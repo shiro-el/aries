@@ -105,7 +105,11 @@ internal fun chatSearchFields(entries: List<ChatEntry>, markdown: Map<String, Ch
             if (!text.isNullOrEmpty()) add(ChatSearchField(entry.id, key, text, itemIndex, joinPrevious))
         }
         when (val body = entry.body) {
-            is ChatEntryBody.User, is ChatEntryBody.Agent -> {
+            is ChatEntryBody.User, is ChatEntryBody.Agent, is ChatEntryBody.Thinking -> {
+                if (body.markdownSource() == null) {
+                    item++
+                    return@forEach
+                }
                 val blocks = markdown[entry.id]?.blocks.orEmpty()
                 blocks.forEachIndexed { index, block ->
                     val key = "markdown:$index"
@@ -132,7 +136,6 @@ internal fun chatSearchFields(entries: List<ChatEntry>, markdown: Map<String, Ch
                 field("tool-output", body.output)
                 item++
             }
-            is ChatEntryBody.Thinking -> { field("thinking", body.text); item++ }
             is ChatEntryBody.AgentError -> { field("error", body.detail); item++ }
             is ChatEntryBody.Question -> {
                 body.questions.forEachIndexed { part, question ->
