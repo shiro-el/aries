@@ -82,7 +82,7 @@ pub(crate) async fn mark_seen(
     let now = client
         .call("terminal.get", serde_json::json!({ "terminal": address }))
         .await?;
-    if crate::host_model::seen_turn(&now) >= turn {
+    if crate::host_model::seen_turn(&now).is_some_and(|seen| seen >= turn) {
         return Ok(crate::terminal_info(&now));
     }
     crate::set_labels(

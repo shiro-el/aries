@@ -201,6 +201,8 @@ class ReconnectTest {
 
         compose.runOnIdle { model.closeTerminal() }
         compose.waitForIdle()
-        compose.onNodeWithContentDescription(str(R.string.agent_status_done), useUnmergedTree = true).assertExists()
+        // The resumed, visible Terminal acknowledged the turn from the new snapshot.
+        compose.onNodeWithContentDescription(str(R.string.agent_status_idle), useUnmergedTree = true).assertExists()
+        assertEquals(listOf("h1 t1 seen=0", "h1 t1 seen=1"), core.labelWrites)
     }
 }

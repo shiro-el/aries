@@ -24,7 +24,7 @@ class ConsoleAgentsTest {
     @get:Rule val compose = createComposeRule()
 
     @Test
-    fun waitingRowsComeBeforePinnedWorkAndKeepMessageLocationAndPinActions() {
+    fun pinnedWorkComesBeforeWaitingRowsAndKeepsMessageLocationAndPinActions() {
         fun terminal(address: String, name: String, status: AgentStatus, pinned: Boolean = false) =
             TerminalInfo(address, name, "", listOf(name), "/repo/$name", "live", status, false, 0uL, pinned)
         val core = FakeCore().apply {
@@ -46,7 +46,7 @@ class ConsoleAgentsTest {
         compose.onNodeWithText(str(R.string.agents_button)).performClick()
         val waiting = compose.onNodeWithText("review").fetchSemanticsNode().boundsInRoot.top
         val work = compose.onNodeWithText("build").fetchSemanticsNode().boundsInRoot.top
-        assertTrue("Waiting Agent must be above pinned work", waiting < work)
+        assertTrue("herdr-app puts pinned Agents first", work < waiting)
         compose.onNodeWithText("Please retry").assertExists()
         compose.onNodeWithText("home:/repo/build").assertExists()
         compose.onNodeWithContentDescription(str(R.string.agent_pin_button_label, "review", "home")).performClick()
