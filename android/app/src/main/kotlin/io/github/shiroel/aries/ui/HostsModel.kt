@@ -40,6 +40,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -921,6 +922,7 @@ class HostsModel(
     /** Re-attaches with `resumed` on each new line, so the screen comes back after a network change. */
     private fun observe(link: HostLink, terminal: TerminalInfo, returnTo: Screen, chatDraft: String = "") {
         val viewer = TerminalViewer(terminal)
+        viewer.inputHistory = InputHistoryModel(core, link.host.id, terminal.address)
         viewer.link = link
         if (attachMode == AttachMode.INPUT) viewer.startTyping()
         screen = Screen.Terminal(viewer, returnTo, chatDraft)
@@ -962,7 +964,10 @@ class HostsModel(
                                 for (input in viewer.inputs) {
                                     when (input) {
                                         is TerminalInput.Text -> view.sendText(input.text)
-                                        is TerminalInput.Paste -> view.pasteText(input.text)
+                                        is TerminalInput.Paste -> {
+                                            view.pasteText(input.text)
+                                            viewer.inputHistory?.remember(input.text)
+                                        }
                                         is TerminalInput.Key -> view.sendKey(input.key, input.mods)
                                     }
                                 }
@@ -990,7 +995,18 @@ class HostsModel(
         alongside: (CoroutineScope.(TerminalView) -> Unit)?,
     ): Boolean {
         val view = conn.attachTerminal(viewer.terminal.address, options)
-        viewer.scroller = view::scrollTo
+        val localChanges = Channel<Unit>(Channel.CONFLATED)
+        viewer.scroller = { lines -> view.scrollTo(lines).also { localChanges.trySend(Unit) } }
+        viewer.searcher = { query, caseSensitive, regex ->
+            view.search(query, caseSensitive, regex)
+            localChanges.trySend(Unit)
+            Unit
+        }
+        viewer.searchNavigator = { backwards ->
+            view.searchNext(backwards)
+            localChanges.trySend(Unit)
+            Unit
+        }
         try {
             return coroutineScope {
                 val side = alongside?.let { f -> launch { f(view) } }
@@ -1005,6 +1021,17 @@ class HostsModel(
                             }
                         }
                     }
+                    // Keep the finished VT readable/searchable until the user leaves.
+                    // After Exited, next() yields a screen only for local changes.
+                    side?.cancel()
+                    for (change in localChanges) {
+                        try {
+                            val update = view.next()
+                            if (update is TerminalUpdate.Screen) viewer.apply(update.frame)
+                        } catch (_: CoreException.Closed) {
+                            // A buffered signal may already have been drawn before Exited.
+                        }
+                    }
                     true
                 } finally {
                     side?.cancel()
@@ -1012,6 +1039,9 @@ class HostsModel(
             }
         } finally {
             viewer.scroller = null
+            viewer.searcher = null
+            viewer.searchNavigator = null
+            localChanges.close()
             withContext(NonCancellable) { view.detach() }
             view.close()
         }

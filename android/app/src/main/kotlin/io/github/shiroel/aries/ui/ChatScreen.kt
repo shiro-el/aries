@@ -87,6 +87,7 @@ class ChatModel(
     /** Runs the calls that sign in to the Host (see [HostsModel]). */
     private val keyWork: CoroutineContext = EmptyCoroutineContext,
 ) {
+    val inputHistory = InputHistoryModel(core, host.id, terminal.address)
     /** The Agent's Terminal, its Agent status kept live by [update]. */
     var terminal by mutableStateOf(terminal)
         private set
@@ -238,7 +239,10 @@ class ChatModel(
         scope.launch {
             try {
                 when (val outcome = conn.sendMessage(terminal.address, text, HeldListener())) {
-                    SendOutcome.Sent -> if (draft == text) draft = ""
+                    SendOutcome.Sent -> {
+                        inputHistory.remember(text)
+                        if (draft == text) draft = ""
+                    }
                     is SendOutcome.Blocked -> {
                         refused = true
                         terminal = terminal.copy(
@@ -410,6 +414,7 @@ fun ChatScreen(
     onView: (AgentView) -> Unit = {},
     calls: CallsModel? = null,
 ) {
+    val readAloud = io.github.shiroel.aries.speech.rememberReadAloud(chat)
     var showGit by remember(chat) { mutableStateOf(false) }
     if (showGit) GitChangesDialog(chat.link, chat.terminal, { showGit = false }) { text ->
         chat.draft = if (chat.draft.isBlank()) text else chat.draft + "\n\n" + text
@@ -431,6 +436,7 @@ fun ChatScreen(
         if (snapshot != null && entries.isEmpty() && snapshot.status == ChatStatus.LIVE) {
             Text(stringResource(R.string.chat_empty))
         }
+        io.github.shiroel.aries.speech.ReadAloudPlayback(readAloud)
         Box(Modifier.weight(1f).fillMaxWidth()) {
             LazyColumn(Modifier.fillMaxSize().testTag("chat-transcript"), state = scroll.list) {
                 entries.forEach { entry ->
@@ -444,8 +450,8 @@ fun ChatScreen(
                         if (body is ChatEntryBody.Question) {
                             QuestionView(chat, entry.id, body)
                         } else {
-                            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-                                ChatEntryView(entry, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image) { chat.toggle(entry.id) }
+                            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (body is ChatEntryBody.Agent) 0.dp else 12.dp)) {
+                                ChatEntryView(entry, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image, readAloud) { chat.toggle(entry.id) }
                             }
                             if (source == null) HorizontalDivider()
                         }
@@ -615,6 +621,7 @@ private fun ChatEntryView(
     agentName: String,
     expanded: Boolean,
     image: (String) -> ByteArray?,
+    readAloud: io.github.shiroel.aries.speech.ReadAloudState,
     onToggle: () -> Unit,
 ) {
     when (val b = entry.body) {
@@ -629,8 +636,9 @@ private fun ChatEntryView(
                 )
             }
         }
-        is ChatEntryBody.Agent -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(agentName, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        is ChatEntryBody.Agent -> Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(agentName, Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            io.github.shiroel.aries.speech.ReadAloudButton(readAloud, entry.id, b.text)
         }
         is ChatEntryBody.Thinking -> Column {
             Text(

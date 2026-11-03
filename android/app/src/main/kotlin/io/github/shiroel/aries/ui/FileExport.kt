@@ -30,7 +30,7 @@ import java.util.UUID
 private const val EXPORT_LIMIT = 64L * 1024 * 1024
 private const val EXPORT_CHUNK = 1_048_576u
 private const val SHARE_LIFETIME_MS = 24L * 60 * 60 * 1000
-private class ExportTooLarge : Exception()
+internal class ExportTooLarge : Exception()
 
 /** Disposing the file/Host panel cancels its transfer, including partial output cleanup. */
 @Composable
@@ -141,12 +141,13 @@ private fun FileExportActions(connection: HostConnection?, address: String, path
 }
 
 /** At most one byte chunk lives in memory; the file is never exposed before EOF. */
-private suspend fun downloadExport(
+internal suspend fun downloadExport(
     connection: HostConnection,
     address: String,
     path: String,
     destination: File,
-    progress: suspend (Long, Long) -> Unit,
+    sizeLimit: Long = EXPORT_LIMIT,
+    progress: suspend (Long, Long) -> Unit = { _, _ -> },
 ) = withContext(Dispatchers.IO) {
     var offset = 0uL
     var total: ULong? = null
@@ -155,7 +156,7 @@ private suspend fun downloadExport(
             ensureActive()
             val chunk = connection.readFileBytes(address, path, offset, EXPORT_CHUNK)
             ensureActive()
-            if (chunk.totalSize > EXPORT_LIMIT.toULong()) throw ExportTooLarge()
+            if (chunk.totalSize > sizeLimit.toULong()) throw ExportTooLarge()
             check(chunk.offset == offset && (total == null || total == chunk.totalSize))
             total = chunk.totalSize
             check(chunk.data.size <= EXPORT_CHUNK.toInt() && offset <= chunk.totalSize)
