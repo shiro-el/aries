@@ -23,6 +23,25 @@
     <string name="files_range">Lines %1$d–%2$d of %3$d</string>
     <string name="files_previous_button">Previous page</string>
     <string name="files_next_button">Next page</string>
+    <!-- Git changes (ticket 89) -->
+    <string name="git_changes_button">Changes</string>
+    <string name="git_changes_title">Git changes · read only</string>
+    <string name="git_loading">Reading changes…</string>
+    <string name="git_not_repository">This folder is not a Git repository.</string>
+    <string name="git_clean">No changes.</string>
+    <string name="git_staged">Staged</string>
+    <string name="git_unstaged">Unstaged</string>
+    <string name="git_untracked">Untracked</string>
+    <string name="git_more_button">Show more</string>
+    <string name="git_truncated">The Host output limit was reached. Only the received portion is shown.</string>
+    <string name="git_binary">Binary file. Preview unavailable.</string>
+    <string name="git_empty_diff">No text diff for this file.</string>
+    <string name="git_send_file">Send file to Agent</string>
+    <string name="git_send_selection">Send selection to Agent</string>
+    <string name="git_select_hint">Tap a line, then another to select a range. The reference is added to your Chat draft.</string>
+    <string name="git_error">Could not read Git changes: %1$s</string>
+    <string name="git_retry_button">Refresh</string>
+    <string name="git_line_label">Old %1$s · new %2$s: %3$s</string>
 
 
     <string name="agents_elapsed_less_than_minute">&lt;1m</string>
