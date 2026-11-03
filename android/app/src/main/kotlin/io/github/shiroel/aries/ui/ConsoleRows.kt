@@ -35,15 +35,15 @@ internal fun statusMessage(status: AgentStatus?): String? = when (status) {
 
 /** Square selection used by Browse Tabs and the Launch form. */
 @Composable
-internal fun ConsoleChoice(selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, label: @Composable () -> Unit) {
+internal fun ConsoleChoice(selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, label: @Composable () -> Unit) {
     val accent = MaterialTheme.colorScheme.primary
-    TextButton(onClick = onClick, shape = RectangleShape,
+    TextButton(onClick = onClick, enabled = enabled, shape = RectangleShape,
         modifier = modifier.semantics { this.selected = selected }.drawBehind {
             if (selected) drawLine(accent, Offset(0f, size.height), Offset(size.width, size.height), 3.dp.toPx())
         }) { label() }
 }
 
-/** Two-line Console row shared by Agents and Browse's Terminal leaves. */
+/** Console row shared by Agents and Browse's Terminal leaves. */
 @Composable
 internal fun ConsoleTerminalRow(
     terminal: TerminalInfo,
@@ -58,7 +58,7 @@ internal fun ConsoleTerminalRow(
     val spokenName = stringResource(R.string.console_agent_accessibility, displayName(terminal), location)
     val description = status?.let { stringResource(agentStatusLabel(it)) } ?: terminal.state
     val sub = if (waiting) statusMessage(status)?.takeIf { it.isNotBlank() } ?: description
-        else stringResource(R.string.console_agent_location, host, terminal.cwd ?: terminal.address)
+        else stringResource(R.string.console_agent_location, host, terminal.currentCwd ?: terminal.address)
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Row(
             Modifier.weight(1f).clickable(onClick = onOpen).semantics {
@@ -71,6 +71,13 @@ internal fun ConsoleTerminalRow(
             if (status != null) AgentStatusMark(status) else TerminalMark()
             Column(Modifier.weight(1f)) {
                 Text(displayName(terminal), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                terminal.currentProgram?.let { program ->
+                    Text(program, style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                if (waiting) Text(stringResource(R.string.console_agent_location, host, terminal.currentCwd ?: terminal.address),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(sub, style = MaterialTheme.typography.bodySmall,
                     color = if (waiting) statusColor(AgentStatus.Blocked(null, null)) else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)

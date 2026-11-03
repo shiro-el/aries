@@ -50,7 +50,7 @@ const CLAUDE_CLEAN_ENV: &str = r#"for v in $(env | sed -n 's/^\(CLAUDE[A-Za-z0-9
 
 impl AgentPreset {
     /// The argv starting this Agent, before the user's extra arguments.
-    fn argv(self) -> Vec<&'static str> {
+    pub(crate) fn argv(self) -> Vec<&'static str> {
         match self {
             AgentPreset::ClaudeCode => vec!["sh", "-c", CLAUDE_CLEAN_ENV, "claude"],
             AgentPreset::Codex => vec!["codex", "--no-daemon"],

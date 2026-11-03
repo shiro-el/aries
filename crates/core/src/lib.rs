@@ -23,6 +23,7 @@ mod store;
 mod structure;
 mod terminal;
 mod transport;
+mod worktrees;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -61,6 +62,7 @@ pub use terminal::{
     AttachOptions, CellRun, CursorPos, FRAME_INTERVAL, KeyMods, ScreenFrame, ScreenLine,
     TerminalExit, TerminalKey, TerminalUpdate, TerminalView, ViewStats,
 };
+pub use worktrees::{WorktreeInfo, WorktreeOpen};
 
 use hc::HcClient;
 use store::{SavedHost, SavedKey, Store};
@@ -168,6 +170,15 @@ pub struct Host {
     pub host_key: Option<String>,
 }
 
+/// The live foreground process group leader, reported by herdr-core.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, uniffi::Record)]
+pub struct ForegroundInfo {
+    pub pid: u32,
+    pub name: String,
+    pub argv: Vec<String>,
+    pub cwd: Option<String>,
+}
+
 /// One Terminal as listed by herdr-core.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct TerminalInfo {
@@ -200,6 +211,9 @@ pub struct TerminalInfo {
     /// Terminal that started this one, as reported by herdr-core.
     #[uniffi(default = None)]
     pub parent: Option<String>,
+    /// Current program and folder; launch argv/cwd remain the fallback.
+    #[uniffi(default = None)]
+    pub foreground: Option<ForegroundInfo>,
 }
 
 fn runtime() -> &'static tokio::runtime::Runtime {
@@ -1489,6 +1503,7 @@ pub(crate) fn terminal_info(v: &serde_json::Value) -> TerminalInfo {
             })
             .unwrap_or_default(),
         cwd: s("cwd"),
+        foreground: serde_json::from_value(v["foreground"].clone()).ok(),
         state: s("state").unwrap_or_default(),
         agent_status,
         needs_attention,

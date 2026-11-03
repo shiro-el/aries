@@ -186,6 +186,21 @@
     <string name="structure_unreadable">이 호스트의 herdr-app 레이아웃을 읽지 못했습니다(%1$s). 터미널을 스페이스·탭 label로 묶어 보여 줍니다.</string>
     <string name="structure_unknown_format">이 호스트의 herdr-app 레이아웃은 Aries가 모르는 형식입니다. 터미널을 스페이스·탭 label로 묶어 보여 줍니다. Aries를 업데이트하세요.</string>
     <string name="structure_connection_closed">호스트와의 연결이 끊어졌습니다. 보이는 내용이 최신이 아닐 수 있습니다.</string>
+    <!-- Worktree picker: read-only discovery and opening. -->
+    <string name="worktrees_button">Worktree 목록</string>
+    <string name="worktrees_title">Worktree 열기</string>
+    <string name="worktrees_open_button">Worktree에서 열기</string>
+    <string name="worktrees_refresh_button">Worktree 새로고침</string>
+    <string name="worktrees_loading">Worktree를 불러오는 중…</string>
+    <string name="worktrees_empty">Worktree가 없습니다.</string>
+    <string name="worktrees_program_label">이 worktree에서 실행</string>
+    <string name="worktrees_shell">셸</string>
+    <string name="worktrees_fallback_hint">현재 Space의 새 Tab으로 엽니다. Space가 없거나 herdr-app이 꺼져 있으면 Terminal을 실행합니다.</string>
+    <string name="worktrees_detached">분리된 HEAD · %1$s</string>
+    <string name="worktrees_bare">Bare 저장소</string>
+    <string name="worktrees_locked">잠김 · %1$s</string>
+    <string name="worktrees_prunable">열 수 없음 · %1$s</string>
+
     <string name="launch_open_button">새 터미널</string>
     <string name="launch_title">터미널 실행</string>
     <string name="launch_command">명령</string>
