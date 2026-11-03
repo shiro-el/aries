@@ -1,8 +1,8 @@
 /**
  * Aries Relay: one-way push delivery (Host -> phone).
  *
- * Stores only pairing tokens (as SHA-256 hashes), device push tokens and
- * rate limit counters (D1). Envelopes are forwarded to FCM and never
+ * Stores only pairing token hashes, device push tokens, rate limit counters
+ * and expiring replay hashes (D1). Envelopes are forwarded to FCM and never
  * stored, queued or logged: nothing here may log a request body.
  *
  * API:
@@ -10,11 +10,13 @@
  *   Rate limited per client IP (hashed).
  * - `PUT /v1/pairing` (Bearer token) `{device_token}` -> 204 (FCM rotated it).
  * - `DELETE /v1/pairing` (Bearer token) -> 204, also for unknown tokens.
- *   Deletes the pairing and its counters at once.
+ *   Deletes the pairing and its pairing counters at once. Shared device
+ *   counters and expiring replay hashes survive unpairing.
  * - `POST /v1/push` (Bearer token), body = the envelope bytes -> 202 once
  *   FCM accepted it. 401 unknown token, 413 too large, 429 rate limited
  *   (`Retry-After`), 410 the phone is gone (the pairing is deleted),
- *   502 FCM failed.
+ *   502 FCM failed, 503 FCM unconfigured or an event is still in flight.
+ *   An accepted replay returns 202 without forwarding or spending budget.
  */
 
 import { type FcmConfig, FcmError, sendFcm } from "./fcm";
@@ -27,6 +29,8 @@ export interface Env {
   FCM_SERVICE_ACCOUNT_EMAIL?: string;
   /** Pushes per pairing token per minute (default 30). */
   PUSH_LIMIT_PER_MINUTE?: string;
+  /** Pushes across all pairings for one FCM device per minute (default 30). */
+  PUSH_DEVICE_LIMIT_PER_MINUTE?: string;
   /** New pairings per client IP per hour (default 20). */
   PAIR_LIMIT_PER_HOUR?: string;
   /** Optional: how FCM and Google OAuth are reached (a service binding, or a fake in tests). */
@@ -65,8 +69,8 @@ function json(status: number, body: unknown, headers: Record<string, string> = {
   });
 }
 
-async function sha256Hex(text: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+async function sha256Hex(value: string | Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", typeof value === "string" ? new TextEncoder().encode(value) : value);
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
@@ -178,34 +182,69 @@ async function push(request: Request, env: Env): Promise<Response> {
     .first<{ device_token: string }>();
   if (!pairing) return json(401, { error: "unknown_pairing" });
 
-  const wait = await rateLimit(env, `push:${hash}`, 60, limit(env.PUSH_LIMIT_PER_MINUTE, 30));
-  if (wait > 0) return json(429, { error: "rate_limited" }, { "retry-after": String(wait) });
-
   const declared = Number(request.headers.get("content-length") ?? "0");
   if (declared > MAX_ENVELOPE_BYTES) return json(413, { error: "too_large" });
   const envelope = new Uint8Array(await request.arrayBuffer());
   if (envelope.length === 0) return json(400, { error: "bad_request" });
   if (envelope.length > MAX_ENVELOPE_BYTES) return json(413, { error: "too_large" });
 
-  let config: FcmConfig;
-  try {
-    config = fcmConfig(env);
-  } catch {
-    return json(503, { error: "fcm_not_configured" });
+  const deviceHash = await sha256Hex(pairing.device_token);
+  const eventHash = await sha256Hex(envelope);
+  const claimId = crypto.randomUUID();
+  const now = Math.floor(Date.now() / 1000);
+  // A D1 batch is a transaction: only one request can acquire this event.
+  // A short lease recovers abandoned requests; accepted hashes live for 24h.
+  const claim = await env.DB.batch([
+    env.DB.prepare("DELETE FROM push_events WHERE expires_at <= ?1").bind(now),
+    env.DB.prepare(
+      `INSERT OR IGNORE INTO push_events (device_hash, event_hash, claim_id, expires_at)
+       VALUES (?1, ?2, ?3, ?4)`,
+    ).bind(deviceHash, eventHash, claimId, now + 60),
+    env.DB.prepare("SELECT accepted FROM push_events WHERE device_hash = ?1 AND event_hash = ?2")
+      .bind(deviceHash, eventHash),
+  ]);
+  if (claim[1].meta.changes === 0) {
+    if ((claim[2].results[0] as { accepted: number }).accepted) return new Response(null, { status: 202 });
+    return json(503, { error: "event_in_flight" }, { "retry-after": "1" });
   }
+
+  let accepted = false;
   try {
-    // Delivery priority is transport metadata; the Relay still cannot read the envelope.
-    const priority = request.headers.get("x-aries-priority") === "normal" ? "NORMAL" : "HIGH";
-    await sendFcm(config, pairing.device_token, { v: "1", e: base64(envelope) }, priority);
-  } catch (e) {
-    if (e instanceof FcmError && e.unregistered) {
-      await forget(env, hash);
-      return json(410, { error: "device_gone" });
+    let config: FcmConfig;
+    try {
+      config = fcmConfig(env);
+    } catch {
+      return json(503, { error: "fcm_not_configured" });
     }
-    console.error("fcm send failed", e instanceof FcmError ? e.status : "network");
-    return json(502, { error: "fcm_failed" });
+    // Accepted duplicates return above, before either budget is consumed.
+    const wait = await rateLimit(env, `push:${hash}`, 60, limit(env.PUSH_LIMIT_PER_MINUTE, 30));
+    if (wait > 0) return json(429, { error: "rate_limited" }, { "retry-after": String(wait) });
+    const deviceWait = await rateLimit(env, `device:${deviceHash}`, 60, limit(env.PUSH_DEVICE_LIMIT_PER_MINUTE, 30));
+    if (deviceWait > 0) return json(429, { error: "rate_limited" }, { "retry-after": String(deviceWait) });
+
+    try {
+      // Delivery priority is transport metadata; the Relay still cannot read the envelope.
+      const priority = request.headers.get("x-aries-priority") === "normal" ? "NORMAL" : "HIGH";
+      await sendFcm(config, pairing.device_token, { v: "1", e: base64(envelope) }, priority);
+    } catch (e) {
+      if (e instanceof FcmError && e.unregistered) {
+        await forget(env, hash);
+        return json(410, { error: "device_gone" });
+      }
+      console.error("fcm send failed", e instanceof FcmError ? e.status : "network");
+      return json(502, { error: "fcm_failed" });
+    }
+    await env.DB.prepare(
+      "UPDATE push_events SET accepted = 1, expires_at = ?1 WHERE device_hash = ?2 AND event_hash = ?3 AND claim_id = ?4",
+    ).bind(Math.floor(Date.now() / 1000) + 86400, deviceHash, eventHash, claimId).run();
+    accepted = true;
+    return new Response(null, { status: 202 });
+  } finally {
+    if (!accepted) {
+      await env.DB.prepare("DELETE FROM push_events WHERE device_hash = ?1 AND event_hash = ?2 AND claim_id = ?3")
+        .bind(deviceHash, eventHash, claimId).run();
+    }
   }
-  return new Response(null, { status: 202 });
 }
 
 function fcmConfig(env: Env): FcmConfig {

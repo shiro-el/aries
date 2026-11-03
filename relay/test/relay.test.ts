@@ -10,10 +10,15 @@ const BASE = "https://relay.test";
 
 let fcm: FakeFcm;
 let relayEnv: Env;
+let envelopeSequence: number;
 
 beforeEach(async () => {
-  await env.DB.batch([env.DB.prepare("DELETE FROM pairings"), env.DB.prepare("DELETE FROM rate_limits")]);
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM pairings"), env.DB.prepare("DELETE FROM rate_limits"),
+    env.DB.prepare("DELETE FROM push_events"),
+  ]);
   resetFcmToken();
+  envelopeSequence = 0;
   fcm = await FakeFcm.create();
   relayEnv = {
     ...env,
@@ -51,8 +56,14 @@ async function pairPhone(device = "fcm-device-1"): Promise<string> {
   return token;
 }
 
-/** A stand-in envelope: 2048 recognisable bytes. */
-function envelope(fill = 0xa5): Uint8Array {
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => { resolve = done; });
+  return { promise, resolve };
+}
+
+/** Distinct stand-in events by default; reuse the bytes to model a retry. */
+function envelope(fill = 0xa5 + envelopeSequence++): Uint8Array {
   const e = new Uint8Array(2048).fill(fill);
   e[0] = 1;
   return e;
@@ -118,6 +129,32 @@ describe("pairing", () => {
 });
 
 describe("delivery", () => {
+  it("acknowledges accepted retries even when FCM configuration is subsequently unavailable", async () => {
+    const token = await pairPhone();
+    const event = envelope();
+    expect((await call("POST", "/v1/push", { token, body: event })).status).toBe(202);
+    relayEnv.FCM_SERVICE_ACCOUNT_JSON = undefined;
+    expect((await call("POST", "/v1/push", { token, body: event })).status).toBe(202);
+    expect((await call("POST", "/v1/push", { token, body: envelope() })).status).toBe(503);
+    expect(fcm.sent).toHaveLength(1);
+  });
+
+  it("acknowledges an accepted event again without resending or spending either budget", async () => {
+    relayEnv.PUSH_LIMIT_PER_MINUTE = "2";
+    relayEnv.PUSH_DEVICE_LIMIT_PER_MINUTE = "2";
+    const a = await pairPhone();
+    const b = await pairPhone();
+    const event = envelope();
+    expect((await call("POST", "/v1/push", { token: a, body: event })).status).toBe(202);
+    for (const token of [a, b, a, b]) {
+      expect((await call("POST", "/v1/push", { token, body: event })).status).toBe(202);
+    }
+    expect((await call("POST", "/v1/push", { token: a, body: envelope() })).status).toBe(202);
+    expect((await call("POST", "/v1/push", { token: b, body: event })).status).toBe(202);
+    expect((await call("POST", "/v1/push", { token: b, body: envelope() })).status).toBe(429);
+    expect(fcm.sent).toHaveLength(2);
+  });
+
   it("allows normal priority for encrypted progress without revealing its content", async () => {
     const token = await pairPhone();
     expect((await call("POST", "/v1/push", { token, body: envelope(), priority: "normal" })).status).toBe(202);
@@ -228,7 +265,191 @@ describe("delivery", () => {
   });
 });
 
+describe("device replay protection", () => {
+  it("recovers an expired in-flight claim without letting its old owner erase a later acceptance", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const started = deferred();
+    const release = deferred();
+    let first: Promise<Response> | undefined;
+    try {
+      vi.setSystemTime(new Date("2026-11-03T10:00:05Z"));
+      const token = await pairPhone();
+      const event = envelope();
+      let stalled = false;
+      relayEnv.FCM = { fetch: async (input, init) => {
+        if (!stalled && new URL(new Request(input, init).url).host === "fcm.googleapis.com") {
+          stalled = true;
+          started.resolve();
+          await release.promise;
+          return Response.json({ error: { status: "UNAVAILABLE" } }, { status: 503 });
+        }
+        return fcm.fetch(input, init);
+      } };
+      first = call("POST", "/v1/push", { token, body: event });
+      await started.promise;
+      vi.setSystemTime(new Date("2026-11-03T10:01:05Z"));
+      expect((await call("POST", "/v1/push", { token, body: event })).status).toBe(202);
+      release.resolve();
+      expect((await first).status).toBe(502);
+      expect((await call("POST", "/v1/push", { token, body: event })).status).toBe(202);
+      expect(fcm.sent).toHaveLength(1);
+    } finally {
+      release.resolve();
+      await first;
+      vi.useRealTimers();
+    }
+  });
+
+  it("serializes concurrent copies until FCM has accepted the event", async () => {
+    relayEnv.PUSH_LIMIT_PER_MINUTE = "1";
+    relayEnv.PUSH_DEVICE_LIMIT_PER_MINUTE = "1";
+    const token = await pairPhone();
+    const event = envelope();
+    const started = deferred();
+    const release = deferred();
+    relayEnv.FCM = { fetch: async (input, init) => {
+      if (new URL(new Request(input, init).url).host === "fcm.googleapis.com") {
+        started.resolve();
+        await release.promise;
+      }
+      return fcm.fetch(input, init);
+    } };
+    const first = call("POST", "/v1/push", { token, body: event });
+    try {
+      await started.promise;
+      const concurrent = await call("POST", "/v1/push", { token, body: event });
+      expect(concurrent.status).toBe(503);
+      expect(concurrent.headers.get("retry-after")).toBe("1");
+      expect(fcm.sent).toHaveLength(0);
+    } finally {
+      release.resolve();
+    }
+    expect((await first).status).toBe(202);
+    expect((await call("POST", "/v1/push", { token, body: event })).status).toBe(202);
+    expect(fcm.sent).toHaveLength(1);
+  });
+
+  it("allows the same event after FCM fails and deduplicates it after success", async () => {
+    const token = await pairPhone();
+    const event = envelope();
+    fcm.failNext = { status: 503, body: { error: { status: "UNAVAILABLE" } } };
+    expect((await call("POST", "/v1/push", { token, body: event })).status).toBe(502);
+    expect((await call("POST", "/v1/push", { token, body: event })).status).toBe(202);
+    expect((await call("POST", "/v1/push", { token, body: event })).status).toBe(202);
+    expect(fcm.sent).toHaveLength(1);
+  });
+
+  it("releases an event when FCM is not configured so it can be retried", async () => {
+    const token = await pairPhone();
+    const event = envelope();
+    relayEnv.FCM_SERVICE_ACCOUNT_JSON = undefined;
+    expect((await call("POST", "/v1/push", { token, body: event })).status).toBe(503);
+    relayEnv.FCM_SERVICE_ACCOUNT_JSON = fcm.serviceAccountJson;
+    expect((await call("POST", "/v1/push", { token, body: event })).status).toBe(202);
+    expect(fcm.sent).toHaveLength(1);
+  });
+
+  it("keeps device replay identities separate and authenticates before acknowledging duplicates", async () => {
+    const a = await pairPhone("device-a");
+    const b = await pairPhone("device-b");
+    const event = envelope();
+    expect((await call("POST", "/v1/push", { token: a, body: event })).status).toBe(202);
+    expect((await call("POST", "/v1/push", { token: b, body: event })).status).toBe(202);
+    await call("DELETE", "/v1/pairing", { token: a });
+    expect((await call("POST", "/v1/push", { token: a, body: event })).status).toBe(401);
+    expect((await call("POST", "/v1/push", { token: b, body: event })).status).toBe(202);
+    expect(fcm.sent).toHaveLength(2);
+  });
+
+  it("expires accepted replay IDs after 24 hours and cleans expired records", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-11-03T10:00:05Z"));
+      const token = await pairPhone();
+      const event = envelope();
+      expect((await call("POST", "/v1/push", { token, body: event })).status).toBe(202);
+      vi.setSystemTime(new Date("2026-11-04T10:00:04Z"));
+      expect((await call("POST", "/v1/push", { token, body: event })).status).toBe(202);
+      expect(fcm.sent).toHaveLength(1);
+      vi.setSystemTime(new Date("2026-11-04T10:00:05Z"));
+      expect((await call("POST", "/v1/push", { token, body: envelope() })).status).toBe(202);
+      // Retention/privacy assertion: an unrelated valid push prunes old IDs.
+      const records = await env.DB.prepare("SELECT COUNT(*) AS n FROM push_events").first<{ n: number }>();
+      expect(records?.n).toBe(1);
+      expect((await call("POST", "/v1/push", { token, body: event })).status).toBe(202);
+      expect(fcm.sent).toHaveLength(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe("rate limit", () => {
+  it("enforces the shared device budget under concurrent distinct sends", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-11-03T10:00:05Z"));
+      relayEnv.PUSH_DEVICE_LIMIT_PER_MINUTE = "2";
+      const a = await pairPhone();
+      const b = await pairPhone();
+      const results = await Promise.all([a, b, a, b, a, b].map((token) =>
+        call("POST", "/v1/push", { token, body: envelope() }),
+      ));
+      expect(results.map((r) => r.status).sort()).toEqual([202, 202, 429, 429, 429, 429]);
+      expect(fcm.sent).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("renews the device budget in the next minute and retries an event rejected by its limit", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-11-03T10:00:05Z"));
+      relayEnv.PUSH_DEVICE_LIMIT_PER_MINUTE = "1";
+      const a = await pairPhone();
+      const b = await pairPhone();
+      const event = envelope();
+      expect((await call("POST", "/v1/push", { token: a, body: envelope() })).status).toBe(202);
+      const over = await call("POST", "/v1/push", { token: b, body: event });
+      expect(over.status).toBe(429);
+      expect(over.headers.get("retry-after")).toBe("55");
+      vi.setSystemTime(new Date("2026-11-03T10:01:00Z"));
+      expect((await call("POST", "/v1/push", { token: b, body: event })).status).toBe(202);
+      expect(fcm.sent).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("uses the current device token's shared budget after rotation", async () => {
+    relayEnv.PUSH_DEVICE_LIMIT_PER_MINUTE = "1";
+    const a = await pairPhone("device-a");
+    const b = await pairPhone("device-b");
+    expect((await call("POST", "/v1/push", { token: a, body: envelope() })).status).toBe(202);
+    expect((await call("PUT", "/v1/pairing", { token: b, json: { device_token: "device-a" } })).status).toBe(204);
+    expect((await call("POST", "/v1/push", { token: b, body: envelope() })).status).toBe(429);
+    expect((await call("PUT", "/v1/pairing", { token: a, json: { device_token: "device-new" } })).status).toBe(204);
+    expect((await call("POST", "/v1/push", { token: a, body: envelope() })).status).toBe(202);
+    expect(fcm.sent.map(({ message }) => message.token)).toEqual(["device-a", "device-new"]);
+  });
+
+  it("shares the device budget across Host pairings and preserves it when one unpairs", async () => {
+    relayEnv.PUSH_DEVICE_LIMIT_PER_MINUTE = "2";
+    const a = await pairPhone("shared-device");
+    const b = await pairPhone("shared-device");
+    const other = await pairPhone("other-device");
+    expect((await call("POST", "/v1/push", { token: a, body: envelope(1) })).status).toBe(202);
+    expect((await call("POST", "/v1/push", { token: b, body: envelope(2) })).status).toBe(202);
+    await call("DELETE", "/v1/pairing", { token: a });
+    const over = await call("POST", "/v1/push", { token: b, body: envelope(3) });
+    expect(over.status).toBe(429);
+    expect(Number(over.headers.get("retry-after"))).toBeGreaterThan(0);
+    expect(Number(over.headers.get("retry-after"))).toBeLessThanOrEqual(60);
+    expect((await call("POST", "/v1/push", { token: other, body: envelope(3) })).status).toBe(202);
+    expect(fcm.sent.map(({ message }) => message.token)).toEqual(["shared-device", "shared-device", "other-device"]);
+  });
+
   it("limits pushes per pairing token", async () => {
     const a = await pairPhone("device-a");
     const b = await pairPhone("device-b");
