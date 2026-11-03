@@ -152,6 +152,79 @@ async fn a_biometric_key_still_signs_in_while_the_user_is_present() {
     assert!(matches!(err, CoreError::Unreachable { .. }), "{err:?}");
 }
 
+#[tokio::test]
+async fn chat_reconnect_requires_a_fresh_key_authorization() {
+    let dir = tempfile::tempdir().unwrap();
+    let vault = PhoneVault::new();
+    let core = core_with(dir.path(), &vault);
+    core.ensure_key().unwrap();
+    let host = core.add_host("desk".into(), closed_ssh()).unwrap();
+    core.set_key_protection(KeyProtection::Biometric).unwrap();
+    let watch = core
+        .watch_chat_retrying(
+            host.id,
+            "t1".into(),
+            None,
+            std::time::Duration::from_secs(60),
+        )
+        .unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        while watch.next().await.unwrap().status != aries_core::ChatStatus::Reconnecting {}
+    })
+    .await
+    .unwrap();
+    vault.user_present.store(false, Ordering::SeqCst);
+    vault.asked.lock().unwrap().clear();
+    watch.retry_now();
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        while vault.asked.lock().unwrap().is_empty() {
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("reconnect must ask the vault again");
+    watch.stop();
+    assert_eq!(*vault.asked.lock().unwrap(), [KeyProtection::Biometric]);
+}
+
+#[tokio::test]
+async fn call_reconnect_requires_a_fresh_key_authorization() {
+    struct Listener(AtomicBool);
+    impl aries_core::CallListener for Listener {
+        fn on_calls(&self, _: Vec<aries_core::CallInfo>) {}
+        fn on_new_call(&self, _: aries_core::CallInfo) {}
+        fn on_state(&self, _: aries_core::CallFeedState) {
+            self.0.store(true, Ordering::SeqCst);
+        }
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let vault = PhoneVault::new();
+    let core = core_with(dir.path(), &vault);
+    core.ensure_key().unwrap();
+    let host = core.add_host("desk".into(), closed_ssh()).unwrap();
+    core.set_key_protection(KeyProtection::Biometric).unwrap();
+    let listener = Arc::new(Listener(AtomicBool::new(false)));
+    let watch = core.watch_calls(host.id, listener.clone()).await.unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        while !listener.0.load(Ordering::SeqCst) {
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    vault.user_present.store(false, Ordering::SeqCst);
+    vault.asked.lock().unwrap().clear();
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        while vault.asked.lock().unwrap().is_empty() {
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("Call reconnect must ask the vault again");
+    watch.stop();
+    assert_eq!(*vault.asked.lock().unwrap(), [KeyProtection::Biometric]);
+}
+
 #[test]
 fn turning_biometric_off_allows_background_answers_again() {
     let dir = tempfile::tempdir().unwrap();

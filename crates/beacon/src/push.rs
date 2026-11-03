@@ -55,9 +55,17 @@ fn pairing_file() -> PathBuf {
     crate::state_dir().join("pairing.json")
 }
 
+fn pending_file() -> PathBuf {
+    crate::state_dir().join("pairing-pending.json")
+}
+
 impl Pairing {
     pub fn load() -> Result<Option<Self>, SendError> {
-        let bytes = match std::fs::read(pairing_file()) {
+        Self::load_from(pairing_file())
+    }
+
+    fn load_from(path: PathBuf) -> Result<Option<Self>, SendError> {
+        let bytes = match std::fs::read(path) {
             Ok(b) => b,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(e) => return Err(SendError::BadPairing(e.to_string())),
@@ -73,6 +81,10 @@ impl Pairing {
     }
 
     fn save(&self) -> Result<(), String> {
+        self.save_to(pairing_file())
+    }
+
+    fn save_to(&self, path: PathBuf) -> Result<(), String> {
         use std::os::unix::fs::OpenOptionsExt;
         let dir = crate::state_dir();
         std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
@@ -83,7 +95,7 @@ impl Pairing {
             beacon_secret: self.beacon.secret_text(),
         })
         .expect("pairing json");
-        let tmp = dir.join(".pairing.json.tmp");
+        let tmp = path.with_extension("json.tmp");
         let _ = std::fs::remove_file(&tmp);
         let mut f = std::fs::OpenOptions::new()
             .write(true)
@@ -92,7 +104,8 @@ impl Pairing {
             .open(&tmp)
             .map_err(|e| format!("{}: {e}", tmp.display()))?;
         std::io::Write::write_all(&mut f, &body).map_err(|e| e.to_string())?;
-        std::fs::rename(&tmp, pairing_file()).map_err(|e| e.to_string())
+        f.sync_all().map_err(|e| e.to_string())?;
+        std::fs::rename(&tmp, path).map_err(|e| e.to_string())
     }
 }
 
@@ -145,8 +158,9 @@ fn delete_on_relay(relay_url: &str, token: &str) -> bool {
 
 /// `aries-beacon pair`: reads a [`PairRequest`] on stdin, stores the
 /// pairing with a fresh Beacon key pair and prints a [`PairReply`]. A
-/// previous pairing's token is revoked on its Relay first (best effort).
-pub fn pair_command() -> Result<(), String> {
+/// previous pairing is revoked only after its replacement is saved.
+/// `prepare` stages it until the phone has persisted the matching keys.
+pub fn pair_command(prepare: bool) -> Result<(), String> {
     let mut input = String::new();
     std::io::stdin()
         .read_to_string(&mut input)
@@ -160,22 +174,59 @@ pub fn pair_command() -> Result<(), String> {
     if req.token.is_empty() || req.relay_url.is_empty() {
         return Err("bad pair request: empty token or relay_url".into());
     }
-    if let Ok(Some(old)) = Pairing::load()
-        && old.token != req.token
-    {
-        delete_on_relay(&old.relay_url, &old.token);
-    }
+    let old = Pairing::load().map_err(|e| e.to_string())?;
     let pairing = Pairing {
         relay_url: req.relay_url.trim_end_matches('/').to_owned(),
         token: req.token,
         phone_key,
         beacon: KeyPair::generate(),
     };
-    pairing.save()?;
+    if prepare {
+        pairing.save_to(pending_file())?;
+    } else {
+        pairing.save()?;
+        revoke_previous(old, &pairing);
+    }
     let reply = PairReply {
         beacon_key: pairing.beacon.public.to_text(),
     };
     println!("{}", serde_json::to_string(&reply).expect("reply json"));
+    Ok(())
+}
+
+fn revoke_previous(old: Option<Pairing>, new: &Pairing) {
+    if let Some(old) = old
+        && (old.token != new.token || old.relay_url != new.relay_url)
+    {
+        delete_on_relay(&old.relay_url, &old.token);
+    }
+}
+
+/// Idempotent activation: a lost SSH reply can be retried after app restart.
+pub fn commit_command() -> Result<(), String> {
+    let mut input = String::new();
+    std::io::stdin()
+        .read_to_string(&mut input)
+        .map_err(|e| e.to_string())?;
+    let request: serde_json::Value = serde_json::from_str(&input).map_err(|e| e.to_string())?;
+    let token = request["token"].as_str().ok_or("no token")?;
+    let relay = request["relay_url"].as_str().ok_or("no relay_url")?;
+    let old = Pairing::load().map_err(|e| e.to_string())?;
+    if old
+        .as_ref()
+        .is_some_and(|p| p.token == token && p.relay_url == relay)
+    {
+        println!("{{\"committed\":true}}");
+        return Ok(());
+    }
+    let pending = Pairing::load_from(pending_file())
+        .map_err(|e| e.to_string())?
+        .filter(|p| p.token == token && p.relay_url == relay)
+        .ok_or("no matching prepared pairing")?;
+    pending.save()?;
+    revoke_previous(old, &pending);
+    let _ = std::fs::remove_file(pending_file());
+    println!("{{\"committed\":true}}");
     Ok(())
 }
 
@@ -193,6 +244,10 @@ pub fn push_test_command() -> Result<(), String> {
 /// `aries-beacon unpair`: deletes the pairing on the Relay (best effort)
 /// and on the Host; prints an [`UnpairReply`].
 pub fn unpair_command() -> Result<(), String> {
+    if let Ok(Some(p)) = Pairing::load_from(pending_file()) {
+        delete_on_relay(&p.relay_url, &p.token);
+    }
+    let _ = std::fs::remove_file(pending_file());
     let reply = match Pairing::load() {
         Ok(Some(p)) => {
             let relay_deleted = delete_on_relay(&p.relay_url, &p.token);

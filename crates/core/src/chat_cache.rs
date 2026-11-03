@@ -16,7 +16,7 @@ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use aries_protocol::chat::ChatItem;
+use aries_protocol::chat::{ChatBody, ChatItem};
 use ring::aead::{self, Aad, LessSafeKey, Nonce, UnboundKey};
 use ring::rand::{SecureRandom, SystemRandom};
 use ring::{hkdf, hmac};
@@ -35,6 +35,8 @@ const KEY: &str = "chat-cache.key";
 const DAY: u64 = 24 * 60 * 60;
 /// How often a followed Chat is written at most.
 pub(crate) const SAVE_EVERY: Duration = Duration::from_secs(1);
+/// Persist at most 16 MiB of base64 image payload per Chat, newest first.
+const IMAGE_BUDGET: usize = 16 * 1024 * 1024;
 
 const SCHEMA: &str = "PRAGMA secure_delete = ON;
 CREATE TABLE IF NOT EXISTS chats (
@@ -44,13 +46,38 @@ CREATE TABLE IF NOT EXISTS chats (
     data BLOB NOT NULL,
     PRIMARY KEY (host, chat)
 ) WITHOUT ROWID;
-CREATE INDEX IF NOT EXISTS chats_updated ON chats (updated);";
+CREATE INDEX IF NOT EXISTS chats_updated ON chats (updated);
+CREATE TABLE IF NOT EXISTS removed_hosts (digest BLOB PRIMARY KEY) WITHOUT ROWID;";
 
 /// A cached Chat: the Beacon's items in order and the cursor after them.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct CachedChat {
     pub items: Vec<ChatItem>,
     pub cursor: Option<String>,
+}
+
+impl CachedChat {
+    fn cap_images(&mut self) -> bool {
+        let mut remaining = IMAGE_BUDGET;
+        let mut changed = false;
+        for item in self.items.iter_mut().rev() {
+            let images = match &mut item.body {
+                ChatBody::User { images, .. } | ChatBody::Tool { images, .. } => images,
+                _ => continue,
+            };
+            for image in images.iter_mut().rev() {
+                if let Some(data) = &image.data {
+                    if data.len() <= remaining {
+                        remaining -= data.len();
+                    } else {
+                        image.data = None;
+                        changed = true;
+                    }
+                }
+            }
+        }
+        changed
+    }
 }
 
 struct Open {
@@ -175,8 +202,21 @@ impl ChatCache {
                 .optional()
                 .map_err(storage)?;
             let Some(data) = data else { return Ok(None) };
-            let opened = unseal(o, host, &chat, data)
+            let mut opened = unseal(o, host, &chat, data)
                 .and_then(|plain| serde_json::from_slice::<CachedChat>(&plain).ok());
+            if let Some(cached) = &mut opened
+                && cached.cap_images()
+            {
+                // Apply the cap to rows written before this policy too,
+                // without extending their retention period.
+                let data = seal(o, host, &chat, serde_json::to_vec(cached).map_err(storage)?)?;
+                o.conn
+                    .execute(
+                        "UPDATE chats SET data = ?3 WHERE host = ?1 AND chat = ?2",
+                        params![host, chat, data],
+                    )
+                    .map_err(storage)?;
+            }
             if opened.is_none() {
                 o.conn
                     .execute(
@@ -190,15 +230,19 @@ impl ChatCache {
     }
 
     pub fn save(&self, host: &str, terminal: &str, chat: &CachedChat) -> Result<(), CoreError> {
-        let plain = serde_json::to_vec(chat).map_err(storage)?;
+        let mut chat = chat.clone();
+        chat.cap_images();
+        let plain = serde_json::to_vec(&chat).map_err(storage)?;
         let now = self.now();
         self.with(|o| {
             let id = chat_id(o, host, terminal);
             let data = seal(o, host, &id, plain)?;
             o.conn
                 .execute(
-                    "INSERT OR REPLACE INTO chats (host, chat, updated, data) VALUES (?1, ?2, ?3, ?4)",
-                    params![host, id, now as i64, data],
+                    "INSERT OR REPLACE INTO chats (host, chat, updated, data)
+                     SELECT ?1, ?2, ?3, ?4 WHERE NOT EXISTS
+                     (SELECT 1 FROM removed_hosts WHERE digest = ?5)",
+                    params![host, id, now as i64, data, host_digest(host)],
                 )
                 .map_err(storage)?;
             Ok(())
@@ -220,13 +264,24 @@ impl ChatCache {
 /// work even when the key cannot be opened). Overwrites the deleted rows.
 pub(crate) fn remove_host(dir: &Path, host: &str) -> Result<(), CoreError> {
     let path = dir.join(DB);
-    if !path.exists() {
-        return Ok(());
-    }
-    connect(&path)?
-        .execute("DELETE FROM chats WHERE host = ?1", [host])
+    let mut conn = connect(&path)?;
+    let tx = conn.transaction().map_err(storage)?;
+    // A durable tombstone also rejects writers that had not opened the
+    // cache yet. The write predicate and deletion serialize in SQLite.
+    tx.execute(
+        "INSERT OR IGNORE INTO removed_hosts (digest) VALUES (?1)",
+        [host_digest(host)],
+    )
+    .map_err(storage)?;
+    tx.execute("DELETE FROM chats WHERE host = ?1", [host])
         .map_err(storage)?;
-    Ok(())
+    tx.commit().map_err(storage)
+}
+
+fn host_digest(host: &str) -> Vec<u8> {
+    ring::digest::digest(&ring::digest::SHA256, host.as_bytes())
+        .as_ref()
+        .to_vec()
 }
 
 fn connect(path: &Path) -> Result<Connection, CoreError> {

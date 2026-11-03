@@ -7,6 +7,7 @@ use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 
 use aries_protocol::chat::ChatEvent;
+use sha2::{Digest, Sha256};
 
 use super::Interpreter;
 
@@ -25,6 +26,7 @@ pub struct JsonlSource {
     quiet_until: u64,
     partial: Vec<u8>,
     inode: Option<(u64, u64)>,
+    checkpoint: Sha256,
 }
 
 /// What one [`JsonlSource::poll`] found.
@@ -34,7 +36,7 @@ pub enum Poll {
     /// New events, each with the offset just after the line that made it.
     /// `more` is set when unread bytes remain.
     Events {
-        events: Vec<(ChatEvent, u64)>,
+        events: Vec<(ChatEvent, String)>,
         more: bool,
     },
     /// The file shrank or was replaced: what was read no longer holds.
@@ -52,6 +54,7 @@ impl JsonlSource {
             quiet_until: resume_after,
             partial: Vec::new(),
             inode: None,
+            checkpoint: Sha256::new(),
         }
     }
 
@@ -60,9 +63,30 @@ impl JsonlSource {
         self.offset
     }
 
-    /// The file is at least `len` bytes long (a cursor into it is valid).
-    pub fn holds(&self, len: u64) -> bool {
-        std::fs::metadata(&self.path).is_ok_and(|m| m.len() >= len)
+    pub fn position(&self) -> String {
+        format!("{}.{}", self.offset, digest(&self.checkpoint))
+    }
+
+    /// A resume point binds the entire consumed prefix, so rewrites of an
+    /// equal or longer file cannot silently reuse an old offset.
+    pub fn holds(&self, position: &str) -> Option<u64> {
+        let (offset, digest) = position.split_once('.')?;
+        let offset = offset.parse::<u64>().ok()?;
+        let file = std::fs::File::open(&self.path).ok()?;
+        if file.metadata().ok()?.len() < offset {
+            return None;
+        }
+        let mut hash = Sha256::new();
+        let mut prefix = file.take(offset);
+        let mut buf = [0; 65536];
+        loop {
+            let n = prefix.read(&mut buf).ok()?;
+            if n == 0 {
+                break;
+            }
+            hash.update(&buf[..n]);
+        }
+        (self::digest(&hash) == digest).then_some(offset)
     }
 
     pub fn poll(&mut self) -> std::io::Result<Poll> {
@@ -108,8 +132,10 @@ impl JsonlSource {
             let line = &self.partial[start..start + nl];
             let end = self.offset + (start + nl + 1) as u64;
             let produced = self.interpreter.line(&String::from_utf8_lossy(line));
+            self.checkpoint.update(&self.partial[start..start + nl + 1]);
             if end > self.quiet_until {
-                events.extend(produced.into_iter().map(|e| (e, end)));
+                let position = format!("{end}.{}", digest(&self.checkpoint));
+                events.extend(produced.into_iter().map(|e| (e, position.clone())));
             }
             start += nl + 1;
         }
@@ -117,4 +143,12 @@ impl JsonlSource {
         self.offset += start as u64;
         Ok(Poll::Events { events, more })
     }
+}
+
+fn digest(hash: &Sha256) -> String {
+    hash.clone()
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }

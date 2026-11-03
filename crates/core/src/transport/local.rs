@@ -20,7 +20,19 @@ impl Transport for LocalProcess {
                     .ok_or_else(|| CoreError::Unreachable {
                         detail: "empty local command".into(),
                     })?;
-            let mut child = tokio::process::Command::new(program)
+            let mut command = tokio::process::Command::new(program);
+            // An endpoint owns its routing. Inherited socket overrides can
+            // otherwise bypass its HC_SESSION and reach the app's own core.
+            for key in [
+                "HC_SESSION",
+                "HC_SOCKET",
+                "HC_SCOPE",
+                "HC_TERMINAL_ID",
+                "HC_TERMINAL_SOCKET",
+            ] {
+                command.env_remove(key);
+            }
+            let mut child = command
                 .args(args)
                 .envs(&self.env)
                 .stdin(Stdio::piped())

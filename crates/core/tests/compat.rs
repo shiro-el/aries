@@ -12,6 +12,37 @@ use common::{core_in, local_endpoint, script_endpoint};
 
 const ALL_METHODS: &str = r#""hello","terminal.run","terminal.list","terminal.get","terminal.kill","terminal.label","terminal.read","terminal.attach","terminal.send","terminal.keys","terminal.interrupt","doc.get","doc.set","events.subscribe""#;
 
+#[tokio::test]
+async fn local_connections_ignore_inherited_core_routes() {
+    const CHILD: &str = "ARIES_TEST_INHERITED_ROUTES";
+    if std::env::var_os(CHILD).is_none() {
+        let status = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "local_connections_ignore_inherited_core_routes",
+                "--nocapture",
+            ])
+            .env(CHILD, "1")
+            .env("HC_SOCKET", "/nonexistent/aries-review-socket")
+            .env("HC_TERMINAL_SOCKET", "/nonexistent/aries-review-terminal")
+            .status()
+            .unwrap();
+        assert!(status.success());
+        return;
+    }
+    let hc = HcSession::start();
+    hc.run_bg("isolated", &["sleep", "300"]);
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    let host = core.add_host("test".into(), local_endpoint(&hc)).unwrap();
+    let conn = core.connect(host.id).await.unwrap();
+    assert_eq!(
+        conn.terminals().await.unwrap()[0].name.as_deref(),
+        Some("isolated")
+    );
+    conn.disconnect().await;
+}
+
 /// A fake `herdr-core connect` that answers hello with `result` and stays open.
 fn fake_core(result: &str) -> String {
     let reply = format!(r#"{{"jsonrpc":"2.0","id":0,"result":{result}}}"#);

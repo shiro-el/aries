@@ -7,6 +7,7 @@ fn call(id: &str) -> Call {
         id: id.into(),
         at_ms: 1_000,
         terminal: Some("t3".into()),
+        recipient: None,
         top_level: true,
         title: "Review ready".into(),
         body: "Tests pass.".into(),

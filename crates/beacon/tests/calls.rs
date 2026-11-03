@@ -340,6 +340,7 @@ fn old_call(seq: u64, at_ms: u64, pad: usize) -> String {
             id: format!("old{seq}"),
             at_ms,
             terminal: None,
+            recipient: None,
             top_level: false,
             title: format!("old {seq}"),
             body: "x".repeat(pad),

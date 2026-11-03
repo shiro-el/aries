@@ -45,17 +45,14 @@ impl Source for JsonlSource {
             Poll::Missing => Batch::Missing,
             Poll::Replaced => Batch::Replaced,
             Poll::Events { events, more } => {
-                let ends: Vec<u64> = events.iter().map(|(_, end)| *end).collect();
+                let ends: Vec<String> = events.iter().map(|(_, end)| end.clone()).collect();
                 let events = events
                     .into_iter()
                     .enumerate()
                     // Only the last event of a transcript line is a resume
                     // point, so resuming never skips the rest of the line.
                     .map(|(i, (event, end))| {
-                        (
-                            event,
-                            (ends.get(i + 1) != Some(&end)).then(|| end.to_string()),
-                        )
+                        (event, (ends.get(i + 1) != Some(&end)).then_some(end))
                     })
                     .collect();
                 Batch::Events { events, more }
@@ -64,6 +61,6 @@ impl Source for JsonlSource {
     }
 
     fn position(&self) -> String {
-        self.offset().to_string()
+        JsonlSource::position(self)
     }
 }

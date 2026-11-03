@@ -644,6 +644,130 @@ async fn removing_the_host_revokes_the_pairing_on_the_relay() {
     assert_eq!(log.deleted, [token]);
 }
 
+#[tokio::test]
+#[ignore = "needs docker"]
+async fn a_flush_preserves_a_revocation_queued_while_http_is_in_flight() {
+    struct RemoveDuringDelete {
+        core: Arc<AriesCore>,
+        host: Mutex<Option<String>>,
+    }
+    impl HttpClient for RemoveDuringDelete {
+        fn send(&self, request: HttpRequest) -> Result<HttpResponse, FetchError> {
+            if let Some(host) = self.host.lock().unwrap().take() {
+                self.core.remove_host(host).unwrap();
+            }
+            Http.send(request)
+        }
+    }
+    let s = setup().await;
+    s.enable("dev-1").await;
+    // Another phone-side Host record on the same server has its own pairing.
+    let other = s
+        .core
+        .add_host(
+            "other".into(),
+            Endpoint::Ssh {
+                address: "127.0.0.1".into(),
+                port: s.host.port(),
+                user: SystemdHost::USER.into(),
+            },
+        )
+        .unwrap()
+        .id;
+    s.core
+        .trust_host_key(other.clone(), s.host.host_key_fingerprint())
+        .unwrap();
+    s.core.remove_host(s.id.clone()).unwrap();
+    s.core
+        .enable_push(
+            other.clone(),
+            s.relay.url().into(),
+            device("dev-2"),
+            Arc::new(Http),
+            Arc::new(Steps::default()),
+        )
+        .await
+        .unwrap();
+    let client = Arc::new(RemoveDuringDelete {
+        core: s.core.clone(),
+        host: Mutex::new(Some(other)),
+    });
+    assert_eq!(s.core.flush_push_revocations(client).await, 1);
+    assert_eq!(s.core.flush_push_revocations(Arc::new(Http)).await, 0);
+    assert!(s.relay.log().pairings.is_empty());
+}
+
+#[tokio::test]
+#[ignore = "needs docker"]
+async fn a_failed_phone_pairing_save_keeps_the_previous_push_working() {
+    let s = setup().await;
+    s.enable("dev-1").await;
+    let data = s._data.path().join("hosts").join(&s.id);
+    // Block both the current writer and the staged writer without harming
+    // the existing committed pairing. No filesystem permissions/root assumptions.
+    std::fs::create_dir(data.join(".push.json.tmp")).unwrap();
+    std::fs::create_dir(data.join(".push-pending.json.tmp")).unwrap();
+    let result = s
+        .core
+        .enable_push(
+            s.id.clone(),
+            s.relay.url().into(),
+            device("dev-2"),
+            Arc::new(Http),
+            Arc::new(Steps::default()),
+        )
+        .await;
+    assert!(result.is_err());
+    s.core.send_test_push(s.id.clone()).await.unwrap();
+    let pushes = s.relay.wait_pushes(2, Duration::from_secs(10));
+    s.core.open_push(pushes.last().unwrap().1.clone()).unwrap();
+}
+
+#[tokio::test]
+#[ignore = "needs docker"]
+async fn a_lost_host_commit_reply_recovers_after_restarting_the_phone() {
+    let s = setup().await;
+    s.enable("dev-1").await;
+    s.host.root(
+        r#"mv /home/aries/.local/bin/aries-beacon /home/aries/.local/bin/aries-beacon.real
+cat > /home/aries/.local/bin/aries-beacon <<'SH'
+#!/bin/sh
+if [ "$1" = pair-commit ] && [ ! -e "$HOME/commit-lost" ]; then
+  "$0.real" "$@" || exit 1
+  touch "$HOME/commit-lost"
+  exit 1
+fi
+exec "$0.real" "$@"
+SH
+chmod 755 /home/aries/.local/bin/aries-beacon"#,
+    );
+    let result = s
+        .core
+        .enable_push(
+            s.id.clone(),
+            s.relay.url().into(),
+            device("dev-2"),
+            Arc::new(Http),
+            Arc::new(Steps::default()),
+        )
+        .await;
+    assert!(result.is_err(), "the Host commit reply was lost");
+    let core = core_in(s._data.path());
+    // A push already sent with the new Host key is readable even before
+    // the pending phone transaction has been recovered after restart.
+    assert!(
+        s.host
+            .check("su aries -c '/home/aries/.local/bin/aries-beacon push-test'")
+    );
+    let pushes = s.relay.wait_pushes(2, Duration::from_secs(10));
+    core.open_push(pushes.last().unwrap().1.clone()).unwrap();
+    core.send_test_push(s.id.clone()).await.unwrap();
+    assert_eq!(core.flush_push_revocations(Arc::new(Http)).await, 0);
+    let pushes = s.relay.wait_pushes(3, Duration::from_secs(10));
+    core.open_push(pushes.last().unwrap().1.clone()).unwrap();
+    assert_eq!(s.relay.log().pairings.len(), 1);
+}
+
 // ---- Agent status pushes (ticket 28) ----------------------------------------
 
 /// Runs `script` as the Host user with the user's runtime dir, so it talks to

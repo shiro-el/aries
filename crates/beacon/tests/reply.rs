@@ -277,7 +277,7 @@ fn unknown_calls_choices_and_unconfirmed_callers_are_refused() {
 
 /// A herdr-core that confirms the Terminal is live and then drops the
 /// connection when asked to type, so the send may or may not have landed.
-fn write_flaky_core(dir: &Path) -> PathBuf {
+fn write_flaky_core(dir: &Path, terminal: &str) -> PathBuf {
     let bin = dir.join("flaky/herdr-core");
     std::fs::create_dir_all(bin.parent().unwrap()).unwrap();
     std::fs::write(
@@ -287,11 +287,12 @@ while IFS= read -r line; do
   id=$(printf '%s' "$line" | sed -n 's/.*"id":\([0-9]*\).*/\1/p')
   case $line in
     *'"hello"'*) printf '{"jsonrpc":"2.0","id":%s,"result":{"version":"0.1.17"}}\n' "$id" ;;
-    *'"terminal.get"'*) printf '{"jsonrpc":"2.0","id":%s,"result":{"address":"t1","state":"live"}}\n' "$id" ;;
+    *'"terminal.get"'*) printf '{"jsonrpc":"2.0","id":%s,"result":__TERMINAL__}\n' "$id" ;;
     *'"terminal.send"'*) echo "$line" >> "$(dirname "$0")/sent"; exit 1 ;;
   esac
 done
-"#,
+"#
+        .replace("__TERMINAL__", terminal.trim()),
     )
     .unwrap();
     use std::os::unix::fs::PermissionsExt;
@@ -302,8 +303,9 @@ done
 #[test]
 fn an_ambiguous_send_is_recorded_unconfirmed_and_never_retried() {
     let env = Env::new();
-    let (_agent, call) = env.agent_with_call("agent", &["Yes"]);
-    let flaky = write_flaky_core(env.state.path());
+    let (agent, call) = env.agent_with_call("agent", &["Yes"]);
+    let terminal = env.hc.hc(&["get", "--json", &agent.address]);
+    let flaky = write_flaky_core(env.state.path(), &terminal);
     let flaky_path = format!("{}:/usr/bin:/bin", flaky.parent().unwrap().display());
 
     let out = env

@@ -808,7 +808,12 @@ impl AriesCore {
     /// Has the paired Beacon send another test notification.
     pub async fn send_test_push(&self, host_id: String) -> Result<(), CoreError> {
         let ssh = self.beacon_ssh(&host_id)?;
-        on_runtime(async move { push::test(&ssh).await }).await
+        let (store, vault) = (self.store.clone(), self.vault.clone());
+        on_runtime(async move {
+            push::complete_pending(&store, vault.as_ref(), &host_id, &ssh).await?;
+            push::test(&ssh).await
+        })
+        .await
     }
 
     /// Which Agent statuses (and subagent Calls) the Host's Beacon pushes.
@@ -854,10 +859,8 @@ impl AriesCore {
         let paired = self
             .hosts()
             .into_iter()
-            .filter_map(|h| {
-                push::pairing_of(&self.store, self.vault.as_ref(), &h.id)
-                    .ok()
-                    .flatten()
+            .flat_map(|h| {
+                push::pairings_of(&self.store, self.vault.as_ref(), &h.id).unwrap_or_default()
             })
             .collect();
         on_runtime(push::update_token(paired, device, http)).await
@@ -878,11 +881,11 @@ impl AriesCore {
     /// Works while the phone is locked. Rejects tampered envelopes, unknown
     /// versions and envelopes from no paired Host.
     pub fn open_push(&self, envelope: Vec<u8>) -> Result<PushNotice, CoreError> {
-        let paired = self.hosts().into_iter().filter_map(|h| {
-            push::pairing_of(&self.store, self.vault.as_ref(), &h.id)
-                .ok()
-                .flatten()
-                .map(|p| (h.id, h.name, p))
+        let paired = self.hosts().into_iter().flat_map(|h| {
+            push::pairings_of(&self.store, self.vault.as_ref(), &h.id)
+                .unwrap_or_default()
+                .into_iter()
+                .map(move |p| (h.id.clone(), h.name.clone(), p))
         });
         push::open(&envelope, paired)
     }
@@ -1109,7 +1112,26 @@ impl AriesCore {
         let host = self.saved_host(host_id)?;
         Ok(match host.endpoint {
             Endpoint::Local { env, .. } => chat::ChatHost::Local(env),
-            Endpoint::Ssh { .. } => chat::ChatHost::Ssh(Box::new(self.beacon_ssh(host_id)?)),
+            Endpoint::Ssh { .. } => {
+                let first = self.beacon_ssh(host_id)?;
+                let store = self.store.clone();
+                let vault = self.vault.clone();
+                let host_id = host_id.to_owned();
+                chat::ChatHost::Ssh {
+                    first: Mutex::new(Some(Box::new(first))),
+                    reopen: Arc::new(move || {
+                        let host = store
+                            .load()?
+                            .hosts
+                            .into_iter()
+                            .find(|h| h.id == host_id)
+                            .ok_or_else(|| CoreError::UnknownHost {
+                                id: host_id.clone(),
+                            })?;
+                        ssh_for_saved_host(&store, vault.as_ref(), host)
+                    }),
+                }
+            }
         })
     }
 
@@ -1121,21 +1143,61 @@ impl AriesCore {
 
     fn beacon_ssh(&self, host_id: &str) -> Result<Ssh, CoreError> {
         let host = self.saved_host(host_id)?;
-        match host.endpoint {
-            Endpoint::Ssh {
-                address,
-                port,
-                user,
-            } => Ok(Ssh {
-                address,
-                port,
-                user,
-                key: self.private_key(host.key_id.as_deref())?,
-                trusted: host.host_key,
-                jumps: self.ssh_hops(host.jumps)?,
-            }),
-            Endpoint::Local { .. } => Err(CoreError::BeaconNeedsSsh),
-        }
+        ssh_for_saved_host(&self.store, self.vault.as_ref(), host)
+    }
+}
+
+/// Rebuild credentials for each SSH authentication, including jump hosts.
+/// Watches keep sealed credentials, never a reusable unlocked private key.
+fn ssh_for_saved_host(
+    store: &Store,
+    vault: &dyn KeyVault,
+    host: SavedHost,
+) -> Result<Ssh, CoreError> {
+    let key = |id: Option<&str>| -> Result<PrivateKey, CoreError> {
+        let (protection, sealed) = match id {
+            None | Some(DEFAULT_KEY_ID) => {
+                let identity = store.read_identity()?.ok_or(CoreError::NoKey)?;
+                (identity.protection, identity.sealed)
+            }
+            Some(id) => {
+                if !store.read_keys()?.iter().any(|k| k.id == id) {
+                    return Err(CoreError::UnknownKey { id: id.to_owned() });
+                }
+                store.read_key_sealed(id)?
+            }
+        };
+        let pem = vault.open(sealed, protection)?;
+        PrivateKey::from_openssh(pem).map_err(|e| CoreError::Vault {
+            detail: e.to_string(),
+        })
+    };
+    match host.endpoint {
+        Endpoint::Ssh {
+            address,
+            port,
+            user,
+        } => Ok(Ssh {
+            address,
+            port,
+            user,
+            key: key(host.key_id.as_deref())?,
+            trusted: host.host_key,
+            jumps: host
+                .jumps
+                .into_iter()
+                .map(|j| {
+                    Ok(SshHop {
+                        key: key(j.key_id.as_deref())?,
+                        address: j.address,
+                        port: j.port,
+                        user: j.user,
+                        trusted: j.host_key,
+                    })
+                })
+                .collect::<Result<_, CoreError>>()?,
+        }),
+        Endpoint::Local { .. } => Err(CoreError::BeaconNeedsSsh),
     }
 }
 

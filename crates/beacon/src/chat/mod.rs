@@ -42,10 +42,10 @@ pub trait Agent {
     /// earlier cursor for this transcript. Default: a [`JsonlSource`] over
     /// `located.path` with [`Agent::interpreter`].
     fn open(&self, located: &Located, resume: Option<&str>) -> Opened {
-        let after = resume.and_then(|p| p.parse::<u64>().ok());
         let fresh = JsonlSource::new(located.path.clone(), self.interpreter(), 0);
+        let after = resume.and_then(|p| fresh.holds(p));
         match after {
-            Some(after) if fresh.holds(after) => Opened {
+            Some(after) => Opened {
                 source: Box::new(JsonlSource::new(
                     located.path.clone(),
                     self.interpreter(),

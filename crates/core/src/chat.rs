@@ -431,7 +431,10 @@ fn tool_status(status: ToolStatus) -> ChatToolStatus {
 
 /// How to run a command on the Host for the Chat.
 pub(crate) enum ChatHost {
-    Ssh(Box<Ssh>),
+    Ssh {
+        first: std::sync::Mutex<Option<Box<Ssh>>>,
+        reopen: Arc<dyn Fn() -> Result<Ssh, CoreError> + Send + Sync>,
+    },
     /// Runs `sh -c` locally with these variables (Local endpoints).
     Local(HashMap<String, String>),
 }
@@ -448,9 +451,25 @@ const LEAKY_ENV: &[&str] = &[
 ];
 
 impl ChatHost {
+    async fn ssh(&self) -> Result<Ssh, CoreError> {
+        let Self::Ssh { first, reopen } = self else {
+            unreachable!()
+        };
+        if let Some(ssh) = first.lock().expect("first SSH lock").take() {
+            return Ok(*ssh);
+        }
+        let reopen = reopen.clone();
+        // The vault may wait for foreground biometric authorization.
+        tokio::task::spawn_blocking(move || reopen())
+            .await
+            .map_err(|e| CoreError::Vault {
+                detail: e.to_string(),
+            })?
+    }
+
     pub(crate) async fn open(&self, command: &str) -> Result<Stream, CoreError> {
         match self {
-            Self::Ssh(ssh) => ssh.exec_stream(command).await,
+            Self::Ssh { .. } => self.ssh().await?.exec_stream(command).await,
             Self::Local(env) => open_local(env, command),
         }
     }
@@ -463,7 +482,7 @@ impl ChatHost {
         sign_in: std::time::Duration,
     ) -> Result<Stream, CoreError> {
         match self {
-            Self::Ssh(ssh) => ssh.exec_stream_within(command, sign_in).await,
+            Self::Ssh { .. } => self.ssh().await?.exec_stream_within(command, sign_in).await,
             Self::Local(env) => open_local(env, command),
         }
     }

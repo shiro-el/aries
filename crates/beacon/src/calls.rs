@@ -14,7 +14,8 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use aries_protocol::calls::{
-    Answer, AnswerState, CallsLine, LogEntry, ReplyLine, ReplyOutcome, Urgency, fold, validate,
+    Answer, AnswerState, CallsLine, LogEntry, Recipient, ReplyLine, ReplyOutcome, Urgency, fold,
+    validate,
 };
 
 pub use aries_protocol::calls::Call;
@@ -35,6 +36,7 @@ pub struct Log {
 /// What the Agent asked for, before it is recorded.
 pub struct NewCall {
     pub terminal: Option<String>,
+    pub recipient: Option<Recipient>,
     pub top_level: bool,
     pub title: String,
     pub body: String,
@@ -98,6 +100,7 @@ impl Log {
                 id: format!("c{at_ms}-{}", random_hex()),
                 at_ms,
                 terminal: new.terminal,
+                recipient: new.recipient,
                 top_level: new.top_level,
                 title: new.title,
                 body: new.body,
@@ -256,16 +259,17 @@ pub fn call_command(log: &Log, args: &[String]) -> i32 {
             return 2;
         }
     };
-    let (terminal, top_level) = match confirm_caller() {
-        Ok(c) => (Some(c.terminal), c.top_level),
+    let (terminal, top_level, recipient) = match confirm_caller() {
+        Ok(c) => (Some(c.terminal), c.top_level, Some(c.recipient)),
         Err(why) => {
             eprintln!("aries-beacon call: caller not confirmed ({why}); the Call is only recorded");
-            (None, false)
+            (None, false, None)
         }
     };
     let call = match log.append(NewCall {
         terminal,
         top_level,
+        recipient,
         ..new
     }) {
         Ok(c) => c,
@@ -314,6 +318,7 @@ fn parse_call(args: &[String]) -> Result<NewCall, String> {
     validate(&title, &body, &choices).map_err(|e| e.to_string())?;
     Ok(NewCall {
         terminal: None,
+        recipient: None,
         top_level: false,
         title,
         body,
@@ -325,6 +330,7 @@ fn parse_call(args: &[String]) -> Result<NewCall, String> {
 struct Caller {
     terminal: String,
     top_level: bool,
+    recipient: Recipient,
 }
 
 /// The Terminal this process runs in, as herdr-core confirms it: the
@@ -351,9 +357,33 @@ fn confirm_caller() -> Result<Caller, String> {
         return Err(format!("this process does not run in Terminal {id}"));
     }
     let terminal = t["address"].as_str().unwrap_or(&id).to_owned();
+    // The first descendant of the Terminal's program is the Agent when
+    // it runs inside a shell; a short-lived `call` helper is never bound.
+    let mut agent_pid = pid;
+    let mut child = std::process::id();
+    while is_shell(pid)
+        && let Some(parent) = parent_of(child)
+    {
+        if parent == pid {
+            if child != std::process::id() {
+                agent_pid = child;
+            }
+            break;
+        }
+        child = parent;
+    }
+    let recipient = Recipient {
+        terminal_pid: pid,
+        created_ms: t["created_ms"]
+            .as_u64()
+            .ok_or("Terminal has no creation identity")?,
+        agent_pid,
+        process: process_identity(agent_pid).ok_or("Agent process identity unavailable")?,
+    };
     Ok(Caller {
         terminal,
         top_level: t["parent"].is_null(),
+        recipient,
     })
 }
 
@@ -377,6 +407,39 @@ fn parent_of(pid: u32) -> Option<u32> {
     // `pid (comm) state ppid ...`; comm may hold spaces and parentheses.
     let rest = &stat[stat.rfind(')')? + 1..];
     rest.split_whitespace().nth(1)?.parse().ok()
+}
+
+fn process_identity(pid: u32) -> Option<String> {
+    use sha2::{Digest, Sha256};
+    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    let rest = &stat[stat.rfind(')')? + 1..];
+    let start = rest.split_whitespace().nth(19)?;
+    let argv = std::fs::read(format!("/proc/{pid}/cmdline")).ok()?;
+    if argv.is_empty() {
+        return None;
+    }
+    let hash: String = Sha256::digest(argv)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    let boot = std::fs::read_to_string("/proc/sys/kernel/random/boot_id").ok()?;
+    Some(format!("{}:{start}:{hash}", boot.trim()))
+}
+
+fn is_shell(pid: u32) -> bool {
+    let Ok(argv) = std::fs::read(format!("/proc/{pid}/cmdline")) else {
+        return false;
+    };
+    let args: Vec<_> = argv.split(|b| *b == 0).filter(|s| !s.is_empty()).collect();
+    let Some(program) = args.first() else {
+        return false;
+    };
+    let name = program.rsplit(|b| *b == b'/').next().unwrap_or(program);
+    matches!(name, b"sh" | b"bash" | b"dash" | b"zsh" | b"fish")
+        && (args[1..].iter().all(|a| a.starts_with(b"-"))
+            || args
+                .get(1)
+                .is_some_and(|a| matches!(*a, b"-c" | b"-lc" | b"-ic")))
 }
 
 // --------------------------------------------------------------- `reply`
@@ -455,10 +518,10 @@ fn reply(log: &Log, id: &str, choice: u32) -> ReplyLine {
                 id: id.to_owned(),
                 answer: answer.clone(),
             }),
-            Ok((terminal, answer)),
+            Ok((terminal, call.recipient, answer)),
         )
     });
-    let (terminal, answer) = match claimed {
+    let (terminal, recipient, answer) = match claimed {
         Ok(Ok(c)) => c,
         Ok(Err(line)) => return line,
         Err(e) => {
@@ -471,7 +534,7 @@ fn reply(log: &Log, id: &str, choice: u32) -> ReplyLine {
         }
     };
 
-    let (state, detail) = match deliver(&terminal, &answer.text) {
+    let (state, detail) = match deliver(&terminal, recipient.as_ref(), &answer.text) {
         Sent::Yes => (AnswerState::Delivered, None),
         Sent::No(why) => (AnswerState::Failed, Some(why)),
         Sent::Maybe(why) => (AnswerState::Unconfirmed, Some(why)),
@@ -520,13 +583,20 @@ enum Sent {
 /// `terminal.send` (paste the text, then Enter); never retried. A refusal
 /// (an error reply) types nothing; a lost connection or no answer within
 /// [`SEND_TIMEOUT`] may have.
-fn deliver(terminal: &str, text: &str) -> Sent {
+fn deliver(terminal: &str, recipient: Option<&Recipient>, text: &str) -> Sent {
+    let Some(recipient) = recipient else {
+        return Sent::No("the original Agent identity was not recorded".into());
+    };
     let mut link = match aries_beacon::core_link::CoreLink::connect() {
         Ok(l) => l,
         Err(e) => return Sent::No(format!("herdr-core: {e}")),
     };
     match link.call("terminal.get", serde_json::json!({ "terminal": terminal })) {
-        Ok(t) if t["state"] == "live" => {}
+        Ok(t)
+            if t["state"] == "live"
+                && t["pid"].as_u64() == Some(u64::from(recipient.terminal_pid))
+                && t["created_ms"].as_u64() == Some(recipient.created_ms)
+                && process_identity(recipient.agent_pid).as_ref() == Some(&recipient.process) => {}
         Ok(_) => return Sent::No(format!("Terminal {terminal} has ended")),
         Err(e) if e.starts_with("rpc") => {
             return Sent::No(format!("Terminal {terminal} is gone ({e})"));
