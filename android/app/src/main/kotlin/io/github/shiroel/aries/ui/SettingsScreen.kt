@@ -123,9 +123,6 @@ fun SettingsScreen(
             }
             item { SettingsField(R.string.accent_title) { AccentControls(settings) } }
             item { SettingsField(R.string.accent_custom) { HsvPicker(settings) } }
-            item(key = "terminal-display") {
-                SettingsField(R.string.terminal_display_title) { TerminalDisplaySection(terminalDisplay) }
-            }
             item {
                 val context = androidx.compose.ui.platform.LocalContext.current
                 val attachments = remember(context) { AttachmentSettings.from(context) }
@@ -148,6 +145,9 @@ fun SettingsScreen(
                         model.attachMode == AttachMode.INPUT,
                     ) { model.setDefaultAttachMode(if (it) AttachMode.INPUT else AttachMode.OBSERVE) }
                 }
+            }
+            item(key = "terminal-display") {
+                SettingsField(R.string.terminal_display_title) { TerminalDisplaySection(terminalDisplay) }
             }
             item { SettingsField { io.github.shiroel.aries.dictation.DictationSettings() } }
         }
