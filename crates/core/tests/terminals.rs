@@ -31,5 +31,5 @@ async fn lists_the_terminals_of_a_host() {
         ]
     );
     assert_eq!(conn.core_version(), "0.1.17");
-    conn.close().await;
+    conn.disconnect().await;
 }

@@ -11,7 +11,7 @@ val repoRoot: File = rootProject.projectDir.parentFile
 
 android {
     namespace = "io.github.shiroel.aries"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "io.github.shiroel.aries"

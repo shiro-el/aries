@@ -41,12 +41,12 @@ async fn trusts_the_host_key_on_first_use_then_refuses_a_changed_one() {
     let conn = core.connect(host.id.clone()).await.unwrap();
     assert_eq!(conn.terminals().await.unwrap(), vec![]);
     assert_eq!(conn.core_version(), "0.1.17");
-    conn.close().await;
+    conn.disconnect().await;
 
     // Trust survives a relaunch.
     drop(core);
     let core = core_in(data.path());
-    core.connect(host.id.clone()).await.unwrap().close().await;
+    core.connect(host.id.clone()).await.unwrap().disconnect().await;
 
     // The Host now presents another key: warn and refuse.
     sshd.rotate_host_keys();
@@ -74,7 +74,7 @@ async fn works_through_a_login_shell_that_prints_a_banner() {
 
     let conn = core.connect(host.id).await.unwrap();
     assert_eq!(conn.terminals().await.unwrap(), vec![]);
-    conn.close().await;
+    conn.disconnect().await;
 }
 
 #[tokio::test]

@@ -281,7 +281,7 @@ impl HostConnection {
         Ok(list.iter().map(terminal_info).collect())
     }
 
-    pub async fn close(&self) {
+    pub async fn disconnect(&self) {
         let client = self.client.clone();
         let _ = on_runtime(async move {
             client.close().await;

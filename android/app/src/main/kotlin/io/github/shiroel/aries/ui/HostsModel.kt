@@ -66,7 +66,7 @@ class HostsModel(private val core: AriesCoreInterface, private val scope: Corout
                 try {
                     screen = Screen.Terminals(host, conn.terminals())
                 } finally {
-                    conn.close()
+                    conn.disconnect()
                 }
             } catch (e: CoreException) {
                 screen = Screen.Hosts

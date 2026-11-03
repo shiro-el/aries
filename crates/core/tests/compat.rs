@@ -108,7 +108,7 @@ async fn tolerates_a_login_shell_that_prints_a_banner() {
         .map(|t| t.name)
         .collect();
     assert_eq!(names, vec![Some("work".to_owned())]);
-    conn.close().await;
+    conn.disconnect().await;
 }
 
 #[tokio::test]
