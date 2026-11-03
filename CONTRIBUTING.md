@@ -91,11 +91,12 @@ format arguments, when an argument is not positional, or when Kotlin passes a
 string literal to UI text (`Text("…")`, `label = "…"`; mark a deliberate one
 with `// i18n-ok`).
 
-To add a language, add only `android/app/src/main/res/values-<lang>/strings.xml`
+To add a language, add `android/app/src/main/res/values-<lang>/strings.xml`
 (e.g. `values-ja`, `values-pt-rBR`) with every translatable key, and run
-`:app:testDebugUnitTest`. No code changes: the per-app language list (Android
-13+) is generated from the `values-*` directories. To make the test require it
-from then on, add the language to `shipped` in `TranslationsTest`.
+`:app:testDebugUnitTest`. Also add its language tag to `res/xml/locales_config.xml`
+and the in-app language picker so Android Settings and Aries offer the same shipped
+languages. To make the test require it from then on, add the language to `shipped`
+in `TranslationsTest`.
 
 ## Beacon on a Host
 

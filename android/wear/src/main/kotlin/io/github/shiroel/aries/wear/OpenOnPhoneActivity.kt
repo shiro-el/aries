@@ -22,23 +22,25 @@ class OpenOnPhoneActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val store = WatchStateStore(this)
+        fun message(resource: Int) = store.summary().localizedContext(this).getString(resource)
         val label = TextView(this).apply {
             gravity = Gravity.CENTER
             setPadding(24, 24, 24, 24)
-            setText(R.string.wear_opening_phone)
+            text = message(R.string.wear_opening_phone)
         }
         setContentView(label)
         val host = intent.getStringExtra("host")
         val terminal = intent.getStringExtra("terminal")
         if (host.isNullOrBlank() || terminal.isNullOrBlank()) {
-            label.setText(R.string.wear_open_phone)
+            label.text = message(R.string.wear_open_phone)
             return
         }
         scope.launch {
             try {
                 withTimeout(10_000) {
-                    val store = WatchStateStore(this@OpenOnPhoneActivity)
                     store.hydrate(this@OpenOnPhoneActivity)
+                    label.text = message(R.string.wear_opening_phone)
                     val phone = requireNotNull(store.phoneNode())
                     val command = OpenWatchAgent(host, terminal)
                     // RPC acknowledges that the phone still knows this Host/Agent.
@@ -60,7 +62,7 @@ class OpenOnPhoneActivity : Activity() {
                 }
                 finish()
             } catch (_: Exception) {
-                if (!isDestroyed) label.setText(R.string.wear_connect_phone)
+                if (!isDestroyed) label.text = message(R.string.wear_connect_phone)
             }
         }
     }

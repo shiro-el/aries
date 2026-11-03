@@ -57,6 +57,7 @@ class LayoutEditTest {
         open(core)
         compose.onNodeWithText(str(R.string.layout_new_space_button)).assertIsNotEnabled()
         compose.onNodeWithText(str(R.string.layout_app_unavailable)).assertExists()
+        compose.onNodeWithText(terminal.name!!).performTouchInput { longClick() }
         compose.onNodeWithText(str(R.string.layout_kill_button)).performClick()
         compose.onNodeWithText(str(R.string.layout_confirm_title, "build")).assertExists()
         compose.onNodeWithText(str(R.string.layout_impact, 1, 0)).assertExists()
@@ -70,6 +71,7 @@ class LayoutEditTest {
         val terminal = TerminalInfo("t1", "agent", "", listOf("codex"), "/repo", "live", agentStatus = AgentStatus.Working)
         val core = FakeCore().apply { structure = HostStructure(emptyList(), listOf(terminal), null) }
         open(core)
+        compose.onNodeWithText(terminal.name!!).performTouchInput { longClick() }
         compose.onNodeWithText(str(R.string.layout_kill_button)).performClick()
         compose.onNodeWithText(str(R.string.layout_working_warning)).assertExists()
         compose.onNodeWithText(str(R.string.layout_confirm_button)).assertDoesNotExist()

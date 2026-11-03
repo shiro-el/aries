@@ -45,6 +45,13 @@
     <string name="github_draft_failed">The draft could not be saved on this phone. Keep this view open and try editing again.</string>
     <string name="github_draft_limit">Comments can contain at most 64 KiB of text.</string>
 
+    <!-- App language (130) -->
+    <string name="app_language_title">App language</string>
+    <string name="app_language_system">System default</string>
+    <string name="app_language_english">English</string>
+    <string name="app_language_korean">한국어</string>
+    <string name="app_language_search">Search languages</string>
+
     <!-- App lock (117) -->
     <string name="app_lock_settings_title">App lock</string>
     <string name="app_lock_enabled_label">Require authentication</string>
@@ -210,6 +217,8 @@
     <string name="agents_elapsed_hours">%1$dh</string>
     <string name="agents_elapsed_days">%1$dd</string>
     <string name="agents_elapsed_label">Status changed %1$s ago</string>
+    <string name="tree_expanded">Expanded</string>
+    <string name="tree_collapsed">Collapsed</string>
     <string name="agents_view_priority">Priority</string>
     <string name="agents_view_grouped">Grouped by space</string>
     <string name="agents_needs_you">Needs you</string>
@@ -303,6 +312,7 @@
     <string name="host_remove_confirm_button">Remove Host</string>
 
     <string name="connecting">Connecting to %1$s…</string>
+    <string name="terminals_actions_label">Terminal actions</string>
     <string name="terminals_title">Terminals on %1$s</string>
     <string name="terminals_empty">No Terminals are running on this Host.</string>
     <string name="terminal_subtitle">%1$s · %2$s</string>

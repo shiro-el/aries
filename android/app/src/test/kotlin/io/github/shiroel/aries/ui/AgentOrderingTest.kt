@@ -26,7 +26,7 @@ class AgentOrderingTest {
         }
     }
 
-    @Test fun groupedViewUsesSpaceTabPaneOrderRatherThanTerminalCreationOrder() {
+    @Test fun retiredGroupedPreferenceCannotOverridePriorityOrder() {
         val a = agent("a", AgentStatus.Error(null))
         val b = agent("b", AgentStatus.Idle)
         val c = agent("c", AgentStatus.Working)
@@ -41,8 +41,8 @@ class AgentOrderingTest {
                 ), emptyList(), null))
             view = AgentListView.Grouped
         }
-        assertEquals(listOf("b", "a", "c"), board.agents.map { it.terminal.address })
-        assertEquals(listOf("First", "Second"), agentGroups(board.agents, board.view).map { it.space?.name })
+        assertEquals(listOf("a", "c", "b"), board.agents.map { it.terminal.address })
+        assertEquals(listOf("priority:4", "priority:2", "priority:1"), agentGroups(board.agents, board.view).map { it.id })
         assertEquals(board.agents, orderAgents(board.agents, board.view))
     }
 
