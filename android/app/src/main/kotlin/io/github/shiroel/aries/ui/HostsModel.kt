@@ -127,6 +127,8 @@ class HostsModel(
 
     /** Every Host's Calls and the new-Call banner; see [resumeCalls]. */
     val calls = CallsModel(core, scope, keyWork)
+    /** Chat cache retention and per-Host clearing (ticket 44). */
+    val chatCache = ChatCacheModel(core, scope, keyWork)
 
     var key by mutableStateOf<PublicKeyInfo?>(null)
         private set
@@ -160,11 +162,26 @@ class HostsModel(
     /** Every line the screens use now: the open Host's and the Agent list's. */
     private val links: List<HostLink> get() = listOfNotNull(browseLink, callLink) + agentLinks.values
 
-    /** The phone's network changed (Wi-Fi to LTE, airplane mode): replace every line and restore the screens. */
-    fun networkChanged() = links.forEach { it.networkChanged() }
+    /**
+     * The phone's network changed (Wi-Fi to LTE, airplane mode): replace every
+     * line and restore the screens. Each line reconnects once, on its own path:
+     * Host connections through their [HostLink], the open Chat's stream (its
+     * own line, see `ChatWatch`) through [ChatModel.reconnect].
+     */
+    fun networkChanged() {
+        links.forEach { it.networkChanged() }
+        liveChat?.reconnect()
+    }
 
     /** The app is back in the foreground: reconnect any line that died meanwhile. */
-    fun foregrounded() = links.forEach { it.check() }
+    fun foregrounded() {
+        links.forEach { it.check() }
+        liveChat?.retryNow()
+    }
+
+    /** The Chat that is open, or still running under the Terminal opened from it. */
+    private val liveChat: ChatModel?
+        get() = (screen as? Screen.Chat ?: (screen as? Screen.Terminal)?.returnTo as? Screen.Chat)?.chat
 
     init {
         guard {
@@ -663,11 +680,7 @@ class HostsModel(
     }
 
     /** The Chat that is open (or under the Terminal opened from it) on [hostId]. */
-    private fun chatOn(hostId: String): ChatModel? {
-        val s = screen
-        val chat = (s as? Screen.Chat ?: (s as? Screen.Terminal)?.returnTo as? Screen.Chat)?.chat
-        return chat?.takeIf { it.host.id == hostId }
-    }
+    private fun chatOn(hostId: String): ChatModel? = liveChat?.takeIf { it.host.id == hostId }
 
     fun back() {
         (screen as? Screen.Chat)?.chat?.stop()
