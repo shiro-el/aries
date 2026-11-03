@@ -207,6 +207,12 @@ async fn saved_launches_are_kept_per_host_and_relaunch_in_one_call() {
     // Survives an app restart, per Host.
     conn.disconnect().await;
     let core = core_in(data.path());
+    // Launcher shortcuts can enumerate saved configs while offline, without opening a key.
+    assert_eq!(
+        core.saved_launches(host.id.clone()).unwrap(),
+        vec![edited.clone(), custom.clone()]
+    );
+    assert!(core.saved_launches(other.id.clone()).unwrap().is_empty());
     let conn = connect(&core, &host.id).await;
     assert_eq!(conn.saved_launches(), vec![edited.clone(), custom.clone()]);
     assert!(connect(&core, &other.id).await.saved_launches().is_empty());

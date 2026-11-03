@@ -17,6 +17,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
+import io.github.shiroel.aries.LaunchShortcuts
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -194,6 +196,7 @@ fun BrowseScreen(
     showHeader: Boolean = true,
 ) {
     val space = browser.openSpace
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val editor = remember(browser) { LayoutEditor(browser, scope).also { browser.layoutEditor = it } }
     Column(Modifier.fillMaxSize()) {
@@ -223,6 +226,7 @@ fun BrowseScreen(
                 onDismiss = { browser.launchForm = null },
                 onSave = { onSaveLaunch(form) },
                 onDelete = { onDeleteLaunch(form, it) },
+                onPin = if (LaunchShortcuts.canPin(context)) { saved -> LaunchShortcuts.pin(context, browser.host.id, saved) } else null,
             )
         }
         val line = browser.link?.state

@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "aries"
 include(":app")
+include(":wear", ":wear-data")

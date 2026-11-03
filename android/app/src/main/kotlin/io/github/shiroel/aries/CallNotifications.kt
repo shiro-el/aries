@@ -58,7 +58,7 @@ data class CallNotice(val hostId: String, val hostName: String, val call: PushCo
 
 /** What a Call notification shows under its text. */
 sealed interface CallView {
-    /** No Choices: nothing to answer (a tap still opens the Terminal). */
+    /** No Choices: free-text reply and snooze (a tap still opens the Terminal). */
     data object Plain : CallView
 
     /** One button per Choice: answers without opening the app. */
@@ -105,7 +105,7 @@ object CallNotifications {
             )
         }
         when (view) {
-            CallView.Plain -> {}
+            CallView.Plain -> InlineNotifications.add(context, builder, notice.hostId, notice.hostName, call.terminal, notice.tag, reply = true)
             CallView.Choices -> call.choices.forEachIndexed { i, choice ->
                 builder.addAction(action(choice, choiceIntent(context, notice, i)))
             }
