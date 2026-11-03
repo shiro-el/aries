@@ -8,7 +8,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * Downloads Beacon release binaries on the phone. The core checks them
+ * Downloads pinned release artifacts (Beacon or herdr-core) on the phone. The core checks them
  * against the checksum pinned in the app before anything reaches a Host.
  */
 class HttpBeaconFetcher : BeaconFetcher {

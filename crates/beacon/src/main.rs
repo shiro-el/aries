@@ -61,6 +61,7 @@ fn main() {
         Some("call") => std::process::exit(calls::call_command(&call_log(), &rest_args())),
         Some("calls") => std::process::exit(calls::calls_command(&call_log(), &rest_args())),
         Some("reply") => std::process::exit(calls::reply_command(&call_log(), &rest_args())),
+        Some("pair-qr") => exit_on_error(aries_beacon::host_pairing::command(&rest_args())),
         Some("pair") => exit_on_error(push::pair_command(false)),
         Some("pair-prepare") => exit_on_error(push::pair_command(true)),
         Some("pair-commit") => exit_on_error(push::commit_command()),
@@ -76,7 +77,7 @@ fn main() {
         }
         _ => {
             eprintln!(
-                "usage: aries-beacon --version | status | serve | call ... | calls [--follow] | reply CALL CHOICE | pair | push-test | unpair | chat TERMINAL [--follow] [--cursor C] | answer TERMINAL QUESTION PICKS... | skill install|uninstall | pi-extension install|remove | opencode-plugin install|remove | policy [set]"
+                "usage: aries-beacon --version | status | serve | call ... | calls [--follow] | reply CALL CHOICE | pair-qr --address ADDRESS [--port PORT] [--listen IP:PORT] [--host-key PUBLIC_KEY_FILE] | pair | push-test | unpair | chat TERMINAL [--follow] [--cursor C] | answer TERMINAL QUESTION PICKS... | skill install|uninstall | pi-extension install|remove | opencode-plugin install|remove | policy [set]"
             );
             std::process::exit(2);
         }

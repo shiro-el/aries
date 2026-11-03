@@ -289,6 +289,7 @@ private fun AddHostForm(model: HostsModel) {
     var port by rememberSaveable { mutableStateOf("22") }
     var user by rememberSaveable { mutableStateOf("") }
     val portNumber = port.toIntOrNull()?.takeIf { it in 1..65535 }
+    QrHostPairing(model)
     Text(stringResource(R.string.host_add_title), style = MaterialTheme.typography.titleMedium)
     OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.host_add_name)) }, singleLine = true)
     OutlinedTextField(address, { address = it }, label = { Text(stringResource(R.string.host_add_address)) }, singleLine = true)

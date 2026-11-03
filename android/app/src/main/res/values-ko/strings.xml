@@ -273,6 +273,19 @@
 
     <string name="host_ssh_address">%1$s@%2$s:%3$d</string>
     <string name="host_local_address">로컬 프로세스</string>
+    <!-- QR Host pairing -->
+    <string name="host_pair_scan_button">Host QR 스캔</string>
+    <string name="host_pair_scan_prompt">aries-beacon pair-qr에 표시된 QR을 스캔하세요</string>
+    <string name="host_pair_hint">Host에서 aries-beacon pair-qr --address ADDRESS를 실행하세요. QR은 5분 뒤 만료되며 폰 한 대만 등록할 수 있습니다.</string>
+    <string name="host_pair_review_title">스캔한 Host 등록</string>
+    <string name="host_pair_fingerprint">Host 키: %1$s</string>
+    <string name="host_pair_review_body">내 Host에서 표시한 QR인지 확인하세요. 등록하면 폰의 공개키를 Host에 설치하고 위 Host 키를 신뢰합니다.</string>
+    <string name="host_pair_confirm_button">QR로 등록</string>
+    <string name="host_pair_busy">등록 중…</string>
+    <string name="host_pair_invalid">Host QR이 올바르지 않거나 만료되었습니다. Host에서 새 QR을 만드세요.</string>
+    <string name="host_pair_refused">등록하지 못했습니다. QR이 이미 사용되었거나 만료되었을 수 있습니다. 주소와 페어링 포트를 확인하고 새 QR을 스캔하세요.</string>
+    <string name="host_pair_key_changed">Host 키가 QR과 일치하지 않습니다. Host를 확인하고 새 QR을 만드세요.</string>
+
     <string name="host_add_title">호스트 추가</string>
     <string name="host_add_name">이름 (선택)</string>
     <string name="host_add_address">주소</string>
@@ -602,6 +615,31 @@
     <string name="connect_unreachable">호스트에 연결할 수 없습니다: %1$s</string>
     <string name="connect_protocol">호스트가 herdr-core 프로토콜로 응답하지 않았습니다: %1$s</string>
     <string name="connect_other">%1$s</string>
+    <!-- Herdr Core installation -->
+    <string name="herdr_diagnostics_install">Herdr Core 설치</string>
+    <string name="herdr_diagnostics_status">Herdr Core 상태 확인</string>
+    <string name="herdr_diagnostics_failed">Herdr Core 설치 실패</string>
+    <string name="herdr_diagnostics_checksum">Herdr Core checksum 불일치</string>
+    <string name="herdr_install_title">Herdr Core</string>
+    <string name="herdr_install_missing">이 Host에 herdr-core가 없습니다.</string>
+    <string name="herdr_install_version">herdr-core %1$s</string>
+    <string name="herdr_install_old">Aries에는 herdr-core 0.1.17 이상이 필요합니다.</string>
+    <string name="herdr_install_button">Herdr Core 설치</string>
+    <string name="herdr_install_update">Herdr Core 업데이트</string>
+    <string name="herdr_install_refresh">Herdr Core 다시 확인</string>
+    <string name="herdr_install_consent_title">Herdr Core를 설치하거나 업데이트할까요?</string>
+    <string name="herdr_install_consent_body">공식 herdr-core 0.1.17 릴리스를 내려받아 고정된 SHA-256 checksum을 검증한 뒤 SSH로 이 Host의 ~/.local/bin에 설치합니다. 기존 사용자 설치는 Terminal을 유지하는 업데이트 기능을 사용합니다. 관리자 권한은 사용하지 않습니다.</string>
+    <string name="herdr_install_confirm">설치 승인</string>
+    <string name="herdr_install_detect">Host 플랫폼 확인 중…</string>
+    <string name="herdr_install_download">릴리스 내려받는 중…</string>
+    <string name="herdr_install_verify">checksum과 버전 검증 중…</string>
+    <string name="herdr_install_working">Herdr Core 설치 중…</string>
+    <string name="herdr_install_done">Herdr Core가 준비되었습니다. 접속하여 계속하세요.</string>
+    <string name="herdr_install_connect">Host에 접속</string>
+    <string name="herdr_install_checksum">checksum 검증에 실패했습니다. 아무것도 설치하지 않았습니다. 예상: %1$s, 실제: %2$s</string>
+    <string name="herdr_install_failed">Herdr Core %1$s 단계 실패: %2$s</string>
+    <string name="herdr_install_recovery">Host 연결, 남은 디스크 공간, 다운로드 접근을 확인한 뒤 다시 확인하고 재시도하세요.</string>
+
     <string name="beacon_title">Beacon</string>
     <string name="beacon_needs_ssh">Beacon은 SSH 호스트에만 설치할 수 있습니다.</string>
     <string name="beacon_status_unknown">이 호스트의 Beacon 상태를 읽을 수 없습니다.</string>
