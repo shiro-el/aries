@@ -87,17 +87,20 @@ internal class MarkdownCode(val source: String, val language: String) {
     } ?: 0
 }
 
+/** Visible prose from Agent histories shares one rendering, search and scrolling path. */
+internal fun ChatEntryBody.markdownSource(): String? = when (this) {
+    is ChatEntryBody.User -> text
+    is ChatEntryBody.Agent -> text
+    is ChatEntryBody.Thinking -> text
+    else -> null
+}
+
 /** Cache only the current transcript, reuse unchanged messages, and cancel work when Chat leaves. */
 @Composable
 internal fun rememberChatMarkdown(entries: List<ChatEntry>): State<Map<String, ChatMarkdownDocument>> {
     val sources = remember(entries) {
         entries.mapNotNull { entry ->
-            val text = when (val body = entry.body) {
-                is ChatEntryBody.User -> body.text
-                is ChatEntryBody.Agent -> body.text
-                else -> null
-            }
-            text?.let { entry.id to it }
+            entry.body.markdownSource()?.let { entry.id to it }
         }
     }
     return produceState(emptyMap(), sources) {
@@ -111,7 +114,7 @@ internal fun rememberChatMarkdown(entries: List<ChatEntry>): State<Map<String, C
     }
 }
 
-internal fun LazyListScope.chatMarkdownItems(id: String, document: ChatMarkdownDocument?) {
+internal fun LazyListScope.chatMarkdownItems(id: String, document: ChatMarkdownDocument?, thinking: Boolean = false) {
     itemsIndexed(
         document?.blocks.orEmpty(),
         key = { index, _ -> "transcript:$id:markdown:$index" },
@@ -119,14 +122,14 @@ internal fun LazyListScope.chatMarkdownItems(id: String, document: ChatMarkdownD
     ) { index, block ->
         CompositionLocalProvider(LocalChatSearchEntry provides id) {
             ChatTextActions(document?.source.orEmpty(), interceptChildLongPress = true) { actions ->
-                ChatMarkdownBlockView(block, actions, "markdown:$index")
+                ChatMarkdownBlockView(block, actions, "markdown:$index", thinking)
             }
         }
     }
 }
 
 @Composable
-private fun ChatMarkdownBlockView(block: ChatMarkdownBlock, actions: Modifier, searchKey: String) {
+private fun ChatMarkdownBlockView(block: ChatMarkdownBlock, actions: Modifier, searchKey: String, thinking: Boolean) {
     when (block) {
         is ChatMarkdownBlock.Prose -> {
             val open = LocalOpenRemoteFile.current
@@ -149,7 +152,7 @@ private fun ChatMarkdownBlockView(block: ChatMarkdownBlock, actions: Modifier, s
                         drawLine(quoteColor, Offset(1.dp.toPx(), 0f), Offset(1.dp.toPx(), size.height), 2.dp.toPx())
                     }.padding(start = 12.dp) else Modifier)
                     .then(if (block.headingLevel > 0) Modifier.semantics { heading() } else Modifier),
-                style = style,
+                style = if (thinking) style.copy(fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant) else style,
             )
         }
         is ChatMarkdownBlock.Cells -> Row(Modifier.padding(horizontal = 16.dp).horizontalScroll(block.scroll)) {
@@ -164,6 +167,7 @@ private fun ChatMarkdownBlockView(block: ChatMarkdownBlock, actions: Modifier, s
                         .background(if (cell.header) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface)
                         .padding(8.dp),
                     fontWeight = if (cell.header) FontWeight.Bold else null,
+                    fontStyle = if (thinking) FontStyle.Italic else null,
                     textAlign = when (cell.alignment) {
                         TableCell.Alignment.RIGHT -> TextAlign.Right
                         TableCell.Alignment.CENTER -> TextAlign.Center

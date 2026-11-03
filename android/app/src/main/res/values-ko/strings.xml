@@ -204,6 +204,8 @@
     <string name="files_full_button">전체 파일</string>
     <string name="files_folder_expanded">펼침</string>
     <string name="files_folder_collapsed">접힘</string>
+    <string name="files_actions_label">파일 작업</string>
+    <string name="files_open_folder_label">%1$s 폴더 열기</string>
     <string name="files_title">Host 파일</string>
     <string name="files_close_button">파일 닫기</string>
     <string name="files_up_button">상위 폴더</string>
@@ -334,6 +336,7 @@
     <string name="connecting">%1$s에 연결 중…</string>
     <string name="terminals_actions_label">Terminal 메뉴</string>
     <!-- Host Agent list and editing context -->
+    <string name="hosts_actions_label">Host 메뉴</string>
     <string name="hosts_layout_context_button">Space·Tab</string>
     <string name="terminals_plain_group">Terminal (%1$d)</string>
     <string name="terminals_title">%1$s의 Terminal</string>
@@ -528,7 +531,7 @@
     <string name="chat_skills_search">스킬 검색</string>
     <string name="chat_catalog_refresh">목록 새로고침</string>
     <string name="chat_catalog_empty">결과 없음</string>
-    <string name="chat_catalog_failed">Host에서 목록을 읽지 못했어요. 새로고침해 주세요.</string>
+    <string name="chat_catalog_failed">Host에서 목록을 읽지 못했어요.</string>
     <string name="chat_catalog_builtin">기본 명령어</string>
 
     <string name="chat_input_label">Agent에게 보낼 메시지</string>

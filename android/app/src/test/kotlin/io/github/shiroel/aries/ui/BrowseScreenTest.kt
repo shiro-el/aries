@@ -142,6 +142,7 @@ class BrowseScreenTest {
             )), emptyList(), null)
         }
         open(core)
+        compose.onNodeWithContentDescription(str(R.string.hosts_actions_label)).performClick()
         compose.onNodeWithTag("host-layout-context").performClick()
         compose.onNodeWithText("  ").assertExists()
         compose.onNodeWithText("   ").assertExists()
@@ -178,6 +179,7 @@ class BrowseScreenTest {
     fun followsDesktopChangesRightAway() {
         val core = FakeCore().apply { structure = desktop }
         open(core)
+        compose.onNodeWithContentDescription(str(R.string.hosts_actions_label)).performClick()
         compose.onNodeWithTag("host-layout-context").performClick()
         compose.onNodeWithTag("host-context-space:s1").assertTextEquals("aries")
 
