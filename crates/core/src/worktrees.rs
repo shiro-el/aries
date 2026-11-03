@@ -117,6 +117,8 @@ impl HostConnection {
                     space_id,
                     tab_id: None,
                     preset,
+                    model: None,
+                    effort: None,
                 })
                 .await?;
             Ok(WorktreeOpen::Terminal {

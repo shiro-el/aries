@@ -295,6 +295,10 @@
     <string name="agent_view_terminal">term</string>
     <string name="agent_view_chat">chat</string>
     <string name="chat_title">Chat: %1$s</string>
+    <!-- Chat reading position -->
+    <string name="chat_latest_button">최신으로</string>
+    <string name="chat_latest_count_button">최신으로 (%1$d)</string>
+
     <string name="chat_empty">아직 메시지가 없습니다.</string>
     <string name="chat_status_connecting">Beacon에 연결하는 중…</string>
     <string name="chat_status_waiting">Agent가 아직 아무것도 기록하지 않았습니다.</string>
@@ -391,6 +395,16 @@
     <string name="chat_answer_unsupported">이 Agent의 질문은 Chat에서 답할 수 없습니다. Terminal에서 답하세요.</string>
     <string name="chat_answer_no_core">Beacon이 이 Host의 herdr-core에 연결하지 못합니다.</string>
     <string name="chat_answer_failed">답을 보내지 못했습니다: %1$s</string>
+    <!-- Chat Agent command and skill catalog -->
+    <string name="chat_commands_title">Agent 명령</string>
+    <string name="chat_skills_button">Skill</string>
+    <string name="chat_skills_title">설치된 Skill</string>
+    <string name="chat_skills_search">Skill 검색</string>
+    <string name="chat_catalog_refresh">목록 새로고침</string>
+    <string name="chat_catalog_empty">검색 결과가 없습니다</string>
+    <string name="chat_catalog_failed">Host 목록을 읽지 못했습니다. 새로고침으로 다시 시도하세요.</string>
+    <string name="chat_catalog_builtin">내장 명령</string>
+
     <string name="chat_input_label">Agent에게 보낼 메시지</string>
     <string name="chat_send_button">보내기</string>
     <string name="chat_sending">보내는 중…</string>
@@ -452,6 +466,24 @@
     <string name="launch_connection_closed">호스트 연결이 끊겼습니다. 뒤로 가서 다시 연결하세요.</string>
     <string name="preset_custom">직접 입력한 명령</string>
     <string name="launch_preset_args">추가 인자(선택)</string>
+    <!-- Launch model and reasoning effort (103). -->
+    <string name="launch_model_label">모델 ID 또는 별칭</string>
+    <string name="launch_model_choose">선택</string>
+    <string name="launch_agent_default">Agent 기본값</string>
+    <string name="launch_model_hint">이 Host에서 사용 가능한 모델을 입력하세요. 비워 두면 Agent 기본값을 사용합니다.</string>
+    <string name="launch_model_provider_hint">이 Host의 provider/model을 입력하세요. 비워 두면 Agent 기본값을 사용합니다.</string>
+    <string name="launch_effort_label">추론 강도</string>
+    <string name="launch_effort_hint">사용 가능한 강도는 이 Host의 모델과 Agent 버전에 따라 다릅니다.</string>
+    <string name="launch_effort_unavailable">OpenCode의 대화형 실행은 추론 강도 선택을 지원하지 않습니다. OpenCode의 모델 설정을 사용하세요.</string>
+    <string name="launch_effort_off">끄기</string>
+    <string name="launch_effort_minimal">최소</string>
+    <string name="launch_effort_low">낮음</string>
+    <string name="launch_effort_medium">중간</string>
+    <string name="launch_effort_high">높음</string>
+    <string name="launch_effort_xhigh">매우 높음</string>
+    <string name="launch_effort_max">최대</string>
+    <string name="launch_effort_ultra">울트라</string>
+
     <string name="launch_saved">저장한 실행 설정</string>
     <string name="launch_saved_edit">수정</string>
     <string name="launch_saved_delete">삭제</string>

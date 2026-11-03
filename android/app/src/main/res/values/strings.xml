@@ -300,6 +300,10 @@
     <string name="agent_view_terminal">term</string>
     <string name="agent_view_chat">chat</string>
     <string name="chat_title">Chat: %1$s</string>
+    <!-- Chat reading position -->
+    <string name="chat_latest_button">Latest</string>
+    <string name="chat_latest_count_button">Latest (%1$d)</string>
+
     <string name="chat_empty">No messages yet.</string>
     <string name="chat_status_connecting">Connecting to the Beacon…</string>
     <string name="chat_status_waiting">The Agent has not written anything yet.</string>
@@ -396,6 +400,16 @@
     <string name="chat_answer_unsupported">This Agent\'s questions cannot be answered from the Chat. Answer in the Terminal.</string>
     <string name="chat_answer_no_core">The Beacon cannot reach herdr-core on this Host.</string>
     <string name="chat_answer_failed">The answer could not be sent: %1$s</string>
+    <!-- Chat Agent command and skill catalog -->
+    <string name="chat_commands_title">Agent commands</string>
+    <string name="chat_skills_button">Skills</string>
+    <string name="chat_skills_title">Installed skills</string>
+    <string name="chat_skills_search">Search skills</string>
+    <string name="chat_catalog_refresh">Refresh catalog</string>
+    <string name="chat_catalog_empty">No matches</string>
+    <string name="chat_catalog_failed">Could not read the Host catalog. Refresh to retry.</string>
+    <string name="chat_catalog_builtin">Built-in command</string>
+
     <string name="chat_input_label">Message to the Agent</string>
     <string name="chat_send_button">Send</string>
     <string name="chat_sending">Sending…</string>
@@ -460,6 +474,24 @@
     <string name="preset_opencode" translatable="false">OpenCode</string>
     <string name="preset_pi" translatable="false">Pi</string>
     <string name="launch_preset_args">Extra arguments (optional)</string>
+    <!-- Launch model and reasoning effort (103). -->
+    <string name="launch_model_label">Model ID or alias</string>
+    <string name="launch_model_choose">Choose</string>
+    <string name="launch_agent_default">Agent default</string>
+    <string name="launch_model_hint">Use a model available on this Host. Leave blank for the Agent default.</string>
+    <string name="launch_model_provider_hint">Enter provider/model from this Host, or leave blank for the Agent default.</string>
+    <string name="launch_effort_label">Reasoning effort</string>
+    <string name="launch_effort_hint">Available levels depend on the model and Agent version on this Host.</string>
+    <string name="launch_effort_unavailable">OpenCode’s interactive launcher does not support choosing effort. Use its model settings.</string>
+    <string name="launch_effort_off">Off</string>
+    <string name="launch_effort_minimal">Minimal</string>
+    <string name="launch_effort_low">Low</string>
+    <string name="launch_effort_medium">Medium</string>
+    <string name="launch_effort_high">High</string>
+    <string name="launch_effort_xhigh">Extra high</string>
+    <string name="launch_effort_max">Maximum</string>
+    <string name="launch_effort_ultra">Ultra</string>
+
     <string name="launch_saved">Saved launches</string>
     <string name="launch_saved_edit">Edit</string>
     <string name="launch_saved_delete">Delete</string>
