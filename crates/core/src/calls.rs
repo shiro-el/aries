@@ -2,22 +2,23 @@
 //!
 //! The Beacon owns the history (`aries-beacon calls`, format in
 //! `aries_protocol::calls`). The core runs `aries-beacon calls --follow` over
-//! its own SSH exec channel (not the herdr-core connection), folds the lines
+//! its own SSH exec channel (not the herdr-core connection; a local shell for
+//! Local Hosts, like the Chat), folds the lines
 //! into [`CallInfo`]s and hands the whole list to a [`CallListener`] after
 //! the first sync and each change. A dropped connection is retried with
 //! backoff; every reconnect starts from a fresh snapshot that replaces the
 //! list, so nothing is missed or doubled, and Calls that arrived while it was
 //! away are reported as new once.
 
-use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use aries_protocol::calls::{self as wire, CallsLine};
 use tokio::io::{AsyncBufReadExt, BufReader};
 
+use crate::chat::ChatHost;
 use crate::error::CoreError;
-use crate::transport::{Ssh, Stream};
+use crate::transport::Stream;
 
 /// No line (not even a heartbeat) for this long means the stream is dead.
 const SILENCE: Duration = Duration::from_secs(wire::HEARTBEAT_SECS * 3);
@@ -127,53 +128,16 @@ pub trait CallListener: Send + Sync {
     fn on_state(&self, state: CallFeedState);
 }
 
-/// How to run the Host's Beacon: over SSH, or (tests, dev) locally.
-pub(crate) enum BeaconRunner {
-    Ssh(Box<Ssh>),
-    Local {
-        argv: Vec<String>,
-        env: HashMap<String, String>,
-    },
-}
-
-impl BeaconRunner {
-    /// Runs `aries-beacon <args>` and streams its stdout. `args` are fixed
-    /// words from the core, quoted for the Host's `sh` anyway.
-    pub(crate) async fn stream(&self, args: &[&str]) -> Result<Stream, CoreError> {
-        match self {
-            Self::Ssh(ssh) => {
-                let words: Vec<String> = args.iter().map(|a| sh_quote(a)).collect();
-                let script = format!(
-                    r#"b="$HOME/.local/bin/aries-beacon"; [ -x "$b" ] || {{ echo not-installed; exit 3; }}; exec "$b" {}"#,
-                    words.join(" ")
-                );
-                ssh.exec_stream(&format!("sh -c {}", sh_quote(&script)))
-                    .await
-            }
-            Self::Local { argv, env } => {
-                let (program, first) = argv.split_first().ok_or(CoreError::BeaconNeedsSsh)?;
-                let mut child = tokio::process::Command::new(program)
-                    .args(first)
-                    .args(args)
-                    .envs(env)
-                    .stdin(std::process::Stdio::piped())
-                    .stdout(std::process::Stdio::piped())
-                    .stderr(std::process::Stdio::null())
-                    .kill_on_drop(true)
-                    .spawn()
-                    .map_err(|e| CoreError::Unreachable {
-                        detail: format!("{program}: {e}"),
-                    })?;
-                let stdin = child.stdin.take().expect("piped stdin");
-                let stdout = child.stdout.take().expect("piped stdout");
-                Ok(Stream {
-                    reader: Box::new(stdout),
-                    writer: Box::new(stdin),
-                    guard: Box::new(std::sync::Mutex::new(child)),
-                })
-            }
-        }
-    }
+/// The Host-side command: `aries-beacon <args>`, or `not-installed` without
+/// a Beacon. `ARIES_BEACON` overrides the installed path (development and
+/// Local test Hosts), as for the Chat.
+fn command(args: &[&str]) -> String {
+    let words: Vec<String> = args.iter().map(|a| sh_quote(a)).collect();
+    let script = format!(
+        r#"b="${{ARIES_BEACON:-$HOME/.local/bin/aries-beacon}}"; [ -x "$b" ] || {{ echo not-installed; exit 3; }}; exec "$b" {}"#,
+        words.join(" ")
+    );
+    format!("sh -c {}", sh_quote(&script))
 }
 
 fn sh_quote(s: &str) -> String {
@@ -249,11 +213,8 @@ fn listing(host_id: &str, calls: &[(u64, wire::Call)]) -> Vec<CallInfo> {
 }
 
 /// The Host's whole Call history, newest first.
-pub(crate) async fn history(
-    runner: &BeaconRunner,
-    host_id: &str,
-) -> Result<Vec<CallInfo>, CoreError> {
-    let mut feed = Feed::new(runner.stream(&["calls"]).await?);
+pub(crate) async fn history(runner: &ChatHost, host_id: &str) -> Result<Vec<CallInfo>, CoreError> {
+    let mut feed = Feed::new(runner.open(&command(&["calls"])).await?);
     let calls = feed.snapshot().await?;
     Ok(listing(host_id, &calls))
 }
@@ -291,7 +252,7 @@ impl Drop for CallWatch {
 }
 
 pub(crate) fn watch(
-    runner: BeaconRunner,
+    runner: ChatHost,
     host_id: String,
     listener: Arc<dyn CallListener>,
 ) -> CallWatch {
@@ -301,7 +262,7 @@ pub(crate) fn watch(
 }
 
 async fn run_watch(
-    runner: BeaconRunner,
+    runner: ChatHost,
     host_id: String,
     listener: Arc<dyn CallListener>,
     cut: Arc<Mutex<Option<tokio::sync::oneshot::Sender<()>>>>,
@@ -313,7 +274,7 @@ async fn run_watch(
         let (tx, mut cut_rx) = tokio::sync::oneshot::channel();
         *cut.lock().expect("cut lock") = Some(tx);
         let result = async {
-            let mut feed = Feed::new(runner.stream(&["calls", "--follow"]).await?);
+            let mut feed = Feed::new(runner.open(&command(&["calls", "--follow"])).await?);
             let mut calls = feed.snapshot().await?;
             backoff = Duration::from_secs(1);
             match &mut seen {

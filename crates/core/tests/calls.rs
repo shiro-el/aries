@@ -26,8 +26,10 @@ fn setup() -> Setup {
     let data = tempfile::tempdir().unwrap();
     let core = core_in(data.path());
     let beacon = beacon_bin().to_string_lossy().into_owned();
-    core.set_local_beacon(vec![beacon.clone()]);
-    let host = core.add_host("dev".into(), local_endpoint(&hc)).unwrap().id;
+    let host = core
+        .add_host("dev".into(), beacon_endpoint(&hc, &beacon))
+        .unwrap()
+        .id;
     Setup {
         hc,
         core,
@@ -79,6 +81,15 @@ impl Setup {
             .unwrap();
         assert!(out.status.success(), "{out:?}");
     }
+}
+
+/// A Local Host whose Beacon is `beacon` (through `ARIES_BEACON`).
+fn beacon_endpoint(hc: &HcSession, beacon: &str) -> Endpoint {
+    let Endpoint::Local { argv, mut env } = local_endpoint(hc) else {
+        unreachable!()
+    };
+    env.insert("ARIES_BEACON".into(), beacon.into());
+    Endpoint::Local { argv, env }
 }
 
 fn wait_until(what: &str, ok: impl Fn() -> bool) {
@@ -232,38 +243,15 @@ async fn a_host_without_a_beacon_says_so() {
     let s = setup();
     let data = tempfile::tempdir().unwrap();
     let core = core_in(data.path());
-    core.set_local_beacon(vec![
-        "/bin/sh".into(),
-        "-c".into(),
-        "echo not-installed; exit 3".into(),
-        "sh".into(),
-    ]);
-    let host = core
-        .add_host("bare".into(), local_endpoint(&s.hc))
-        .unwrap()
-        .id;
-    assert!(matches!(
-        core.calls(host).await,
-        Err(CoreError::BeaconNotInstalled)
-    ));
-}
-
-#[tokio::test]
-async fn a_local_host_needs_a_beacon_command() {
-    let data = tempfile::tempdir().unwrap();
-    let core = core_in(data.path());
     let host = core
         .add_host(
-            "x".into(),
-            Endpoint::Local {
-                argv: vec!["true".into()],
-                env: Default::default(),
-            },
+            "bare".into(),
+            beacon_endpoint(&s.hc, "/nonexistent/aries-beacon"),
         )
         .unwrap()
         .id;
     assert!(matches!(
         core.calls(host).await,
-        Err(CoreError::BeaconNeedsSsh)
+        Err(CoreError::BeaconNotInstalled)
     ));
 }

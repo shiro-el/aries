@@ -325,12 +325,8 @@ impl Ssh {
         Ok(out)
     }
 
-    async fn open_inner(&self) -> Result<Stream, CoreError> {
-        self.exec_stream(REMOTE_COMMAND).await
-    }
-
-    /// Runs `command` on the Host (no PTY) and streams its stdio, for
-    /// long-running commands such as `aries-beacon calls --follow`.
+    /// Runs `command` on the Host (no PTY) and streams its stdio. Dropping
+    /// the stream closes the channel.
     pub async fn exec_stream(&self, command: &str) -> Result<Stream, CoreError> {
         let (mut sessions, session) = self.session().await?;
         let channel = session
@@ -351,6 +347,6 @@ impl Ssh {
 
 impl Transport for Ssh {
     fn open(&self) -> OpenFuture<'_> {
-        Box::pin(self.open_inner())
+        Box::pin(self.exec_stream(REMOTE_COMMAND))
     }
 }

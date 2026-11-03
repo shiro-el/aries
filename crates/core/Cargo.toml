@@ -23,6 +23,9 @@ qrcode = { version = "0.14.1", default-features = false }
 alacritty_terminal = { version = "0.26.0", default-features = false }
 sha2 = "0.11"
 
+[build-dependencies]
+serde_json.workspace = true
+
 [dev-dependencies]
 aries-test-support.workspace = true
 rqrr = "0.11.0"

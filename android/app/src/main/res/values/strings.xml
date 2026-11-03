@@ -70,6 +70,12 @@
     <string name="terminal_exited_signal">The program was stopped by signal %1$s.</string>
     <string name="terminal_exited_reason">The program ended (%1$s).</string>
     <string name="terminal_connection_closed">The connection to the Terminal closed. What you see may be out of date.</string>
+    <string name="terminal_scrolled_back">%1$d lines back</string>
+    <string name="terminal_back_to_live">Back to live</string>
+    <string name="terminal_zoom_reset">Zoom %1$d%% · Reset</string>
+    <string name="terminal_copy">Copy</string>
+    <string name="terminal_open_link">Open link</string>
+    <string name="terminal_copy_link">Copy link</string>
 
     <string name="agents_button">All Agents</string>
     <string name="agents_title">Agents</string>
@@ -97,6 +103,28 @@
     <string name="agent_status_done">Done</string>
     <string name="agent_status_idle">Idle</string>
     <string name="agent_attention_label">Needs you</string>
+    <string name="chat_open_button">Chat</string>
+    <string name="chat_open_label">Open the Chat of %1$s</string>
+    <string name="chat_title">Chat: %1$s</string>
+    <string name="chat_empty">No messages yet.</string>
+    <string name="chat_status_connecting">Connecting to the Beacon…</string>
+    <string name="chat_status_waiting">The Agent has not written anything yet.</string>
+    <string name="chat_status_no_agent">No supported Agent is running in this Terminal.</string>
+    <string name="chat_status_ended">The Agent exited. This is its last Chat.</string>
+    <string name="chat_status_reconnecting">Connection lost. Reconnecting…</string>
+    <string name="chat_status_no_terminal">This Terminal no longer exists.</string>
+    <string name="chat_status_no_beacon">The Chat needs the Beacon on this Host. Install it from the Host screen.</string>
+    <string name="chat_status_no_core">The Beacon cannot reach herdr-core on this Host. Retrying…</string>
+    <string name="chat_status_incompatible">The Beacon on this Host is newer than this app. Update Aries to read the Chat.</string>
+    <string name="chat_you">You</string>
+    <string name="chat_thinking">Thinking</string>
+    <string name="chat_tool_running">running</string>
+    <string name="chat_tool_failed">failed</string>
+    <string name="chat_tool_input">Input</string>
+    <string name="chat_tool_output">Result</string>
+    <string name="chat_tool_expand_label">Show the full %1$s call</string>
+    <string name="chat_agent_error">Agent error</string>
+    <string name="chat_unsupported">This entry needs a newer version of Aries.</string>
     <string name="space_unnamed">Unnamed Space</string>
     <string name="space_summary">Tabs: %1$d · Panes: %2$d</string>
     <string name="space_no_tabs">This Space has no Tabs.</string>
@@ -123,6 +151,17 @@
     <string name="launch_spawn_failed">The Host could not start it: %1$s. Check the program name and the folder.</string>
     <string name="launch_rpc_failed">herdr-core refused (%1$s): %2$s</string>
     <string name="launch_connection_closed">The connection to the Host closed. Go back and connect again.</string>
+    <string name="preset_custom">Custom command</string>
+    <string name="preset_claude_code" translatable="false">Claude Code</string>
+    <string name="preset_codex" translatable="false">Codex</string>
+    <string name="preset_opencode" translatable="false">OpenCode</string>
+    <string name="preset_pi" translatable="false">Pi</string>
+    <string name="launch_preset_args">Extra arguments (optional)</string>
+    <string name="launch_saved">Saved launches</string>
+    <string name="launch_saved_edit">Edit</string>
+    <string name="launch_saved_delete">Delete</string>
+    <string name="launch_save_name">Name to save as</string>
+    <string name="launch_save_button">Save</string>
 
     <string name="host_key_trust_title">Trust this Host?</string>
     <string name="host_key_trust_body">This is the first connection to %1$s. Check that its Host key fingerprint is:\n\n%2$s\n\nOn the Host, run: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</string>
@@ -164,6 +203,13 @@
     <string name="beacon_unavailable_body">This version of Aries has no Beacon for %1$s/%2$s yet.</string>
     <string name="beacon_download_body">Could not download the Beacon: %1$s</string>
     <string name="beacon_step_body">Step "%1$s" failed on the Host: %2$s</string>
+    <string name="beacon_updated">Updated the Beacon from %1$s to %2$s.</string>
+    <string name="beacon_update_needed">The Beacon needs an update (%1$s to %2$s). Automatic updates are off, so nothing was installed.</string>
+    <string name="beacon_update_button">Update Beacon</string>
+    <string name="beacon_auto_update">Update the Beacon automatically</string>
+    <string name="beacon_macos_login_title">Beacon runs only while you are logged in</string>
+    <string name="beacon_macos_login_body">The Beacon is installed as a macOS LaunchAgent. macOS ties LaunchAgents to your login session: the Beacon, and its notifications, stop when you log out of the Mac and start again at your next login, also after a restart.</string>
+    <string name="beacon_macos_login_limit">On macOS the Beacon runs only while you are logged in to the Mac.</string>
 
     <string name="key_default_label">Default key</string>
     <string name="keys_title">Other SSH keys</string>
