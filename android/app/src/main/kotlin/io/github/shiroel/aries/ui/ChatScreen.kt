@@ -450,9 +450,8 @@ fun ChatScreen(
     CompositionLocalProvider(LocalChatSearch provides searchDecoration) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))) {
             AgentScreenHeader(chat.terminal, chat.host.name, onBack, AgentView.CHAT, onView,
-                onChanges = { showGit = true }, link = chat.link, onTerminalUpdate = { chat.update(listOf(it)) })
+                onChanges = { showGit = true }, link = chat.link, onTerminalUpdate = { chat.update(listOf(it)) }, onSearch = { searchOpen = true })
             ChatSearchBar(searchOpen, query, selectedIndex + 1, matches.size,
-                onOpen = { searchOpen = true },
                 onQuery = { query = it; selected = null },
                 onMove = { selected = navigateChatSearch(matches, active, it) },
                 onClose = ::closeSearch,
