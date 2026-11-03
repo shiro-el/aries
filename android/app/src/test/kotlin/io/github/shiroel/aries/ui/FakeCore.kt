@@ -1,5 +1,7 @@
 package io.github.shiroel.aries.ui
 
+import io.github.shiroel.aries.core.LastKnownState
+import io.github.shiroel.aries.core.LastKnownStateWatch
 import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.core.AriesCoreInterface
 import io.github.shiroel.aries.core.AgentView
@@ -88,7 +90,11 @@ class FakeCore : AriesCoreInterface {
 
     /** Sends a changed Terminal list to the open watch. */
     fun push(list: List<TerminalInfo>) {
+        terminals = list
         updates.trySend(list)
+        terminalWatchers.filterKeys { it !in terminalsOf }.values.forEach { watchers ->
+            watchers.toList().forEach { it.trySend(list) }
+        }
     }
     /** Per-Host Terminal lists (by Host id), for tests with several Hosts; others get [terminals]. */
     val terminalsOf = mutableMapOf<String, List<TerminalInfo>>()
@@ -103,22 +109,32 @@ class FakeCore : AriesCoreInterface {
     val labelWrites = mutableListOf<String>()
 
     private val hostUpdates = mutableMapOf<String, Channel<List<TerminalInfo>>>()
+    private val terminalWatchers = mutableMapOf<String, MutableSet<Channel<List<TerminalInfo>>>>()
+
+    /** Each subscriber receives every update, like independent core event subscriptions. */
+    internal fun watchTerminals(hostId: String, gone: kotlinx.coroutines.Deferred<Unit>): TerminalWatch {
+        val channel = Channel<List<TerminalInfo>>(Channel.UNLIMITED)
+        val watchers = terminalWatchers.getOrPut(hostId) { mutableSetOf() }
+        watchers += channel
+        return FakeWatch(terminalsOf[hostId] ?: terminals, channel, gone) { watchers -= channel }
+    }
 
     private fun updatesOf(hostId: String) = hostUpdates.getOrPut(hostId) { Channel(Channel.UNLIMITED) }
 
     /** [hostId]'s Terminal list changed (on the Host or another client). */
     fun push(hostId: String, list: List<TerminalInfo>) {
         terminalsOf[hostId] = list
-        updatesOf(hostId).trySend(list)
+        terminalWatchers[hostId]?.toList()?.forEach { it.trySend(list) }
     }
 
     /** What the fake Host does on a label write: change its Terminal and tell its watchers. */
     internal fun label(hostId: String, address: String, write: String, change: (TerminalInfo) -> TerminalInfo): TerminalInfo {
         labelWrites += "$hostId $address $write"
-        val list = terminalsOf[hostId] ?: throw CoreException.UnknownHost(hostId)
+        val list = terminalsOf[hostId] ?: terminals
         val t = list.find { it.address == address } ?: throw CoreException.Closed()
         val changed = change(t)
-        push(hostId, list.map { if (it.address == address) changed else it })
+        val next = list.map { if (it.address == address) changed else it }
+        if (hostId in terminalsOf) push(hostId, next) else push(next)
         return changed
     }
 
@@ -160,6 +176,38 @@ class FakeCore : AriesCoreInterface {
         installFailWith?.let { throw it }
         ensureKey()
         return if (installed.add(hostId)) KeyInstall.ADDED else KeyInstall.ALREADY_PRESENT
+    }
+
+    val snapshotsRequested = mutableListOf<String>()
+    val snapshotFailures = mutableSetOf<String>()
+    val storedStates = mutableMapOf<String, LastKnownState>()
+    private val stateChanges = mutableListOf<Channel<Unit>>()
+
+    override suspend fun snapshot(hostId: String): LastKnownState {
+        snapshotsRequested += hostId
+        host(hostId)
+        if (hostId in snapshotFailures) throw CoreException.Unreachable("offline")
+        return LastKnownState(hostId, (terminalsOf[hostId] ?: terminals).filter { it.agentStatus != null }, System.currentTimeMillis().toULong())
+            .also { storedStates[hostId] = it; stateChanges.forEach { channel -> channel.trySend(Unit) } }
+    }
+
+    override fun lastKnownState(hostId: String): LastKnownState? {
+        host(hostId)
+        return storedStates[hostId]
+    }
+
+    override fun lastKnownStates(): List<LastKnownState> = storedStates.values.toList()
+
+    override fun watchLastKnownStates(): LastKnownStateWatch {
+        val changes = Channel<Unit>(Channel.CONFLATED).also { stateChanges += it; it.trySend(Unit) }
+        return object : LastKnownStateWatch(NoHandle) {
+            override suspend fun next(): List<LastKnownState> {
+                changes.receive()
+                return lastKnownStates()
+            }
+            override fun stop() { stateChanges.remove(changes); changes.close() }
+            override fun close() {}
+        }
     }
 
     override fun hosts(): List<Host> = hosts.toList()
@@ -216,6 +264,8 @@ class FakeCore : AriesCoreInterface {
 
     override fun removeHost(hostId: String) {
         if (!hosts.removeIf { it.id == hostId }) throw CoreException.UnknownHost(hostId)
+        storedStates.remove(hostId)
+        stateChanges.forEach { it.trySend(Unit) }
         pushPaired.remove(hostId) // queued for revocation, like the core
     }
 
@@ -269,7 +319,7 @@ class FakeCore : AriesCoreInterface {
             return FakeConnection(list, structure ?: HostStructure(emptyList(), list, null), updatesOf(hostId), hostId, this)
                 .also { it.herdrAvailable = herdrAppAvailable; connection = it; connectionsOf[hostId] = it }
         }
-        return FakeConnection(terminals, structure ?: HostStructure(emptyList(), terminals, null), updates, saved = savedLaunches)
+        return FakeConnection(terminals, structure ?: HostStructure(emptyList(), terminals, null), updates, hostId, this, saved = savedLaunches)
             .also { it.herdrAvailable = herdrAppAvailable; connection = it }
     }
 
@@ -399,7 +449,8 @@ class FakeCore : AriesCoreInterface {
         return 0u
     }
 
-    override fun openPush(envelope: ByteArray): PushNotice = throw CoreException.PushRejected("fake")
+    var openedPush: PushNotice? = null
+    override fun openPush(envelope: ByteArray): PushNotice = openedPush ?: throw CoreException.PushRejected("fake")
 
     /** Chat snapshots `watchChat` delivers, in order (see [pushChat]). */
     val chat = Channel<ChatSnapshot>(Channel.UNLIMITED)
@@ -599,7 +650,8 @@ class FakeConnection(
         return list
     }
 
-    override suspend fun watchTerminals(): TerminalWatch = FakeWatch(list, updates, gone)
+    override suspend fun watchTerminals(): TerminalWatch =
+        core?.watchTerminals(hostId, gone) ?: FakeWatch(list, updates, gone)
     override suspend fun structure(): HostStructure = current.also { calls += "structure" }
 
     override suspend fun watchStructure(listener: StructureListener): StructureWatch {
@@ -704,6 +756,7 @@ class FakeWatch(
     private val first: List<TerminalInfo>,
     private val updates: Channel<List<TerminalInfo>>,
     private val gone: kotlinx.coroutines.Deferred<Unit> = kotlinx.coroutines.CompletableDeferred(),
+    private val onStop: () -> Unit = {},
 ) : TerminalWatch(NoHandle) {
     private var started = false
 
@@ -719,7 +772,7 @@ class FakeWatch(
         }
     }
 
-    override fun stop() {}
+    override fun stop() { onStop() }
 
     override fun close() {}
 }
