@@ -139,7 +139,7 @@ fun AgentsScreen(
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.titleSmall,
                 )
-                board.unavailable[host.id]?.let { Text(text(it), style = MaterialTheme.typography.bodySmall) }
+                board.unavailable[host.id]?.let { Text(stringResource(it.res, *it.args.toTypedArray()), style = MaterialTheme.typography.bodySmall) }
             }
         }
         items(board.hosts.filter { board.closed[it.id] == true }, key = { "closed:" + it.id }) { host ->

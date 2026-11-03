@@ -273,4 +273,4 @@ private fun QrCode(qr: QrMatrix, modifier: Modifier = Modifier) {
 }
 
 @Composable
-internal fun text(m: Message): String = stringResource(m.res, *m.args.toTypedArray())
+private fun text(m: Message): String = stringResource(m.res, *m.args.toTypedArray())
