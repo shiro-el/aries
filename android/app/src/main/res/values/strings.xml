@@ -157,6 +157,12 @@
     <string name="files_export_failed">Could not transfer this file. Check the connection, file and folder permissions, and free space, then retry.</string>
     <!-- Remote file browser (90) -->
     <string name="files_open_button">Files</string>
+    <string name="files_changed_heading">Changed</string>
+    <string name="files_folders_heading">Folders</string>
+    <string name="files_diff_button">Diff</string>
+    <string name="files_full_button">Full file</string>
+    <string name="files_folder_expanded">Expanded</string>
+    <string name="files_folder_collapsed">Collapsed</string>
     <string name="files_title">Host files</string>
     <string name="files_close_button">Close files</string>
     <string name="files_up_button">Parent folder</string>
@@ -735,6 +741,7 @@
     <string name="push_off_host_unreachable">Push is off and the Relay deleted this pairing. The Host could not be reached, so its copy of the pairing stays until the next pairing; it no longer works.</string>
     <string name="push_channel_name">Host notifications</string>
     <!-- Watched Agent progress -->
+    <string name="agent_actions_label">Agent actions</string>
     <string name="agent_watch_label">Watch progress</string>
     <string name="agent_watch_error">Could not update watching: %1$s</string>
     <string name="push_progress_channel">Watched Agent progress</string>

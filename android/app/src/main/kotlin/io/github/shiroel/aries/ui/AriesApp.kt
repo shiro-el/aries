@@ -131,12 +131,6 @@ private fun AriesContent(model: HostsModel, settings: ThemeSettings, terminalDis
                                 onView = model::switchView.takeIf { s.viewer.terminal.agentStatus != null },
                                 displaySettings = terminalDisplay,
                                 onSelectionSend = model::sendTerminalSelectionToDraft,
-                                onGitSend = if (s.viewer.terminal.agentStatus == null) null else { text ->
-                                    model.switchView(io.github.shiroel.aries.core.AgentView.CHAT)
-                                    (model.screen as? Screen.Chat)?.chat?.let { chat ->
-                                        chat.draft = if (chat.draft.isBlank()) text else chat.draft + "\n\n" + text
-                                    }
-                                },
                             )
                         }
                         is Screen.JumpHosts -> {

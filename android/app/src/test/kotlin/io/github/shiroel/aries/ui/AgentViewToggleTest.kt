@@ -3,8 +3,6 @@ package io.github.shiroel.aries.ui
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.test.assertIsOn
-import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -71,15 +69,15 @@ class AgentViewToggleTest {
         core.terminalsOf["h1"] = listOf(claude, vim)
         browseHome(core)
         click("claude")
+        compose.onNodeWithTag("agent-actions").performClick()
         compose.onNodeWithTag("agent-watch").performClick()
         compose.waitForIdle()
         assertEquals(listOf("h1 t1 watched=true"), core.labelWrites.filter { it.contains("watched=") })
-        compose.onNodeWithTag("agent-watch").assertIsOn()
         click(str(R.string.agent_view_chat))
+        compose.onNodeWithTag("agent-actions").performClick()
         compose.onNodeWithTag("agent-watch").performClick()
         compose.waitForIdle()
         assertEquals(listOf("h1 t1 watched=true", "h1 t1 watched=false"), core.labelWrites.filter { it.contains("watched=") })
-        compose.onNodeWithTag("agent-watch").assertIsOff()
     }
 
     @Test

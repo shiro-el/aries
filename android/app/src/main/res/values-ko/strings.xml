@@ -157,6 +157,12 @@
     <string name="files_export_failed">파일을 전송하지 못했습니다. 연결, 파일과 폴더의 접근 권한, 여유 공간을 확인한 뒤 다시 시도하세요.</string>
     <!-- Remote file browser (90) -->
     <string name="files_open_button">파일</string>
+    <string name="files_changed_heading">변경됨</string>
+    <string name="files_folders_heading">폴더</string>
+    <string name="files_diff_button">Diff</string>
+    <string name="files_full_button">전체 파일</string>
+    <string name="files_folder_expanded">펼침</string>
+    <string name="files_folder_collapsed">접힘</string>
     <string name="files_title">Host 파일</string>
     <string name="files_close_button">파일 닫기</string>
     <string name="files_up_button">상위 폴더</string>
@@ -723,6 +729,7 @@
     <string name="push_off_host_unreachable">푸시를 껐고 Relay에서 이 페어링을 삭제했습니다. Host에 연결할 수 없어 Host 쪽 페어링 사본은 다음 페어링 때까지 남지만 더는 동작하지 않습니다.</string>
     <string name="push_channel_name">Host 알림</string>
     <!-- Watched Agent progress -->
+    <string name="agent_actions_label">Agent 동작</string>
     <string name="agent_watch_label">진행 상황 지켜보기</string>
     <string name="agent_watch_error">지켜보기를 변경하지 못했습니다: %1$s</string>
     <string name="push_progress_channel">지켜보는 Agent 진행 상황</string>

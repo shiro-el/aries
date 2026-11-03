@@ -46,7 +46,8 @@ class GitChangesTest {
 
     @Test fun selectedDiffIsAppendedToChatDraftWithoutSending() {
         val (core, model) = openAgent()
-        compose.onNodeWithText(str(R.string.git_changes_button)).performClick()
+        compose.onNodeWithTag("agent-actions").performClick()
+        compose.onNodeWithText(str(R.string.files_open_button)).performClick()
         compose.onNodeWithText("x").performClick()
         compose.onNodeWithText("+hello").performClick()
         compose.onNodeWithText(str(R.string.git_send_selection)).performClick()
@@ -62,7 +63,8 @@ class GitChangesTest {
             model.switchView(AgentView.CHAT)
             (model.screen as Screen.Chat).chat.draft = "Review this"
         }
-        compose.onNodeWithText(str(R.string.git_changes_button)).performClick()
+        compose.onNodeWithTag("agent-actions").performClick()
+        compose.onNodeWithText(str(R.string.files_open_button)).performClick()
         compose.onNodeWithText("x").performClick()
         compose.onNodeWithText(str(R.string.git_send_file)).performClick()
         compose.runOnIdle {
@@ -74,10 +76,11 @@ class GitChangesTest {
     @Test fun nonRepositoryCanBeRefreshedIntoACleanRepository() {
         val (core, _) = openAgent()
         compose.runOnIdle { core.connection!!.gitFiles = GitChanges("/outside", emptyList(), false, true) }
-        compose.onNodeWithText(str(R.string.git_changes_button)).performClick()
+        compose.onNodeWithTag("agent-actions").performClick()
+        compose.onNodeWithText(str(R.string.files_open_button)).performClick()
         compose.onNodeWithText(str(R.string.git_not_repository)).assertExists()
         compose.runOnIdle { core.connection!!.gitFiles = GitChanges("/repo", emptyList(), false, false) }
-        compose.onNodeWithText(str(R.string.git_retry_button)).performClick()
+        compose.onNodeWithText(str(R.string.files_refresh_button)).performClick()
         compose.onNodeWithText(str(R.string.git_clean)).assertExists()
     }
 
@@ -86,7 +89,8 @@ class GitChangesTest {
         compose.runOnIdle {
             core.connection!!.gitPatch = GitDiff((1..205).map { GitDiffLine("+line $it", null, it.toUInt()) }, false, true)
         }
-        compose.onNodeWithText(str(R.string.git_changes_button)).performClick()
+        compose.onNodeWithTag("agent-actions").performClick()
+        compose.onNodeWithText(str(R.string.files_open_button)).performClick()
         compose.onNodeWithText("x").performClick()
         compose.onNodeWithText(str(R.string.git_truncated)).assertExists()
         compose.onNodeWithText("+line 205").assertDoesNotExist()

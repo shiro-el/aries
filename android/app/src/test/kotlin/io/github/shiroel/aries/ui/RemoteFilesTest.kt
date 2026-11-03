@@ -60,6 +60,39 @@ class RemoteFilesTest {
         assertEquals("'/repo/src/a.kt':3\nlast", draft)
         assertEquals(listOf(Triple("/repo/src/a.kt", 1uL, 200u), Triple("/repo/src/a.kt", 3uL, 200u)), requests)
     }
+    @Test fun changedFileLinkStartsWithDiffAndFullFileKeepsTheLinkedLine() {
+        val reads = mutableListOf<ULong>()
+        val diffs = mutableListOf<Triple<String, String, GitDiffKind>>()
+        val conn = object : HostConnection(NoHandle) {
+            override suspend fun gitChanges(address: String) = GitChanges("/repo",
+                listOf(GitFile("src/Main.kt", null, "MM", true, true, false)), false, false)
+            override suspend fun gitDiff(address: String, cwd: String, path: String, kind: GitDiffKind): GitDiff {
+                assertEquals("box/t7", address)
+                diffs += Triple(cwd, path, kind)
+                return GitDiff(listOf(GitDiffLine("+updated", null, 415u)), false, false)
+            }
+            override suspend fun readFilePage(address: String, path: String, offset: ULong, limit: UInt): RemoteFilePage {
+                assertEquals("box/t7", address)
+                assertEquals("/repo/src/Main.kt", path)
+                reads += offset
+                return RemoteFilePage("full source", offset, offset, 800u)
+            }
+        }
+        compose.setContent { MaterialTheme {
+            RemoteFilesScreen(conn, "box/t7", {}, initialLocation = FileLocation("/repo/src/Main.kt", 415u))
+        } }
+        compose.onNodeWithText("+updated").assertExists()
+        assertEquals(emptyList<ULong>(), reads)
+        compose.onNodeWithText("Full file").performClick()
+        compose.onNodeWithText("full source").assertExists()
+        assertEquals(listOf(415uL), reads)
+        compose.onNodeWithText("Diff").performClick()
+        compose.onNodeWithText(str(R.string.git_staged)).performClick()
+        compose.onNodeWithText("+updated").assertExists()
+        assertEquals(Triple("/repo", "src/Main.kt", GitDiffKind.UNSTAGED), diffs.first())
+        assertEquals(Triple("/repo", "src/Main.kt", GitDiffKind.STAGED), diffs.last())
+    }
+
     @Test fun nonTextAndNulBytesHaveNoPreviewButFileCanBeReferenced() {
         var binary = false
         val conn = object : HostConnection(NoHandle) {
@@ -99,6 +132,7 @@ class RemoteFilesTest {
         compose.waitForIdle()
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).performTextInput("Please review")
         core.connection!!.fileDirectory = RemoteDirectory("/repo", listOf(RemoteFileEntry("a'b.kt", false)))
+        compose.onNodeWithTag("agent-actions").performClick()
         compose.onNodeWithTag("files-open").performClick()
         compose.onNodeWithText("a'b.kt").performClick()
         compose.onNodeWithText(str(R.string.files_send_file_button)).performClick()
@@ -107,6 +141,7 @@ class RemoteFilesTest {
 
         // The same action from Terminal keeps the previous Chat draft and appends another reference.
         compose.onNodeWithText(str(R.string.agent_view_terminal)).performClick()
+        compose.onNodeWithTag("agent-actions").performClick()
         compose.onNodeWithTag("files-open").performClick()
         compose.onNodeWithText("a'b.kt").performClick()
         compose.onNodeWithText(str(R.string.files_send_file_button)).performClick()
