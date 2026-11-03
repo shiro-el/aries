@@ -4,27 +4,33 @@
 
 mod common;
 
-use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
-use aries_core::{BlockedReason, HostConnection, SendListener, SendOutcome};
+use aries_core::{
+    AttachOptions, BlockedReason, HostConnection, SendListener, SendOutcome, TerminalUpdate,
+    TerminalView,
+};
 use aries_test_support::{FakeAgent, HcSession};
 use common::{core_in, local_endpoint};
 
 #[derive(Default)]
-struct Held(AtomicUsize);
+struct Held {
+    calls: AtomicUsize,
+    notified: tokio::sync::Notify,
+}
 
 impl SendListener for Held {
     fn on_held(&self) {
-        self.0.fetch_add(1, Ordering::SeqCst);
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        self.notified.notify_one();
     }
 }
 
 impl Held {
     fn count(&self) -> usize {
-        self.0.load(Ordering::SeqCst)
+        self.calls.load(Ordering::SeqCst)
     }
 }
 
@@ -110,38 +116,44 @@ async fn a_blocked_agent_refuses_the_message_and_says_why() {
     assert!(agent.inputs().is_empty(), "nothing may answer its dialog");
 }
 
-/// A person at the Host typing into the Terminal, through `hc attach` on a
-/// pseudo-terminal (`script`): one key of `keys` every 400 ms.
-fn person_typing(hc: &HcSession, address: &str, keys: &str) -> Child {
-    let attach = format!("{} attach {address}", hc.bin().display());
-    let typed: String = keys
-        .chars()
-        .map(|c| format!("printf {c}; sleep 0.4; "))
-        .collect();
-    // script types what it reads on the attach's tty; Ctrl+\ (034) detaches
-    // at the end, the timeout is a backstop.
-    let feed = format!(
-        "( {typed}sleep 1; printf '\\034' ) | timeout 20 script -qfc '{attach}' /dev/null >/dev/null 2>&1"
-    );
-    let mut cmd = Command::new("sh");
-    cmd.arg("-c").arg(feed).stdin(Stdio::null());
-    for (k, v) in hc.env() {
-        cmd.env(k, v);
-    }
-    for k in [
-        "HC_TERMINAL_ID",
-        "HC_TERMINAL_SOCKET",
-        "HC_SOCKET",
-        "HC_SCOPE",
-    ] {
-        cmd.env_remove(k);
-    }
-    cmd.spawn().unwrap()
-}
-
-/// Waits for the person to finish typing and detach.
-fn finish(mut child: Child) {
-    let _ = child.wait();
+/// Types through a separate interactive viewer and waits until its input is
+/// echoed, so a send cannot race the person's attach/typing startup.
+async fn person_typing(conn: &HostConnection, address: &str, text: &str) -> Arc<TerminalView> {
+    let person = conn
+        .attach_terminal(
+            address.to_owned(),
+            AttachOptions {
+                observe: false,
+                cols: 80,
+                rows: 24,
+                history: 0,
+                resumed: false,
+            },
+        )
+        .await
+        .unwrap();
+    person.send_text(text.into()).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            match person.next().await.unwrap() {
+                TerminalUpdate::Screen { frame } => {
+                    if frame.lines.iter().any(|line| {
+                        line.runs
+                            .iter()
+                            .map(|run| run.text.as_str())
+                            .collect::<String>()
+                            .contains(text)
+                    }) {
+                        break;
+                    }
+                }
+                update => panic!("person's Terminal ended before echoing input: {update:?}"),
+            }
+        }
+    })
+    .await
+    .expect("person's input never reached the Terminal");
+    person
 }
 
 #[tokio::test]
@@ -152,31 +164,35 @@ async fn a_message_waits_while_a_person_types_then_goes_in() {
     let data = tempfile::tempdir().unwrap();
     let conn = connect(&hc, &data).await;
 
-    let person = person_typing(&hc, &agent.address, "abcd");
-    // Attach startup varies under parallel builds. Observe echoed human input
-    // before sending, so this tests the input gate rather than a startup race.
-    let deadline = Instant::now() + Duration::from_secs(10);
-    while !hc.hc(&["read", &agent.address]).contains("ab") {
-        assert!(
-            Instant::now() < deadline,
-            "the person never attached and typed"
-        );
-        std::thread::sleep(Duration::from_millis(50));
-    }
+    // Another interactive client uses the same human-input channel as hc
+    // attach. Wait for its echo instead of assuming a subprocess is ready
+    // after 600 ms (attach itself can spend 500 ms querying its outer tty).
+    let person_data = tempfile::tempdir().unwrap();
+    let person_conn = connect(&hc, &person_data).await;
+    let person = person_typing(&person_conn, &agent.address, "ab").await;
     let held = Arc::new(Held::default());
-    let t0 = Instant::now();
-    let outcome = conn
-        .send_message(agent.address.clone(), "after you".into(), held.clone())
-        .await;
-    let took = t0.elapsed();
-    finish(person);
+    let send = conn.send_message(agent.address.clone(), "after you".into(), held.clone());
+    tokio::pin!(send);
+    let outcome = tokio::time::timeout(Duration::from_secs(15), async {
+        tokio::select! {
+            result = &mut send => panic!("message completed before being held: {result:?}"),
+            _ = held.notified.notified() => {}
+        }
+        assert!(
+            agent.inputs().is_empty(),
+            "a held message must not be submitted"
+        );
+        // The person can keep typing while Chat waits, then pause. The
+        // final input assertion checks that the draft precedes the send.
+        person.send_text("cd".into()).await.unwrap();
+        send.await
+    })
+    .await
+    .expect("held message never completed after the person paused");
+    person.detach().await;
 
     assert_eq!(outcome.unwrap(), SendOutcome::Sent);
     assert_eq!(held.count(), 1, "the app is told the message is held");
-    assert!(
-        took > Duration::from_secs(2),
-        "held until the typing paused: {took:?}"
-    );
     // The person's keys come first, then the message.
     assert_eq!(inputs_after(&agent, 1), vec!["abcdafter you"]);
 }
@@ -334,17 +350,9 @@ async fn a_background_reply_reports_when_typing_holds_it() {
     let data = tempfile::tempdir().unwrap();
     let core = core_in(data.path());
     let host = core.add_host("dev".into(), local_endpoint(&hc)).unwrap();
-    let person = person_typing(&hc, &agent.address, "abcd");
-    // Attach startup varies under parallel builds. Observe echoed human input
-    // before sending, so this tests the input gate rather than a startup race.
-    let deadline = Instant::now() + Duration::from_secs(10);
-    while !hc.hc(&["read", &agent.address]).contains("ab") {
-        assert!(
-            Instant::now() < deadline,
-            "the person never attached and typed"
-        );
-        std::thread::sleep(Duration::from_millis(50));
-    }
+    let person_data = tempfile::tempdir().unwrap();
+    let person_conn = connect(&hc, &person_data).await;
+    let person = person_typing(&person_conn, &agent.address, "abcd").await;
     let held = Arc::new(Held::default());
     let outcome = core
         .send_message_background(
@@ -354,7 +362,7 @@ async fn a_background_reply_reports_when_typing_holds_it() {
             held.clone(),
         )
         .await;
-    finish(person);
+    person.detach().await;
     assert_eq!(outcome.unwrap(), SendOutcome::Sent);
     assert_eq!(held.count(), 1);
     assert_eq!(inputs_after(&agent, 1), vec!["abcdafter you"]);

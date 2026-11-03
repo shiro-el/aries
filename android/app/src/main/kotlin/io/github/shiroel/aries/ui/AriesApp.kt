@@ -68,10 +68,11 @@ fun AriesApp(
     settings: ThemeSettings = rememberThemeSettings(),
     guidance: io.github.shiroel.aries.guidance.AppGuidanceState? = null,
     allowNotifications: suspend () -> Boolean = { false },
+    terminalDisplay: TerminalDisplaySettings = rememberTerminalDisplaySettings(),
 ) {
     AriesTheme(settings) {
-        if (guidance == null) AriesContent(model, settings)
-        else io.github.shiroel.aries.guidance.AppGuidance(guidance, allowNotifications) { AriesContent(model, settings) }
+        if (guidance == null) AriesContent(model, settings, terminalDisplay)
+        else io.github.shiroel.aries.guidance.AppGuidance(guidance, allowNotifications) { AriesContent(model, settings, terminalDisplay) }
     }
 }
 
@@ -82,7 +83,7 @@ private fun rememberThemeSettings(): ThemeSettings {
 }
 
 @Composable
-private fun AriesContent(model: HostsModel, settings: ThemeSettings) {
+private fun AriesContent(model: HostsModel, settings: ThemeSettings, terminalDisplay: TerminalDisplaySettings) {
     // Calls are followed (for the banner) only while the app is in front.
     LifecycleStartEffect(model) {
         model.resumeCalls()
@@ -97,6 +98,7 @@ private fun AriesContent(model: HostsModel, settings: ThemeSettings) {
                         Screen.Settings -> {
                             SettingsScreen(
                                 model, settings, onBack = model::back, showHeader = false,
+                                terminalDisplay = terminalDisplay,
                                 hostEditor = { host -> if (host.endpoint is Endpoint.Ssh) HostEditSection(model, host) },
                             )
                         }
@@ -127,6 +129,7 @@ private fun AriesContent(model: HostsModel, settings: ThemeSettings) {
                                 s.viewer,
                                 onBack = model::closeTerminal,
                                 onView = model::switchView.takeIf { s.viewer.terminal.agentStatus != null },
+                                displaySettings = terminalDisplay,
                                 onGitSend = if (s.viewer.terminal.agentStatus == null) null else { text ->
                                     model.switchView(io.github.shiroel.aries.core.AgentView.CHAT)
                                     (model.screen as? Screen.Chat)?.chat?.let { chat ->
