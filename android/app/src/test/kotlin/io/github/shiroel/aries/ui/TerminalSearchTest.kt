@@ -74,7 +74,7 @@ class TerminalSearchTest {
         compose.waitUntil(5000) { view.searches.lastOrNull() == Triple("error", true, false) }
         compose.onNodeWithText(str(R.string.terminal_search_regex)).performClick()
         compose.waitUntil(5000) { view.searches.lastOrNull() == Triple("error", true, true) }
-        compose.onNodeWithText(str(R.string.terminal_search_close)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.terminal_search_close)).performClick()
         compose.waitUntil(5000) { view.searches.lastOrNull()?.first == "" }
         assertTrue(view.sent.isEmpty())
         assertTrue(view.resizes.isEmpty())

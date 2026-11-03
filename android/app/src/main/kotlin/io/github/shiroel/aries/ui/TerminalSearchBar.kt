@@ -12,7 +12,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -82,9 +81,7 @@ internal fun TerminalSearchBar(viewer: TerminalViewer, open: Boolean, onClose: (
                 keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { focus.clearFocus() }),
             )
-            TextButton(onClick = { focus.clearFocus(); onClose() }) {
-                Text(stringResource(R.string.terminal_search_close))
-            }
+            ActionIcon(R.drawable.ic_x, R.string.terminal_search_close, { focus.clearFocus(); onClose() })
         }
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
@@ -96,10 +93,10 @@ internal fun TerminalSearchBar(viewer: TerminalViewer, open: Boolean, onClose: (
                 label = { Text(stringResource(R.string.terminal_search_regex)) })
             val canMove = !busy && !invalid && query.isNotEmpty() && searcher != null && (viewer.search?.total ?: 0u) > 0u
             for (backwards in listOf(true, false)) {
-                val description = stringResource(if (backwards) R.string.terminal_search_previous else R.string.terminal_search_next)
-                TextButton(
+                ActionIcon(
+                    if (backwards) R.drawable.ic_chevron_up else R.drawable.ic_chevron_down,
+                    if (backwards) R.string.terminal_search_previous else R.string.terminal_search_next,
                     enabled = canMove,
-                    modifier = Modifier.semantics { contentDescription = description },
                     onClick = {
                         scope.launch {
                             operations.withLock {
@@ -107,7 +104,7 @@ internal fun TerminalSearchBar(viewer: TerminalViewer, open: Boolean, onClose: (
                             }
                         }
                     },
-                ) { Text(stringResource(if (backwards) R.string.key_up else R.string.key_down)) }
+                )
             }
             if (!invalid && !busy && query.isNotEmpty()) {
                 val found = viewer.search
