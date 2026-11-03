@@ -9,6 +9,7 @@ import androidx.work.testing.TestListenableWorkerBuilder
 import androidx.work.testing.WorkManagerTestInitHelper
 import com.google.firebase.messaging.RemoteMessage
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.first
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
@@ -40,6 +41,22 @@ class PairingChallengeTest {
             .setInputData(androidx.work.workDataOf("verification_id" to id, "challenge" to proof)).build()
         assertEquals(ListenableWorker.Result.success(), worker.doWork())
         assertEquals(listOf(id to proof), core.pushConfirmations)
+        assertTrue(context.getSystemService(NotificationManager::class.java).activeNotifications.isEmpty())
+    }
+
+    @Test
+    @Config(sdk = [28])
+    fun confirmsOnOlderAndroidWithoutStartingAForegroundNotification() = runBlocking {
+        val id = "o".repeat(43)
+        PairingChallengeWorker.enqueue(context, mapOf("verification_id" to id, "challenge" to "p".repeat(43)))
+        val manager = WorkManager.getInstance(context)
+        val work = manager.getWorkInfosForUniqueWork("push-ownership:$id").get().single()
+        WorkManagerTestInitHelper.getTestDriver(context)!!.setAllConstraintsMet(work.id)
+        val finished = kotlinx.coroutines.withTimeout(5_000) {
+            manager.getWorkInfoByIdFlow(work.id).first { it?.state?.isFinished == true }
+        }
+        assertEquals(androidx.work.WorkInfo.State.SUCCEEDED, finished!!.state)
+        assertEquals(listOf(id to "p".repeat(43)), core.pushConfirmations)
         assertTrue(context.getSystemService(NotificationManager::class.java).activeNotifications.isEmpty())
     }
 

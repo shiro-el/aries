@@ -817,6 +817,7 @@
     <string name="diagnostics_beacon_remove">Remove Beacon</string>
     <string name="diagnostics_push_enable">Enable push</string>
     <string name="diagnostics_push_disable">Disable push</string>
+    <string name="diagnostics_push_verification">Push token verification</string>
     <string name="diagnostics_push_test">Test push</string>
     <string name="diagnostics_relay_request">Relay request</string>
     <string name="diagnostics_push_receive">Receive push</string>
@@ -834,6 +835,7 @@
     <string name="diagnostics_error_download">Beacon download failed</string>
     <string name="diagnostics_error_checksum">Beacon checksum mismatch</string>
     <string name="diagnostics_error_operation">Beacon operation failed</string>
+    <string name="diagnostics_error_verify">Push delivery not verified</string>
     <string name="diagnostics_error_register">Relay registration failed</string>
     <string name="diagnostics_error_revoke">Relay removal failed</string>
     <string name="diagnostics_error_push">Push rejected</string>

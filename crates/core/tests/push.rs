@@ -1268,6 +1268,12 @@ async fn registration_waits_for_device_proof_before_pairing_the_host() {
                     rt.block_on(self.core.confirm_push_token(id, "p".repeat(43), receiver))
                         .unwrap()
                 );
+                assert_eq!(
+                    self.core
+                        .push_verification_state(self.host.clone())
+                        .unwrap(),
+                    Some(aries_core::PushVerificationState::Verified)
+                );
                 (
                     202,
                     serde_json::json!({"token": "pending-token", "expires_in": 120}),
@@ -1293,7 +1299,8 @@ async fn registration_waits_for_device_proof_before_pairing_the_host() {
     let host = dead_ssh_host(&core);
     let steps = Arc::new(Steps::default());
     let http = Arc::new(OwnershipRelay {
-        core: core.clone(),
+        // A cold FCM receiver reopens the persisted local registration context.
+        core: core_in(data.path()),
         confirmed: Default::default(),
         host: host.clone(),
     });
@@ -1385,6 +1392,28 @@ async fn failed_verification_never_pairs_the_host_and_is_visible_after_restart()
         restarted.push_verification_state(host.clone()).unwrap(),
         Some(aries_core::PushVerificationState::Failed)
     );
+    let diagnostics = restarted
+        .diagnostics(
+            Some(aries_core::DiagnosticSource::Relay),
+            Some(host.clone()),
+            false,
+        )
+        .unwrap();
+    assert!(
+        diagnostics
+            .iter()
+            .any(|e| e.event == aries_core::DiagnosticEvent::PushVerification
+                && e.http_status == Some(202))
+    );
+    assert!(
+        diagnostics
+            .iter()
+            .any(|e| e.event == aries_core::DiagnosticEvent::PushVerification
+                && e.error == Some(aries_core::DiagnosticError::RelayVerification))
+    );
+    let exported = serde_json::to_string(&diagnostics).unwrap();
+    assert!(!exported.contains("pending"));
+    assert!(!exported.contains("relay.test"));
     restarted.remove_host(host.clone()).unwrap();
     assert!(!data.path().join("hosts").join(host).exists());
 }

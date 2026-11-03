@@ -1,6 +1,7 @@
 package io.github.shiroel.aries
 
 import android.content.Context
+import android.os.Build
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
@@ -41,7 +42,13 @@ class PairingChallengeWorker(context: Context, params: WorkerParameters) : Corou
                 .setInputData(workDataOf("verification_id" to id, "challenge" to proof))
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .setBackoffCriteria(BackoffPolicy.LINEAR, 10, TimeUnit.SECONDS)
-                .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                .apply {
+                    // Before Android 12, expedited work requires a foreground
+                    // notification. Ownership confirmation stays silent.
+                    if (Build.VERSION.SDK_INT >= 31) {
+                        setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                    }
+                }
                 .build()
             WorkManager.getInstance(context).enqueueUniqueWork("push-ownership:$id", ExistingWorkPolicy.KEEP, work)
         }

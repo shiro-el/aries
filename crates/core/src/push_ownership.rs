@@ -9,6 +9,7 @@ use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde::{Deserialize, Serialize};
 
+use crate::diagnostics::{DiagnosticError, DiagnosticEvent, DiagnosticSource, Log};
 use crate::error::{CoreError, storage};
 use crate::push::{HttpClient, http, status_error};
 use crate::store::Store;
@@ -121,9 +122,10 @@ pub(crate) async fn confirm(
                 .then_some((host, v.relay_url))
         })
     };
-    let Some((_host, relay)) = target else {
+    let Some((host, relay)) = target else {
         return Ok(false);
     };
+    let client = Log::new(store.clone()).http(client, Some(host.clone()));
     let r = http(
         &client,
         "POST",
@@ -135,6 +137,9 @@ pub(crate) async fn confirm(
     // The initiating request verifies activation via GET before the Host is
     // paired. A lost confirm response can therefore still complete safely.
     if r.status == 204 {
+        // Persist the acknowledgement even if the initiating app process has
+        // gone away. Its polling request still checks the Relay's exact ID.
+        finish(&store, &host, &id, true).map_err(|e| e.to_string())?;
         Ok(true)
     } else {
         Err(status_error(&r))
@@ -149,11 +154,20 @@ pub(crate) async fn wait(
     token: &str,
     client: &Arc<dyn HttpClient>,
 ) -> Result<(), String> {
+    let log = Log::new(store.clone());
+    log.record(
+        Some(host),
+        DiagnosticSource::Relay,
+        DiagnosticEvent::PushVerification,
+        None,
+        Some(202),
+    );
     let result = tokio::time::timeout(Duration::from_secs(LIFETIME), async {
         loop {
-            if state(store, host).map_err(|e| e.to_string())?
-                != Some(PushVerificationState::Pending)
-            {
+            if !matches!(
+                state(store, host).map_err(|e| e.to_string())?,
+                Some(PushVerificationState::Pending | PushVerificationState::Verified)
+            ) {
                 return Err("device token verification expired; retry push setup".into());
             }
             let r = http(
@@ -185,5 +199,15 @@ pub(crate) async fn wait(
     .await
     .unwrap_or_else(|_| Err("device token verification timed out; retry push setup".into()));
     finish(store, host, id, result.is_ok()).map_err(|e| e.to_string())?;
+    log.record(
+        Some(host),
+        DiagnosticSource::Relay,
+        DiagnosticEvent::PushVerification,
+        result
+            .as_ref()
+            .err()
+            .map(|_| DiagnosticError::RelayVerification),
+        None,
+    );
     result
 }
