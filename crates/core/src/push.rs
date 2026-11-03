@@ -542,12 +542,12 @@ pub(crate) async fn enable(e: Enable) -> Result<PushPairing, CoreError> {
     // Relay cannot be reached, the queue retries it.
     let old = read_stored(&e.store, &e.host_id)?;
     if let Some(old) = &old {
-        let mut queue = read_queue(&e.store)?;
-        queue.push(Revocation {
-            relay_url: old.relay_url.clone(),
-            sealed: old.sealed.clone(),
-        });
-        write_queue(&e.store, &queue)?;
+        with_queue(&e.store, |queue| {
+            queue.push(Revocation {
+                relay_url: old.relay_url.clone(),
+                sealed: old.sealed.clone(),
+            });
+        })?;
     }
     save(
         &e.store,
@@ -707,7 +707,7 @@ pub(crate) fn open(
 
 // ---- Revocation queue ----------------------------------------------------------
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct Revocation {
     relay_url: String,
     /// The pairing's sealed secrets ([`Stored::sealed`]).
@@ -715,6 +715,22 @@ struct Revocation {
 }
 
 const QUEUE: &str = "push-revocations.json";
+
+/// Only the read/modify/write transaction holds this lock, never HTTP.
+/// A file lock coordinates independent core handles for the same store.
+fn with_queue<T>(store: &Store, f: impl FnOnce(&mut Vec<Revocation>) -> T) -> Result<T, CoreError> {
+    let lock = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(store.root().join("push-revocations.lock"))
+        .map_err(storage)?;
+    lock.lock().map_err(storage)?;
+    let mut queue = read_queue(store)?;
+    let result = f(&mut queue);
+    write_queue(store, &queue)?;
+    Ok(result)
+}
 
 fn read_queue(store: &Store) -> Result<Vec<Revocation>, CoreError> {
     match std::fs::read(store.root().join(QUEUE)) {
@@ -736,12 +752,12 @@ pub(crate) fn queue_revocation(store: &Store, host_id: &str) -> Result<(), CoreE
     let Some(s) = read_stored(store, host_id)? else {
         return Ok(());
     };
-    let mut queue = read_queue(store)?;
-    queue.push(Revocation {
-        relay_url: s.relay_url,
-        sealed: s.sealed,
-    });
-    write_queue(store, &queue)?;
+    with_queue(store, |queue| {
+        queue.push(Revocation {
+            relay_url: s.relay_url,
+            sealed: s.sealed,
+        })
+    })?;
     forget(store, host_id)
 }
 
@@ -751,21 +767,23 @@ pub(crate) async fn flush(
     vault: Arc<dyn KeyVault>,
     client: Arc<dyn HttpClient>,
 ) -> u32 {
-    let Ok(queue) = read_queue(&store) else {
+    let Ok(queue) = with_queue(&store, |queue| queue.clone()) else {
         return 0;
     };
     if queue.is_empty() {
         return 0;
     }
-    let mut left = Vec::new();
+    let mut completed = Vec::new();
     for r in queue {
         match open_secrets(vault.as_ref(), &r.sealed) {
-            Ok(s) if revoke(&client, &r.relay_url, &s.token).await.is_err() => left.push(r),
+            Ok(s) if revoke(&client, &r.relay_url, &s.token).await.is_err() => {}
             // Revoked, or unreadable (nothing could ever revoke it).
-            _ => {}
+            _ => completed.push(r),
         }
     }
-    let n = left.len() as u32;
-    let _ = write_queue(&store, &left);
-    n
+    with_queue(&store, |queue| {
+        queue.retain(|r| !completed.contains(r));
+        queue.len() as u32
+    })
+    .unwrap_or(0)
 }

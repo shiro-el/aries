@@ -644,6 +644,59 @@ async fn removing_the_host_revokes_the_pairing_on_the_relay() {
     assert_eq!(log.deleted, [token]);
 }
 
+#[tokio::test]
+#[ignore = "needs docker"]
+async fn a_flush_preserves_a_revocation_queued_while_http_is_in_flight() {
+    struct RemoveDuringDelete {
+        core: Arc<AriesCore>,
+        host: Mutex<Option<String>>,
+    }
+    impl HttpClient for RemoveDuringDelete {
+        fn send(&self, request: HttpRequest) -> Result<HttpResponse, FetchError> {
+            if let Some(host) = self.host.lock().unwrap().take() {
+                self.core.remove_host(host).unwrap();
+            }
+            Http.send(request)
+        }
+    }
+    let s = setup().await;
+    s.enable("dev-1").await;
+    // Another phone-side Host record on the same server has its own pairing.
+    let other = s
+        .core
+        .add_host(
+            "other".into(),
+            Endpoint::Ssh {
+                address: "127.0.0.1".into(),
+                port: s.host.port(),
+                user: SystemdHost::USER.into(),
+            },
+        )
+        .unwrap()
+        .id;
+    s.core
+        .trust_host_key(other.clone(), s.host.host_key_fingerprint())
+        .unwrap();
+    s.core.remove_host(s.id.clone()).unwrap();
+    s.core
+        .enable_push(
+            other.clone(),
+            s.relay.url().into(),
+            device("dev-2"),
+            Arc::new(Http),
+            Arc::new(Steps::default()),
+        )
+        .await
+        .unwrap();
+    let client = Arc::new(RemoveDuringDelete {
+        core: s.core.clone(),
+        host: Mutex::new(Some(other)),
+    });
+    assert_eq!(s.core.flush_push_revocations(client).await, 1);
+    assert_eq!(s.core.flush_push_revocations(Arc::new(Http)).await, 0);
+    assert!(s.relay.log().pairings.is_empty());
+}
+
 // ---- Agent status pushes (ticket 28) ----------------------------------------
 
 /// Runs `script` as the Host user with the user's runtime dir, so it talks to
