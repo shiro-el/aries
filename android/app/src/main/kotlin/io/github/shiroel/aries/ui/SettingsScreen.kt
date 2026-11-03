@@ -63,6 +63,7 @@ fun SettingsScreen(
     settings: ThemeSettings,
     onBack: () -> Unit,
     showHeader: Boolean = true,
+    terminalDisplay: TerminalDisplaySettings = rememberTerminalDisplaySettings(),
     hostEditor: @Composable (Host) -> Unit = {},
 ) {
     val host = model.settingsHost?.let { selected -> model.hosts.find { it.id == selected.id } }
@@ -144,6 +145,9 @@ fun SettingsScreen(
                         model.attachMode == AttachMode.INPUT,
                     ) { model.setDefaultAttachMode(if (it) AttachMode.INPUT else AttachMode.OBSERVE) }
                 }
+            }
+            item(key = "terminal-display") {
+                SettingsField(R.string.terminal_display_title) { TerminalDisplaySection(terminalDisplay) }
             }
             item { SettingsField { io.github.shiroel.aries.dictation.DictationSettings() } }
             item(key = "app-guidance") {

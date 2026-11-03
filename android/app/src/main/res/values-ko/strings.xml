@@ -179,6 +179,16 @@
     <string name="terminals_empty">이 호스트에서 실행 중인 터미널이 없습니다.</string>
     <string name="terminal_subtitle">%1$s · %2$s</string>
     <string name="terminal_open_button">터미널 열기</string>
+    <!-- Terminal display -->
+    <string name="terminal_display_title">터미널 표시</string>
+    <string name="terminal_display_font_label">글꼴</string>
+    <string name="terminal_display_font_system">시스템 고정폭</string>
+    <string name="terminal_display_size_label">기본 글꼴 크기: %1$d</string>
+    <string name="terminal_display_size_hint">관찰 모드에서는 Host의 격자에 맞춥니다. 두 손가락으로 확대할 수 있습니다.</string>
+    <string name="terminal_display_contrast_label">최소 대비 보장</string>
+    <string name="terminal_display_contrast_hint">대비가 1.6:1 미만인 글자를 보정합니다. 그래픽 색상은 유지합니다.</string>
+    <string name="terminal_display_license_button">JetBrains Mono 라이선스</string>
+
     <string name="terminal_observing">%1$s · 보기 전용 · %2$d×%3$d</string>
     <string name="terminal_typing">%1$s · 입력 중 · %2$d×%3$d</string>
     <string name="terminal_input_hint">여기를 누르면 입력할 수 있습니다. 그때부터 Terminal 크기는 이 폰을 따릅니다.</string>
