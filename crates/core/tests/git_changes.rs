@@ -49,6 +49,50 @@ fn git(repo: &std::path::Path, args: &[&str]) {
 }
 
 #[tokio::test]
+async fn git_changes_and_binary_diffs_work_on_a_korean_nested_machine() {
+    let repo = tempfile::tempdir().unwrap();
+    git(repo.path(), &["init", "-q"]);
+    let name = "한글.bin";
+    std::fs::write(repo.path().join(name), [0, 1, 2]).unwrap();
+    git(repo.path(), &["add", "."]);
+    std::fs::write(repo.path().join(name), [0, 3, 4]).unwrap();
+    let hc = HcSession::start();
+    let remote = HcSession::start_with_env(&[("LANG", "ko_KR.UTF-8"), ("LC_ALL", "ko_KR.UTF-8")]);
+    hc.add_machine("box", &remote);
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    let host = core.add_host("test".into(), local_endpoint(&hc)).unwrap();
+    let conn = core.connect(host.id).await.unwrap();
+    let cwd = repo.path().display().to_string();
+    let changes = conn
+        .git_changes_in("box/t1".into(), Some(cwd.clone()))
+        .await
+        .unwrap();
+    assert!(!changes.not_repository);
+    assert_eq!(changes.files.len(), 1);
+    assert_eq!(changes.files[0].path, name);
+    assert!(changes.files[0].staged && changes.files[0].unstaged);
+    let diff = conn
+        .git_diff(
+            "box/t1".into(),
+            cwd,
+            name.into(),
+            aries_core::GitDiffKind::Unstaged,
+        )
+        .await
+        .unwrap();
+    assert!(diff.binary);
+    let outside = tempfile::tempdir().unwrap();
+    assert!(
+        conn.git_changes_in("box/t1".into(), Some(outside.path().display().to_string()))
+            .await
+            .unwrap()
+            .not_repository
+    );
+    conn.disconnect().await;
+}
+
+#[tokio::test]
 async fn reader_uses_launch_folder_and_reads_staged_unstaged_and_untracked_without_writes() {
     let repo = tempfile::tempdir().unwrap();
     git(repo.path(), &["init", "-q"]);

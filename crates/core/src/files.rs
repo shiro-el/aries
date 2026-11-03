@@ -1,5 +1,7 @@
 //! Read-only Host files. Paths stay data; directory commands never interpolate them.
-use crate::{CoreError, HostConnection, error::protocol, on_runtime};
+use crate::{
+    CoreError, HostConnection, error::protocol, layout_edit::machine_exec_env, on_runtime,
+};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::json;
 
@@ -92,6 +94,7 @@ impl HostConnection {
             let out = client.call("machine.exec", json!({
                 "argv": ["sh", "-c", READ_BYTES, "files", path, offset.to_string(), length.to_string()],
                 "on": machine(&address), "timeout": 15,
+                "env": machine_exec_env(),
             })).await?;
             if out["code"].as_i64() != Some(0)
                 || out["truncated"].as_bool() == Some(true)
@@ -140,6 +143,7 @@ impl HostConnection {
             };
             let out = client.call("machine.exec", json!({
                 "argv": ["sh", "-c", LIST], "cwd": cwd, "on": machine(&address), "timeout": 10,
+                "env": machine_exec_env(),
             })).await?;
             if out["code"].as_i64() != Some(0)
                 || out["truncated"].as_bool() == Some(true)

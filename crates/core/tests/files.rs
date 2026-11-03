@@ -4,6 +4,33 @@ use aries_test_support::HcSession;
 use common::{core_in, local_endpoint};
 
 #[tokio::test]
+async fn listing_and_binary_reads_use_c_locale_on_a_korean_nested_machine() {
+    let hc = HcSession::start();
+    let (remote, _tools) = common::korean_host_with_c_locale_shell(&[]);
+    hc.add_machine("box", &remote);
+    let folder = tempfile::tempdir().unwrap();
+    let name = "한글 'file\n.bin";
+    std::fs::write(folder.path().join(name), [0, 255, 128, 42]).unwrap();
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    let host = core.add_host("test".into(), local_endpoint(&hc)).unwrap();
+    let conn = core.connect(host.id).await.unwrap();
+    let listing = conn
+        .list_files("box/t1".into(), Some(folder.path().display().to_string()))
+        .await
+        .unwrap();
+    assert_eq!(listing.entries.len(), 1);
+    assert_eq!(listing.entries[0].name, name);
+    let bytes = conn
+        .read_file_bytes("box/t1".into(), format!("{}/{name}", listing.path), 0, 4)
+        .await
+        .unwrap();
+    assert_eq!(bytes.data, [0, 255, 128, 42]);
+    assert!(bytes.eof);
+    conn.disconnect().await;
+}
+
+#[tokio::test]
 async fn browses_terminal_folder_and_reads_whole_line_pages() {
     let hc = HcSession::start();
     let folder = tempfile::tempdir().unwrap();
