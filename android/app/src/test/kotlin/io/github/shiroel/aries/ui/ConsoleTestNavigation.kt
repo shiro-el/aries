@@ -11,7 +11,9 @@ fun ComposeContentTestRule.openConsoleDrawer() {
 }
 
 fun ComposeContentTestRule.openKeyDetails() {
-    onNodeWithTag("hosts-key-band").performScrollTo().performClick()
+    openConsoleDrawer()
+    onNodeWithTag("settings-open").performClick()
+    onNodeWithTag("settings-keys").performScrollTo().performClick()
 }
 
 fun ComposeContentTestRule.openHostAddForm() {
@@ -23,7 +25,7 @@ fun ComposeContentTestRule.openHostActions(hostId: String) {
 }
 
 fun ComposeContentTestRule.openHostActionsIfClosed(hostId: String) {
-    // Install/Jump tests return to the same row with its expanded actions retained.
+    // Install/Jump tests return to the same Host settings.
     if (onAllNodes(androidx.compose.ui.test.hasTestTag("host-actions:$hostId")).fetchSemanticsNodes().isEmpty()) {
         openHostActions(hostId)
     }

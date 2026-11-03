@@ -1,6 +1,12 @@
 package io.github.shiroel.aries.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.items
+import io.github.shiroel.aries.core.Endpoint
+import io.github.shiroel.aries.core.Host
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -52,7 +58,28 @@ val AccentPresets = listOf(
 )
 
 @Composable
-fun SettingsScreen(model: HostsModel, settings: ThemeSettings, onBack: () -> Unit, showHeader: Boolean = true) {
+fun SettingsScreen(
+    model: HostsModel,
+    settings: ThemeSettings,
+    onBack: () -> Unit,
+    showHeader: Boolean = true,
+    hostEditor: @Composable (Host) -> Unit = {},
+) {
+    val host = model.settingsHost?.let { selected -> model.hosts.find { it.id == selected.id } }
+    if (host != null) {
+        HostSettingsScreen(model, host, hostEditor)
+        return
+    }
+    if (model.settingsKeys) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            KeySection(model)
+            if (model.key != null) {
+                HorizontalDivider()
+                ExtraKeysSection(model)
+            }
+        }
+        return
+    }
     Column(Modifier.fillMaxSize()) {
         if (showHeader) {
             Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -62,6 +89,25 @@ fun SettingsScreen(model: HostsModel, settings: ThemeSettings, onBack: () -> Uni
             HorizontalDivider()
         }
         LazyColumn(Modifier.fillMaxSize()) {
+            item {
+                Text(
+                    stringResource(R.string.settings_keys_open),
+                    Modifier.fillMaxWidth().testTag("settings-keys").clickable(onClick = model::openKeySettings).padding(16.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                HorizontalDivider()
+            }
+            if (model.hosts.isNotEmpty()) item {
+                Text(stringResource(R.string.settings_hosts_title), Modifier.padding(16.dp), style = MaterialTheme.typography.bodySmall)
+            }
+            items(model.hosts, key = { "settings-host:${it.id}" }) { host ->
+                Text(
+                    host.name,
+                    Modifier.fillMaxWidth().testTag("settings-host:${host.id}").clickable { model.openHostSettings(host) }.padding(16.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                HorizontalDivider()
+            }
             item {
                 SettingsField(R.string.theme_title) {
                     ConsoleSegments(
@@ -77,6 +123,11 @@ fun SettingsScreen(model: HostsModel, settings: ThemeSettings, onBack: () -> Uni
             item { SettingsField(R.string.accent_title) { AccentControls(settings) } }
             item { SettingsField(R.string.accent_custom) { HsvPicker(settings) } }
             item { SettingsField { ChatCacheSettings(model.chatCache) } }
+            item {
+                SettingsField(R.string.settings_agent_view) {
+                    AgentViewToggle(model.agentView, model::setDefaultAgentView)
+                }
+            }
             item(key = "attach-mode") {
                 SettingsField {
                     OptionToggle(
@@ -86,6 +137,35 @@ fun SettingsScreen(model: HostsModel, settings: ThemeSettings, onBack: () -> Uni
                 }
             }
         }
+    }
+}
+
+/** Host configuration stays reachable even when a herdr-core Browse connection fails. */
+@Composable
+private fun HostSettingsScreen(model: HostsModel, host: Host, hostEditor: @Composable (Host) -> Unit) {
+    LazyColumn(Modifier.fillMaxSize().testTag("host-actions:${host.id}")) {
+        item {
+            SettingsField {
+                Text(host.name, style = MaterialTheme.typography.titleMedium)
+                // Ticket 60 supplies the name/address form here without changing this navigation.
+                hostEditor(host)
+                JumpSummary(model.jumps[host.id].orEmpty())
+                if (host.endpoint is Endpoint.Ssh) {
+                    TextButton(onClick = { model.editJumps(host) }) { Text(stringResource(R.string.host_jumps_button)) }
+                    TextButton(onClick = { model.askPassword(host) }) { Text(stringResource(R.string.host_install_key_button)) }
+                }
+                ClearChatCacheButton(model.chatCache, host)
+                model.chatCache.notice?.let {
+                    Text(stringResource(it.res, *it.args.toTypedArray()), style = MaterialTheme.typography.bodySmall)
+                }
+                val removeLabel = stringResource(R.string.host_remove_button_label, host.name)
+                TextButton(onClick = { model.askRemove(host) }, modifier = Modifier.semantics { contentDescription = removeLabel }) {
+                    Text(stringResource(R.string.host_remove_button), color = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+        item { SettingsField { BeaconSection(model.beacon) } }
+        item { SettingsField { PushSection(model.push, beaconInstalled = model.beacon.installed) } }
     }
 }
 
