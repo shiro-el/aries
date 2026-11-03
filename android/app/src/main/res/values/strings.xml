@@ -23,6 +23,25 @@
     <string name="files_range">Lines %1$d–%2$d of %3$d</string>
     <string name="files_previous_button">Previous page</string>
     <string name="files_next_button">Next page</string>
+    <!-- Git changes (ticket 89) -->
+    <string name="git_changes_button">Changes</string>
+    <string name="git_changes_title">Git changes · read only</string>
+    <string name="git_loading">Reading changes…</string>
+    <string name="git_not_repository">This folder is not a Git repository.</string>
+    <string name="git_clean">No changes.</string>
+    <string name="git_staged">Staged</string>
+    <string name="git_unstaged">Unstaged</string>
+    <string name="git_untracked">Untracked</string>
+    <string name="git_more_button">Show more</string>
+    <string name="git_truncated">The Host output limit was reached. Only the received portion is shown.</string>
+    <string name="git_binary">Binary file. Preview unavailable.</string>
+    <string name="git_empty_diff">No text diff for this file.</string>
+    <string name="git_send_file">Send file to Agent</string>
+    <string name="git_send_selection">Send selection to Agent</string>
+    <string name="git_select_hint">Tap a line, then another to select a range. The reference is added to your Chat draft.</string>
+    <string name="git_error">Could not read Git changes: %1$s</string>
+    <string name="git_retry_button">Refresh</string>
+    <string name="git_line_label">Old %1$s · new %2$s: %3$s</string>
 
 
     <string name="agents_elapsed_less_than_minute">&lt;1m</string>
@@ -237,6 +256,20 @@
     <string name="shortcuts_missing_title">Saved launch unavailable</string>
     <string name="shortcuts_missing_body">This saved launch or its Host was removed. Choose another saved launch in Aries.</string>
     <string name="shortcuts_pin_button">Pin shortcut</string>
+    <!-- Worktree picker: read-only discovery and opening. -->
+    <string name="worktrees_button">Worktrees</string>
+    <string name="worktrees_title">Open a worktree</string>
+    <string name="worktrees_open_button">Open worktree</string>
+    <string name="worktrees_refresh_button">Refresh worktrees</string>
+    <string name="worktrees_loading">Loading worktrees…</string>
+    <string name="worktrees_empty">No worktrees found.</string>
+    <string name="worktrees_program_label">Start in this worktree</string>
+    <string name="worktrees_shell">Shell</string>
+    <string name="worktrees_fallback_hint">Opens a new Tab in this Space. Without a Space or herdr-app, starts a Terminal.</string>
+    <string name="worktrees_detached">Detached · %1$s</string>
+    <string name="worktrees_bare">Bare repository</string>
+    <string name="worktrees_locked">Locked · %1$s</string>
+    <string name="worktrees_prunable">Unavailable · %1$s</string>
 
     <string name="launch_open_button">New Terminal</string>
     <string name="launch_title">Start a Terminal</string>

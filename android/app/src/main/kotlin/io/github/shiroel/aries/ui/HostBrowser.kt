@@ -209,6 +209,7 @@ fun BrowseScreen(
             }
         }
         LayoutEditControls(browser, editor)
+        WorktreeControls(browser)
         if (onNewTerminal != null && browser.structure != null && !browser.closed && browser.savedLaunches.isNotEmpty()) {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(browser.savedLaunches, key = { "saved:" + it.id }) { s ->
@@ -295,6 +296,7 @@ private fun SpaceList(
                 val t = row.value
                 TerminalBranch(row.guide, row.depth) {
                     ConsoleTerminalRow(t, browser.host.name, { onOpen(t) }, trailing = {
+                        WorktreeControls(browser, t)
                         browser.layoutEditor?.let { EndTerminalButton(it, t) }
                     })
                 }

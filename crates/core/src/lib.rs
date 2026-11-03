@@ -11,6 +11,7 @@ mod chat;
 mod chat_cache;
 mod error;
 mod files;
+mod git_changes;
 mod hc;
 mod host_edit;
 mod host_model;
@@ -25,6 +26,7 @@ mod store;
 mod structure;
 mod terminal;
 mod transport;
+mod worktrees;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -49,6 +51,7 @@ pub use chat::{
 };
 pub use error::{AnswerProblem, CoreError, Incompatibility, VaultError};
 pub use files::{RemoteDirectory, RemoteFileEntry, RemoteFilePage};
+pub use git_changes::*;
 pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
 pub use host_model::{AgentStatus, BlockedReason, TerminalWatch};
 pub use last_known_state::{LastKnownState, LastKnownStateWatch};
@@ -65,6 +68,7 @@ pub use terminal::{
     AttachOptions, CellRun, CursorPos, FRAME_INTERVAL, KeyMods, ScreenFrame, ScreenLine,
     TerminalExit, TerminalKey, TerminalUpdate, TerminalView, ViewStats,
 };
+pub use worktrees::{WorktreeInfo, WorktreeOpen};
 
 use hc::HcClient;
 use store::{SavedHost, SavedKey, Store};
@@ -172,6 +176,15 @@ pub struct Host {
     pub host_key: Option<String>,
 }
 
+/// The live foreground process group leader, reported by herdr-core.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, uniffi::Record)]
+pub struct ForegroundInfo {
+    pub pid: u32,
+    pub name: String,
+    pub argv: Vec<String>,
+    pub cwd: Option<String>,
+}
+
 /// One Terminal as listed by herdr-core.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, uniffi::Record)]
 pub struct TerminalInfo {
@@ -212,6 +225,9 @@ pub struct TerminalInfo {
     #[uniffi(default = false)]
     #[serde(default)]
     pub watched: bool,
+    /// Current program and folder; launch argv/cwd remain the fallback.
+    #[uniffi(default = None)]
+    pub foreground: Option<ForegroundInfo>,
 }
 
 fn runtime() -> &'static tokio::runtime::Runtime {
@@ -1612,6 +1628,7 @@ pub(crate) fn terminal_info(v: &serde_json::Value) -> TerminalInfo {
             })
             .unwrap_or_default(),
         cwd: s("cwd"),
+        foreground: serde_json::from_value(v["foreground"].clone()).ok(),
         state: s("state").unwrap_or_default(),
         agent_status,
         needs_attention,
