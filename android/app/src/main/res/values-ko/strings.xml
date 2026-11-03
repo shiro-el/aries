@@ -60,6 +60,25 @@
     <string name="files_range">전체 %3$d행 중 %1$d–%2$d행</string>
     <string name="files_previous_button">이전 페이지</string>
     <string name="files_next_button">다음 페이지</string>
+    <!-- Git changes (ticket 89) -->
+    <string name="git_changes_button">변경</string>
+    <string name="git_changes_title">Git 변경 · 읽기 전용</string>
+    <string name="git_loading">변경을 읽는 중…</string>
+    <string name="git_not_repository">이 폴더는 Git 저장소가 아닙니다.</string>
+    <string name="git_clean">변경이 없습니다.</string>
+    <string name="git_staged">스테이징됨</string>
+    <string name="git_unstaged">스테이징되지 않음</string>
+    <string name="git_untracked">추적되지 않음</string>
+    <string name="git_more_button">더 보기</string>
+    <string name="git_truncated">Host 출력 한도에 도달했습니다. 받은 부분만 표시합니다.</string>
+    <string name="git_binary">바이너리 파일입니다. 미리 볼 수 없습니다.</string>
+    <string name="git_empty_diff">이 파일의 텍스트 diff가 없습니다.</string>
+    <string name="git_send_file">Agent에게 파일 보내기</string>
+    <string name="git_send_selection">Agent에게 선택한 줄 보내기</string>
+    <string name="git_select_hint">줄을 누르고 다른 줄을 누르면 범위를 선택합니다. 참조는 Chat 입력란에 추가됩니다.</string>
+    <string name="git_error">Git 변경을 읽지 못했습니다: %1$s</string>
+    <string name="git_retry_button">새로고침</string>
+    <string name="git_line_label">이전 %1$s · 새 %2$s: %3$s</string>
 
 
     <string name="agents_elapsed_less_than_minute">1분 미만</string>
@@ -262,6 +281,21 @@
     <string name="structure_unreadable">이 호스트의 herdr-app 레이아웃을 읽지 못했습니다(%1$s). 터미널을 스페이스·탭 label로 묶어 보여 줍니다.</string>
     <string name="structure_unknown_format">이 호스트의 herdr-app 레이아웃은 Aries가 모르는 형식입니다. 터미널을 스페이스·탭 label로 묶어 보여 줍니다. Aries를 업데이트하세요.</string>
     <string name="structure_connection_closed">호스트와의 연결이 끊어졌습니다. 보이는 내용이 최신이 아닐 수 있습니다.</string>
+    <!-- Worktree picker: read-only discovery and opening. -->
+    <string name="worktrees_button">Worktree 목록</string>
+    <string name="worktrees_title">Worktree 열기</string>
+    <string name="worktrees_open_button">Worktree에서 열기</string>
+    <string name="worktrees_refresh_button">Worktree 새로고침</string>
+    <string name="worktrees_loading">Worktree를 불러오는 중…</string>
+    <string name="worktrees_empty">Worktree가 없습니다.</string>
+    <string name="worktrees_program_label">이 worktree에서 실행</string>
+    <string name="worktrees_shell">셸</string>
+    <string name="worktrees_fallback_hint">현재 Space의 새 Tab으로 엽니다. Space가 없거나 herdr-app이 꺼져 있으면 Terminal을 실행합니다.</string>
+    <string name="worktrees_detached">분리된 HEAD · %1$s</string>
+    <string name="worktrees_bare">Bare 저장소</string>
+    <string name="worktrees_locked">잠김 · %1$s</string>
+    <string name="worktrees_prunable">열 수 없음 · %1$s</string>
+
     <string name="launch_open_button">새 터미널</string>
     <string name="launch_title">터미널 실행</string>
     <string name="launch_command">명령</string>
@@ -424,6 +458,17 @@
     <string name="push_call_channel_urgent">긴급 Call</string>
     <string name="push_call_channel_emergency">비상 Call</string>
     <string name="push_no_firebase">이 빌드에는 Firebase 설정이 없습니다</string>
+    <!-- Inline notification actions -->
+    <string name="notification_reply_button">답장</string>
+    <string name="notification_reply_hint">Agent에게 메시지 보내기</string>
+    <string name="notification_seen_button">봤음</string>
+    <string name="notification_snooze_button">1시간 뒤에</string>
+    <string name="notification_message_sent">메시지를 보냈어요</string>
+    <string name="notification_action_failed">결과를 확인하지 못했어요. 다시 시도하기 전에 Terminal에서 확인해 주세요.</string>
+    <string name="notification_action_offline">네트워크가 없어 보내지 못했어요. Aries를 열어 다시 시도해 주세요.</string>
+    <string name="notification_action_key_locked">보내지 못했어요. Aries를 열어 이 Host의 SSH 키 잠금을 해제해 주세요.</string>
+    <string name="notification_marking_seen">봤음으로 표시 중…</string>
+
     <string name="call_notify_open_app">앱 열기</string>
     <string name="call_notify_try_again">다시 시도</string>
     <string name="call_notify_sending">“%1$s” 보내는 중…</string>
