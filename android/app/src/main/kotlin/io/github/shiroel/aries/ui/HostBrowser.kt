@@ -1,12 +1,8 @@
 package io.github.shiroel.aries.ui
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -23,7 +19,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -204,18 +199,11 @@ fun BrowseScreen(
     showHeader: Boolean = true,
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val editor = remember(browser) { browser.layoutEditor ?: LayoutEditor(browser, scope).also { browser.layoutEditor = it } }
+    val editor = rememberLayoutEditor(browser)
     Column(Modifier.fillMaxSize()) {
-        Row {
-            if (showHeader) TreeBackButton(onBack)
-            if (onNewTerminal != null && browser.structure != null && !browser.closed) {
-                TextButton(onClick = onNewTerminal) { Text(stringResource(R.string.launch_open_button)) }
-            }
-        }
-        HostLayoutContext(browser)
+        if (showHeader) ConsoleTopBar(browser.host.name, onMenu = {}, onBack = onBack,
+            showMark = false, inbox = {}, actions = { HostActions(browser, onNewTerminal) })
         LayoutEditControls(browser, editor)
-        WorktreeControls(browser)
         if (onNewTerminal != null && browser.structure != null && !browser.closed && browser.savedLaunches.isNotEmpty()) {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(browser.savedLaunches, key = { "saved:" + it.id }) { s ->
@@ -291,10 +279,6 @@ private fun HostTreeList(
         browser.layoutEditor?.let { EndTerminalButton(it, entry.terminal, close) }
     }
     LazyColumn {
-        item {
-            Text(stringResource(R.string.terminals_title, browser.host.name), Modifier.padding(12.dp),
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
         if (browser.terminals.isEmpty()) item { Text(stringResource(R.string.terminals_empty)) }
         agentTreeItems(agents, agentFolds, { onOpen(it.terminal) }, onPin, tag = "host-agent",
             sectionNamespace = "all", actions = actions)
@@ -325,37 +309,6 @@ private fun selectTerminalContext(browser: HostBrowser, address: String) {
             tab.panes.firstOrNull { pane -> pane.terminalAddress == address || pane.subAgents.any { it.address == address } }
                 ?.let { browser.focus(tab, it) }
             return
-        }
-    }
-}
-
-/** Explicit edit/launch target, including empty Tabs; never another level in the Agent list. */
-@Composable
-private fun HostLayoutContext(browser: HostBrowser) {
-    val structure = browser.structure ?: return
-    if (structure.spaces.isEmpty()) return
-    var expanded by remember(browser) { mutableStateOf(false) }
-    Box {
-        TextButton(onClick = { expanded = true }, modifier = Modifier.testTag("host-layout-context")) {
-            Text(browser.openSpace?.let { space -> listOfNotNull(space.name, browser.tab?.name).joinToString(" · ") }
-                ?: stringResource(R.string.hosts_layout_context_button), maxLines = 1,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            structure.spaces.forEach { space ->
-                DropdownMenuItem(text = { Text(space.name) }, modifier = Modifier.testTag("host-context-space:${space.id}"), onClick = {
-                    browser.openSpace(space.id)
-                    expanded = false
-                })
-                space.tabs.forEach { tab ->
-                    DropdownMenuItem(text = { Text(tab.name, Modifier.padding(start = 16.dp)) },
-                        modifier = Modifier.testTag("host-context-tab:${space.id}:${tab.id}"), onClick = {
-                            browser.openSpace(space.id)
-                            browser.selectTab(tab)
-                            expanded = false
-                        })
-                }
-            }
         }
     }
 }

@@ -44,11 +44,11 @@ class GithubScreenTest {
     @Test fun filtersAndSearchResetPaginationAndKeepTheSelectedRepository() {
         val conn = open()
         compose.onNodeWithText("octo/project").assertExists()
-        compose.onNodeWithText(str(R.string.github_next)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.github_next)).performClick()
         compose.onNodeWithText(str(R.string.github_prs)).performClick()
         compose.onNodeWithText(str(R.string.github_closed)).performClick()
         compose.onNodeWithTag("github-search").performTextInput("search term")
-        compose.onNodeWithText(str(R.string.github_search_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.github_search_button)).performClick()
         compose.runOnIdle {
             assertEquals(listOf("PULL_REQUEST", "CLOSED", "search term", "1"), conn.githubRequests.last())
             assertEquals(1, conn.githubRepoReads)
@@ -112,10 +112,10 @@ class GithubScreenTest {
         val conn = open { it.githubFailure = CoreException.Rpc("github_missing", "") }
         compose.onNodeWithText(str(R.string.github_missing)).assertExists()
         compose.runOnIdle { conn.githubFailure = CoreException.Rpc("github_auth", "") }
-        compose.onNodeWithText(str(R.string.github_refresh)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.github_refresh)).performClick()
         compose.onNodeWithText(str(R.string.github_auth)).assertExists()
         compose.runOnIdle { conn.githubFailure = null }
-        compose.onNodeWithText(str(R.string.github_refresh)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.github_refresh)).performClick()
         compose.onNodeWithText("#42 · Issue title").assertExists()
     }
 }
