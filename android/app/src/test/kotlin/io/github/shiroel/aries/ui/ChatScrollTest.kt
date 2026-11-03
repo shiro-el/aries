@@ -106,6 +106,18 @@ class ChatScrollTest {
         compose.onNodeWithText("Latest (3)").assertIsDisplayed()
     }
 
+    @Test fun reopeningAtThePreviousEndDoesNotSkipRowsThatArrivedWhileAway() {
+        open()
+        val before = compose.onNodeWithText("Reply 30\nSecond line\nThird line").fetchSemanticsNode().positionInRoot.y
+        compose.runOnIdle { generation.value++ }
+        push(entries(33))
+
+        compose.onNodeWithText("Reply 30\nSecond line\nThird line").assertIsDisplayed()
+        val after = compose.onNodeWithText("Reply 30\nSecond line\nThird line").fetchSemanticsNode().positionInRoot.y
+        assertEquals(before, after, 0.5f)
+        compose.onNodeWithText("Latest (3)").assertIsDisplayed()
+    }
+
     @Test fun streamingFollowsTheBottomOfAnOversizedRowButDoesNotInterruptHistoryReading() {
         open()
         fun streaming(lines: Int) = entries(29) + ChatEntry("a30", null,

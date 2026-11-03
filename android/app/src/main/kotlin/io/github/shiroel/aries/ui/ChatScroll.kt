@@ -66,13 +66,15 @@ internal fun rememberChatScrollState(chat: ChatModel, entries: List<ChatEntry>, 
                 } else if (saved != null) {
                     pending = (saved.pending + after(saved.transcriptTail, transcript) + after(saved.callTail, calls))
                         .intersect(keys.toSet())
-                    if (!state.following) {
-                        val anchorIndex = keys.indexOf(saved.anchor)
-                        state.list.scrollToItem(
-                            if (anchorIndex >= 0) anchorIndex else saved.index.coerceIn(keys.indices),
-                            if (anchorIndex >= 0) saved.offset else 0,
-                        )
-                    }
+                    // Restore even when the user left at the end: rows may
+                    // have arrived while Chat was closed. Follow again only
+                    // if that saved viewport still reaches the current end.
+                    val anchorIndex = keys.indexOf(saved.anchor)
+                    state.list.scrollToItem(
+                        if (anchorIndex >= 0) anchorIndex else saved.index.coerceIn(keys.indices),
+                        if (anchorIndex >= 0) saved.offset else 0,
+                    )
+                    state.following = !state.list.canScrollForward
                 }
                 if (state.following || latest) {
                     state.following = true
