@@ -10,6 +10,7 @@
 pub mod claude;
 mod follow;
 mod jsonl;
+pub mod media;
 
 use std::path::PathBuf;
 
