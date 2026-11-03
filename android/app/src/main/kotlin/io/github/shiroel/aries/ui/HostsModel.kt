@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github.shiroel.aries.HttpBeaconFetcher
+import io.github.shiroel.aries.HttpRelayClient
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.core.AriesCoreInterface
@@ -15,6 +16,7 @@ import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.Host
 import io.github.shiroel.aries.core.HostConnection
 import io.github.shiroel.aries.core.HostStructure
+import io.github.shiroel.aries.core.HttpClient
 import io.github.shiroel.aries.core.Incompatibility
 import io.github.shiroel.aries.core.JumpHost
 import io.github.shiroel.aries.core.KeyInfo
@@ -102,9 +104,24 @@ class HostsModel(
     private val scope: CoroutineScope,
     beaconFetcher: BeaconFetcher = HttpBeaconFetcher(),
     private val keyWork: CoroutineContext = EmptyCoroutineContext,
+    pushPlatform: PushPlatform = NoPush,
+    private val http: HttpClient = HttpRelayClient(),
 ) {
     /** The Beacon section of the connected Host. */
-    val beacon = BeaconModel(core, scope, beaconFetcher, keyWork)
+    val beacon = BeaconModel(core, scope, beaconFetcher, onRemoved = { onBeaconRemoved() }, keyWork = keyWork)
+
+    /** The push section of the connected Host. */
+    val push = PushModel(core, scope, pushPlatform, http)
+
+    private fun onBeaconRemoved() {
+        flushPushRevocations()
+        beacon.host?.let(push::load)
+    }
+
+    /** Sends the Relay revocations that Host or Beacon removal queued. */
+    fun flushPushRevocations() {
+        scope.launch { core.flushPushRevocations(http) }
+    }
 
     /** Chat cache retention and per-Host clearing (ticket 44). */
     val chatCache = ChatCacheModel(core, scope, keyWork)
@@ -160,6 +177,7 @@ class HostsModel(
             hosts = core.hosts()
             refreshRoutes()
         }
+        flushPushRevocations()
     }
 
     fun createKey() = guard {
@@ -229,6 +247,7 @@ class HostsModel(
                 open = conn to null
                 screen = Screen.Browse(browser)
                 beacon.load(host)
+                push.load(host)
                 status = watchBrowse(link, browser)
             } catch (e: CoreException) {
                 screen = Screen.Hosts
@@ -377,6 +396,7 @@ class HostsModel(
         guard {
             core.removeHost(prompt.host.id)
             hosts = core.hosts()
+            flushPushRevocations()
         }
     }
 

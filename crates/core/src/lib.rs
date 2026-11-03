@@ -12,6 +12,7 @@ mod error;
 mod hc;
 mod host_model;
 mod launch;
+mod push;
 mod removal;
 mod store;
 mod structure;
@@ -35,6 +36,10 @@ pub use error::{CoreError, Incompatibility, VaultError};
 pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
 pub use host_model::{AgentStatus, BlockedReason, TerminalWatch};
 pub use launch::{AgentPreset, LaunchRequest, RECENT_CWDS_KEPT, SavedLaunch};
+pub use push::{
+    HttpClient, HttpRequest, HttpResponse, PushContent, PushDevice, PushDisable, PushNotice,
+    PushPairing, PushProgress, PushStep,
+};
 pub use structure::{HostStructure, PaneInfo, SpaceInfo, StructureProblem, TabInfo};
 pub use terminal::{
     AttachOptions, CellRun, CursorPos, FRAME_INTERVAL, ScreenFrame, ScreenLine, TerminalExit,
@@ -220,7 +225,7 @@ impl AriesCore {
         let store = Store::open(&PathBuf::from(data_dir))?;
         let saved = store.load()?;
         let chat_cache = chat_cache::ChatCache::new(
-            store.dir(),
+            store.root(),
             vault.clone(),
             store.read_settings().chat_cache_days,
         );
@@ -714,7 +719,109 @@ impl AriesCore {
     /// Stops and removes the Beacon service and binary. Call records stay.
     pub async fn uninstall_beacon(&self, host_id: String) -> Result<(), CoreError> {
         let ssh = self.beacon_ssh(&host_id)?;
-        on_runtime(async move { beacon::uninstall(&ssh).await }).await
+        on_runtime(async move { beacon::uninstall(&ssh).await }).await?;
+        // The Beacon revoked its pairing; revoke it from the phone too, in
+        // case the Host could not reach the Relay.
+        push::queue_revocation(&self.store, &host_id)
+    }
+}
+
+/// Push (`push` module): pairing a Host with this phone through the Relay.
+#[uniffi::export]
+impl AriesCore {
+    /// Turns push on for a Host whose Beacon is installed: registers this
+    /// phone (`device`) on the Relay at `relay_url`, exchanges keys with the
+    /// Beacon over SSH and has it send a test notification. `progress`
+    /// hears each step as it starts; a failure names its step
+    /// ([`CoreError::PushFailed`]). Turning it on again replaces the pairing.
+    pub async fn enable_push(
+        &self,
+        host_id: String,
+        relay_url: String,
+        device: PushDevice,
+        http: Arc<dyn HttpClient>,
+        progress: Arc<dyn PushProgress>,
+    ) -> Result<PushPairing, CoreError> {
+        let e = push::Enable {
+            ssh: self.beacon_ssh(&host_id)?,
+            host_id,
+            relay_url,
+            device,
+            store: self.store.clone(),
+            vault: self.vault.clone(),
+            http,
+            progress,
+        };
+        on_runtime(push::enable(e)).await
+    }
+
+    /// The Host's push pairing, if push is on.
+    pub fn push_pairing(&self, host_id: String) -> Result<Option<PushPairing>, CoreError> {
+        self.saved_host(&host_id)?;
+        Ok(push::relay_url_of(&self.store, &host_id)?.map(|relay_url| PushPairing { relay_url }))
+    }
+
+    /// Has the paired Beacon send another test notification.
+    pub async fn send_test_push(&self, host_id: String) -> Result<(), CoreError> {
+        let ssh = self.beacon_ssh(&host_id)?;
+        on_runtime(async move { push::test(&ssh).await }).await
+    }
+
+    /// Turns push off: deletes the pairing on the Relay (from the phone),
+    /// then on the Host (best effort, see [`PushDisable::host_cleared`]).
+    /// If the Relay cannot be reached nothing changes and the error says so.
+    pub async fn disable_push(
+        &self,
+        host_id: String,
+        http: Arc<dyn HttpClient>,
+    ) -> Result<PushDisable, CoreError> {
+        self.saved_host(&host_id)?;
+        let ssh = self.beacon_ssh(&host_id).ok();
+        let (store, vault) = (self.store.clone(), self.vault.clone());
+        on_runtime(push::disable(host_id, ssh, store, vault, http)).await
+    }
+
+    /// Tells the Relay this phone's new push token (FCM rotates it), for
+    /// every paired Host.
+    pub async fn update_push_token(
+        &self,
+        device: PushDevice,
+        http: Arc<dyn HttpClient>,
+    ) -> Result<(), CoreError> {
+        let paired = self
+            .hosts()
+            .into_iter()
+            .filter_map(|h| {
+                push::pairing_of(&self.store, self.vault.as_ref(), &h.id)
+                    .ok()
+                    .flatten()
+            })
+            .collect();
+        on_runtime(push::update_token(paired, device, http)).await
+    }
+
+    /// Sends the Relay revocations queued by Host or Beacon removal. Call it
+    /// after those and at app start. Returns how many are still queued
+    /// (the Relay was unreachable).
+    pub async fn flush_push_revocations(&self, http: Arc<dyn HttpClient>) -> u32 {
+        let (store, vault) = (self.store.clone(), self.vault.clone());
+        runtime()
+            .spawn(push::flush(store, vault, http))
+            .await
+            .unwrap_or(0)
+    }
+
+    /// Opens a push envelope as it arrived (FCM data `e`, base64-decoded).
+    /// Works while the phone is locked. Rejects tampered envelopes, unknown
+    /// versions and envelopes from no paired Host.
+    pub fn open_push(&self, envelope: Vec<u8>) -> Result<PushNotice, CoreError> {
+        let paired = self.hosts().into_iter().filter_map(|h| {
+            push::pairing_of(&self.store, self.vault.as_ref(), &h.id)
+                .ok()
+                .flatten()
+                .map(|p| (h.id, h.name, p))
+        });
+        push::open(&envelope, paired)
     }
 
     /// Call when connecting: reads the Beacon and, if it is older than the

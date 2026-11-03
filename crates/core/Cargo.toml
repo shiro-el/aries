@@ -25,6 +25,7 @@ sha2 = "0.11"
 # Chat cache: bundled SQLite cross-compiles with the NDK; rows are sealed with ring.
 rusqlite = { version = "0.41", features = ["bundled"] }
 ring = "0.17"
+base64 = "0.22"
 
 [build-dependencies]
 serde_json.workspace = true

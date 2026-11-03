@@ -9,3 +9,6 @@ android/app/src/main/jniLibs/
 android/app/src/main/java/uniffi/
 android/app/google-services.json
 /dist/
+relay/node_modules/
+relay/.wrangler/
+relay/wrangler.deploy.jsonc

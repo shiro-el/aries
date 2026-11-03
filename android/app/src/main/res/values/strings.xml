@@ -241,4 +241,30 @@
     <string name="jump_key_changed_title">Jump host key changed</string>
     <string name="jump_key_changed_body">Jump host %1$d (%2$s) presented a different key than before, so Aries did not connect. Someone may be intercepting the connection, or the jump host was reinstalled.\n\nTrusted: %3$s\nNow: %4$s</string>
     <string name="connect_jump_auth_rejected">Jump host %1$d (%2$s) did not accept the key chosen for it. Add that key\'s public key to ~/.ssh/authorized_keys on the jump host.</string>
+    <string name="push_title">Push notifications</string>
+    <string name="push_needs_beacon">Install the Beacon to turn on push notifications for this Host.</string>
+    <string name="push_off_body">Get notifications from this Host on this phone, also while Aries is closed or the phone is locked. They are end-to-end encrypted: the Relay that delivers them cannot read them.</string>
+    <string name="push_force_stop_note">If you force-stop Aries in Android settings, notifications stop arriving until you open Aries again, and force-stopping also clears notifications already shown.</string>
+    <string name="push_enable_button">Turn on push</string>
+    <string name="push_disable_button">Turn off push</string>
+    <string name="push_test_button">Send a test notification</string>
+    <string name="push_retry_button">Try again</string>
+    <string name="push_step_register">Register this phone with the Relay</string>
+    <string name="push_step_pair">Exchange keys with the Beacon</string>
+    <string name="push_step_test">Send a test notification</string>
+    <string name="push_step_unpair">Remove the pairing from the Relay</string>
+    <string name="push_step_running" translatable="false">… %1$s</string>
+    <string name="push_step_done" translatable="false">✓ %1$s</string>
+    <string name="push_step_failed" translatable="false">✗ %1$s</string>
+    <string name="push_failed">Step \"%1$s\" failed: %2$s</string>
+    <string name="push_on_body">Push is on. Relay: %1$s</string>
+    <string name="push_test_sent">A test notification is on its way. If it does not arrive, check that notifications for Aries are allowed.</string>
+    <string name="push_no_relay">This build of Aries has no Relay configured, so push notifications are not available.</string>
+    <string name="push_unavailable">Push notifications are not available on this phone: %1$s</string>
+    <string name="push_permission_denied">Notifications are not allowed for Aries. Allow them in Android settings, then turn on push again.</string>
+    <string name="push_off_host_unreachable">Push is off and the Relay deleted this pairing. The Host could not be reached, so its copy of the pairing stays until the next pairing; it no longer works.</string>
+    <string name="push_channel_name">Host notifications</string>
+    <string name="push_test_title">Push works for %1$s</string>
+    <string name="push_test_body">This test notification came from the Beacon on %1$s, end-to-end encrypted.</string>
+    <string name="push_no_firebase">this build has no Firebase configuration</string>
 </resources>

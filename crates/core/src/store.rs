@@ -61,6 +61,7 @@ impl Default for Settings {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct Store {
     dir: PathBuf,
 }
@@ -110,7 +111,8 @@ impl Store {
         self.write_atomic("identity.sealed", &encode_sealed(id.protection, &id.sealed))
     }
 
-    pub fn dir(&self) -> &Path {
+    /// The data dir itself, for app-wide files of other modules.
+    pub fn root(&self) -> &Path {
         &self.dir
     }
 

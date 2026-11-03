@@ -1,0 +1,23 @@
+// Local and test configuration of the Relay. Deploys use the config that
+// scripts/deploy-config.mjs writes from ARIES_CF_D1_NAME / ARIES_CF_D1_ID
+// (see CONTRIBUTING.md `## Relay`).
+{
+  "name": "aries-relay",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  // Request logs carry URLs and status only; the Relay never logs bodies.
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
+  "vars": {
+    "PUSH_LIMIT_PER_MINUTE": "30",
+    "PAIR_LIMIT_PER_HOUR": "20"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "aries-relay-local",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

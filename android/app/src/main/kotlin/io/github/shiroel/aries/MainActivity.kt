@@ -18,9 +18,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val core = app.core
+        val push = AndroidPushPlatform(this)
         setContent {
             val scope = rememberCoroutineScope()
-            val model = remember { HostsModel(core, scope, keyWork = Dispatchers.IO).also { this@MainActivity.model = it } }
+            val model = remember { HostsModel(core, scope, keyWork = Dispatchers.IO, pushPlatform = push).also { this@MainActivity.model = it } }
             MaterialTheme { AriesApp(model) }
         }
         network = NetworkWatch(this) { model?.networkChanged() }.also { it.start() }

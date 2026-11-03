@@ -34,6 +34,8 @@ class BeaconModel(
     private val core: AriesCoreInterface,
     private val scope: CoroutineScope,
     private val fetcher: BeaconFetcher,
+    /** Called after the Beacon was removed (its push pairing is queued for revocation). */
+    private val onRemoved: () -> Unit = {},
     private val keyWork: CoroutineContext = EmptyCoroutineContext,
 ) {
     var host by mutableStateOf<Host?>(null)
@@ -49,6 +51,10 @@ class BeaconModel(
         private set
     var autoUpdate by mutableStateOf(true)
         private set
+
+    /** The Host has a Beacon installed (as last read). */
+    val installed: Boolean
+        get() = (ui as? BeaconUi.Known)?.state is BeaconState.Installed
 
     /** The release this app installs. */
     val pinnedVersion: String get() = core.beaconRelease().version
@@ -117,10 +123,12 @@ class BeaconModel(
         val host = host ?: return
         ui = BeaconUi.Working
         run {
-            onKey {
+            val state = onKey {
                 core.uninstallBeacon(host.id)
                 core.beaconStatus(host.id)
             }
+            onRemoved()
+            state
         }
     }
 
