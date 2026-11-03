@@ -1,9 +1,14 @@
 package io.github.shiroel.aries
 
+import android.os.Build
+import android.os.Looper
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
+import android.security.keystore.UserNotAuthenticatedException
+import io.github.shiroel.aries.core.KeyProtection
 import io.github.shiroel.aries.core.KeyVault
 import io.github.shiroel.aries.core.VaultException
+import java.security.InvalidAlgorithmParameterException
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -11,44 +16,95 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /**
- * Seals the core's secrets (the SSH private key) with an AES-256-GCM key that
- * never leaves the Android Keystore. Sealed form: `[12-byte IV][ciphertext+tag]`.
+ * Lets the user authorize one use of a biometric-protected Keystore key.
+ * Blocks the calling thread until the user answers; returns the authorized
+ * cipher, or null if the user cancelled. Never called on the main thread.
+ */
+fun interface BiometricAuthorizer {
+    fun authorize(cipher: Cipher): Cipher?
+}
+
+/**
+ * Seals the core's secrets (the SSH private key) with AES-256-GCM keys that
+ * never leave the Android Keystore. Sealed form: `[12-byte IV][ciphertext+tag]`.
  *
- * The key requires no user authentication yet; the key policy ticket adds
- * the biometric option.
+ * One Keystore key per [KeyProtection] (ticket 01's measurements):
+ * - [KeyProtection.PLAIN]: no user-authentication binding and no
+ *   `setUnlockedDeviceRequired`, so it works on a locked phone and Choice
+ *   buttons can answer from the notification.
+ * - [KeyProtection.BIOMETRIC]: every use needs a strong biometric through
+ *   [authorizer]. With no authorizer (no Activity in the foreground, as in a
+ *   BroadcastReceiver) it fails at once with [VaultException.Locked] instead
+ *   of being used quietly.
  */
 class KeystoreVault(private val alias: String = "aries-vault") : KeyVault {
+    @Volatile
+    var authorizer: BiometricAuthorizer? = null
 
-    override fun seal(plaintext: ByteArray): ByteArray = guarded {
+    override fun seal(plaintext: ByteArray, protection: KeyProtection): ByteArray = guarded {
         val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.ENCRYPT_MODE, key())
-        cipher.iv + cipher.doFinal(plaintext)
+        cipher.init(Cipher.ENCRYPT_MODE, key(protection))
+        val ready = authorized(cipher, protection)
+        ready.iv + ready.doFinal(plaintext)
     }
 
-    override fun open(sealed: ByteArray): ByteArray = guarded {
+    override fun open(sealed: ByteArray, protection: KeyProtection): ByteArray = guarded {
         require(sealed.size > IV_BYTES) { "sealed data too short" }
         val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, sealed, 0, IV_BYTES))
-        cipher.doFinal(sealed, IV_BYTES, sealed.size - IV_BYTES)
+        cipher.init(Cipher.DECRYPT_MODE, key(protection), GCMParameterSpec(128, sealed, 0, IV_BYTES))
+        authorized(cipher, protection).doFinal(sealed, IV_BYTES, sealed.size - IV_BYTES)
     }
 
-    private fun key(): SecretKey {
+    private fun authorized(cipher: Cipher, protection: KeyProtection): Cipher {
+        if (protection == KeyProtection.PLAIN) return cipher
+        val auth = authorizer ?: throw VaultException.Locked()
+        check(Looper.myLooper() != Looper.getMainLooper()) { "biometric unlock on the main thread" }
+        return auth.authorize(cipher) ?: throw VaultException.Locked()
+    }
+
+    private fun aliasFor(protection: KeyProtection) = when (protection) {
+        KeyProtection.PLAIN -> alias
+        KeyProtection.BIOMETRIC -> "$alias-biometric"
+    }
+
+    private fun key(protection: KeyProtection): SecretKey {
+        val name = aliasFor(protection)
         val store = KeyStore.getInstance(KEYSTORE).apply { load(null) }
-        (store.getKey(alias, null) as SecretKey?)?.let { return it }
+        (store.getKey(name, null) as SecretKey?)?.let { return it }
+        val spec = KeyGenParameterSpec.Builder(name, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+            .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+            .setKeySize(256)
+        if (protection == KeyProtection.BIOMETRIC) {
+            spec.setUserAuthenticationRequired(true).setInvalidatedByBiometricEnrollment(true)
+            // Timeout 0: every use needs its own biometric, so a recent
+            // screen unlock never lets the key work in the background.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                spec.setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG)
+            } else {
+                @Suppress("DEPRECATION")
+                spec.setUserAuthenticationValidityDurationSeconds(-1)
+            }
+        }
         val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, KEYSTORE)
-        generator.init(
-            KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
-                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                .setKeySize(256)
-                .build(),
-        )
-        return generator.generateKey()
+        try {
+            generator.init(spec.build())
+            return generator.generateKey()
+        } catch (e: InvalidAlgorithmParameterException) {
+            // No secure lock screen or no enrolled biometric.
+            throw VaultException.BiometricUnavailable(e.toString())
+        } catch (e: IllegalStateException) {
+            throw VaultException.BiometricUnavailable(e.toString())
+        }
     }
 
     private inline fun guarded(block: () -> ByteArray): ByteArray =
         try {
             block()
+        } catch (e: VaultException) {
+            throw e
+        } catch (e: UserNotAuthenticatedException) {
+            throw VaultException.Locked()
         } catch (e: Exception) {
             throw VaultException.Failed(e.toString())
         }
