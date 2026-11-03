@@ -123,6 +123,7 @@ fun SettingsScreen(
             item { SettingsField(R.string.accent_title) { AccentControls(settings) } }
             item { SettingsField(R.string.accent_custom) { HsvPicker(settings) } }
             item { SettingsField { ChatCacheSettings(model.chatCache) } }
+            item(key = "quiet-hours") { SettingsField { QuietHoursSection() } }
             item {
                 SettingsField(R.string.settings_agent_view) {
                     AgentViewToggle(model.agentView, model::setDefaultAgentView)

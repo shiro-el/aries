@@ -20,6 +20,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import java.time.LocalTime
 
 /**
  * Receives Relay pushes from FCM (high-priority data messages, also while
@@ -66,7 +67,6 @@ class PushService : FirebaseMessagingService() {
 
     companion object {
         private const val TAG = "AriesPush"
-        private const val CHANNEL = "host_notifications"
         private const val CALL_CHECK = "calls_check"
         private const val CALL_URGENT = "calls_urgent"
         private const val CALL_EMERGENCY = "calls_emergency"
@@ -93,9 +93,7 @@ class PushService : FirebaseMessagingService() {
                 CallNotifications.post(context, call, view)
                 return
             }
-            manager.createNotificationChannel(
-                NotificationChannel(CHANNEL, context.getString(R.string.push_channel_name), NotificationManager.IMPORTANCE_HIGH),
-            )
+            val channel = StatusChannels.channel(context, manager, content is PushContent.Status && content.status == AgentStatus.Done)
             val (title, body) = when (content) {
                 is PushContent.Test -> context.getString(R.string.push_test_title, notice.hostName) to
                     context.getString(R.string.push_test_body, notice.hostName)
@@ -112,21 +110,28 @@ class PushService : FirebaseMessagingService() {
                 }
                 is PushContent.Call -> return // shown by showCall
             }
-            val builder = Notification.Builder(context, CHANNEL)
+            val builder = Notification.Builder(context, channel)
                 .setSmallIcon(R.drawable.ic_stat_aries)
                 .setColor(ThemeSettings.from(context).accentArgb)
                 .setContentTitle(title)
                 .setContentText(body)
                 .setAutoCancel(true)
-            // A tap opens that Agent's Terminal.
-            if (content is PushContent.Status) builder.setContentIntent(PushTarget(notice.hostId, content.terminal).pendingIntent(context))
-            val notification = builder.build()
             // One notification per Agent: its newer status replaces the older.
-            val tag = when (content) {
-                is PushContent.Status -> content.terminal
-                else -> null
+            if (content is PushContent.Status) {
+                val tag = content.terminal
+                NotificationGroups.decorate(context, builder, notice.hostId, notice.hostName, tag, content.terminal)
+                val status = content.status
+                if ((status == AgentStatus.Done || status is AgentStatus.Blocked || status is AgentStatus.Error) &&
+                    QuietHoursSettings.from(context).hours.contains(LocalTime.now())
+                ) {
+                    // Android suppresses sound AND vibration even on an audible channel.
+                    // The summary independently uses GROUP_ALERT_CHILDREN, so neither rings.
+                    builder.setGroupAlertBehavior(Notification.GROUP_ALERT_SUMMARY)
+                }
+                NotificationGroups.post(context, notice.hostId, notice.hostName, tag, builder.build())
+            } else {
+                manager.notify(null, notice.hostId.hashCode(), builder.build())
             }
-            manager.notify(tag, notice.hostId.hashCode(), notification)
         }
 
         /**
@@ -171,9 +176,8 @@ class PushService : FirebaseMessagingService() {
                 .setWhen(call.atMs.toLong())
                 .setShowWhen(true)
                 .setAutoCancel(true)
+            NotificationGroups.decorate(context, builder, hostId, hostName, "call:${call.id}", call.terminal)
             if (call.urgency == CallUrgency.EMERGENCY) builder.setCategory(Notification.CATEGORY_ALARM)
-            // A tap opens the Terminal that called (only confirmed Calls are pushed).
-            builder.setContentIntent(PushTarget(hostId, call.terminal).pendingIntent(context))
             return builder
         }
     }

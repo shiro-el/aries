@@ -449,4 +449,16 @@
     <string name="host_edit_title">Edit Host</string>
     <string name="host_edit_save_button">Save</string>
     <string name="host_edit_invalid_body">Use a unique Host name, a valid address and user, and a port from 1 to 65535.</string>
+    <string name="terminal_compose_button">Compose message</string>
+    <string name="terminal_direct_input_button">Direct typing</string>
+    <string name="terminal_composer_hint">Edit text to send to the Terminal</string>
+    <string name="terminal_composer_send_button">Send</string>
+    <string name="terminal_enter_button">Enter</string>
+    <string name="push_channel_done">Done</string>
+    <string name="push_channel_attention">Blocked and Error</string>
+    <string name="push_host_summary">%1$s: %2$d waiting</string>
+    <string name="quiet_hours_title">Quiet hours</string>
+    <string name="quiet_hours_hint">Done, Blocked and Error stay silent during this phone’s local time range. Calls keep their alert settings. Matching times mean all day.</string>
+    <string name="quiet_hours_start">Start</string>
+    <string name="quiet_hours_end">End</string>
 </resources>

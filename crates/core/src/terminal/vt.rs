@@ -107,6 +107,15 @@ impl Vt {
         self.term.mode().contains(TermMode::APP_CURSOR)
     }
 
+    /// Encodes an edited draft as one paste, using the program's live DEC 2004 mode.
+    pub fn paste_bytes(&self, text: &str) -> Vec<u8> {
+        if self.term.mode().contains(TermMode::BRACKETED_PASTE) {
+            format!("\x1b[200~{}\x1b[201~", text.replace("\x1b[201~", "")).into_bytes()
+        } else {
+            text.replace("\r\n", "\r").replace('\n', "\r").into_bytes()
+        }
+    }
+
     /// Shows the screen `lines` lines back into the scrollback (0 = live);
     /// stops at the oldest line. Returns where it stopped. While scrolled
     /// back, new output keeps the view on the same lines.
@@ -351,6 +360,22 @@ fn default_palette(i: usize) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn paste_follows_live_dec_2004_and_keeps_multiline_text_together() {
+        let mut vt = Vt::new(20, 4, 0);
+        assert_eq!(
+            vt.paste_bytes("one\r\ntwo\n세\rfour"),
+            b"one\rtwo\r\xec\x84\xb8\rfour"
+        );
+        vt.feed(b"\x1b[?2004h");
+        assert_eq!(
+            vt.paste_bytes("one\r\ntwo\n세\x1b[201~tail\x1b[201~"),
+            "\x1b[200~one\r\ntwo\n세tail\x1b[201~".as_bytes(),
+        );
+        vt.feed(b"\x1b[?2004l");
+        assert_eq!(vt.paste_bytes("one\ntwo"), b"one\rtwo");
+    }
 
     #[test]
     fn colours_runs_and_sends_only_the_rows_that_changed() {

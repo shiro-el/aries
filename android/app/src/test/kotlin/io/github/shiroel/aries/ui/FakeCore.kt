@@ -777,6 +777,11 @@ class FakeTerminalView(val address: String, val options: AttachOptions) : Termin
         sent += "text:$text"
     }
 
+    override suspend fun pasteText(text: String) {
+        check(!options.observe) { "an observer cannot paste" }
+        sent += "paste:$text"
+    }
+
     override suspend fun sendKey(key: TerminalKey, mods: KeyMods) {
         check(!options.observe) { "an observer cannot type" }
         val name = when (key) {
