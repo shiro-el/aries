@@ -5,6 +5,45 @@
   Glossary terms: Host = 호스트, Terminal = 터미널, Agent = 에이전트.
 -->
 <resources>
+    <!-- Remote file browser (90) -->
+    <string name="files_open_button">파일</string>
+    <string name="files_title">Host 파일</string>
+    <string name="files_close_button">파일 닫기</string>
+    <string name="files_up_button">상위 폴더</string>
+    <string name="files_refresh_button">새로고침</string>
+    <string name="files_back_folder_button">폴더로 돌아가기</string>
+    <string name="files_send_file_button">Agent에게 파일 보내기</string>
+    <string name="files_send_line_label">Agent에게 %1$d행 보내기</string>
+    <string name="files_line_hint">줄을 누르면 Chat 초안에 추가합니다.</string>
+    <string name="files_not_text">미리 볼 수 없음: 바이너리 또는 UTF-8이 아닌 파일입니다.</string>
+    <string name="files_loading">파일을 불러오는 중…</string>
+    <string name="files_failed">폴더 또는 파일을 불러오지 못했습니다. 연결, 경로, 권한을 확인한 뒤 다시 시도하세요.</string>
+    <string name="files_empty_folder">빈 폴더입니다.</string>
+    <string name="files_empty_file">빈 파일입니다.</string>
+    <string name="files_range">전체 %3$d행 중 %1$d–%2$d행</string>
+    <string name="files_previous_button">이전 페이지</string>
+    <string name="files_next_button">다음 페이지</string>
+    <!-- Git changes (ticket 89) -->
+    <string name="git_changes_button">변경</string>
+    <string name="git_changes_title">Git 변경 · 읽기 전용</string>
+    <string name="git_loading">변경을 읽는 중…</string>
+    <string name="git_not_repository">이 폴더는 Git 저장소가 아닙니다.</string>
+    <string name="git_clean">변경이 없습니다.</string>
+    <string name="git_staged">스테이징됨</string>
+    <string name="git_unstaged">스테이징되지 않음</string>
+    <string name="git_untracked">추적되지 않음</string>
+    <string name="git_more_button">더 보기</string>
+    <string name="git_truncated">Host 출력 한도에 도달했습니다. 받은 부분만 표시합니다.</string>
+    <string name="git_binary">바이너리 파일입니다. 미리 볼 수 없습니다.</string>
+    <string name="git_empty_diff">이 파일의 텍스트 diff가 없습니다.</string>
+    <string name="git_send_file">Agent에게 파일 보내기</string>
+    <string name="git_send_selection">Agent에게 선택한 줄 보내기</string>
+    <string name="git_select_hint">줄을 누르고 다른 줄을 누르면 범위를 선택합니다. 참조는 Chat 입력란에 추가됩니다.</string>
+    <string name="git_error">Git 변경을 읽지 못했습니다: %1$s</string>
+    <string name="git_retry_button">새로고침</string>
+    <string name="git_line_label">이전 %1$s · 새 %2$s: %3$s</string>
+
+
     <string name="agents_elapsed_less_than_minute">1분 미만</string>
     <string name="agents_elapsed_minutes">%1$d분</string>
     <string name="agents_elapsed_hours">%1$d시간</string>
@@ -185,6 +224,11 @@
     <string name="chat_question_send">답 보내기</string>
     <string name="chat_question_sending">보내는 중…</string>
     <string name="chat_question_sent">답을 보냈습니다.</string>
+    <!-- Notification question answers -->
+    <string name="question_notify_open_app">앱에서 답하기</string>
+    <string name="question_notify_sent">“%1$s” 전송 완료</string>
+    <string name="question_notify_unknown">답변이 전송되었을 수 있습니다. 다시 답하기 전에 Chat을 확인하세요.</string>
+
     <string name="chat_answer_answered">이미 답한 질문입니다.</string>
     <string name="chat_answer_gone">Agent가 더 이상 이 질문을 묻고 있지 않습니다.</string>
     <string name="chat_answer_invalid">질문에 맞지 않는 답입니다.</string>
@@ -213,6 +257,21 @@
     <string name="structure_unreadable">이 호스트의 herdr-app 레이아웃을 읽지 못했습니다(%1$s). 터미널을 스페이스·탭 label로 묶어 보여 줍니다.</string>
     <string name="structure_unknown_format">이 호스트의 herdr-app 레이아웃은 Aries가 모르는 형식입니다. 터미널을 스페이스·탭 label로 묶어 보여 줍니다. Aries를 업데이트하세요.</string>
     <string name="structure_connection_closed">호스트와의 연결이 끊어졌습니다. 보이는 내용이 최신이 아닐 수 있습니다.</string>
+    <!-- Worktree picker: read-only discovery and opening. -->
+    <string name="worktrees_button">Worktree 목록</string>
+    <string name="worktrees_title">Worktree 열기</string>
+    <string name="worktrees_open_button">Worktree에서 열기</string>
+    <string name="worktrees_refresh_button">Worktree 새로고침</string>
+    <string name="worktrees_loading">Worktree를 불러오는 중…</string>
+    <string name="worktrees_empty">Worktree가 없습니다.</string>
+    <string name="worktrees_program_label">이 worktree에서 실행</string>
+    <string name="worktrees_shell">셸</string>
+    <string name="worktrees_fallback_hint">현재 Space의 새 Tab으로 엽니다. Space가 없거나 herdr-app이 꺼져 있으면 Terminal을 실행합니다.</string>
+    <string name="worktrees_detached">분리된 HEAD · %1$s</string>
+    <string name="worktrees_bare">Bare 저장소</string>
+    <string name="worktrees_locked">잠김 · %1$s</string>
+    <string name="worktrees_prunable">열 수 없음 · %1$s</string>
+
     <string name="launch_open_button">새 터미널</string>
     <string name="launch_title">터미널 실행</string>
     <string name="launch_command">명령</string>
@@ -359,6 +418,12 @@
     <string name="push_permission_denied">Aries 알림이 허용되지 않았습니다. Android 설정에서 허용한 뒤 다시 푸시를 켜세요.</string>
     <string name="push_off_host_unreachable">푸시를 껐고 Relay에서 이 페어링을 삭제했습니다. Host에 연결할 수 없어 Host 쪽 페어링 사본은 다음 페어링 때까지 남지만 더는 동작하지 않습니다.</string>
     <string name="push_channel_name">Host 알림</string>
+    <!-- Watched Agent progress -->
+    <string name="agent_watch_label">진행 상황 지켜보기</string>
+    <string name="agent_watch_error">지켜보기를 변경하지 못했습니다: %1$s</string>
+    <string name="push_progress_channel">지켜보는 Agent 진행 상황</string>
+    <string name="push_progress_body">%1$d분 경과 · 하위 Agent %2$d개</string>
+
     <string name="push_test_title">%1$s 푸시 동작 확인</string>
     <string name="push_test_body">%1$s의 Beacon이 보낸 테스트 알림입니다. 종단 간 암호화돼 있습니다.</string>
     <string name="push_status_title">%2$s의 %1$s</string>

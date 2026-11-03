@@ -10,6 +10,8 @@ mod calls;
 mod chat;
 mod chat_cache;
 mod error;
+mod files;
+mod git_changes;
 mod hc;
 mod host_edit;
 mod host_model;
@@ -24,6 +26,7 @@ mod store;
 mod structure;
 mod terminal;
 mod transport;
+mod worktrees;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -47,6 +50,8 @@ pub use chat::{
     ChatToolStatus, ChatWatch,
 };
 pub use error::{AnswerProblem, CoreError, Incompatibility, VaultError};
+pub use files::{RemoteDirectory, RemoteFileEntry, RemoteFilePage};
+pub use git_changes::*;
 pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
 pub use host_model::{AgentStatus, BlockedReason, TerminalWatch};
 pub use last_known_state::{LastKnownState, LastKnownStateWatch};
@@ -63,6 +68,7 @@ pub use terminal::{
     AttachOptions, CellRun, CursorPos, FRAME_INTERVAL, KeyMods, ScreenFrame, ScreenLine,
     TerminalExit, TerminalKey, TerminalUpdate, TerminalView, ViewStats,
 };
+pub use worktrees::{WorktreeInfo, WorktreeOpen};
 
 use hc::HcClient;
 use store::{SavedHost, SavedKey, Store};
@@ -170,6 +176,15 @@ pub struct Host {
     pub host_key: Option<String>,
 }
 
+/// The live foreground process group leader, reported by herdr-core.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, uniffi::Record)]
+pub struct ForegroundInfo {
+    pub pid: u32,
+    pub name: String,
+    pub argv: Vec<String>,
+    pub cwd: Option<String>,
+}
+
 /// One Terminal as listed by herdr-core.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, uniffi::Record)]
 pub struct TerminalInfo {
@@ -206,6 +221,13 @@ pub struct TerminalInfo {
     /// Seeing a completed turn does not reset this clock.
     #[uniffi(default = None)]
     pub status_ms: Option<u64>,
+    /// Explicit progress watching, shared with the Beacon through aries.watch.
+    #[uniffi(default = false)]
+    #[serde(default)]
+    pub watched: bool,
+    /// Current program and folder; launch argv/cwd remain the fallback.
+    #[uniffi(default = None)]
+    pub foreground: Option<ForegroundInfo>,
 }
 
 fn runtime() -> &'static tokio::runtime::Runtime {
@@ -1032,6 +1054,40 @@ impl AriesCore {
         };
         on_runtime(async move { chat::answer(&host, &terminal, &answer).await }).await
     }
+
+    /// Answers from a notification without a [`HostConnection`] or UI.
+    /// Every key on the route must be PLAIN; never asks for biometrics.
+    /// Sign-in is limited to 15 seconds, then the existing one-shot answer
+    /// path waits at most 30 seconds for the Beacon. Nothing is retried.
+    pub async fn answer_question_background(
+        &self,
+        host_id: String,
+        terminal: String,
+        question_id: String,
+        picks: Vec<Vec<u32>>,
+    ) -> Result<(), CoreError> {
+        if !self.can_answer_in_background(host_id.clone())? {
+            return Err(CoreError::KeyLocked);
+        }
+        let host = self.chat_host(&host_id)?;
+        let answer = aries_protocol::answer::Answer {
+            question: question_id,
+            picks: picks
+                .into_iter()
+                .map(|p| p.into_iter().map(|n| n as usize).collect())
+                .collect(),
+        };
+        on_runtime(async move {
+            chat::answer_within(
+                &host,
+                &terminal,
+                &answer,
+                std::time::Duration::from_secs(15),
+            )
+            .await
+        })
+        .await
+    }
 }
 
 /// Calls (`calls` module).
@@ -1361,6 +1417,18 @@ impl HostConnection {
         on_runtime(async move { set_labels(&client, &address, labels).await }).await
     }
 
+    /// Selects an Agent for ongoing progress notifications. The label belongs
+    /// to the Terminal on the Host; other clients and the Beacon see it.
+    pub async fn set_watched(
+        &self,
+        address: String,
+        watched: bool,
+    ) -> Result<TerminalInfo, CoreError> {
+        let client = self.client.clone();
+        let labels = serde_json::json!({ "aries.watch": if watched { "1" } else { "" } });
+        on_runtime(async move { set_labels(&client, &address, labels).await }).await
+    }
+
     /// Starts a new Terminal running `request.command` (see `launch.rs`),
     /// placed in the requested Space/Tab by label; the document is never
     /// written. herdr-core's refusal (`spawn_failed` for a missing program or
@@ -1540,6 +1608,7 @@ pub(crate) fn terminal_info(v: &serde_json::Value) -> TerminalInfo {
     TerminalInfo {
         machine: address.rsplit_once('/').map(|(m, _)| m.to_owned()),
         pinned: host_model::pinned(v),
+        watched: v["labels"]["aries.watch"].as_str() == Some("1"),
         address,
         parent: s("parent"),
         name: s("name"),
@@ -1553,6 +1622,7 @@ pub(crate) fn terminal_info(v: &serde_json::Value) -> TerminalInfo {
             })
             .unwrap_or_default(),
         cwd: s("cwd"),
+        foreground: serde_json::from_value(v["foreground"].clone()).ok(),
         state: s("state").unwrap_or_default(),
         agent_status,
         needs_attention,

@@ -69,6 +69,18 @@ impl HostConnection {
         cwd: Option<String>,
         timeout_seconds: u32,
     ) -> Result<ExecOutput, CoreError> {
+        self.machine_exec_on(argv, cwd, timeout_seconds, None).await
+    }
+}
+
+impl HostConnection {
+    pub(crate) async fn machine_exec_on(
+        &self,
+        argv: Vec<String>,
+        cwd: Option<String>,
+        timeout_seconds: u32,
+        on: Option<String>,
+    ) -> Result<ExecOutput, CoreError> {
         if !(1..=20).contains(&timeout_seconds) {
             return Err(protocol("exec timeout must be between 1 and 20 seconds"));
         }
@@ -78,7 +90,7 @@ impl HostConnection {
                 .call(
                     "machine.exec",
                     json!({
-                        "argv": argv, "cwd": cwd, "timeout": timeout_seconds,
+                        "argv": argv, "cwd": cwd, "timeout": timeout_seconds, "on": on,
                     }),
                 )
                 .await
@@ -102,7 +114,10 @@ impl HostConnection {
             timed_out: v["timed_out"].as_bool().unwrap_or(false),
         })
     }
+}
 
+#[uniffi::export]
+impl HostConnection {
     /// A read-only control-socket probe, not just an executable/PID check.
     /// Missing binary, closed window or a hung app all disable layout edits.
     pub async fn herdr_app_available(&self) -> Result<bool, CoreError> {

@@ -527,6 +527,15 @@ class FakeCore : AriesCoreInterface {
         answerFailure?.let { answerFailure = null; throw it }
     }
 
+    val backgroundAnswers = mutableListOf<Triple<String, String, List<List<UInt>>>>()
+    var answerHold: CompletableDeferred<Unit>? = null
+
+    override suspend fun answerQuestionBackground(hostId: String, terminal: String, questionId: String, picks: List<List<UInt>>) {
+        backgroundAnswers += Triple(terminal, questionId, picks)
+        answerHold?.await()
+        answerQuestion(hostId, terminal, questionId, picks)
+    }
+
     /** Each Host's Call history (newest first), by Host id. */
     val callsOf = mutableMapOf<String, List<CallInfo>>()
 
@@ -597,6 +606,28 @@ class FakeConnection(
     private val core: FakeCore? = null,
     private val saved: MutableList<SavedLaunch> = core?.savedLaunches ?: mutableListOf(),
 ) : HostConnection(NoHandle) {
+    var worktrees = emptyList<io.github.shiroel.aries.core.WorktreeInfo>()
+    val worktreeFolders = mutableListOf<String>()
+    val openedWorktrees = mutableListOf<Triple<String, String?, io.github.shiroel.aries.core.AgentPreset?>>()
+    var worktreeFailure: CoreException? = null
+    override suspend fun listWorktrees(cwd: String): List<io.github.shiroel.aries.core.WorktreeInfo> {
+        worktreeFolders += cwd
+        return worktrees
+    }
+    override suspend fun openWorktree(folder: String, spaceId: String?, preset: io.github.shiroel.aries.core.AgentPreset?): io.github.shiroel.aries.core.WorktreeOpen {
+        openedWorktrees += Triple(folder, spaceId, preset)
+        worktreeFailure?.let { throw it }
+        return if (spaceId != null) io.github.shiroel.aries.core.WorktreeOpen.Tab(spaceId, "tb2", "t9")
+        else io.github.shiroel.aries.core.WorktreeOpen.Terminal("t9")
+    }
+    var fileDirectory = io.github.shiroel.aries.core.RemoteDirectory("/repo", emptyList())
+    override suspend fun listFiles(address: String, path: String?) = fileDirectory
+    override suspend fun readFilePage(address: String, path: String, offset: ULong, limit: UInt) =
+        io.github.shiroel.aries.core.RemoteFilePage("", 1u, 0u, 0u)
+    var gitFiles = io.github.shiroel.aries.core.GitChanges("/repo", emptyList(), false, false)
+    var gitPatch = io.github.shiroel.aries.core.GitDiff(emptyList(), false, false)
+    override suspend fun gitChanges(address: String) = gitFiles
+    override suspend fun gitDiff(address: String, cwd: String, path: String, kind: io.github.shiroel.aries.core.GitDiffKind) = gitPatch
     val edits = mutableListOf<io.github.shiroel.aries.core.LayoutEdit>()
     var editFailure: CoreException? = null
     override suspend fun editLayout(edit: io.github.shiroel.aries.core.LayoutEdit): String {
@@ -615,6 +646,9 @@ class FakeConnection(
         core!!.label(hostId, address, "seen=$turn") {
             if (it.agentStatus == AgentStatus.Done && turn >= it.turn) it.copy(agentStatus = AgentStatus.Idle) else it
         }
+
+    override suspend fun setWatched(address: String, watched: Boolean): TerminalInfo =
+        core!!.label(hostId, address, "watched=$watched") { it.copy(watched = watched) }
 
     override suspend fun setPinned(address: String, pinned: Boolean): TerminalInfo =
         core!!.label(hostId, address, "pinned=$pinned") { it.copy(pinned = pinned) }
