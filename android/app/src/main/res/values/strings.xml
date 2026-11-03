@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Key naming: <area>_<thing>[_<role>], lowercase snake_case, shared with iOS.
+  See "UI strings" in CONTRIBUTING.md.
+-->
+<resources>
+    <string name="app_name">Aries</string>
+
+    <string name="ok_button">OK</string>
+    <string name="cancel_button">Cancel</string>
+    <string name="back_button">Back</string>
+
+    <string name="hosts_title">Hosts</string>
+    <string name="hosts_empty">No Hosts yet. Add one below.</string>
+
+    <string name="key_missing">Aries needs an SSH key to sign in to your Hosts.</string>
+    <string name="key_create_button">Create SSH key</string>
+    <string name="key_title">This phone\'s SSH key</string>
+    <string name="key_fingerprint">Fingerprint: %1$s</string>
+    <string name="key_copy_button">Copy public key</string>
+    <string name="key_copy_hint">Add it to ~/.ssh/authorized_keys on each Host.</string>
+    <string name="key_clip_label">Aries SSH public key</string>
+
+    <string name="host_ssh_address">%1$s@%2$s:%3$d</string>
+    <string name="host_local_address">Local process</string>
+    <string name="host_add_title">Add a Host</string>
+    <string name="host_add_name">Name (optional)</string>
+    <string name="host_add_address">Address</string>
+    <string name="host_add_port">Port</string>
+    <string name="host_add_user">User name</string>
+    <string name="host_add_button">Add Host</string>
+
+    <string name="connecting">Connecting to %1$s…</string>
+    <string name="terminals_title">Terminals on %1$s</string>
+    <string name="terminals_empty">No Terminals are running on this Host.</string>
+    <string name="terminal_subtitle">%1$s · %2$s</string>
+
+    <string name="host_key_trust_title">Trust this Host?</string>
+    <string name="host_key_trust_body">This is the first connection to %1$s. Check that its Host key fingerprint is:\n\n%2$s\n\nOn the Host, run: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</string>
+    <string name="host_key_trust_button">Trust and connect</string>
+    <string name="host_key_changed_title">Host key changed</string>
+    <string name="host_key_changed_body">The Host presented a different key than before, so Aries did not connect. Someone may be intercepting the connection, or the Host was reinstalled.\n\nTrusted: %1$s\nNow: %2$s</string>
+
+    <string name="incompatible_title">Update needed</string>
+    <string name="incompatible_app_too_old">This Host runs a newer herdr-core protocol (generation %1$d). Update Aries.</string>
+    <string name="incompatible_core_too_old">This Host runs herdr-core %1$s. Aries needs %2$s or newer: run `hc update` on the Host.</string>
+    <string name="incompatible_missing_methods">This Host\'s herdr-core lacks %1$s. Run `hc update` on the Host.</string>
+
+    <string name="connect_failed_title">Could not connect</string>
+    <string name="connect_auth_rejected">The Host did not accept this phone\'s SSH key. Add the public key to ~/.ssh/authorized_keys on the Host.</string>
+    <string name="connect_no_key">Create an SSH key first.</string>
+    <string name="connect_unreachable">Could not reach the Host: %1$s</string>
+    <string name="connect_protocol">The Host did not speak the herdr-core protocol: %1$s</string>
+    <string name="connect_other">%1$s</string>
+</resources>

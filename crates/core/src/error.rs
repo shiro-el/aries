@@ -41,8 +41,8 @@ pub enum CoreError {
     #[error("protocol failure: {detail}")]
     Protocol { detail: String },
     /// herdr-core answered a request with an error.
-    #[error("herdr-core {kind}: {message}")]
-    Rpc { kind: String, message: String },
+    #[error("herdr-core {kind}: {detail}")]
+    Rpc { kind: String, detail: String },
     #[error("the connection to the Host closed")]
     Closed,
 }

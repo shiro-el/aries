@@ -268,7 +268,7 @@ fn version_tuple(v: &str) -> Vec<u64> {
 fn rpc_error(err: &Value) -> CoreError {
     CoreError::Rpc {
         kind: err["data"]["kind"].as_str().unwrap_or("unknown").to_owned(),
-        message: err["message"].as_str().unwrap_or("").to_owned(),
+        detail: err["message"].as_str().unwrap_or("").to_owned(),
     }
 }
 

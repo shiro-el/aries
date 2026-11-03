@@ -266,7 +266,7 @@ impl SshdHost {
     pub fn rotate_host_keys(&self) {
         docker(&[
             "exec", &self.container, "sh", "-c",
-            "rm -f /etc/ssh/ssh_host_* && ssh-keygen -A >/dev/null && pkill -f 'sshd -D'",
+            "rm -f /etc/ssh/ssh_host_* && ssh-keygen -A >/dev/null && pkill -x sshd",
         ]);
         std::thread::sleep(Duration::from_millis(300));
         self.wait_ready();
