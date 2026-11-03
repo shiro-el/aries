@@ -15,10 +15,13 @@ import io.github.shiroel.aries.core.Linger
 import io.github.shiroel.aries.core.JumpHost
 import io.github.shiroel.aries.core.KeyInfo
 import io.github.shiroel.aries.core.HostStructure
+import io.github.shiroel.aries.core.KeyProtection
 import io.github.shiroel.aries.core.NoHandle
 import io.github.shiroel.aries.core.PublicKeyInfo
 import io.github.shiroel.aries.core.StructureListener
 import io.github.shiroel.aries.core.StructureWatch
+import io.github.shiroel.aries.core.LaunchRequest
+import io.github.shiroel.aries.core.PaneInfo
 import io.github.shiroel.aries.core.QrMatrix
 import io.github.shiroel.aries.core.TerminalInfo
 import io.github.shiroel.aries.core.TerminalWatch
@@ -155,6 +158,24 @@ class FakeCore : AriesCoreInterface {
         if (!hosts.removeIf { it.id == hostId }) throw CoreException.UnknownHost(hostId)
     }
 
+    /** When set, `setKeyProtection` fails with it and the policy stays. */
+    var failProtectionWith: CoreException? = null
+
+    private var protection = KeyProtection.PLAIN
+
+    override fun keyProtection(): KeyProtection? = key?.let { protection }
+
+    override fun setKeyProtection(protection: KeyProtection) {
+        if (key == null) throw CoreException.NoKey()
+        failProtectionWith?.let { throw it }
+        this.protection = protection
+    }
+
+    override fun canAnswerInBackground(hostId: String): Boolean {
+        val host = hosts.find { it.id == hostId } ?: throw CoreException.UnknownHost(hostId)
+        return host.endpoint is Endpoint.Local || keyProtection() == KeyProtection.PLAIN
+    }
+
     override suspend fun connect(hostId: String): HostConnection {
         failWith?.let { throw it }
         val host = hosts.find { it.id == hostId } ?: throw CoreException.UnknownHost(hostId)
@@ -242,6 +263,32 @@ class FakeConnection(
 
             override fun close() {}
         }
+    }
+
+    /** What `launch` was asked to start, in order. */
+    val launched = mutableListOf<LaunchRequest>()
+
+    /** When set, `launch` fails with it. */
+    var launchFailWith: CoreException? = null
+
+    var recentCwds: List<String> = emptyList()
+
+    override fun recentCwds(): List<String> = recentCwds
+
+    /** Like herdr-core: a new live Terminal, shown in its labelled Tab (or unplaced). */
+    override suspend fun launch(request: LaunchRequest): TerminalInfo {
+        calls += "launch"
+        launchFailWith?.let { throw it }
+        launched += request
+        val t = TerminalInfo("t${100 + launched.size}", null, "", request.command.split(" "), request.cwd, "live")
+        val pane = PaneInfo(t.address, t.address, t)
+        val placed = current.spaces.map { s ->
+            if (s.id != request.spaceId) s
+            else s.copy(tabs = s.tabs.map { tab -> if (tab.id == request.tabId) tab.copy(panes = tab.panes + pane) else tab })
+        }
+        val inTab = placed != current.spaces
+        push(current.copy(spaces = placed, unplaced = if (inTab) current.unplaced else current.unplaced + t))
+        return t
     }
 
     /** The desktop changed the structure. */

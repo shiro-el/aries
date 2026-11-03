@@ -9,6 +9,7 @@ mod beacon;
 mod error;
 mod hc;
 mod host_model;
+mod launch;
 mod removal;
 mod store;
 mod structure;
@@ -29,6 +30,7 @@ pub use beacon::{
 pub use error::{CoreError, Incompatibility, VaultError};
 pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
 pub use host_model::{AgentStatus, BlockedReason, TerminalWatch};
+pub use launch::{LaunchRequest, RECENT_CWDS_KEPT};
 pub use structure::{HostStructure, PaneInfo, SpaceInfo, StructureProblem, TabInfo};
 
 use hc::HcClient;
@@ -41,11 +43,26 @@ pub const DEFAULT_KEY_ID: &str = "default";
 uniffi::setup_scaffolding!();
 
 /// Seals secrets at rest. On Android this is an AES-GCM key held by the
-/// Android Keystore; tests use a stand-in.
+/// Android Keystore, one Keystore key per [`KeyProtection`]; tests use a
+/// stand-in. Bytes sealed under one protection open only under the same one.
 #[uniffi::export(with_foreign)]
 pub trait KeyVault: Send + Sync {
-    fn seal(&self, plaintext: Vec<u8>) -> Result<Vec<u8>, VaultError>;
-    fn open(&self, sealed: Vec<u8>) -> Result<Vec<u8>, VaultError>;
+    fn seal(&self, plaintext: Vec<u8>, protection: KeyProtection) -> Result<Vec<u8>, VaultError>;
+    /// A [`KeyProtection::Biometric`] open fails with [`VaultError::Locked`]
+    /// unless the user authenticates for this use; it never falls back.
+    fn open(&self, sealed: Vec<u8>, protection: KeyProtection) -> Result<Vec<u8>, VaultError>;
+}
+
+/// The user's choice of how the app's SSH key is unlocked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum KeyProtection {
+    /// Sealed by a Keystore key with no user-authentication binding, so it
+    /// also works on a locked phone: Choice buttons can answer from the
+    /// notification.
+    Plain,
+    /// Every use needs a strong biometric. Unusable in the background, so
+    /// notifications show "Open app" instead of Choice buttons.
+    Biometric,
 }
 
 /// The app's SSH public key, ready to paste into `authorized_keys`.
@@ -203,10 +220,10 @@ impl AriesCore {
 
     /// The app's SSH public key, if one was created.
     pub fn public_key(&self) -> Result<Option<PublicKeyInfo>, CoreError> {
-        let Some((_, public)) = self.store.read_identity()? else {
+        let Some(id) = self.store.read_identity()? else {
             return Ok(None);
         };
-        Ok(Some(public_key_info(&public)?))
+        Ok(Some(public_key_info(&id.public)?))
     }
 
     /// The app's public key line as a QR code, if a key was created.
@@ -238,9 +255,94 @@ impl AriesCore {
             return Ok(info);
         }
         let (private, public) = generate_key("aries")?;
-        let sealed = self.vault.seal(private.as_bytes().to_vec())?;
-        self.store.write_identity(&sealed, &public)?;
+        let sealed = self
+            .vault
+            .seal(private.as_bytes().to_vec(), KeyProtection::Plain)?;
+        self.store.write_identity(&store::Identity {
+            protection: KeyProtection::Plain,
+            sealed,
+            public: public.clone(),
+        })?;
         public_key_info(&public)
+    }
+
+    /// How the app's SSH keys are unlocked, or `None` before the default key
+    /// exists. The policy is app-wide: it covers every key in [`AriesCore::keys`].
+    pub fn key_protection(&self) -> Result<Option<KeyProtection>, CoreError> {
+        Ok(self.store.read_identity()?.map(|id| id.protection))
+    }
+
+    /// Re-seals every SSH key (the default one and those from `create_key`)
+    /// under `protection`; the public keys and every Host's `authorized_keys`
+    /// stay valid. Entering or leaving [`KeyProtection::Biometric`] asks the
+    /// user to authenticate, so call it from the foreground and off the main
+    /// thread. On failure every key keeps the old protection.
+    pub fn set_key_protection(&self, protection: KeyProtection) -> Result<(), CoreError> {
+        let id = self.store.read_identity()?.ok_or(CoreError::NoKey)?;
+        // Re-seal everything in memory first, so a vault failure writes nothing.
+        let mut extras = Vec::new();
+        for k in self.store.read_keys()? {
+            let (old, sealed) = self.store.read_key_sealed(&k.id)?;
+            if old != protection {
+                let private = self.vault.open(sealed.clone(), old)?;
+                let resealed = self.vault.seal(private, protection)?;
+                extras.push((k.id, old, sealed, resealed));
+            }
+        }
+        let identity = if id.protection == protection {
+            None
+        } else {
+            let private = self.vault.open(id.sealed.clone(), id.protection)?;
+            Some(self.vault.seal(private, protection)?)
+        };
+        // The default key, which `key_protection` reports, goes last; if any
+        // write fails, put back the keys already written.
+        let mut written = Vec::new();
+        let result = (|| {
+            for (key_id, _, _, resealed) in &extras {
+                self.store.write_key_sealed(key_id, protection, resealed)?;
+                written.push(key_id.clone());
+            }
+            if let Some(sealed) = identity {
+                self.store.write_identity(&store::Identity {
+                    protection,
+                    sealed,
+                    public: id.public.clone(),
+                })?;
+            }
+            Ok(())
+        })();
+        if result.is_err() {
+            for (key_id, old, sealed, _) in &extras {
+                if written.contains(key_id) {
+                    let _ = self.store.write_key_sealed(key_id, *old, sealed);
+                }
+            }
+        }
+        result
+    }
+
+    /// Whether a Choice for this Host can be answered from a notification
+    /// without opening the app: signing in to the Host must not need a
+    /// biometric unlock. When `false`, show "Open app" instead of Choices.
+    ///
+    /// For an SSH Host that means the Host's key and every jump host's key
+    /// exist and are [`KeyProtection::Plain`].
+    pub fn can_answer_in_background(&self, host_id: String) -> Result<bool, CoreError> {
+        let host = self.saved_host(&host_id)?;
+        if let Endpoint::Local { .. } = host.endpoint {
+            return Ok(true);
+        }
+        let key_ids = std::iter::once(host.key_id.as_deref())
+            .chain(host.jumps.iter().map(|j| j.key_id.as_deref()));
+        for key_id in key_ids {
+            match self.sealed_key(key_id) {
+                Ok((KeyProtection::Plain, _)) => {}
+                Ok(_) | Err(CoreError::NoKey | CoreError::UnknownKey { .. }) => return Ok(false),
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(true)
     }
 
     /// Registers a Host. Connecting is a separate step.
@@ -284,16 +386,18 @@ impl AriesCore {
     }
 
     /// Creates another ed25519 SSH key, for jump hosts or Hosts that need an
-    /// account of their own.
+    /// account of their own. It is sealed under the current
+    /// [`AriesCore::key_protection`] (`Plain` before the default key exists).
     pub fn create_key(&self, label: String) -> Result<KeyInfo, CoreError> {
+        let protection = self.key_protection()?.unwrap_or(KeyProtection::Plain);
         let (private, public) = generate_key(&label)?;
-        let sealed = self.vault.seal(private.into_bytes())?;
+        let sealed = self.vault.seal(private.into_bytes(), protection)?;
         let saved = SavedKey {
             id: new_id(),
             label,
             public,
         };
-        self.store.add_key(&saved, &sealed)?;
+        self.store.add_key(&saved, protection, &sealed)?;
         key_info(&saved)
     }
 
@@ -465,6 +569,7 @@ impl AriesCore {
             on_runtime(async move { HcClient::handshake(transport.open().await?).await }).await?;
         Ok(Arc::new(HostConnection {
             client: Arc::new(client),
+            recent: launch::RecentCwds::in_host_dir(self.store.host_dir(&host.id)),
         }))
     }
 }
@@ -489,20 +594,28 @@ impl AriesCore {
     /// The private half of `key_id` (`None` or [`DEFAULT_KEY_ID`]: the
     /// default key).
     fn private_key(&self, key_id: Option<&str>) -> Result<PrivateKey, CoreError> {
-        let sealed = match key_id {
-            None | Some(DEFAULT_KEY_ID) => self.store.read_identity()?.ok_or(CoreError::NoKey)?.0,
-            Some(id) => {
-                self.check_key_id(Some(id))?;
-                self.store.read_key_sealed(id)?
-            }
-        };
-        let pem = self.vault.open(sealed)?;
+        let (protection, sealed) = self.sealed_key(key_id)?;
+        let pem = self.vault.open(sealed, protection)?;
         let pem = String::from_utf8(pem).map_err(|e| CoreError::Vault {
             detail: e.to_string(),
         })?;
         PrivateKey::from_openssh(&pem).map_err(|e| CoreError::Vault {
             detail: e.to_string(),
         })
+    }
+
+    /// The sealed private half of `key_id` and the protection it is under.
+    fn sealed_key(&self, key_id: Option<&str>) -> Result<(KeyProtection, Vec<u8>), CoreError> {
+        match key_id {
+            None | Some(DEFAULT_KEY_ID) => {
+                let id = self.store.read_identity()?.ok_or(CoreError::NoKey)?;
+                Ok((id.protection, id.sealed))
+            }
+            Some(id) => {
+                self.check_key_id(Some(id))?;
+                self.store.read_key_sealed(id)
+            }
+        }
     }
 
     fn check_key_id(&self, key_id: Option<&str>) -> Result<(), CoreError> {
@@ -620,6 +733,7 @@ impl AriesCore {
 #[derive(uniffi::Object)]
 pub struct HostConnection {
     client: Arc<HcClient>,
+    recent: launch::RecentCwds,
 }
 
 #[uniffi::export]
@@ -719,6 +833,28 @@ impl HostConnection {
         let value = if pinned { "1" } else { "" };
         let labels = serde_json::json!({ aries_protocol::agent_status::PINNED_LABEL: value });
         on_runtime(async move { set_labels(&client, &address, labels).await }).await
+    }
+
+    /// Starts a new Terminal running `request.command` (see `launch.rs`),
+    /// placed in the requested Space/Tab by label; the document is never
+    /// written. herdr-core's refusal (`spawn_failed` for a missing program or
+    /// cwd, ...) comes back as [`CoreError::Rpc`] with its `kind`. On success
+    /// the cwd joins [`HostConnection::recent_cwds`].
+    pub async fn launch(&self, request: LaunchRequest) -> Result<TerminalInfo, CoreError> {
+        let client = self.client.clone();
+        let params = launch::run_params(&request);
+        let result = on_runtime(async move { client.call("terminal.run", params).await }).await?;
+        if let Some(cwd) = launch::cwd_to_remember(&request) {
+            // The Terminal runs either way; a full disk only loses the hint.
+            let _ = self.recent.remember(cwd);
+        }
+        Ok(terminal_info(&result))
+    }
+
+    /// Working directories recently launched in on this Host, newest first,
+    /// at most [`RECENT_CWDS_KEPT`]. Kept on the phone, per Host.
+    pub fn recent_cwds(&self) -> Vec<String> {
+        self.recent.list()
     }
 
     pub async fn disconnect(&self) {

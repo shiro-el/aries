@@ -3,6 +3,7 @@ package io.github.shiroel.aries.ui
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -11,6 +12,7 @@ import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ApplicationProvider
@@ -47,6 +49,8 @@ class JumpHostsScreenTest {
         val core = FakeCore().apply { ensureKey() }
         show(core)
 
+        // The host list is lazy: bring the extra keys section into composition first.
+        compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(str(R.string.key_new_button)))
         field(R.string.key_new_label).onFirst().performScrollTo().performTextInput("bastion")
         compose.onNodeWithText(str(R.string.key_new_button)).performScrollTo().performClick()
 

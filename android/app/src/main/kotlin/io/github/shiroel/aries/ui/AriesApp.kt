@@ -23,6 +23,10 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
+import io.github.shiroel.aries.core.KeyProtection
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -63,7 +67,13 @@ fun AriesApp(model: HostsModel) {
                     BackHandler {
                         if (s.browser.openSpaceId != null) s.browser.closeSpace() else model.back()
                     }
-                    BrowseScreen(s.browser, onBack = model::back) { BeaconSection(model.beacon) }
+                    BrowseScreen(
+                        s.browser,
+                        onBack = model::back,
+                        onNewTerminal = { model.newTerminal(s.browser) },
+                        onLaunch = { model.launch(s.browser, it) },
+                        hostSections = { BeaconSection(model.beacon) },
+                    )
                 }
                 is Screen.JumpHosts -> {
                     BackHandler { model.back() }
@@ -92,9 +102,18 @@ private fun HostListScreen(model: HostsModel) {
         Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item { Text(stringResource(R.string.hosts_title), style = MaterialTheme.typography.headlineMedium) }
-        if (model.hosts.isNotEmpty()) {
-            item { Button(onClick = model::openAgents) { Text(stringResource(R.string.agents_button)) } }
+        item {
+            // The Agents entry shares the title row so the Host list stays reachable.
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(stringResource(R.string.hosts_title), style = MaterialTheme.typography.headlineMedium)
+                if (model.hosts.isNotEmpty()) {
+                    Button(onClick = model::openAgents) { Text(stringResource(R.string.agents_button)) }
+                }
+            }
         }
         item { KeySection(model) }
         item { HorizontalDivider() }
@@ -136,6 +155,21 @@ private fun KeySection(model: HostsModel) {
     }) { Text(stringResource(R.string.key_copy_button)) }
     Button(onClick = model::showKeyQr) { Text(stringResource(R.string.key_qr_button)) }
     Text(stringResource(R.string.key_copy_hint), style = MaterialTheme.typography.bodySmall)
+    BiometricToggle(model.keyProtection == KeyProtection.BIOMETRIC, model::requireBiometric)
+}
+
+@Composable
+private fun BiometricToggle(required: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().toggleable(value = required, role = Role.Switch, onValueChange = onChange),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(R.string.key_biometric_label), style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(R.string.key_biometric_hint), style = MaterialTheme.typography.bodySmall)
+        }
+        Switch(checked = required, onCheckedChange = null)
+    }
 }
 
 @Composable
