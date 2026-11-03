@@ -60,7 +60,7 @@ class NotificationTapTest {
     }
 
     @Test
-    fun opensTheExactHostAndMachineTerminalAndBackShowsTheAgent() {
+    fun opensTheExactHostAndMachineTerminalAndBackShowsTheList() {
         val core = twoHosts()
         show(core)
         tap("h1", "box/t1")
@@ -71,12 +71,26 @@ class NotificationTapTest {
         assertTrue(core.connectionsOf["h2"]?.views.orEmpty().isEmpty())
         assertTrue(model.screen is Screen.Terminal)
 
-        // Back leaves the Terminal for that Agent's detail in the Agents list.
+        // Back leaves the Terminal for the Agents list.
         compose.onNodeWithText(str(R.string.back_button)).performClick()
         compose.waitForIdle()
         assertTrue(view.detached)
-        compose.onNodeWithText(str(R.string.agent_detail_host, "home")).assertExists()
-        compose.onNodeWithText(str(R.string.agent_detail_address, "box/t1")).assertExists()
+        assertTrue(model.screen is Screen.Agents)
+        compose.onNodeWithText("codex").assertExists()
+        compose.onNodeWithText("claude").assertExists()
+    }
+
+    @Test
+    fun aDoneNotificationOpensDirectlyAndMarksTheTurnSeen() {
+        val core = twoHosts().apply {
+            terminalsOf["h2"] = listOf(agent("t1", "pi", AgentStatus.Done).copy(turn = 4uL))
+        }
+        show(core)
+        tap("h2", "t1")
+
+        assertTrue(model.screen is Screen.Terminal)
+        assertEquals("t1", core.connectionsOf.getValue("h2").views.single().address)
+        assertEquals(listOf("h2 t1 seen=4"), core.labelWrites)
     }
 
     @Test

@@ -182,7 +182,6 @@ class ReconnectTest {
         compose.onNodeWithText(str(R.string.agents_button)).performClick()
         compose.waitForIdle()
         compose.onNodeWithText("claude").performClick()
-        compose.onNodeWithText(str(R.string.agent_open_button)).performClick()
         compose.waitForIdle()
         val dropped = core.connectionsOf.getValue(home.id)
         assertEquals("t1", dropped.views.single().address)
@@ -200,9 +199,7 @@ class ReconnectTest {
         assertNotSame(dropped, again)
         assertTrue(again.views.single().options.resumed)
 
-        model.closeTerminal()
-        compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.back_button)).performClick()
+        compose.runOnIdle { model.closeTerminal() }
         compose.waitForIdle()
         compose.onNodeWithContentDescription(str(R.string.agent_status_done), useUnmergedTree = true).assertExists()
     }

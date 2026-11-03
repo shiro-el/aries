@@ -54,7 +54,7 @@ class BrowseScreenTest {
                     TabInfo("tab2", "build", listOf(pane("p3", shell))),
                 ),
             ),
-            SpaceInfo("s2", "", null, listOf(TabInfo("tab3", "", listOf(PaneInfo("p9", "t99", null))))),
+            SpaceInfo("s2", "~", null, listOf(TabInfo("tab3", "1", listOf(PaneInfo("p9", "t99", null)), named = false)), named = false),
         ),
         unplaced = listOf(stray),
         problem = null,
@@ -93,7 +93,7 @@ class BrowseScreenTest {
         open(core)
 
         compose.onNodeWithText("aries").assertExists()
-        compose.onNodeWithText(str(R.string.space_unnamed)).assertExists()
+        compose.onNodeWithText("~").assertExists()
 
         compose.onNodeWithText("aries").performClick()
         // First Tab is shown, with its Panes in layout order.
@@ -106,6 +106,18 @@ class BrowseScreenTest {
         compose.onNodeWithText("build").performClick()
         compose.onNodeWithText("build-shell").assertExists()
         compose.onNodeWithText("claude-main").assertDoesNotExist()
+    }
+
+    @Test
+    fun preservesExplicitWhitespaceNamesFromCoreLikeHerdr() {
+        val core = FakeCore().apply {
+            structure = HostStructure(listOf(SpaceInfo(
+                "s", "  ", null, listOf(TabInfo("tab", "   ", emptyList())),
+            )), emptyList(), null)
+        }
+        open(core)
+        compose.onNodeWithText("  ").assertExists().performClick()
+        compose.onNodeWithText("   ").assertExists()
     }
 
     @Test
@@ -122,8 +134,8 @@ class BrowseScreenTest {
         val core = FakeCore().apply { structure = desktop }
         open(core)
 
-        compose.onNodeWithText(str(R.string.space_unnamed)).performClick()
-        compose.onNodeWithText(str(R.string.tab_unnamed)).assertExists()
+        compose.onNodeWithText("~").performClick()
+        compose.onNodeWithText("1").assertExists()
         compose.onNodeWithText(str(R.string.pane_terminal_gone, "t99")).assertExists()
     }
 
@@ -148,7 +160,7 @@ class BrowseScreenTest {
         compose.waitForIdle()
 
         compose.onNodeWithText("aries-renamed").assertExists()
-        compose.onNodeWithText(str(R.string.space_unnamed)).assertDoesNotExist()
+        compose.onNodeWithText("~").assertDoesNotExist()
     }
 
     @Test

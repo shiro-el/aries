@@ -232,7 +232,7 @@ fun LaunchDialog(
                             modifier = Modifier.testTag("launch_space:" + s.id),
                             selected = s.id == form.spaceId,
                             onClick = { form.selectSpace(s.id) },
-                            label = { Text(s.name.ifBlank { stringResource(R.string.space_unnamed) }) },
+                            label = { Text(s.name) },
                         )
                     }
                 }
@@ -245,7 +245,7 @@ fun LaunchDialog(
                                 modifier = Modifier.testTag("launch_tab:" + t.id),
                                 selected = t.id == form.tabId,
                                 onClick = { form.selectTab(t.id) },
-                                label = { Text(t.name.ifBlank { stringResource(R.string.tab_unnamed) }) },
+                                label = { Text(t.name) },
                             )
                         }
                     }

@@ -98,7 +98,7 @@ class AgentViewToggleTest {
     }
 
     @Test
-    fun theSavedChatViewOpensTheAgentFromItsDetailAsTheChat() {
+    fun theSavedChatViewOpensTheAgentDirectlyAndBackReturnsToTheList() {
         val core = FakeCore().apply {
             savedView = AgentView.CHAT // picked before the app restarted
             addHost("home", Endpoint.Ssh("10.0.0.2", 22u, "me"))
@@ -108,15 +108,14 @@ class AgentViewToggleTest {
         compose.openConsoleDrawer()
         click(str(R.string.agents_button))
         click("claude")
-        compose.onNodeWithText(str(R.string.agent_view_chat)).assertDoesNotExist()
-
-        click(str(R.string.agent_open_button))
+        compose.onNodeWithText(str(R.string.agent_open_button)).assertDoesNotExist()
         assertTrue(model.screen is Screen.Chat)
         assertEquals(listOf("h1" to "t1"), core.chatsOpened)
         assertTrue(core.connectionsOf.getValue("h1").views.isEmpty())
 
         click(str(R.string.back_button))
-        compose.onNodeWithText(str(R.string.agent_detail_host, "home")).assertExists()
+        assertTrue(model.screen is Screen.Agents)
+        compose.onNodeWithTag("agent-row:h1:t1").assertExists()
     }
 
     @Test
@@ -145,7 +144,8 @@ class AgentViewToggleTest {
         click(str(R.string.agent_view_terminal))
         assertTrue(model.screen is Screen.Terminal)
         click(str(R.string.back_button))
-        compose.onNodeWithText(str(R.string.agent_detail_address, "t1")).assertExists()
+        assertTrue(model.screen is Screen.Agents)
+        compose.onNodeWithTag("agent-row:h1:t1").assertExists()
     }
 
     @Test

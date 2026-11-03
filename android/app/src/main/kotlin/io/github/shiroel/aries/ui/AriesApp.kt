@@ -102,8 +102,12 @@ private fun AriesContent(model: HostsModel, settings: ThemeSettings) {
                                 onDeleteLaunch = { form, saved -> model.deleteSavedLaunch(s.browser, form, saved) },
                                 onRunSaved = { model.runSaved(s.browser, it) },
                                 hostSections = {
-                                    BeaconSection(model.beacon)
-                                    PushSection(model.push, beaconInstalled = model.beacon.installed)
+                                    if (model.beacon.ui == BeaconUi.Known(io.github.shiroel.aries.core.BeaconState.NotInstalled)) {
+                                        TextButton(
+                                            onClick = { model.openHostSettings(s.browser.host) },
+                                            modifier = Modifier.testTag("browse-host-settings:${s.browser.host.id}"),
+                                        ) { Text(stringResource(R.string.settings_beacon_missing), maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                                    }
                                 },
                             )
                         }
@@ -124,7 +128,6 @@ private fun AriesContent(model: HostsModel, settings: ThemeSettings) {
                                 onBack = model::back,
                                 onOpen = { model.openAgent(s.board, it) },
                                 onPin = { entry, pinned -> model.pin(s.board, entry, pinned) },
-                                onTerminal = { model.openTerminal(it.terminal) },
                             )
                         }
                         is Screen.Chat -> {
@@ -146,50 +149,25 @@ private fun AriesContent(model: HostsModel, settings: ThemeSettings) {
 
 @Composable
 private fun HostListScreen(model: HostsModel) {
-    var keyDetails by rememberSaveable { mutableStateOf(false) }
     var adding by rememberSaveable { mutableStateOf(false) }
     LazyColumn(Modifier.fillMaxSize()) {
-        item(key = "key") {
-            val key = model.key
-            if (key == null) {
-                Column(Modifier.padding(12.dp)) {
-                    Text(stringResource(R.string.key_missing), style = MaterialTheme.typography.bodySmall)
-                    TextButton(onClick = { model.createKey(); keyDetails = true }) {
-                        Text(stringResource(R.string.key_create_button))
-                    }
-                }
-            } else {
-                Text(
-                    stringResource(R.string.console_key_band, key.fingerprint),
-                    Modifier.fillMaxWidth().testTag("hosts-key-band").clickable { keyDetails = !keyDetails }
-                        .background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 12.dp, vertical = 6.dp),
-                    fontSize = 12.sp, lineHeight = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (keyDetails) Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { KeySection(model) }
-            }
-            HorizontalDivider()
-        }
         if (model.hosts.isEmpty()) item { Text(stringResource(R.string.hosts_empty), Modifier.padding(12.dp), fontSize = 12.sp) }
         items(model.hosts, key = { it.id }) { host -> ConsoleHostRow(model, host) }
-        // Per-Host clearing stays here, so its result remains visible on Hosts.
-        model.chatCache.notice?.let { notice ->
-            item { Text(stringResource(notice.res, *notice.args.toTypedArray()), Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall) }
-        }
         item(key = "add") {
             Text(
                 stringResource(if (adding) R.string.console_add_close else R.string.console_add_host),
                 Modifier.fillMaxWidth().testTag("hosts-add-toggle").clickable { adding = !adding }.padding(12.dp),
                 fontSize = 14.sp, color = MaterialTheme.colorScheme.primary,
             )
-            if (adding) Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { AddHostForm(model) }
+            if (adding) Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (model.key == null) MissingKeySettingsLink(model) else AddHostForm(model)
+            }
         }
-        if (model.key != null) item { Column(Modifier.padding(12.dp)) { ExtraKeysSection(model) } }
     }
 }
 
 @Composable
 private fun ConsoleHostRow(model: HostsModel, host: Host) {
-    var menu by rememberSaveable(host.id) { mutableStateOf(false) }
     val color = if (host.endpoint is Endpoint.Local) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.width(3.dp).height(48.dp).background(color))
@@ -208,28 +186,19 @@ private fun ConsoleHostRow(model: HostsModel, host: Host) {
         )
         val moreLabel = stringResource(R.string.console_host_menu, host.name)
         Box(
-            Modifier.size(48.dp).testTag("host-menu:${host.id}").clickable { menu = !menu }
+            Modifier.size(48.dp).testTag("host-menu:${host.id}").clickable { model.openHostSettings(host) }
                 .semantics { contentDescription = moreLabel },
             contentAlignment = Alignment.Center,
         ) { Text(stringResource(R.string.console_more), fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
-    if (menu) Column(Modifier.testTag("host-actions:${host.id}").padding(start = 15.dp, end = 12.dp)) {
-        JumpSummary(model.jumps[host.id].orEmpty())
-        if (host.endpoint is Endpoint.Ssh) {
-            TextButton(onClick = { model.editJumps(host) }) { Text(stringResource(R.string.host_jumps_button)) }
-            TextButton(onClick = { model.askPassword(host) }) { Text(stringResource(R.string.host_install_key_button)) }
-        }
-        ClearChatCacheButton(model.chatCache, host)
-        val removeLabel = stringResource(R.string.host_remove_button_label, host.name)
-        TextButton(onClick = { model.askRemove(host) }, modifier = Modifier.semantics { contentDescription = removeLabel }) {
-            Text(stringResource(R.string.host_remove_button), color = MaterialTheme.colorScheme.error)
-        }
+    if (model.missingKeyHostId == host.id && model.key == null) {
+        Column(Modifier.padding(12.dp)) { MissingKeySettingsLink(model) }
     }
     HorizontalDivider()
 }
 
 @Composable
-private fun KeySection(model: HostsModel) {
+internal fun KeySection(model: HostsModel) {
     val key = model.key
     if (key == null) {
         Text(stringResource(R.string.key_missing))
@@ -275,6 +244,14 @@ internal fun OptionToggle(label: Int, hint: Int, on: Boolean, onChange: (Boolean
             Text(stringResource(hint), style = MaterialTheme.typography.bodySmall)
         }
         Switch(checked = on, onCheckedChange = null)
+    }
+}
+
+@Composable
+internal fun MissingKeySettingsLink(model: HostsModel) {
+    Text(stringResource(R.string.key_missing), style = MaterialTheme.typography.bodySmall)
+    TextButton(onClick = model::openKeySettings, modifier = Modifier.testTag("missing-key-settings")) {
+        Text(stringResource(R.string.settings_keys_open))
     }
 }
 

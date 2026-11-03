@@ -175,10 +175,8 @@
     <string name="chat_blocked_auth">Agent가 Terminal에서 로그인을 기다립니다.</string>
     <string name="chat_blocked_other">Agent가 Terminal에서 기다리고 있습니다.</string>
 
-    <string name="space_unnamed">이름 없는 스페이스</string>
     <string name="space_summary">탭 %1$d개 · 페인 %2$d개</string>
     <string name="space_no_tabs">이 스페이스에는 탭이 없습니다.</string>
-    <string name="tab_unnamed">이름 없는 탭</string>
     <string name="tab_empty">이 탭에는 터미널이 없습니다.</string>
     <string name="pane_terminal_gone">%1$s (종료됨)</string>
     <string name="pane_zoom_button">확대</string>
@@ -391,7 +389,7 @@
     <string name="console_menu_glyph">☰</string>
     <string name="console_back_glyph">←</string>
     <string name="console_agents_waiting">%1$d개 기다림</string>
-    <string name="console_all_hosts">모든 Host, Host 추가</string>
+    <string name="console_all_hosts">Hosts</string>
     <!-- i18n-ok: decorative tree guides, shared across languages. -->
     <string name="console_tree_last">└─</string>
     <string name="console_tree_branch">├─</string>
@@ -414,7 +412,7 @@
     <string name="call_open_chat_label">Call: %2$s — %1$s의 Chat 열기</string>
     <string name="call_inbox_close">Call 닫기</string>
     <string name="console_chat_choice_number">%1$d</string>
-    <string name="console_chat_call_label">Call %1$s</string>
+    <string name="console_chat_call_label">Call</string>
     <string name="console_agent_host_prefix">%1$s /\u0020</string>
     <string name="console_agent_unknown_folder">폴더 정보 없음</string>
     <string name="console_agent_unknown_age">시간 정보 없음</string>
@@ -423,4 +421,8 @@
     <string name="console_agent_accessibility">%1$s · %2$s</string>
     <string name="console_agent_age_unknown">—</string>
     <string name="console_agent_age_unavailable">경과 시간 알 수 없음</string>
+    <string name="settings_keys_open">폰 SSH 키</string>
+    <string name="settings_hosts_title">Host별 설정</string>
+    <string name="settings_agent_view">기본 Agent 보기</string>
+    <string name="settings_beacon_missing">Beacon 설치 안 됨 · Host 설정</string>
 </resources>

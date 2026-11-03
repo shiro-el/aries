@@ -100,7 +100,8 @@ class AgentConsoleScreenTest {
         hold.complete(Unit)
         compose.waitForIdle()
         assertEquals(listOf(Triple("h1", "c1", 1u)), core.replies)
-        compose.onNodeWithText(context.getString(R.string.call_answer_delivered, "Wait")).assertExists()
+        compose.onNodeWithText("Merge?").assertDoesNotExist()
+        compose.onNodeWithText(context.getString(R.string.call_answer_delivered, "Wait")).assertDoesNotExist()
         compose.onNodeWithTag("agent-meta").assertExists()
     }
 }
