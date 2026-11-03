@@ -13,6 +13,7 @@
     <application
         android:name=".AriesApplication"
         android:allowBackup="false"
+        android:networkSecurityConfig="@xml/app_network_security"
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
