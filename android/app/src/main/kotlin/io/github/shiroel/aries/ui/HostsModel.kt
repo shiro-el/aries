@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github.shiroel.aries.HttpBeaconFetcher
 import io.github.shiroel.aries.R
+import io.github.shiroel.aries.core.TerminalInfo
 import io.github.shiroel.aries.core.AriesCoreInterface
 import io.github.shiroel.aries.core.BeaconFetcher
 import io.github.shiroel.aries.core.CoreException
@@ -37,6 +38,9 @@ sealed interface Screen {
 
     /** An open Host: its Spaces, Tabs and Panes. */
     data class Browse(val browser: HostBrowser) : Screen
+
+    /** An Agent's Chat, opened from [Browse] (which [back] returns to). */
+    data class Chat(val browser: HostBrowser, val chat: ChatModel) : Screen
 }
 
 sealed interface Prompt {
@@ -275,7 +279,23 @@ class HostsModel(
         }
     }
 
+    /** Opens the Chat of the Agent in [terminal] on the open Host. */
+    fun openChat(terminal: TerminalInfo) {
+        val browse = screen as? Screen.Browse ?: return
+        val chat = ChatModel(core, browse.browser.host, terminal)
+        screen = Screen.Chat(browse.browser, chat)
+        chat.start(scope)
+    }
+
+    /** Leaves the Chat for the Host's Terminals. */
+    fun closeChat() {
+        val open = screen as? Screen.Chat ?: return
+        open.chat.stop()
+        screen = Screen.Browse(open.browser)
+    }
+
     fun back() {
+        (screen as? Screen.Chat)?.chat?.stop()
         screen = Screen.Hosts
         status?.cancel()
         status = null

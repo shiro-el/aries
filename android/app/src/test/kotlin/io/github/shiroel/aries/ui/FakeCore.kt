@@ -5,6 +5,8 @@ import io.github.shiroel.aries.core.BeaconFetcher
 import io.github.shiroel.aries.core.BeaconInstall
 import io.github.shiroel.aries.core.BeaconRelease
 import io.github.shiroel.aries.core.BeaconState
+import io.github.shiroel.aries.core.ChatSnapshot
+import io.github.shiroel.aries.core.ChatWatch
 import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.Host
@@ -157,6 +159,31 @@ class FakeCore : AriesCoreInterface {
 
     override suspend fun uninstallBeacon(hostId: String) {
         beacon = BeaconState.NotInstalled
+    }
+
+    /** Chat snapshots `watchChat` delivers, in order (see [pushChat]). */
+    val chat = Channel<ChatSnapshot>(Channel.UNLIMITED)
+
+    /** (host id, terminal) of each `watchChat` call. */
+    val chatsOpened = mutableListOf<Pair<String, String>>()
+    var chatStopped = false
+        private set
+
+    fun pushChat(snapshot: ChatSnapshot) {
+        chat.trySend(snapshot)
+    }
+
+    override fun watchChat(hostId: String, terminal: String, cursor: String?): ChatWatch {
+        chatsOpened += hostId to terminal
+        return object : ChatWatch(NoHandle) {
+            override suspend fun next(): ChatSnapshot = chat.receive()
+
+            override fun stop() {
+                chatStopped = true
+            }
+
+            override fun close() {}
+        }
     }
 
     companion object {

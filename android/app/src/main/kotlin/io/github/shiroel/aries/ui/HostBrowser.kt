@@ -23,6 +23,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.Host
@@ -119,7 +121,12 @@ fun displayName(t: TerminalInfo): String = t.name ?: t.title.ifBlank { t.argv.jo
 
 /** [hostSections] are per-Host panels (the Beacon) shown at the end of the Space list. */
 @Composable
-fun BrowseScreen(browser: HostBrowser, onBack: () -> Unit, hostSections: @Composable () -> Unit = {}) {
+fun BrowseScreen(
+    browser: HostBrowser,
+    onBack: () -> Unit,
+    onOpenChat: (TerminalInfo) -> Unit = {},
+    hostSections: @Composable () -> Unit = {},
+) {
     val space = browser.openSpace
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row {
@@ -131,8 +138,8 @@ fun BrowseScreen(browser: HostBrowser, onBack: () -> Unit, hostSections: @Compos
         browser.structure?.problem?.let { Notice(problemText(it)) }
         when {
             browser.structure == null -> Text(stringResource(R.string.connecting, browser.host.name))
-            space == null -> SpaceList(browser, browser.structure!!, hostSections)
-            else -> SpaceView(browser, space)
+            space == null -> SpaceList(browser, browser.structure!!, onOpenChat, hostSections)
+            else -> SpaceView(browser, space, onOpenChat)
         }
     }
 }
@@ -155,7 +162,12 @@ private fun Notice(text: String) {
 }
 
 @Composable
-private fun SpaceList(browser: HostBrowser, s: HostStructure, hostSections: @Composable () -> Unit) {
+private fun SpaceList(
+    browser: HostBrowser,
+    s: HostStructure,
+    onOpenChat: (TerminalInfo) -> Unit,
+    hostSections: @Composable () -> Unit,
+) {
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
             Text(stringResource(R.string.terminals_title, browser.host.name), style = MaterialTheme.typography.headlineSmall)
@@ -177,7 +189,7 @@ private fun SpaceList(browser: HostBrowser, s: HostStructure, hostSections: @Com
                 HorizontalDivider()
                 Text(stringResource(R.string.unplaced_title), style = MaterialTheme.typography.titleMedium)
             }
-            items(s.unplaced, key = { "unplaced:" + it.address }) { TerminalRow(browser.current(it)) }
+            items(s.unplaced, key = { "unplaced:" + it.address }) { TerminalRow(browser.current(it), onOpenChat) }
         }
         item {
             HorizontalDivider()
@@ -187,7 +199,7 @@ private fun SpaceList(browser: HostBrowser, s: HostStructure, hostSections: @Com
 }
 
 @Composable
-private fun SpaceView(browser: HostBrowser, space: SpaceInfo) {
+private fun SpaceView(browser: HostBrowser, space: SpaceInfo, onOpenChat: (TerminalInfo) -> Unit) {
     Text(space.name.ifBlank { stringResource(R.string.space_unnamed) }, style = MaterialTheme.typography.headlineSmall)
     val tab = browser.tab
     if (tab == null) {
@@ -207,7 +219,7 @@ private fun SpaceView(browser: HostBrowser, space: SpaceInfo) {
     val focused = browser.focusedPane(tab)
     if (zoomed != null) {
         TextButton(onClick = { browser.unzoom(tab) }) { Text(stringResource(R.string.pane_unzoom_button)) }
-        PaneRow(zoomed, browser, focused = true) {}
+        PaneRow(zoomed, browser, focused = true, onOpenChat) {}
         return
     }
     if (focused != null) {
@@ -216,13 +228,19 @@ private fun SpaceView(browser: HostBrowser, space: SpaceInfo) {
     if (tab.panes.isEmpty()) Text(stringResource(R.string.tab_empty))
     LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         items(tab.panes, key = { "pane:" + it.id + ":" + it.terminalAddress }) { pane ->
-            PaneRow(pane, browser, focused = pane.id == focused) { browser.focus(tab, pane) }
+            PaneRow(pane, browser, focused = pane.id == focused, onOpenChat) { browser.focus(tab, pane) }
         }
     }
 }
 
 @Composable
-private fun PaneRow(pane: PaneInfo, browser: HostBrowser, focused: Boolean, onClick: () -> Unit) {
+private fun PaneRow(
+    pane: PaneInfo,
+    browser: HostBrowser,
+    focused: Boolean,
+    onOpenChat: (TerminalInfo) -> Unit,
+    onClick: () -> Unit,
+) {
     val modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
     Column(
         (if (focused) modifier.background(MaterialTheme.colorScheme.secondaryContainer) else modifier).padding(8.dp),
@@ -234,15 +252,27 @@ private fun PaneRow(pane: PaneInfo, browser: HostBrowser, focused: Boolean, onCl
             Text(displayName(t), style = MaterialTheme.typography.titleMedium)
             Text(stringResource(R.string.terminal_subtitle, t.address, t.state), style = MaterialTheme.typography.bodySmall)
             AgentStatusLine(t)
+            ChatButton(t, onOpenChat)
         }
     }
 }
 
 @Composable
-private fun TerminalRow(t: TerminalInfo) {
+private fun TerminalRow(t: TerminalInfo, onOpenChat: (TerminalInfo) -> Unit) {
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Text(displayName(t), style = MaterialTheme.typography.titleMedium)
         Text(stringResource(R.string.terminal_subtitle, t.address, t.state), style = MaterialTheme.typography.bodySmall)
         AgentStatusLine(t)
+        ChatButton(t, onOpenChat)
+    }
+}
+
+/** Agents (Terminals that report Agent status) have a Chat. */
+@Composable
+private fun ChatButton(t: TerminalInfo, onOpenChat: (TerminalInfo) -> Unit) {
+    if (t.agentStatus == null) return
+    val label = stringResource(R.string.chat_open_label, displayName(t))
+    TextButton(onClick = { onOpenChat(t) }, modifier = Modifier.semantics { contentDescription = label }) {
+        Text(stringResource(R.string.chat_open_button))
     }
 }
