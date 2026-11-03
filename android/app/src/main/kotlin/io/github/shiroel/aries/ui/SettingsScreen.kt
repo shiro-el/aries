@@ -63,6 +63,7 @@ fun SettingsScreen(
     settings: ThemeSettings,
     onBack: () -> Unit,
     showHeader: Boolean = true,
+    terminalDisplay: TerminalDisplaySettings = rememberTerminalDisplaySettings(),
     hostEditor: @Composable (Host) -> Unit = {},
 ) {
     val host = model.settingsHost?.let { selected -> model.hosts.find { it.id == selected.id } }
@@ -122,6 +123,9 @@ fun SettingsScreen(
             }
             item { SettingsField(R.string.accent_title) { AccentControls(settings) } }
             item { SettingsField(R.string.accent_custom) { HsvPicker(settings) } }
+            item(key = "terminal-display") {
+                SettingsField(R.string.terminal_display_title) { TerminalDisplaySection(terminalDisplay) }
+            }
             item {
                 val context = androidx.compose.ui.platform.LocalContext.current
                 val attachments = remember(context) { AttachmentSettings.from(context) }

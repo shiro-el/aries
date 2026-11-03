@@ -63,8 +63,12 @@ import io.github.shiroel.aries.core.Host
 import io.github.shiroel.aries.core.QrMatrix
 
 @Composable
-fun AriesApp(model: HostsModel, settings: ThemeSettings = rememberThemeSettings()) {
-    AriesTheme(settings) { AriesContent(model, settings) }
+fun AriesApp(
+    model: HostsModel,
+    settings: ThemeSettings = rememberThemeSettings(),
+    terminalDisplay: TerminalDisplaySettings = rememberTerminalDisplaySettings(),
+) {
+    AriesTheme(settings) { AriesContent(model, settings, terminalDisplay) }
 }
 
 @Composable
@@ -74,7 +78,7 @@ private fun rememberThemeSettings(): ThemeSettings {
 }
 
 @Composable
-private fun AriesContent(model: HostsModel, settings: ThemeSettings) {
+private fun AriesContent(model: HostsModel, settings: ThemeSettings, terminalDisplay: TerminalDisplaySettings) {
     // Calls are followed (for the banner) only while the app is in front.
     LifecycleStartEffect(model) {
         model.resumeCalls()
@@ -89,6 +93,7 @@ private fun AriesContent(model: HostsModel, settings: ThemeSettings) {
                         Screen.Settings -> {
                             SettingsScreen(
                                 model, settings, onBack = model::back, showHeader = false,
+                                terminalDisplay = terminalDisplay,
                                 hostEditor = { host -> if (host.endpoint is Endpoint.Ssh) HostEditSection(model, host) },
                             )
                         }
@@ -119,6 +124,7 @@ private fun AriesContent(model: HostsModel, settings: ThemeSettings) {
                                 s.viewer,
                                 onBack = model::closeTerminal,
                                 onView = model::switchView.takeIf { s.viewer.terminal.agentStatus != null },
+                                displaySettings = terminalDisplay,
                             )
                         }
                         is Screen.JumpHosts -> {

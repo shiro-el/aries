@@ -34,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -43,6 +44,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -347,7 +349,12 @@ private val TerminalForeground = Color(0xFFD8DADC)
 private val SelectionColor = Color(0x664D8DFF)
 
 @Composable
-fun TerminalScreen(viewer: TerminalViewer, onBack: () -> Unit, onView: ((AgentView) -> Unit)? = null) {
+fun TerminalScreen(
+    viewer: TerminalViewer,
+    onBack: () -> Unit,
+    onView: ((AgentView) -> Unit)? = null,
+    displaySettings: TerminalDisplaySettings = rememberTerminalDisplaySettings(),
+) {
     // The keyboard pushes the input and key bar up and shrinks the screen
     // (the Scaffold already keeps clear of the navigation bar).
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))) {
@@ -368,7 +375,7 @@ fun TerminalScreen(viewer: TerminalViewer, onBack: () -> Unit, onView: ((AgentVi
         }
         val look = remember(viewer) { TerminalLook(viewer) }
         TerminalLookBar(viewer, look)
-        TerminalCanvas(viewer, look, Modifier.fillMaxWidth().weight(1f))
+        TerminalCanvas(viewer, look, displaySettings, Modifier.fillMaxWidth().weight(1f))
         if (viewer.typing) KeyBar(viewer)
         TerminalComposer(viewer)
     }
@@ -458,16 +465,14 @@ private fun Banner(text: String) {
     )
 }
 
-/** Base text size; smaller when the Terminal is too wide for the screen. */
-private val MaxFont = 14.sp
-
 @Composable
-private fun TerminalCanvas(viewer: TerminalViewer, look: TerminalLook, modifier: Modifier) {
+private fun TerminalCanvas(viewer: TerminalViewer, look: TerminalLook, settings: TerminalDisplaySettings, modifier: Modifier) {
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
+    val family = settings.font.family
     // Advance width and line height of one monospace cell at 100sp (in px).
-    val probe = remember(measurer) {
-        measurer.measure("M", TextStyle(fontFamily = FontFamily.Monospace, fontSize = 100.sp))
+    val probe = remember(measurer, family) {
+        measurer.measure("M", TextStyle(fontFamily = family, fontSize = 100.sp))
     }
     val description = viewer.version.let { viewer.text() }
     // The selected cells moved away.
@@ -478,7 +483,7 @@ private fun TerminalCanvas(viewer: TerminalViewer, look: TerminalLook, modifier:
         val per100 = probe.size.width.toFloat().coerceAtLeast(1f)
         // The probe's font size in px: cell sizes scale with font px over it.
         val probePx = with(density) { 100.sp.toPx() }
-        val maxPx = with(density) { MaxFont.toPx() }
+        val maxPx = with(density) { settings.fontSize.sp.toPx() }
         // Typing: the phone sets the grid, at the base text size. Watching:
         // the desktop's grid, shrunk to fit the width.
         val baseFontPx = if (viewer.typing) maxPx else minOf(maxPx, widthPx / cols / per100 * probePx)
@@ -495,13 +500,14 @@ private fun TerminalCanvas(viewer: TerminalViewer, look: TerminalLook, modifier:
         val cellW = look.cellW
         val cellH = look.cellH
         val fontSize = with(density) { fontPx.toSp() }
+        val minimumContrast = settings.minimumContrast
         Canvas(
             Modifier.fillMaxSize().clipToBounds().testTag("terminal-screen")
                 .semantics { contentDescription = description }
                 .terminalGestures(look, viewer),
         ) {
             viewer.version // redraw on every frame
-            val base = TextStyle(fontFamily = FontFamily.Monospace, fontSize = fontSize, color = TerminalForeground)
+            val base = TextStyle(fontFamily = family, fontSize = fontSize, color = TerminalForeground)
             translate(look.panX, look.panY) {
             for (row in 0 until viewer.rows) {
                 val y = row * cellH
@@ -514,18 +520,12 @@ private fun TerminalCanvas(viewer: TerminalViewer, look: TerminalLook, modifier:
                         fg = bg ?: TerminalBackground
                         bg = f
                     }
-                    if (run.dim) fg = fg.copy(alpha = 0.6f)
                     bg?.let { drawRect(it, Offset(x, y), Size(run.width.toInt() * cellW, cellH)) }
-                    val style = styleOf(base, run, fg)
-                    if (run.wide) {
-                        // Each wide character gets exactly two cells.
-                        var cx = x
-                        run.text.codePoints().forEach { cp ->
-                            drawText(measurer, String(Character.toChars(cp)), Offset(cx, y), style)
-                            cx += 2 * cellW
+                    if (run.wide || run.text.isNotBlank()) {
+                        for (span in terminalTextSpans(run, fg, bg ?: TerminalBackground, minimumContrast)) {
+                            val ink = if (run.dim) span.foreground.copy(alpha = 0.6f) else span.foreground
+                            drawTerminalText(measurer, span.text, Offset(x + span.column * cellW, y), styleOf(base, run, ink))
                         }
-                    } else if (run.text.isNotBlank()) {
-                        drawText(measurer, run.text, Offset(x, y), style)
                     }
                 }
             }
@@ -539,7 +539,7 @@ private fun TerminalCanvas(viewer: TerminalViewer, look: TerminalLook, modifier:
                 if (viewer.composing.isNotEmpty()) {
                     val at = Offset(c.column.toInt() * cellW, c.row.toInt() * cellH)
                     drawRect(TerminalForeground, at, Size(2 * cellW, cellH))
-                    drawText(measurer, viewer.composing, at, base.copy(color = TerminalBackground, textDecoration = TextDecoration.Underline))
+                    drawTerminalText(measurer, viewer.composing, at, base.copy(color = TerminalBackground, textDecoration = TextDecoration.Underline))
                 }
             }
             look.selection?.ordered()?.let { s ->
@@ -556,6 +556,12 @@ private fun TerminalCanvas(viewer: TerminalViewer, look: TerminalLook, modifier:
             }
         }
     }
+}
+
+private fun DrawScope.drawTerminalText(measurer: TextMeasurer, text: String, at: Offset, style: TextStyle) {
+    // TextMeasurer caches layout independently of color. Supply paint properties
+    // explicitly so a color change also repaints already measured Terminal text.
+    drawText(measurer.measure(text, style), color = style.color, topLeft = at, textDecoration = style.textDecoration)
 }
 
 private fun styleOf(base: TextStyle, run: CellRun, fg: Color): TextStyle {
