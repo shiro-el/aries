@@ -45,9 +45,17 @@ const CALL_TIMEOUT: Duration = Duration::from_secs(30);
 
 const HEADER: usize = 9;
 const MAX_PAYLOAD: usize = 16 << 20;
-const KIND_DATA: u8 = 0;
-const KIND_CREDIT: u8 = 1;
-const KIND_CLOSE: u8 = 2;
+pub(crate) const KIND_DATA: u8 = 0;
+pub(crate) const KIND_CREDIT: u8 = 1;
+pub(crate) const KIND_CLOSE: u8 = 2;
+pub(crate) const KIND_RESIZE: u8 = 3;
+
+/// One frame the core sent on a stream channel (any kind but CREDIT).
+#[derive(Debug)]
+pub(crate) struct Frame {
+    pub kind: u8,
+    pub payload: Vec<u8>,
+}
 
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct Hello {
@@ -63,12 +71,12 @@ type Pending =
     Arc<std::sync::Mutex<Option<HashMap<u64, oneshot::Sender<Result<Value, CoreError>>>>>>;
 type Writer = Arc<Mutex<Box<dyn tokio::io::AsyncWrite + Send + Unpin>>>;
 
-/// Stream channels (non-zero) and DATA that arrived for a channel before its
-/// opener registered it (the reply and the first frames race).
+/// Stream channels (non-zero) and frames that arrived for a channel before
+/// its opener registered it (the reply and the first frames race).
 #[derive(Default)]
 struct Channels {
-    open: HashMap<u32, mpsc::UnboundedSender<Vec<u8>>>,
-    early: HashMap<u32, Vec<Vec<u8>>>,
+    open: HashMap<u32, mpsc::UnboundedSender<Frame>>,
+    early: HashMap<u32, Vec<Frame>>,
     closed: bool,
 }
 type SharedChannels = Arc<std::sync::Mutex<Channels>>;
@@ -175,21 +183,19 @@ impl HcClient {
             .as_u64()
             .ok_or_else(|| protocol("events.subscribe returned no channel"))?
             as u32;
-        let (bytes_tx, mut bytes_rx) = mpsc::unbounded_channel::<Vec<u8>>();
-        {
-            let mut ch = self.channels.lock().expect("channels lock");
-            for chunk in ch.early.remove(&channel).unwrap_or_default() {
-                let _ = bytes_tx.send(chunk);
-            }
-            if !ch.closed {
-                ch.open.insert(channel, bytes_tx);
-            }
-        }
+        let mut frames = self.stream(channel);
         let (tx, rx) = mpsc::unbounded_channel();
         let writer = self.writer.clone();
         tokio::spawn(async move {
             let mut buf: Vec<u8> = Vec::new();
-            while let Some(chunk) = bytes_rx.recv().await {
+            while let Some(Frame {
+                kind,
+                payload: chunk,
+            }) = frames.recv().await
+            {
+                if kind != KIND_DATA {
+                    break;
+                }
                 let credit = (chunk.len() as u32).to_le_bytes();
                 buf.extend_from_slice(&chunk);
                 while let Some(end) = buf.iter().position(|&b| b == b'\n') {
@@ -209,6 +215,30 @@ impl HcClient {
             }
         });
         Ok((reply, rx))
+    }
+
+    /// The frames of stream `channel` (as a method reply named it), starting
+    /// with any that arrived before this call. A CLOSE is the last frame; the
+    /// receiver also ends when the connection does.
+    pub fn stream(&self, channel: u32) -> mpsc::UnboundedReceiver<Frame> {
+        let (tx, rx) = mpsc::unbounded_channel();
+        let mut ch = self.channels.lock().expect("channels lock");
+        let early = ch.early.remove(&channel).unwrap_or_default();
+        let closed = early.iter().any(|f| f.kind == KIND_CLOSE);
+        for frame in early {
+            let _ = tx.send(frame);
+        }
+        if !ch.closed && !closed {
+            ch.open.insert(channel, tx);
+        }
+        rx
+    }
+
+    /// Sends one frame on a stream channel (CREDIT, DATA, RESIZE, CLOSE...).
+    pub async fn send(&self, channel: u32, kind: u8, payload: &[u8]) -> Result<(), CoreError> {
+        send_frame(&self.writer, channel, kind, payload)
+            .await
+            .map_err(|_| CoreError::Closed)
     }
 
     fn forget(&self, id: u64) {
@@ -387,18 +417,18 @@ async fn read_frames<R: tokio::io::AsyncRead + Unpin>(
         }
         if channel != 0 {
             let mut ch = channels.lock().expect("channels lock");
-            match kind {
-                KIND_DATA => match ch.open.get(&channel) {
-                    Some(tx) => {
-                        let _ = tx.send(payload);
-                    }
-                    None => ch.early.entry(channel).or_default().push(payload),
-                },
-                KIND_CLOSE => {
-                    ch.open.remove(&channel);
-                    ch.early.remove(&channel);
+            if kind == KIND_CREDIT {
+                continue;
+            }
+            let frame = Frame { kind, payload };
+            match ch.open.get(&channel) {
+                Some(tx) => {
+                    let _ = tx.send(frame);
                 }
-                _ => {}
+                None => ch.early.entry(channel).or_default().push(frame),
+            }
+            if kind == KIND_CLOSE {
+                ch.open.remove(&channel);
             }
             continue;
         }

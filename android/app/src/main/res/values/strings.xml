@@ -55,6 +55,12 @@
     <string name="terminals_title">Terminals on %1$s</string>
     <string name="terminals_empty">No Terminals are running on this Host.</string>
     <string name="terminal_subtitle">%1$s · %2$s</string>
+    <string name="terminal_open_button">Open Terminal</string>
+    <string name="terminal_observing">%1$s · observing · %2$d×%3$d</string>
+    <string name="terminal_exited_code">The program exited with code %1$d.</string>
+    <string name="terminal_exited_signal">The program was stopped by signal %1$s.</string>
+    <string name="terminal_exited_reason">The program ended (%1$s).</string>
+    <string name="terminal_connection_closed">The connection to the Terminal closed. What you see may be out of date.</string>
 
     <string name="agent_status_working">Working</string>
     <string name="agent_status_blocked">Blocked</string>

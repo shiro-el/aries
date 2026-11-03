@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AriesCoreInterface
+import io.github.shiroel.aries.core.AttachOptions
 import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.Host
@@ -19,9 +20,13 @@ import io.github.shiroel.aries.core.PublicKeyInfo
 import io.github.shiroel.aries.core.StructureListener
 import io.github.shiroel.aries.core.StructureWatch
 import io.github.shiroel.aries.core.QrMatrix
+import io.github.shiroel.aries.core.TerminalInfo
+import io.github.shiroel.aries.core.TerminalUpdate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** A message for the user: a string resource and its format arguments. */
 data class Message(@StringRes val res: Int, val args: List<Any> = emptyList())
@@ -35,6 +40,9 @@ sealed interface Screen {
 
     /** An open Host: its Spaces, Tabs and Panes. */
     data class Browse(val browser: HostBrowser) : Screen
+
+    /** One of the open Host's Terminals, observed; back returns to [browser]. */
+    data class Terminal(val viewer: TerminalViewer, val browser: HostBrowser) : Screen
 }
 
 sealed interface Prompt {
@@ -265,7 +273,53 @@ class HostsModel(private val core: AriesCoreInterface, private val scope: Corout
         }
     }
 
+    /** The open Terminal's stream; cancelled when it closes. */
+    private var viewing: Job? = null
+
+    /**
+     * Opens [terminal] of the open Host in observe mode: the desktop keeps its
+     * size and the screen follows the Terminal's grid. Entry point for every
+     * list that shows Terminals or Agents.
+     */
+    fun openTerminal(terminal: TerminalInfo) {
+        val browser = (screen as? Screen.Browse)?.browser ?: return
+        val conn = open?.first ?: return
+        val viewer = TerminalViewer(browser.current(terminal))
+        screen = Screen.Terminal(viewer, browser)
+        viewing = scope.launch {
+            val view = try {
+                conn.attachTerminal(terminal.address, AttachOptions(observe = true, cols = 80u, rows = 24u, history = 0u))
+            } catch (e: CoreException) {
+                viewer.markClosed()
+                return@launch
+            }
+            try {
+                while (true) {
+                    when (val u = view.next()) {
+                        is TerminalUpdate.Screen -> viewer.apply(u.frame)
+                        is TerminalUpdate.Exited -> viewer.exited(u.exit)
+                    }
+                }
+            } catch (e: CoreException) {
+                viewer.markClosed()
+            } finally {
+                withContext(NonCancellable) { view.detach() }
+                view.close()
+            }
+        }
+    }
+
+    /** Leaves the open Terminal (it keeps running) and shows its Host again. */
+    fun closeTerminal() {
+        val s = screen as? Screen.Terminal ?: return
+        viewing?.cancel()
+        viewing = null
+        screen = Screen.Browse(s.browser)
+    }
+
     fun back() {
+        viewing?.cancel()
+        viewing = null
         screen = Screen.Hosts
         status?.cancel()
         status = null

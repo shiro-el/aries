@@ -11,6 +11,7 @@ mod host_model;
 mod removal;
 mod store;
 mod structure;
+mod terminal;
 mod transport;
 
 use std::collections::HashMap;
@@ -25,6 +26,10 @@ pub use error::{CoreError, Incompatibility, VaultError};
 pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
 pub use host_model::{AgentStatus, BlockedReason, TerminalWatch};
 pub use structure::{HostStructure, PaneInfo, SpaceInfo, StructureProblem, TabInfo};
+pub use terminal::{
+    AttachOptions, CellRun, CursorPos, FRAME_INTERVAL, ScreenFrame, ScreenLine, TerminalExit,
+    TerminalUpdate, TerminalView, ViewStats,
+};
 
 use hc::HcClient;
 use store::{SavedHost, SavedKey, Store};
@@ -560,6 +565,23 @@ impl HostConnection {
                 .await?;
         let list = result["terminals"].as_array().cloned().unwrap_or_default();
         Ok(list.iter().map(terminal_info).collect())
+    }
+
+    /// Attaches to the Terminal at `address` (`t7`, `machine/t7`) and
+    /// streams its screen. With `observe` the desktop keeps its size and the
+    /// view follows the Terminal's grid when the desktop resizes it.
+    pub async fn attach_terminal(
+        &self,
+        address: String,
+        options: AttachOptions,
+    ) -> Result<Arc<TerminalView>, CoreError> {
+        let client = self.client.clone();
+        on_runtime(async move {
+            TerminalView::attach(client, address, options)
+                .await
+                .map(Arc::new)
+        })
+        .await
     }
 
     /// Watches the Host's Terminals and their Agent status live.

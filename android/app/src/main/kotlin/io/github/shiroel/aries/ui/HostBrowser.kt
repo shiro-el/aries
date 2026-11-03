@@ -118,7 +118,7 @@ class HostBrowser(val host: Host) {
 fun displayName(t: TerminalInfo): String = t.name ?: t.title.ifBlank { t.argv.joinToString(" ") }
 
 @Composable
-fun BrowseScreen(browser: HostBrowser, onBack: () -> Unit) {
+fun BrowseScreen(browser: HostBrowser, onBack: () -> Unit, onOpen: (TerminalInfo) -> Unit = {}) {
     val space = browser.openSpace
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row {
@@ -130,8 +130,8 @@ fun BrowseScreen(browser: HostBrowser, onBack: () -> Unit) {
         browser.structure?.problem?.let { Notice(problemText(it)) }
         when {
             browser.structure == null -> Text(stringResource(R.string.connecting, browser.host.name))
-            space == null -> SpaceList(browser, browser.structure!!)
-            else -> SpaceView(browser, space)
+            space == null -> SpaceList(browser, browser.structure!!, onOpen)
+            else -> SpaceView(browser, space, onOpen)
         }
     }
 }
@@ -154,7 +154,7 @@ private fun Notice(text: String) {
 }
 
 @Composable
-private fun SpaceList(browser: HostBrowser, s: HostStructure) {
+private fun SpaceList(browser: HostBrowser, s: HostStructure, onOpen: (TerminalInfo) -> Unit) {
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
             Text(stringResource(R.string.terminals_title, browser.host.name), style = MaterialTheme.typography.headlineSmall)
@@ -176,13 +176,13 @@ private fun SpaceList(browser: HostBrowser, s: HostStructure) {
                 HorizontalDivider()
                 Text(stringResource(R.string.unplaced_title), style = MaterialTheme.typography.titleMedium)
             }
-            items(s.unplaced, key = { "unplaced:" + it.address }) { TerminalRow(browser.current(it)) }
+            items(s.unplaced, key = { "unplaced:" + it.address }) { TerminalRow(browser.current(it)) { onOpen(it) } }
         }
     }
 }
 
 @Composable
-private fun SpaceView(browser: HostBrowser, space: SpaceInfo) {
+private fun SpaceView(browser: HostBrowser, space: SpaceInfo, onOpen: (TerminalInfo) -> Unit) {
     Text(space.name.ifBlank { stringResource(R.string.space_unnamed) }, style = MaterialTheme.typography.headlineSmall)
     val tab = browser.tab
     if (tab == null) {
@@ -202,7 +202,7 @@ private fun SpaceView(browser: HostBrowser, space: SpaceInfo) {
     val focused = browser.focusedPane(tab)
     if (zoomed != null) {
         TextButton(onClick = { browser.unzoom(tab) }) { Text(stringResource(R.string.pane_unzoom_button)) }
-        PaneRow(zoomed, browser, focused = true) {}
+        PaneRow(zoomed, browser, focused = true, onOpen = onOpen) {}
         return
     }
     if (focused != null) {
@@ -211,13 +211,19 @@ private fun SpaceView(browser: HostBrowser, space: SpaceInfo) {
     if (tab.panes.isEmpty()) Text(stringResource(R.string.tab_empty))
     LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         items(tab.panes, key = { "pane:" + it.id + ":" + it.terminalAddress }) { pane ->
-            PaneRow(pane, browser, focused = pane.id == focused) { browser.focus(tab, pane) }
+            PaneRow(pane, browser, focused = pane.id == focused, onOpen = onOpen) { browser.focus(tab, pane) }
         }
     }
 }
 
 @Composable
-private fun PaneRow(pane: PaneInfo, browser: HostBrowser, focused: Boolean, onClick: () -> Unit) {
+private fun PaneRow(
+    pane: PaneInfo,
+    browser: HostBrowser,
+    focused: Boolean,
+    onOpen: (TerminalInfo) -> Unit,
+    onClick: () -> Unit,
+) {
     val modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
     Column(
         (if (focused) modifier.background(MaterialTheme.colorScheme.secondaryContainer) else modifier).padding(8.dp),
@@ -229,13 +235,14 @@ private fun PaneRow(pane: PaneInfo, browser: HostBrowser, focused: Boolean, onCl
             Text(displayName(t), style = MaterialTheme.typography.titleMedium)
             Text(stringResource(R.string.terminal_subtitle, t.address, t.state), style = MaterialTheme.typography.bodySmall)
             AgentStatusLine(t)
+            TextButton(onClick = { onOpen(t) }) { Text(stringResource(R.string.terminal_open_button)) }
         }
     }
 }
 
 @Composable
-private fun TerminalRow(t: TerminalInfo) {
-    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+private fun TerminalRow(t: TerminalInfo, onOpen: () -> Unit) {
+    Column(Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(vertical = 4.dp)) {
         Text(displayName(t), style = MaterialTheme.typography.titleMedium)
         Text(stringResource(R.string.terminal_subtitle, t.address, t.state), style = MaterialTheme.typography.bodySmall)
         AgentStatusLine(t)

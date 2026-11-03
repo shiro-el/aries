@@ -1,6 +1,7 @@
 package io.github.shiroel.aries.ui
 
 import io.github.shiroel.aries.core.AriesCoreInterface
+import io.github.shiroel.aries.core.AttachOptions
 import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.Host
@@ -15,6 +16,8 @@ import io.github.shiroel.aries.core.StructureWatch
 import io.github.shiroel.aries.core.KeyInstall
 import io.github.shiroel.aries.core.QrMatrix
 import io.github.shiroel.aries.core.TerminalInfo
+import io.github.shiroel.aries.core.TerminalUpdate
+import io.github.shiroel.aries.core.TerminalView
 import io.github.shiroel.aries.core.TerminalWatch
 import kotlinx.coroutines.channels.Channel
 
@@ -179,6 +182,12 @@ class FakeConnection(
         listener?.onStructure(structure)
     }
 
+    /** Terminals attached on this connection, in order. */
+    val views = mutableListOf<FakeTerminalView>()
+
+    override suspend fun attachTerminal(address: String, options: AttachOptions): TerminalView =
+        FakeTerminalView(address, options).also { views += it }
+
     override suspend fun disconnect() {
         disconnected = true
     }
@@ -202,6 +211,36 @@ class FakeWatch(
     }
 
     override fun stop() {}
+
+    override fun close() {}
+}
+
+/** An attached Terminal whose screen updates the test pushes. */
+class FakeTerminalView(val address: String, val options: AttachOptions) : TerminalView(NoHandle) {
+    private val updates = Channel<TerminalUpdate>(Channel.UNLIMITED)
+    var detached = false
+        private set
+
+    fun push(update: TerminalUpdate) {
+        updates.trySend(update)
+    }
+
+    /** The stream ends without an exit (the connection dropped). */
+    fun end() {
+        updates.close()
+    }
+
+    override suspend fun next(): TerminalUpdate =
+        try {
+            updates.receive()
+        } catch (e: kotlinx.coroutines.channels.ClosedReceiveChannelException) {
+            throw CoreException.Closed()
+        }
+
+    override suspend fun detach() {
+        detached = true
+        updates.close()
+    }
 
     override fun close() {}
 }
