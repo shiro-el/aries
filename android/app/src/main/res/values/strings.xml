@@ -2,9 +2,10 @@
 <!--
   Key naming: <area>_<thing>[_<role>], lowercase snake_case, shared with iOS.
   See "UI strings" in CONTRIBUTING.md.
+  Add every new string to values-ko/strings.xml too (TranslationsTest checks it).
 -->
 <resources>
-    <string name="app_name">Aries</string>
+    <string name="app_name" translatable="false">Aries</string>
 
     <string name="ok_button">OK</string>
     <string name="cancel_button">Cancel</string>

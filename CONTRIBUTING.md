@@ -68,6 +68,21 @@ follow one rule:
 - Format arguments are positional (`%1$s`, `%2$d`) so translations can reorder
   them; iOS maps them to `%1$@` / `%2$d`.
 
+English (`values/`) is the fallback for any device language Aries lacks.
+Korean (`values-ko/`) ships and must stay complete: **a new string needs its
+Korean translation in the same change.** Brand names and pure format strings
+can be `translatable="false"` instead. `TranslationsTest` (part of
+`:app:testDebugUnitTest`) fails when a translation lacks a key or has different
+format arguments, when an argument is not positional, or when Kotlin passes a
+string literal to UI text (`Text("…")`, `label = "…"`; mark a deliberate one
+with `// i18n-ok`).
+
+To add a language, add only `android/app/src/main/res/values-<lang>/strings.xml`
+(e.g. `values-ja`, `values-pt-rBR`) with every translatable key, and run
+`:app:testDebugUnitTest`. No code changes: the per-app language list (Android
+13+) is generated from the `values-*` directories. To make the test require it
+from then on, add the language to `shipped` in `TranslationsTest`.
+
 ## License
 
 Code is Apache-2.0 (`LICENSE`). The logo set is excluded from it and carries
