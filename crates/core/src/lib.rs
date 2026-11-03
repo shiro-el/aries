@@ -7,6 +7,7 @@
 
 mod error;
 mod hc;
+mod launch;
 mod removal;
 mod store;
 mod structure;
@@ -22,6 +23,7 @@ use serde::{Deserialize, Serialize};
 
 pub use error::{CoreError, Incompatibility, VaultError};
 pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
+pub use launch::{LaunchRequest, RECENT_CWDS_KEPT};
 pub use structure::{HostStructure, PaneInfo, SpaceInfo, StructureProblem, TabInfo};
 
 use hc::HcClient;
@@ -314,6 +316,7 @@ impl AriesCore {
             on_runtime(async move { HcClient::handshake(transport.open().await?).await }).await?;
         Ok(Arc::new(HostConnection {
             client: Arc::new(client),
+            recent: launch::RecentCwds::in_host_dir(self.store.host_dir(&host.id)),
         }))
     }
 }
@@ -356,6 +359,7 @@ impl AriesCore {
 #[derive(uniffi::Object)]
 pub struct HostConnection {
     client: Arc<HcClient>,
+    recent: launch::RecentCwds,
 }
 
 #[uniffi::export]
@@ -414,6 +418,28 @@ impl HostConnection {
         })
         .await?;
         Ok(Arc::new(StructureWatch { task }))
+    }
+
+    /// Starts a new Terminal running `request.command` (see `launch.rs`),
+    /// placed in the requested Space/Tab by label; the document is never
+    /// written. herdr-core's refusal (`spawn_failed` for a missing program or
+    /// cwd, ...) comes back as [`CoreError::Rpc`] with its `kind`. On success
+    /// the cwd joins [`HostConnection::recent_cwds`].
+    pub async fn launch(&self, request: LaunchRequest) -> Result<TerminalInfo, CoreError> {
+        let client = self.client.clone();
+        let params = launch::run_params(&request);
+        let result = on_runtime(async move { client.call("terminal.run", params).await }).await?;
+        if let Some(cwd) = launch::cwd_to_remember(&request) {
+            // The Terminal runs either way; a full disk only loses the hint.
+            let _ = self.recent.remember(cwd);
+        }
+        Ok(terminal_info(&result))
+    }
+
+    /// Working directories recently launched in on this Host, newest first,
+    /// at most [`RECENT_CWDS_KEPT`]. Kept on the phone, per Host.
+    pub fn recent_cwds(&self) -> Vec<String> {
+        self.recent.list()
     }
 
     pub async fn disconnect(&self) {
