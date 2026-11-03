@@ -85,11 +85,19 @@ pub struct HcSession {
     dir: tempfile::TempDir,
     name: String,
     bin: PathBuf,
+    extra_env: Vec<(String, String)>,
 }
 
 impl HcSession {
     /// Starts a fresh core in its own session and temp dirs.
     pub fn start() -> Self {
+        Self::start_with_env(&[])
+    }
+
+    /// Like [`HcSession::start`], with `extra` added to the core's own
+    /// environment (which every Terminal it starts inherits), for example a
+    /// `PATH` with fake agent programs.
+    pub fn start_with_env(extra: &[(&str, &str)]) -> Self {
         // Short base path: the socket path must stay under the 108-byte limit.
         let dir = tempfile::Builder::new()
             .prefix("aries-hc-")
@@ -107,6 +115,10 @@ impl HcSession {
             dir,
             name: unique("aries-test"),
             bin: herdr_core_bin(),
+            extra_env: extra
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
         };
         session.hc(&["server", "start"]);
         session
@@ -134,6 +146,9 @@ impl HcSession {
             ("XDG_DATA_HOME".into(), p("data")),
             ("XDG_CACHE_HOME".into(), p("cache")),
         ]
+        .into_iter()
+        .chain(self.extra_env.iter().cloned())
+        .collect()
     }
 
     /// The argv that speaks the client protocol on stdio for this session

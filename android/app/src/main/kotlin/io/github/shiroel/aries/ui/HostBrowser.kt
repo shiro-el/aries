@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -22,12 +23,14 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.Host
 import io.github.shiroel.aries.core.HostStructure
 import io.github.shiroel.aries.core.PaneInfo
+import io.github.shiroel.aries.core.SavedLaunch
 import io.github.shiroel.aries.core.SpaceInfo
 import io.github.shiroel.aries.core.StructureProblem
 import io.github.shiroel.aries.core.TabInfo
@@ -67,6 +70,9 @@ class HostBrowser(val host: Host) {
 
     /** The "new Terminal" form, while it is open. */
     var launchForm by mutableStateOf<LaunchForm?>(null)
+
+    /** The Host's saved launch configs, each started with one tap. */
+    var savedLaunches by mutableStateOf<List<SavedLaunch>>(emptyList())
 
     /** A just-launched Terminal to open once the structure lists it: (space, tab, address). */
     private var pendingReveal: Triple<String, String, String>? = null
@@ -156,6 +162,9 @@ fun BrowseScreen(
     onBack: () -> Unit,
     onNewTerminal: (() -> Unit)? = null,
     onLaunch: (LaunchForm) -> Unit = {},
+    onSaveLaunch: (LaunchForm) -> Unit = {},
+    onDeleteLaunch: (LaunchForm, SavedLaunch) -> Unit = { _, _ -> },
+    onRunSaved: (SavedLaunch) -> Unit = {},
     hostSections: @Composable () -> Unit = {},
 ) {
     val space = browser.openSpace
@@ -168,8 +177,25 @@ fun BrowseScreen(
                 TextButton(onClick = onNewTerminal) { Text(stringResource(R.string.launch_open_button)) }
             }
         }
+        if (onNewTerminal != null && browser.structure != null && !browser.closed && browser.savedLaunches.isNotEmpty()) {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(browser.savedLaunches, key = { "saved:" + it.id }) { s ->
+                    AssistChip(
+                        modifier = Modifier.testTag("saved_run:" + s.id),
+                        onClick = { onRunSaved(s) },
+                        label = { Text(s.name) },
+                    )
+                }
+            }
+        }
         browser.launchForm?.let { form ->
-            LaunchDialog(form, onLaunch = { onLaunch(form) }, onDismiss = { browser.launchForm = null })
+            LaunchDialog(
+                form,
+                onLaunch = { onLaunch(form) },
+                onDismiss = { browser.launchForm = null },
+                onSave = { onSaveLaunch(form) },
+                onDelete = { onDeleteLaunch(form, it) },
+            )
         }
         if (browser.closed) Notice(stringResource(R.string.structure_connection_closed))
         browser.structure?.problem?.let { Notice(problemText(it)) }

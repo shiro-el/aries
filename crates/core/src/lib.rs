@@ -30,7 +30,7 @@ pub use beacon::{
 pub use error::{CoreError, Incompatibility, VaultError};
 pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
 pub use host_model::{AgentStatus, BlockedReason, TerminalWatch};
-pub use launch::{LaunchRequest, RECENT_CWDS_KEPT};
+pub use launch::{AgentPreset, LaunchRequest, RECENT_CWDS_KEPT, SavedLaunch};
 pub use structure::{HostStructure, PaneInfo, SpaceInfo, StructureProblem, TabInfo};
 
 use hc::HcClient;
@@ -562,6 +562,7 @@ impl AriesCore {
         Ok(Arc::new(HostConnection {
             client: Arc::new(client),
             recent: launch::RecentCwds::in_host_dir(self.store.host_dir(&host.id)),
+            saved: launch::SavedLaunches::in_host_dir(self.store.host_dir(&host.id)),
         }))
     }
 }
@@ -726,6 +727,7 @@ impl AriesCore {
 pub struct HostConnection {
     client: Arc<HcClient>,
     recent: launch::RecentCwds,
+    saved: launch::SavedLaunches,
 }
 
 #[uniffi::export]
@@ -812,6 +814,24 @@ impl HostConnection {
     /// at most [`RECENT_CWDS_KEPT`]. Kept on the phone, per Host.
     pub fn recent_cwds(&self) -> Vec<String> {
         self.recent.list()
+    }
+
+    /// The launch configs saved for this Host, oldest first. Kept on the
+    /// phone, per Host; run one with [`HostConnection::launch`] on its
+    /// `request`.
+    pub fn saved_launches(&self) -> Vec<SavedLaunch> {
+        self.saved.list()
+    }
+
+    /// Saves `launch` under its (trimmed) name: a new one when its `id` is
+    /// empty, else replaces the one with that id. Returns it as stored.
+    pub fn save_launch(&self, launch: SavedLaunch) -> Result<SavedLaunch, CoreError> {
+        self.saved.save(launch)
+    }
+
+    /// Deletes the saved launch `id`; succeeds if it is already gone.
+    pub fn delete_saved_launch(&self, id: String) -> Result<(), CoreError> {
+        self.saved.delete(&id)
     }
 
     pub async fn disconnect(&self) {

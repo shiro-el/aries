@@ -22,6 +22,7 @@ import io.github.shiroel.aries.core.StructureWatch
 import io.github.shiroel.aries.core.LaunchRequest
 import io.github.shiroel.aries.core.PaneInfo
 import io.github.shiroel.aries.core.QrMatrix
+import io.github.shiroel.aries.core.SavedLaunch
 import io.github.shiroel.aries.core.TerminalInfo
 import io.github.shiroel.aries.core.TerminalWatch
 import kotlinx.coroutines.channels.Channel
@@ -155,9 +156,12 @@ class FakeCore : AriesCoreInterface {
             }
         }
         requireTrust?.let { if (host.hostKey != it) throw CoreException.HostKeyUnknown(it) }
-        return FakeConnection(terminals, structure ?: HostStructure(emptyList(), terminals, null), updates)
+        return FakeConnection(terminals, structure ?: HostStructure(emptyList(), terminals, null), updates, savedLaunches)
             .also { connection = it }
     }
+
+    /** Saved launch configs, kept across connections like the core keeps them per Host. */
+    val savedLaunches = mutableListOf<SavedLaunch>()
 
     /** What `beaconStatus` reports; `installBeacon` / `uninstallBeacon` change it. */
     var beacon: BeaconState = BeaconState.NotInstalled
@@ -190,6 +194,7 @@ class FakeConnection(
     private val list: List<TerminalInfo>,
     private var current: HostStructure,
     private val updates: Channel<List<TerminalInfo>> = Channel(),
+    private val saved: MutableList<SavedLaunch> = mutableListOf(),
 ) : HostConnection(NoHandle) {
     /** Core API methods called on this connection, in order. */
     val calls = mutableListOf<String>()
@@ -230,12 +235,26 @@ class FakeConnection(
 
     override fun recentCwds(): List<String> = recentCwds
 
+    override fun savedLaunches(): List<SavedLaunch> = saved.toList()
+
+    override fun saveLaunch(launch: SavedLaunch): SavedLaunch {
+        val stored = launch.copy(id = launch.id.ifEmpty { "L${saved.size + 1}" }, name = launch.name.trim())
+        val i = saved.indexOfFirst { it.id == stored.id }
+        if (i >= 0) saved[i] = stored else saved += stored
+        return stored
+    }
+
+    override fun deleteSavedLaunch(id: String) {
+        saved.removeAll { it.id == id }
+    }
+
     /** Like herdr-core: a new live Terminal, shown in its labelled Tab (or unplaced). */
     override suspend fun launch(request: LaunchRequest): TerminalInfo {
         calls += "launch"
         launchFailWith?.let { throw it }
         launched += request
-        val t = TerminalInfo("t${100 + launched.size}", null, "", request.command.split(" "), request.cwd, "live")
+        val argv = listOfNotNull(request.preset?.name?.lowercase()) + request.command.split(" ").filter { it.isNotEmpty() }
+        val t = TerminalInfo("t${100 + launched.size}", null, "", argv, request.cwd, "live")
         val pane = PaneInfo(t.address, t.address, t)
         val placed = current.spaces.map { s ->
             if (s.id != request.spaceId) s

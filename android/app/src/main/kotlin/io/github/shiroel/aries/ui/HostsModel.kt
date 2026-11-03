@@ -18,6 +18,7 @@ import io.github.shiroel.aries.core.JumpHost
 import io.github.shiroel.aries.core.KeyInfo
 import io.github.shiroel.aries.core.KeyInstall
 import io.github.shiroel.aries.core.PublicKeyInfo
+import io.github.shiroel.aries.core.SavedLaunch
 import io.github.shiroel.aries.core.StructureListener
 import io.github.shiroel.aries.core.StructureWatch
 import io.github.shiroel.aries.core.QrMatrix
@@ -180,6 +181,7 @@ class HostsModel(
             try {
                 val conn = withContext(keyWork) { core.connect(host.id) }
                 val browser = HostBrowser(host)
+                browser.savedLaunches = conn.savedLaunches()
                 open = conn to null
                 screen = Screen.Browse(browser)
                 beacon.load(host)
@@ -219,7 +221,49 @@ class HostsModel(
     fun newTerminal(browser: HostBrowser) {
         val conn = open?.first ?: return
         val structure = browser.structure ?: return
-        browser.launchForm = LaunchForm(structure, conn.recentCwds(), browser.openSpaceId, browser.tab?.id)
+        browser.launchForm =
+            LaunchForm(structure, conn.recentCwds(), browser.openSpaceId, browser.tab?.id, browser.savedLaunches)
+    }
+
+    /** Saves [form] under its name (new, or replacing the config it edits); the form stays open. */
+    fun saveLaunch(browser: HostBrowser, form: LaunchForm) {
+        val conn = open?.first ?: return
+        form.error = null
+        try {
+            form.stored(conn.saveLaunch(form.toSaved()))
+            browser.savedLaunches = form.saved.toList()
+        } catch (e: CoreException) {
+            form.error = launchProblem(e)
+        }
+    }
+
+    fun deleteSavedLaunch(browser: HostBrowser, form: LaunchForm, saved: SavedLaunch) {
+        val conn = open?.first ?: return
+        form.error = null
+        try {
+            conn.deleteSavedLaunch(saved.id)
+            form.removed(saved.id)
+            browser.savedLaunches = form.saved.toList()
+        } catch (e: CoreException) {
+            form.error = launchProblem(e)
+        }
+    }
+
+    /** One tap: starts [saved] as stored. If that fails, its form opens with the reason. */
+    fun runSaved(browser: HostBrowser, saved: SavedLaunch) {
+        val conn = open?.first ?: return
+        val structure = browser.structure ?: return
+        scope.launch {
+            try {
+                val terminal = conn.launch(saved.request)
+                browser.reveal(saved.request.spaceId, saved.request.tabId, terminal.address)
+            } catch (e: CoreException) {
+                val form = LaunchForm(structure, conn.recentCwds(), null, null, browser.savedLaunches)
+                form.edit(saved)
+                form.error = launchProblem(e)
+                browser.launchForm = form
+            }
+        }
     }
 
     /** Starts [form]'s command on the open Host, then shows the new Terminal; failures stay on the form. */
