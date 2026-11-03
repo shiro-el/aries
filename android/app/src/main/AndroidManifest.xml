@@ -53,6 +53,9 @@
         </provider>
         <!-- A Call notification's Choice button (ticket 36); only SystemUI sends it. -->
         <receiver
+            android:name=".InlineActionReceiver"
+            android:exported="false" />
+        <receiver
             android:name=".ChoiceReceiver"
             android:exported="false" />
         <receiver

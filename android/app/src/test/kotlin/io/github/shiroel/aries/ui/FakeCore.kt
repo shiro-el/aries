@@ -599,6 +599,24 @@ class FakeCore : AriesCoreInterface {
         }
     }
 
+    override suspend fun markSeenBackground(hostId: String, terminal: String, turn: ULong): TerminalInfo {
+        backgroundFailure?.let { throw it }
+        labelWrites += "$hostId $terminal seen=$turn"
+        return TerminalInfo(terminal, null, "", emptyList(), null, "live")
+    }
+
+    val backgroundMessages = mutableListOf<Triple<String, String, String>>()
+    var backgroundSendOutcome: SendOutcome = SendOutcome.Sent
+    var backgroundFailure: CoreException? = null
+    var backgroundHold: CompletableDeferred<Unit>? = null
+
+    override suspend fun sendMessageBackground(hostId: String, terminal: String, text: String, listener: SendListener): SendOutcome {
+        backgroundMessages += Triple(hostId, terminal, text)
+        backgroundHold?.let { listener.onHeld(); it.await() }
+        backgroundFailure?.let { throw it }
+        return backgroundSendOutcome
+    }
+
     companion object {
         const val PUBLIC_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeFakeFakeFakeFakeFakeFakeFakeFakeFake aries"
     }

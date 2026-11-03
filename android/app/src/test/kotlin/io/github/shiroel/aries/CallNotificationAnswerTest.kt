@@ -114,10 +114,10 @@ class CallNotificationAnswerTest {
     }
 
     @Test
-    fun aCallWithoutChoicesHasNoButtons() {
+    fun aCallWithoutChoicesOffersReplyAndSnooze() {
         PushService.show(context, push(emptyList())) { true }
 
-        assertEquals(emptyList<String>(), buttons(shown()))
+        assertEquals(listOf(str(R.string.notification_reply_button), str(R.string.notification_snooze_button)), buttons(shown()))
     }
 
     @Test
