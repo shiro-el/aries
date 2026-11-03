@@ -19,6 +19,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
+import io.github.shiroel.aries.core.PushVerificationState
+import kotlinx.coroutines.delay
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -39,6 +42,13 @@ import io.github.shiroel.aries.R
 fun PushSection(model: PushModel, beaconInstalled: Boolean) {
     val host = model.host ?: return
     var beaconRequired by remember(host.id, beaconInstalled) { mutableStateOf(false) }
+    LaunchedEffect(host.id, model.ui) {
+        do {
+            model.refreshVerification()
+            if (model.verificationState != PushVerificationState.PENDING) break
+            delay(1_000)
+        } while (true)
+    }
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(stringResource(R.string.push_title), style = MaterialTheme.typography.titleMedium)
@@ -106,6 +116,16 @@ fun PushSection(model: PushModel, beaconInstalled: Boolean) {
                 }
                 PolicyOptions(model)
             }
+        }
+        when (model.verificationState) {
+            PushVerificationState.PENDING -> Text(stringResource(R.string.push_verification_pending))
+            PushVerificationState.FAILED -> {
+                Text(stringResource(R.string.push_verification_failed), color = MaterialTheme.colorScheme.error)
+                if (model.ui is PushUi.On) {
+                    TextButton(onClick = model::enable) { Text(stringResource(R.string.push_retry_button)) }
+                }
+            }
+            else -> Unit
         }
         model.problem?.let { Text(resolve(it), color = MaterialTheme.colorScheme.error) }
         model.notice?.let { Text(resolve(it), style = MaterialTheme.typography.bodySmall) }

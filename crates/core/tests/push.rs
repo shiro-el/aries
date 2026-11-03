@@ -1216,3 +1216,204 @@ async fn watched_progress_is_normal_priority_throttled_and_replaced_on_done() {
     assert_eq!(s.relay.log().pushes.len(), 4);
     conn.disconnect().await;
 }
+
+/// FCM can arrive before the registration HTTP response. The app must
+/// answer only a challenge matching its own locally initiated registration.
+#[tokio::test]
+async fn registration_waits_for_device_proof_before_pairing_the_host() {
+    struct OwnershipRelay {
+        core: Arc<AriesCore>,
+        confirmed: Arc<Mutex<Option<String>>>,
+        host: String,
+    }
+    struct Confirmation(Arc<Mutex<Option<String>>>);
+    impl HttpClient for Confirmation {
+        fn send(&self, r: HttpRequest) -> Result<HttpResponse, FetchError> {
+            assert_eq!(r.url, "https://relay.test/v1/pairing/confirm");
+            let body: serde_json::Value = serde_json::from_slice(&r.body).unwrap();
+            assert_eq!(body["challenge"], "p".repeat(43));
+            *self.0.lock().unwrap() = Some(body["verification_id"].as_str().unwrap().to_owned());
+            Ok(HttpResponse {
+                status: 204,
+                body: vec![],
+            })
+        }
+    }
+    impl HttpClient for OwnershipRelay {
+        fn send(&self, r: HttpRequest) -> Result<HttpResponse, FetchError> {
+            let body: serde_json::Value = serde_json::from_slice(&r.body).unwrap_or_default();
+            let (status, reply) = if r.method == "POST" && r.url.ends_with("/v1/pairings") {
+                let id = body["verification_id"]
+                    .as_str()
+                    .expect("local registration ID")
+                    .to_owned();
+                assert_eq!(
+                    self.core
+                        .push_verification_state(self.host.clone())
+                        .unwrap(),
+                    Some(aries_core::PushVerificationState::Pending)
+                );
+                let receiver: Arc<dyn HttpClient> = Arc::new(Confirmation(self.confirmed.clone()));
+                let rt = tokio::runtime::Handle::current();
+                assert!(
+                    !rt.block_on(self.core.confirm_push_token(
+                        "x".repeat(43),
+                        "p".repeat(43),
+                        receiver.clone()
+                    ))
+                    .unwrap()
+                );
+                assert!(self.confirmed.lock().unwrap().is_none());
+                assert!(
+                    rt.block_on(self.core.confirm_push_token(id, "p".repeat(43), receiver))
+                        .unwrap()
+                );
+                assert_eq!(
+                    self.core
+                        .push_verification_state(self.host.clone())
+                        .unwrap(),
+                    Some(aries_core::PushVerificationState::Verified)
+                );
+                (
+                    202,
+                    serde_json::json!({"token": "pending-token", "expires_in": 120}),
+                )
+            } else if r.method == "GET" {
+                assert_eq!(r.headers["Authorization"], "Bearer pending-token");
+                (
+                    200,
+                    serde_json::json!({"status": "active", "verification_id": self.confirmed.lock().unwrap().clone()}),
+                )
+            } else {
+                assert_eq!(r.method, "DELETE");
+                (204, serde_json::Value::Null)
+            };
+            Ok(HttpResponse {
+                status,
+                body: reply.to_string().into_bytes(),
+            })
+        }
+    }
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    let host = dead_ssh_host(&core);
+    let steps = Arc::new(Steps::default());
+    let http = Arc::new(OwnershipRelay {
+        // A cold FCM receiver reopens the persisted local registration context.
+        core: core_in(data.path()),
+        confirmed: Default::default(),
+        host: host.clone(),
+    });
+    let r = core
+        .enable_push(
+            host.clone(),
+            "https://relay.test".into(),
+            device("phone"),
+            http,
+            steps.clone(),
+        )
+        .await;
+    assert!(
+        matches!(
+            r,
+            Err(CoreError::PushFailed {
+                step: PushStep::Pair,
+                ..
+            })
+        ),
+        "{r:?}"
+    );
+    assert_eq!(
+        *steps.0.lock().unwrap(),
+        [PushStep::Register, PushStep::Verify, PushStep::Pair]
+    );
+    assert_eq!(
+        core.push_verification_state(host).unwrap(),
+        Some(aries_core::PushVerificationState::Verified)
+    );
+}
+
+#[tokio::test]
+async fn failed_verification_never_pairs_the_host_and_is_visible_after_restart() {
+    #[derive(Default)]
+    struct PendingRelay(Mutex<Vec<String>>);
+    impl HttpClient for PendingRelay {
+        fn send(&self, r: HttpRequest) -> Result<HttpResponse, FetchError> {
+            self.0.lock().unwrap().push(r.method.clone());
+            Ok(match r.method.as_str() {
+                "POST" => HttpResponse {
+                    status: 202,
+                    body: br#"{"token":"pending","expires_in":120}"#.to_vec(),
+                },
+                "GET" => HttpResponse {
+                    status: 401,
+                    body: br#"{"error":"unknown_pairing"}"#.to_vec(),
+                },
+                "DELETE" => HttpResponse {
+                    status: 204,
+                    body: vec![],
+                },
+                _ => panic!("unexpected request"),
+            })
+        }
+    }
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    let host = dead_ssh_host(&core);
+    let steps = Arc::new(Steps::default());
+    let relay = Arc::new(PendingRelay::default());
+    let r = core
+        .enable_push(
+            host.clone(),
+            "https://relay.test".into(),
+            device("phone"),
+            relay.clone(),
+            steps.clone(),
+        )
+        .await;
+    assert!(
+        matches!(
+            r,
+            Err(CoreError::PushFailed {
+                step: PushStep::Verify,
+                ..
+            })
+        ),
+        "{r:?}"
+    );
+    assert_eq!(
+        *steps.0.lock().unwrap(),
+        [PushStep::Register, PushStep::Verify]
+    );
+    assert_eq!(*relay.0.lock().unwrap(), ["POST", "GET", "DELETE"]);
+    assert!(core.push_pairing(host.clone()).unwrap().is_none());
+    let restarted = core_in(data.path());
+    assert_eq!(
+        restarted.push_verification_state(host.clone()).unwrap(),
+        Some(aries_core::PushVerificationState::Failed)
+    );
+    let diagnostics = restarted
+        .diagnostics(
+            Some(aries_core::DiagnosticSource::Relay),
+            Some(host.clone()),
+            false,
+        )
+        .unwrap();
+    assert!(
+        diagnostics
+            .iter()
+            .any(|e| e.event == aries_core::DiagnosticEvent::PushVerification
+                && e.http_status == Some(202))
+    );
+    assert!(
+        diagnostics
+            .iter()
+            .any(|e| e.event == aries_core::DiagnosticEvent::PushVerification
+                && e.error == Some(aries_core::DiagnosticError::RelayVerification))
+    );
+    let exported = serde_json::to_string(&diagnostics).unwrap();
+    assert!(!exported.contains("pending"));
+    assert!(!exported.contains("relay.test"));
+    restarted.remove_host(host.clone()).unwrap();
+    assert!(!data.path().join("hosts").join(host).exists());
+}

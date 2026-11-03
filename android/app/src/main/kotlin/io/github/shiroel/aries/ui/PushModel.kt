@@ -11,6 +11,7 @@ import io.github.shiroel.aries.core.HttpClient
 import io.github.shiroel.aries.core.PushDevice
 import io.github.shiroel.aries.core.PushPolicy
 import io.github.shiroel.aries.core.PushProgress
+import io.github.shiroel.aries.core.PushVerificationState
 import io.github.shiroel.aries.core.PushStep
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -70,6 +71,14 @@ class PushModel(
     var ui by mutableStateOf<PushUi>(PushUi.Loading)
         private set
 
+    var verificationState by mutableStateOf<PushVerificationState?>(null)
+        private set
+
+    /** Also exposes failed background token rotations when reopening settings. */
+    fun refreshVerification() {
+        verificationState = host?.let { runCatching { core.pushVerificationState(it.id) }.getOrNull() }
+    }
+
     /** Why the last action failed, shown under the section. */
     var problem by mutableStateOf<Message?>(null)
         private set
@@ -110,6 +119,7 @@ class PushModel(
 
     private fun refresh() {
         val host = host ?: return
+        refreshVerification()
         ui = try {
             core.pushPairing(host.id)?.let { PushUi.On(it.relayUrl) }
                 ?: PushUi.Off
@@ -263,6 +273,7 @@ class PushModel(
 }
 
 fun stepLabel(step: PushStep): Int = when (step) {
+    PushStep.VERIFY -> R.string.push_step_verify
     PushStep.REGISTER -> R.string.push_step_register
     PushStep.PAIR -> R.string.push_step_pair
     PushStep.TEST -> R.string.push_step_test

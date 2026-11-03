@@ -350,6 +350,23 @@ class PushSectionTest {
         option(R.string.push_policy_blocked).assertIsOn()
     }
 
+    @Test
+    fun pendingAndFailedTokenVerificationRemainVisibleForAnExistingPairing() {
+        val core = FakeCore().apply {
+            beacon = installed()
+            pushPaired["h1"] = RELAY
+            pushVerifications["h1"] = io.github.shiroel.aries.core.PushVerificationState.PENDING
+        }
+        val model = connectTo(core)
+        shows(str(R.string.push_verification_pending))
+        compose.runOnIdle {
+            core.pushVerifications["h1"] = io.github.shiroel.aries.core.PushVerificationState.FAILED
+            model.push.refreshVerification()
+        }
+        shows(str(R.string.push_verification_failed))
+        shows(str(R.string.push_on_body, RELAY))
+    }
+
     private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.onAllNodesWithTextLast(text: String) {
         onAllNodes(androidx.compose.ui.test.hasText(text)).let { it[it.fetchSemanticsNodes().size - 1] }.performClick()
         waitForIdle()
