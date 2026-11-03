@@ -36,6 +36,17 @@ class AppLockTest {
         assertEquals(0, window.attributes.flags and WindowManager.LayoutParams.FLAG_SECURE)
     }
 
+    @Test fun anAuthenticationCallbackAfterLeavingCannotUnlockTheBackgroundApp() {
+        val lock = AppLock(prefs).also { it.enableAfterAuthentication() }
+        lock.backgrounded()
+        lock.authenticationSucceeded()
+        assertTrue(lock.locked)
+        lock.foregrounded()
+        assertTrue(lock.locked)
+        lock.authenticationSucceeded()
+        assertFalse(lock.locked)
+    }
+
     @Test fun immediatePolicyLocksOnLeavingAndColdStartsAlwaysLock() {
         val lock = AppLock(prefs)
         assertFalse(lock.enabled)

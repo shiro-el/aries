@@ -51,8 +51,9 @@ class AppLock(
     }
 
     fun authenticationSucceeded() {
-        locked = false
-        backgroundAt = null
+        // A result queued just before Home must not reopen content behind the lock.
+        // Only a foreground entry consumes the background timestamp.
+        locked = enabled && backgroundAt != null
     }
 
     fun backgrounded() {
