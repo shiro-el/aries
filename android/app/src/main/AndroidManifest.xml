@@ -21,6 +21,10 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- A Call notification's Choice button (ticket 36); only SystemUI sends it. -->
+        <receiver
+            android:name=".ChoiceReceiver"
+            android:exported="false" />
         <service
             android:name=".PushService"
             android:exported="false">

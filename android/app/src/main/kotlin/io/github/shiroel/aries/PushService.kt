@@ -43,7 +43,13 @@ class PushService : FirebaseMessagingService() {
             Log.w(TAG, "push rejected: ${e.message}")
             return
         }
-        show(this, notice)
+        show(this, notice) { hostId ->
+            try {
+                core.canAnswerInBackground(hostId)
+            } catch (e: CoreException) {
+                false
+            }
+        }
     }
 
     override fun onNewToken(token: String) {
@@ -64,11 +70,22 @@ class PushService : FirebaseMessagingService() {
         private const val CALL_EMERGENCY = "calls_emergency"
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-        fun show(context: Context, notice: PushNotice) {
+        /**
+         * Shows [notice]. A Call gets its Choices as buttons when
+         * [canAnswerInBackground] says its Host's key opens while the phone
+         * is locked, otherwise an "Open app" button (ticket 36).
+         */
+        fun show(context: Context, notice: PushNotice, canAnswerInBackground: (hostId: String) -> Boolean = { false }) {
             val manager = context.getSystemService(NotificationManager::class.java)
             val content = notice.content
             if (content is PushContent.Call) {
-                showCall(context, manager, notice.hostId, notice.hostName, content)
+                val call = CallNotice(notice.hostId, notice.hostName, content)
+                val view = when {
+                    content.choices.isEmpty() -> CallView.Plain
+                    CallNotifications.fitsAsButtons(content) && canAnswerInBackground(call.hostId) -> CallView.Choices
+                    else -> CallView.OpenApp
+                }
+                CallNotifications.post(context, call, view)
                 return
             }
             manager.createNotificationChannel(
@@ -132,7 +149,8 @@ class PushService : FirebaseMessagingService() {
             return id
         }
 
-        private fun showCall(context: Context, manager: NotificationManager, hostId: String, hostName: String, call: PushContent.Call) {
+        /** A Call's notification without buttons; [CallNotifications] adds them and posts it. */
+        internal fun callBuilder(context: Context, manager: NotificationManager, hostId: String, hostName: String, call: PushContent.Call): Notification.Builder {
             val choices = call.choices.takeIf { it.isNotEmpty() }
                 ?.let { context.getString(R.string.call_choices, it.joinToString(" / ")) }
             val text = call.body.ifEmpty { choices ?: "" }
@@ -149,8 +167,7 @@ class PushService : FirebaseMessagingService() {
             if (call.urgency == CallUrgency.EMERGENCY) builder.setCategory(Notification.CATEGORY_ALARM)
             // A tap opens the Terminal that called (only confirmed Calls are pushed).
             builder.setContentIntent(PushTarget(hostId, call.terminal).pendingIntent(context))
-            // One notification per Call.
-            manager.notify("call:${call.id}", hostId.hashCode(), builder.build())
+            return builder
         }
     }
 }

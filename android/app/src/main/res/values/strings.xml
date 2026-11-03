@@ -353,4 +353,15 @@
     <string name="push_call_channel_urgent">Urgent Calls</string>
     <string name="push_call_channel_emergency">Emergency Calls</string>
     <string name="push_no_firebase">this build has no Firebase configuration</string>
+    <string name="call_notify_open_app">Open app</string>
+    <string name="call_notify_try_again">Try again</string>
+    <string name="call_notify_sending">Sending “%1$s”…</string>
+    <string name="call_notify_no_network">Not sent: no network</string>
+    <string name="call_notify_unreachable">Not sent: the Host did not answer</string>
+    <string name="call_notify_key_locked">Not sent: answer in the app (the key needs your unlock)</string>
+    <string name="call_notify_key_rejected">Not sent: the Host rejected the key</string>
+    <string name="call_notify_host_key">Not sent: check the Host key in the app</string>
+    <string name="call_notify_not_sent">Not sent: %1$s</string>
+    <string name="call_notify_unknown">Unknown: it may have been delivered. Check Call history</string>
+    <string name="call_notify_channel_sending">Sending answers</string>
 </resources>
