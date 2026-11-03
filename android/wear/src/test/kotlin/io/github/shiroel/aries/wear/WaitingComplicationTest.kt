@@ -20,6 +20,7 @@ class WaitingComplicationTest {
     @Test fun complicationShowsCountAndDescribesItsOriginalAge() {
         val data = WaitingComplication.render(context, WatchSummary(7, emptyList(), 60_000), 360_000)
         assertEquals("7", data.text.getTextAt(context.resources, Instant.EPOCH).toString())
+        assertEquals("5m ago", data.title!!.getTextAt(context.resources, Instant.EPOCH).toString())
         assertEquals("7 waiting · 5 min ago", data.contentDescription!!.getTextAt(context.resources, Instant.EPOCH).toString())
     }
 

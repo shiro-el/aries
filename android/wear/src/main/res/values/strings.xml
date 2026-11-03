@@ -4,6 +4,7 @@
     <string name="wear_waiting_count">%1$d waiting</string>
     <string name="wear_waiting_label">Waiting</string>
     <string name="wear_age_minutes">%1$d min ago</string>
+    <string name="wear_age_compact">%1$dm ago</string>
     <string name="wear_not_synced">Not synced yet</string>
     <string name="wear_open_phone">Open Aries on your phone</string>
     <string name="wear_no_agents">No Agents</string>
