@@ -114,6 +114,7 @@ internal fun chatSearchFields(entries: List<ChatEntry>, markdown: Map<String, Ch
                 blocks.forEachIndexed { index, block ->
                     val key = "markdown:$index"
                     when (block) {
+                        is ChatMarkdownBlock.Diagram -> field(key, block.code.source, item + 1 + index)
                         is ChatMarkdownBlock.Prose -> field(key, block.text.text, item + 1 + index, if (block.continuation) "" else null)
                         is ChatMarkdownBlock.CodeLines -> {
                             val previous = blocks.getOrNull(index - 1) as? ChatMarkdownBlock.CodeLines

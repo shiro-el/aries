@@ -19,6 +19,11 @@ jobs:
           sh scripts/tests/release-version.test.sh
           sh scripts/tests/play-policy.test.sh
           sh scripts/tests/beacon-manifest.test.sh
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Offline Mermaid adapter regression
+        run: node --test android/app/src/test/js/mermaid.test.cjs
 
   rust:
     runs-on: ubuntu-latest

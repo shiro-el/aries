@@ -23,3 +23,7 @@ assets/licenses/commonmark-java.txt inside the Android app.
 Claude and Codex program icons are from LobeHub icons (MIT), adapted from
 herdr-app defaults/icons. See the bundled licenses/lobehub-icons.txt notice.
 Brand names and marks remain the property of their respective owners.
+
+Mermaid diagrams use Pele 1.13.0 (MIT), pinned from https://github.com/obsidianmd/pele.
+The offline bundle is assets/mermaid/pele-1.13.0.js. Its complete license,
+including its Lucide ISC notice, ships at assets/licenses/pele.txt.

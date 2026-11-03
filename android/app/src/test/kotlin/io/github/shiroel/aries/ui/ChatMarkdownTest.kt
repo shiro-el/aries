@@ -53,6 +53,20 @@ class ChatMarkdownTest {
         compose.onNodeWithText(str(R.string.agent_view_chat)).performClick()
     }
 
+    // Regression: valid partial Mermaid must remain readable code until its closing fence arrives.
+    @Test
+    @Config(qualifiers = "h1200dp")
+    fun streamingMermaidStaysSourceUntilTheFenceCloses() {
+        val core = FakeCore()
+        openChat(core)
+        val source = "flowchart LR\nPhone --> Host"
+        core.pushChat(ChatSnapshot(listOf(entry("a1", ChatEntryBody.Agent("```mermaid\n$source"))), ChatStatus.LIVE, null))
+        compose.waitUntil(5_000) { compose.onAllNodesWithText(source).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText(source).assertExists()
+        compose.onNodeWithText(str(R.string.chat_code_copy_button)).performClick()
+        assertEquals(source + "\n", context.getSystemService(ClipboardManager::class.java).primaryClip?.getItemAt(0)?.text?.toString())
+    }
+
     @Test
     @Config(qualifiers = "h1200dp")
     fun thinkingFromAgentHistoryRendersMarkdownAndReplacesItsParsedText() {
