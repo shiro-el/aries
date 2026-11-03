@@ -9,7 +9,10 @@
 //! 2. [`PushStep::Pair`]: over SSH, `aries-beacon pair` gets the Relay URL,
 //!    the token and the phone's public key, and answers with the Beacon's
 //!    public key. A failure here deletes the Relay pairing again.
-//! 3. [`PushStep::Test`]: `aries-beacon push-test` seals a test message and
+//! 3. [`PushStep::Unpair`], only when the Host was already paired (turning
+//!    push on again, or changing the Relay): the old pairing is deleted on
+//!    its Relay, queued for later if that Relay cannot be reached.
+//! 4. [`PushStep::Test`]: `aries-beacon push-test` seals a test message and
 //!    posts it to the Relay, which forwards it to the phone.
 //!
 //! Stored per Host in `hosts/<id>/push.json`: Relay URL, the Beacon's public
@@ -107,6 +110,35 @@ pub struct PushDisable {
 pub enum PushContent {
     /// The test notification sent when push was turned on.
     Test { sent_at: u64 },
+    /// An Agent became Blocked, Error (or Done, if the user turned that on).
+    Status {
+        /// Terminal address on the Host (`t7`, `box/t7`).
+        terminal: String,
+        name: Option<String>,
+        title: Option<String>,
+        /// Not a subagent (its Terminal has no parent).
+        top_level: bool,
+        status: crate::AgentStatus,
+        /// Unix seconds on the Host.
+        at: u64,
+    },
+    /// An Agent sent a Call; the Android notification channel follows its
+    /// urgency. The full Call (and its answer) is in Call history under `id`.
+    Call {
+        id: String,
+        /// Address of the calling Terminal on the Host.
+        terminal: String,
+        /// Not a subagent's Call.
+        top_level: bool,
+        title: String,
+        /// May be cut short (ending in `…`); Call history has it in full.
+        body: String,
+        urgency: crate::calls::CallUrgency,
+        /// An answer names one of these by its index.
+        choices: Vec<String>,
+        /// When the Host recorded it, Unix milliseconds.
+        at_ms: u64,
+    },
 }
 
 /// An opened push, from a paired Host.
@@ -244,9 +276,61 @@ async fn http(
         .map_err(|e| e.to_string())
 }
 
+/// The most of a Relay's error body shown (an error page can be long).
+const BODY_SHOWN: usize = 200;
+
 fn status_error(r: &HttpResponse) -> String {
     let body = String::from_utf8_lossy(&r.body);
-    format!("the Relay answered HTTP {}: {}", r.status, body.trim())
+    let body = body.split_whitespace().collect::<Vec<_>>().join(" ");
+    let body = match body.char_indices().nth(BODY_SHOWN) {
+        Some((cut, _)) => format!("{}…", &body[..cut]),
+        None => body,
+    };
+    format!("the Relay answered HTTP {}: {body}", r.status)
+}
+
+/// Checks a Relay URL typed by the user and returns it without surrounding
+/// spaces or a trailing `/`, with the scheme in lower case. `https://` only;
+/// `http://` is allowed for this device's own address (a Relay run locally
+/// for development), as the pairing token would otherwise travel in clear.
+pub(crate) fn normalize_relay_url(raw: &str) -> Result<String, String> {
+    let url = raw.trim();
+    if url.chars().any(char::is_whitespace) {
+        return Err("the Relay URL must not contain spaces".into());
+    }
+    let (scheme, rest) = url.split_once("://").unwrap_or(("", url));
+    let rest = rest.trim_end_matches('/');
+    let scheme = scheme.to_ascii_lowercase();
+    if scheme != "https" && scheme != "http" {
+        return Err(
+            "the Relay URL must start with https:// (for example https://relay.example.com)".into(),
+        );
+    }
+    if rest.contains(['?', '#']) {
+        return Err("the Relay URL must not have a query or #fragment".into());
+    }
+    let authority = rest.split('/').next().unwrap_or_default();
+    if authority.contains('@') {
+        return Err("the Relay URL must not contain a user name or password".into());
+    }
+    let host = match authority.strip_prefix('[') {
+        Some(v6) => v6.split(']').next().unwrap_or_default(),
+        None => authority.split(':').next().unwrap_or_default(),
+    };
+    if host.is_empty() {
+        return Err("the Relay URL has no host".into());
+    }
+    let loopback = host.eq_ignore_ascii_case("localhost")
+        || host
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|ip| ip.is_loopback());
+    if scheme == "http" && !loopback {
+        return Err(
+            "the Relay URL must start with https://: over http:// the pairing would travel unencrypted"
+                .into(),
+        );
+    }
+    Ok(format!("{scheme}://{rest}"))
 }
 
 async fn register(
@@ -261,17 +345,31 @@ async fn register(
         None,
         Some(serde_json::json!({"platform": device.platform, "device_token": device.token})),
     )
-    .await?;
-    if r.status != 201 && r.status != 200 {
-        return Err(status_error(&r));
+    .await
+    .map_err(|e| format!("could not reach the Relay at {relay_url}: {e}"))?;
+    let not_aries = || format!("{relay_url} is not an Aries Relay: its reply has no pairing token");
+    match r.status {
+        200 | 201 => {}
+        404 | 405 => {
+            return Err(format!(
+                "no Aries Relay answers at {relay_url} ({})",
+                status_error(&r)
+            ));
+        }
+        429 => {
+            return Err(format!(
+                "the Relay refused: too many new pairings from this network, try again in an hour ({})",
+                status_error(&r)
+            ));
+        }
+        _ => return Err(status_error(&r)),
     }
-    let v: serde_json::Value =
-        serde_json::from_slice(&r.body).map_err(|e| format!("Relay reply: {e}"))?;
+    let v: serde_json::Value = serde_json::from_slice(&r.body).map_err(|_| not_aries())?;
     v["token"]
         .as_str()
         .filter(|t| !t.is_empty())
         .map(str::to_owned)
-        .ok_or_else(|| "the Relay reply has no token".into())
+        .ok_or_else(not_aries)
 }
 
 /// `DELETE /v1/pairing`. The Relay answers 204 also for an unknown token.
@@ -362,15 +460,8 @@ pub(crate) struct Enable {
 }
 
 pub(crate) async fn enable(e: Enable) -> Result<PushPairing, CoreError> {
-    let relay_url = e.relay_url.trim().trim_end_matches('/').to_owned();
-    // An earlier pairing of this Host: revoke it (the Beacon also does when
-    // it is re-paired).
-    if let Ok(Some(old)) = pairing_of(&e.store, e.vault.as_ref(), &e.host_id) {
-        let _ = revoke(&e.http, &old.relay_url, &old.token).await;
-        forget(&e.store, &e.host_id)?;
-    }
-
     e.progress.on_step(PushStep::Register);
+    let relay_url = normalize_relay_url(&e.relay_url).map_err(|d| failed(PushStep::Register, d))?;
     let phone = KeyPair::generate();
     let token = register(&e.http, &relay_url, &e.device)
         .await
@@ -404,6 +495,18 @@ pub(crate) async fn enable(e: Enable) -> Result<PushPairing, CoreError> {
             return Err(failed(PushStep::Pair, d));
         }
     };
+    // The Beacon now uses the new pairing (and revoked its old token on the
+    // old Relay, best effort). Revoke the old one from here too; if the old
+    // Relay cannot be reached, the queue retries it.
+    let old = read_stored(&e.store, &e.host_id)?;
+    if let Some(old) = &old {
+        let mut queue = read_queue(&e.store)?;
+        queue.push(Revocation {
+            relay_url: old.relay_url.clone(),
+            sealed: old.sealed.clone(),
+        });
+        write_queue(&e.store, &queue)?;
+    }
     save(
         &e.store,
         e.vault.as_ref(),
@@ -415,6 +518,10 @@ pub(crate) async fn enable(e: Enable) -> Result<PushPairing, CoreError> {
             beacon_key,
         },
     )?;
+    if old.is_some() {
+        e.progress.on_step(PushStep::Unpair);
+        flush(e.store.clone(), e.vault.clone(), e.http.clone()).await;
+    }
 
     e.progress.on_step(PushStep::Test);
     test(&e.ssh).await?;
@@ -473,6 +580,40 @@ pub(crate) fn open(
             Ok(message) => {
                 let content = match message {
                     envelope::PushMessage::Test { sent_at } => PushContent::Test { sent_at },
+                    envelope::PushMessage::Status {
+                        terminal,
+                        name,
+                        title,
+                        top_level,
+                        status,
+                        at,
+                    } => PushContent::Status {
+                        terminal,
+                        name,
+                        title,
+                        top_level,
+                        status: status.into(),
+                        at,
+                    },
+                    envelope::PushMessage::Call {
+                        id,
+                        terminal,
+                        top_level,
+                        title,
+                        body,
+                        urgency,
+                        choices,
+                        at_ms,
+                    } => PushContent::Call {
+                        id,
+                        terminal,
+                        top_level,
+                        title,
+                        body,
+                        urgency: urgency.into(),
+                        choices,
+                        at_ms,
+                    },
                 };
                 return Ok(PushNotice {
                     host_id,

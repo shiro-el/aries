@@ -31,7 +31,7 @@ pub(crate) struct Removal<'a> {
 pub(crate) type Step = fn(&Removal) -> Result<(), CoreError>;
 
 /// Cleanup steps, in order. Tickets append theirs (see the module doc).
-pub(crate) const STEPS: &[Step] = &[queue_push_revocation, remove_local_state];
+pub(crate) const STEPS: &[Step] = &[queue_push_revocation, remove_local_state, remove_chat_cache];
 
 /// Runs every step for `host`. The caller drops the Host record afterwards.
 pub(crate) fn run(host: &SavedHost, store: &Store) -> Result<(), CoreError> {
@@ -52,4 +52,9 @@ fn remove_local_state(r: &Removal) -> Result<(), CoreError> {
 /// Must run before [`remove_local_state`], which deletes the pairing file.
 fn queue_push_revocation(r: &Removal) -> Result<(), CoreError> {
     crate::push::queue_revocation(r.store, &r.host.id)
+}
+
+/// Deletes the Host's cached Chats (ticket 44). Works without the cache key.
+fn remove_chat_cache(r: &Removal) -> Result<(), CoreError> {
+    crate::chat_cache::remove_host(r.store.root(), &r.host.id)
 }

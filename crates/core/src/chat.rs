@@ -14,11 +14,13 @@ use aries_protocol::chat::{
     ChatBody, ChatEvent, ChatItem, ChatLine, ChatLineError, ChatState, ToolStatus,
 };
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::sync::{Mutex, watch};
+use tokio::sync::{Mutex, Notify, watch};
 use tokio::task::JoinHandle;
+use tokio::time::Instant;
 
 use aries_protocol::answer::{Answer, AnswerOutcome, AnswerReply};
 
+use crate::chat_cache::{CachedChat, ChatCache, SAVE_EVERY};
 use crate::error::{AnswerProblem, CoreError};
 use crate::transport::{Ssh, Stream};
 
@@ -178,6 +180,8 @@ pub struct ChatSnapshot {
 #[derive(Debug, Clone)]
 pub(crate) struct ChatModel {
     entries: Vec<ChatEntry>,
+    /// The Beacon's items behind `entries`, same order (what the cache keeps).
+    items: Vec<ChatItem>,
     index: HashMap<String, usize>,
     pub status: ChatStatus,
     pub cursor: Option<String>,
@@ -191,10 +195,41 @@ impl ChatModel {
     pub fn new(cursor: Option<String>) -> Self {
         Self {
             entries: Vec::new(),
+            items: Vec::new(),
             index: HashMap::new(),
             status: ChatStatus::Connecting,
             cursor,
             images: Images::default(),
+        }
+    }
+
+    /// Shows a cached Chat (its images included) and resumes after its cursor.
+    pub fn seed(&mut self, chat: CachedChat) {
+        self.cursor = chat.cursor;
+        for item in chat.items {
+            self.upsert(item);
+        }
+    }
+
+    pub fn to_cache(&self) -> CachedChat {
+        CachedChat {
+            items: self.items.clone(),
+            cursor: self.cursor.clone(),
+        }
+    }
+
+    fn upsert(&mut self, item: ChatItem) {
+        let entry = self.entry(item.clone());
+        match self.index.get(&entry.id) {
+            Some(&i) => {
+                self.entries[i] = entry;
+                self.items[i] = item;
+            }
+            None => {
+                self.index.insert(entry.id.clone(), self.entries.len());
+                self.entries.push(entry);
+                self.items.push(item);
+            }
         }
     }
 
@@ -265,23 +300,16 @@ impl ChatModel {
         match line.event {
             ChatEvent::Reset { .. } => {
                 self.entries.clear();
+                self.items.clear();
                 self.index.clear();
                 self.images().clear();
             }
-            ChatEvent::Item { item } => {
-                let entry = self.entry(item);
-                match self.index.get(&entry.id) {
-                    Some(&i) => self.entries[i] = entry,
-                    None => {
-                        self.index.insert(entry.id.clone(), self.entries.len());
-                        self.entries.push(entry);
-                    }
-                }
-            }
+            ChatEvent::Item { item } => self.upsert(item),
             ChatEvent::Remove { id } => {
                 self.forget_images(&id);
                 if self.index.remove(&id).is_some() {
                     self.entries.retain(|e| e.id != id);
+                    self.items.retain(|e| e.id != id);
                     self.index = (self.entries.iter().enumerate())
                         .map(|(i, e)| (e.id.clone(), i))
                         .collect();
@@ -548,7 +576,17 @@ const SILENCE: Duration = Duration::from_secs(45);
 pub struct ChatWatch {
     rx: Arc<Mutex<watch::Receiver<Option<ChatSnapshot>>>>,
     task: JoinHandle<()>,
+    wake: Arc<Wake>,
     images: Images,
+}
+
+/// The app's reconnect signals (see [`ChatWatch::reconnect`]).
+#[derive(Default)]
+struct Wake {
+    /// Drop the current line and connect again now.
+    replace: Notify,
+    /// Skip the wait before the next attempt.
+    retry: Notify,
 }
 
 impl ChatWatch {
@@ -556,17 +594,87 @@ impl ChatWatch {
         host: ChatHost,
         terminal: String,
         cursor: Option<String>,
+        cache: Option<CacheSlot>,
         retry: Duration,
     ) -> Self {
         let model = ChatModel::new(cursor);
         let (tx, rx) = watch::channel(Some(model.snapshot()));
         let images = model.images.clone();
-        let task = crate::runtime().spawn(follow(host, terminal, model, tx, retry));
+        let wake = Arc::new(Wake::default());
+        let signals = wake.clone();
+        let task = crate::runtime().spawn(async move {
+            let mut model = model;
+            if let Some(slot) = &cache
+                && let Some(cached) = slot.load(&terminal).await
+                // An explicit cursor wins unless it is the cached one.
+                && (model.cursor.is_none() || model.cursor == cached.cursor)
+            {
+                model.seed(cached);
+                if tx.send(Some(model.snapshot())).is_err() {
+                    return;
+                }
+            }
+            follow(host, terminal, model, cache, tx, retry, &signals).await
+        });
         Self {
             rx: Arc::new(Mutex::new(rx)),
             task,
+            wake,
             images,
         }
+    }
+}
+
+/// Where a watch keeps its Chat between runs.
+pub(crate) struct CacheSlot {
+    pub cache: ChatCache,
+    pub host: String,
+}
+
+impl CacheSlot {
+    async fn load(&self, terminal: &str) -> Option<CachedChat> {
+        let (cache, host, terminal) = (self.cache.clone(), self.host.clone(), terminal.to_owned());
+        tokio::task::spawn_blocking(move || cache.load(&host, &terminal))
+            .await
+            .ok()?
+            .ok()?
+    }
+
+    /// Best effort: a Chat that cannot be cached still shows.
+    async fn save(&self, terminal: &str, model: &ChatModel) {
+        let (cache, host, terminal) = (self.cache.clone(), self.host.clone(), terminal.to_owned());
+        let chat = model.to_cache();
+        let _ = tokio::task::spawn_blocking(move || cache.save(&host, &terminal, &chat)).await;
+    }
+}
+
+/// Writes the model to the cache at most every [`SAVE_EVERY`], and when
+/// asked to flush.
+struct Saver<'a> {
+    slot: Option<&'a CacheSlot>,
+    dirty: bool,
+    next: Instant,
+}
+
+impl Saver<'_> {
+    /// When the pending write is due, if one is pending.
+    fn due(&self) -> Option<Instant> {
+        (self.dirty && self.slot.is_some()).then_some(self.next)
+    }
+
+    async fn changed(&mut self, terminal: &str, model: &ChatModel) {
+        self.dirty = true;
+        if Instant::now() >= self.next {
+            self.flush(terminal, model).await;
+        }
+    }
+
+    async fn flush(&mut self, terminal: &str, model: &ChatModel) {
+        if let (true, Some(slot)) = (self.dirty, self.slot) {
+            slot.save(terminal, model).await;
+            self.next = Instant::now() + SAVE_EVERY;
+        }
+        self.dirty = false;
     }
 }
 
@@ -574,9 +682,16 @@ async fn follow(
     host: ChatHost,
     terminal: String,
     mut model: ChatModel,
+    cache: Option<CacheSlot>,
     tx: watch::Sender<Option<ChatSnapshot>>,
     retry: Duration,
+    wake: &Wake,
 ) {
+    let mut saver = Saver {
+        slot: cache.as_ref(),
+        dirty: false,
+        next: Instant::now(),
+    };
     let mut backoff = retry;
     loop {
         let command = command(&terminal, model.cursor.as_deref());
@@ -589,23 +704,42 @@ async fn follow(
                 guard,
             } = stream;
             let mut lines = BufReader::new(reader).lines();
+            let mut heard = Instant::now();
             loop {
-                let next = tokio::time::timeout(SILENCE, lines.next_line()).await;
-                let Ok(Ok(Some(text))) = next else { break };
+                let silent = heard + SILENCE;
+                let wake_at = saver.due().map_or(silent, |d| d.min(silent));
+                let next = tokio::select! {
+                    next = tokio::time::timeout_at(wake_at, lines.next_line()) => next,
+                    _ = wake.replace.notified() => break,
+                };
+                let text = match next {
+                    Ok(Ok(Some(text))) => text,
+                    Ok(_) => break,
+                    Err(_) if Instant::now() >= silent => break,
+                    Err(_) => {
+                        saver.flush(&terminal, &model).await;
+                        continue;
+                    }
+                };
+                heard = Instant::now();
                 model.apply_text(&text);
                 backoff = retry;
                 // Publish once the burst is read, not for every line.
                 let burst_read = lines.get_ref().buffer().is_empty();
-                if (burst_read || model.status.is_final())
-                    && tx.send(Some(model.snapshot())).is_err()
-                {
-                    return;
+                if burst_read || model.status.is_final() {
+                    saver.changed(&terminal, &model).await;
+                    if tx.send(Some(model.snapshot())).is_err() {
+                        saver.flush(&terminal, &model).await;
+                        return;
+                    }
                 }
                 if model.status.is_final() {
+                    saver.flush(&terminal, &model).await;
                     return;
                 }
             }
             drop((writer, guard));
+            saver.flush(&terminal, &model).await;
         }
         if model.status.is_final() {
             return;
@@ -614,8 +748,11 @@ async fn follow(
         if tx.send(Some(model.snapshot())).is_err() {
             return;
         }
-        tokio::time::sleep(backoff).await;
-        backoff = (backoff * 2).min(Duration::from_secs(30));
+        tokio::select! {
+            _ = tokio::time::sleep(backoff) => backoff = (backoff * 2).min(Duration::from_secs(30)),
+            _ = wake.replace.notified() => backoff = retry,
+            _ = wake.retry.notified() => backoff = retry,
+        }
     }
 }
 
@@ -643,6 +780,18 @@ impl ChatWatch {
     }
 
     /// Stops following; the Beacon on the Host exits.
+    /// The phone's network changed: the line is likely dead, so drop it
+    /// and connect again now, after the last cursor.
+    pub fn reconnect(&self) {
+        self.wake.replace.notify_waiters();
+    }
+
+    /// The app is back in front: if the Chat waits to reconnect, try now.
+    /// A live line is kept (a dead one is noticed by its silence).
+    pub fn retry_now(&self) {
+        self.wake.retry.notify_waiters();
+    }
+
     pub fn stop(&self) {
         self.task.abort();
     }

@@ -7,6 +7,7 @@ import io.github.shiroel.aries.core.AriesCoreInterface
 import io.github.shiroel.aries.core.CallFeedState
 import io.github.shiroel.aries.core.CallInfo
 import io.github.shiroel.aries.core.CallListener
+import io.github.shiroel.aries.core.CallReplyOutcome
 import io.github.shiroel.aries.core.CallWatch
 import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Host
@@ -17,7 +18,21 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** One Call and the Host it came from. */
-data class CallEntry(val host: Host, val call: CallInfo)
+data class CallEntry(val host: Host, val call: CallInfo) {
+    val key get() = "${host.id}/${call.id}"
+
+    /** It can still be answered with a Choice from here. */
+    val answerable get() = call.terminal != null && call.answer == null && call.choices.isNotEmpty()
+}
+
+/** What the last answer from Call history ran into, beyond the recorded answer. */
+sealed interface ReplyNote {
+    /** The reply never started on the Host (nothing was typed); try again. */
+    data class NotSent(val detail: String) : ReplyNote
+
+    /** The Beacon answered with [outcome] (anything but a plain delivery). */
+    data class Outcome(val outcome: CallReplyOutcome) : ReplyNote
+}
 
 /**
  * Every Host's Call history, kept live by one core watch per Host, and the
@@ -44,6 +59,45 @@ class CallsModel(
     /** Hosts whose feed is down, with why (shown in Call history). */
     var problems by mutableStateOf<Map<String, String>>(emptyMap())
         private set
+
+    /** Calls being answered, by [CallEntry.key]. */
+    var replying by mutableStateOf<Set<String>>(emptySet())
+        private set
+
+    /** The last answer's note per Call, by [CallEntry.key]. */
+    var replyNotes by mutableStateOf<Map<String, ReplyNote>>(emptyMap())
+        private set
+
+    /**
+     * Answers [entry]'s Call with Choice [choice]: the Host's Beacon types it
+     * into the calling Terminal once. The recorded answer shows on the Call
+     * right away (the feed confirms it later).
+     */
+    fun reply(entry: CallEntry, choice: Int) {
+        val key = entry.key
+        if (key in replying) return
+        replying = replying + key
+        replyNotes = replyNotes - key
+        scope.launch {
+            val note: ReplyNote? = try {
+                val r = withContext(keyWork) { core.replyCall(entry.host.id, entry.call.id, choice.toUInt()) }
+                r.answer?.let { answer ->
+                    perHost[entry.host.id] = perHost[entry.host.id].orEmpty().map {
+                        if (it.id == entry.call.id) it.copy(answer = answer) else it
+                    }
+                    publish()
+                }
+                when (r.outcome) {
+                    CallReplyOutcome.DELIVERED, CallReplyOutcome.FAILED, CallReplyOutcome.UNCONFIRMED -> null
+                    else -> ReplyNote.Outcome(r.outcome)
+                }
+            } catch (e: CoreException) {
+                ReplyNote.NotSent(e.message.orEmpty())
+            }
+            replying = replying - key
+            replyNotes = if (note == null) replyNotes - key else replyNotes + (key to note)
+        }
+    }
 
     /** A Host's watch; [watch] is `null` while it is being started. */
     private class Slot {

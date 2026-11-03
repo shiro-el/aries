@@ -32,6 +32,7 @@ cd android && ./gradlew :app:testDebugUnitTest      # Compose UI tests against a
 cd android && ./gradlew :app:assembleDebug          # debug APK (builds the core with cargo-ndk)
 cd android && ./gradlew :app:connectedDebugAndroidTest   # device tests (Android Keystore); needs a device/emulator
 scripts/measure-terminal-latency.sh 40              # key -> drawn echo on a device over SSH (docker); logcat AriesLatency
+scripts/test-korean-ime.sh                          # Korean typed on the real Gboard (한국어 두벌식 added by hand)
 cd relay && npm ci --legacy-peer-deps && npm run typecheck && npm test   # Relay HTTP API (Workers runtime, fake FCM)
 ```
 
@@ -125,6 +126,26 @@ a new notification kind is a new `PushMessage` variant plus its
 delete the pairing on the Relay (removal queues it; the app sends the queue
 with `flush_push_revocations`).
 
+Agent status pushes: `aries-beacon serve` subscribes to the local
+herdr-core's events (plain mode), tracks status with
+`aries_beacon::status_watch` (the shared `agent_status` rule; top-level =
+Terminal without `parent`; an Agent that stays Blocked for the same reason
+or stays in Error is pushed once; the first snapshot after start is a
+baseline) and sends `PushMessage::Status` for what
+`aries_protocol::push_policy::PushPolicy` allows (default Blocked + Error,
+top-level only; `<state>/push-policy.json` overrides). The real Claude Code
+check: `ARIES_REAL_CLAUDE=1 cargo test -p aries-beacon --test status_push -- --ignored real_claude`.
+
+Call pushes: `aries-beacon call` records the Call first, prints it, then
+sends `PushMessage::Call` (ID, Terminal, title, body, urgency, Choices)
+when `PushPolicy::allows_call` agrees (confirmed caller, urgency above
+`record`, top-level unless `child_agents`). A push failure is a stderr line
+and exit 0; the Call stays in Call history. The body is cut to fit the
+envelope. Android shows each Call on the channel for its urgency
+(`calls_check`, `calls_urgent`, `calls_emergency`). Tests:
+`cargo test -p aries-beacon --test call_push` (FakeRelay
+`fail_pushes(status)` plays a failing Relay).
+
 The Relay is `relay/` (Cloudflare Worker + D1, TypeScript). It stores only
 pairing token hashes, device push tokens and rate limit counters, and never
 stores or logs an envelope.
@@ -146,9 +167,13 @@ npx wrangler deploy -c wrangler.deploy.jsonc
 ```
 
 Wrangler reads `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`. The app
-gets its Relay URL at build time from `ARIES_RELAY_URL` (repo variable in CI,
-or `-Paries.relayUrl`), and Firebase from `android/app/google-services.json`
-(never committed); without either the app says push is unavailable.
+gets its default Relay URL at build time from `ARIES_RELAY_URL` (repo variable
+in CI, or `-Paries.relayUrl`), and Firebase from
+`android/app/google-services.json` (never committed); without Firebase the app
+says push is unavailable, without a default Relay it asks for one. The user can
+set another Relay per Host (`enable_push` again with the new URL: it pairs the
+new Relay first, then unpairs the old one). Running your own Relay is in
+`relay/README.md`.
 
 ## Releases
 

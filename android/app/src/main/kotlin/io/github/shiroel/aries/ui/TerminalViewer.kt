@@ -158,9 +158,21 @@ class TerminalViewer(val terminal: TerminalInfo) {
     var phoneGrid by mutableStateOf<Pair<Int, Int>?>(null)
         internal set
 
-    /** Text the keyboard is still composing (not sent yet). */
+    /**
+     * The part of the keyboard's composing text not sent yet: the Hangul
+     * syllable still being built (shown at the cursor and in the input bar).
+     */
     var composing by mutableStateOf("")
-        internal set
+        private set
+
+    /** The rest of the composing text, already typed into the Terminal. */
+    private var echoed = ""
+
+    /**
+     * Called when typing outside the keyboard (the key bar, a key event) ends
+     * a composition the keyboard may still think is open, so it can reset.
+     */
+    var onCompositionInterrupted: (() -> Unit)? = null
 
     /** Ctrl from the key bar, held for the next key only. */
     var ctrl by mutableStateOf(false)
@@ -177,18 +189,75 @@ class TerminalViewer(val terminal: TerminalInfo) {
         ctrl = !ctrl
     }
 
+    /**
+     * The keyboard's composing text is now [text]. All of it but a trailing
+     * Hangul syllable goes to the Terminal right away, so keyboards that
+     * compose whole Latin words still type key by key; the syllable is held
+     * until the keyboard moves on, as it can still change (한 + ㅏ -> 하나).
+     */
+    fun compose(text: String) {
+        val last = if (text.isEmpty()) 0 else text.codePointBefore(text.length)
+        // A syllable already sent and unchanged (하나 -> 하) stays sent.
+        val held = if (isHangul(last) && !echoed.startsWith(text)) Character.charCount(last) else 0
+        retype(text.substring(0, text.length - held))
+        composing = text.substring(text.length - held)
+    }
+
+    /** The keyboard committed [text] in place of what it was composing. */
+    fun commit(text: String) {
+        retype(text)
+        echoed = ""
+        composing = ""
+    }
+
+    /** The keyboard finished composing: what it composed stays as is. */
+    fun finishComposing() = commit(echoed + composing)
+
+    /** Deletes the last [count] characters being composed; false when nothing is. */
+    fun deleteComposing(count: Int): Boolean {
+        val text = echoed + composing
+        if (text.isEmpty()) return false
+        var end = text.length
+        repeat(count) { if (end > 0) end = text.offsetByCodePoints(end, -1) }
+        compose(text.substring(0, end))
+        return true
+    }
+
+    /** Makes the composed text already in the Terminal [target]: Backspace over what differs, type the rest. */
+    private fun retype(target: String) {
+        var same = 0
+        while (same < echoed.length && same < target.length && echoed.codePointAt(same) == target.codePointAt(same)) {
+            same += Character.charCount(echoed.codePointAt(same))
+        }
+        repeat(echoed.codePointCount(same, echoed.length)) { pressNow(TerminalKey.Backspace, NoMods) }
+        typeNow(target.substring(same))
+        echoed = target
+    }
+
+    /** Typing that is not the keyboard's composing ends the composition first, keeping its text. */
+    private fun interruptComposition() {
+        if (echoed.isEmpty() && composing.isEmpty()) return
+        finishComposing()
+        onCompositionInterrupted?.invoke()
+    }
+
     /** Types [text]; a newline is Enter. A held Ctrl applies to the first character. */
     fun type(text: String) {
+        interruptComposition()
+        typeNow(text)
+    }
+
+    private fun typeNow(text: String) {
         var rest = text
         while (rest.isNotEmpty()) {
             if (rest[0] == '\n') {
-                press(TerminalKey.Enter)
+                pressNow(TerminalKey.Enter, NoMods)
                 rest = rest.substring(1)
                 continue
             }
             if (ctrl) {
                 val n = Character.charCount(rest.codePointAt(0))
-                press(TerminalKey.Char(rest.substring(0, n)))
+                pressNow(TerminalKey.Char(rest.substring(0, n)), NoMods)
                 rest = rest.substring(n)
                 continue
             }
@@ -199,7 +268,12 @@ class TerminalViewer(val terminal: TerminalInfo) {
     }
 
     /** Presses [key] with a held Ctrl (then lets go of it) and any extra [mods]. */
-    fun press(key: TerminalKey, mods: KeyMods = KeyMods(ctrl = false, alt = false, shift = false)) {
+    fun press(key: TerminalKey, mods: KeyMods = NoMods) {
+        interruptComposition()
+        pressNow(key, mods)
+    }
+
+    private fun pressNow(key: TerminalKey, mods: KeyMods) {
         send(TerminalInput.Key(key, mods.copy(ctrl = mods.ctrl || ctrl)))
         ctrl = false
     }
@@ -220,6 +294,13 @@ class TerminalViewer(val terminal: TerminalInfo) {
         sb.toString().trimEnd()
     }
 }
+
+private val NoMods = KeyMods(ctrl = false, alt = false, shift = false)
+
+/** Hangul syllables and jamo: what a Korean keyboard builds up one syllable at a time. */
+private fun isHangul(cp: Int): Boolean =
+    cp in 0xAC00..0xD7A3 || cp in 0x1100..0x11FF || cp in 0x3130..0x318F ||
+        cp in 0xA960..0xA97F || cp in 0xD7B0..0xD7FF
 
 /** One thing typed into a Terminal. */
 sealed interface TerminalInput {
@@ -424,6 +505,12 @@ private fun TerminalCanvas(viewer: TerminalViewer, look: TerminalLook, modifier:
                     Offset(c.column.toInt() * cellW, c.row.toInt() * cellH),
                     Size(cellW, cellH),
                 )
+                // The syllable still being composed, where it will land (two cells, as Hangul is wide).
+                if (viewer.composing.isNotEmpty()) {
+                    val at = Offset(c.column.toInt() * cellW, c.row.toInt() * cellH)
+                    drawRect(TerminalForeground, at, Size(2 * cellW, cellH))
+                    drawText(measurer, viewer.composing, at, base.copy(color = TerminalBackground, textDecoration = TextDecoration.Underline))
+                }
             }
             look.selection?.ordered()?.let { s ->
                 for (row in s.start.row..s.end.row) {

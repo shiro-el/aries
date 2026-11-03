@@ -7,8 +7,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use aries_core::{
-    BeaconArtifact, BeaconFetcher, BeaconRelease, CallFeedState, CallInfo, CallListener, CoreError,
-    Endpoint, FetchError,
+    BeaconArtifact, BeaconFetcher, BeaconRelease, CallFeedState, CallInfo, CallListener,
+    CallReplyOutcome, CoreError, Endpoint, FetchError,
 };
 use aries_test_support::{SystemdHost, beacon_bin};
 use common::core_in;
@@ -111,6 +111,12 @@ async fn the_app_reads_and_follows_call_history_over_ssh() {
     assert_eq!(calls[0].choices, ["Yes"]);
     // `su` is no herdr-core Terminal: recorded, caller unconfirmed.
     assert_eq!(calls[0].terminal, None);
+    // So `reply` runs over SSH but has no Terminal to type into.
+    let reply = core
+        .reply_call(id.clone(), calls[0].id.clone(), 0)
+        .await
+        .unwrap();
+    assert_eq!(reply.outcome, CallReplyOutcome::NotAnswerable);
 
     let rec = Arc::new(Recorder::default());
     let watch = core.watch_calls(id.clone(), rec.clone()).await.unwrap();

@@ -5,6 +5,7 @@
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -24,6 +25,8 @@ pub struct RelayLog {
 pub struct FakeRelay {
     url: String,
     log: Arc<Mutex<RelayLog>>,
+    /// Non-zero: `/v1/push` answers with this status and records nothing.
+    push_failure: Arc<AtomicU16>,
 }
 
 impl FakeRelay {
@@ -39,6 +42,8 @@ impl FakeRelay {
         let url = format!("http://{}", listener.local_addr().unwrap());
         let log = Arc::new(Mutex::new(RelayLog::default()));
         let shared = log.clone();
+        let push_failure = Arc::new(AtomicU16::new(0));
+        let failure = push_failure.clone();
         std::thread::spawn(move || {
             let mut next = 0u32;
             for stream in listener.incoming() {
@@ -46,12 +51,23 @@ impl FakeRelay {
                 next += 1;
                 let log = shared.clone();
                 let n = next;
+                let failure = failure.load(Ordering::SeqCst);
                 std::thread::spawn(move || {
-                    let _ = serve(stream, &log, n);
+                    let _ = serve(stream, &log, n, failure);
                 });
             }
         });
-        Self { url, log }
+        Self {
+            url,
+            log,
+            push_failure,
+        }
+    }
+
+    /// From now on every `POST /v1/push` fails with `status` (e.g. 429, 503)
+    /// and is not recorded; `0` makes pushes work again.
+    pub fn fail_pushes(&self, status: u16) {
+        self.push_failure.store(status, Ordering::SeqCst);
     }
 
     /// Base URL, `http://ip:port` (no trailing slash).
@@ -121,7 +137,12 @@ fn read_request(stream: &TcpStream) -> std::io::Result<Request> {
     })
 }
 
-fn serve(mut stream: TcpStream, log: &Mutex<RelayLog>, n: u32) -> std::io::Result<()> {
+fn serve(
+    mut stream: TcpStream,
+    log: &Mutex<RelayLog>,
+    n: u32,
+    push_failure: u16,
+) -> std::io::Result<()> {
     stream.set_read_timeout(Some(Duration::from_secs(10)))?;
     let req = read_request(&stream)?;
     let bearer = req
@@ -157,6 +178,9 @@ fn serve(mut stream: TcpStream, log: &Mutex<RelayLog>, n: u32) -> std::io::Resul
             log.pairings.remove(&t);
             log.deleted.push(t);
             (204, String::new())
+        }
+        ("POST", "/v1/push") if push_failure != 0 => {
+            (push_failure, r#"{"error":"failing"}"#.to_owned())
         }
         ("POST", "/v1/push") => match bearer.filter(|t| log.pairings.contains_key(t)) {
             Some(t) => {
