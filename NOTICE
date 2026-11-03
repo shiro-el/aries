@@ -5,6 +5,11 @@ Licensed under the Apache License, Version 2.0 (see LICENSE), except:
 
 - assets/aries/ (the Aries logo set and images derived from it) is excluded
   from the Apache License and carries its own license: assets/aries/LICENSE.
+- android/app/src/main/res/font/jetbrains_mono*.ttf (JetBrains Mono) is
+  Copyright 2020 The JetBrains Mono Project Authors and licensed under the
+  SIL Open Font License 1.1. The full notice ships in the APK at
+  assets/licenses/JetBrainsMono-OFL.txt and is accessible in Terminal display
+  settings. Source: https://github.com/JetBrains/JetBrainsMono
 
 Third-party notices for the software in the Android app are generated at
 build time: assets/licenses/rust-crates.txt (Rust crates in the core) and

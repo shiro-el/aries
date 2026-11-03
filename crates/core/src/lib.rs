@@ -51,7 +51,7 @@ pub use chat::{
     ChatToolStatus, ChatWatch,
 };
 pub use error::{AnswerProblem, CoreError, Incompatibility, VaultError};
-pub use files::{RemoteDirectory, RemoteFileEntry, RemoteFilePage};
+pub use files::{RemoteDirectory, RemoteFileBytes, RemoteFileEntry, RemoteFilePage};
 pub use git_changes::*;
 pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
 pub use host_model::{AgentStatus, BlockedReason, TerminalWatch};
