@@ -78,6 +78,7 @@ class PushService : FirebaseMessagingService() {
          * is locked, otherwise an "Open app" button (ticket 36).
          */
         fun show(context: Context, notice: PushNotice, canAnswerInBackground: (hostId: String) -> Boolean = { false }) {
+            val context = AppLanguage.context(context)
             val manager = context.getSystemService(NotificationManager::class.java)
             val content = notice.content
             if (content is PushContent.Progress) {
@@ -189,6 +190,7 @@ class PushService : FirebaseMessagingService() {
 
         /** A Call's notification without buttons; [CallNotifications] adds them and posts it. */
         internal fun callBuilder(context: Context, manager: NotificationManager, hostId: String, hostName: String, call: PushContent.Call): Notification.Builder {
+            val context = AppLanguage.context(context)
             val choices = call.choices.takeIf { it.isNotEmpty() }
                 ?.let { context.getString(R.string.call_choices, it.joinToString(" / ")) }
             val text = call.body.ifEmpty { choices ?: "" }

@@ -2,7 +2,7 @@ package io.github.shiroel.aries
 
 import android.content.Intent
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.CompositionLocalProvider
@@ -26,7 +26,7 @@ import kotlinx.coroutines.launch
 import androidx.lifecycle.lifecycleScope
 import io.github.shiroel.aries.core.CoreException
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
     private val app get() = application as AriesApplication
     private lateinit var appUnlock: DeviceAppUnlock
     private lateinit var lockSession: AppLockSession
@@ -61,7 +61,10 @@ class MainActivity : ComponentActivity() {
                     core, scope, keyWork = Dispatchers.IO, pushPlatform = push,
                     locationStore = LastLocationStore.from(this),
                     onSavedLaunchesChanged = ::refreshLaunchShortcuts,
-                ).also { this@MainActivity.model = it }
+                ).also {
+                    this@MainActivity.model = it
+                    if (savedInstanceState?.getBoolean("settings-open") == true) it.openSettings()
+                }
             }
             LaunchedEffect(model) { resumeModel() }
             val guidance = remember {
@@ -157,6 +160,8 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        // A language change recreates the activity; keep its Settings destination open.
+        outState.putBoolean("settings-open", model?.screen == io.github.shiroel.aries.ui.Screen.Settings)
         outState.putParcelable("pending-push-target", pushTarget?.intent(this))
         outState.putParcelable("pending-launch-target", savedLaunchTarget?.intent(this))
         outState.putBoolean("pending-tile-target", tileRequested)

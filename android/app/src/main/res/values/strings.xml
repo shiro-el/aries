@@ -45,6 +45,13 @@
     <string name="github_draft_failed">The draft could not be saved on this phone. Keep this view open and try editing again.</string>
     <string name="github_draft_limit">Comments can contain at most 64 KiB of text.</string>
 
+    <!-- App language (130) -->
+    <string name="app_language_title">App language</string>
+    <string name="app_language_system">System default</string>
+    <string name="app_language_english">English</string>
+    <string name="app_language_korean">한국어</string>
+    <string name="app_language_search">Search languages</string>
+
     <!-- App lock (117) -->
     <string name="app_lock_settings_title">App lock</string>
     <string name="app_lock_enabled_label">Require authentication</string>

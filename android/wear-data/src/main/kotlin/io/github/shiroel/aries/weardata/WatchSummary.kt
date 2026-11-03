@@ -9,14 +9,21 @@ import com.google.android.gms.wearable.PutDataRequest
 data class WatchAgent(val hostId: String, val terminal: String, val name: String, val status: String)
 
 /** Versioned, small Data Layer contract; no SSH keys or conversation content. */
-data class WatchSummary(val waiting: Int, val agents: List<WatchAgent>, val fetchedAtMs: Long) {
+data class WatchSummary(
+    val waiting: Int,
+    val agents: List<WatchAgent>,
+    val fetchedAtMs: Long,
+    val languageTag: String = "",
+) {
     init {
+        require(languageTag.length <= 64)
         require(waiting >= 0 && fetchedAtMs >= 0 && agents.size <= 3)
         require(agents.all { it.hostId.isNotBlank() && it.terminal.isNotBlank() })
     }
 
     fun toRequest(): PutDataRequest = PutDataMapRequest.create(DATA_PATH).apply {
         dataMap.putInt("version", 1)
+        dataMap.putString("language_tag", languageTag)
         dataMap.putInt("waiting", waiting)
         dataMap.putLong("fetched_at_ms", fetchedAtMs)
         dataMap.putDataMapArrayList("agents", ArrayList(agents.map { agent ->
@@ -43,7 +50,7 @@ data class WatchSummary(val waiting: Int, val agents: List<WatchAgent>, val fetc
                 WatchAgent(requireNotNull(it.getString("host")), requireNotNull(it.getString("terminal")),
                     requireNotNull(it.getString("name")), requireNotNull(it.getString("status")))
             }
-            WatchSummary(map.getInt("waiting"), agents, map.getLong("fetched_at_ms"))
+            WatchSummary(map.getInt("waiting"), agents, map.getLong("fetched_at_ms"), map.getString("language_tag") ?: "")
         }.getOrNull()
     }
 }

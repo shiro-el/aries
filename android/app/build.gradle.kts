@@ -30,8 +30,8 @@ android {
         resValues = true
     }
 
-    // The per-app language list (Android 13+) comes from the res/values-* dirs.
-    androidResources { generateLocaleConfig = true }
+    // Keep Android Settings and the in-app picker limited to shipped translations.
+    androidResources { generateLocaleConfig = false }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -62,6 +62,7 @@ licensee {
 }
 
 dependencies {
+    implementation("androidx.appcompat:appcompat:1.7.1")
     implementation(project(":wear-data"))
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(platform(libs.androidx.compose.bom))
