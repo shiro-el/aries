@@ -310,7 +310,13 @@
     <string name="push_failed">Step \"%1$s\" failed: %2$s</string>
     <string name="push_on_body">Push is on. Relay: %1$s</string>
     <string name="push_test_sent">A test notification is on its way. If it does not arrive, check that notifications for Aries are allowed.</string>
-    <string name="push_no_relay">This build of Aries has no Relay configured, so push notifications are not available.</string>
+    <string name="push_no_relay">This build of Aries has no default Relay. Enter the URL of a Relay you run yourself.</string>
+    <string name="push_relay_label">Relay URL</string>
+    <string name="push_relay_placeholder" translatable="false">https://relay.example.com</string>
+    <string name="push_relay_hint">https:// only. A Relay you run yourself must send through the Firebase project of this Aries build.</string>
+    <string name="push_change_relay_button">Change Relay</string>
+    <string name="push_change_relay_body">Aries pairs with the new Relay first, then removes the pairing from the old one. If the new Relay fails, the old one keeps working.</string>
+    <string name="push_use_relay_button">Use this Relay</string>
     <string name="push_unavailable">Push notifications are not available on this phone: %1$s</string>
     <string name="push_permission_denied">Notifications are not allowed for Aries. Allow them in Android settings, then turn on push again.</string>
     <string name="push_off_host_unreachable">Push is off and the Relay deleted this pairing. The Host could not be reached, so its copy of the pairing stays until the next pairing; it no longer works.</string>

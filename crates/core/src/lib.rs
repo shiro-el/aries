@@ -742,7 +742,14 @@ impl AriesCore {
     /// phone (`device`) on the Relay at `relay_url`, exchanges keys with the
     /// Beacon over SSH and has it send a test notification. `progress`
     /// hears each step as it starts; a failure names its step
-    /// ([`CoreError::PushFailed`]). Turning it on again replaces the pairing.
+    /// ([`CoreError::PushFailed`]). `relay_url` must be `https://` (or
+    /// `http://` to this device's own address); a bad URL fails at
+    /// [`PushStep::Register`] before anything is sent.
+    ///
+    /// Turning it on again, for example with another (self-hosted) Relay,
+    /// replaces the pairing: only once the new one is paired is the old one
+    /// deleted on its Relay ([`PushStep::Unpair`], queued if unreachable).
+    /// A failed change keeps the old pairing working.
     pub async fn enable_push(
         &self,
         host_id: String,
