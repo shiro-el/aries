@@ -3,6 +3,8 @@ package io.github.shiroel.aries.ui
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
@@ -70,17 +72,20 @@ class PushSectionTest {
             model = remember { HostsModel(core, scope, noDownload, pushPlatform = platform, http = noHttp) }
             MaterialTheme { AriesApp(model) }
         }
-        compose.onNodeWithText("box").performClick()
+        compose.openHostActions("h1")
+        compose.onNodeWithTag("host-actions:h1").performScrollToNode(hasText(str(R.string.push_title)))
         compose.waitForIdle()
         return model
     }
 
     private fun click(res: Int) {
+        compose.onNodeWithTag("host-actions:h1").performScrollToNode(hasText(str(res)))
         compose.onNodeWithText(str(res)).performScrollTo().performClick()
         compose.waitForIdle()
     }
 
     private fun shows(text: String) {
+        compose.onNodeWithTag("host-actions:h1").performScrollToNode(hasText(text))
         compose.onNodeWithText(text).performScrollTo().assertExists()
     }
 

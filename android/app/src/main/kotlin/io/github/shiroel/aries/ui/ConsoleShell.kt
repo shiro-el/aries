@@ -140,6 +140,7 @@ private fun consoleTitle(screen: Screen): String = when (screen) {
 
 private fun consoleBack(model: HostsModel): (() -> Unit)? = when (val screen = model.screen) {
     Screen.Hosts -> null
+    Screen.Settings, is Screen.JumpHosts -> model::settingsBack
     is Screen.Terminal -> model::closeTerminal
     is Screen.Chat -> model::closeChat
     is Screen.Agents -> if (screen.board.openKey != null) screen.board::closeDetail else null

@@ -43,27 +43,21 @@ class HostListScreenTest {
     }
 
     @Test
-    fun hostsKeepKeyDetailsAndAddFormCollapsedUntilOpened() {
+    fun hostsKeepOnlyTheAddFormCollapsedUntilOpened() {
         val core = FakeCore().apply { ensureKey() }
         show(core)
         compose.onNodeWithText(FakeCore.PUBLIC_KEY).assertDoesNotExist()
+        compose.onNodeWithTag("hosts-key-band").assertDoesNotExist()
         compose.onNode(hasSetTextAction() and hasText(str(R.string.host_add_address))).assertDoesNotExist()
-        compose.onNodeWithTag("hosts-key-band").performClick()
-        compose.onNodeWithText(FakeCore.PUBLIC_KEY).assertExists()
-        compose.onNodeWithText(str(R.string.key_copy_button)).assertExists()
-        compose.onNodeWithTag("hosts-key-band").performClick()
-        compose.onNodeWithText(FakeCore.PUBLIC_KEY).assertDoesNotExist()
         compose.onNodeWithTag("hosts-add-toggle").performClick()
         compose.onNode(hasSetTextAction() and hasText(str(R.string.host_add_address))).assertExists()
     }
 
     @Test
-    fun createsAKeyAndShowsThePublicKeyToCopy() {
-        val core = FakeCore()
-        show(core)
-
+    fun createsAKeyInSettingsAndShowsThePublicKeyToCopy() {
+        show(FakeCore())
+        compose.openKeyDetails()
         compose.onNodeWithText(str(R.string.key_create_button)).performClick()
-
         compose.onNodeWithText(FakeCore.PUBLIC_KEY).assertExists()
         compose.onNodeWithText(str(R.string.key_copy_button)).assertExists()
     }
@@ -84,7 +78,7 @@ class HostListScreenTest {
 
     @Test
     fun addsAHostFromTheForm() {
-        val core = FakeCore()
+        val core = FakeCore().apply { ensureKey() }
         show(core)
 
         compose.openHostAddForm()

@@ -115,20 +115,26 @@ enum class AfterTrust { Connect, InstallKey }
 class HostsModel(
     private val core: AriesCoreInterface,
     private val scope: CoroutineScope,
-    beaconFetcher: BeaconFetcher = HttpBeaconFetcher(),
+    private val beaconFetcher: BeaconFetcher = HttpBeaconFetcher(),
     private val keyWork: CoroutineContext = EmptyCoroutineContext,
-    pushPlatform: PushPlatform = NoPush,
+    private val pushPlatform: PushPlatform = NoPush,
     private val http: HttpClient = HttpRelayClient(),
 ) {
-    /** The Beacon section of the connected Host. */
-    val beacon = BeaconModel(core, scope, beaconFetcher, onRemoved = { onBeaconRemoved() }, keyWork = keyWork)
+    /** Current Host's settings models; a previous Host's pending work keeps its own state. */
+    var beacon by mutableStateOf(BeaconModel(core, scope, beaconFetcher, keyWork = keyWork))
+        private set
+    var push by mutableStateOf(PushModel(core, scope, pushPlatform, http, keyWork))
+        private set
 
-    /** The push section of the connected Host. */
-    val push = PushModel(core, scope, pushPlatform, http, keyWork)
-
-    private fun onBeaconRemoved() {
-        flushPushRevocations()
-        beacon.host?.let(push::load)
+    private fun loadHostSettings(host: Host) {
+        val hostPush = PushModel(core, scope, pushPlatform, http, keyWork)
+        push = hostPush
+        beacon = BeaconModel(core, scope, beaconFetcher, onRemoved = {
+            flushPushRevocations()
+            hostPush.load(host)
+        }, keyWork = keyWork)
+        beacon.load(host)
+        hostPush.load(host)
     }
 
     /** Sends the Relay revocations that Host or Beacon removal queued. */
@@ -164,6 +170,14 @@ class HostsModel(
 
     /** How an Agent opens: the view last picked with the Terminal/Chat toggle (Terminal by default). */
     var agentView by mutableStateOf(AgentView.TERMINAL)
+        private set
+
+    /** Settings subpages share the drawer destination and own all configuration. */
+    var settingsHost by mutableStateOf<Host?>(null)
+        private set
+    var settingsKeys by mutableStateOf(false)
+        private set
+    var missingKeyHostId by mutableStateOf<String?>(null)
         private set
 
     /** The open Host's connection and structure watch, while [Screen.Browse] shows (the latest line after a reconnect). */
@@ -253,7 +267,7 @@ class HostsModel(
         core.setJumpHosts(host.id, jumps)
         core.setHostSshKey(host.id, hostKeyId)
         refreshRoutes()
-        screen = Screen.Hosts
+        screen = Screen.Settings
     }
 
     private fun refreshRoutes() {
@@ -270,6 +284,7 @@ class HostsModel(
     }
 
     fun connect(host: Host) {
+        missingKeyHostId = null
         val connecting = Screen.Connecting(host)
         screen = connecting
         scope.launch {
@@ -286,12 +301,15 @@ class HostsModel(
                 browser.savedLaunches = conn.savedLaunches()
                 open = conn to null
                 screen = Screen.Browse(browser)
-                beacon.load(host)
-                push.load(host)
+                loadHostSettings(host)
                 status = watchBrowse(link, browser)
             } catch (e: CoreException) {
                 if (screen !== connecting) return@launch
                 screen = Screen.Hosts
+                if (e is CoreException.NoKey && key == null) {
+                    missingKeyHostId = host.id
+                    return@launch
+                }
                 prompt = when (e) {
                     is CoreException.HostKeyUnknown -> Prompt.TrustHostKey(host, e.fingerprint)
                     is CoreException.JumpHostKeyUnknown -> Prompt.TrustJumpHostKey(host, e.hop, e.address, e.fingerprint)
@@ -438,6 +456,9 @@ class HostsModel(
             core.removeHost(prompt.host.id)
             hosts = core.hosts()
             hostsChanged()
+            settingsHost = null
+            settingsKeys = false
+            screen = Screen.Settings
             flushPushRevocations()
         }
     }
@@ -876,7 +897,37 @@ class HostsModel(
     /** Settings is a drawer destination. */
     fun openSettings() {
         back()
+        settingsHost = null
+        settingsKeys = false
         screen = Screen.Settings
+    }
+
+    /** Shared destination for Host menus, Browse guidance and inbox install links (ticket 51). */
+    fun openHostSettings(host: Host) {
+        openSettings()
+        settingsHost = host
+        loadHostSettings(host)
+    }
+
+    fun openKeySettings() {
+        openSettings()
+        settingsKeys = true
+    }
+
+    fun settingsBack() {
+        if (screen is Screen.JumpHosts) {
+            screen = Screen.Settings
+        } else if (settingsHost != null || settingsKeys) {
+            settingsHost = null
+            settingsKeys = false
+        } else {
+            back()
+        }
+    }
+
+    fun setDefaultAgentView(view: AgentView) = guard {
+        core.setAgentView(view)
+        agentView = core.agentView()
     }
 
     /** The connection owned by a Chat opened from the inbox. */
