@@ -44,7 +44,8 @@ CREATE TABLE IF NOT EXISTS chats (
     data BLOB NOT NULL,
     PRIMARY KEY (host, chat)
 ) WITHOUT ROWID;
-CREATE INDEX IF NOT EXISTS chats_updated ON chats (updated);";
+CREATE INDEX IF NOT EXISTS chats_updated ON chats (updated);
+CREATE TABLE IF NOT EXISTS removed_hosts (digest BLOB PRIMARY KEY) WITHOUT ROWID;";
 
 /// A cached Chat: the Beacon's items in order and the cursor after them.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -197,8 +198,10 @@ impl ChatCache {
             let data = seal(o, host, &id, plain)?;
             o.conn
                 .execute(
-                    "INSERT OR REPLACE INTO chats (host, chat, updated, data) VALUES (?1, ?2, ?3, ?4)",
-                    params![host, id, now as i64, data],
+                    "INSERT OR REPLACE INTO chats (host, chat, updated, data)
+                     SELECT ?1, ?2, ?3, ?4 WHERE NOT EXISTS
+                     (SELECT 1 FROM removed_hosts WHERE digest = ?5)",
+                    params![host, id, now as i64, data, host_digest(host)],
                 )
                 .map_err(storage)?;
             Ok(())
@@ -220,13 +223,24 @@ impl ChatCache {
 /// work even when the key cannot be opened). Overwrites the deleted rows.
 pub(crate) fn remove_host(dir: &Path, host: &str) -> Result<(), CoreError> {
     let path = dir.join(DB);
-    if !path.exists() {
-        return Ok(());
-    }
-    connect(&path)?
-        .execute("DELETE FROM chats WHERE host = ?1", [host])
+    let mut conn = connect(&path)?;
+    let tx = conn.transaction().map_err(storage)?;
+    // A durable tombstone also rejects writers that had not opened the
+    // cache yet. The write predicate and deletion serialize in SQLite.
+    tx.execute(
+        "INSERT OR IGNORE INTO removed_hosts (digest) VALUES (?1)",
+        [host_digest(host)],
+    )
+    .map_err(storage)?;
+    tx.execute("DELETE FROM chats WHERE host = ?1", [host])
         .map_err(storage)?;
-    Ok(())
+    tx.commit().map_err(storage)
+}
+
+fn host_digest(host: &str) -> Vec<u8> {
+    ring::digest::digest(&ring::digest::SHA256, host.as_bytes())
+        .as_ref()
+        .to_vec()
 }
 
 fn connect(path: &Path) -> Result<Connection, CoreError> {

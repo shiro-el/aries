@@ -385,6 +385,29 @@ async fn removing_a_host_leaves_no_trace_of_its_cache() {
     assert!(core.cached_chat(kept, "t1".into()).await.unwrap().is_some());
 }
 
+#[tokio::test]
+async fn removing_a_host_prevents_an_open_watch_from_recreating_its_cache() {
+    let env = Env::new();
+    let core = env.core();
+    let host = env.host(&core, "h");
+    env.beacon_printing("h", FIRST);
+    let watch = watch(&core, &host);
+    wait_for(&watch, "live", |s| s.status == ChatStatus::Live).await;
+    cached(&core, &host, "first cache", |s| s.entries.len() == 2).await;
+    core.remove_host(host.clone()).unwrap();
+
+    env.beacon_printing("h", AFTER);
+    watch.reconnect();
+    wait_for(&watch, "updated retained watch", |s| s.entries.len() == 3).await;
+    // Let the debounced writer run, including any already-started blocking save.
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    watch.stop();
+    assert!(
+        !contains(&env.at_rest(), &host),
+        "a retained watch recreated the removed Host's cache"
+    );
+}
+
 // The app's reconnect signals (HostLink, ticket 19): a network change
 // replaces the Chat's line at once; coming back to the foreground retries a
 // waiting reconnect at once. Both resume after the cursor.
