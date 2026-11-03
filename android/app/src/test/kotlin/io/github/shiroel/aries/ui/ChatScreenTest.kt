@@ -128,13 +128,13 @@ class ChatScreenTest {
         core.pushChat(
             ChatSnapshot(first + entry("u2", ChatEntryBody.User("branch A question")), ChatStatus.LIVE, "pi:s:1"),
         )
-        compose.waitForIdle()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("branch A question").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("branch A question").assertExists()
 
         core.pushChat(
             ChatSnapshot(first + entry("u3", ChatEntryBody.User("branch B question")), ChatStatus.LIVE, "pi:s:2"),
         )
-        compose.waitForIdle()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("branch B question").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("branch A question").assertDoesNotExist()
         compose.onNodeWithText("branch B question").assertExists()
         compose.onNodeWithText("first answer").assertExists()

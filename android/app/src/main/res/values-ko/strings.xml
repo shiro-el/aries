@@ -283,6 +283,10 @@
     <string name="agent_view_terminal">term</string>
     <string name="agent_view_chat">chat</string>
     <string name="chat_title">Chat: %1$s</string>
+    <!-- Chat reading position -->
+    <string name="chat_latest_button">최신으로</string>
+    <string name="chat_latest_count_button">최신으로 (%1$d)</string>
+
     <string name="chat_empty">아직 메시지가 없습니다.</string>
     <string name="chat_status_connecting">Beacon에 연결하는 중…</string>
     <string name="chat_status_waiting">Agent가 아직 아무것도 기록하지 않았습니다.</string>
@@ -379,6 +383,16 @@
     <string name="chat_answer_unsupported">이 Agent의 질문은 Chat에서 답할 수 없습니다. Terminal에서 답하세요.</string>
     <string name="chat_answer_no_core">Beacon이 이 Host의 herdr-core에 연결하지 못합니다.</string>
     <string name="chat_answer_failed">답을 보내지 못했습니다: %1$s</string>
+    <!-- Chat Agent command and skill catalog -->
+    <string name="chat_commands_title">Agent 명령</string>
+    <string name="chat_skills_button">Skill</string>
+    <string name="chat_skills_title">설치된 Skill</string>
+    <string name="chat_skills_search">Skill 검색</string>
+    <string name="chat_catalog_refresh">목록 새로고침</string>
+    <string name="chat_catalog_empty">검색 결과가 없습니다</string>
+    <string name="chat_catalog_failed">Host 목록을 읽지 못했습니다. 새로고침으로 다시 시도하세요.</string>
+    <string name="chat_catalog_builtin">내장 명령</string>
+
     <string name="chat_input_label">Agent에게 보낼 메시지</string>
     <string name="chat_send_button">보내기</string>
     <string name="chat_sending">보내는 중…</string>
