@@ -93,6 +93,12 @@
     <string name="files_range">Lines %1$d–%2$d of %3$d</string>
     <string name="files_previous_button">Previous page</string>
     <string name="files_next_button">Next page</string>
+    <!-- Remote image and PDF preview (111) -->
+    <string name="files_pdf_title">PDF page</string>
+    <string name="files_pdf_page">Page %1$d of %2$d</string>
+    <string name="files_preview_open">Open preview</string>
+    <string name="files_preview_too_large">This file exceeds the %1$d MiB preview limit.</string>
+    <string name="files_preview_failed">Could not preview this file. Check the file and connection, then refresh to retry.</string>
     <!-- File code view and Chat links (110) -->
     <string name="files_wrap_lines">Wrap lines</string>
     <string name="files_missing">File not found: %1$s</string>
@@ -250,6 +256,18 @@
     <string name="terminal_send_to_agent">Send to Agent</string>
     <string name="terminal_open_link">Open link</string>
     <string name="terminal_copy_link">Copy link</string>
+
+    <!-- Terminal output search -->
+    <string name="terminal_search_button">Search output</string>
+    <string name="terminal_search_hint">Find in output</string>
+    <string name="terminal_search_case">Match case</string>
+    <string name="terminal_search_regex">Regex</string>
+    <string name="terminal_search_previous">Previous match</string>
+    <string name="terminal_search_next">Next match</string>
+    <string name="terminal_search_close">Close search</string>
+    <string name="terminal_search_count">%1$d of %2$d</string>
+    <string name="terminal_search_no_matches">No matches</string>
+    <string name="terminal_search_invalid">Invalid search pattern or query too long</string>
 
     <string name="agents_button">All Agents</string>
     <string name="agents_title">Agents</string>
@@ -464,6 +482,24 @@
     <string name="preset_opencode" translatable="false">OpenCode</string>
     <string name="preset_pi" translatable="false">Pi</string>
     <string name="launch_preset_args">Extra arguments (optional)</string>
+    <!-- Launch model and reasoning effort (103). -->
+    <string name="launch_model_label">Model ID or alias</string>
+    <string name="launch_model_choose">Choose</string>
+    <string name="launch_agent_default">Agent default</string>
+    <string name="launch_model_hint">Use a model available on this Host. Leave blank for the Agent default.</string>
+    <string name="launch_model_provider_hint">Enter provider/model from this Host, or leave blank for the Agent default.</string>
+    <string name="launch_effort_label">Reasoning effort</string>
+    <string name="launch_effort_hint">Available levels depend on the model and Agent version on this Host.</string>
+    <string name="launch_effort_unavailable">OpenCode’s interactive launcher does not support choosing effort. Use its model settings.</string>
+    <string name="launch_effort_off">Off</string>
+    <string name="launch_effort_minimal">Minimal</string>
+    <string name="launch_effort_low">Low</string>
+    <string name="launch_effort_medium">Medium</string>
+    <string name="launch_effort_high">High</string>
+    <string name="launch_effort_xhigh">Extra high</string>
+    <string name="launch_effort_max">Maximum</string>
+    <string name="launch_effort_ultra">Ultra</string>
+
     <string name="launch_saved">Saved launches</string>
     <string name="launch_saved_edit">Edit</string>
     <string name="launch_saved_delete">Delete</string>

@@ -22,6 +22,8 @@ fn request(
         space_id: space.map(Into::into),
         tab_id: tab.map(Into::into),
         preset: None,
+        model: None,
+        effort: None,
     }
 }
 
