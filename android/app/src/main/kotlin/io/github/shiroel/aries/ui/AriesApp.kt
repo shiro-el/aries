@@ -130,6 +130,7 @@ private fun AriesContent(model: HostsModel, settings: ThemeSettings, terminalDis
                                 onBack = model::closeTerminal,
                                 onView = model::switchView.takeIf { s.viewer.terminal.agentStatus != null },
                                 displaySettings = terminalDisplay,
+                                onSelectionSend = model::sendTerminalSelectionToDraft,
                                 onGitSend = if (s.viewer.terminal.agentStatus == null) null else { text ->
                                     model.switchView(io.github.shiroel.aries.core.AgentView.CHAT)
                                     (model.screen as? Screen.Chat)?.chat?.let { chat ->

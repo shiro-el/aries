@@ -92,7 +92,7 @@ fn texts(s: &ChatSnapshot) -> Vec<String> {
         .iter()
         .map(|e| match &e.body {
             ChatEntryBody::User { text, .. } => format!("user: {text}"),
-            ChatEntryBody::Agent { text } => format!("agent: {text}"),
+            ChatEntryBody::Agent { text, .. } => format!("agent: {text}"),
             ChatEntryBody::Thinking { .. } => "thinking".into(),
             ChatEntryBody::Tool { name, status, .. } => format!("tool {name} {status:?}"),
             ChatEntryBody::AgentError { detail } => format!("error: {detail}"),
@@ -509,4 +509,55 @@ async fn reconnecting_after_a_transcript_rewrite_replaces_the_cached_chat() {
     .await;
     resumed.stop();
     assert_eq!(texts(&after), ["user: new content"]);
+}
+
+#[tokio::test]
+async fn tool_details_and_response_metadata_reach_the_phone_without_filling_absent_fields() {
+    let env = Env::new();
+    let lines = env.file("metadata-lines", concat!(
+        r#"{"v":1,"type":"item","item":{"id":"t","kind":"tool","name":"Bash","status":"done","input":{"command":"pwd"},"output":"/repo","details":{"command":"pwd","cwd":"/repo","exit_code":0,"duration_ms":12}}}"#, "\n",
+        r#"{"v":1,"type":"item","item":{"id":"a","kind":"agent","text":"Done","metadata":{"model":"agent-model","input_tokens":5,"output_tokens":2,"cache_read_tokens":0,"duration_ms":1234,"completion":"interrupted"}}}"#, "\n",
+        r#"{"v":1,"type":"item","item":{"id":"old","kind":"agent","text":"Older Beacon"}}"#, "\n",
+        r#"{"v":1,"type":"state","state":"live"}"#, "\n",
+    ));
+    let host = env.fake_beacon(&format!("cat {lines}; sleep 30"));
+    let watch = env.watch(&host);
+    let snapshot = wait_for(&watch, "live metadata", |s| s.status == ChatStatus::Live).await;
+    let ChatEntryBody::Tool {
+        details: Some(d),
+        input,
+        output,
+        ..
+    } = &snapshot.entries[0].body
+    else {
+        panic!("no tool details")
+    };
+    assert_eq!(d.command.as_deref(), Some("pwd"));
+    assert_eq!(d.cwd.as_deref(), Some("/repo"));
+    assert_eq!(d.exit_code, Some(0));
+    assert_eq!(d.duration_ms, Some(12));
+    assert_eq!(d.result_count, None);
+    assert!(input.contains("pwd"));
+    assert_eq!(output.as_deref(), Some("/repo"));
+    let ChatEntryBody::Agent {
+        metadata: Some(m), ..
+    } = &snapshot.entries[1].body
+    else {
+        panic!("no response metadata")
+    };
+    assert_eq!(m.model.as_deref(), Some("agent-model"));
+    assert_eq!(m.input_tokens, Some(5));
+    assert_eq!(m.output_tokens, Some(2));
+    assert_eq!(m.cache_read_tokens, Some(0));
+    assert_eq!(m.cache_write_tokens, None);
+    assert_eq!(m.duration_ms, Some(1234));
+    assert_eq!(
+        m.completion,
+        Some(aries_core::ChatResponseCompletion::Interrupted)
+    );
+    assert!(matches!(
+        snapshot.entries[2].body,
+        ChatEntryBody::Agent { metadata: None, .. }
+    ));
+    watch.stop();
 }

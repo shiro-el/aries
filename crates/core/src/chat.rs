@@ -35,6 +35,8 @@ pub struct ChatEntry {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+// Keep the optional, flat records shared with the phone API.
+#[allow(clippy::large_enum_variant)]
 pub enum ChatEntryBody {
     User {
         text: String,
@@ -44,13 +46,15 @@ pub enum ChatEntryBody {
     },
     Agent {
         text: String,
+        #[uniffi(default)]
+        metadata: Option<ChatResponseMetadata>,
     },
     /// `text` is `None` when the Agent does not record what it thought.
     Thinking {
         text: Option<String>,
     },
-    /// Shown collapsed as `name` + `title`; expanded shows `input` (pretty
-    /// JSON) and `output`.
+    /// Collapsed as `name` + `title`; expanded shows normalized details,
+    /// output and a separate raw-input disclosure.
     Tool {
         name: String,
         title: String,
@@ -63,6 +67,8 @@ pub enum ChatEntryBody {
         /// Pictures in the result.
         #[uniffi(default)]
         images: Vec<ChatImage>,
+        #[uniffi(default)]
+        details: Option<ChatToolDetails>,
     },
     AgentError {
         detail: String,
@@ -84,6 +90,90 @@ pub enum ChatEntryBody {
     },
     /// Something a newer Beacon sends that this app cannot show yet.
     Unsupported,
+}
+
+/// Optional measurements from the Agent transcript.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ChatResponseMetadata {
+    #[uniffi(default)]
+    pub model: Option<String>,
+    #[uniffi(default)]
+    pub input_tokens: Option<u64>,
+    #[uniffi(default)]
+    pub output_tokens: Option<u64>,
+    #[uniffi(default)]
+    pub cache_read_tokens: Option<u64>,
+    #[uniffi(default)]
+    pub cache_write_tokens: Option<u64>,
+    #[uniffi(default)]
+    pub duration_ms: Option<u64>,
+    #[uniffi(default)]
+    pub completion: Option<ChatResponseCompletion>,
+}
+
+impl From<aries_protocol::chat::ResponseMetadata> for ChatResponseMetadata {
+    fn from(value: aries_protocol::chat::ResponseMetadata) -> Self {
+        Self {
+            model: value.model,
+            input_tokens: value.input_tokens,
+            output_tokens: value.output_tokens,
+            cache_read_tokens: value.cache_read_tokens,
+            cache_write_tokens: value.cache_write_tokens,
+            duration_ms: value.duration_ms,
+            completion: value.completion.map(Into::into),
+        }
+    }
+}
+
+/// Optional measurements from the Agent transcript.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ChatToolDetails {
+    #[uniffi(default)]
+    pub command: Option<String>,
+    #[uniffi(default)]
+    pub cwd: Option<String>,
+    #[uniffi(default)]
+    pub exit_code: Option<i64>,
+    #[uniffi(default)]
+    pub duration_ms: Option<u64>,
+    #[uniffi(default)]
+    pub path: Option<String>,
+    #[uniffi(default)]
+    pub pattern: Option<String>,
+    #[uniffi(default)]
+    pub result_count: Option<u64>,
+}
+
+impl From<aries_protocol::chat::ToolDetails> for ChatToolDetails {
+    fn from(value: aries_protocol::chat::ToolDetails) -> Self {
+        Self {
+            command: value.command,
+            cwd: value.cwd,
+            exit_code: value.exit_code,
+            duration_ms: value.duration_ms,
+            path: value.path,
+            pattern: value.pattern,
+            result_count: value.result_count,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum ChatResponseCompletion {
+    Complete,
+    Interrupted,
+    Error,
+}
+
+impl From<aries_protocol::chat::ResponseCompletion> for ChatResponseCompletion {
+    fn from(value: aries_protocol::chat::ResponseCompletion) -> Self {
+        use aries_protocol::chat::ResponseCompletion;
+        match value {
+            ResponseCompletion::Complete => Self::Complete,
+            ResponseCompletion::Interrupted => Self::Interrupted,
+            ResponseCompletion::Error => Self::Error,
+        }
+    }
 }
 
 /// An image in the Chat. The entry only describes it; the bytes come from
@@ -352,7 +442,10 @@ impl ChatModel {
                 text,
                 images: self.keep_images(&item.id, images),
             },
-            ChatBody::Agent { text } => ChatEntryBody::Agent { text },
+            ChatBody::Agent { text, metadata } => ChatEntryBody::Agent {
+                text,
+                metadata: metadata.map(Into::into),
+            },
             ChatBody::Thinking { text } => ChatEntryBody::Thinking { text },
             ChatBody::Tool {
                 name,
@@ -391,7 +484,9 @@ impl ChatModel {
                 diff,
                 images,
                 question: None,
+                details,
             } => ChatEntryBody::Tool {
+                details: details.map(Into::into),
                 images: self.keep_images(&item.id, images),
                 diff: diff.map(|d| ChatDiff {
                     path: d.path,
