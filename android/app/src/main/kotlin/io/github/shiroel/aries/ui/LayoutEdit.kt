@@ -272,9 +272,9 @@ private fun HoldToEnd(target: Any, enabled: Boolean, onHeld: () -> Unit) {
 }
 
 @Composable
-internal fun EndTerminalButton(editor: LayoutEditor, terminal: TerminalInfo) {
+internal fun EndTerminalButton(editor: LayoutEditor, terminal: TerminalInfo, onOpen: () -> Unit = {}) {
     val label = stringResource(R.string.layout_kill_label, displayName(terminal))
-    TextButton(onClick = { editor.ending = LayoutEndTarget.Terminal(terminal) }, enabled = !editor.busy,
+    TextButton(onClick = { onOpen(); editor.ending = LayoutEndTarget.Terminal(terminal) }, enabled = !editor.busy,
         modifier = Modifier.semantics { contentDescription = label }) {
         Text(stringResource(R.string.layout_kill_button))
     }

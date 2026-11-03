@@ -67,22 +67,17 @@ private fun families(entries: List<AgentEntry>): List<AgentFamily> {
 /**
  * Shared herdr-app ordering for lists, drawers and phone surfaces. Sequence is
  * core listing order; its reverse breaks ties where desktop's local seq is
- * unavailable. Grouped view follows Space/Tab/Pane order. Children stay in core
- * order below their parent. Folding never changes this result.
+ * unavailable. Children stay in core order below their parent. Folding never
+ * changes this result; the retired Grouped preference is ignored.
  */
+@Suppress("UNUSED_PARAMETER")
 fun orderAgents(entries: List<AgentEntry>, view: AgentListView = AgentListView.Priority): List<AgentEntry> {
-    val ordered = families(entries).let { families ->
-        if (view == AgentListView.Priority) families.sortedWith(
-            compareByDescending<AgentFamily> { it.priority }
-                .thenByDescending { it.root.terminal.statusMs ?: 0uL }
-                .thenByDescending { it.sequence },
-        ) else families.sortedWith(compareBy(
-            { it.root.hostOrder },
-            { it.root.space?.order ?: Int.MAX_VALUE },
-            { it.root.layoutOrder ?: Int.MAX_VALUE },
-            { it.sequence },
-        ))
-    }
+    // Older callers may still supply Grouped; retired preferences have no effect.
+    val ordered = families(entries).sortedWith(
+        compareByDescending<AgentFamily> { it.priority }
+            .thenByDescending { it.root.terminal.statusMs ?: 0uL }
+            .thenByDescending { it.sequence },
+    )
     return (ordered.filter { it.root.terminal.pinned } + ordered.filterNot { it.root.terminal.pinned })
         .flatMap { it.entries }
 }
@@ -100,8 +95,7 @@ fun agentGroups(entries: List<AgentEntry>, view: AgentListView): List<AgentGroup
     val groups = families(orderAgents(entries, view)).groupBy { family ->
         when {
             family.root.terminal.pinned -> "pinned"
-            view == AgentListView.Priority -> "priority:${family.priority.coerceAtLeast(1)}"
-            else -> "space:${family.root.host.id}:${family.root.space?.id.orEmpty()}"
+            else -> "priority:${family.priority.coerceAtLeast(1)}"
         }
     }
     return groups.map { (id, members) ->

@@ -1,7 +1,5 @@
 package io.github.shiroel.aries.ui
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,8 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -25,14 +21,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -84,6 +72,8 @@ class HostBrowser(val host: Host) {
         }).find { it.address == address }
     }
 
+    fun replaceTerminal(terminal: TerminalInfo) { live[terminal.address] = terminal }
+
     fun updateTerminals(list: List<TerminalInfo>) {
         val addresses = list.map { it.address }.toSet()
         live.keys.retainAll(addresses)
@@ -102,6 +92,8 @@ class HostBrowser(val host: Host) {
 
     /** A just-launched Terminal to open once the structure lists it: (space, tab, address). */
     private var pendingReveal: Triple<String, String, String>? = null
+    internal var revealRequest by mutableStateOf<Triple<String, String, String>?>(null)
+        private set
 
     val openSpace: SpaceInfo? get() = structure?.spaces?.find { it.id == openSpaceId }
 
@@ -135,6 +127,7 @@ class HostBrowser(val host: Host) {
             return
         }
         pendingReveal = Triple(spaceId, tabId, address)
+        revealRequest = pendingReveal
         openSpaceId = spaceId
         tabOfSpace[spaceId] = tabId
         tryReveal()
@@ -188,6 +181,7 @@ fun BrowseScreen(
     onBack: () -> Unit,
     onOpen: (TerminalInfo) -> Unit = {},
     onNewTerminal: (() -> Unit)? = null,
+    onPin: (AgentEntry, Boolean) -> Unit = { _, _ -> },
     onLaunch: (LaunchForm) -> Unit = {},
     onSaveLaunch: (LaunchForm) -> Unit = {},
     onDeleteLaunch: (LaunchForm, SavedLaunch) -> Unit = { _, _ -> },
@@ -195,13 +189,12 @@ fun BrowseScreen(
     hostSections: @Composable () -> Unit = {},
     showHeader: Boolean = true,
 ) {
-    val space = browser.openSpace
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val editor = remember(browser) { browser.layoutEditor ?: LayoutEditor(browser, scope).also { browser.layoutEditor = it } }
     Column(Modifier.fillMaxSize()) {
         Row {
-            if (showHeader) TextButton(onClick = if (space != null) browser::closeSpace else onBack) {
+            if (showHeader) TextButton(onClick = onBack) {
                 Text(stringResource(R.string.back_button))
             }
             if (onNewTerminal != null && browser.structure != null && !browser.closed) {
@@ -235,8 +228,7 @@ fun BrowseScreen(
         browser.structure?.problem?.let { Notice(problemText(it)) }
         when {
             browser.structure == null -> Text(stringResource(R.string.connecting, browser.host.name))
-            space == null -> SpaceList(browser, browser.structure!!, hostSections, onOpen)
-            else -> SpaceView(browser, space, onOpen)
+            else -> HostTreeList(browser, browser.structure!!, hostSections, onOpen, onPin)
         }
     }
 }
@@ -259,133 +251,68 @@ private fun Notice(text: String) {
 }
 
 @Composable
-private fun SpaceList(
+private fun HostTreeList(
     browser: HostBrowser,
-    s: HostStructure,
+    structure: HostStructure,
     hostSections: @Composable () -> Unit,
     onOpen: (TerminalInfo) -> Unit,
+    onPin: (AgentEntry, Boolean) -> Unit,
 ) {
+    val folds = rememberTreeFolds("host:${browser.host.id}")
+    val agentFolds = rememberTreeFolds("agents")
+    androidx.compose.runtime.LaunchedEffect(browser.revealRequest) {
+        browser.revealRequest?.let { (space, tab, _) ->
+            folds.expand("space:$space")
+            folds.expand("tab:$space:$tab")
+        }
+    }
     LazyColumn {
         item {
-            Text(stringResource(R.string.terminals_title, browser.host.name), Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.terminals_title, browser.host.name), Modifier.padding(12.dp),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        if (s.spaces.isEmpty() && s.unplaced.isEmpty()) item { Text(stringResource(R.string.terminals_empty)) }
-        items(s.spaces, key = { "space:" + it.id }) { space ->
-            Row(Modifier.fillMaxWidth().clickable { browser.openSpace(space.id) }.heightIn(min = 48.dp).padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically) {
-                Text("▸", Modifier.width(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) // i18n-ok: decorative disclosure mark
-                Column(Modifier.weight(1f)) {
-                    Text(space.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    val count = space.tabs.sumOf { it.panes.size }
-                    Text(
-                        listOfNotNull(space.folder, stringResource(R.string.space_summary, space.tabs.size, count))
-                            .joinToString(" · "),
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    )
+        if (structure.spaces.isEmpty() && structure.unplaced.isEmpty()) item { Text(stringResource(R.string.terminals_empty)) }
+        structure.spaces.forEach { space ->
+            val spaceKey = "space:${space.id}"
+            item(key = spaceKey) {
+                TreeSectionRow(space.name, 0, folds.contains(spaceKey), {
+                    browser.openSpace(space.id)
+                    folds.toggle(spaceKey)
+                }, Modifier.testTag("host-space:${space.id}"))
+            }
+            if (!folds.contains(spaceKey)) space.tabs.forEach { tab ->
+                val tabKey = "tab:${space.id}:${tab.id}"
+                item(key = tabKey) {
+                    TreeSectionRow(tab.name, 1, folds.contains(tabKey), {
+                        browser.openSpace(space.id)
+                        browser.selectTab(tab)
+                        folds.toggle(tabKey)
+                    }, Modifier.testTag("host-tab:${space.id}:${tab.id}"))
                 }
-            }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        }
-        if (s.unplaced.isNotEmpty()) {
-            item {
-                HorizontalDivider()
-                Text(stringResource(R.string.unplaced_title), Modifier.padding(12.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            items(terminalTree(s.unplaced.map(browser::current)) { it }, key = { "unplaced:" + it.value.address }) { row ->
-                val t = row.value
-                TerminalBranch(row.guide, row.depth) {
-                    ConsoleTerminalRow(t, browser.host.name, { onOpen(t) }, trailing = {
-                        WorktreeControls(browser, t)
-                        browser.layoutEditor?.let { EndTerminalButton(it, t) }
-                    })
-                }
-            }
-        }
-        item {
-            HorizontalDivider()
-            Column(Modifier.padding(horizontal = 12.dp)) { hostSections() }
-        }
-    }
-}
-
-@Composable
-private fun SpaceView(
-    browser: HostBrowser,
-    space: SpaceInfo,
-    onOpen: (TerminalInfo) -> Unit,
-) {
-    Text(space.name, Modifier.padding(12.dp), style = MaterialTheme.typography.titleMedium)
-    val tab = browser.tab
-    if (tab == null) {
-        Text(stringResource(R.string.space_no_tabs))
-        return
-    }
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(space.tabs, key = { it.id }) { t ->
-            ConsoleChoice(selected = t.id == tab.id, onClick = { browser.selectTab(t) }) {
-                Text(t.name, style = MaterialTheme.typography.bodySmall)
-            }
-        }
-    }
-    val zoomed = browser.zoomedPane(tab)
-    val focused = browser.focusedPane(tab)
-    if (zoomed != null) {
-        TextButton(onClick = { browser.unzoom(tab) }) { Text(stringResource(R.string.pane_unzoom_button)) }
-        PaneRow(zoomed, browser, focused = true, onOpen = onOpen) {}
-        return
-    }
-    if (focused != null) {
-        TextButton(onClick = { browser.zoom(tab) }) { Text(stringResource(R.string.pane_zoom_button)) }
-    }
-    if (tab.panes.isEmpty()) Text(stringResource(R.string.tab_empty))
-    LazyColumn {
-        itemsIndexed(tab.panes, key = { _, pane -> "pane:" + pane.id + ":" + pane.terminalAddress }) { index, pane ->
-            PaneRow(pane, browser, focused = pane.id == focused, onOpen = onOpen, last = index == tab.panes.lastIndex) { browser.focus(tab, pane) }
-        }
-    }
-}
-
-@Composable
-private fun PaneRow(
-    pane: PaneInfo,
-    browser: HostBrowser,
-    focused: Boolean,
-    onOpen: (TerminalInfo) -> Unit,
-    last: Boolean = true,
-    onClick: () -> Unit,
-) {
-    val accent = MaterialTheme.colorScheme.primary
-    val modifier = Modifier.fillMaxWidth().semantics { selected = focused }
-        .background(if (focused) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surface)
-        .drawBehind { if (focused) drawLine(accent, Offset.Zero, Offset(0f, size.height), 3.dp.toPx()) }
-    Column {
-        Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-            Text(if (last) "└─" else "├─", Modifier.padding(start = 12.dp).width(24.dp), style = MaterialTheme.typography.bodySmall, // i18n-ok: tree guides
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            val t = pane.terminal?.let(browser::current)
-            if (t == null) {
-                Text(stringResource(R.string.pane_terminal_gone, pane.terminalAddress),
-                    Modifier.clickable(onClick = onClick).padding(12.dp), style = MaterialTheme.typography.bodySmall)
-            } else {
-                Column(Modifier.weight(1f)) {
-                    ConsoleTerminalRow(t, browser.host.name, onClick, trailing = {
-                        val open = if (t.agentStatus != null) R.string.agent_open_button else R.string.terminal_open_button
-                        TextButton(onClick = { onOpen(t) }) { Text(stringResource(open), style = MaterialTheme.typography.bodySmall) }
-                        browser.layoutEditor?.let { EndTerminalButton(it, t) }
-                    })
+                if (!folds.contains(tabKey)) {
+                    val terminals = tab.panes.flatMap { listOfNotNull(it.terminal) + it.subAgents }.map(browser::current)
+                    val entries = withAgentSpaces(terminals.mapIndexed { index, t -> AgentEntry(browser.host, t, sequence = index) }, structure)
+                    agentTreeItems(orderAgents(entries), agentFolds, { onOpen(it.terminal) }, onPin,
+                        tag = "host-terminal:${space.id}:${tab.id}", sections = false,
+                        actions = { entry, close -> browser.layoutEditor?.let { EndTerminalButton(it, entry.terminal, close) } })
+                    tab.panes.filter { it.terminal == null }.forEach { pane ->
+                        item(key = "gone:${space.id}:${tab.id}:${pane.id}") {
+                            Text(stringResource(R.string.pane_terminal_gone, pane.terminalAddress), Modifier.padding(start = 48.dp, top = 8.dp, bottom = 8.dp),
+                                style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
                 }
             }
         }
-        val root = pane.terminal?.let(browser::current)
-        if (root != null) {
-            terminalTree(listOf(root) + pane.subAgents.map(browser::current)) { it }.drop(1).forEach { row ->
-                TerminalBranch(row.guide, row.depth + 1) {
-                    ConsoleTerminalRow(row.value, browser.host.name, { onOpen(row.value) }, trailing = {
-                        browser.layoutEditor?.let { EndTerminalButton(it, row.value) }
-                    })
-                }
-            }
+        if (structure.unplaced.isNotEmpty()) {
+            item { Text(stringResource(R.string.unplaced_title), Modifier.padding(12.dp), style = MaterialTheme.typography.titleSmall) }
+            val entries = structure.unplaced.map(browser::current).mapIndexed { index, t -> AgentEntry(browser.host, t, sequence = index) }
+            agentTreeItems(orderAgents(entries), agentFolds, { onOpen(it.terminal) }, onPin, tag = "host-unplaced", sections = false,
+                actions = { entry, close ->
+                    WorktreeControls(browser, entry.terminal)
+                    browser.layoutEditor?.let { EndTerminalButton(it, entry.terminal, close) }
+                })
         }
+        item { Column(Modifier.padding(horizontal = 12.dp)) { hostSections() } }
     }
 }
