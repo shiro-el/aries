@@ -7,16 +7,19 @@
 //! - `status`: prints one [`BeaconStatus`] JSON line.
 //! - `call`: an Agent asks for the user (see `calls.rs`).
 //! - `calls [--follow]`: Call history as JSON lines (see `calls.rs`).
+//! - `pair` / `push-test` / `unpair`: the push pairing with one phone
+//!   ([`push`]); run by the phone over SSH.
 //! - `chat <terminal> [--follow] [--cursor C]`: the Terminal's Agent Chat
 //!   as JSON lines (`aries_protocol::chat`).
 //! - `--version`: `aries-beacon <version> (contract <n>)`.
+
+mod calls;
+mod push;
 
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
-
-mod calls;
 
 use aries_beacon::{herdr_core, home};
 use aries_protocol::beacon::BeaconStatus;
@@ -36,13 +39,23 @@ fn main() {
         Some("serve") => serve(),
         Some("call") => std::process::exit(calls::call_command(&call_log(), &rest_args())),
         Some("calls") => std::process::exit(calls::calls_command(&call_log(), &rest_args())),
+        Some("pair") => exit_on_error(push::pair_command()),
+        Some("push-test") => exit_on_error(push::push_test_command()),
+        Some("unpair") => exit_on_error(push::unpair_command()),
         Some("chat") => chat(std::env::args().skip(2).collect()),
         _ => {
             eprintln!(
-                "usage: aries-beacon --version | status | serve | call ... | calls [--follow] | chat TERMINAL [--follow] [--cursor C]"
+                "usage: aries-beacon --version | status | serve | call ... | calls [--follow] | pair | push-test | unpair | chat TERMINAL [--follow] [--cursor C]"
             );
             std::process::exit(2);
         }
+    }
+}
+
+fn exit_on_error(result: Result<(), String>) {
+    if let Err(e) = result {
+        eprintln!("aries-beacon: {e}");
+        std::process::exit(1);
     }
 }
 

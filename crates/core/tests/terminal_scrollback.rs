@@ -76,6 +76,7 @@ fn observe(history: u32) -> AttachOptions {
         cols: 40,
         rows: 10,
         history,
+        resumed: false,
     }
 }
 

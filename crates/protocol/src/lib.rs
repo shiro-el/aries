@@ -10,3 +10,4 @@ pub mod agent_status;
 pub mod beacon;
 pub mod calls;
 pub mod chat;
+pub mod push;

@@ -18,11 +18,28 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val core = app.core
+        val push = AndroidPushPlatform(this)
         setContent {
             val scope = rememberCoroutineScope()
-            val model = remember { HostsModel(core, scope, keyWork = Dispatchers.IO) }
+            val model = remember { HostsModel(core, scope, keyWork = Dispatchers.IO, pushPlatform = push).also { this@MainActivity.model = it } }
             MaterialTheme { AriesApp(model) }
         }
+        network = NetworkWatch(this) { model?.networkChanged() }.also { it.start() }
+    }
+
+    /** The screens' model, for network and foreground events. */
+    private var model: HostsModel? = null
+    private var network: NetworkWatch? = null
+
+    override fun onStart() {
+        super.onStart()
+        // Back from the background: lines may have died while the phone slept.
+        model?.foregrounded()
+    }
+
+    override fun onDestroy() {
+        network?.stop()
+        super.onDestroy()
     }
 
     override fun onResume() {

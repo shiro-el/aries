@@ -727,6 +727,8 @@ impl HcSession {
     }
 }
 
+pub mod relay;
+pub use relay::{FakeRelay, RelayLog, ReverseTunnel, http_request};
 impl HcSession {
     /// Adds `remote` to this core as machine `name` (`hc machine add --via`),
     /// so its Terminals show up here as `name/tN`. The `--via` command is a
