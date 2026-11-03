@@ -3,6 +3,7 @@
 
 pub mod chat;
 pub mod core_link;
+pub mod pi_extension;
 pub mod skill;
 pub mod status_watch;
 

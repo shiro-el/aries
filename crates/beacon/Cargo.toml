@@ -10,6 +10,7 @@ rust-version.workspace = true
 aries-protocol.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2 = "0.11"
 thiserror.workspace = true
 # rustls with ring and bundled web PKI roots: no system TLS libraries needed on the Host.
 ureq = "3.5.1"

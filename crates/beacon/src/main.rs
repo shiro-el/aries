@@ -8,6 +8,8 @@
 //! - `status`: prints one [`BeaconStatus`] JSON line.
 //! - `call`: an Agent asks for the user (see `calls.rs`).
 //! - `calls [--follow]`: Call history as JSON lines (see `calls.rs`).
+//! - `reply CALL CHOICE`: the phone answers a Call; types the Choice into
+//!   the calling Terminal once (see `calls.rs`).
 //! - `pair` / `push-test` / `unpair`: the push pairing with one phone
 //!   ([`push`]); run by the phone over SSH.
 //! - `chat <terminal> [--follow] [--cursor C]`: the Terminal's Agent Chat
@@ -19,6 +21,9 @@
 //! - `skill install` / `skill uninstall`: the managed `call-human` skill
 //!   for Agents ([`aries_beacon::skill`]); run by the phone over SSH when it
 //!   installs, updates or removes the Beacon. One `SkillReport` line.
+//! - `pi-extension install|remove`: the managed Pi status extension
+//!   ([`aries_beacon::pi_extension`]); the phone runs `install` after
+//!   installing or updating the Beacon.
 //! - `--version`: `aries-beacon <version> (contract <n>)`.
 
 mod call_push;
@@ -52,6 +57,7 @@ fn main() {
         Some("serve") => serve(),
         Some("call") => std::process::exit(calls::call_command(&call_log(), &rest_args())),
         Some("calls") => std::process::exit(calls::calls_command(&call_log(), &rest_args())),
+        Some("reply") => std::process::exit(calls::reply_command(&call_log(), &rest_args())),
         Some("pair") => exit_on_error(push::pair_command()),
         Some("push-test") => exit_on_error(push::push_test_command()),
         Some("unpair") => exit_on_error(push::unpair_command()),
@@ -59,9 +65,12 @@ fn main() {
         Some("answer") => answer(std::env::args().skip(2).collect()),
         Some("skill") => exit_on_error(skill(&rest_args())),
         Some("policy") => std::process::exit(policy::command(&rest_args())),
+        Some("pi-extension") => {
+            std::process::exit(aries_beacon::pi_extension::command(&rest_args()))
+        }
         _ => {
             eprintln!(
-                "usage: aries-beacon --version | status | serve | call ... | calls [--follow] | pair | push-test | unpair | chat TERMINAL [--follow] [--cursor C] | answer TERMINAL QUESTION PICKS... | skill install|uninstall | policy [set]"
+                "usage: aries-beacon --version | status | serve | call ... | calls [--follow] | reply CALL CHOICE | pair | push-test | unpair | chat TERMINAL [--follow] [--cursor C] | answer TERMINAL QUESTION PICKS... | skill install|uninstall | pi-extension install|remove | policy [set]"
             );
             std::process::exit(2);
         }

@@ -35,7 +35,8 @@ pub use beacon::{
     BeaconSource, BeaconState, BeaconUpdate, FetchError, Linger, pinned_release,
 };
 pub use calls::{
-    CallAnswer, CallAnswerState, CallFeedState, CallInfo, CallListener, CallUrgency, CallWatch,
+    CallAnswer, CallAnswerState, CallFeedState, CallInfo, CallListener, CallReply,
+    CallReplyOutcome, CallUrgency, CallWatch,
 };
 pub use chat::{
     ChatEntry, ChatEntryBody, ChatQuestionOption, ChatQuestionPart, ChatSnapshot, ChatStatus,
@@ -1005,6 +1006,30 @@ impl AriesCore {
     ) -> Result<Arc<CallWatch>, CoreError> {
         let runner = self.chat_host(&host_id)?;
         Ok(Arc::new(calls::watch(runner, host_id, listener)))
+    }
+
+    /// Answers Call `call_id` with its Choice `choice` (0-based): the
+    /// Host's Beacon types that Choice into the calling Terminal, then
+    /// Enter, at most once ever (it claims the Call first).
+    ///
+    /// A plain core call with no UI state, so it also runs from a
+    /// notification action in the background (ticket 36). How it ends:
+    /// - `Err(..)`: the reply never started on the Host (no key, key locked,
+    ///   Host unreachable, key rejected, Host key unknown or changed).
+    ///   Nothing was claimed or typed; trying again is safe.
+    /// - `Ok` with [`CallReplyOutcome::Unknown`]: the Beacon was started but
+    ///   its result was lost (connection dropped, timed out). It may have
+    ///   been delivered; the Call history shows. Trying again is still safe:
+    ///   the claim makes a second try `Answered` if the first got through.
+    /// - Any other `Ok`: what the Beacon did and recorded.
+    pub async fn reply_call(
+        &self,
+        host_id: String,
+        call_id: String,
+        choice: u32,
+    ) -> Result<CallReply, CoreError> {
+        let runner = self.chat_host(&host_id)?;
+        on_runtime(async move { calls::reply(&runner, &call_id, choice).await }).await
     }
 }
 

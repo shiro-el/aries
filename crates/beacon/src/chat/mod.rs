@@ -13,6 +13,7 @@ pub mod codex;
 mod follow;
 mod jsonl;
 pub mod media;
+pub mod pi;
 
 use std::path::PathBuf;
 
@@ -118,5 +119,6 @@ pub fn agents() -> Vec<Box<dyn Agent>> {
     vec![
         Box::new(claude::ClaudeCode::from_env()),
         Box::new(codex::Codex),
+        Box::new(pi::Pi),
     ]
 }

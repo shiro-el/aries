@@ -15,6 +15,8 @@ import io.github.shiroel.aries.core.BeaconState
 import io.github.shiroel.aries.core.CallFeedState
 import io.github.shiroel.aries.core.CallInfo
 import io.github.shiroel.aries.core.CallListener
+import io.github.shiroel.aries.core.CallReply
+import io.github.shiroel.aries.core.CallReplyOutcome
 import io.github.shiroel.aries.core.CallWatch
 import io.github.shiroel.aries.core.BeaconUpdate
 import io.github.shiroel.aries.core.ChatSnapshot
@@ -446,6 +448,25 @@ class FakeCore : AriesCoreInterface {
 
             override fun close() {}
         }
+    }
+
+    /** (host id, call id, choice) of each `replyCall`. */
+    val replies = mutableListOf<Triple<String, String, UInt>>()
+
+    /** What `replyCall` returns. */
+    var replyResult = CallReply(CallReplyOutcome.DELIVERED, null, null)
+
+    /** Thrown by the next `replyCall` instead (the reply never started on the Host). */
+    var replyFailure: CoreException? = null
+
+    /** When set, `replyCall` waits for it first. */
+    var replyHold: CompletableDeferred<Unit>? = null
+
+    override suspend fun replyCall(hostId: String, callId: String, choice: UInt): CallReply {
+        replies += Triple(hostId, callId, choice)
+        replyHold?.await()
+        replyFailure?.let { replyFailure = null; throw it }
+        return replyResult
     }
 
     /** An Agent on [call]'s Host sent it: the Host's watch hears of it. */

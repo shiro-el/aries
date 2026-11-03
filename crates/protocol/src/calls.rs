@@ -173,6 +173,87 @@ pub fn fold(entries: impl IntoIterator<Item = LogEntry>) -> Vec<(u64, Call)> {
     calls
 }
 
+// ------------------------------------------------------------- `reply`
+
+/// Version of the [`ReplyLine`] format.
+pub const REPLY_FORMAT: u32 = 1;
+
+/// What `aries-beacon reply CALL CHOICE` did. Only [`ReplyOutcome::Delivered`]
+/// exits 0.
+///
+/// The Beacon claims the Call in its log (an [`AnswerState::Claimed`]
+/// answer) before it types anything, so no second answer is ever typed: a
+/// retry of the same reply, or a racing reply from another phone, gets
+/// [`ReplyOutcome::Answered`]. That also makes a retry safe after the phone
+/// lost the connection mid-reply.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReplyOutcome {
+    /// Typed into the calling Terminal, then Enter.
+    Delivered,
+    /// Claimed, but certainly not typed (the Terminal is gone, herdr-core
+    /// refused it, ...); recorded as [`AnswerState::Failed`].
+    Failed,
+    /// Claimed and handed to herdr-core, but its answer never came: the
+    /// text may or may not be in the Terminal. Recorded as
+    /// [`AnswerState::Unconfirmed`] and never retried.
+    Unconfirmed,
+    /// The Call already has an answer (in [`ReplyLine::answer`]); nothing
+    /// was typed.
+    Answered,
+    /// No Call with this id in the Host's history.
+    NoCall,
+    /// The Call has no Choice with this index.
+    NoChoice,
+    /// The Call's caller was never confirmed, so there is no Terminal to
+    /// type into.
+    NotAnswerable,
+    /// The Host has no (usable) Beacon. Written by the app's launcher
+    /// script, never by the Beacon itself.
+    NoBeacon,
+    /// An outcome this reader does not know: treat as a failure.
+    #[serde(other)]
+    Unknown,
+}
+
+/// The one line `aries-beacon reply` prints.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReplyLine {
+    pub v: u32,
+    pub outcome: ReplyOutcome,
+    /// The Call's answer as recorded after this reply (the earlier one for
+    /// [`ReplyOutcome::Answered`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub answer: Option<Answer>,
+    /// For logs and error details; not for matching.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
+impl ReplyLine {
+    pub fn new(outcome: ReplyOutcome, answer: Option<Answer>, detail: Option<String>) -> Self {
+        Self {
+            v: REPLY_FORMAT,
+            outcome,
+            answer,
+            detail,
+        }
+    }
+
+    /// Reads a line; `Err` for other lines and newer versions.
+    pub fn parse(line: &str) -> Result<Self, String> {
+        let reply: Self = serde_json::from_str(line).map_err(|e| e.to_string())?;
+        if reply.v > REPLY_FORMAT {
+            return Err(format!("reply format {} is newer", reply.v));
+        }
+        Ok(reply)
+    }
+
+    pub fn to_json(&self) -> String {
+        serde_json::to_string(self).expect("reply line json")
+    }
+}
+
 /// Why a Call was refused before it was recorded.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Invalid {
