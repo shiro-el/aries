@@ -24,6 +24,23 @@ class DiagnosticsScreenTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
 
     @Test
+    fun pendingVerificationIsShownAsWaitingInsteadOfSuccessfulDelivery() {
+        val core = FakeCore()
+        val host = core.addHost("Alpha", Endpoint.Ssh("alpha", 22u, "u"))
+        core.diagnosticEntries = listOf(
+            DiagnosticEntry(1_700_000_002_000uL, host.id, DiagnosticSource.RELAY, DiagnosticEvent.PUSH_VERIFICATION, null, 202u),
+            DiagnosticEntry(1_700_000_001_000uL, host.id, DiagnosticSource.RELAY, DiagnosticEvent.PUSH_VERIFICATION, DiagnosticError.RELAY_VERIFICATION, null),
+        )
+        compose.setContent {
+            val scope = rememberCoroutineScope()
+            val history = remember { DiagnosticsModel(core, scope, kotlin.coroutines.EmptyCoroutineContext) }
+            androidx.compose.material3.MaterialTheme { DiagnosticsScreen(history, listOf(host)) }
+        }
+        compose.onNodeWithText(context.getString(io.github.shiroel.aries.R.string.push_verification_pending), substring = true).assertIsDisplayed()
+        compose.onNodeWithText(context.getString(io.github.shiroel.aries.R.string.diagnostics_error_verify), substring = true).assertIsDisplayed()
+    }
+
+    @Test
     fun settingsFiltersHistoryAndCopiesAndExportsOnlyVisibleRecords() {
         val core = FakeCore()
         val alpha = core.addHost("Alpha", Endpoint.Ssh("alpha", 22u, "u"))

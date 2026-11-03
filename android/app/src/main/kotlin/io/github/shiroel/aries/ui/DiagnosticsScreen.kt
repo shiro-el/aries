@@ -140,7 +140,10 @@ private fun diagnosticText(context: Context, entry: DiagnosticEntry, names: Map<
     val time = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM).withZone(ZoneId.systemDefault())
         .format(Instant.ofEpochMilli(entry.timestampMs.toLong()))
     val host = entry.hostId?.let { names[it] } ?: context.getString(R.string.diagnostics_unknown_host)
-    val result = context.getString(entry.error?.label() ?: R.string.diagnostics_success)
+    val resultLabel = if (entry.event == DiagnosticEvent.PUSH_VERIFICATION && entry.httpStatus == 202.toUShort() && entry.error == null) {
+        R.string.push_verification_pending
+    } else entry.error?.label() ?: R.string.diagnostics_success
+    val result = context.getString(resultLabel)
     val outcome = entry.httpStatus?.let { context.getString(R.string.diagnostics_http, result, it.toInt()) } ?: result
     return context.getString(R.string.diagnostics_entry, time, host, context.getString(entry.source.label()),
         context.getString(entry.event.label()), outcome)
