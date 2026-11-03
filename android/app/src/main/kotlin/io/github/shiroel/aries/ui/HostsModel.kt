@@ -490,22 +490,15 @@ class HostsModel(
     /**
      * Opens [terminal]: an Agent in the saved [agentView], any other
      * Terminal as a Terminal in observe mode (the desktop keeps its size and
-     * the screen follows the Terminal's grid). Entry point for every list
-     * that shows Terminals or Agents: from Browse it is a Terminal of the
-     * open Host; from [Screen.Agents] it is the Terminal of the Agent whose
-     * detail is open. Leaving it returns to where it was opened.
+     * the screen follows the Terminal's grid). From Browse it is a Terminal
+     * of the open Host. Agents lists use [openAgent] to retain the whole Host/address
+     * identity. Leaving a Terminal returns to where it was opened.
      */
     fun openTerminal(terminal: TerminalInfo) {
         when (val s = screen) {
             is Screen.Browse -> {
                 val link = browseLink ?: return
                 show(link, s.browser.current(terminal), s)
-            }
-            is Screen.Agents -> {
-                val key = s.board.openKey ?: return
-                if (key.address != terminal.address) return
-                val link = agentLinks[key.hostId] ?: return
-                show(link, s.board.find(key)?.terminal ?: terminal, s)
             }
             // From a Chat (a Blocked Agent): back returns to the still-live Chat.
             is Screen.Chat -> {
@@ -696,7 +689,7 @@ class HostsModel(
     /**
      * A tapped Agent notification (warm or cold start): leaves whatever is
      * open, shows the Agents list and, once [hostId]'s list arrives, opens
-     * that Agent's Terminal (back returns to its detail). A Terminal that is
+     * that Agent in its saved view (back returns to the list). A Terminal that is
      * no longer live, or a Host that was removed, is explained instead.
      */
     fun openPushedAgent(hostId: String, address: String) {
@@ -737,7 +730,7 @@ class HostsModel(
                                 terminalOn(host.id)?.update(list)
                                 focusing?.let { key ->
                                     focusing = null
-                                    if (screen === agents) focusOn(agents, link, host, key, list)
+                                    if (screen === agents) focusOn(agents, host, key, list)
                                 }
                             }
                         } finally {
@@ -751,7 +744,7 @@ class HostsModel(
         }
     }
 
-    private fun focusOn(agents: Screen.Agents, link: HostLink, host: Host, key: AgentKey, list: List<TerminalInfo>) {
+    private fun focusOn(agents: Screen.Agents, host: Host, key: AgentKey, list: List<TerminalInfo>) {
         val terminal = list.find { it.address == key.address && it.state == "live" }
         if (terminal == null) {
             prompt = Prompt.Problem(
@@ -760,16 +753,20 @@ class HostsModel(
             )
             return
         }
-        agents.board.open(key)
-        show(link, terminal, agents)
+        openAgent(agents.board, AgentEntry(host, terminal))
     }
 
-    /** Opens an Agent's detail; a Done Agent counts as seen there, for every client. */
+    /** Opens an Agent in its saved view over the list; a Done Agent counts as seen for every client. */
     fun openAgent(board: AgentBoard, entry: AgentEntry) {
-        board.open(entry.key)
-        val t = entry.terminal
-        if (t.agentStatus != AgentStatus.Done) return
-        labelWrite(board, entry) { it.markSeen(t.address, t.turn) }
+        val agents = screen as? Screen.Agents ?: return
+        if (agents.board !== board) return
+        val current = board.find(entry.key) ?: return
+        val link = agentLinks[current.host.id] ?: return
+        val t = current.terminal
+        show(link, t, agents)
+        if (t.agentStatus == AgentStatus.Done) {
+            labelWrite(board, current) { it.markSeen(t.address, t.turn) }
+        }
     }
 
     /** Pins or unpins an Agent for every client. */
@@ -867,7 +864,6 @@ class HostsModel(
         val board = (screen as? Screen.Agents)?.board
         if (board != null) {
             openAgent(board, entry)
-            openTerminal(entry.terminal)
         } else {
             openPushedAgent(entry.host.id, entry.terminal.address)
         }

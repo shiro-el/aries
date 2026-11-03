@@ -240,7 +240,7 @@ class ChatScreenTest {
     }
 
     @Test
-    fun opensFromTheAgentsListAndReturnsToTheAgent() {
+    fun opensFromTheAgentsListAndReturnsToTheList() {
         val core = FakeCore().apply {
             addHost("home", Endpoint.Ssh("10.0.0.2", 22u, "me"))
             addHost("server", Endpoint.Ssh("10.0.0.3", 22u, "me"))
@@ -256,8 +256,6 @@ class ChatScreenTest {
         compose.waitForIdle()
         compose.onNodeWithText("claude").performClick()
         compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.agent_open_button)).performClick()
-        compose.waitForIdle()
         compose.onNodeWithText(str(R.string.agent_view_chat)).performClick()
         compose.waitForIdle()
         assertEquals(listOf("h2" to "t1"), core.chatsOpened)
@@ -266,7 +264,8 @@ class ChatScreenTest {
         compose.onNodeWithText(str(R.string.back_button)).performClick()
         compose.waitForIdle()
         assertTrue(core.chatStopped)
-        compose.onNodeWithText(str(R.string.agent_detail_host, "server")).assertExists()
+        compose.onNodeWithText("claude").assertExists()
+        compose.onNodeWithContentDescription(str(R.string.agent_pin_button_label, "claude", "server")).assertExists()
     }
 
     private fun option(label: String) = ChatQuestionOption(label, "Choose $label")
