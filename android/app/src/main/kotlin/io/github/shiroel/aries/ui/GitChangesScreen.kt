@@ -47,12 +47,12 @@ internal fun ColumnScope.GitFileDiff(
     if (onSend != null) {
         Row {
             val path = "${cwd.trimEnd('/')}/${selectedFile.path}"
-            TextButton(onClick = { onSend(formatGitReference(path, diff?.lines.orEmpty().take(visible))) }) { Text(stringResource(R.string.git_send_file)) }
-            TextButton(enabled = selection != null && diff != null, onClick = {
-                val range = selection ?: return@TextButton
-                val lines = diff?.lines ?: return@TextButton
+            ActionIcon(R.drawable.ic_file, R.string.git_send_file, { onSend(formatGitReference(path, diff?.lines.orEmpty().take(visible))) })
+            ActionIcon(R.drawable.ic_send, R.string.git_send_selection, enabled = selection != null && diff != null, onClick = {
+                val range = selection ?: return@ActionIcon
+                val lines = diff?.lines ?: return@ActionIcon
                 onSend(formatGitReference(path, lines.slice(range)))
-            }) { Text(stringResource(R.string.git_send_selection)) }
+            })
         }
     }
     val patch = diff

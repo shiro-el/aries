@@ -1,5 +1,9 @@
 package io.github.shiroel.aries.ui
 
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+
+import androidx.compose.ui.test.onNodeWithContentDescription
+
 import android.content.ClipboardManager
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
@@ -110,7 +114,7 @@ class TerminalScrollZoomCopyTest {
         compose.waitForIdle()
         compose.onNodeWithText(str(R.string.terminal_scrolled_back, back.toInt())).assertExists()
 
-        compose.onNodeWithText(str(R.string.terminal_back_to_live)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.terminal_back_to_live)).performClick()
         compose.waitForIdle()
         assertEquals(0u, view.scrolls.last())
 
@@ -121,7 +125,7 @@ class TerminalScrollZoomCopyTest {
         screen.performTouchInput { swipeUp() }
         compose.waitForIdle()
         assertTrue(view.scrolls.drop(before).all { it == 0u })
-        compose.onAllNodesWithText(str(R.string.terminal_back_to_live)).assertCountEquals(0)
+        compose.onAllNodesWithContentDescription(str(R.string.terminal_back_to_live)).assertCountEquals(0)
     }
 
     @Test
@@ -154,10 +158,10 @@ class TerminalScrollZoomCopyTest {
 
         screen.performTouchInput { longClick(cell(1)) }
         compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.terminal_copy)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.terminal_copy)).performClick()
         compose.waitForIdle()
         assertEquals("hello", clipboard())
-        compose.onAllNodesWithText(str(R.string.terminal_copy)).assertCountEquals(0)
+        compose.onAllNodesWithContentDescription(str(R.string.terminal_copy)).assertCountEquals(0)
     }
 
     @Test
@@ -168,13 +172,13 @@ class TerminalScrollZoomCopyTest {
 
         screen.performTouchInput { longClick(cell(8)) }
         compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.terminal_open_link)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.terminal_open_link)).performClick()
         compose.waitForIdle()
         assertEquals(listOf("https://example.com/a?b=1"), opened)
 
         screen.performTouchInput { longClick(cell(8)) }
         compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.terminal_copy_link)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.terminal_copy_link)).performClick()
         compose.waitForIdle()
         assertEquals("https://example.com/a?b=1", clipboard())
     }
@@ -187,7 +191,7 @@ class TerminalScrollZoomCopyTest {
 
         screen.performTouchInput { longClick(cell(5)) }
         compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.terminal_open_link)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.terminal_open_link)).performClick()
         assertEquals(listOf("https://ci.example/run/7"), opened)
     }
 

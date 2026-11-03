@@ -1,5 +1,11 @@
 package io.github.shiroel.aries.ui
 
+import androidx.compose.ui.test.hasAnyDescendant
+
+import androidx.compose.ui.test.assert
+
+import androidx.compose.ui.test.onNodeWithTag
+
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -128,7 +134,7 @@ class JumpHostsScreenTest {
         compose.waitForIdle()
 
         assertEquals("SHA256:jjj", core.jumpHosts("h1").single().hostKey)
-        compose.onNodeWithText(str(R.string.terminals_title, "work")).assertExists()
+        compose.onNodeWithTag("console-top-bar").assert(hasAnyDescendant(hasText("work")))
     }
 
     @Test

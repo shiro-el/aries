@@ -9,7 +9,6 @@ import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -185,12 +184,12 @@ internal fun ChatSearchBar(
                 modifier = Modifier.weight(1f).focusRequester(focus).semantics { contentDescription = label },
                 label = { Text(label) }, singleLine = true, shape = RectangleShape,
             )
-            TextButton(onClick = onClose, shape = RectangleShape) { Text(stringResource(R.string.chat_search_close)) }
+            ActionIcon(R.drawable.ic_x, R.string.chat_search_close, onClose)
         }
         Row {
             Text(stringResource(R.string.chat_search_count, current, count), Modifier.weight(1f).padding(12.dp))
-            TextButton(onClick = { onMove(-1) }, enabled = count > 0, shape = RectangleShape) { Text(stringResource(R.string.chat_search_previous)) }
-            TextButton(onClick = { onMove(1) }, enabled = count > 0, shape = RectangleShape) { Text(stringResource(R.string.chat_search_next)) }
+            ActionIcon(R.drawable.ic_chevron_up, R.string.chat_search_previous, { onMove(-1) }, enabled = count > 0)
+            ActionIcon(R.drawable.ic_chevron_down, R.string.chat_search_next, { onMove(1) }, enabled = count > 0)
         }
     }
     LaunchedEffect(focus) { focus.requestFocus() }

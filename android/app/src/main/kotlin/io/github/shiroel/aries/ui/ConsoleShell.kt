@@ -117,7 +117,9 @@ internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit) {
                     ConsoleTopBar(consoleTitle(screen), onMenu = {
                         model.closeCallInbox()
                         scope.launch { drawer.open() }
-                    }, onBack = consoleBack(model))
+                    }, onBack = consoleBack(model), actions = {
+                        if (screen is Screen.Browse) HostActions(screen.browser) { model.newTerminal(screen.browser) }
+                    })
                 }
                 Box(Modifier.weight(1f)) {
                     content()
