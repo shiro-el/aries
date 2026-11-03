@@ -52,6 +52,9 @@ class HostBrowser(val host: Host) {
     var closed by mutableStateOf(false)
         private set
 
+    /** The Host line; its state shows while it reconnects. */
+    var link: HostLink? = null
+
     var openSpaceId by mutableStateOf<String?>(null)
         private set
     private val tabOfSpace = mutableStateMapOf<String, String>()
@@ -201,7 +204,9 @@ fun BrowseScreen(
                 onDelete = { onDeleteLaunch(form, it) },
             )
         }
-        if (browser.closed) Notice(stringResource(R.string.structure_connection_closed))
+        val line = browser.link?.state
+        if (line == LinkState.Reconnecting) Notice(stringResource(R.string.reconnecting))
+        if (browser.closed || line is LinkState.Down) Notice(stringResource(R.string.structure_connection_closed))
         browser.structure?.problem?.let { Notice(problemText(it)) }
         when {
             browser.structure == null -> Text(stringResource(R.string.connecting, browser.host.name))
