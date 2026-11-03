@@ -442,6 +442,7 @@
     <string name="chat_status_no_core">Beacon이 이 Host의 herdr-core에 연결하지 못하고 있어요. 다시 시도하는 중…</string>
     <string name="chat_status_incompatible">이 Host의 Beacon이 앱보다 새 버전이에요. Chat을 보려면 Aries를 업데이트해 주세요.</string>
     <string name="chat_you">나</string>
+    <string name="chat_user_queued">나 · 대기 중</string>
     <!-- Chat Markdown code blocks (94) -->
     <string name="chat_code_label">코드</string>
     <string name="chat_code_copy_button">코드 복사</string>

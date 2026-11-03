@@ -199,7 +199,7 @@ async fn images_are_fetched_on_demand_and_a_capped_one_is_only_described() {
     let host = env.fake_beacon(&format!("cat {lines}; sleep 30"));
     let watch = env.watch(&host);
     let s = wait_for(&watch, "live", |s| s.status == ChatStatus::Live).await;
-    let ChatEntryBody::User { text, images } = &s.entries[0].body else {
+    let ChatEntryBody::User { text, images, .. } = &s.entries[0].body else {
         panic!()
     };
     assert_eq!(text, "see");
@@ -559,5 +559,51 @@ async fn tool_details_and_response_metadata_reach_the_phone_without_filling_abse
         snapshot.entries[2].body,
         ChatEntryBody::Agent { metadata: None, .. }
     ));
+    watch.stop();
+}
+
+#[tokio::test]
+async fn waiting_input_becomes_one_delivered_message_with_its_image() {
+    let env = Env::new();
+    let gate = env.dir.path().join("deliver");
+    let queued = env.file("queued", concat!(
+        r#"{"v":1,"type":"reset","agent":"claude-code","session":"s"}"#, "\n",
+        r#"{"v":1,"type":"item","item":{"id":"queue-one","kind":"user","text":"Check the image","queued":true}}"#, "\n",
+        r#"{"v":1,"type":"state","state":"live"}"#, "\n",
+    ));
+    let delivered = env.file("delivered", concat!(
+        r#"{"v":1,"type":"remove","id":"queue-one"}"#, "\n",
+        r#"{"v":1,"type":"item","item":{"id":"delivered-one","kind":"user","text":"Check the image","images":[{"media_type":"image/png","data":"aGVsbG8=","bytes":5}]}}"#, "\n",
+    ));
+    let host = env.fake_beacon(&format!(
+        "cat {queued}\nwhile [ ! -f {} ]; do sleep 0.05; done\ncat {delivered}\nsleep 30",
+        gate.display()
+    ));
+    let watch = env.watch(&host);
+    let waiting = wait_for(&watch, "waiting input", |s| s.status == ChatStatus::Live).await;
+    assert!(matches!(
+        waiting.entries[0].body,
+        ChatEntryBody::User { queued: true, .. }
+    ));
+    std::fs::write(gate, "go").unwrap();
+    let delivered = wait_for(&watch, "delivered input", |s| {
+        s.entries.first().is_some_and(|e| e.id == "delivered-one")
+    })
+    .await;
+    assert_eq!(delivered.entries.len(), 1);
+    let ChatEntryBody::User {
+        text,
+        images,
+        queued,
+    } = &delivered.entries[0].body
+    else {
+        panic!()
+    };
+    assert!(!queued);
+    assert_eq!(text, "Check the image");
+    assert_eq!(
+        watch.image(images[0].id.clone()).as_deref(),
+        Some(&b"hello"[..])
+    );
     watch.stop();
 }
