@@ -473,6 +473,15 @@
     <string name="host_edit_title">Host 편집</string>
     <string name="host_edit_save_button">저장</string>
     <string name="host_edit_invalid_body">중복되지 않는 Host 이름, 올바른 주소와 사용자, 1~65535 사이의 포트를 입력하세요.</string>
+
+    <string name="attachments_choose_agent">공유한 내용을 붙일 Agent 선택</string>
+    <string name="attachments_uploading">첨부 파일을 올리는 중…</string>
+    <string name="attachments_too_large">첨부 파일이 8 MiB를 초과합니다. 더 작은 파일을 선택하거나 이미지 축소를 켜세요.</string>
+    <string name="attachments_failed">첨부할 수 없음: %1$s</string>
+    <string name="attachments_file_button">파일 첨부</string>
+    <string name="attachments_camera_button">사진 촬영</string>
+    <string name="attachments_resize_label">첨부 이미지 축소</string>
+    <string name="attachments_resize_hint">긴 변이 최대 2048픽셀인 JPEG로 변환합니다.</string>
     <string name="layout_new_space_button">새 Space</string>
     <string name="layout_app_unavailable">Space와 Tab을 편집하려면 이 Host에서 herdr-app을 여세요.</string>
     <string name="layout_kill_button">종료</string>
