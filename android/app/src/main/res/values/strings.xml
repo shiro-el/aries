@@ -45,6 +45,47 @@
     <string name="github_draft_failed">The draft could not be saved on this phone. Keep this view open and try editing again.</string>
     <string name="github_draft_limit">Comments can contain at most 64 KiB of text.</string>
 
+    <!-- GitHub PR resources (114) -->
+    <string name="github_pr_truncated">This PR response exceeds the Host’s size limit. Some details cannot be displayed.</string>
+    <string name="github_pr_conversation">Conversation</string>
+    <string name="github_pr_files">Files</string>
+    <string name="github_pr_commits">Commits</string>
+    <string name="github_pr_checks">Checks</string>
+    <string name="github_pr_reviews">Reviews</string>
+    <string name="github_pr_no_files">No changed files.</string>
+    <string name="github_pr_no_commits">No commits.</string>
+    <string name="github_pr_no_checks">No checks reported for this PR head commit.</string>
+    <string name="github_pr_no_reviews">No reviews yet.</string>
+    <string name="github_pr_patch_unavailable">GitHub did not provide a patch for this file. Binary or large file patches may be unavailable.</string>
+    <string name="github_pr_files_limited">GitHub returns at most 3,000 files. This list may be incomplete.</string>
+    <string name="github_pr_commits_limited">GitHub returns at most 250 PR commits. This list may be incomplete.</string>
+    <string name="github_pr_file_stats">%1$s · +%2$d −%3$d</string>
+    <string name="github_pr_previous_path">Previously: %1$s</string>
+    <string name="github_pr_added">Added</string>
+    <string name="github_pr_removed">Removed</string>
+    <string name="github_pr_renamed">Renamed</string>
+    <string name="github_pr_copied">Copied</string>
+    <string name="github_pr_changed">Changed</string>
+    <string name="github_pr_queued">Queued</string>
+    <string name="github_pr_in_progress">In progress</string>
+    <string name="github_pr_pending">Pending</string>
+    <string name="github_pr_waiting">Waiting</string>
+    <string name="github_pr_requested">Requested</string>
+    <string name="github_pr_success">Passed</string>
+    <string name="github_pr_failure">Failed</string>
+    <string name="github_pr_neutral">Neutral</string>
+    <string name="github_pr_cancelled">Cancelled</string>
+    <string name="github_pr_skipped">Skipped</string>
+    <string name="github_pr_timed_out">Timed out</string>
+    <string name="github_pr_action_required">Action required</string>
+    <string name="github_pr_stale">Stale</string>
+    <string name="github_pr_error">Error</string>
+    <string name="github_pr_unknown">Unknown</string>
+    <string name="github_pr_approved">Approved</string>
+    <string name="github_pr_changes_requested">Changes requested</string>
+    <string name="github_pr_commented">Commented</string>
+    <string name="github_pr_dismissed">Dismissed</string>
+
     <!-- App lock (117) -->
     <string name="app_lock_settings_title">App lock</string>
     <string name="app_lock_enabled_label">Require authentication</string>

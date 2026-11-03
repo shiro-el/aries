@@ -2,20 +2,14 @@ package io.github.shiroel.aries.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -125,31 +119,11 @@ internal fun GitChangesDialog(
                     val patch = diff
                     if (patch == null && error == null) Text(stringResource(R.string.git_loading), Modifier.padding(12.dp))
                     if (patch != null) {
-                        if (patch.truncated) Text(stringResource(R.string.git_truncated), Modifier.padding(12.dp))
-                        if (patch.binary) Text(stringResource(R.string.git_binary), Modifier.padding(12.dp))
-                        if (patch.lines.isEmpty() && !patch.binary) Text(stringResource(R.string.git_empty_diff), Modifier.padding(12.dp))
-                        val horizontal = rememberScrollState()
-                        LazyColumn(Modifier.weight(1f).horizontalScroll(horizontal).testTag("git-diff-lines")) {
-                            itemsIndexed(patch.lines.take(visible)) { index, line ->
-                                val selected = selection?.contains(index) == true
-                                val label = stringResource(R.string.git_line_label, line.oldLine?.toString() ?: "–", line.newLine?.toString() ?: "–", line.text)
-                                Row(Modifier.fillMaxWidth().selectable(selected, enabled = onSend != null && (line.oldLine != null || line.newLine != null), onClick = {
-                                    val first = selection
-                                    selection = if (first == null || first.first != first.last) index..index else minOf(first.first, index)..maxOf(first.first, index)
-                                }).background(if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface)
-                                    .semantics { contentDescription = label }.padding(horizontal = 12.dp, vertical = 4.dp)) {
-                                    Text("${line.oldLine ?: ""} ${line.newLine ?: ""}", Modifier.widthIn(min = 64.dp), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall) // i18n-ok: numeric old/new line columns
-                                    Text(line.text, fontFamily = FontFamily.Monospace, color = when {
-                                        line.newLine != null && line.oldLine == null -> MaterialTheme.colorScheme.primary
-                                        line.oldLine != null && line.newLine == null -> MaterialTheme.colorScheme.error
-                                        else -> MaterialTheme.colorScheme.onSurface
-                                    })
-                                }
-                            }
-                            if (patch.lines.size > visible) item {
-                                TextButton(onClick = { visible += 200 }) { Text(stringResource(R.string.git_more_button)) }
-                            }
-                        }
+                        GitDiffView(patch, Modifier.weight(1f), visible, { visible += 200 }, selection,
+                            if (onSend == null) null else { index ->
+                                val first = selection
+                                selection = if (first == null || first.first != first.last) index..index else minOf(first.first, index)..maxOf(first.first, index)
+                            })
                     }
                 }
             }

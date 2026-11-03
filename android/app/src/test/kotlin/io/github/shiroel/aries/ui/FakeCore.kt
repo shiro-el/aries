@@ -671,6 +671,27 @@ class FakeConnection(
 ) : HostConnection(NoHandle) {
     var githubRepo = io.github.shiroel.aries.core.GithubRepository("/repo", null, "octo/project", "github.com")
     var githubRepoReads = 0
+    var githubPrFiles = io.github.shiroel.aries.core.GithubPrFiles(emptyList(), false)
+    var githubPrCommits = io.github.shiroel.aries.core.GithubPrCommits(emptyList(), false)
+    var githubPrChecks = io.github.shiroel.aries.core.GithubPrChecks("c".repeat(40), emptyList())
+    var githubPrReviews = emptyList<io.github.shiroel.aries.core.GithubPrReview>()
+    var githubPrFailure: CoreException? = null
+    override suspend fun githubPrFiles(repo: io.github.shiroel.aries.core.GithubRepository, number: UInt): io.github.shiroel.aries.core.GithubPrFiles {
+        githubPrFailure?.let { throw it }
+        return githubPrFiles
+    }
+    override suspend fun githubPrCommits(repo: io.github.shiroel.aries.core.GithubRepository, number: UInt): io.github.shiroel.aries.core.GithubPrCommits {
+        githubPrFailure?.let { throw it }
+        return githubPrCommits
+    }
+    override suspend fun githubPrChecks(repo: io.github.shiroel.aries.core.GithubRepository, number: UInt): io.github.shiroel.aries.core.GithubPrChecks {
+        githubPrFailure?.let { throw it }
+        return githubPrChecks
+    }
+    override suspend fun githubPrReviews(repo: io.github.shiroel.aries.core.GithubRepository, number: UInt): List<io.github.shiroel.aries.core.GithubPrReview> {
+        githubPrFailure?.let { throw it }
+        return githubPrReviews
+    }
     var githubFailure: CoreException? = null
     var githubPage = io.github.shiroel.aries.core.GithubPage(listOf(
         io.github.shiroel.aries.core.GithubItem(42u, "Issue title", "open", "octocat", "2026-11-04", "**Issue body**", io.github.shiroel.aries.core.GithubKind.ISSUE),
