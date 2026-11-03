@@ -1,0 +1,71 @@
+//! What the app remembers between launches, under the app's data dir:
+//! `hosts.json` (Hosts and their trusted Host key fingerprints),
+//! `identity.sealed` (the SSH private key, sealed by the [`KeyVault`]) and
+//! `identity.pub`.
+
+use std::path::{Path, PathBuf};
+
+use serde::{Deserialize, Serialize};
+
+use crate::Endpoint;
+use crate::error::{CoreError, storage};
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub(crate) struct Saved {
+    #[serde(default)]
+    pub hosts: Vec<SavedHost>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct SavedHost {
+    pub id: String,
+    pub name: String,
+    pub endpoint: Endpoint,
+    #[serde(default)]
+    pub host_key: Option<String>,
+}
+
+pub(crate) struct Store {
+    dir: PathBuf,
+}
+
+impl Store {
+    pub fn open(dir: &Path) -> Result<Self, CoreError> {
+        std::fs::create_dir_all(dir).map_err(storage)?;
+        Ok(Self { dir: dir.to_owned() })
+    }
+
+    pub fn load(&self) -> Result<Saved, CoreError> {
+        match std::fs::read(self.dir.join("hosts.json")) {
+            Ok(bytes) => serde_json::from_slice(&bytes).map_err(storage),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Saved::default()),
+            Err(e) => Err(storage(e)),
+        }
+    }
+
+    pub fn save(&self, saved: &Saved) -> Result<(), CoreError> {
+        let bytes = serde_json::to_vec_pretty(saved).map_err(storage)?;
+        self.write_atomic("hosts.json", &bytes)
+    }
+
+    pub fn read_identity(&self) -> Result<Option<(Vec<u8>, String)>, CoreError> {
+        let sealed = match std::fs::read(self.dir.join("identity.sealed")) {
+            Ok(b) => b,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => return Err(storage(e)),
+        };
+        let public = std::fs::read_to_string(self.dir.join("identity.pub")).map_err(storage)?;
+        Ok(Some((sealed, public.trim().to_owned())))
+    }
+
+    pub fn write_identity(&self, sealed: &[u8], public: &str) -> Result<(), CoreError> {
+        self.write_atomic("identity.pub", format!("{public}\n").as_bytes())?;
+        self.write_atomic("identity.sealed", sealed)
+    }
+
+    fn write_atomic(&self, name: &str, bytes: &[u8]) -> Result<(), CoreError> {
+        let tmp = self.dir.join(format!(".{name}.tmp"));
+        std::fs::write(&tmp, bytes).map_err(storage)?;
+        std::fs::rename(&tmp, self.dir.join(name)).map_err(storage)
+    }
+}
