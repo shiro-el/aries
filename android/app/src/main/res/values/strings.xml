@@ -93,6 +93,12 @@
     <string name="files_range">Lines %1$d–%2$d of %3$d</string>
     <string name="files_previous_button">Previous page</string>
     <string name="files_next_button">Next page</string>
+    <!-- Remote image and PDF preview (111) -->
+    <string name="files_pdf_title">PDF page</string>
+    <string name="files_pdf_page">Page %1$d of %2$d</string>
+    <string name="files_preview_open">Open preview</string>
+    <string name="files_preview_too_large">This file exceeds the %1$d MiB preview limit.</string>
+    <string name="files_preview_failed">Could not preview this file. Check the file and connection, then refresh to retry.</string>
     <!-- File code view and Chat links (110) -->
     <string name="files_wrap_lines">Wrap lines</string>
     <string name="files_missing">File not found: %1$s</string>
