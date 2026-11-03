@@ -38,6 +38,10 @@ class FakeCore : AriesCoreInterface {
         hosts[i] = hosts[i].copy(hostKey = fingerprint)
     }
 
+    override fun removeHost(hostId: String) {
+        if (!hosts.removeIf { it.id == hostId }) throw CoreException.UnknownHost(hostId)
+    }
+
     override suspend fun connect(hostId: String): HostConnection {
         failWith?.let { throw it }
         val host = hosts.find { it.id == hostId } ?: throw CoreException.UnknownHost(hostId)

@@ -52,6 +52,15 @@ Tests go at the seams in `.scratch/aries-mvp/spec.md`:
 3. **Android UI <-> core API**: `android/app/src/test/` Compose tests against a
    fake implementation of the generated `AriesCoreInterface`.
 
+## Host removal
+
+`AriesCore::remove_host` runs the cleanup steps in `crates/core/src/removal.rs`,
+then drops the Host record (connection settings and trusted Host key). A ticket
+that creates something for one Host (pairing, Chat cache, ...) adds its own
+idempotent step to `removal::STEPS` and tests the removal at the core API seam.
+Per-Host files belong under `Store::host_dir` (`hosts/<id>/`), which the
+existing step already deletes. Details are in the module doc.
+
 ## UI strings
 
 Every user-visible string is an Android string resource

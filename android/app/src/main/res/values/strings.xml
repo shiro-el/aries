@@ -30,6 +30,11 @@
     <string name="host_add_port">Port</string>
     <string name="host_add_user">User name</string>
     <string name="host_add_button">Add Host</string>
+    <string name="host_remove_button">Remove</string>
+    <string name="host_remove_button_label">Remove %1$s</string>
+    <string name="host_remove_title">Remove %1$s?</string>
+    <string name="host_remove_body">Aries forgets this Host\'s address, its trusted Host key and everything stored for it on this phone. Nothing on the Host itself changes.</string>
+    <string name="host_remove_confirm_button">Remove Host</string>
 
     <string name="connecting">Connecting to %1$s…</string>
     <string name="terminals_title">Terminals on %1$s</string>
