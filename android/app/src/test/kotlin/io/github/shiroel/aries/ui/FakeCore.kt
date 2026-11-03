@@ -286,6 +286,9 @@ class FakeCore : AriesCoreInterface {
 
     /** When set, `enablePush` reports steps up to this one and then fails there. */
     var pushFailAt: PushStep? = null
+
+    /** The Relay URL of each `enablePush` call, in order. */
+    val pushRelays = mutableListOf<String>()
     var pushDisableHostCleared = true
     var testPushes = 0
     var revocationFlushes = 0
@@ -297,6 +300,7 @@ class FakeCore : AriesCoreInterface {
         http: HttpClient,
         progress: PushProgress,
     ): PushPairing {
+        pushRelays += relayUrl
         for (step in listOf(PushStep.REGISTER, PushStep.PAIR, PushStep.TEST)) {
             progress.onStep(step)
             if (step == pushFailAt) {
@@ -344,11 +348,43 @@ class FakeCore : AriesCoreInterface {
         chat.trySend(snapshot)
     }
 
+    /** When set, `watchChat` fails with it. */
+    var failChatWith: CoreException? = null
+    var chatReconnects = 0
+        private set
+    var chatRetries = 0
+        private set
+
+    /** The Chat cache, by (host id, terminal). */
+    val cachedChats = mutableMapOf<Pair<String, String>, ChatSnapshot>()
+    var retentionDays = 30u
+
+    override fun chatCacheRetentionDays(): UInt = retentionDays
+
+    override fun setChatCacheRetentionDays(days: UInt) {
+        retentionDays = maxOf(days, 1u)
+    }
+
+    override suspend fun cachedChat(hostId: String, terminal: String): ChatSnapshot? = cachedChats[hostId to terminal]
+
+    override suspend fun clearChatCache(hostId: String) {
+        if (hosts.none { it.id == hostId }) throw CoreException.UnknownHost(hostId)
+        cachedChats.keys.removeIf { it.first == hostId }
+    }
+
     override fun watchChat(hostId: String, terminal: String, cursor: String?): ChatWatch {
         chatsOpened += hostId to terminal
+        failChatWith?.let { throw it }
         return object : ChatWatch(NoHandle) {
             override suspend fun next(): ChatSnapshot = chat.receive()
 
+            override fun reconnect() {
+                chatReconnects++
+            }
+
+            override fun retryNow() {
+                chatRetries++
+            }
             override fun image(id: String): ByteArray? = chatImages[id]
 
             override fun stop() {

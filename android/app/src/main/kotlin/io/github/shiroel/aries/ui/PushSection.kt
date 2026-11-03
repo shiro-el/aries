@@ -8,12 +8,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
 
@@ -29,11 +34,12 @@ fun PushSection(model: PushModel, beaconInstalled: Boolean) {
         }
         when (val ui = model.ui) {
             PushUi.Loading, PushUi.Working -> CircularProgressIndicator()
-            PushUi.NoRelay -> Text(stringResource(R.string.push_no_relay))
             PushUi.Off -> {
                 Text(stringResource(R.string.push_off_body))
                 Text(stringResource(R.string.push_force_stop_note), style = MaterialTheme.typography.bodySmall)
-                Button(onClick = model::enable) {
+                if (!model.hasDefaultRelay) Text(stringResource(R.string.push_no_relay))
+                RelayField(model)
+                Button(onClick = model::enable, enabled = model.relayDraft.isNotBlank()) {
                     Text(stringResource(if (model.problem == null) R.string.push_enable_button else R.string.push_retry_button))
                 }
             }
@@ -54,15 +60,41 @@ fun PushSection(model: PushModel, beaconInstalled: Boolean) {
             is PushUi.On -> {
                 Text(stringResource(R.string.push_on_body, ui.relayUrl))
                 Text(stringResource(R.string.push_force_stop_note), style = MaterialTheme.typography.bodySmall)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = model::sendTest) { Text(stringResource(R.string.push_test_button)) }
-                    OutlinedButton(onClick = model::disable) { Text(stringResource(R.string.push_disable_button)) }
+                if (model.changingRelay) {
+                    Text(stringResource(R.string.push_change_relay_body), style = MaterialTheme.typography.bodySmall)
+                    RelayField(model)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = model::enable, enabled = model.relayDraft.isNotBlank()) {
+                            Text(stringResource(R.string.push_use_relay_button))
+                        }
+                        TextButton(onClick = model::cancelRelayChange) { Text(stringResource(R.string.cancel_button)) }
+                    }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = model::sendTest) { Text(stringResource(R.string.push_test_button)) }
+                        OutlinedButton(onClick = model::disable) { Text(stringResource(R.string.push_disable_button)) }
+                    }
+                    TextButton(onClick = model::changeRelay) { Text(stringResource(R.string.push_change_relay_button)) }
                 }
             }
         }
         model.problem?.let { Text(resolve(it), color = MaterialTheme.colorScheme.error) }
         model.notice?.let { Text(resolve(it), style = MaterialTheme.typography.bodySmall) }
     }
+}
+
+/** The Relay this Host's push goes through: this build's default or a self-hosted one. */
+@Composable
+private fun RelayField(model: PushModel) {
+    OutlinedTextField(
+        model.relayDraft, { model.relayDraft = it },
+        modifier = Modifier.fillMaxWidth().testTag("push_relay_url"),
+        label = { Text(stringResource(R.string.push_relay_label)) },
+        placeholder = { Text(stringResource(R.string.push_relay_placeholder)) },
+        supportingText = { Text(stringResource(R.string.push_relay_hint)) },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false),
+    )
 }
 
 /** A [Message] whose arguments may themselves be messages (a step's name). */
