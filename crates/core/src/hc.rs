@@ -57,7 +57,8 @@ pub(crate) struct Hello {
     pub framed: bool,
 }
 
-type Pending = Arc<std::sync::Mutex<Option<HashMap<u64, oneshot::Sender<Result<Value, CoreError>>>>>>;
+type Pending =
+    Arc<std::sync::Mutex<Option<HashMap<u64, oneshot::Sender<Result<Value, CoreError>>>>>>;
 
 /// One framed connection to a Host's herdr-core.
 pub(crate) struct HcClient {
@@ -72,7 +73,11 @@ pub(crate) struct HcClient {
 impl HcClient {
     /// Says `hello`, checks compatibility and switches to framed mode.
     pub async fn handshake(stream: Stream) -> Result<Self, CoreError> {
-        let Stream { reader, mut writer, guard } = stream;
+        let Stream {
+            reader,
+            mut writer,
+            guard,
+        } = stream;
         let hello = json!({
             "jsonrpc": "2.0",
             "id": 0,
@@ -81,8 +86,14 @@ impl HcClient {
         });
         let mut line = serde_json::to_vec(&hello).map_err(|e| protocol(e.to_string()))?;
         line.push(b'\n');
-        writer.write_all(&line).await.map_err(|e| protocol(format!("send hello: {e}")))?;
-        writer.flush().await.map_err(|e| protocol(format!("send hello: {e}")))?;
+        writer
+            .write_all(&line)
+            .await
+            .map_err(|e| protocol(format!("send hello: {e}")))?;
+        writer
+            .flush()
+            .await
+            .map_err(|e| protocol(format!("send hello: {e}")))?;
 
         let mut reader = BufReader::new(reader);
         let reply = tokio::time::timeout(HELLO_TIMEOUT, read_hello_reply(&mut reader))
@@ -180,7 +191,10 @@ async fn read_hello_reply<R: tokio::io::AsyncRead + Unpin>(
             let hint = if noise.is_empty() {
                 String::new()
             } else {
-                format!(" (it printed: {:?})", noise.chars().take(200).collect::<String>())
+                format!(
+                    " (it printed: {:?})",
+                    noise.chars().take(200).collect::<String>()
+                )
             };
             return Err(protocol(format!(
                 "herdr-core connect ended before answering hello; is herdr-core installed on the Host?{hint}"
@@ -245,7 +259,9 @@ fn check_hello(reply: Value) -> Result<Hello, CoreError> {
 
 fn generation_mismatch(host: u32, version: &str) -> CoreError {
     let reason = if host > GENERATION {
-        Incompatibility::AppTooOld { host_generation: host }
+        Incompatibility::AppTooOld {
+            host_generation: host,
+        }
     } else {
         Incompatibility::CoreTooOld {
             version: version.to_owned(),
@@ -297,7 +313,11 @@ async fn read_frames<R: tokio::io::AsyncRead + Unpin>(mut reader: BufReader<R>, 
         let Some(id) = msg.get("id").and_then(Value::as_u64) else {
             continue; // notifications
         };
-        let tx = pending.lock().expect("pending lock").as_mut().and_then(|m| m.remove(&id));
+        let tx = pending
+            .lock()
+            .expect("pending lock")
+            .as_mut()
+            .and_then(|m| m.remove(&id));
         if let Some(tx) = tx {
             let result = match msg.get("error") {
                 Some(err) => Err(rpc_error(err)),

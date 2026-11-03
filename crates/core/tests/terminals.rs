@@ -25,7 +25,10 @@ async fn lists_the_terminals_of_a_host() {
     seen.sort();
     assert_eq!(
         seen,
-        vec![(first, Some("first".into())), (second, Some("second".into()))]
+        vec![
+            (first, Some("first".into())),
+            (second, Some("second".into()))
+        ]
     );
     assert_eq!(conn.core_version(), "0.1.17");
     conn.close().await;

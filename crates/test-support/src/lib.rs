@@ -221,7 +221,15 @@ impl SshdHost {
         let container = unique(&format!("{prefix}-sshd"));
         let mount = format!("{}:/usr/local/bin/herdr-core:ro", bin.display());
         docker(&[
-            "run", "-d", "--rm", "--name", &container, "-p", "127.0.0.1::22", "-v", &mount,
+            "run",
+            "-d",
+            "--rm",
+            "--name",
+            &container,
+            "-p",
+            "127.0.0.1::22",
+            "-v",
+            &mount,
             SSHD_IMAGE,
         ]);
         let mut host = Self { container, port: 0 };
@@ -248,7 +256,13 @@ impl SshdHost {
                 "printf '%s\\n' \"$KEY\" >> /home/{user}/.ssh/authorized_keys && chown {user} /home/{user}/.ssh/authorized_keys && chmod 600 /home/{user}/.ssh/authorized_keys"
             );
             docker(&[
-                "exec", "-e", &format!("KEY={public_key}"), &self.container, "sh", "-c", &script,
+                "exec",
+                "-e",
+                &format!("KEY={public_key}"),
+                &self.container,
+                "sh",
+                "-c",
+                &script,
             ]);
         }
     }
@@ -256,16 +270,27 @@ impl SshdHost {
     /// SHA256 fingerprint (`SHA256:...`) of the container's ed25519 host key.
     pub fn host_key_fingerprint(&self) -> String {
         let out = docker(&[
-            "exec", &self.container, "ssh-keygen", "-l", "-f", "/etc/ssh/ssh_host_ed25519_key.pub",
+            "exec",
+            &self.container,
+            "ssh-keygen",
+            "-l",
+            "-f",
+            "/etc/ssh/ssh_host_ed25519_key.pub",
         ]);
-        out.split_whitespace().nth(1).expect("fingerprint").to_owned()
+        out.split_whitespace()
+            .nth(1)
+            .expect("fingerprint")
+            .to_owned()
     }
 
     /// Replaces the host keys and restarts sshd, as a reinstalled or
     /// impersonated Host would look.
     pub fn rotate_host_keys(&self) {
         docker(&[
-            "exec", &self.container, "sh", "-c",
+            "exec",
+            &self.container,
+            "sh",
+            "-c",
             "rm -f /etc/ssh/ssh_host_* && ssh-keygen -A >/dev/null && pkill -x sshd",
         ]);
         std::thread::sleep(Duration::from_millis(300));

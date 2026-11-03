@@ -32,7 +32,9 @@ pub(crate) struct Store {
 impl Store {
     pub fn open(dir: &Path) -> Result<Self, CoreError> {
         std::fs::create_dir_all(dir).map_err(storage)?;
-        Ok(Self { dir: dir.to_owned() })
+        Ok(Self {
+            dir: dir.to_owned(),
+        })
     }
 
     pub fn load(&self) -> Result<Saved, CoreError> {

@@ -24,7 +24,8 @@ pub(crate) struct Stream {
     pub guard: Box<dyn Send + Sync>,
 }
 
-pub(crate) type OpenFuture<'a> = Pin<Box<dyn Future<Output = Result<Stream, CoreError>> + Send + 'a>>;
+pub(crate) type OpenFuture<'a> =
+    Pin<Box<dyn Future<Output = Result<Stream, CoreError>> + Send + 'a>>;
 
 pub(crate) trait Transport: Send + Sync {
     /// Opens a stream whose other end is `herdr-core connect` on the Host.

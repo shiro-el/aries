@@ -40,16 +40,24 @@ struct Checker {
 impl client::Handler for Checker {
     type Error = russh::Error;
 
-    async fn check_server_key(&mut self, key: &PublicKeyOrCertificate) -> Result<bool, Self::Error> {
+    async fn check_server_key(
+        &mut self,
+        key: &PublicKeyOrCertificate,
+    ) -> Result<bool, Self::Error> {
         let fingerprint = match key {
             PublicKeyOrCertificate::PublicKey { key, .. } => key.fingerprint(HashAlg::Sha256),
-            PublicKeyOrCertificate::Certificate(cert) => cert.public_key().fingerprint(HashAlg::Sha256),
+            PublicKeyOrCertificate::Certificate(cert) => {
+                cert.public_key().fingerprint(HashAlg::Sha256)
+            }
         }
         .to_string();
         let check = match &self.trusted {
             None => HostKeyCheck::Unknown { fingerprint },
             Some(t) if *t == fingerprint => HostKeyCheck::Trusted,
-            Some(t) => HostKeyCheck::Changed { expected: t.clone(), actual: fingerprint },
+            Some(t) => HostKeyCheck::Changed {
+                expected: t.clone(),
+                actual: fingerprint,
+            },
         };
         let ok = check == HostKeyCheck::Trusted;
         *self.outcome.lock().expect("outcome lock") = Some(check);
@@ -65,20 +73,30 @@ impl Ssh {
             ..Default::default()
         });
         let outcome = Arc::new(Mutex::new(None));
-        let checker = Checker { trusted: self.trusted.clone(), outcome: outcome.clone() };
+        let checker = Checker {
+            trusted: self.trusted.clone(),
+            outcome: outcome.clone(),
+        };
         let addr = (self.address.as_str(), self.port);
-        let connected = tokio::time::timeout(CONNECT_TIMEOUT, client::connect(config, addr, checker))
-            .await
-            .map_err(|_| CoreError::Unreachable { detail: "timed out".into() })?;
+        let connected =
+            tokio::time::timeout(CONNECT_TIMEOUT, client::connect(config, addr, checker))
+                .await
+                .map_err(|_| CoreError::Unreachable {
+                    detail: "timed out".into(),
+                })?;
         let mut session = match connected {
             Ok(s) => s,
             Err(e) => {
                 return Err(match outcome.lock().expect("outcome lock").take() {
-                    Some(HostKeyCheck::Unknown { fingerprint }) => CoreError::HostKeyUnknown { fingerprint },
+                    Some(HostKeyCheck::Unknown { fingerprint }) => {
+                        CoreError::HostKeyUnknown { fingerprint }
+                    }
                     Some(HostKeyCheck::Changed { expected, actual }) => {
                         CoreError::HostKeyChanged { expected, actual }
                     }
-                    _ => CoreError::Unreachable { detail: e.to_string() },
+                    _ => CoreError::Unreachable {
+                        detail: e.to_string(),
+                    },
                 });
             }
         };
@@ -88,18 +106,24 @@ impl Ssh {
                 PrivateKeyWithHashAlg::new(Arc::new(self.key.clone()), None),
             )
             .await
-            .map_err(|e| CoreError::Unreachable { detail: e.to_string() })?;
+            .map_err(|e| CoreError::Unreachable {
+                detail: e.to_string(),
+            })?;
         if !auth.success() {
             return Err(CoreError::AuthRejected);
         }
         let channel = session
             .channel_open_session()
             .await
-            .map_err(|e| CoreError::Unreachable { detail: e.to_string() })?;
+            .map_err(|e| CoreError::Unreachable {
+                detail: e.to_string(),
+            })?;
         channel
             .exec(true, REMOTE_COMMAND)
             .await
-            .map_err(|e| CoreError::Unreachable { detail: e.to_string() })?;
+            .map_err(|e| CoreError::Unreachable {
+                detail: e.to_string(),
+            })?;
         let (reader, writer) = tokio::io::split(channel.into_stream());
         Ok(Stream {
             reader: Box::new(reader),

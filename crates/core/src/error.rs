@@ -61,14 +61,20 @@ impl From<uniffi::UnexpectedUniFFICallbackError> for VaultError {
 
 impl From<VaultError> for CoreError {
     fn from(e: VaultError) -> Self {
-        Self::Vault { detail: e.to_string() }
+        Self::Vault {
+            detail: e.to_string(),
+        }
     }
 }
 
 pub(crate) fn storage(e: impl std::fmt::Display) -> CoreError {
-    CoreError::Storage { detail: e.to_string() }
+    CoreError::Storage {
+        detail: e.to_string(),
+    }
 }
 
 pub(crate) fn protocol(detail: impl Into<String>) -> CoreError {
-    CoreError::Protocol { detail: detail.into() }
+    CoreError::Protocol {
+        detail: detail.into(),
+    }
 }

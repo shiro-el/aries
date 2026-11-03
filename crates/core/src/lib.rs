@@ -48,9 +48,16 @@ pub struct PublicKeyInfo {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, uniffi::Enum)]
 pub enum Endpoint {
     /// SSH with the app's key; runs `herdr-core connect` without a PTY.
-    Ssh { address: String, port: u16, user: String },
+    Ssh {
+        address: String,
+        port: u16,
+        user: String,
+    },
     /// A local child process speaking the protocol on stdio (tests, dev).
-    Local { argv: Vec<String>, env: HashMap<String, String> },
+    Local {
+        argv: Vec<String>,
+        env: HashMap<String, String>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -95,7 +102,9 @@ async fn on_runtime<T: Send + 'static>(
     runtime()
         .spawn(fut)
         .await
-        .map_err(|e| CoreError::Protocol { detail: format!("core task failed: {e}") })?
+        .map_err(|e| CoreError::Protocol {
+            detail: format!("core task failed: {e}"),
+        })?
 }
 
 #[derive(uniffi::Object)]
@@ -112,7 +121,11 @@ impl AriesCore {
     pub fn new(data_dir: String, vault: Arc<dyn KeyVault>) -> Result<Arc<Self>, CoreError> {
         let store = Store::open(&PathBuf::from(data_dir))?;
         let saved = store.load()?;
-        Ok(Arc::new(Self { store, vault, hosts: Mutex::new(saved.hosts) }))
+        Ok(Arc::new(Self {
+            store,
+            vault,
+            hosts: Mutex::new(saved.hosts),
+        }))
     }
 
     /// The app's SSH public key, if one was created.
@@ -129,16 +142,23 @@ impl AriesCore {
         if let Some(info) = self.public_key()? {
             return Ok(info);
         }
-        let mut key = PrivateKey::random(&mut rand::rng(), Algorithm::Ed25519)
-            .map_err(|e| CoreError::Vault { detail: e.to_string() })?;
+        let mut key = PrivateKey::random(&mut rand::rng(), Algorithm::Ed25519).map_err(|e| {
+            CoreError::Vault {
+                detail: e.to_string(),
+            }
+        })?;
         key.set_comment("aries");
         let private = key
             .to_openssh(LineEnding::LF)
-            .map_err(|e| CoreError::Vault { detail: e.to_string() })?;
+            .map_err(|e| CoreError::Vault {
+                detail: e.to_string(),
+            })?;
         let public = key
             .public_key()
             .to_openssh()
-            .map_err(|e| CoreError::Vault { detail: e.to_string() })?;
+            .map_err(|e| CoreError::Vault {
+                detail: e.to_string(),
+            })?;
         let sealed = self.vault.seal(private.as_bytes().to_vec())?;
         self.store.write_identity(&sealed, &public)?;
         public_key_info(&public)
@@ -146,13 +166,23 @@ impl AriesCore {
 
     /// Registers a Host. Connecting is a separate step.
     pub fn add_host(&self, name: String, endpoint: Endpoint) -> Result<Host, CoreError> {
-        let saved = SavedHost { id: new_id(), name, endpoint, host_key: None };
+        let saved = SavedHost {
+            id: new_id(),
+            name,
+            endpoint,
+            host_key: None,
+        };
         self.update_hosts(|hosts| hosts.push(saved.clone()))?;
         Ok(to_host(&saved))
     }
 
     pub fn hosts(&self) -> Vec<Host> {
-        self.hosts.lock().expect("hosts lock").iter().map(to_host).collect()
+        self.hosts
+            .lock()
+            .expect("hosts lock")
+            .iter()
+            .map(to_host)
+            .collect()
     }
 
     /// Trusts `fingerprint` as `host_id`'s Host key, after the user compared
@@ -165,7 +195,11 @@ impl AriesCore {
                 found = true;
             }
         })?;
-        if found { Ok(()) } else { Err(CoreError::UnknownHost { id: host_id }) }
+        if found {
+            Ok(())
+        } else {
+            Err(CoreError::UnknownHost { id: host_id })
+        }
     }
 
     /// Connects to a Host and checks its herdr-core is compatible.
@@ -180,7 +214,11 @@ impl AriesCore {
             .ok_or(CoreError::UnknownHost { id: host_id })?;
         let transport: Box<dyn Transport> = match host.endpoint {
             Endpoint::Local { argv, env } => Box::new(LocalProcess { argv, env }),
-            Endpoint::Ssh { address, port, user } => Box::new(Ssh {
+            Endpoint::Ssh {
+                address,
+                port,
+                user,
+            } => Box::new(Ssh {
                 address,
                 port,
                 user,
@@ -188,8 +226,11 @@ impl AriesCore {
                 trusted: host.host_key,
             }),
         };
-        let client = on_runtime(async move { HcClient::handshake(transport.open().await?).await }).await?;
-        Ok(Arc::new(HostConnection { client: Arc::new(client) }))
+        let client =
+            on_runtime(async move { HcClient::handshake(transport.open().await?).await }).await?;
+        Ok(Arc::new(HostConnection {
+            client: Arc::new(client),
+        }))
     }
 }
 
@@ -197,15 +238,21 @@ impl AriesCore {
     fn private_key(&self) -> Result<PrivateKey, CoreError> {
         let (sealed, _) = self.store.read_identity()?.ok_or(CoreError::NoKey)?;
         let pem = self.vault.open(sealed)?;
-        let pem = String::from_utf8(pem).map_err(|e| CoreError::Vault { detail: e.to_string() })?;
-        PrivateKey::from_openssh(&pem).map_err(|e| CoreError::Vault { detail: e.to_string() })
+        let pem = String::from_utf8(pem).map_err(|e| CoreError::Vault {
+            detail: e.to_string(),
+        })?;
+        PrivateKey::from_openssh(&pem).map_err(|e| CoreError::Vault {
+            detail: e.to_string(),
+        })
     }
 
     fn update_hosts(&self, f: impl FnOnce(&mut Vec<SavedHost>)) -> Result<(), CoreError> {
         let mut hosts = self.hosts.lock().expect("hosts lock");
         let mut next = hosts.clone();
         f(&mut next);
-        self.store.save(&store::Saved { hosts: next.clone() })?;
+        self.store.save(&store::Saved {
+            hosts: next.clone(),
+        })?;
         *hosts = next;
         Ok(())
     }
@@ -227,10 +274,9 @@ impl HostConnection {
     /// The Host's Terminals (live ones, as `terminal.list` returns them).
     pub async fn terminals(&self) -> Result<Vec<TerminalInfo>, CoreError> {
         let client = self.client.clone();
-        let result = on_runtime(async move {
-            client.call("terminal.list", serde_json::json!({})).await
-        })
-        .await?;
+        let result =
+            on_runtime(async move { client.call("terminal.list", serde_json::json!({})).await })
+                .await?;
         let list = result["terminals"].as_array().cloned().unwrap_or_default();
         Ok(list.iter().map(terminal_info).collect())
     }
@@ -253,7 +299,11 @@ fn terminal_info(v: &serde_json::Value) -> TerminalInfo {
         title: s("title").unwrap_or_default(),
         argv: v["argv"]
             .as_array()
-            .map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_owned)).collect())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_str().map(str::to_owned))
+                    .collect()
+            })
             .unwrap_or_default(),
         cwd: s("cwd"),
         state: s("state").unwrap_or_default(),
@@ -261,8 +311,9 @@ fn terminal_info(v: &serde_json::Value) -> TerminalInfo {
 }
 
 fn public_key_info(openssh: &str) -> Result<PublicKeyInfo, CoreError> {
-    let key = russh::keys::PublicKey::from_openssh(openssh)
-        .map_err(|e| CoreError::Storage { detail: e.to_string() })?;
+    let key = russh::keys::PublicKey::from_openssh(openssh).map_err(|e| CoreError::Storage {
+        detail: e.to_string(),
+    })?;
     Ok(PublicKeyInfo {
         openssh: openssh.to_owned(),
         fingerprint: key.fingerprint(HashAlg::Sha256).to_string(),

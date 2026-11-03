@@ -14,9 +14,12 @@ pub(crate) struct LocalProcess {
 impl Transport for LocalProcess {
     fn open(&self) -> OpenFuture<'_> {
         Box::pin(async move {
-            let (program, args) = self.argv.split_first().ok_or_else(|| CoreError::Unreachable {
-                detail: "empty local command".into(),
-            })?;
+            let (program, args) =
+                self.argv
+                    .split_first()
+                    .ok_or_else(|| CoreError::Unreachable {
+                        detail: "empty local command".into(),
+                    })?;
             let mut child = tokio::process::Command::new(program)
                 .args(args)
                 .envs(&self.env)
@@ -25,7 +28,9 @@ impl Transport for LocalProcess {
                 .stderr(Stdio::null())
                 .kill_on_drop(true)
                 .spawn()
-                .map_err(|e| CoreError::Unreachable { detail: format!("{program}: {e}") })?;
+                .map_err(|e| CoreError::Unreachable {
+                    detail: format!("{program}: {e}"),
+                })?;
             let stdin = child.stdin.take().expect("piped stdin");
             let stdout = child.stdout.take().expect("piped stdout");
             Ok(Stream {

@@ -20,9 +20,9 @@ impl KeyVault for TestVault {
     }
 
     fn open(&self, sealed: Vec<u8>) -> Result<Vec<u8>, VaultError> {
-        let body = sealed
-            .strip_prefix(MARK)
-            .ok_or(VaultError::Failed { detail: "not sealed by TestVault".into() })?;
+        let body = sealed.strip_prefix(MARK).ok_or(VaultError::Failed {
+            detail: "not sealed by TestVault".into(),
+        })?;
         Ok(body.iter().map(|b| b ^ 0x5a).collect())
     }
 }
