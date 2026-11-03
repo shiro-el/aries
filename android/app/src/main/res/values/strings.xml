@@ -226,6 +226,11 @@
     <string name="key_esc">Esc</string>
     <string name="key_tab">Tab</string>
     <string name="key_ctrl">Ctrl</string>
+    <string name="key_alt">Alt</string>
+    <string name="key_home">Home</string>
+    <string name="key_end">End</string>
+    <string name="key_page_up">PgUp</string>
+    <string name="key_page_down">PgDn</string>
     <string name="key_up">↑</string>
     <string name="key_down">↓</string>
     <string name="key_left">←</string>
@@ -288,6 +293,10 @@
     <string name="chat_status_no_core">The Beacon cannot reach herdr-core on this Host. Retrying…</string>
     <string name="chat_status_incompatible">The Beacon on this Host is newer than this app. Update Aries to read the Chat.</string>
     <string name="chat_you">You</string>
+    <!-- Chat Markdown code blocks (94) -->
+    <string name="chat_code_label">Code</string>
+    <string name="chat_code_copy_button">Copy code</string>
+    <string name="chat_code_copied">Copied</string>
     <!-- Chat text selection and clipboard actions. -->
     <string name="chat_text_actions">Text actions</string>
     <string name="chat_copy_all">Copy all</string>
@@ -312,6 +321,19 @@
     <string name="chat_image_loading">Loading image…</string>
     <string name="chat_image_unreadable">This image cannot be shown.</string>
     <string name="chat_image_too_large">Image too large to show (%1$s MB)</string>
+
+    <!-- Full-screen image viewer (Chat and remote files). -->
+    <string name="image_viewer_title">Image viewer</string>
+    <string name="image_viewer_open">Open full-screen image</string>
+    <string name="image_viewer_save">Save image</string>
+    <string name="image_viewer_share">Share image</string>
+    <string name="image_viewer_zoom">%1$d%% zoom</string>
+    <string name="image_viewer_zoom_in">Zoom in</string>
+    <string name="image_viewer_zoom_out">Zoom out</string>
+    <string name="image_viewer_reset">Fit image to screen</string>
+    <string name="image_viewer_export_failed">Could not save or share this image. Try again.</string>
+    <string name="image_viewer_saved">Image saved</string>
+    <string name="image_viewer_exporting">Preparing image…</string>
     <string name="chat_diff_more">%1$d more lines</string>
     <string name="chat_diff_truncated">The diff is too large; the rest is not shown.</string>
     <string name="chat_question_label">Question</string>
@@ -454,6 +476,18 @@
     <string name="beacon_macos_login_limit">On macOS the Beacon runs only while you are logged in to the Mac.</string>
 
     <string name="key_default_label">Default key</string>
+    <!-- SSH key import -->
+    <string name="key_import_button">Import existing key</string>
+    <string name="key_import_title">Import SSH private key</string>
+    <string name="key_import_hint">Choose a file or paste an OpenSSH ed25519, RSA or ECDSA private key (up to 64 KiB). Its passphrase is used once and is not saved. The imported key uses the same biometric setting as your other keys. Select additional keys in the Host’s SSH route settings.</string>
+    <string name="key_import_file_button">Choose key file</string>
+    <string name="key_import_private_label">Private key</string>
+    <string name="key_import_passphrase_label">Passphrase (if encrypted)</string>
+    <string name="key_import_busy">Importing…</string>
+    <string name="key_import_invalid">Could not import the key. Check the private key format and passphrase, then try again.</string>
+    <string name="key_import_file_error">Could not read the key file. Choose a readable text file no larger than 64 KiB.</string>
+    <string name="key_import_too_large">The private key must be no larger than 64 KiB.</string>
+
     <string name="keys_title">Other SSH keys</string>
     <string name="key_new_label">Label for a new key</string>
     <string name="key_new_button">Create another key</string>

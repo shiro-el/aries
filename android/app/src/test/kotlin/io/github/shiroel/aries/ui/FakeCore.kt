@@ -235,6 +235,19 @@ class FakeCore : AriesCoreInterface {
     override fun createKey(label: String): KeyInfo =
         KeyInfo("k${extraKeys.size + 1}", label, PUBLIC_KEY, "SHA256:fake-$label").also { extraKeys += it }
 
+    val importedKeys = mutableListOf<Triple<String, String, String>>()
+    var importFailure: CoreException? = null
+    override fun importKey(label: String, privateKey: String, passphrase: String): KeyInfo {
+        signsIn("importKey")
+        importFailure?.let { throw it }
+        importedKeys += Triple(label, privateKey, passphrase)
+        if (key == null) {
+            key = PublicKeyInfo(PUBLIC_KEY, "SHA256:fake-imported")
+            return keys().first()
+        }
+        return createKey(label)
+    }
+
     override fun keys(): List<KeyInfo> =
         listOfNotNull(key?.let { KeyInfo("default", "", it.openssh, it.fingerprint) }) + extraKeys
 

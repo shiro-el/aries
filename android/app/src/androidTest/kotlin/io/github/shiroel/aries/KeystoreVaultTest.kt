@@ -5,9 +5,11 @@ import androidx.test.platform.app.InstrumentationRegistry
 import io.github.shiroel.aries.core.AriesCore
 import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.KeyProtection
+import io.github.shiroel.aries.core.KeyVault
 import io.github.shiroel.aries.core.VaultException
 import java.io.File
 import java.security.KeyStore
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -54,6 +56,40 @@ class KeystoreVaultTest {
         assertEquals(first, again)
         dir.listFiles()!!.forEach { f ->
             assertFalse(f.name, String(f.readBytes(), Charsets.ISO_8859_1).contains("PRIVATE KEY"))
+        }
+    }
+
+    @Test
+    fun importedKeyIsSealedByAndroidKeystoreAndOpensAfterRelaunch() = runBlocking {
+        val vault = KeystoreVault(alias)
+        var privateKey = byteArrayOf()
+        // Capture a disposable generated key at the public vault seam, in memory.
+        val source = AriesCore(dir.absolutePath, object : KeyVault {
+            override fun seal(plaintext: ByteArray, protection: KeyProtection): ByteArray {
+                privateKey = plaintext.copyOf()
+                return vault.seal(plaintext, protection)
+            }
+            override fun open(sealed: ByteArray, protection: KeyProtection) = vault.open(sealed, protection)
+        })
+        val public = source.ensureKey()
+        val core = AriesCore(dir.absolutePath, vault)
+        val imported = core.importKey("existing", String(privateKey, Charsets.UTF_8), "")
+        privateKey.fill(0)
+        assertEquals(public.openssh, imported.openssh)
+        val host = core.addHost("closed", io.github.shiroel.aries.core.Endpoint.Ssh("127.0.0.1", 1u, "aries"))
+        core.setHostSshKey(host.id, imported.id)
+
+        val again = AriesCore(dir.absolutePath, KeystoreVault(alias))
+        assertEquals(imported, again.keys().last())
+        try {
+            again.connect(host.id)
+            fail("nothing listens on port 1")
+        } catch (e: CoreException) {
+            // Reaching SSH proves the sealed imported key could be opened.
+            assertTrue(e is CoreException.Unreachable)
+        }
+        dir.walkTopDown().filter { it.isFile }.forEach { file ->
+            assertFalse(file.name, String(file.readBytes(), Charsets.ISO_8859_1).contains("PRIVATE KEY"))
         }
     }
 
