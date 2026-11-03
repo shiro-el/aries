@@ -16,7 +16,7 @@ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use aries_protocol::chat::ChatItem;
+use aries_protocol::chat::{ChatBody, ChatItem};
 use ring::aead::{self, Aad, LessSafeKey, Nonce, UnboundKey};
 use ring::rand::{SecureRandom, SystemRandom};
 use ring::{hkdf, hmac};
@@ -35,6 +35,8 @@ const KEY: &str = "chat-cache.key";
 const DAY: u64 = 24 * 60 * 60;
 /// How often a followed Chat is written at most.
 pub(crate) const SAVE_EVERY: Duration = Duration::from_secs(1);
+/// Persist at most 16 MiB of base64 image payload per Chat, newest first.
+const IMAGE_BUDGET: usize = 16 * 1024 * 1024;
 
 const SCHEMA: &str = "PRAGMA secure_delete = ON;
 CREATE TABLE IF NOT EXISTS chats (
@@ -52,6 +54,30 @@ CREATE TABLE IF NOT EXISTS removed_hosts (digest BLOB PRIMARY KEY) WITHOUT ROWID
 pub(crate) struct CachedChat {
     pub items: Vec<ChatItem>,
     pub cursor: Option<String>,
+}
+
+impl CachedChat {
+    fn cap_images(&mut self) -> bool {
+        let mut remaining = IMAGE_BUDGET;
+        let mut changed = false;
+        for item in self.items.iter_mut().rev() {
+            let images = match &mut item.body {
+                ChatBody::User { images, .. } | ChatBody::Tool { images, .. } => images,
+                _ => continue,
+            };
+            for image in images.iter_mut().rev() {
+                if let Some(data) = &image.data {
+                    if data.len() <= remaining {
+                        remaining -= data.len();
+                    } else {
+                        image.data = None;
+                        changed = true;
+                    }
+                }
+            }
+        }
+        changed
+    }
 }
 
 struct Open {
@@ -176,8 +202,21 @@ impl ChatCache {
                 .optional()
                 .map_err(storage)?;
             let Some(data) = data else { return Ok(None) };
-            let opened = unseal(o, host, &chat, data)
+            let mut opened = unseal(o, host, &chat, data)
                 .and_then(|plain| serde_json::from_slice::<CachedChat>(&plain).ok());
+            if let Some(cached) = &mut opened
+                && cached.cap_images()
+            {
+                // Apply the cap to rows written before this policy too,
+                // without extending their retention period.
+                let data = seal(o, host, &chat, serde_json::to_vec(cached).map_err(storage)?)?;
+                o.conn
+                    .execute(
+                        "UPDATE chats SET data = ?3 WHERE host = ?1 AND chat = ?2",
+                        params![host, chat, data],
+                    )
+                    .map_err(storage)?;
+            }
             if opened.is_none() {
                 o.conn
                     .execute(
@@ -191,7 +230,9 @@ impl ChatCache {
     }
 
     pub fn save(&self, host: &str, terminal: &str, chat: &CachedChat) -> Result<(), CoreError> {
-        let plain = serde_json::to_vec(chat).map_err(storage)?;
+        let mut chat = chat.clone();
+        chat.cap_images();
+        let plain = serde_json::to_vec(&chat).map_err(storage)?;
         let now = self.now();
         self.with(|o| {
             let id = chat_id(o, host, terminal);

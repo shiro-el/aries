@@ -503,3 +503,49 @@ async fn a_cached_chat_keeps_its_images() {
     );
     watch.stop();
 }
+
+#[tokio::test]
+async fn a_chat_image_cache_keeps_newest_images_within_its_size_cap() {
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    let env = Env::new();
+    let core = env.core();
+    let host = env.host(&core, "h");
+    let image = STANDARD.encode(vec![7u8; 2 * 1024 * 1024]);
+    let mut lines =
+        String::from("{\"v\":1,\"type\":\"reset\",\"agent\":\"claude-code\",\"session\":\"s\"}\n");
+    for i in 0..7 {
+        lines.push_str(
+            &serde_json::json!({"v":1,"type":"item", "item": {
+            "id":format!("u{i}"), "kind":"user", "text":format!("message {i}"),
+            "images":[{"media_type":"image/png","data":image,"bytes":2*1024*1024}]
+        }, "cursor":format!("cc:s:{i}")})
+            .to_string(),
+        );
+        lines.push('\n');
+    }
+    lines.push_str("{\"v\":1,\"type\":\"state\",\"state\":\"live\"}\n");
+    env.beacon_printing("h", &lines);
+    let first = watch(&core, &host);
+    wait_for(&first, "all images", |s| s.status == ChatStatus::Live).await;
+    cached(&core, &host, "all messages", |s| s.entries.len() == 7).await;
+    first.stop();
+    env.beacon("h", "exit 1");
+    let reopened = watch(&core, &host);
+    let snapshot = wait_for(&reopened, "cached messages", |s| s.entries.len() == 7).await;
+    assert_eq!(snapshot.cursor.as_deref(), Some("cc:s:6"));
+    let available: Vec<_> = snapshot
+        .entries
+        .iter()
+        .map(|e| {
+            let ChatEntryBody::User { text, images } = &e.body else {
+                panic!("user entry")
+            };
+            assert!(text.starts_with("message "));
+            images[0].available
+        })
+        .collect();
+    // Each 2 MiB image occupies 2,796,204 base64 bytes; newest five fit
+    // inside the 16 MiB persisted image budget. Text/metadata all survive.
+    assert_eq!(available, [false, false, true, true, true, true, true]);
+    reopened.stop();
+}
