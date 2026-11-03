@@ -96,7 +96,8 @@ fun SettingsScreen(
             }
             HorizontalDivider()
         }
-        LazyColumn(Modifier.fillMaxSize()) {
+        LazyColumn(Modifier.fillMaxSize().testTag("settings-list")) {
+            item(key = "app-language") { SettingsField { AppLanguageSetting() } }
             item {
                 Text(
                     stringResource(R.string.settings_keys_open),

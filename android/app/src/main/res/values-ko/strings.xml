@@ -86,6 +86,13 @@
     <string name="github_pr_commented">의견 남김</string>
     <string name="github_pr_dismissed">기각됨</string>
 
+    <!-- App language (130) -->
+    <string name="app_language_title">앱 언어</string>
+    <string name="app_language_system">시스템 기본</string>
+    <string name="app_language_english">English</string>
+    <string name="app_language_korean">한국어</string>
+    <string name="app_language_search">언어 검색</string>
+
     <!-- App lock (117) -->
     <string name="app_lock_settings_title">앱 잠금</string>
     <string name="app_lock_enabled_label">인증 요구</string>

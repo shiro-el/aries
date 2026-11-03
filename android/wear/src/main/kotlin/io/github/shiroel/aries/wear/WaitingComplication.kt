@@ -7,6 +7,7 @@ import io.github.shiroel.aries.weardata.WatchSummary
 
 object WaitingComplication {
     fun render(context: Context, summary: WatchSummary, now: Long): ShortTextComplicationData {
+        val context = summary.localizedContext(context)
         val description = if (summary.fetchedAtMs == 0L) context.getString(R.string.wear_not_synced)
         else context.getString(R.string.wear_complication_description, summary.waiting, WatchTile.age(context, summary, now))
         val title = if (summary.fetchedAtMs == 0L) context.getString(R.string.wear_waiting_label)

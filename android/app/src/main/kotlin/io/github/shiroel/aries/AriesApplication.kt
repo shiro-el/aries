@@ -1,6 +1,7 @@
 package io.github.shiroel.aries
 
 import android.app.Application
+import android.content.res.Configuration as ResourceConfiguration
 import androidx.work.Configuration
 import io.github.shiroel.aries.core.AriesCore
 import io.github.shiroel.aries.core.AriesCoreInterface
@@ -10,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 class AriesApplication : Application(), HasCore, Configuration.Provider {
     override val workManagerConfiguration: Configuration
@@ -31,6 +33,19 @@ class AriesApplication : Application(), HasCore, Configuration.Provider {
         } else {
             homeWidgetUpdates?.cancel()
             homeWidgetUpdates = null
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: ResourceConfiguration) {
+        super.onConfigurationChanged(newConfig)
+        refreshLanguageSurfaces()
+    }
+
+    /** Configuration changes must republish strings without connecting to a Host. */
+    fun refreshLanguageSurfaces() {
+        WatchPhone.languageChanged()
+        if (HomeWidgets.hasWidgets(this)) {
+            homeWidgetScope.launch { HomeWidgets.update(this@AriesApplication, core) }
         }
     }
 

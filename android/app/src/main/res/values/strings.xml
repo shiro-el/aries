@@ -86,6 +86,13 @@
     <string name="github_pr_commented">Commented</string>
     <string name="github_pr_dismissed">Dismissed</string>
 
+    <!-- App language (130) -->
+    <string name="app_language_title">App language</string>
+    <string name="app_language_system">System default</string>
+    <string name="app_language_english">English</string>
+    <string name="app_language_korean">한국어</string>
+    <string name="app_language_search">Search languages</string>
+
     <!-- App lock (117) -->
     <string name="app_lock_settings_title">App lock</string>
     <string name="app_lock_enabled_label">Require authentication</string>

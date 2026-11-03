@@ -8,6 +8,8 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.R
@@ -136,11 +138,13 @@ class SettingsConsolidationTest {
         show(core)
         compose.openConsoleDrawer()
         compose.onNodeWithTag("settings-open").performClick()
-        compose.onNodeWithText(str(R.string.agent_view_chat)).performScrollTo().performClick()
+        compose.onNodeWithTag("settings-list").performScrollToNode(hasText(str(R.string.agent_view_chat)))
+        compose.onNodeWithText(str(R.string.agent_view_chat)).performClick()
         compose.runOnIdle { assertEquals(AgentView.CHAT, core.agentView()) }
         compose.onNodeWithTag("console-back").performClick()
         compose.openConsoleDrawer()
         compose.onNodeWithTag("settings-open").performClick()
-        compose.onNodeWithText(str(R.string.agent_view_chat)).performScrollTo().assertIsSelected()
+        compose.onNodeWithTag("settings-list").performScrollToNode(hasText(str(R.string.agent_view_chat)))
+        compose.onNodeWithText(str(R.string.agent_view_chat)).assertIsSelected()
     }
 }

@@ -65,6 +65,7 @@ object QuestionNotifications {
     }
 
     fun post(context: Context, notice: QuestionNotice, view: QuestionView) {
+        val context = AppLanguage.context(context)
         // Use the same monitor as grouped posts/dismissals, so the identity
         // check and replacement cannot race a newer push.
         synchronized(NotificationGroups) {
