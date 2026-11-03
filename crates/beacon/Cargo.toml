@@ -8,6 +8,13 @@ rust-version.workspace = true
 
 [dependencies]
 aries-protocol.workspace = true
+russh.workspace = true
+tokio.workspace = true
+rand = { version = "0.10", features = ["thread_rng"] }
+base64 = "0.22"
+qrcode = { version = "0.14.1", default-features = false }
+subtle = "2.6"
+libc = "0.2"
 rusqlite = { version = "0.41.1", features = ["bundled"] }
 serde.workspace = true
 serde_json.workspace = true
