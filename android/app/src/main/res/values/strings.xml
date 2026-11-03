@@ -5,6 +5,22 @@
   Add every new string to values-ko/strings.xml too (TranslationsTest checks it).
 -->
 <resources>
+    <string name="agents_elapsed_less_than_minute">&lt;1m</string>
+    <string name="agents_elapsed_minutes">%1$dm</string>
+    <string name="agents_elapsed_hours">%1$dh</string>
+    <string name="agents_elapsed_days">%1$dd</string>
+    <string name="agents_elapsed_label">Status changed %1$s ago</string>
+    <string name="agents_view_priority">Priority</string>
+    <string name="agents_view_grouped">Grouped by space</string>
+    <string name="agents_needs_you">Needs you</string>
+    <string name="agents_pinned_group">Pinned · %1$d</string>
+    <string name="agents_priority_group">%1$s · %2$d</string>
+    <string name="agents_space_group">%1$s · %2$s · %3$d</string>
+    <string name="agents_expand_children">Expand %1$s, %2$d child Agents</string>
+    <string name="agents_collapse_children">Collapse %1$s, %2$d child Agents</string>
+    <string name="agents_child_count">%1$d</string>
+    <string name="agents_fold_closed" translatable="false">▸</string>
+    <string name="agents_fold_open" translatable="false">▾</string>
     <string name="app_name" translatable="false">Aries</string>
 
     <string name="ok_button">OK</string>
