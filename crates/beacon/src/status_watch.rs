@@ -26,6 +26,9 @@ pub struct Change {
     /// No parent Terminal.
     pub top_level: bool,
     pub status: AgentStatus,
+    /// Turn belonging to this transition, including the increment when
+    /// leaving Working (the separate turn event arrives after status).
+    pub turn: u64,
 }
 
 /// What a notification asks of the caller.
@@ -77,7 +80,13 @@ impl Facts {
     }
 
     fn set_status(&mut self, status: &Value) {
+        let was_working = self.status.as_ref().is_some_and(|s| s.state == "working");
         self.status = serde_json::from_value(status.clone()).ok();
+        // herdr-core increments before publishing status, then publishes the
+        // absolute turn. Mirror that rule so queued changes keep their turn.
+        if was_working && !self.status.as_ref().is_some_and(|s| s.state == "working") {
+            self.turn = self.turn.saturating_add(1);
+        }
     }
 
     fn agent_status(&self) -> Option<AgentStatus> {
@@ -105,6 +114,7 @@ impl Facts {
             title: Some(self.title.clone()).filter(|t| !t.is_empty()),
             top_level: self.parent.is_none(),
             status: status?,
+            turn: self.turn,
         })
     }
 }

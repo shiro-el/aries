@@ -89,6 +89,8 @@ pub struct Located {
 /// What herdr-core says about a Terminal (`terminal.get`).
 #[derive(Debug, Clone, Default)]
 pub struct TerminalFacts {
+    /// Current Host turn, absent on older cores.
+    pub turn: Option<u64>,
     pub pid: Option<u32>,
     pub foreground_pid: Option<u32>,
     /// The foreground process's argv, as herdr-core sees it (also where
@@ -103,6 +105,7 @@ impl TerminalFacts {
     pub fn from_json(v: &serde_json::Value) -> Self {
         let pid = |v: &serde_json::Value| v.as_u64().and_then(|p| u32::try_from(p).ok());
         Self {
+            turn: v["turn"].as_u64(),
             pid: pid(&v["pid"]),
             foreground_pid: pid(&v["foreground"]["pid"]),
             foreground_argv: (v["foreground"]["argv"].as_array().into_iter().flatten())
