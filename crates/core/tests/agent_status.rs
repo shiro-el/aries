@@ -69,6 +69,9 @@ async fn shows_each_agents_status_live_and_leaves_other_programs_without_one() {
     })
     .await;
     let other = find(&list, &plain);
+    let idle_since = find(&list, &agent.address)
+        .status_ms
+        .expect("core status time");
     assert_eq!(other.agent_status, None, "sleep never reports status");
     assert!(!other.needs_attention);
 
@@ -82,6 +85,12 @@ async fn shows_each_agents_status_live_and_leaves_other_programs_without_one() {
     })
     .await;
     assert!(find(&list, &agent.address).needs_attention);
+    assert!(find(&list, &agent.address).status_ms.unwrap() > idle_since);
+    let listed = conn.terminals().await.unwrap();
+    assert_eq!(
+        find(&list, &agent.address).status_ms,
+        find(&listed, &agent.address).status_ms
+    );
     assert_eq!(find(&list, &plain).agent_status, None);
 
     hc.hc(&["send", "--force", &agent.address, "yes"]);
