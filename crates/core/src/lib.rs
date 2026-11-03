@@ -15,6 +15,7 @@ mod host_edit;
 mod host_model;
 mod last_known_state;
 mod launch;
+mod layout_edit;
 mod push;
 mod removal;
 mod send;
@@ -50,6 +51,7 @@ pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
 pub use host_model::{AgentStatus, BlockedReason, TerminalWatch};
 pub use last_known_state::{LastKnownState, LastKnownStateWatch};
 pub use launch::{AgentPreset, LaunchRequest, RECENT_CWDS_KEPT, SavedLaunch};
+pub use layout_edit::{ExecOutput, LayoutEdit};
 pub use push::{
     HttpClient, HttpRequest, HttpResponse, PushContent, PushDevice, PushDisable, PushNotice,
     PushPairing, PushPolicy, PushProgress, PushStep,
