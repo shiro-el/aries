@@ -245,6 +245,18 @@
     <string name="terminal_open_link">링크 열기</string>
     <string name="terminal_copy_link">링크 복사</string>
 
+    <!-- Terminal output search -->
+    <string name="terminal_search_button">출력 검색</string>
+    <string name="terminal_search_hint">출력에서 찾기</string>
+    <string name="terminal_search_case">대소문자 구분</string>
+    <string name="terminal_search_regex">정규식</string>
+    <string name="terminal_search_previous">이전 일치</string>
+    <string name="terminal_search_next">다음 일치</string>
+    <string name="terminal_search_close">검색 닫기</string>
+    <string name="terminal_search_count">%2$d개 중 %1$d</string>
+    <string name="terminal_search_no_matches">일치하는 내용 없음</string>
+    <string name="terminal_search_invalid">잘못된 검색 패턴이거나 검색어가 너무 깁니다</string>
+
     <string name="agents_button">모든 에이전트</string>
     <string name="agents_title">에이전트</string>
     <string name="agents_empty">호스트에서 실행 중인 에이전트가 없습니다.</string>

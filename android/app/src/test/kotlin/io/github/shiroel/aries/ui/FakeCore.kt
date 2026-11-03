@@ -924,5 +924,13 @@ class FakeTerminalView(val address: String, val options: AttachOptions) : Termin
 
     override fun scrollTo(lines: UInt): UInt = lines.also { scrolls += it }
 
+    val searches = mutableListOf<Triple<String, Boolean, Boolean>>()
+    val searchMoves = mutableListOf<Boolean>()
+    override fun search(query: String, caseSensitive: Boolean, regex: Boolean) {
+        if (regex && query == "[") throw CoreException.Protocol("invalid terminal search pattern")
+        searches += Triple(query, caseSensitive, regex)
+    }
+    override fun searchNext(backwards: Boolean) { searchMoves += backwards }
+
     override fun close() {}
 }

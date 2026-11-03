@@ -250,6 +250,18 @@
     <string name="terminal_open_link">Open link</string>
     <string name="terminal_copy_link">Copy link</string>
 
+    <!-- Terminal output search -->
+    <string name="terminal_search_button">Search output</string>
+    <string name="terminal_search_hint">Find in output</string>
+    <string name="terminal_search_case">Match case</string>
+    <string name="terminal_search_regex">Regex</string>
+    <string name="terminal_search_previous">Previous match</string>
+    <string name="terminal_search_next">Next match</string>
+    <string name="terminal_search_close">Close search</string>
+    <string name="terminal_search_count">%1$d of %2$d</string>
+    <string name="terminal_search_no_matches">No matches</string>
+    <string name="terminal_search_invalid">Invalid search pattern or query too long</string>
+
     <string name="agents_button">All Agents</string>
     <string name="agents_title">Agents</string>
     <string name="agents_empty">No Agents are running on your Hosts.</string>
