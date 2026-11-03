@@ -17,17 +17,25 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.retryWhen
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
 object WatchPhone {
+    private val languageChanges = MutableStateFlow(0L)
+    fun languageChanged() { languageChanges.update { it + 1 } }
+
     /** Watches local storage only; the existing pull schedule owns all SSH activity. */
     fun start(context: Context, core: AriesCoreInterface, scope: CoroutineScope) = scope.launch(Dispatchers.IO) {
         LastKnownStates.observe(core).retryWhen { error, _ ->
             if (error is CancellationException) false else { delay(5_000); true }
-        }.collect { states ->
+        }.combine(languageChanges) { states, _ -> states }.collect { states ->
             try {
-                Wearable.getDataClient(context).putDataItem(summary(core.hosts(), states).toRequest()).await()
+                Wearable.getDataClient(context).putDataItem(summary(core.hosts(), states).copy(
+                    languageTag = AppLanguage.context(context).resources.configuration.locales[0].toLanguageTag(),
+                ).toRequest()).await()
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {

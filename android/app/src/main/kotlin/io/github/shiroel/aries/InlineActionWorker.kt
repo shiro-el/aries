@@ -31,7 +31,7 @@ class InlineActionWorker(context: Context, params: WorkerParameters) : Coroutine
         val target = inputData.getString(TARGET)?.let(InlineTarget::fromJson) ?: return@withContext Result.failure()
         val action = inputData.getString(ACTION)
         val core = (applicationContext as? HasCore)?.core ?: return@withContext Result.failure()
-        val context = applicationContext
+        val context = AppLanguage.context(applicationContext)
         fun show(resource: Int) = InlineNotifications.update(context, target, context.getString(resource))
         // Never deliver a stale queued draft or repeat an interrupted send.
         if (runAttemptCount > 0 || System.currentTimeMillis() - inputData.getLong(CREATED, 0) > 60_000) {
@@ -70,7 +70,7 @@ class InlineActionWorker(context: Context, params: WorkerParameters) : Coroutine
 
     /** Expedited work on Android 9–11 needs a foreground notification. */
     override suspend fun getForegroundInfo(): ForegroundInfo {
-        val context = applicationContext
+        val context = AppLanguage.context(applicationContext)
         val channel = "inline_actions"
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(NotificationChannel(channel,

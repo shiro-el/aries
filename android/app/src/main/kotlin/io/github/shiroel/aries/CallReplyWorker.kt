@@ -70,17 +70,18 @@ class CallReplyWorker(context: Context, params: WorkerParameters) : CoroutineWor
 
     /** Only below Android 12, where expedited work runs as a foreground service. */
     override suspend fun getForegroundInfo(): ForegroundInfo {
+        val context = AppLanguage.context(applicationContext)
         val manager = applicationContext.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(
             NotificationChannel(
                 CHANNEL,
-                applicationContext.getString(R.string.call_notify_channel_sending),
+                context.getString(R.string.call_notify_channel_sending),
                 NotificationManager.IMPORTANCE_LOW,
             ),
         )
-        val n = Notification.Builder(applicationContext, CHANNEL)
+        val n = Notification.Builder(context, CHANNEL)
             .setSmallIcon(android.R.drawable.stat_notify_chat)
-            .setContentTitle(applicationContext.getString(R.string.call_notify_channel_sending))
+            .setContentTitle(context.getString(R.string.call_notify_channel_sending))
             .build()
         return ForegroundInfo(FOREGROUND_ID, n)
     }
@@ -128,6 +129,7 @@ object CallReplies {
     private const val OVERALL_MS = 90_000L
 
     suspend fun answer(context: Context, core: AriesCoreInterface, notice: CallNotice, choice: Int, online: Boolean): CallView.Done {
+        val context = AppLanguage.context(context)
         val choiceText = notice.call.choices.getOrElse(choice) { "" }
         if (!online) {
             return CallView.Done(context.getString(R.string.call_notify_no_network), retry = choice)
