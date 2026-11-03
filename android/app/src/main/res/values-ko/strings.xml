@@ -68,6 +68,13 @@
     <string name="terminal_exited_signal">프로그램이 시그널 %1$s(으)로 중지되었습니다.</string>
     <string name="terminal_exited_reason">프로그램이 끝났습니다(%1$s).</string>
     <string name="terminal_connection_closed">터미널과의 연결이 끊어졌습니다. 보이는 내용이 최신이 아닐 수 있습니다.</string>
+    <string name="reconnecting">연결이 끊겼습니다. 다시 연결하는 중…</string>
+    <string name="terminal_scrolled_back">%1$d줄 위</string>
+    <string name="terminal_back_to_live">실시간으로</string>
+    <string name="terminal_zoom_reset">확대 %1$d%% · 원래대로</string>
+    <string name="terminal_copy">복사</string>
+    <string name="terminal_open_link">링크 열기</string>
+    <string name="terminal_copy_link">링크 복사</string>
 
     <string name="agents_button">모든 에이전트</string>
     <string name="agents_title">에이전트</string>
@@ -75,6 +82,7 @@
     <string name="agents_no_hosts">먼저 호스트를 추가하세요.</string>
     <string name="agents_host_unavailable">%1$s에 연결할 수 없습니다</string>
     <string name="agents_host_closed">%1$s와의 연결이 끊어졌습니다. 에이전트 정보가 최신이 아닐 수 있습니다.</string>
+    <string name="agents_host_reconnecting">%1$s에 다시 연결하는 중…</string>
     <string name="agent_pinned_label">고정됨</string>
     <string name="agent_pin_button">고정</string>
     <string name="agent_unpin_button">고정 해제</string>
@@ -233,4 +241,27 @@
     <string name="jump_key_changed_title">jump host 키가 바뀌었습니다</string>
     <string name="jump_key_changed_body">jump host %1$d(%2$s)가 이전과 다른 키를 보내서 Aries가 연결하지 않았습니다. 누군가 연결을 가로채고 있거나 jump host를 다시 설치했을 수 있습니다.\n\n신뢰한 키: %3$s\n현재 키: %4$s</string>
     <string name="connect_jump_auth_rejected">jump host %1$d(%2$s)가 지정한 키를 받아들이지 않았습니다. 그 jump host의 ~/.ssh/authorized_keys에 해당 키의 공개 키를 추가하세요.</string>
+    <string name="push_title">푸시 알림</string>
+    <string name="push_needs_beacon">이 Host의 푸시 알림을 켜려면 Beacon을 설치하세요.</string>
+    <string name="push_off_body">Aries가 꺼져 있거나 폰이 잠겨 있어도 이 Host의 알림을 이 폰에서 받습니다. 알림은 종단 간 암호화되어, 전달하는 Relay도 내용을 읽을 수 없습니다.</string>
+    <string name="push_force_stop_note">Android 설정에서 Aries를 강제 중지하면 Aries를 다시 열 때까지 알림이 오지 않고, 이미 표시된 알림도 지워집니다.</string>
+    <string name="push_enable_button">푸시 켜기</string>
+    <string name="push_disable_button">푸시 끄기</string>
+    <string name="push_test_button">테스트 알림 보내기</string>
+    <string name="push_retry_button">다시 시도</string>
+    <string name="push_step_register">Relay에 이 폰 등록</string>
+    <string name="push_step_pair">Beacon과 키 교환</string>
+    <string name="push_step_test">테스트 알림 보내기</string>
+    <string name="push_step_unpair">Relay에서 페어링 삭제</string>
+    <string name="push_failed">\"%1$s\" 단계 실패: %2$s</string>
+    <string name="push_on_body">푸시가 켜져 있습니다. Relay: %1$s</string>
+    <string name="push_test_sent">테스트 알림을 보냈습니다. 도착하지 않으면 Aries 알림이 허용돼 있는지 확인하세요.</string>
+    <string name="push_no_relay">이 Aries 빌드에는 Relay가 설정돼 있지 않아 푸시 알림을 쓸 수 없습니다.</string>
+    <string name="push_unavailable">이 폰에서는 푸시 알림을 쓸 수 없습니다: %1$s</string>
+    <string name="push_permission_denied">Aries 알림이 허용되지 않았습니다. Android 설정에서 허용한 뒤 다시 푸시를 켜세요.</string>
+    <string name="push_off_host_unreachable">푸시를 껐고 Relay에서 이 페어링을 삭제했습니다. Host에 연결할 수 없어 Host 쪽 페어링 사본은 다음 페어링 때까지 남지만 더는 동작하지 않습니다.</string>
+    <string name="push_channel_name">Host 알림</string>
+    <string name="push_test_title">%1$s 푸시 동작 확인</string>
+    <string name="push_test_body">%1$s의 Beacon이 보낸 테스트 알림입니다. 종단 간 암호화돼 있습니다.</string>
+    <string name="push_no_firebase">이 빌드에는 Firebase 설정이 없습니다</string>
 </resources>

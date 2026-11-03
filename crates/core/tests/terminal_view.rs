@@ -85,6 +85,7 @@ fn observe() -> AttachOptions {
         cols: 40,
         rows: 10,
         history: 0,
+        resumed: false,
     }
 }
 
@@ -169,6 +170,7 @@ async fn observing_leaves_the_desktop_size_and_follows_its_resizes() {
         cols: 100,
         rows: 30,
         history: 0,
+        resumed: false,
     };
     let _desk = desktop
         .attach_terminal(address.clone(), typing)
