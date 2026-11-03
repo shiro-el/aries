@@ -53,26 +53,54 @@ impl Agent for Codex {
         Box::<CodexInterpreter>::default()
     }
 
-    /// `request_user_input` shows the options as a list with the first one
-    /// selected: option n is `down` n times, then `enter`. Only one
-    /// single-choice question at a time was verified (ticket 03).
+    fn answer_input(
+        &self,
+        question: &ChatQuestion,
+        picks: &[Vec<usize>],
+        text: &[Option<String>],
+    ) -> Result<Vec<super::answer::AnswerInput>, KeysError> {
+        use super::answer::AnswerInput::Keys;
+        if question.questions.iter().any(|q| q.multi) {
+            return Err(KeysError::Unsupported("multi-select Codex question".into()));
+        }
+        if text.iter().any(Option::is_some) {
+            return Ok(question
+                .questions
+                .iter()
+                .enumerate()
+                .map(|(i, q)| super::answer::AnswerInput::Menu {
+                    prompt: q.text.clone(),
+                    options: q.options.len(),
+                    pick: picks[i].first().copied(),
+                    text: text.get(i).and_then(Clone::clone),
+                })
+                .collect());
+        }
+        let mut actions = Vec::new();
+        for picks in picks {
+            let mut keys = vec!["down".into(); picks[0]];
+            keys.push("enter".into());
+            actions.push(Keys(keys));
+        }
+        Ok(actions)
+    }
+
+    /// Each Enter advances to the next part; the last one submits the request.
     fn answer_keys(
         &self,
         question: &ChatQuestion,
         picks: &[Vec<usize>],
     ) -> Result<Vec<String>, KeysError> {
-        if question.questions.len() != 1 {
-            return Err(KeysError::Unsupported(
-                "several Codex questions at once".into(),
-            ));
-        }
-        if question.questions[0].multi {
-            return Err(KeysError::Unsupported("multi-select Codex question".into()));
-        }
-        let n = picks[0][0];
-        let mut keys = vec!["down".to_owned(); n];
-        keys.push("enter".into());
-        Ok(keys)
+        self.answer_input(question, picks, &[]).map(|actions| {
+            actions
+                .into_iter()
+                .flat_map(|action| match action {
+                    super::answer::AnswerInput::Keys(keys) => keys,
+                    super::answer::AnswerInput::Text(_)
+                    | super::answer::AnswerInput::Menu { .. } => unreachable!(),
+                })
+                .collect()
+        })
     }
 }
 

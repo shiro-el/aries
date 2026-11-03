@@ -556,6 +556,13 @@ class FakeCore : AriesCoreInterface {
         answerQuestion(hostId, terminal, questionId, picks)
     }
 
+    val textAnswers = mutableListOf<Pair<String, List<String?>>>()
+    override suspend fun answerQuestionWithText(hostId: String, terminal: String, questionId: String, picks: List<List<UInt>>, freeText: List<String?>) {
+        signsIn("answerQuestionWithText")
+        textAnswers += questionId to freeText
+        answerFailure?.let { answerFailure = null; throw it }
+    }
+
     /** Each Host's Call history (newest first), by Host id. */
     val callsOf = mutableMapOf<String, List<CallInfo>>()
 
