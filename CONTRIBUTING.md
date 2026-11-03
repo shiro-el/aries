@@ -30,6 +30,7 @@ cargo test -p aries-core -- --ignored              # SSH, jump host, password bo
 cd android && ./gradlew :app:testDebugUnitTest      # Compose UI tests against a fake core (Robolectric)
 cd android && ./gradlew :app:assembleDebug          # debug APK (builds the core with cargo-ndk)
 cd android && ./gradlew :app:connectedDebugAndroidTest   # device tests (Android Keystore); needs a device/emulator
+cd relay && npm ci --legacy-peer-deps && npm run typecheck && npm test   # Relay HTTP API (Workers runtime, fake FCM)
 ```
 
 `-Paries.abis=x86_64` limits the Android build to one ABI (faster on an emulator);
@@ -103,6 +104,43 @@ managed skills) adds its own removal step there and tests it in
 `crates/core/tests/beacon.rs`. The pinned release (`pinned_release`) and its
 checksums come from the Beacon release pipeline; tests swap it with
 `AriesCore::set_beacon_release`.
+
+## Push and the Relay
+
+Turning push on (`AriesCore::enable_push`, `crates/core/src/push.rs`)
+registers the phone on the Relay, runs `aries-beacon pair` over SSH (key
+exchange) and `aries-beacon push-test`. The envelope format is
+`aries_protocol::push` (version byte + HPKE auth mode + fixed 2048 bytes).
+The Beacon sends with `push::send(&PushMessage)` (`crates/beacon/src/push.rs`);
+a new notification kind is a new `PushMessage` variant plus its
+`PushContent` in the core. Turning push off, Host removal and Beacon removal
+delete the pairing on the Relay (removal queues it; the app sends the queue
+with `flush_push_revocations`).
+
+The Relay is `relay/` (Cloudflare Worker + D1, TypeScript). It stores only
+pairing token hashes, device push tokens and rate limit counters, and never
+stores or logs an envelope.
+
+```sh
+cd relay && npm ci --legacy-peer-deps && npm run typecheck && npm test   # Workers runtime, fake FCM
+```
+
+Core tests use `aries_test_support::FakeRelay` (records envelopes) and, for a
+docker Host, `SystemdHost::reverse_tunnel` so the Beacon in the container
+reaches it. Deploying (done by a human, never by tests):
+
+```sh
+cd relay
+node scripts/deploy-config.mjs      # needs ARIES_CF_D1_NAME, ARIES_CF_D1_ID, ARIES_FCM_SERVICE_ACCOUNT_EMAIL
+npx wrangler d1 migrations apply "$ARIES_CF_D1_NAME" --remote -c wrangler.deploy.jsonc
+npx wrangler secret put FCM_SERVICE_ACCOUNT_JSON -c wrangler.deploy.jsonc < service-account.json
+npx wrangler deploy -c wrangler.deploy.jsonc
+```
+
+Wrangler reads `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`. The app
+gets its Relay URL at build time from `ARIES_RELAY_URL` (repo variable in CI,
+or `-Paries.relayUrl`), and Firebase from `android/app/google-services.json`
+(never committed); without either the app says push is unavailable.
 
 ## Releases
 
