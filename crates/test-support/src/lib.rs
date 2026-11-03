@@ -171,6 +171,69 @@ impl HcSession {
         let v: serde_json::Value = serde_json::from_str(out.trim()).expect("run json");
         v["address"].as_str().expect("address").to_owned()
     }
+
+    /// One plain-mode JSON-RPC call through `herdr-core connect` (for API-only
+    /// methods such as `doc.set`). Returns `result`; panics on an error reply.
+    pub fn rpc(&self, method: &str, params: serde_json::Value) -> serde_json::Value {
+        use std::io::{BufRead, BufReader, Write};
+        let mut child = self
+            .command()
+            .arg("connect")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("run herdr-core connect");
+        let mut stdin = child.stdin.take().expect("stdin");
+        let hello =
+            serde_json::json!({"jsonrpc":"2.0","id":0,"method":"hello","params":{"generation":1}});
+        let call = serde_json::json!({"jsonrpc":"2.0","id":1,"method":method,"params":params});
+        writeln!(stdin, "{hello}\n{call}").expect("write rpc");
+        let mut reply = None;
+        for line in BufReader::new(child.stdout.take().expect("stdout")).lines() {
+            let Ok(line) = line else { break };
+            let Ok(v) = serde_json::from_str::<serde_json::Value>(&line) else {
+                continue;
+            };
+            if v["id"] == 1 {
+                reply = Some(v);
+                break;
+            }
+        }
+        drop(stdin);
+        let _ = child.kill();
+        let _ = child.wait();
+        let reply = reply.unwrap_or_else(|| panic!("no reply to {method}"));
+        assert!(reply.get("error").is_none(), "{method} failed: {reply}");
+        reply["result"].clone()
+    }
+
+    /// Writes document `name` (any JSON) over whatever version is there.
+    pub fn set_doc(&self, name: &str, value: serde_json::Value) {
+        let version = self.rpc("doc.get", serde_json::json!({ "name": name }))["version"].clone();
+        self.rpc(
+            "doc.set",
+            serde_json::json!({ "name": name, "value": value, "version": version }),
+        );
+    }
+
+    /// Starts `argv` in a new background Terminal with `labels`; returns its address.
+    pub fn run_labeled(&self, name: &str, labels: &[(&str, &str)], argv: &[&str]) -> String {
+        let mut args: Vec<String> = ["run", "--bg", "--json", "--no-parent", "--name", name]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        for (k, v) in labels {
+            args.push("--label".into());
+            args.push(format!("{k}={v}"));
+        }
+        args.push("--".into());
+        args.extend(argv.iter().map(|s| s.to_string()));
+        let refs: Vec<&str> = args.iter().map(String::as_str).collect();
+        let out = self.hc(&refs);
+        let v: serde_json::Value = serde_json::from_str(out.trim()).expect("run json");
+        v["address"].as_str().expect("address").to_owned()
+    }
 }
 
 impl Drop for HcSession {
@@ -195,14 +258,25 @@ fn assert_ok(out: &Output, what: &str) {
     );
 }
 
-/// Image tag built from `fixtures/sshd/Dockerfile`.
-pub const SSHD_IMAGE: &str = "aries-test-sshd:1";
+/// Image built from `fixtures/sshd/Dockerfile`, tagged by a hash of the
+/// Dockerfile so branches with different fixtures do not overwrite each
+/// other's image.
+pub fn sshd_image() -> String {
+    use std::hash::{Hash, Hasher};
+    let dockerfile =
+        std::fs::read(repo_root().join("fixtures/sshd/Dockerfile")).expect("read sshd Dockerfile");
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    dockerfile.hash(&mut h);
+    format!("aries-test-sshd:{:016x}", h.finish())
+}
 
 /// A docker container running a real sshd with the pinned herdr-core.
 ///
 /// Users: [`SshdHost::USER`] (plain `/bin/sh`) and [`SshdHost::NOISY_USER`]
-/// (a login shell that prints a banner on stdout before running the command).
-/// Removed on drop. Container names start with `ARIES_TEST_CONTAINER_PREFIX`
+/// (a login shell that prints a banner on stdout before running the command)
+/// accept keys only. [`SshdHost::PASSWORD_USER`] (no `~/.ssh` yet) and
+/// [`SshdHost::LOCKED_USER`] (a root-owned `~/.ssh`) also accept
+/// [`SshdHost::PASSWORD`]. Removed on drop. Container names start with `ARIES_TEST_CONTAINER_PREFIX`
 /// (default `aries-test`).
 pub struct SshdHost {
     container: String,
@@ -212,6 +286,9 @@ pub struct SshdHost {
 impl SshdHost {
     pub const USER: &'static str = "aries";
     pub const NOISY_USER: &'static str = "noisy";
+    pub const PASSWORD_USER: &'static str = "bootstrap";
+    pub const LOCKED_USER: &'static str = "locked";
+    pub const PASSWORD: &'static str = "aries-test-password";
 
     /// Builds the image if needed and starts a container.
     pub fn start() -> Self {
@@ -235,7 +312,8 @@ impl SshdHost {
     fn launch(network: Option<&str>) -> Self {
         let bin = herdr_core_bin();
         let fixture = repo_root().join("fixtures/sshd");
-        docker(&["build", "-q", "-t", SSHD_IMAGE, &fixture.to_string_lossy()]);
+        let image = sshd_image();
+        docker(&["build", "-q", "-t", &image, &fixture.to_string_lossy()]);
         let prefix =
             std::env::var("ARIES_TEST_CONTAINER_PREFIX").unwrap_or_else(|_| "aries-test".into());
         let container = unique(&format!("{prefix}-sshd"));
@@ -254,7 +332,7 @@ impl SshdHost {
         if let Some(network) = network {
             args.extend(["--network", network]);
         }
-        args.push(SSHD_IMAGE);
+        args.push(&image);
         docker(&args);
         let mut host = Self { container, port: 0 };
         let mapped = docker(&["port", &host.container, "22/tcp"]);
@@ -289,6 +367,17 @@ impl SshdHost {
                 &script,
             ]);
         }
+    }
+
+    /// Contents of `user`'s `~/.ssh/authorized_keys` (empty if missing).
+    pub fn authorized_keys(&self, user: &str) -> String {
+        docker(&[
+            "exec",
+            &self.container,
+            "sh",
+            "-c",
+            &format!("cat /home/{user}/.ssh/authorized_keys 2>/dev/null || true"),
+        ])
     }
 
     /// SHA256 fingerprint (`SHA256:...`) of the container's ed25519 host key.

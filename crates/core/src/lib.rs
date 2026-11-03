@@ -9,6 +9,7 @@ mod error;
 mod hc;
 mod removal;
 mod store;
+mod structure;
 mod transport;
 
 use std::collections::HashMap;
@@ -21,10 +22,11 @@ use serde::{Deserialize, Serialize};
 
 pub use error::{CoreError, Incompatibility, VaultError};
 pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
+pub use structure::{HostStructure, PaneInfo, SpaceInfo, StructureProblem, TabInfo};
 
 use hc::HcClient;
 use store::{SavedHost, SavedKey, Store};
-use transport::{LocalProcess, Ssh, SshHop, Transport};
+use transport::{LocalProcess, PasswordLogin, Ssh, SshHop, Transport};
 
 /// Id of the key [`AriesCore::ensure_key`] creates, in [`AriesCore::keys`].
 pub const DEFAULT_KEY_ID: &str = "default";
@@ -70,6 +72,22 @@ pub struct JumpHost {
     /// sets it through `trust_jump_host_key` and ignores it in
     /// `set_jump_hosts`.
     pub host_key: Option<String>,
+}
+
+/// A QR code as a square of modules, row by row; `true` is dark. The app
+/// draws it and adds the quiet zone around it.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct QrMatrix {
+    pub size: u32,
+    pub modules: Vec<bool>,
+}
+
+/// What a password bootstrap did to the Host's `authorized_keys`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum KeyInstall {
+    Added,
+    /// The same key was already there; nothing was written.
+    AlreadyPresent,
 }
 
 /// How to reach a Host's herdr-core.
@@ -162,6 +180,28 @@ impl AriesCore {
             return Ok(None);
         };
         Ok(Some(public_key_info(&public)?))
+    }
+
+    /// The app's public key line as a QR code, if a key was created.
+    pub fn public_key_qr(&self) -> Result<Option<QrMatrix>, CoreError> {
+        let Some(info) = self.public_key()? else {
+            return Ok(None);
+        };
+        let code = qrcode::QrCode::with_error_correction_level(
+            info.openssh.as_bytes(),
+            qrcode::EcLevel::M,
+        )
+        .map_err(|e| CoreError::Storage {
+            detail: format!("QR code: {e}"),
+        })?;
+        Ok(Some(QrMatrix {
+            size: code.width() as u32,
+            modules: code
+                .to_colors()
+                .into_iter()
+                .map(|c| c == qrcode::Color::Dark)
+                .collect(),
+        }))
     }
 
     /// Creates the app's ed25519 SSH key unless one exists, and returns its
@@ -313,6 +353,50 @@ impl AriesCore {
         self.update_host(&host_id, |h| h.key_id = key_id)
     }
 
+    /// Logs in to an SSH Host once with `password` and adds the public half
+    /// of the Host's SSH key (see `host_ssh_key`) to its
+    /// `~/.ssh/authorized_keys`, so later connections use the key. The
+    /// password is not stored. The Host is reached through its jump hosts,
+    /// which sign in with their own keys. Host keys are checked like
+    /// `connect` does, so the first call may return
+    /// [`CoreError::HostKeyUnknown`] or [`CoreError::JumpHostKeyUnknown`].
+    pub async fn install_key_with_password(
+        &self,
+        host_id: String,
+        password: String,
+    ) -> Result<KeyInstall, CoreError> {
+        let host = self.saved_host(&host_id)?;
+        let Endpoint::Ssh {
+            address,
+            port,
+            user,
+        } = host.endpoint
+        else {
+            return Err(CoreError::KeyInstallFailed {
+                detail: "this Host is not reached over SSH".into(),
+            });
+        };
+        let public = match host.key_id.as_deref() {
+            None | Some(DEFAULT_KEY_ID) => self.ensure_key()?.openssh,
+            Some(id) => {
+                self.keys()?
+                    .into_iter()
+                    .find(|k| k.id == id)
+                    .ok_or_else(|| CoreError::UnknownKey { id: id.to_owned() })?
+                    .openssh
+            }
+        };
+        let login = PasswordLogin {
+            address,
+            port,
+            user,
+            password,
+            trusted: host.host_key,
+            jumps: self.ssh_hops(host.jumps)?,
+        };
+        on_runtime(async move { login.install_key(&public).await }).await
+    }
+
     /// Removes a Host after the user confirmed it: runs every cleanup step
     /// (see `removal.rs` for how tickets add theirs), then forgets the
     /// Host's connection settings and trusted Host key. If a step fails the
@@ -334,14 +418,7 @@ impl AriesCore {
 
     /// Connects to a Host and checks its herdr-core is compatible.
     pub async fn connect(&self, host_id: String) -> Result<Arc<HostConnection>, CoreError> {
-        let host = self
-            .hosts
-            .lock()
-            .expect("hosts lock")
-            .iter()
-            .find(|h| h.id == host_id)
-            .cloned()
-            .ok_or(CoreError::UnknownHost { id: host_id })?;
+        let host = self.saved_host(&host_id)?;
         let transport: Box<dyn Transport> = match host.endpoint {
             Endpoint::Local { argv, env } => Box::new(LocalProcess { argv, env }),
             Endpoint::Ssh {
@@ -354,19 +431,7 @@ impl AriesCore {
                 user,
                 key: self.private_key(host.key_id.as_deref())?,
                 trusted: host.host_key,
-                jumps: host
-                    .jumps
-                    .into_iter()
-                    .map(|j| {
-                        Ok(SshHop {
-                            key: self.private_key(j.key_id.as_deref())?,
-                            address: j.address,
-                            port: j.port,
-                            user: j.user,
-                            trusted: j.host_key,
-                        })
-                    })
-                    .collect::<Result<_, CoreError>>()?,
+                jumps: self.ssh_hops(host.jumps)?,
             }),
         };
         let client =
@@ -378,6 +443,22 @@ impl AriesCore {
 }
 
 impl AriesCore {
+    /// The jump hosts with their private keys, ready to connect through.
+    fn ssh_hops(&self, jumps: Vec<JumpHost>) -> Result<Vec<SshHop>, CoreError> {
+        jumps
+            .into_iter()
+            .map(|j| {
+                Ok(SshHop {
+                    key: self.private_key(j.key_id.as_deref())?,
+                    address: j.address,
+                    port: j.port,
+                    user: j.user,
+                    trusted: j.host_key,
+                })
+            })
+            .collect()
+    }
+
     /// The private half of `key_id` (`None` or [`DEFAULT_KEY_ID`]: the
     /// default key).
     fn private_key(&self, key_id: Option<&str>) -> Result<PrivateKey, CoreError> {
@@ -469,6 +550,47 @@ impl HostConnection {
         Ok(list.iter().map(terminal_info).collect())
     }
 
+    /// The Host's Spaces, Tabs and Panes as herdr-app arranges them, read
+    /// from its `herdr-app` document (never written). Falls back to
+    /// `herdr.space` / `herdr.tab` labels when the document is unusable.
+    pub async fn structure(&self) -> Result<HostStructure, CoreError> {
+        let client = self.client.clone();
+        on_runtime(async move { read_structure(&client).await }).await
+    }
+
+    /// Delivers the structure now and again whenever the desktop changes the
+    /// document or Terminals come, go or are relabelled. Ends (with
+    /// `on_closed`) when the connection does or `stop` is called.
+    pub async fn watch_structure(
+        &self,
+        listener: Arc<dyn StructureListener>,
+    ) -> Result<Arc<StructureWatch>, CoreError> {
+        let client = self.client.clone();
+        let task = on_runtime(async move {
+            // Subscribe before reading, so no change falls in between.
+            let (_, mut events) = client.subscribe_events(serde_json::json!({})).await?;
+            listener.on_structure(read_structure(&client).await?);
+            Ok(tokio::spawn(async move {
+                while let Some(msg) = events.recv().await {
+                    let mut changed = changes_structure(&msg);
+                    while let Ok(more) = events.try_recv() {
+                        changed |= changes_structure(&more);
+                    }
+                    if !changed {
+                        continue;
+                    }
+                    match read_structure(&client).await {
+                        Ok(s) => listener.on_structure(s),
+                        Err(_) => break,
+                    }
+                }
+                listener.on_closed();
+            }))
+        })
+        .await?;
+        Ok(Arc::new(StructureWatch { task }))
+    }
+
     pub async fn disconnect(&self) {
         let client = self.client.clone();
         let _ = on_runtime(async move {
@@ -479,7 +601,62 @@ impl HostConnection {
     }
 }
 
-fn terminal_info(v: &serde_json::Value) -> TerminalInfo {
+/// Receives a Host's structure from [`HostConnection::watch_structure`].
+#[uniffi::export(with_foreign)]
+pub trait StructureListener: Send + Sync {
+    fn on_structure(&self, structure: HostStructure);
+    /// No more updates: the connection ended or the watch was stopped.
+    fn on_closed(&self);
+}
+
+/// A running [`HostConnection::watch_structure`].
+#[derive(uniffi::Object)]
+pub struct StructureWatch {
+    task: tokio::task::JoinHandle<()>,
+}
+
+#[uniffi::export]
+impl StructureWatch {
+    pub fn stop(&self) {
+        self.task.abort();
+    }
+}
+
+impl Drop for StructureWatch {
+    fn drop(&mut self) {
+        self.task.abort();
+    }
+}
+
+async fn read_structure(client: &HcClient) -> Result<HostStructure, CoreError> {
+    let doc = client
+        .call(
+            "doc.get",
+            serde_json::json!({ "name": structure::DOCUMENT }),
+        )
+        .await?;
+    let list = client.call("terminal.list", serde_json::json!({})).await?;
+    let terminals = list["terminals"].as_array().cloned().unwrap_or_default();
+    Ok(structure::build(&doc, &terminals))
+}
+
+/// Whether an event-stream message can change what `read_structure` returns.
+fn changes_structure(msg: &serde_json::Value) -> bool {
+    let params = &msg["params"];
+    match msg["method"].as_str() {
+        Some("missed") => true,
+        Some("event") => match params["type"].as_str() {
+            Some("doc") => {
+                params["data"]["name"] == structure::DOCUMENT && params.get("machine").is_none()
+            }
+            Some("created" | "removed" | "restarted" | "finished" | "labels" | "title") => true,
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
+pub(crate) fn terminal_info(v: &serde_json::Value) -> TerminalInfo {
     let s = |k: &str| v[k].as_str().map(str::to_owned);
     TerminalInfo {
         address: s("address").unwrap_or_default(),
