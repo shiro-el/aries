@@ -67,6 +67,10 @@ fun SettingsScreen(
     terminalDisplay: TerminalDisplaySettings = rememberTerminalDisplaySettings(),
     hostEditor: @Composable (Host) -> Unit = {},
 ) {
+    if (model.settingsDiagnostics) {
+        DiagnosticsScreen(model.diagnosticHistory, model.hosts)
+        return
+    }
     val host = model.settingsHost?.let { selected -> model.hosts.find { it.id == selected.id } }
     if (host != null) {
         HostSettingsScreen(model, host, hostEditor)
@@ -163,6 +167,12 @@ fun SettingsScreen(
                 io.github.shiroel.aries.guidance.LocalAppGuidance.current?.let {
                     io.github.shiroel.aries.guidance.AppGuidanceSettings(it)
                 }
+            }
+            item(key = "diagnostics") {
+                Text(stringResource(R.string.diagnostics_title),
+                    Modifier.fillMaxWidth().testTag("settings-diagnostics").clickable(onClick = model::openDiagnostics).padding(16.dp),
+                    color = MaterialTheme.colorScheme.primary)
+                HorizontalDivider()
             }
         }
     }
