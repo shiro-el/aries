@@ -803,6 +803,11 @@ class FakeConnection(
     }
     override suspend fun readFilePage(address: String, path: String, offset: ULong, limit: UInt) =
         fileReader(address, path, offset, limit)
+    var fileBytesReader: (String, String, ULong, UInt) -> io.github.shiroel.aries.core.RemoteFileBytes = { _, _, _, _ ->
+        throw CoreException.Rpc("not_found", "missing")
+    }
+    override suspend fun readFileBytes(address: String, path: String, offset: ULong, length: UInt) =
+        fileBytesReader(address, path, offset, length)
     var catalog = io.github.shiroel.aries.core.AgentCatalog(emptyList(), emptyList())
     var catalogFailure: CoreException? = null
     val catalogRequests = mutableListOf<Boolean>()

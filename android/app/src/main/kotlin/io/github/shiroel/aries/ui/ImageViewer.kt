@@ -29,14 +29,14 @@ private data class ViewerPicture(val bitmap: Bitmap, val mime: String)
  * [name] is a suggested export filename; it may include a remote path.
  */
 @Composable
-fun ImageViewer(bytes: ByteArray, onDismiss: () -> Unit, name: String = "image") {
+fun ImageViewer(bytes: ByteArray, onDismiss: () -> Unit, name: String = "image", mediaType: String? = null) {
     key(bytes) {
         Dialog(onDismissRequest = onDismiss, properties = DialogProperties(
             usePlatformDefaultWidth = false, decorFitsSystemWindows = false,
         )) {
             var loading by remember { mutableStateOf(true) }
             val picture by produceState<ViewerPicture?>(null, bytes) {
-                value = withContext(Dispatchers.Default) { decodeViewerPicture(bytes, name) }
+                value = withContext(Dispatchers.Default) { decodeViewerPicture(bytes, name, mediaType) }
                 loading = false
             }
             Surface(Modifier.fillMaxSize()) {
@@ -58,8 +58,8 @@ fun ImageViewer(bytes: ByteArray, onDismiss: () -> Unit, name: String = "image")
 }
 
 /** Bound decode memory while retaining enough detail to read screenshots. */
-private fun decodeViewerPicture(bytes: ByteArray, name: String): ViewerPicture? = try {
-    if (name.substringAfterLast('.', "").lowercase(Locale.ROOT) == "svg") decodeViewerSvg(bytes)
+private fun decodeViewerPicture(bytes: ByteArray, name: String, mediaType: String?): ViewerPicture? = try {
+    if (mediaType == "image/svg+xml" || (mediaType == null && name.substringAfterLast('.', "").lowercase(Locale.ROOT) == "svg")) decodeViewerSvg(bytes)
     else decodeViewerRaster(bytes)
 } catch (_: Exception) { null }
 
