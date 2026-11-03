@@ -1,5 +1,4 @@
 import java.io.File
-import java.util.Properties
 import javax.inject.Inject
 import org.gradle.process.ExecOperations
 
@@ -16,36 +15,13 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "io.github.shiroel.aries"
         minSdk = 28
         targetSdk = 36
-        // Release builds pass both from the tag (scripts/release-version.sh).
-        versionCode = (findProperty("aries.versionCode") as String?)?.toInt() ?: 1
-        versionName = findProperty("aries.versionName") as String? ?: "0.1.0-dev"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += rustAbis() }
         // Push: the Relay this build talks to, and Firebase from google-services.json.
         buildConfigField("String", "ARIES_RELAY_URL", "\"${relayUrl()}\"")
         firebaseValues("io.github.shiroel.aries").forEach { (name, value) -> resValue("string", name, value) }
-    }
-
-    signingConfigs {
-        uploadKey()?.let { key ->
-            create("upload") {
-                storeFile = key.storeFile
-                storePassword = key.storePassword
-                keyAlias = key.keyAlias
-                keyPassword = key.keyPassword
-                if (key.storeFile.extension.lowercase() in setOf("p12", "pfx")) storeType = "pkcs12"
-            }
-        }
-    }
-
-    buildTypes {
-        // Debug builds install next to a release (or legacy) Aries on the same device.
-        debug { applicationIdSuffix = ".dev" }
-        // Without an upload key the release APK is left unsigned.
-        release { signingConfigs.findByName("upload")?.let { signingConfig = it } }
     }
 
     buildFeatures {
@@ -86,6 +62,8 @@ licensee {
 }
 
 dependencies {
+    implementation(project(":wear-data"))
+    implementation(libs.kotlinx.coroutines.play.services)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.material3)
@@ -141,29 +119,6 @@ fun firebaseValues(packageName: String): Map<String, String> {
         "gcm_defaultSenderId" to project["project_number"].toString(),
         "project_id" to project["project_id"].toString(),
     )
-}
-
-// ---- Upload key --------------------------------------------------------------
-// The release signing key (the upload key; Play re-signs with the app key, and
-// GitHub Releases APKs ship signed with it). CI sets the ARIES_UPLOAD_* env
-// vars from the ANDROID_UPLOAD_* secrets; locally ARIES_UPLOAD_KEYSTORE_PROPERTIES
-// can point at a properties file with storeFile/storePassword/keyAlias/keyPassword.
-
-class UploadKey(val storeFile: File, val storePassword: String, val keyAlias: String, val keyPassword: String)
-
-fun uploadKey(): UploadKey? {
-    val env = System.getenv()
-    env["ARIES_UPLOAD_KEYSTORE"]?.takeIf { it.isNotBlank() }?.let { path ->
-        fun need(name: String) = env[name]?.takeIf { it.isNotEmpty() } ?: error("$name is not set")
-        return UploadKey(
-            file(path), need("ARIES_UPLOAD_STORE_PASSWORD"),
-            need("ARIES_UPLOAD_KEY_ALIAS"), need("ARIES_UPLOAD_KEY_PASSWORD"),
-        )
-    }
-    val propsPath = env["ARIES_UPLOAD_KEYSTORE_PROPERTIES"]?.takeIf { it.isNotBlank() } ?: return null
-    val props = Properties().apply { file(propsPath).inputStream().use { load(it) } }
-    fun need(name: String) = props.getProperty(name) ?: error("$propsPath has no $name")
-    return UploadKey(file(need("storeFile")), need("storePassword"), need("keyAlias"), need("keyPassword"))
 }
 
 // ---- Rust core -------------------------------------------------------------

@@ -174,6 +174,30 @@ class ChatMarkdownTest {
     }
 
     @Test
+    @Config(qualifiers = "h1200dp")
+    fun markdownFileReferencesRetainNativeFileNavigation() {
+        val core = FakeCore()
+        openChat(core)
+        val reads = mutableListOf<Pair<String, ULong>>()
+        core.connection!!.fileReader = { _, path, offset, _ ->
+            reads += path to offset
+            io.github.shiroel.aries.core.RemoteFilePage("val answer = 42\n", offset, offset, 800u)
+        }
+        for ((source, displayed, expected) in listOf(
+            Triple("See `src/Main.kt:415`.", "See src/Main.kt:415.", "/repo/src/Main.kt" to 415uL),
+            Triple("`src/a file.kt:9`", "src/a file.kt:9", "/repo/src/a file.kt" to 9uL),
+            Triple("[open file](<src/a file.kt:7>)", "open file", "/repo/src/a file.kt" to 7uL),
+        )) {
+            core.pushChat(ChatSnapshot(listOf(entry("a1", ChatEntryBody.Agent(source))), ChatStatus.LIVE, null))
+            compose.waitUntil(5_000) { compose.onAllNodesWithText(displayed).fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithText(displayed).performFirstLinkClick()
+            compose.onNodeWithTag("files-line:${expected.second}").assertExists()
+            assertEquals(expected, reads.last())
+            compose.onNodeWithText(str(R.string.files_close_button)).performClick()
+        }
+    }
+
+    @Test
     fun longMarkdownKeepsOffscreenContentLazyAndCopiesCodeAcrossChunks() {
         val core = FakeCore()
         openChat(core)

@@ -123,6 +123,9 @@ internal fun LazyListScope.chatMarkdownItems(id: String, document: ChatMarkdownD
 private fun ChatMarkdownBlockView(block: ChatMarkdownBlock) {
     when (block) {
         is ChatMarkdownBlock.Prose -> {
+            val open = LocalOpenRemoteFile.current
+            val color = MaterialTheme.colorScheme.primary
+            val linked = remember(block.text, open, color) { annotateChatFileLinks(block.text, open, color) }
             val style = when (block.headingLevel) {
                 1 -> MaterialTheme.typography.headlineMedium
                 2 -> MaterialTheme.typography.headlineSmall
@@ -133,7 +136,7 @@ private fun ChatMarkdownBlockView(block: ChatMarkdownBlock) {
             }
             val quoteColor = MaterialTheme.colorScheme.outline
             Text(
-                block.text,
+                linked,
                 Modifier.fillMaxWidth().padding(start = 16.dp + 12.dp * block.depth.coerceAtMost(8), end = 16.dp, top = 4.dp, bottom = 4.dp)
                     .then(if (block.quoted) Modifier.drawBehind {
                         drawLine(quoteColor, Offset(1.dp.toPx(), 0f), Offset(1.dp.toPx(), size.height), 2.dp.toPx())
@@ -144,8 +147,11 @@ private fun ChatMarkdownBlockView(block: ChatMarkdownBlock) {
         }
         is ChatMarkdownBlock.Cells -> Row(Modifier.padding(horizontal = 16.dp).horizontalScroll(block.scroll)) {
             block.cells.forEach { cell ->
+                val open = LocalOpenRemoteFile.current
+                val color = MaterialTheme.colorScheme.primary
+                val linked = remember(cell.text, open, color) { annotateChatFileLinks(cell.text, open, color) }
                 Text(
-                    cell.text,
+                    linked,
                     Modifier.width(160.dp)
                         .background(if (cell.header) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface)
                         .padding(8.dp),
@@ -279,7 +285,11 @@ private fun AnnotatedString.Builder.appendInlines(parent: Node) {
     parent.children().forEach { node ->
         when (node) {
             is org.commonmark.node.Text -> append(node.literal)
-            is Code -> withStyle(SpanStyle(fontFamily = FontFamily.Monospace)) { append(node.literal) }
+            is Code -> {
+                pushStringAnnotation(CHAT_INLINE_CODE, "")
+                withStyle(SpanStyle(fontFamily = FontFamily.Monospace)) { append(node.literal) }
+                pop()
+            }
             is StrongEmphasis -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { appendInlines(node) }
             is Emphasis -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { appendInlines(node) }
             is Link -> {
@@ -287,6 +297,10 @@ private fun AnnotatedString.Builder.appendInlines(parent: Node) {
                     withLink(LinkAnnotation.Url(node.destination, TextLinkStyles(SpanStyle(textDecoration = TextDecoration.Underline)))) {
                         appendInlines(node)
                     }
+                } else if (chatFileLocation(node.destination) != null) {
+                    pushStringAnnotation(CHAT_FILE_DESTINATION, node.destination)
+                    appendInlines(node)
+                    pop()
                 } else appendInlines(node)
             }
             is Image -> {

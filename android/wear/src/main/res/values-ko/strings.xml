@@ -1,0 +1,19 @@
+<resources>
+    <!-- Companion state surfaces -->
+    <string name="wear_waiting_count">대기 %1$d</string>
+    <string name="wear_waiting_label">대기</string>
+    <string name="wear_age_minutes">%1$d분 전</string>
+    <string name="wear_age_compact">%1$d분 전</string>
+    <string name="wear_not_synced">아직 동기화되지 않음</string>
+    <string name="wear_open_phone">폰에서 Aries를 열어 주세요</string>
+    <string name="wear_no_agents">Agent 없음</string>
+    <string name="wear_agent_row">%1$s · %2$s</string>
+    <string name="wear_status_blocked">Blocked</string>
+    <string name="wear_status_error">Error</string>
+    <string name="wear_status_done">Done</string>
+    <string name="wear_status_working">Working</string>
+    <string name="wear_status_idle">Idle</string>
+    <string name="wear_connect_phone">폰을 연결하고 다시 시도해 주세요</string>
+    <string name="wear_opening_phone">폰에서 여는 중</string>
+    <string name="wear_complication_description">대기 %1$d · %2$s</string>
+</resources>

@@ -384,7 +384,8 @@ fun ChatScreen(
                     }
                 }
                 if (source != null) {
-                    chatMarkdownItems(entry.id, markdown[entry.id]?.takeIf { it.source == source })
+                    // Keep the last complete document visible until the background parse swaps it.
+                    chatMarkdownItems(entry.id, markdown[entry.id])
                     item(key = "transcript:${entry.id}:footer") {
                         if (body is ChatEntryBody.User && body.images.isNotEmpty()) {
                             Column(Modifier.padding(horizontal = 16.dp)) {
