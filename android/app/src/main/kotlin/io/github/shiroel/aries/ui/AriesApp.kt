@@ -70,6 +70,7 @@ fun AriesApp(model: HostsModel) {
                     BrowseScreen(
                         s.browser,
                         onBack = model::back,
+                        onOpen = model::openTerminal,
                         onNewTerminal = { model.newTerminal(s.browser) },
                         onLaunch = { model.launch(s.browser, it) },
                         onSaveLaunch = { model.saveLaunch(s.browser, it) },
@@ -78,9 +79,25 @@ fun AriesApp(model: HostsModel) {
                         hostSections = { BeaconSection(model.beacon) },
                     )
                 }
+                is Screen.Terminal -> {
+                    BackHandler { model.closeTerminal() }
+                    TerminalScreen(s.viewer, onBack = model::closeTerminal)
+                }
                 is Screen.JumpHosts -> {
                     BackHandler { model.back() }
                     JumpHostsScreen(model, s.host, s.jumps, s.hostKeyId)
+                }
+                is Screen.Agents -> {
+                    BackHandler {
+                        if (s.board.openKey != null) s.board.closeDetail() else model.back()
+                    }
+                    AgentsScreen(
+                        s.board,
+                        onBack = model::back,
+                        onOpen = { model.openAgent(s.board, it) },
+                        onPin = { entry, pinned -> model.pin(s.board, entry, pinned) },
+                        onTerminal = { model.openTerminal(it.terminal) },
+                    )
                 }
             }
         }
@@ -94,7 +111,19 @@ private fun HostListScreen(model: HostsModel) {
         Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item { Text(stringResource(R.string.hosts_title), style = MaterialTheme.typography.headlineMedium) }
+        item {
+            // The Agents entry shares the title row so the Host list stays reachable.
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(stringResource(R.string.hosts_title), style = MaterialTheme.typography.headlineMedium)
+                if (model.hosts.isNotEmpty()) {
+                    Button(onClick = model::openAgents) { Text(stringResource(R.string.agents_button)) }
+                }
+            }
+        }
         item { KeySection(model) }
         item { HorizontalDivider() }
         if (model.hosts.isEmpty()) {

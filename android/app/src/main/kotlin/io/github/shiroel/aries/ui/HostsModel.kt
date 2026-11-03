@@ -6,7 +6,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github.shiroel.aries.HttpBeaconFetcher
 import io.github.shiroel.aries.R
+import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.core.AriesCoreInterface
+import io.github.shiroel.aries.core.AttachOptions
 import io.github.shiroel.aries.core.BeaconFetcher
 import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Endpoint
@@ -22,11 +24,14 @@ import io.github.shiroel.aries.core.SavedLaunch
 import io.github.shiroel.aries.core.StructureListener
 import io.github.shiroel.aries.core.StructureWatch
 import io.github.shiroel.aries.core.QrMatrix
+import io.github.shiroel.aries.core.TerminalInfo
+import io.github.shiroel.aries.core.TerminalUpdate
 import io.github.shiroel.aries.core.KeyProtection
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -42,6 +47,12 @@ sealed interface Screen {
 
     /** An open Host: its Spaces, Tabs and Panes. */
     data class Browse(val browser: HostBrowser) : Screen
+
+    /** One Terminal, observed; back returns to [returnTo] (its Host's Browse or the Agents list). */
+    data class Terminal(val viewer: TerminalViewer, val returnTo: Screen) : Screen
+
+    /** Every Host's Agents in one list. */
+    data class Agents(val board: AgentBoard) : Screen
 }
 
 sealed interface Prompt {
@@ -380,7 +391,132 @@ class HostsModel(
         }
     }
 
+    /** The open Terminal's stream; cancelled when it closes. */
+    private var viewing: Job? = null
+
+    /**
+     * Opens [terminal] in observe mode: the desktop keeps its size and the
+     * screen follows the Terminal's grid. Entry point for every list that
+     * shows Terminals or Agents: from Browse it is a Terminal of the open
+     * Host; from [Screen.Agents] it is the Terminal of the Agent whose detail
+     * is open. Leaving it ([closeTerminal]) returns to where it was opened.
+     */
+    fun openTerminal(terminal: TerminalInfo) {
+        when (val s = screen) {
+            is Screen.Browse -> {
+                val conn = open?.first ?: return
+                observe(conn, s.browser.current(terminal), s)
+            }
+            is Screen.Agents -> {
+                val key = s.board.openKey ?: return
+                if (key.address != terminal.address) return
+                val conn = agentConns[key.hostId] ?: return
+                observe(conn, s.board.find(key)?.terminal ?: terminal, s)
+            }
+            else -> return
+        }
+    }
+
+    private fun observe(conn: HostConnection, terminal: TerminalInfo, returnTo: Screen) {
+        val viewer = TerminalViewer(terminal)
+        screen = Screen.Terminal(viewer, returnTo)
+        viewing = scope.launch {
+            val view = try {
+                conn.attachTerminal(terminal.address, AttachOptions(observe = true, cols = 80u, rows = 24u, history = 0u))
+            } catch (e: CoreException) {
+                viewer.markClosed()
+                return@launch
+            }
+            try {
+                while (true) {
+                    when (val u = view.next()) {
+                        is TerminalUpdate.Screen -> viewer.apply(u.frame)
+                        is TerminalUpdate.Exited -> viewer.exited(u.exit)
+                    }
+                }
+            } catch (e: CoreException) {
+                viewer.markClosed()
+            } finally {
+                withContext(NonCancellable) { view.detach() }
+                view.close()
+            }
+        }
+    }
+
+    /** Leaves the open Terminal (it keeps running) and shows where it was opened from. */
+    fun closeTerminal() {
+        val s = screen as? Screen.Terminal ?: return
+        viewing?.cancel()
+        viewing = null
+        screen = s.returnTo
+    }
+
+    /** Connections and watch jobs of [Screen.Agents], per Host id. */
+    private val agentConns = mutableMapOf<String, HostConnection>()
+    private val agentJobs = mutableListOf<Job>()
+
+    /** Connects to every Host and shows all their Agents in one list. */
+    fun openAgents() {
+        val board = AgentBoard(hosts)
+        screen = Screen.Agents(board)
+        hosts.forEach { host ->
+            agentJobs += scope.launch {
+                val conn = try {
+                    core.connect(host.id)
+                } catch (e: CoreException) {
+                    board.fail(host.id, problemFor(e).body)
+                    return@launch
+                }
+                agentConns[host.id] = conn
+                try {
+                    val watch = conn.watchTerminals()
+                    try {
+                        while (true) board.update(host.id, watch.next())
+                    } finally {
+                        watch.stop()
+                    }
+                } catch (e: CoreException) {
+                    board.markClosed(host.id)
+                }
+            }
+        }
+    }
+
+    /** Opens an Agent's detail; a Done Agent counts as seen there, for every client. */
+    fun openAgent(board: AgentBoard, entry: AgentEntry) {
+        board.open(entry.key)
+        val t = entry.terminal
+        if (t.agentStatus != AgentStatus.Done) return
+        labelWrite(board, entry) { it.markSeen(t.address, t.turn) }
+    }
+
+    /** Pins or unpins an Agent for every client. */
+    fun pin(board: AgentBoard, entry: AgentEntry, pinned: Boolean) =
+        labelWrite(board, entry) { it.setPinned(entry.terminal.address, pinned) }
+
+    private fun labelWrite(board: AgentBoard, entry: AgentEntry, write: suspend (HostConnection) -> TerminalInfo) {
+        val conn = agentConns[entry.host.id] ?: return
+        scope.launch {
+            try {
+                board.replace(entry.host.id, write(conn))
+            } catch (e: CoreException) {
+                prompt = problemFor(e)
+            }
+        }
+    }
+
+    private fun closeAgents() {
+        agentJobs.forEach { it.cancel() }
+        agentJobs.clear()
+        val conns = agentConns.values.toList()
+        agentConns.clear()
+        conns.forEach { scope.launch { it.disconnect() } }
+    }
+
     fun back() {
+        viewing?.cancel()
+        viewing = null
+        if (screen is Screen.Agents) closeAgents()
         screen = Screen.Hosts
         status?.cancel()
         status = null

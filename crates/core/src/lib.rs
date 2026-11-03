@@ -13,6 +13,7 @@ mod launch;
 mod removal;
 mod store;
 mod structure;
+mod terminal;
 mod transport;
 
 use std::collections::HashMap;
@@ -32,6 +33,10 @@ pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
 pub use host_model::{AgentStatus, BlockedReason, TerminalWatch};
 pub use launch::{AgentPreset, LaunchRequest, RECENT_CWDS_KEPT, SavedLaunch};
 pub use structure::{HostStructure, PaneInfo, SpaceInfo, StructureProblem, TabInfo};
+pub use terminal::{
+    AttachOptions, CellRun, CursorPos, FRAME_INTERVAL, ScreenFrame, ScreenLine, TerminalExit,
+    TerminalUpdate, TerminalView, ViewStats,
+};
 
 use hc::HcClient;
 use store::{SavedHost, SavedKey, Store};
@@ -160,6 +165,14 @@ pub struct TerminalInfo {
     /// herdr-core's `turn` counter (what `herdr.seen` is compared with).
     #[uniffi(default = 0)]
     pub turn: u64,
+    /// Pinned by the user on any client (shared `herdr.pinned` label).
+    #[uniffi(default = false)]
+    pub pinned: bool,
+    /// For a Terminal on a machine the Host added with `hc machine add`, that
+    /// machine's name (`box` in `box/t7`). For display only: always use the
+    /// whole [`address`](Self::address) to reach the Terminal.
+    #[uniffi(default = None)]
+    pub machine: Option<String>,
 }
 
 fn runtime() -> &'static tokio::runtime::Runtime {
@@ -747,6 +760,23 @@ impl HostConnection {
         Ok(list.iter().map(terminal_info).collect())
     }
 
+    /// Attaches to the Terminal at `address` (`t7`, `machine/t7`) and
+    /// streams its screen. With `observe` the desktop keeps its size and the
+    /// view follows the Terminal's grid when the desktop resizes it.
+    pub async fn attach_terminal(
+        &self,
+        address: String,
+        options: AttachOptions,
+    ) -> Result<Arc<TerminalView>, CoreError> {
+        let client = self.client.clone();
+        on_runtime(async move {
+            TerminalView::attach(client, address, options)
+                .await
+                .map(Arc::new)
+        })
+        .await
+    }
+
     /// Watches the Host's Terminals and their Agent status live.
     pub async fn watch_terminals(&self) -> Result<Arc<TerminalWatch>, CoreError> {
         let client = self.client.clone();
@@ -792,6 +822,41 @@ impl HostConnection {
         })
         .await?;
         Ok(Arc::new(StructureWatch { task }))
+    }
+
+    /// Marks the Agent at `address` seen up to `turn` (the turn whose Done the
+    /// user confirmed) in the shared `herdr.seen` label, so every client,
+    /// desktop included, shows it Idle. Never moves `herdr.seen` backwards.
+    /// `address` is used whole (`t7` or `machine/t7`). Returns the Terminal
+    /// as it is after the change.
+    pub async fn mark_seen(&self, address: String, turn: u64) -> Result<TerminalInfo, CoreError> {
+        let client = self.client.clone();
+        on_runtime(async move {
+            let now = client
+                .call("terminal.get", serde_json::json!({ "terminal": address }))
+                .await?;
+            if host_model::seen_turn(&now) >= turn {
+                return Ok(terminal_info(&now));
+            }
+            let labels =
+                serde_json::json!({ aries_protocol::agent_status::SEEN_LABEL: turn.to_string() });
+            set_labels(&client, &address, labels).await
+        })
+        .await
+    }
+
+    /// Pins or unpins the Agent at `address` for every client through the
+    /// shared `herdr.pinned` label. Returns the Terminal after the change.
+    pub async fn set_pinned(
+        &self,
+        address: String,
+        pinned: bool,
+    ) -> Result<TerminalInfo, CoreError> {
+        let client = self.client.clone();
+        // An empty value removes the label.
+        let value = if pinned { "1" } else { "" };
+        let labels = serde_json::json!({ aries_protocol::agent_status::PINNED_LABEL: value });
+        on_runtime(async move { set_labels(&client, &address, labels).await }).await
     }
 
     /// Starts a new Terminal running `request.command` (see `launch.rs`),
@@ -871,6 +936,20 @@ impl Drop for StructureWatch {
     }
 }
 
+async fn set_labels(
+    client: &HcClient,
+    address: &str,
+    labels: serde_json::Value,
+) -> Result<TerminalInfo, CoreError> {
+    let t = client
+        .call(
+            "terminal.label",
+            serde_json::json!({ "terminal": address, "labels": labels }),
+        )
+        .await?;
+    Ok(terminal_info(&t))
+}
+
 async fn read_structure(client: &HcClient) -> Result<HostStructure, CoreError> {
     let doc = client
         .call(
@@ -902,8 +981,11 @@ fn changes_structure(msg: &serde_json::Value) -> bool {
 pub(crate) fn terminal_info(v: &serde_json::Value) -> TerminalInfo {
     let s = |k: &str| v[k].as_str().map(str::to_owned);
     let (agent_status, needs_attention) = host_model::status_of(v);
+    let address = s("address").unwrap_or_default();
     TerminalInfo {
-        address: s("address").unwrap_or_default(),
+        machine: address.rsplit_once('/').map(|(m, _)| m.to_owned()),
+        pinned: host_model::pinned(v),
+        address,
         name: s("name"),
         title: s("title").unwrap_or_default(),
         argv: v["argv"]
