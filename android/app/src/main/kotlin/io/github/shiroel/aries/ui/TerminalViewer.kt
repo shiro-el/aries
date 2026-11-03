@@ -52,6 +52,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.shiroel.aries.R
+import io.github.shiroel.aries.core.AgentView
 import io.github.shiroel.aries.core.CellRun
 import io.github.shiroel.aries.core.CursorPos
 import io.github.shiroel.aries.core.KeyMods
@@ -313,7 +314,7 @@ private val TerminalForeground = Color(0xFFD8DADC)
 private val SelectionColor = Color(0x664D8DFF)
 
 @Composable
-fun TerminalScreen(viewer: TerminalViewer, onBack: () -> Unit) {
+fun TerminalScreen(viewer: TerminalViewer, onBack: () -> Unit, onView: ((AgentView) -> Unit)? = null) {
     // The keyboard pushes the input and key bar up and shrinks the screen
     // (the Scaffold already keeps clear of the navigation bar).
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))) {
@@ -331,6 +332,8 @@ fun TerminalScreen(viewer: TerminalViewer, onBack: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
+            // Only an Agent has a Chat to switch to.
+            onView?.let { AgentViewToggle(AgentView.TERMINAL, it) }
         }
         viewer.exit?.let { Banner(exitText(it)) }
         val line = viewer.link?.state

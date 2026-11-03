@@ -52,6 +52,8 @@ pub(crate) struct Settings {
     pub chat_cache_days: u32,
     /// How opening a Terminal attaches (ticket 17).
     pub attach_mode: crate::AttachMode,
+    /// How an Agent's Terminal opens: Terminal or Chat (ticket 48).
+    pub agent_view: crate::AgentView,
 }
 
 impl Default for Settings {
@@ -60,6 +62,7 @@ impl Default for Settings {
             beacon_auto_update: true,
             chat_cache_days: crate::chat_cache::DEFAULT_RETENTION_DAYS,
             attach_mode: crate::AttachMode::default(),
+            agent_view: crate::AgentView::default(),
         }
     }
 }

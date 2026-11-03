@@ -1,4 +1,4 @@
-//! The attach-mode option. Kept with the other app-wide options in
+//! The attach-mode and Agent view options. Kept with the other app-wide options in
 //! `settings.json` ([`crate::store::Settings`]).
 
 use serde::{Deserialize, Serialize};
@@ -18,6 +18,16 @@ pub enum AttachMode {
     Input,
 }
 
+/// How an Agent's Terminal opens: the view the user last picked with the
+/// Terminal/Chat toggle.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, uniffi::Enum)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentView {
+    #[default]
+    Terminal,
+    Chat,
+}
+
 #[uniffi::export]
 impl AriesCore {
     /// How opening a Terminal attaches; [`AttachMode::Observe`] until changed.
@@ -28,6 +38,17 @@ impl AriesCore {
     pub fn set_attach_mode(&self, mode: AttachMode) -> Result<(), CoreError> {
         let mut settings = self.store.read_settings();
         settings.attach_mode = mode;
+        self.store.write_settings(&settings)
+    }
+
+    /// How an Agent's Terminal opens; [`AgentView::Terminal`] until changed.
+    pub fn agent_view(&self) -> Result<AgentView, CoreError> {
+        Ok(self.store.read_settings().agent_view)
+    }
+
+    pub fn set_agent_view(&self, view: AgentView) -> Result<(), CoreError> {
+        let mut settings = self.store.read_settings();
+        settings.agent_view = view;
         self.store.write_settings(&settings)
     }
 }

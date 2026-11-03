@@ -6,8 +6,8 @@ mod common;
 use std::time::{Duration, Instant};
 
 use aries_core::{
-    AttachMode, AttachOptions, HostConnection, KeyMods, ScreenFrame, TerminalExit, TerminalKey,
-    TerminalUpdate, TerminalView,
+    AgentView, AttachMode, AttachOptions, HostConnection, KeyMods, ScreenFrame, TerminalExit,
+    TerminalKey, TerminalUpdate, TerminalView,
 };
 use aries_test_support::{FakeAgent, HcSession};
 use common::{core_in, local_endpoint};
@@ -186,6 +186,19 @@ fn the_default_attach_mode_is_observe_and_the_choice_is_kept() {
         core_in(data.path()).attach_mode().unwrap(),
         AttachMode::Input
     );
+}
+
+#[test]
+fn the_default_agent_view_is_terminal_and_the_choice_is_kept() {
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    assert_eq!(core.agent_view().unwrap(), AgentView::Terminal);
+    core.set_agent_view(AgentView::Chat).unwrap();
+    core.set_attach_mode(AttachMode::Input).unwrap();
+    drop(core);
+    let core = core_in(data.path());
+    assert_eq!(core.agent_view().unwrap(), AgentView::Chat);
+    assert_eq!(core.attach_mode().unwrap(), AttachMode::Input);
 }
 
 #[tokio::test]

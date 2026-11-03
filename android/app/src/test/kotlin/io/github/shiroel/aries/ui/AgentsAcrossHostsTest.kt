@@ -152,7 +152,7 @@ class AgentsAcrossHostsTest {
 
         compose.onNodeWithText("pi").performClick()
         compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.terminal_open_button)).performClick()
+        compose.onNodeWithText(str(R.string.agent_open_button)).performClick()
         compose.waitForIdle()
 
         // Attached on the Agent's own Host (server), not home: both have a t1.

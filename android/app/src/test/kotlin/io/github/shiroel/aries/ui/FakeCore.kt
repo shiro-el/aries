@@ -2,6 +2,7 @@ package io.github.shiroel.aries.ui
 
 import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.core.AriesCoreInterface
+import io.github.shiroel.aries.core.AgentView
 import io.github.shiroel.aries.core.AttachMode
 import io.github.shiroel.aries.core.BeaconCheck
 import io.github.shiroel.aries.core.AttachOptions
@@ -218,6 +219,15 @@ class FakeCore : AriesCoreInterface {
 
     override fun setAttachMode(mode: AttachMode) {
         attach = mode
+    }
+
+    /** The saved Agent view (settings.json `agent_view`); Terminal until changed. */
+    var savedView = AgentView.TERMINAL
+
+    override fun agentView(): AgentView = savedView
+
+    override fun setAgentView(view: AgentView) {
+        savedView = view
     }
 
     override fun setKeyProtection(protection: KeyProtection) {

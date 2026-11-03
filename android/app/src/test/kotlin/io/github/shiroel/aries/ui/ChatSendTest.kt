@@ -12,6 +12,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentStatus
+import io.github.shiroel.aries.core.AgentView
 import io.github.shiroel.aries.core.BlockedReason
 import io.github.shiroel.aries.core.ChatEntry
 import io.github.shiroel.aries.core.ChatEntryBody
@@ -44,6 +45,7 @@ class ChatSendTest {
 
     private fun openChat(core: FakeCore, agent: TerminalInfo = claude): FakeConnection {
         core.terminals = listOf(agent)
+        core.savedView = AgentView.CHAT // the Agent opens as its Chat
         core.addHost("home", Endpoint.Ssh("10.0.0.2", 22u, "me"))
         compose.setContent {
             val scope = rememberCoroutineScope()
@@ -52,7 +54,7 @@ class ChatSendTest {
         }
         compose.onNodeWithText("home").performClick()
         compose.waitForIdle()
-        compose.onNodeWithContentDescription(str(R.string.chat_open_label, "claude")).performClick()
+        compose.onNodeWithText("claude").performClick()
         compose.waitForIdle()
         core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, null))
         compose.waitForIdle()
@@ -120,6 +122,28 @@ class ChatSendTest {
         compose.waitForIdle()
         compose.onNodeWithText(str(R.string.chat_title, "claude")).assertExists()
         compose.onNodeWithText("go on").assertExists()
+    }
+
+    @Test
+    fun theToggleOnTheTerminalOfABlockedNoticeReturnsToTheSameChat() {
+        val core = FakeCore()
+        val conn = openChat(core)
+        core.push(listOf(claude.copy(agentStatus = permission, needsAttention = true)))
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.terminal_open_button)).performClick()
+        compose.waitForIdle()
+
+        compose.onNodeWithText(str(R.string.agent_view_chat)).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.chat_title, "claude")).assertExists()
+        assertEquals("the Chat stayed live, not reopened", 1, core.chatsOpened.size)
+        assertEquals(true, conn.views.single().detached)
+
+        // Back is the Host, not the Terminal again.
+        compose.onNodeWithText(str(R.string.back_button)).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("claude").assertExists()
+        compose.onNodeWithText(str(R.string.chat_title, "claude")).assertDoesNotExist()
     }
 
     @Test

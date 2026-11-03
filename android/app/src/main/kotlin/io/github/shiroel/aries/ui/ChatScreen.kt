@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AnswerProblem
 import io.github.shiroel.aries.core.AgentStatus
+import io.github.shiroel.aries.core.AgentView
 import io.github.shiroel.aries.core.AriesCoreInterface
 import io.github.shiroel.aries.core.BlockedReason
 import io.github.shiroel.aries.core.ChatEntry
@@ -268,7 +269,12 @@ fun answerProblem(e: CoreException): Message = when (e) {
 }
 
 @Composable
-fun ChatScreen(chat: ChatModel, onBack: () -> Unit, onOpenTerminal: () -> Unit = {}) {
+fun ChatScreen(
+    chat: ChatModel,
+    onBack: () -> Unit,
+    onOpenTerminal: () -> Unit = {},
+    onView: (AgentView) -> Unit = {},
+) {
     val snapshot = chat.snapshot
     val entries = snapshot?.entries.orEmpty()
     val list = rememberLazyListState()
@@ -282,7 +288,9 @@ fun ChatScreen(chat: ChatModel, onBack: () -> Unit, onOpenTerminal: () -> Unit =
             Text(
                 stringResource(R.string.chat_title, displayName(chat.terminal)),
                 style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f),
             )
+            AgentViewToggle(AgentView.CHAT, onView)
         }
         statusText(snapshot?.status ?: ChatStatus.CONNECTING)?.let { ChatNotice(it) }
         if (snapshot != null && entries.isEmpty() && snapshot.status == ChatStatus.LIVE) {

@@ -180,7 +180,7 @@ class ReconnectTest {
         compose.onNodeWithText(str(R.string.agents_button)).performClick()
         compose.waitForIdle()
         compose.onNodeWithText("claude").performClick()
-        compose.onNodeWithText(str(R.string.terminal_open_button)).performClick()
+        compose.onNodeWithText(str(R.string.agent_open_button)).performClick()
         compose.waitForIdle()
         val dropped = core.connectionsOf.getValue(home.id)
         assertEquals("t1", dropped.views.single().address)

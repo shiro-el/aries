@@ -51,7 +51,7 @@ pub use push::{
     PushPairing, PushPolicy, PushProgress, PushStep,
 };
 pub use send::{HELD_AFTER, SendListener, SendOutcome};
-pub use settings::AttachMode;
+pub use settings::{AgentView, AttachMode};
 pub use structure::{HostStructure, PaneInfo, SpaceInfo, StructureProblem, TabInfo};
 pub use terminal::{
     AttachOptions, CellRun, CursorPos, FRAME_INTERVAL, KeyMods, ScreenFrame, ScreenLine,

@@ -81,7 +81,6 @@ fun AriesApp(model: HostsModel) {
                         s.browser,
                         onBack = model::back,
                         onOpen = model::openTerminal,
-                        onOpenChat = { model.openChat(s.browser.host, it) },
                         onNewTerminal = { model.newTerminal(s.browser) },
                         onLaunch = { model.launch(s.browser, it) },
                         onSaveLaunch = { model.saveLaunch(s.browser, it) },
@@ -95,7 +94,11 @@ fun AriesApp(model: HostsModel) {
                 }
                 is Screen.Terminal -> {
                     BackHandler { model.closeTerminal() }
-                    TerminalScreen(s.viewer, onBack = model::closeTerminal)
+                    TerminalScreen(
+                        s.viewer,
+                        onBack = model::closeTerminal,
+                        onView = model::switchView.takeIf { s.viewer.terminal.agentStatus != null },
+                    )
                 }
                 is Screen.JumpHosts -> {
                     BackHandler { model.back() }
@@ -111,7 +114,6 @@ fun AriesApp(model: HostsModel) {
                         onOpen = { model.openAgent(s.board, it) },
                         onPin = { entry, pinned -> model.pin(s.board, entry, pinned) },
                         onTerminal = { model.openTerminal(it.terminal) },
-                        onChat = { model.openChat(it.host, it.terminal) },
                     )
                 }
                 Screen.Calls -> {
@@ -120,7 +122,12 @@ fun AriesApp(model: HostsModel) {
                 }
                 is Screen.Chat -> {
                     BackHandler { model.closeChat() }
-                    ChatScreen(s.chat, onBack = model::closeChat, onOpenTerminal = { model.openTerminal(s.chat.terminal) })
+                    ChatScreen(
+                        s.chat,
+                        onBack = model::closeChat,
+                        onOpenTerminal = { model.openTerminal(s.chat.terminal) },
+                        onView = model::switchView,
+                    )
                 }
             }
         }

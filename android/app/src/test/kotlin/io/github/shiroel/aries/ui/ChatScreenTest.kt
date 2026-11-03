@@ -64,8 +64,9 @@ class ChatScreenTest {
         }
         compose.onNodeWithText("home").performClick()
         compose.waitForIdle()
-        compose.onNodeWithContentDescription(str(R.string.chat_open_label, "vim")).assertDoesNotExist()
-        compose.onNodeWithContentDescription(str(R.string.chat_open_label, "claude")).performClick()
+        compose.onNodeWithText("claude").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.agent_view_chat)).performClick()
         compose.waitForIdle()
     }
 
@@ -254,7 +255,9 @@ class ChatScreenTest {
         compose.waitForIdle()
         compose.onNodeWithText("claude").performClick()
         compose.waitForIdle()
-        compose.onNodeWithContentDescription(str(R.string.chat_open_label, "claude")).performClick()
+        compose.onNodeWithText(str(R.string.agent_open_button)).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.agent_view_chat)).performClick()
         compose.waitForIdle()
         assertEquals(listOf("h2" to "t1"), core.chatsOpened)
         compose.onNodeWithText(str(R.string.chat_title, "claude")).assertExists()

@@ -4,7 +4,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
@@ -54,7 +53,9 @@ class KeyWorkTest {
         show(core)
         compose.onNodeWithText("home").performClick()
         compose.waitForIdle()
-        compose.onNodeWithContentDescription(str(R.string.chat_open_label, "claude")).performClick()
+        compose.onNodeWithText("claude").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.agent_view_chat)).performClick()
         compose.waitForIdle()
 
         assertTrue(core.chatsOpened.isNotEmpty())

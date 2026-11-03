@@ -68,7 +68,9 @@ class ChatCacheTest {
         show(core)
         compose.onNodeWithText("home").performClick()
         compose.waitForIdle()
-        compose.onNodeWithContentDescription(str(R.string.chat_open_label, "claude")).performClick()
+        compose.onNodeWithText("claude").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.agent_view_chat)).performClick()
         compose.waitForIdle()
     }
 

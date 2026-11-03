@@ -8,6 +8,7 @@ import io.github.shiroel.aries.HttpBeaconFetcher
 import io.github.shiroel.aries.HttpRelayClient
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentStatus
+import io.github.shiroel.aries.core.AgentView
 import io.github.shiroel.aries.core.AriesCoreInterface
 import io.github.shiroel.aries.core.AttachMode
 import io.github.shiroel.aries.core.AttachOptions
@@ -69,7 +70,7 @@ sealed interface Screen {
 
     /** Every Host's Call history ([HostsModel.calls]). */
     data object Calls : Screen
-    /** An Agent's Chat; back returns to [returnTo] (its Host's Browse or the Agents list). */
+    /** An Agent's Chat; back returns to [returnTo] (its Host's Browse, the Agents list or Call history). */
     data class Chat(val chat: ChatModel, val returnTo: Screen) : Screen
 }
 
@@ -162,6 +163,10 @@ class HostsModel(
     var attachMode by mutableStateOf(AttachMode.OBSERVE)
         private set
 
+    /** How an Agent opens: the view last picked with the Terminal/Chat toggle (Terminal by default). */
+    var agentView by mutableStateOf(AgentView.TERMINAL)
+        private set
+
     /** The open Host's connection and structure watch, while [Screen.Browse] shows (the latest line after a reconnect). */
     private var open: Pair<HostConnection, StructureWatch?>? = null
 
@@ -205,6 +210,7 @@ class HostsModel(
             hosts = core.hosts()
             refreshRoutes()
             attachMode = core.attachMode()
+            agentView = core.agentView()
         }
         flushPushRevocations()
     }
@@ -476,23 +482,24 @@ class HostsModel(
     private var viewing: Job? = null
 
     /**
-     * Opens [terminal] in observe mode: the desktop keeps its size and the
-     * screen follows the Terminal's grid. Entry point for every list that
-     * shows Terminals or Agents: from Browse it is a Terminal of the open
-     * Host; from [Screen.Agents] it is the Terminal of the Agent whose detail
-     * is open. Leaving it ([closeTerminal]) returns to where it was opened.
+     * Opens [terminal]: an Agent in the saved [agentView], any other
+     * Terminal as a Terminal in observe mode (the desktop keeps its size and
+     * the screen follows the Terminal's grid). Entry point for every list
+     * that shows Terminals or Agents: from Browse it is a Terminal of the
+     * open Host; from [Screen.Agents] it is the Terminal of the Agent whose
+     * detail is open. Leaving it returns to where it was opened.
      */
     fun openTerminal(terminal: TerminalInfo) {
         when (val s = screen) {
             is Screen.Browse -> {
                 val link = browseLink ?: return
-                observe(link, s.browser.current(terminal), s)
+                show(link, s.browser.current(terminal), s)
             }
             is Screen.Agents -> {
                 val key = s.board.openKey ?: return
                 if (key.address != terminal.address) return
                 val link = agentLinks[key.hostId] ?: return
-                observe(link, s.board.find(key)?.terminal ?: terminal, s)
+                show(link, s.board.find(key)?.terminal ?: terminal, s)
             }
             // From a Chat (a Blocked Agent): back returns to the still-live Chat.
             is Screen.Chat -> {
@@ -501,6 +508,55 @@ class HostsModel(
                 observe(link, s.chat.terminal, s)
             }
             else -> return
+        }
+    }
+
+    /** Shows [terminal] over [returnTo]: an Agent in the saved [agentView], any other Terminal as a Terminal. */
+    private fun show(link: HostLink, terminal: TerminalInfo, returnTo: Screen) {
+        if (terminal.agentStatus != null && agentView == AgentView.CHAT) {
+            chat(link, terminal, returnTo)
+        } else {
+            observe(link, terminal, returnTo)
+        }
+    }
+
+    private fun chat(link: HostLink?, terminal: TerminalInfo, returnTo: Screen) {
+        val host = link?.host ?: return
+        val chat = ChatModel(core, host, terminal, link, keyWork)
+        screen = Screen.Chat(chat, returnTo)
+        chat.start(scope)
+    }
+
+    /**
+     * The Terminal/Chat toggle: shows the open Agent as [view] in place, so
+     * back still returns to where it was opened, and saves [view] for the
+     * next Agent opened.
+     */
+    fun switchView(view: AgentView) {
+        when (val s = screen) {
+            is Screen.Terminal -> {
+                if (view != AgentView.CHAT || s.viewer.terminal.agentStatus == null) return
+                if (s.returnTo is Screen.Chat) {
+                    // Opened from that Chat's Blocked notice: the Chat is still live under it.
+                    closeTerminal()
+                } else {
+                    val link = s.viewer.link ?: return
+                    viewing?.cancel()
+                    viewing = null
+                    chat(link, s.viewer.terminal, s.returnTo)
+                }
+            }
+            is Screen.Chat -> {
+                if (view != AgentView.TERMINAL) return
+                val link = s.chat.link ?: return
+                s.chat.stop()
+                observe(link, s.chat.terminal, s.returnTo)
+            }
+            else -> return
+        }
+        guard {
+            core.setAgentView(view)
+            agentView = core.agentView()
         }
     }
 
@@ -691,7 +747,7 @@ class HostsModel(
             return
         }
         agents.board.open(key)
-        observe(link, terminal, agents)
+        show(link, terminal, agents)
     }
 
     /** Opens an Agent's detail; a Done Agent counts as seen there, for every client. */
@@ -752,7 +808,7 @@ class HostsModel(
     /** The line a Call's Terminal is shown over, until Call history is left. */
     private var callLink: HostLink? = null
 
-    /** Shows the Terminal that sent [entry]'s Call; back returns to Call history. */
+    /** Opens the Terminal (an Agent in the saved view) that sent [entry]'s Call; back returns to Call history. */
     fun openCallTerminal(entry: CallEntry) {
         val address = entry.call.terminal ?: return
         if (screen != Screen.Calls) return
@@ -772,7 +828,7 @@ class HostsModel(
                     )
                     return@launch
                 }
-                if (screen == Screen.Calls) observe(link, terminal, Screen.Calls)
+                if (screen == Screen.Calls) show(link, terminal, Screen.Calls)
             } catch (e: CoreException) {
                 prompt = when (e) {
                     is CoreException.HostKeyUnknown -> Prompt.TrustHostKey(entry.host, e.fingerprint)
@@ -780,19 +836,6 @@ class HostsModel(
                 }
             }
         }
-    }
-
-    /** Opens the Chat of the Agent in [terminal] on [host], from Browse or the Agents list. */
-    fun openChat(host: Host, terminal: TerminalInfo) {
-        val from = screen
-        val link = when (from) {
-            is Screen.Browse -> browseLink
-            is Screen.Agents -> agentLinks[host.id]
-            else -> return
-        }
-        val chat = ChatModel(core, host, terminal, link, keyWork)
-        screen = Screen.Chat(chat, from)
-        chat.start(scope)
     }
 
     /** Leaves the Chat (the Agent keeps running) for where it was opened. */

@@ -76,7 +76,7 @@ class TerminalScreenTest {
         }
         open(core)
         compose.onNodeWithText("work").performClick()
-        compose.onNodeWithText(str(R.string.terminal_open_button)).performClick()
+        compose.onNodeWithText(str(R.string.agent_open_button)).performClick()
         compose.waitForIdle()
 
         val view = core.connection!!.views.single()

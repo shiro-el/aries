@@ -25,8 +25,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.Host
@@ -166,7 +164,6 @@ fun BrowseScreen(
     browser: HostBrowser,
     onBack: () -> Unit,
     onOpen: (TerminalInfo) -> Unit = {},
-    onOpenChat: (TerminalInfo) -> Unit = {},
     onNewTerminal: (() -> Unit)? = null,
     onLaunch: (LaunchForm) -> Unit = {},
     onSaveLaunch: (LaunchForm) -> Unit = {},
@@ -210,8 +207,8 @@ fun BrowseScreen(
         browser.structure?.problem?.let { Notice(problemText(it)) }
         when {
             browser.structure == null -> Text(stringResource(R.string.connecting, browser.host.name))
-            space == null -> SpaceList(browser, browser.structure!!, hostSections, onOpen, onOpenChat)
-            else -> SpaceView(browser, space, onOpen, onOpenChat)
+            space == null -> SpaceList(browser, browser.structure!!, hostSections, onOpen)
+            else -> SpaceView(browser, space, onOpen)
         }
     }
 }
@@ -239,7 +236,6 @@ private fun SpaceList(
     s: HostStructure,
     hostSections: @Composable () -> Unit,
     onOpen: (TerminalInfo) -> Unit,
-    onOpenChat: (TerminalInfo) -> Unit,
 ) {
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
@@ -264,7 +260,7 @@ private fun SpaceList(
             }
             items(s.unplaced, key = { "unplaced:" + it.address }) {
                 val t = browser.current(it)
-                TerminalRow(t, onOpenChat) { onOpen(t) }
+                TerminalRow(t) { onOpen(t) }
             }
         }
         item {
@@ -279,7 +275,6 @@ private fun SpaceView(
     browser: HostBrowser,
     space: SpaceInfo,
     onOpen: (TerminalInfo) -> Unit,
-    onOpenChat: (TerminalInfo) -> Unit,
 ) {
     Text(space.name.ifBlank { stringResource(R.string.space_unnamed) }, style = MaterialTheme.typography.headlineSmall)
     val tab = browser.tab
@@ -300,7 +295,7 @@ private fun SpaceView(
     val focused = browser.focusedPane(tab)
     if (zoomed != null) {
         TextButton(onClick = { browser.unzoom(tab) }) { Text(stringResource(R.string.pane_unzoom_button)) }
-        PaneRow(zoomed, browser, focused = true, onOpen = onOpen, onOpenChat = onOpenChat) {}
+        PaneRow(zoomed, browser, focused = true, onOpen = onOpen) {}
         return
     }
     if (focused != null) {
@@ -309,7 +304,7 @@ private fun SpaceView(
     if (tab.panes.isEmpty()) Text(stringResource(R.string.tab_empty))
     LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         items(tab.panes, key = { "pane:" + it.id + ":" + it.terminalAddress }) { pane ->
-            PaneRow(pane, browser, focused = pane.id == focused, onOpen = onOpen, onOpenChat = onOpenChat) { browser.focus(tab, pane) }
+            PaneRow(pane, browser, focused = pane.id == focused, onOpen = onOpen) { browser.focus(tab, pane) }
         }
     }
 }
@@ -320,7 +315,6 @@ private fun PaneRow(
     browser: HostBrowser,
     focused: Boolean,
     onOpen: (TerminalInfo) -> Unit,
-    onOpenChat: (TerminalInfo) -> Unit,
     onClick: () -> Unit,
 ) {
     val modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
@@ -334,28 +328,18 @@ private fun PaneRow(
             Text(displayName(t), style = MaterialTheme.typography.titleMedium)
             Text(stringResource(R.string.terminal_subtitle, t.address, t.state), style = MaterialTheme.typography.bodySmall)
             AgentStatusLine(t)
-            TextButton(onClick = { onOpen(t) }) { Text(stringResource(R.string.terminal_open_button)) }
-            ChatButton(t, onOpenChat)
+            // An Agent opens in the view picked last (Terminal or Chat).
+            val open = if (t.agentStatus != null) R.string.agent_open_button else R.string.terminal_open_button
+            TextButton(onClick = { onOpen(t) }) { Text(stringResource(open)) }
         }
     }
 }
 
 @Composable
-private fun TerminalRow(t: TerminalInfo, onOpenChat: (TerminalInfo) -> Unit, onOpen: () -> Unit) {
+private fun TerminalRow(t: TerminalInfo, onOpen: () -> Unit) {
     Column(Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(vertical = 4.dp)) {
         Text(displayName(t), style = MaterialTheme.typography.titleMedium)
         Text(stringResource(R.string.terminal_subtitle, t.address, t.state), style = MaterialTheme.typography.bodySmall)
         AgentStatusLine(t)
-        ChatButton(t, onOpenChat)
-    }
-}
-
-/** Agents (Terminals that report Agent status) have a Chat. */
-@Composable
-private fun ChatButton(t: TerminalInfo, onOpenChat: (TerminalInfo) -> Unit) {
-    if (t.agentStatus == null) return
-    val label = stringResource(R.string.chat_open_label, displayName(t))
-    TextButton(onClick = { onOpenChat(t) }, modifier = Modifier.semantics { contentDescription = label }) {
-        Text(stringResource(R.string.chat_open_button))
     }
 }
