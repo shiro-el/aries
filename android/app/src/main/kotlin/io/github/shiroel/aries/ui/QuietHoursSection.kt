@@ -2,7 +2,6 @@ package io.github.shiroel.aries.ui
 
 import android.app.TimePickerDialog
 import android.text.format.DateFormat
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.selection.toggleable
@@ -33,10 +32,7 @@ fun QuietHoursSection() {
             .toggleable(hours.enabled, role = Role.Switch) { settings.update(hours.copy(enabled = it)) },
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(stringResource(R.string.quiet_hours_title), style = MaterialTheme.typography.titleSmall)
-            Text(stringResource(R.string.quiet_hours_hint), style = MaterialTheme.typography.bodySmall)
-        }
+        Text(stringResource(R.string.quiet_hours_title), Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
         Switch(checked = hours.enabled, onCheckedChange = null)
     }
     QuietTimeButton(R.string.quiet_hours_start, "quiet-hours-start", hours.startMinute, hours.enabled) {

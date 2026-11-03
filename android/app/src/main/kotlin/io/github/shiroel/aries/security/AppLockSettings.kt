@@ -29,7 +29,6 @@ fun AppLockSettings(session: AppLockSession) {
         LockToggle(R.string.app_lock_enabled_label, "app-lock-enabled", lock.enabled, !session.busy) {
             if (it) session.enable() else session.disable()
         }
-        Text(stringResource(R.string.app_lock_settings_hint), style = MaterialTheme.typography.bodySmall)
         AppLockNotice(session)
         if (lock.enabled) {
             Text(stringResource(R.string.app_lock_delay_label))
@@ -52,7 +51,6 @@ fun AppLockSettings(session: AppLockSession) {
                 }
             }
             LockToggle(R.string.app_lock_previews_label, "app-lock-previews", lock.hidePreviews, !session.busy, lock::chooseHidePreviews)
-            Text(stringResource(R.string.app_lock_previews_hint), style = MaterialTheme.typography.bodySmall)
         }
     }
 }

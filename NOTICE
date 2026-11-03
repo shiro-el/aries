@@ -19,3 +19,7 @@ and attached to each GitHub Release.
 Chat Markdown uses commonmark-java and its GFM tables extension (BSD-2-Clause).
 Their copyright and license are included in
 assets/licenses/commonmark-java.txt inside the Android app.
+
+Claude and Codex program icons are from LobeHub icons (MIT), adapted from
+herdr-app defaults/icons. See the bundled licenses/lobehub-icons.txt notice.
+Brand names and marks remain the property of their respective owners.

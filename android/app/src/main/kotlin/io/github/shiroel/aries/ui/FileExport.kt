@@ -52,7 +52,7 @@ private fun FileExportActions(
     actions: @Composable ((() -> Unit)?, (() -> Unit)?, Boolean) -> Unit,
 ) {
     val context = LocalContext.current
-    val shareTitle = stringResource(R.string.files_share_title)
+    val shareTitle by rememberUpdatedState(stringResource(R.string.files_share_title))
     val scope = rememberCoroutineScope()
     var job by remember { mutableStateOf<Job?>(null) }
     var busy by remember { mutableStateOf(false) }

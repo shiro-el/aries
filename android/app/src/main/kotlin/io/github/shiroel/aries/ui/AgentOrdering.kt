@@ -10,11 +10,13 @@ data class AgentSpace(val id: String, val name: String, val order: Int)
 
 fun withAgentSpaces(entries: List<AgentEntry>, structure: HostStructure?): List<AgentEntry> {
     val positions = mutableMapOf<String, Int>()
+    val tabs = mutableMapOf<String, String?>()
     val spaces = buildMap {
         structure?.spaces?.forEachIndexed { index, space ->
             val location = AgentSpace(space.id, space.name, index)
             space.tabs.forEach { tab -> tab.panes.forEach { pane ->
                 put(pane.terminalAddress, location)
+                tabs[pane.terminalAddress] = tab.name.takeIf { tab.named && !it.matches(Regex("[0-9]+")) }
                 positions[pane.terminalAddress] = positions.size
                 pane.subAgents.forEach { put(it.address, location) }
             } }
@@ -30,7 +32,7 @@ fun withAgentSpaces(entries: List<AgentEntry>, structure: HostStructure?): List<
             if (location != null) break
             current = current.terminal.parent?.let { byKey[AgentKey(entry.host.id, it)] }
         }
-        entry.copy(space = location, layoutOrder = positions[entry.terminal.address])
+        entry.copy(space = location, layoutOrder = positions[entry.terminal.address], tabName = current?.let { tabs[it.terminal.address] })
     }
 }
 

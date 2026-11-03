@@ -13,6 +13,10 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -26,11 +30,15 @@ import io.github.shiroel.aries.core.BeaconUpdate
 @Composable
 fun BeaconSection(model: BeaconModel) {
     val host = model.host ?: return
+    var installAttempted by remember(host.id) { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(stringResource(R.string.beacon_title), style = MaterialTheme.typography.titleMedium)
         when (val ui = model.ui) {
             BeaconUi.Loading, BeaconUi.Working -> CircularProgressIndicator()
-            is BeaconUi.Unavailable -> Text(text(ui.reason))
+            is BeaconUi.Unavailable -> {
+                TextButton(onClick = { installAttempted = true }) { Text(stringResource(R.string.beacon_install_button)) }
+                if (installAttempted) Text(text(ui.reason), color = MaterialTheme.colorScheme.error)
+            }
             is BeaconUi.Known -> when (val s = ui.state) {
                 BeaconState.NotInstalled -> {
                     Text(stringResource(R.string.beacon_not_installed))
@@ -67,14 +75,6 @@ fun BeaconSection(model: BeaconModel) {
                         }
                         BeaconUpdate.NotNeeded -> {}
                     }
-                    if (s.os == "macos") {
-                        Text(stringResource(R.string.beacon_macos_login_limit), style = MaterialTheme.typography.bodySmall)
-                    } else if (!s.linger) {
-                        Text(
-                            stringResource(R.string.beacon_no_linger, userOf(host)),
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(onClick = model::install) { Text(stringResource(R.string.beacon_reinstall_button)) }
                         TextButton(onClick = model::askRemove) { Text(stringResource(R.string.beacon_remove_button)) }
@@ -98,8 +98,7 @@ fun BeaconSection(model: BeaconModel) {
     if (model.confirmRemove) {
         AlertDialog(
             onDismissRequest = model::dismiss,
-            title = { Text(stringResource(R.string.beacon_remove_title)) },
-            text = { Text(stringResource(R.string.beacon_remove_body, host.name)) },
+            title = { Text(stringResource(R.string.beacon_remove_title, host.name)) },
             confirmButton = { TextButton(onClick = model::remove) { Text(stringResource(R.string.beacon_remove_button)) } },
             dismissButton = { TextButton(onClick = model::dismiss) { Text(stringResource(R.string.cancel_button)) } },
         )

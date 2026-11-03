@@ -75,7 +75,8 @@ class LaunchScreenTest {
     fun launchesIntoTheTabShownAndOpensTheNewTerminal() {
         val core = FakeCore().apply { structure = desktop }
         open(core)
-        compose.onNodeWithText("build").performClick()
+        compose.onNodeWithTag("host-layout-context").performClick()
+        compose.onNodeWithTag("host-context-tab:s1:tab2").performClick()
 
         compose.onNodeWithText(str(R.string.launch_open_button)).performClick()
         compose.onNodeWithText(str(R.string.launch_button)).assertIsNotEnabled()
@@ -103,7 +104,7 @@ class LaunchScreenTest {
         command("htop")
         run()
         assertEquals(LaunchRequest("htop", null, "s2", "tab3"), core.connection!!.launched.last())
-        compose.onNodeWithText("todo").assertExists()
+        compose.onNodeWithText("notes · todo").assertExists()
         compose.onNodeWithText("htop").assertExists()
     }
 
@@ -120,7 +121,7 @@ class LaunchScreenTest {
 
         assertEquals(LaunchRequest("make test", "/tmp", null, null), core.connection!!.launched.last())
         // Unplaced Terminals show on the Space list.
-        compose.onNodeWithText(str(R.string.unplaced_title)).performScrollTo().assertExists()
+        compose.onNodeWithTag("host-plain-terminals").performScrollTo().assertExists()
         compose.onNodeWithText("make test").performScrollTo().assertExists()
     }
 

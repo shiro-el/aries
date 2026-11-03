@@ -19,7 +19,6 @@
     <string name="github_next">Next</string>
     <string name="github_page">Page %1$d</string>
     <string name="github_refresh">Refresh</string>
-    <string name="github_loading">Loading GitHub…</string>
     <string name="github_empty">No matching issues or pull requests.</string>
     <string name="github_limited">GitHub search is incomplete or limited to 1,000 results. Narrow your search.</string>
     <string name="github_item_title">#%1$d · %2$s</string>
@@ -45,6 +44,47 @@
     <string name="github_draft_failed">The draft could not be saved on this phone. Keep this view open and try editing again.</string>
     <string name="github_draft_limit">Comments can contain at most 64 KiB of text.</string>
 
+    <!-- GitHub PR resources (114) -->
+    <string name="github_pr_truncated">This PR response exceeds the Host’s size limit. Some details cannot be displayed.</string>
+    <string name="github_pr_conversation">Conversation</string>
+    <string name="github_pr_files">Files</string>
+    <string name="github_pr_commits">Commits</string>
+    <string name="github_pr_checks">Checks</string>
+    <string name="github_pr_reviews">Reviews</string>
+    <string name="github_pr_no_files">No changed files.</string>
+    <string name="github_pr_no_commits">No commits.</string>
+    <string name="github_pr_no_checks">No checks reported for this PR head commit.</string>
+    <string name="github_pr_no_reviews">No reviews yet.</string>
+    <string name="github_pr_patch_unavailable">GitHub did not provide a patch for this file. Binary or large file patches may be unavailable.</string>
+    <string name="github_pr_files_limited">GitHub returns at most 3,000 files. This list may be incomplete.</string>
+    <string name="github_pr_commits_limited">GitHub returns at most 250 PR commits. This list may be incomplete.</string>
+    <string name="github_pr_file_stats">%1$s · +%2$d −%3$d</string>
+    <string name="github_pr_previous_path">Previously: %1$s</string>
+    <string name="github_pr_added">Added</string>
+    <string name="github_pr_removed">Removed</string>
+    <string name="github_pr_renamed">Renamed</string>
+    <string name="github_pr_copied">Copied</string>
+    <string name="github_pr_changed">Changed</string>
+    <string name="github_pr_queued">Queued</string>
+    <string name="github_pr_in_progress">In progress</string>
+    <string name="github_pr_pending">Pending</string>
+    <string name="github_pr_waiting">Waiting</string>
+    <string name="github_pr_requested">Requested</string>
+    <string name="github_pr_success">Passed</string>
+    <string name="github_pr_failure">Failed</string>
+    <string name="github_pr_neutral">Neutral</string>
+    <string name="github_pr_cancelled">Cancelled</string>
+    <string name="github_pr_skipped">Skipped</string>
+    <string name="github_pr_timed_out">Timed out</string>
+    <string name="github_pr_action_required">Action required</string>
+    <string name="github_pr_stale">Stale</string>
+    <string name="github_pr_error">Error</string>
+    <string name="github_pr_unknown">Unknown</string>
+    <string name="github_pr_approved">Approved</string>
+    <string name="github_pr_changes_requested">Changes requested</string>
+    <string name="github_pr_commented">Commented</string>
+    <string name="github_pr_dismissed">Dismissed</string>
+
     <!-- App language (130) -->
     <string name="app_language_title">App language</string>
     <string name="app_language_system">System default</string>
@@ -55,15 +95,12 @@
     <!-- App lock (117) -->
     <string name="app_lock_settings_title">App lock</string>
     <string name="app_lock_enabled_label">Require authentication</string>
-    <string name="app_lock_settings_hint">Protect app content when returning from the background. Notification actions keep working as before.</string>
     <string name="app_lock_delay_label">Lock after leaving the app</string>
     <string name="app_lock_delay_immediate">Immediately</string>
     <string name="app_lock_delay_one_minute">1 minute</string>
     <string name="app_lock_delay_five_minutes">5 minutes</string>
-    <string name="app_lock_previews_label">Hide app previews</string>
-    <string name="app_lock_previews_hint">Hide Aries in Recents and block screenshots and screen sharing while app lock is enabled.</string>
+    <string name="app_lock_previews_label">Hide previews and block screenshots</string>
     <string name="app_lock_screen_title">Aries is locked</string>
-    <string name="app_lock_screen_body">Authenticate with biometrics or your device lock to continue.</string>
     <string name="app_lock_unlock_button">Unlock Aries</string>
     <string name="app_lock_authenticating">Authenticating…</string>
     <string name="app_lock_cancelled">Authentication cancelled.</string>
@@ -90,7 +127,6 @@
     <string name="read_aloud_voice_local">On device</string>
     <string name="read_aloud_preview">Preview voice</string>
     <string name="read_aloud_sample">Hello. Aries can read Agent responses aloud.</string>
-    <string name="read_aloud_hint">Tap Read on a Chat response to hear it with system speech. Code blocks are skipped. Playback stops when you leave the screen. Korean text uses a Korean voice when available. Network voices may send text to the speech provider.</string>
 
     <!-- Quick open and command palette -->
     <string name="quick_open_title">Quick open</string>
@@ -118,16 +154,15 @@
     <string name="onboarding_open_button">Getting started</string>
     <string name="whats_new_open_button">What’s New</string>
     <string name="onboarding_permission_button">Allow notifications</string>
-    <string name="onboarding_permission_granted">Notifications are allowed. Enable push in your Host’s settings next.</string>
+    <string name="onboarding_permission_granted">Notifications allowed.</string>
     <string name="onboarding_permission_denied">Notifications are off. You can allow them later in Android settings.</string>
     <string name="app_update_url_label">Update metadata URL</string>
-    <string name="app_update_url_hint">Use HTTPS. HTTP is supported for the default development server. Save the URL before checking.</string>
     <string name="app_update_url_invalid">Enter an HTTP or HTTPS URL without credentials.</string>
     <string name="app_update_save_button">Save update URL</string>
     <string name="app_update_check_button">Check for updates</string>
     <string name="app_update_checking">Checking for updates…</string>
     <string name="app_update_current">No newer version is available.</string>
-    <string name="app_update_found">A newer version is available. Use the banner to open the download.</string>
+    <string name="app_update_found">A newer version is available.</string>
     <string name="app_update_failed">Could not check for updates. Check the URL and connection, then retry.</string>
 
     <string name="app_update_available">Aries %1$s is available</string>
@@ -139,11 +174,8 @@
 
     <string name="onboarding_title">Get started · %1$d of 3</string>
     <string name="onboarding_host_title">Add a Host</string>
-    <string name="onboarding_host_body">Create an SSH key in Settings → SSH keys, then use Add Host on the Hosts screen. A Host is a computer running herdr-core.</string>
     <string name="onboarding_beacon_title">Install Beacon</string>
-    <string name="onboarding_beacon_body">Open your Host’s settings and install Beacon. Beacon runs on that Host and sends Agent notifications and Calls.</string>
     <string name="onboarding_notifications_title">Allow notifications</string>
-    <string name="onboarding_notifications_body">Allow notifications so Aries can show Agent updates and Calls. Then enable push in your Host’s settings to pair that Host with this phone.</string>
     <string name="onboarding_next_button">Next</string>
     <string name="onboarding_finish_button">Finish</string>
     <string name="onboarding_skip_button">Skip guide</string>
@@ -153,7 +185,6 @@
     <string name="files_save_button">Save to phone</string>
     <string name="files_share_button">Share</string>
     <string name="files_share_title">Share Host file</string>
-    <string name="files_export_limit">Save or share one file, up to 64 MiB.</string>
     <string name="files_export_starting">Starting download…</string>
     <string name="files_export_progress">Downloaded %1$d of %2$d bytes</string>
     <string name="files_export_saving">Saving to the selected folder…</string>
@@ -222,17 +253,11 @@
     <string name="agents_elapsed_label">Status changed %1$s ago</string>
     <string name="tree_expanded">Expanded</string>
     <string name="tree_collapsed">Collapsed</string>
-    <string name="agents_view_priority">Priority</string>
-    <string name="agents_view_grouped">Grouped by space</string>
     <string name="agents_needs_you">Needs you</string>
     <string name="agents_pinned_group">Pinned · %1$d</string>
     <string name="agents_priority_group">%1$s · %2$d</string>
-    <string name="agents_space_group">%1$s · %2$s · %3$d</string>
     <string name="agents_expand_children">Expand %1$s, %2$d child Agents</string>
     <string name="agents_collapse_children">Collapse %1$s, %2$d child Agents</string>
-    <string name="agents_child_count">%1$d</string>
-    <string name="agents_fold_closed" translatable="false">▸</string>
-    <string name="agents_fold_open" translatable="false">▾</string>
     <!-- Home widgets (78). -->
     <string name="widget_waiting_title">Aries · Needs you</string>
     <string name="widget_agents_title">Aries · Agents</string>
@@ -260,12 +285,9 @@
     <string name="key_title">This phone\'s SSH key</string>
     <string name="key_fingerprint">Fingerprint: %1$s</string>
     <string name="key_copy_button">Copy public key</string>
-    <string name="key_copy_hint">Add it to ~/.ssh/authorized_keys on each Host.</string>
     <string name="key_clip_label">Aries SSH public key</string>
-    <string name="key_biometric_label">Require biometric unlock</string>
-    <string name="key_biometric_hint">Every use of an SSH key (the default one and every other key) asks for your fingerprint or face. Call notifications then show Open app instead of Choices, because the keys cannot be used without you.</string>
+    <string name="key_biometric_label">Require biometrics for SSH keys</string>
     <string name="key_biometric_prompt_title">Unlock the SSH key</string>
-    <string name="key_biometric_prompt_subtitle">Aries needs the key to sign in to a Host.</string>
     <string name="key_locked_title">SSH key locked</string>
     <string name="key_locked_body">The SSH key needs a biometric unlock, which did not happen. Try again and confirm the prompt.</string>
     <string name="key_biometric_unavailable_title">Biometric unlock unavailable</string>
@@ -277,12 +299,11 @@
 
     <string name="host_install_key_button">Install key with password</string>
     <string name="key_install_title">Install the key on %1$s</string>
-    <string name="key_install_body">Sign in once with the password for %1$s. Aries adds this phone\'s public key to ~/.ssh/authorized_keys and uses only the key after that. The password is not saved.</string>
     <string name="key_install_password">Password</string>
     <string name="key_install_button">Install key</string>
     <string name="key_install_done_title">Key installed</string>
-    <string name="key_install_added_body">This phone\'s key was added on %1$s. Aries now connects with the key.</string>
-    <string name="key_install_present_body">%1$s already had this phone\'s key. Nothing was changed.</string>
+    <string name="key_install_added_body">SSH key installed on %1$s.</string>
+    <string name="key_install_present_body">SSH key already installed on %1$s.</string>
     <string name="key_install_failed_title">Could not install the key</string>
     <string name="key_install_password_rejected">The Host did not accept the user name or password. The Host may also have password login turned off; then add the public key to ~/.ssh/authorized_keys by hand.</string>
     <string name="key_install_write_failed">Signed in, but could not write ~/.ssh/authorized_keys on the Host: %1$s\n\nCheck that the user owns ~/.ssh and can write to it.</string>
@@ -292,10 +313,8 @@
     <!-- QR Host pairing -->
     <string name="host_pair_scan_button">Scan Host QR</string>
     <string name="host_pair_scan_prompt">Scan the QR shown by aries-beacon pair-qr</string>
-    <string name="host_pair_hint">On the Host, run: aries-beacon pair-qr --address ADDRESS. The QR expires in 5 minutes and registers one phone.</string>
     <string name="host_pair_review_title">Register scanned Host</string>
     <string name="host_pair_fingerprint">Host key: %1$s</string>
-    <string name="host_pair_review_body">Confirm that this QR came from your Host. Registering installs this phone’s public key and trusts the Host key above.</string>
     <string name="host_pair_confirm_button">Register with QR</string>
     <string name="host_pair_busy">Registering…</string>
     <string name="host_pair_invalid">Invalid or expired Host QR. Generate a new QR on the Host.</string>
@@ -311,11 +330,13 @@
     <string name="host_remove_button">Remove</string>
     <string name="host_remove_button_label">Remove %1$s</string>
     <string name="host_remove_title">Remove %1$s?</string>
-    <string name="host_remove_body">Aries forgets this Host\'s address, its trusted Host key and everything stored for it on this phone. Nothing on the Host itself changes.</string>
     <string name="host_remove_confirm_button">Remove Host</string>
 
     <string name="connecting">Connecting to %1$s…</string>
     <string name="terminals_actions_label">Terminal actions</string>
+    <!-- Host Agent list and editing context -->
+    <string name="hosts_layout_context_button">Space and Tab</string>
+    <string name="terminals_plain_group">Terminals (%1$d)</string>
     <string name="terminals_title">Terminals on %1$s</string>
     <string name="terminals_empty">No Terminals are running on this Host.</string>
     <string name="terminal_subtitle">%1$s · %2$s</string>
@@ -326,14 +347,12 @@
     <string name="terminal_display_font_system">System monospace</string>
     <string name="terminal_display_font_jetbrains" translatable="false">JetBrains Mono</string>
     <string name="terminal_display_size_label">Default font size: %1$d</string>
-    <string name="terminal_display_size_hint">Observe mode fits the Host’s grid. Pinch to zoom.</string>
-    <string name="terminal_display_contrast_label">Minimum contrast</string>
-    <string name="terminal_display_contrast_hint">Correct text below 1.6:1 contrast. Graphics keep their colors.</string>
+    <string name="terminal_display_contrast_label">Improve low-contrast text</string>
     <string name="terminal_display_license_button">JetBrains Mono license</string>
 
     <string name="terminal_observing">%1$s · observing · %2$d×%3$d</string>
     <string name="terminal_typing">%1$s · typing · %2$d×%3$d</string>
-    <string name="terminal_input_hint">Tap here to type. The Terminal then takes this phone\'s size.</string>
+    <string name="terminal_input_hint">Type in Terminal</string>
     <string name="terminal_input_typing">Typing into the Terminal</string>
     <string name="key_esc">Esc</string>
     <string name="key_tab">Tab</string>
@@ -349,7 +368,6 @@
     <string name="key_right">→</string>
     <string name="key_interrupt">^C</string>
     <string name="attach_input_label">Open Terminals ready to type</string>
-    <string name="attach_input_hint">Off: Terminals open in observe mode and keep the desktop\'s size until you tap the input. On: they open ready to type and take this phone\'s size.</string>
     <string name="terminal_exited_code">The program exited with code %1$d.</string>
     <string name="terminal_exited_signal">The program was stopped by signal %1$s.</string>
     <string name="terminal_exited_reason">The program ended (%1$s).</string>
@@ -382,16 +400,8 @@
     <string name="agents_host_unavailable">Could not reach %1$s</string>
     <string name="agents_host_closed">The connection to %1$s closed. Its Agents may be out of date.</string>
     <string name="agents_host_reconnecting">Reconnecting to %1$s…</string>
-    <string name="agent_pinned_label">Pinned</string>
-    <string name="agent_pin_button">Pin</string>
-    <string name="agent_unpin_button">Unpin</string>
     <string name="agent_pin_button_label">Pin %1$s on %2$s</string>
     <string name="agent_unpin_button_label">Unpin %1$s on %2$s</string>
-    <string name="agent_detail_host">Host: %1$s</string>
-    <string name="agent_detail_address">Address: %1$s</string>
-    <string name="agent_detail_folder">Folder: %1$s</string>
-    <string name="agent_detail_command">Command: %1$s</string>
-    <string name="agent_detail_gone">This Agent is no longer running.</string>
 
     <string name="agent_status_working">Working</string>
     <string name="agent_status_blocked">Blocked</string>
@@ -407,12 +417,10 @@
     <string name="agent_view_chat">chat</string>
     <!-- Terminal and Chat input history (108) -->
     <string name="input_history_title">Input history</string>
-    <string name="input_history_hint">Recent inputs on this phone. Select one to edit before sending.</string>
     <string name="input_history_empty">No input history yet.</string>
     <string name="input_history_clear_button">Clear history</string>
     <string name="input_history_failed">Could not read or save input history.</string>
 
-    <string name="chat_title">Chat: %1$s</string>
     <!-- Chat search -->
     <string name="chat_search_button">Search Chat</string>
     <string name="chat_search_hint">Search cached Chat</string>
@@ -441,7 +449,6 @@
     <string name="chat_text_actions">Text actions</string>
     <string name="chat_copy_all">Copy all</string>
     <string name="chat_select_text">Select text</string>
-    <string name="chat_select_hint">Long press a word, then drag the handles to select the text to copy.</string>
     <string name="chat_thinking">Thinking</string>
     <string name="chat_tool_running">running</string>
     <string name="chat_tool_failed">failed</string>
@@ -471,8 +478,7 @@
     <string name="chat_tool_expand_label">Show the full %1$s call</string>
     <string name="chat_agent_error">Agent error</string>
     <string name="chat_unsupported">This entry needs a newer version of Aries.</string>
-    <string name="chat_cache_title">Chat cache</string>
-    <string name="chat_cache_hint">Chats you read are kept on this phone, encrypted with its key, so they open without the Host. Chats not updated for this long are deleted.</string>
+    <string name="chat_cache_title">Chat retention</string>
     <string name="chat_cache_days">%1$d days</string>
     <string name="chat_cache_clear_button">Clear Chat cache</string>
     <string name="chat_cache_clear_label">Clear the cached Chats of %1$s</string>
@@ -499,11 +505,10 @@
     <string name="chat_diff_truncated">The diff is too large; the rest is not shown.</string>
     <string name="chat_question_label">Question</string>
     <string name="chat_question_option_label">Answer %1$s</string>
-    <string name="chat_question_multi_hint">Choose one or more.</string>
     <string name="chat_question_text_label">Write an answer to %1$s</string>
     <string name="chat_question_text_hint">Write your own answer</string>
-    <string name="chat_question_queued">Queued · answer the question above first.</string>
-    <string name="chat_question_history">Past question · replies are sent as messages.</string>
+    <string name="chat_question_queued">Queued question</string>
+    <string name="chat_question_history">Past question</string>
     <string name="chat_question_send">Send answer</string>
     <string name="chat_question_sending">Sending…</string>
     <string name="chat_question_sent">Answer sent.</string>
@@ -538,14 +543,9 @@
     <string name="chat_blocked_question">The Agent asks you a question in the Terminal.</string>
     <string name="chat_blocked_auth">The Agent needs you to sign in, in the Terminal.</string>
     <string name="chat_blocked_other">The Agent waits for you in the Terminal.</string>
-    <string name="space_summary">Tabs: %1$d · Panes: %2$d</string>
-    <string name="space_no_tabs">This Space has no Tabs.</string>
-    <string name="tab_empty">This Tab has no Terminals.</string>
     <string name="pane_terminal_gone">%1$s (ended)</string>
-    <string name="pane_zoom_button">Zoom</string>
-    <string name="pane_unzoom_button">Show all Panes</string>
     <string name="unplaced_title">Other Terminals</string>
-    <string name="structure_no_document">herdr-app has not saved a layout on this Host. Terminals are grouped by their Space and Tab labels.</string>
+    <string name="structure_no_document">No saved herdr-app layout.</string>
     <string name="structure_unreadable">The herdr-app layout on this Host could not be read (%1$s). Terminals are grouped by their Space and Tab labels.</string>
     <string name="structure_unknown_format">The herdr-app layout on this Host is in a format Aries does not know. Terminals are grouped by their Space and Tab labels. Update Aries.</string>
     <string name="structure_connection_closed">The connection to the Host closed. What you see may be out of date.</string>
@@ -567,7 +567,6 @@
     <string name="worktrees_empty">No worktrees found.</string>
     <string name="worktrees_program_label">Start in this worktree</string>
     <string name="worktrees_shell">Shell</string>
-    <string name="worktrees_fallback_hint">Opens a new Tab in this Space. Without a Space or herdr-app, starts a Terminal.</string>
     <string name="worktrees_detached">Detached · %1$s</string>
     <string name="worktrees_bare">Bare repository</string>
     <string name="worktrees_locked">Locked · %1$s</string>
@@ -596,11 +595,7 @@
     <string name="launch_model_label">Model ID or alias</string>
     <string name="launch_model_choose">Choose</string>
     <string name="launch_agent_default">Agent default</string>
-    <string name="launch_model_hint">Use a model available on this Host. Leave blank for the Agent default.</string>
-    <string name="launch_model_provider_hint">Enter provider/model from this Host, or leave blank for the Agent default.</string>
     <string name="launch_effort_label">Reasoning effort</string>
-    <string name="launch_effort_hint">Available levels depend on the model and Agent version on this Host.</string>
-    <string name="launch_effort_unavailable">OpenCode’s interactive launcher does not support choosing effort. Use its model settings.</string>
     <string name="launch_effort_off">Off</string>
     <string name="launch_effort_minimal">Minimal</string>
     <string name="launch_effort_low">Low</string>
@@ -646,7 +641,6 @@
     <string name="herdr_install_update">Update Herdr Core</string>
     <string name="herdr_install_refresh">Check Herdr Core again</string>
     <string name="herdr_install_consent_title">Install or update Herdr Core?</string>
-    <string name="herdr_install_consent_body">Download the official herdr-core 0.1.17 release, verify its pinned SHA-256 checksum and install it over SSH into ~/.local/bin on this Host. Existing user installations use the terminal-preserving updater. No administrator access is used.</string>
     <string name="herdr_install_confirm">Approve installation</string>
     <string name="herdr_install_detect">Checking Host platform…</string>
     <string name="herdr_install_download">Downloading release…</string>
@@ -656,12 +650,11 @@
     <string name="herdr_install_connect">Connect to Host</string>
     <string name="herdr_install_checksum">Checksum verification failed. Nothing was installed. Expected: %1$s; got: %2$s</string>
     <string name="herdr_install_failed">Herdr Core failed at %1$s: %2$s</string>
-    <string name="herdr_install_recovery">Check the Host connection, available disk space and download access, then check again and retry.</string>
 
     <string name="beacon_title">Beacon</string>
     <string name="beacon_needs_ssh">The Beacon can only be installed on an SSH Host.</string>
     <string name="beacon_status_unknown">Could not read the Beacon on this Host.</string>
-    <string name="beacon_not_installed">The Beacon is not installed. It sends notifications and Calls from this Host.</string>
+    <string name="beacon_not_installed">Beacon is not installed.</string>
     <string name="beacon_install_button">Install Beacon</string>
     <string name="beacon_reinstall_button">Reinstall</string>
     <string name="beacon_remove_button">Remove Beacon</string>
@@ -670,11 +663,9 @@
     <string name="beacon_not_attached">Running, not attached to herdr-core yet.</string>
     <string name="beacon_attached">Running, attached to herdr-core %1$s.</string>
     <string name="beacon_out_of_range">This app does not support Beacon %1$s (it needs %2$s). Reinstall the Beacon.</string>
-    <string name="beacon_no_linger">The Beacon only runs while you are logged in to the Host. To keep it running, run on the Host: sudo loginctl enable-linger %1$s</string>
     <string name="beacon_linger_title">Beacon stops when you log out</string>
     <string name="beacon_linger_body">The Beacon is installed, but the Host refused to keep your services running after logout (%1$s). Without that the Beacon, and its notifications, stop until you log in again.\n\nOn the Host, run: sudo loginctl enable-linger %2$s</string>
-    <string name="beacon_remove_title">Remove the Beacon?</string>
-    <string name="beacon_remove_body">This stops the Beacon on %1$s and removes its service and program. Call history stays on the Host.</string>
+    <string name="beacon_remove_title">Remove Beacon from %1$s?</string>
     <string name="beacon_failed_title">Beacon not installed</string>
     <string name="beacon_checksum_body">The downloaded Beacon does not match the checksum built into this app, so nothing was installed.\n\nExpected: %1$s\nGot: %2$s</string>
     <string name="beacon_unsupported_host_body">The Beacon does not support %1$s/%2$s Hosts.</string>
@@ -685,15 +676,11 @@
     <string name="beacon_update_needed">The Beacon needs an update (%1$s to %2$s). Automatic updates are off, so nothing was installed.</string>
     <string name="beacon_update_button">Update Beacon</string>
     <string name="beacon_auto_update">Update the Beacon automatically</string>
-    <string name="beacon_macos_login_title">Beacon runs only while you are logged in</string>
-    <string name="beacon_macos_login_body">The Beacon is installed as a macOS LaunchAgent. macOS ties LaunchAgents to your login session: the Beacon, and its notifications, stop when you log out of the Mac and start again at your next login, also after a restart.</string>
-    <string name="beacon_macos_login_limit">On macOS the Beacon runs only while you are logged in to the Mac.</string>
 
     <string name="key_default_label">Default key</string>
     <!-- SSH key import -->
     <string name="key_import_button">Import existing key</string>
     <string name="key_import_title">Import SSH private key</string>
-    <string name="key_import_hint">Choose a file or paste an OpenSSH ed25519, RSA or ECDSA private key (up to 64 KiB). Its passphrase is used once and is not saved. The imported key uses the same biometric setting as your other keys. Select additional keys in the Host’s SSH route settings.</string>
     <string name="key_import_file_button">Choose key file</string>
     <string name="key_import_private_label">Private key</string>
     <string name="key_import_passphrase_label">Passphrase (if encrypted)</string>
@@ -709,7 +696,6 @@
     <string name="host_jumps_button">Jump hosts</string>
     <string name="host_jumps_summary">via %1$s</string>
     <string name="jumps_title">Route to %1$s</string>
-    <string name="jumps_hint">Aries signs in to each jump host in order, then to the Host through the last one.</string>
     <string name="jumps_empty">No jump hosts: Aries connects to the Host directly.</string>
     <string name="jumps_hop_title">Jump host %1$d</string>
     <string name="jumps_add_button">Add jump host</string>
@@ -722,9 +708,7 @@
     <string name="jump_key_changed_title">Jump host key changed</string>
     <string name="jump_key_changed_body">Jump host %1$d (%2$s) presented a different key than before, so Aries did not connect. Someone may be intercepting the connection, or the jump host was reinstalled.\n\nTrusted: %3$s\nNow: %4$s</string>
     <string name="connect_jump_auth_rejected">Jump host %1$d (%2$s) did not accept the key chosen for it. Add that key\'s public key to ~/.ssh/authorized_keys on the jump host.</string>
-    <string name="calls_button">Calls</string>
     <string name="calls_title">Calls</string>
-    <string name="calls_empty">No Calls yet. Agents send Calls with aries-beacon call when they need you.</string>
     <string name="calls_feed_down">%1$s: Calls are not up to date (%2$s). Retrying.</string>
     <string name="call_meta">%1$s · %2$s · %3$s</string>
     <string name="call_choices">Choices: %1$s</string>
@@ -736,15 +720,9 @@
     <string name="call_answer_delivered">Answered: %1$s</string>
     <string name="call_answer_failed">Answer failed: %1$s</string>
     <string name="call_answer_unconfirmed">Answer not confirmed: %1$s</string>
-    <string name="call_unconfirmed">The Beacon could not confirm which Terminal sent this Call, so it was only recorded.</string>
-    <string name="call_from_helper">From a subagent: recorded in Call history; notified only when \"Include subagents\" is on.</string>
-    <string name="call_open_terminal">Open Terminal</string>
-    <string name="call_open_terminal_label">Open Terminal %1$s, which sent %2$s</string>
+    <string name="call_unconfirmed">Cannot reply: the caller Terminal is unknown.</string>
     <string name="call_terminal_gone_title">Terminal is gone</string>
     <string name="call_terminal_gone_body">Terminal %1$s, which sent this Call, is no longer running on %2$s.</string>
-    <string name="call_banner_from">New Call from %1$s · %2$s</string>
-    <string name="call_banner_view">View</string>
-    <string name="call_banner_dismiss">Dismiss</string>
     <string name="call_answer_choice_label">Answer %1$s with %2$s</string>
     <string name="call_answer_sending">Sending the answer…</string>
     <string name="call_reply_not_sent">Not sent: %1$s. Nothing was typed; you can try again.</string>
@@ -755,14 +733,12 @@
     <string name="call_reply_no_beacon">The Beacon is not installed on this Host.</string>
     <string name="push_title">Push notifications</string>
     <string name="push_needs_beacon">Install the Beacon to turn on push notifications for this Host.</string>
-    <string name="push_off_body">Get notifications from this Host on this phone, also while Aries is closed or the phone is locked. They are end-to-end encrypted: the Relay that delivers them cannot read them.</string>
-    <string name="push_force_stop_note">If you force-stop Aries in Android settings, notifications stop arriving until you open Aries again, and force-stopping also clears notifications already shown.</string>
     <string name="push_enable_button">Turn on push</string>
     <string name="push_disable_button">Turn off push</string>
     <string name="push_test_button">Send a test notification</string>
     <string name="push_retry_button">Try again</string>
     <string name="push_step_register">Register this phone with the Relay</string>
-    <string name="push_verification_pending">Waiting for this phone to receive the Relay’s verification push…</string>
+    <string name="push_verification_pending">Verifying push delivery…</string>
     <string name="push_verification_failed">Push delivery has not been verified. Retry push setup.</string>
     <string name="push_step_verify">Confirm this phone can receive push</string>
     <string name="push_step_pair">Exchange keys with the Beacon</string>
@@ -773,18 +749,14 @@
     <string name="push_step_failed_description">Failed</string>
     <string name="push_failed">Step \"%1$s\" failed: %2$s</string>
     <string name="push_on_body">Push is on. Relay: %1$s</string>
-    <string name="push_test_sent">A test notification is on its way. If it does not arrive, check that notifications for Aries are allowed.</string>
-    <string name="push_no_relay">This build of Aries has no default Relay. Enter the URL of a Relay you run yourself.</string>
+    <string name="push_test_sent">Test notification sent.</string>
     <string name="push_relay_label">Relay URL</string>
     <string name="push_relay_placeholder" translatable="false">https://relay.example.com</string>
-    <string name="push_relay_hint">https:// only. A Relay you run yourself must send through the Firebase project of this Aries build.</string>
     <string name="push_change_relay_button">Change Relay</string>
-    <string name="push_change_relay_body">Aries pairs with the new Relay first, then removes the pairing from the old one. If the new Relay fails, the old one keeps working.</string>
     <string name="push_use_relay_button">Use this Relay</string>
     <string name="push_unavailable">Push notifications are not available on this phone: %1$s</string>
     <string name="push_permission_denied">Notifications are not allowed for Aries. Allow them in Android settings, then turn on push again.</string>
     <string name="push_off_host_unreachable">Push is off and the Relay deleted this pairing. The Host could not be reached, so its copy of the pairing stays until the next pairing; it no longer works.</string>
-    <string name="push_channel_name">Host notifications</string>
     <!-- Watched Agent progress -->
     <string name="agent_actions_label">Agent actions</string>
     <string name="agent_watch_label">Watch progress</string>
@@ -793,7 +765,7 @@
     <string name="push_progress_body">%1$d min elapsed · %2$d subagents</string>
 
     <string name="push_test_title">Push works for %1$s</string>
-    <string name="push_test_body">This test notification came from the Beacon on %1$s, end-to-end encrypted.</string>
+    <string name="push_test_body">Test notification from %1$s.</string>
     <string name="push_status_title">%1$s on %2$s</string>
     <string name="push_status_body" translatable="false">%1$s: %2$s</string>
     <string name="push_terminal_gone_title">Agent is gone</string>
@@ -826,15 +798,10 @@
     <string name="call_notify_unknown">Unknown: it may have been delivered. Check Call history</string>
     <string name="call_notify_channel_sending">Sending answers</string>
     <string name="push_policy_title">Notify me when</string>
-    <string name="push_policy_body">Saved on this Host, so the Beacon follows it while Aries is closed.</string>
     <string name="push_policy_blocked">An Agent is blocked</string>
-    <string name="push_policy_blocked_hint">It waits for a permission, an answer or a login. Repeats for the same reason are not notified again.</string>
     <string name="push_policy_error">An Agent reports an error</string>
-    <string name="push_policy_error_hint">It stopped because something went wrong.</string>
     <string name="push_policy_done">An Agent finishes a turn</string>
-    <string name="push_policy_done_hint">Only turns you have not seen yet, here or in another Herdr app.</string>
     <string name="push_policy_child_agents">Include subagents</string>
-    <string name="push_policy_child_agents_hint">Also notify for Agents started by another Agent, and for their Calls. When off, only top-level Agents notify and subagent Calls are only recorded in Call history.</string>
     <string name="push_policy_failed">Could not read or change the notification options on the Host: %1$s</string>
     <string name="push_policy_retry">Load the options again</string>
 
@@ -842,7 +809,6 @@
     <string name="settings_title">Settings</string>
     <!-- Local diagnostics -->
     <string name="diagnostics_title">Diagnostics</string>
-    <string name="diagnostics_retention">Up to 500 local events. Errors use categories; credentials and message contents are excluded. Copy and export include the current filter.</string>
     <string name="diagnostics_all">All</string>
     <string name="diagnostics_all_hosts">All Hosts</string>
     <string name="diagnostics_failures">Failures only</string>
@@ -913,9 +879,6 @@
     <string name="console_agents_waiting">%1$d waiting</string>
     <string name="console_all_hosts">Hosts</string>
     <!-- i18n-ok: decorative tree guides, shared across languages. -->
-    <string name="console_tree_last">└─</string>
-    <string name="console_tree_branch">├─</string>
-    <string name="console_key_band">Key / %1$s</string>
     <string name="console_add_host">+ Add Host</string>
     <string name="console_add_close">− Close add form</string>
     <string name="console_ssh">ssh</string>
@@ -968,8 +931,7 @@
     <string name="attachments_failed">Could not attach: %1$s</string>
     <string name="attachments_file_button">Attach files</string>
     <string name="attachments_camera_button">Take a photo</string>
-    <string name="attachments_resize_label">Resize attachment images</string>
-    <string name="attachments_resize_hint">Convert images to JPEG with the longest side at most 2048 pixels.</string>
+    <string name="attachments_resize_label">Resize images to 2048 px</string>
     <string name="layout_new_space_button">New Space</string>
     <string name="layout_app_unavailable">Open herdr-app on this Host to edit Spaces and Tabs.</string>
     <string name="layout_kill_button">End</string>
@@ -1002,15 +964,12 @@
     <string name="language_picker_no_results">No languages found</string>
     <string name="dictation_model_label">Transcription model</string>
     <string name="dictation_vocabulary_label">Vocabulary (names and terms)</string>
-    <string name="dictation_context_label">Automatic context</string>
-    <string name="dictation_context_hint">Send Host, Agent and project names and the end of the last Agent response to Groq.</string>
+    <string name="dictation_context_label">Include names and last response</string>
     <string name="dictation_start_button">Dictate</string>
-    <string name="dictation_record_button">Start recording</string>
     <string name="dictation_stop_button">Stop and transcribe</string>
     <string name="dictation_recording">Recording…</string>
     <string name="dictation_uploading">Transcribing…</string>
     <string name="dictation_retry_button">Retry transcription</string>
-    <string name="dictation_disclosure">Your audio is sent to Groq for transcription. The text is added to your draft. Review and send it yourself.</string>
     <string name="dictation_permission_denied">Allow microphone access to record dictation.</string>
     <string name="dictation_record_failed">Could not record audio. Try again.</string>
     <string name="dictation_failed">Could not transcribe audio. Try again.</string>
@@ -1028,7 +987,6 @@
     <string name="push_channel_attention">Blocked and Error</string>
     <string name="push_host_summary">%1$s: %2$d waiting</string>
     <string name="quiet_hours_title">Quiet hours</string>
-    <string name="quiet_hours_hint">Done, Blocked and Error stay silent during this phone’s local time range. Calls keep their alert settings. Matching times mean all day.</string>
     <string name="quiet_hours_start">Start</string>
     <string name="quiet_hours_end">End</string>
 </resources>

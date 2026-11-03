@@ -92,7 +92,6 @@ fun JumpHostsScreen(model: HostsModel, host: Host, jumps: List<JumpHost>, hostKe
     ) {
         if (showHeader) TextButton(onClick = model::back) { Text(stringResource(R.string.back_button)) }
         if (showHeader) Text(stringResource(R.string.jumps_title, host.name), style = MaterialTheme.typography.headlineSmall)
-        Text(stringResource(R.string.jumps_hint), style = MaterialTheme.typography.bodySmall)
         if (drafts.isEmpty()) Text(stringResource(R.string.jumps_empty))
         drafts.forEachIndexed { i, d ->
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {

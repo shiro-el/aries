@@ -94,9 +94,6 @@ class PushModel(
     var changingRelay by mutableStateOf(false)
         private set
 
-    /** `true` when this build has a default Relay (otherwise the user must give one). */
-    val hasDefaultRelay: Boolean get() = platform.relayUrl != null
-
     /** What the Host's Beacon notifies about; `null` until read from the Host (over SSH). */
     var policy by mutableStateOf<PushPolicy?>(null)
         private set

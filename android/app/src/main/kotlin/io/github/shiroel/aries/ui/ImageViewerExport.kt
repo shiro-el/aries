@@ -23,6 +23,7 @@ import kotlinx.coroutines.*
 @Composable
 internal fun ImageViewerExport(bytes: ByteArray, mime: String?, name: String) {
     val context = LocalContext.current
+    val shareTitle by rememberUpdatedState(stringResource(R.string.image_viewer_share))
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
     var picking by remember { mutableStateOf(false) }
@@ -94,7 +95,7 @@ internal fun ImageViewerExport(bytes: ByteArray, mime: String?, name: String) {
                     clipData = ClipData.newRawUri(filename, uri)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
-                context.startActivity(Intent.createChooser(send, context.getString(R.string.image_viewer_share))
+                context.startActivity(Intent.createChooser(send, shareTitle)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 shared = true
             } catch (e: CancellationException) {

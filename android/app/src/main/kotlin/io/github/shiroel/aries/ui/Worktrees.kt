@@ -109,7 +109,6 @@ internal fun WorktreeControls(browser: HostBrowser, unplaced: TerminalInfo? = nu
                             label = { Text(stringResource(preset.label)) })
                     }
                 }
-                Text(stringResource(R.string.worktrees_fallback_hint), style = MaterialTheme.typography.bodySmall)
                 target.error?.let { Text(stringResource(it.res, *it.args.toTypedArray()), color = MaterialTheme.colorScheme.error) }
                 TextButton(enabled = !target.busy && connection != null, onClick = { load(target) }) {
                     Text(stringResource(R.string.worktrees_refresh_button))

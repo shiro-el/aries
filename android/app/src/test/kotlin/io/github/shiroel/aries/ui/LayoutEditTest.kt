@@ -5,7 +5,6 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -50,14 +49,15 @@ class LayoutEditTest {
         compose.waitForIdle()
     }
 
-    @Test fun unavailableAppDisablesLayoutEditsButTerminalKillStillWorks() {
+    @Test fun unavailableAppRejectsLayoutAttemptsButTerminalKillStillWorks() {
         val terminal = TerminalInfo("t1", "build", "", listOf("sleep"), "/repo", "live")
         val core = FakeCore().apply {
             herdrAppAvailable = false
             structure = HostStructure(emptyList(), listOf(terminal), null)
         }
         open(core)
-        compose.onNodeWithContentDescription(str(R.string.layout_new_space_button)).assertIsNotEnabled()
+        compose.onNodeWithContentDescription(str(R.string.layout_new_space_button)).performClick()
+        assertEquals(emptyList<LayoutEdit>(), core.connection!!.edits)
         compose.onNodeWithText(str(R.string.layout_app_unavailable)).assertExists()
         compose.onNodeWithText(terminal.name!!).performTouchInput { longClick() }
         compose.onNodeWithText(str(R.string.layout_kill_button)).performClick()
@@ -98,7 +98,8 @@ class LayoutEditTest {
         compose.waitForIdle()
         assertEquals(listOf(LayoutEdit.NewSpace("new space", "/new/repo")), core.connection!!.edits)
 
-        compose.onNodeWithText("repo").performClick()
+        compose.onNodeWithTag("host-layout-context").performClick()
+        compose.onNodeWithTag("host-context-space:s1").performClick()
         compose.onNodeWithContentDescription(str(R.string.layout_new_tab_button)).performClick()
         compose.onNodeWithTag("layout-name").performTextReplacement("tests")
         compose.onNodeWithText(str(R.string.layout_save_button)).performClick()
@@ -132,7 +133,8 @@ class LayoutEditTest {
             ))), emptyList(), null)
         }
         open(core)
-        compose.onNodeWithText("repo").performClick()
+        compose.onNodeWithTag("host-layout-context").performClick()
+        compose.onNodeWithTag("host-context-space:s1").performClick()
         compose.onNodeWithContentDescription(str(R.string.layout_actions_button)).performClick()
         compose.onNodeWithText(str(R.string.layout_close_space_button)).performClick()
         compose.onNodeWithText(str(R.string.layout_confirm_title, "repo")).assertExists()
@@ -159,7 +161,8 @@ class LayoutEditTest {
             structure = HostStructure(listOf(SpaceInfo("s1", "repo", null, listOf(TabInfo("only", "build", emptyList())))), emptyList(), null)
         }
         open(core)
-        compose.onNodeWithText("repo").performClick()
+        compose.onNodeWithTag("host-layout-context").performClick()
+        compose.onNodeWithTag("host-context-space:s1").performClick()
         compose.onNodeWithContentDescription(str(R.string.layout_actions_button)).performClick()
         compose.onNodeWithText(str(R.string.layout_close_tab_button)).performClick()
         compose.onNodeWithText(str(R.string.layout_confirm_title, "build")).assertExists()
@@ -176,7 +179,8 @@ class LayoutEditTest {
         }
         open(core)
         core.connection!!.editFailure = CoreException.Rpc("herdr_app_failed", "closed window")
-        compose.onNodeWithText("repo").performClick()
+        compose.onNodeWithTag("host-layout-context").performClick()
+        compose.onNodeWithTag("host-context-space:s1").performClick()
         compose.onNodeWithContentDescription(str(R.string.layout_actions_button)).performClick()
         compose.onNodeWithText(str(R.string.layout_close_tab_button)).performClick()
         compose.onNodeWithText(str(R.string.layout_confirm_button)).performClick()

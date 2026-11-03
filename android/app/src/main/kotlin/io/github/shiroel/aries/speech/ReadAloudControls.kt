@@ -10,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import android.content.res.Configuration
 import java.util.Locale
 import androidx.compose.ui.res.stringResource
@@ -56,17 +57,17 @@ private fun ReadAloudSpeed(state: ReadAloudState) {
 fun ReadAloudSettings(state: ReadAloudState) {
     var picker by remember { mutableStateOf(false) }
     Text(stringResource(R.string.read_aloud_title), style = MaterialTheme.typography.titleSmall)
-    Text(stringResource(R.string.read_aloud_hint), style = MaterialTheme.typography.bodySmall)
     ReadAloudSpeed(state)
     val selected = state.voices.find { it.id == state.voice }
     TextButton(onClick = { picker = true }, enabled = state.ready, modifier = Modifier.testTag("read-aloud-voice")) {
         Text(stringResource(R.string.read_aloud_voice, selected?.let { "${it.name} (${it.languageTag})" } ?: stringResource(R.string.read_aloud_default_voice)))
     }
     val context = LocalContext.current
+    val currentConfiguration = LocalConfiguration.current
     val defaultSample = stringResource(R.string.read_aloud_sample)
-    val sample = remember(context, selected, defaultSample) {
+    val sample = remember(context, currentConfiguration, selected, defaultSample) {
         selected?.let {
-            val configuration = Configuration(context.resources.configuration).apply { setLocale(Locale.forLanguageTag(it.languageTag)) }
+            val configuration = Configuration(currentConfiguration).apply { setLocale(Locale.forLanguageTag(it.languageTag)) }
             context.createConfigurationContext(configuration).getString(R.string.read_aloud_sample)
         } ?: defaultSample
     }

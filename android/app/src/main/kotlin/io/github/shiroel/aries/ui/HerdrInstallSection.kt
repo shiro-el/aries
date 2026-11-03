@@ -57,7 +57,6 @@ fun HerdrInstallSection(model: HerdrInstallModel, connect: () -> Unit) {
         }
         model.problem?.let {
             Text(stringResource(it.res, *it.args.toTypedArray()), color = MaterialTheme.colorScheme.error)
-            Text(stringResource(R.string.herdr_install_recovery))
         }
         if (model.output.isNotBlank()) {
             SelectionContainer { Text(model.output, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(4.dp)) }
@@ -67,7 +66,6 @@ fun HerdrInstallSection(model: HerdrInstallModel, connect: () -> Unit) {
         AlertDialog(
             onDismissRequest = model::cancel,
             title = { Text(stringResource(R.string.herdr_install_consent_title)) },
-            text = { Text(stringResource(R.string.herdr_install_consent_body)) },
             confirmButton = { TextButton(onClick = model::install) { Text(stringResource(R.string.herdr_install_confirm)) } },
             dismissButton = { TextButton(onClick = model::cancel) { Text(stringResource(R.string.cancel_button)) } },
         )
