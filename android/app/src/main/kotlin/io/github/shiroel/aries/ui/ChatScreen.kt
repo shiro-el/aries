@@ -411,6 +411,7 @@ fun ChatScreen(
     }
     val snapshot = chat.snapshot
     val entries = snapshot?.entries.orEmpty()
+    val markdown by rememberChatMarkdown(entries)
     val agentCalls = calls?.let { model ->
         model.calls.filter {
             it.host.id == chat.host.id && it.call.terminal == chat.terminal.address &&
@@ -419,8 +420,11 @@ fun ChatScreen(
     }.orEmpty()
     val list = rememberLazyListState()
     // Follow the conversation: keep the newest entry in view.
-    LaunchedEffect(entries.size, agentCalls.size) {
-        val count = entries.size + agentCalls.size
+    val transcriptItems = entries.sumOf {
+        if (it.body is ChatEntryBody.User || it.body is ChatEntryBody.Agent) 2 + (markdown[it.id]?.blocks?.size ?: 0) else 1
+    }
+    LaunchedEffect(entries.size, transcriptItems, agentCalls.size) {
+        val count = transcriptItems + agentCalls.size
         if (count > 0) list.scrollToItem(count - 1)
     }
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))) {
@@ -431,15 +435,39 @@ fun ChatScreen(
             Text(stringResource(R.string.chat_empty))
         }
         LazyColumn(Modifier.weight(1f), state = list) {
-            items(entries, key = { "transcript:${it.id}" }) { entry ->
+            entries.forEach { entry ->
                 val body = entry.body
-                if (body is ChatEntryBody.Question) {
-                    QuestionView(chat, entry.id, body)
-                } else {
-                    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-                        ChatEntryView(entry, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image) { chat.toggle(entry.id) }
+                val source = when (body) {
+                    is ChatEntryBody.User -> body.text
+                    is ChatEntryBody.Agent -> body.text
+                    else -> null
+                }
+                item(key = "transcript:${entry.id}") {
+                    if (body is ChatEntryBody.Question) {
+                        QuestionView(chat, entry.id, body)
+                    } else {
+                        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                            ChatEntryView(entry, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image) { chat.toggle(entry.id) }
+                        }
+                        if (source == null) HorizontalDivider()
                     }
-                    HorizontalDivider()
+                }
+                if (source != null) {
+                    // Keep the last complete document visible until the background parse swaps it.
+                    chatMarkdownItems(entry.id, markdown[entry.id])
+                    item(key = "transcript:${entry.id}:footer") {
+                        if (body is ChatEntryBody.User && body.images.isNotEmpty()) {
+                            Column(Modifier.padding(horizontal = 16.dp)) {
+                                body.images.forEach { ChatImageView(it, chat::image) }
+                            }
+                        }
+                        if (body is ChatEntryBody.Agent) body.metadata?.let { metadata ->
+                            Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                                ChatResponseMetadataView(metadata)
+                            }
+                        }
+                        HorizontalDivider(Modifier.padding(top = 8.dp))
+                    }
                 }
             }
             items(agentCalls, key = { "call:${it.key}" }) { entry ->
@@ -590,14 +618,10 @@ private fun ChatEntryView(
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary,
                 )
-                if (b.text.isNotEmpty()) ChatTextActions(b.text, interceptChildLongPress = true) { ChatFileText(b.text, it) }
-                b.images.forEach { ChatImageView(it, image) }
             }
         }
         is ChatEntryBody.Agent -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(agentName, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            ChatTextActions(b.text, interceptChildLongPress = true) { ChatFileText(b.text, it) }
-            b.metadata?.let { ChatResponseMetadataView(it) }
         }
         is ChatEntryBody.Thinking -> Column {
             Text(

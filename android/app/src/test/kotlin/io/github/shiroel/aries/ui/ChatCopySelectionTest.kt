@@ -20,6 +20,8 @@ import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.performFirstLinkClick
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -85,9 +87,15 @@ class ChatCopySelectionTest {
         compose.onNodeWithText(str(R.string.agent_view_chat)).performClick()
     }
 
-    private fun show(body: ChatEntryBody) {
+    private fun show(body: ChatEntryBody, rendered: String? = null) {
         core.pushChat(ChatSnapshot(listOf(ChatEntry("entry", null, body)), ChatStatus.LIVE, null))
         compose.waitForIdle()
+        val text = rendered ?: when (body) {
+            is ChatEntryBody.User -> body.text
+            is ChatEntryBody.Agent -> body.text
+            else -> null
+        }
+        if (text != null) compose.waitUntil(5_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
     }
 
     private fun clipboard(): String? = context.getSystemService(ClipboardManager::class.java)
@@ -98,14 +106,14 @@ class ChatCopySelectionTest {
         open()
         val prompt = "Fix this:\n  val 이름 = \"hello\"\n"
         val response = "**Done**\n```kotlin\nprintln(\"안녕\")\n```"
-        for ((body, text) in listOf(
-            ChatEntryBody.User(prompt) to prompt,
-            ChatEntryBody.Agent(response) to response,
-            ChatEntryBody.Thinking(response) to response,
-            ChatEntryBody.AgentError(response) to response,
+        for ((body, text, rendered) in listOf(
+            Triple(ChatEntryBody.User(prompt), prompt, "Fix this:"),
+            Triple(ChatEntryBody.Agent(response), response, "Done"),
+            Triple(ChatEntryBody.Thinking(response), response, response),
+            Triple(ChatEntryBody.AgentError(response), response, response),
         )) {
-            show(body)
-            compose.onNodeWithText(text).performTouchInput { longClick() }
+            show(body, rendered)
+            compose.onNodeWithText(rendered, substring = true).performTouchInput { longClick() }
             compose.onNodeWithText(str(R.string.chat_select_text)).assertExists()
             compose.onNodeWithText(str(R.string.chat_copy_all)).performClick()
             compose.waitForIdle()
@@ -167,7 +175,7 @@ class ChatCopySelectionTest {
         compose.onNodeWithText(str(R.string.chat_copy_all)).performClick()
         assertEquals("README.md:7", clipboard())
         assertEquals(0, reads)
-        reference.performTouchInput { click() }
+        reference.performFirstLinkClick()
         compose.onNodeWithTag("files-line:7").assertExists()
         assertEquals(1, reads)
     }
