@@ -56,8 +56,21 @@ import io.github.shiroel.aries.core.TerminalWatch
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 
+/** Set while a coroutine runs in the test's key-work context (see [FakeCore.offKeyWork]). */
+val inKeyWork = ThreadLocal<Boolean>()
+
 /** In-memory stand-in for the Rust core, for UI tests. */
 class FakeCore : AriesCoreInterface {
+    /**
+     * Calls that open the SSH key outside [inKeyWork]. On a phone a
+     * biometric key cannot be opened on the main thread, so each is a crash.
+     */
+    val offKeyWork = mutableListOf<String>()
+
+    private fun signsIn(call: String) {
+        if (inKeyWork.get() != true) offKeyWork += call
+    }
+
     /** When set, `connect` asks the user to trust this fingerprint first. */
     var requireTrust: String? = null
 
@@ -137,6 +150,7 @@ class FakeCore : AriesCoreInterface {
         key?.let { QrMatrix(2u, listOf(true, false, false, true)) }
 
     override suspend fun installKeyWithPassword(hostId: String, password: String): KeyInstall {
+        signsIn("installKeyWithPassword")
         val host = hosts.find { it.id == hostId } ?: throw CoreException.UnknownHost(hostId)
         requireTrust?.let { if (host.hostKey != it) throw CoreException.HostKeyUnknown(it) }
         passwordsTried += hostId to password
@@ -218,6 +232,7 @@ class FakeCore : AriesCoreInterface {
     }
 
     override suspend fun connect(hostId: String): HostConnection {
+        signsIn("connect")
         failWith?.let { throw it }
         val host = hosts.find { it.id == hostId } ?: throw CoreException.UnknownHost(hostId)
         requireJumpTrust?.let { fp ->
@@ -251,16 +266,21 @@ class FakeCore : AriesCoreInterface {
     override fun beaconRelease(): BeaconRelease = BeaconRelease("0.1.0", emptyList())
 
     override suspend fun installBeacon(hostId: String, fetcher: BeaconFetcher): BeaconInstall {
+        signsIn("installBeacon")
         beaconFailWith?.let { throw it }
         installs++
         beacon = installed("0.1.0", supported = true, linger = beaconLinger == Linger.Enabled)
         return BeaconInstall("0.1.0", beaconLinger, BeaconSource.HOST_DOWNLOAD)
     }
 
-    override suspend fun beaconStatus(hostId: String): BeaconState = beacon
+    override suspend fun beaconStatus(hostId: String): BeaconState {
+        signsIn("beaconStatus")
+        return beacon
+    }
 
     /** Like the core: an unsupported Beacon is updated, or reported when auto update is off. */
     override suspend fun checkBeacon(hostId: String, fetcher: BeaconFetcher): BeaconCheck {
+        signsIn("checkBeacon")
         val state = beacon
         if (state !is BeaconState.Installed || state.supported) return BeaconCheck(state, BeaconUpdate.NotNeeded)
         if (!autoUpdate) return BeaconCheck(state, BeaconUpdate.Needed)
@@ -278,6 +298,7 @@ class FakeCore : AriesCoreInterface {
         BeaconState.Installed(version, 1u, true, "0.1.17", linger, supported, ">=0.1.0, <0.2.0", beaconOs)
 
     override suspend fun uninstallBeacon(hostId: String) {
+        signsIn("uninstallBeacon")
         beacon = BeaconState.NotInstalled
         pushPaired.remove(hostId)
     }
@@ -301,6 +322,7 @@ class FakeCore : AriesCoreInterface {
         http: HttpClient,
         progress: PushProgress,
     ): PushPairing {
+        signsIn("enablePush")
         pushRelays += relayUrl
         for (step in listOf(PushStep.REGISTER, PushStep.PAIR, PushStep.TEST)) {
             progress.onStep(step)
@@ -317,10 +339,12 @@ class FakeCore : AriesCoreInterface {
     override fun pushPairing(hostId: String): PushPairing? = pushPaired[hostId]?.let { PushPairing(it) }
 
     override suspend fun sendTestPush(hostId: String) {
+        signsIn("sendTestPush")
         testPushes++
     }
 
     override suspend fun disablePush(hostId: String, http: HttpClient): PushDisable {
+        signsIn("disablePush")
         pushPaired.remove(hostId)
         return PushDisable(pushDisableHostCleared)
     }
@@ -332,11 +356,13 @@ class FakeCore : AriesCoreInterface {
     var pushPolicyFailure: CoreException? = null
 
     override suspend fun pushPolicy(hostId: String): PushPolicy {
+        signsIn("pushPolicy")
         pushPolicyFailure?.let { throw it }
         return pushPolicies[hostId] ?: PushPolicy(blocked = true, error = true, done = false, childAgents = false)
     }
 
     override suspend fun setPushPolicy(hostId: String, policy: PushPolicy): PushPolicy {
+        signsIn("setPushPolicy")
         pushPolicyFailure?.let { throw it }
         pushPolicies[hostId] = policy
         return policy
@@ -391,6 +417,7 @@ class FakeCore : AriesCoreInterface {
     }
 
     override fun watchChat(hostId: String, terminal: String, cursor: String?): ChatWatch {
+        signsIn("watchChat")
         chatsOpened += hostId to terminal
         failChatWith?.let { throw it }
         return object : ChatWatch(NoHandle) {
@@ -420,6 +447,7 @@ class FakeCore : AriesCoreInterface {
     var answerFailure: CoreException? = null
 
     override suspend fun answerQuestion(hostId: String, terminal: String, questionId: String, picks: List<List<UInt>>) {
+        signsIn("answerQuestion")
         answers += Triple(terminal, questionId, picks)
         answerFailure?.let { answerFailure = null; throw it }
     }
@@ -436,6 +464,7 @@ class FakeCore : AriesCoreInterface {
     override suspend fun calls(hostId: String): List<CallInfo> = callsOf[hostId].orEmpty()
 
     override suspend fun watchCalls(hostId: String, listener: CallListener): CallWatch {
+        signsIn("watchCalls")
         host(hostId)
         callWatchesStarted += hostId
         callListeners[hostId] = listener
@@ -463,6 +492,7 @@ class FakeCore : AriesCoreInterface {
     var replyHold: CompletableDeferred<Unit>? = null
 
     override suspend fun replyCall(hostId: String, callId: String, choice: UInt): CallReply {
+        signsIn("replyCall")
         replies += Triple(hostId, callId, choice)
         replyHold?.await()
         replyFailure?.let { replyFailure = null; throw it }

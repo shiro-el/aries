@@ -14,6 +14,9 @@ import io.github.shiroel.aries.core.PushProgress
 import io.github.shiroel.aries.core.PushStep
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.EmptyCoroutineContext
 
 /** What the phone offers for push: this build's default Relay, the FCM token, the permission. */
 interface PushPlatform {
@@ -59,6 +62,8 @@ class PushModel(
     private val scope: CoroutineScope,
     private val platform: PushPlatform,
     private val http: HttpClient,
+    /** Runs the calls that sign in to the Host (see [HostsModel]). */
+    private val keyWork: CoroutineContext = EmptyCoroutineContext,
 ) {
     var host by mutableStateOf<Host?>(null)
         private set
@@ -125,7 +130,7 @@ class PushModel(
         policyProblem = null
         scope.launch {
             try {
-                val read = core.pushPolicy(host.id)
+                val read = withContext(keyWork) { core.pushPolicy(host.id) }
                 if (this@PushModel.host?.id == host.id) policy = read
             } catch (e: CoreException) {
                 policyProblem = policyFailed(e)
@@ -144,7 +149,7 @@ class PushModel(
         policyProblem = null
         scope.launch {
             try {
-                val saved = core.setPushPolicy(host.id, change(old))
+                val saved = withContext(keyWork) { core.setPushPolicy(host.id, change(old)) }
                 if (this@PushModel.host?.id == host.id) policy = saved
             } catch (e: CoreException) {
                 policyProblem = policyFailed(e)
@@ -200,7 +205,7 @@ class PushModel(
                 }
             }
             try {
-                core.enablePush(host.id, relay, PushDevice("fcm", token), http, progress)
+                withContext(keyWork) { core.enablePush(host.id, relay, PushDevice("fcm", token), http, progress) }
                 notice = Message(R.string.push_test_sent)
                 refresh()
             } catch (e: CoreException) {
@@ -225,7 +230,7 @@ class PushModel(
         notice = null
         scope.launch {
             try {
-                core.sendTestPush(host.id)
+                withContext(keyWork) { core.sendTestPush(host.id) }
                 notice = Message(R.string.push_test_sent)
             } catch (e: CoreException) {
                 problem = pushProblem(e)
@@ -240,7 +245,7 @@ class PushModel(
         ui = PushUi.Working
         scope.launch {
             try {
-                val off = core.disablePush(host.id, http)
+                val off = withContext(keyWork) { core.disablePush(host.id, http) }
                 if (!off.hostCleared) notice = Message(R.string.push_off_host_unreachable)
             } catch (e: CoreException) {
                 problem = pushProblem(e)

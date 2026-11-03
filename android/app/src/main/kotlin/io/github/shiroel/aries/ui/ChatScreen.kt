@@ -50,6 +50,9 @@ import io.github.shiroel.aries.core.TerminalInfo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.EmptyCoroutineContext
 
 /**
  * One Terminal's Agent Chat, as the core reads it through the Host's Beacon.
@@ -62,6 +65,8 @@ class ChatModel(
     terminal: TerminalInfo,
     /** The open Host's line: messages go through its live connection. */
     val link: HostLink? = null,
+    /** Runs the calls that sign in to the Host (see [HostsModel]). */
+    private val keyWork: CoroutineContext = EmptyCoroutineContext,
 ) {
     /** The Agent's Terminal, its Agent status kept live by [update]. */
     var terminal by mutableStateOf(terminal)
@@ -152,7 +157,7 @@ class ChatModel(
         this.scope = scope
         job = scope.launch {
             val w = try {
-                core.watchChat(host.id, terminal.address, null)
+                withContext(keyWork) { core.watchChat(host.id, terminal.address, null) }
             } catch (e: CoreException) {
                 // Still show what the cache holds (ticket 44).
                 val cached = try { core.cachedChat(host.id, terminal.address) } catch (e: CoreException) { null }
@@ -213,7 +218,9 @@ class ChatModel(
         answers = answers + (id to AnswerState.Sending)
         scope.launch {
             val state = try {
-                core.answerQuestion(host.id, terminal.address, id, chosen.map { p -> p.map { it.toUInt() } })
+                withContext(keyWork) {
+                    core.answerQuestion(host.id, terminal.address, id, chosen.map { p -> p.map { it.toUInt() } })
+                }
                 AnswerState.Sent
             } catch (e: CoreException) {
                 AnswerState.Failed(answerProblem(e))

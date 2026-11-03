@@ -124,7 +124,7 @@ class HostsModel(
     val beacon = BeaconModel(core, scope, beaconFetcher, onRemoved = { onBeaconRemoved() }, keyWork = keyWork)
 
     /** The push section of the connected Host. */
-    val push = PushModel(core, scope, pushPlatform, http)
+    val push = PushModel(core, scope, pushPlatform, http, keyWork)
 
     private fun onBeaconRemoved() {
         flushPushRevocations()
@@ -386,7 +386,7 @@ class HostsModel(
         prompt = null
         scope.launch {
             prompt = try {
-                val body = when (core.installKeyWithPassword(host.id, password)) {
+                val body = when (withContext(keyWork) { core.installKeyWithPassword(host.id, password) }) {
                     KeyInstall.ADDED -> R.string.key_install_added_body
                     KeyInstall.ALREADY_PRESENT -> R.string.key_install_present_body
                 }
@@ -648,7 +648,7 @@ class HostsModel(
             var focusing = focus?.takeIf { it.hostId == host.id }
             agentJobs += scope.launch {
                 val conn = try {
-                    core.connect(host.id)
+                    withContext(keyWork) { core.connect(host.id) }
                 } catch (e: CoreException) {
                     board.fail(host.id, problemFor(e).body)
                     return@launch
@@ -790,7 +790,7 @@ class HostsModel(
             is Screen.Agents -> agentLinks[host.id]
             else -> return
         }
-        val chat = ChatModel(core, host, terminal, link)
+        val chat = ChatModel(core, host, terminal, link, keyWork)
         screen = Screen.Chat(chat, from)
         chat.start(scope)
     }
