@@ -160,7 +160,7 @@ async fn lists_real_git_worktrees_from_a_nested_folder_and_reports_non_repositor
     ]);
     git(&["worktree", "add", "--detach", linked.to_str().unwrap()]);
     std::fs::create_dir(linked.join("nested")).unwrap();
-    let hc = HcSession::start();
+    let hc = HcSession::start_with_env(&[("LANG", "ko_KR.UTF-8"), ("LC_ALL", "ko_KR.UTF-8")]);
     let data = tempfile::tempdir().unwrap();
     let core = core_in(data.path());
     let host = core.add_host("test".into(), local_endpoint(&hc)).unwrap();
