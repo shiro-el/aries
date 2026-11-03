@@ -42,7 +42,9 @@ pub enum Step {
 enum Entered {
     Blocked(Option<BlockedReason>),
     Error,
-    Done(u64),
+    /// No turn number: `turn` only grows when an Agent leaves `working`,
+    /// which re-arms anyway, and it arrives after the `status` event.
+    Done,
 }
 
 #[derive(Debug, Default)]
@@ -89,7 +91,7 @@ impl Facts {
         let entered = match &status {
             Some(AgentStatus::Blocked { reason, .. }) => Some(Entered::Blocked(*reason)),
             Some(AgentStatus::Error { .. }) => Some(Entered::Error),
-            Some(AgentStatus::Done) => Some(Entered::Done(self.turn)),
+            Some(AgentStatus::Done) => Some(Entered::Done),
             _ => None,
         };
         if entered == self.entered {
@@ -286,6 +288,28 @@ mod tests {
         assert_eq!(changed(w.apply(&status(2, "t1", blocked.clone()))).len(), 1);
         assert!(changed(w.apply(&event(3, "t1", "finished", json!({})))).is_empty());
         assert_eq!(changed(w.apply(&status(4, "t1", blocked))).len(), 1);
+    }
+
+    /// herdr-core sends `status` before the `turn` it bumps on leaving
+    /// `working`: with an older unseen turn, Done shows up twice in a row.
+    #[test]
+    fn a_finished_turn_is_reported_once_when_its_turn_count_follows() {
+        let mut w = StatusWatch::new();
+        let mut t = terminal("t1", None, json!({"state": "blocked"}));
+        t["turn"] = json!(1);
+        w.snapshot(&json!({"seq": 1, "terminals": [t]}));
+        assert!(changed(w.apply(&status(2, "t1", json!({"state": "working"})))).is_empty());
+        assert_eq!(
+            changed(w.apply(&status(3, "t1", json!({"state": "done"})))),
+            [("t1".into(), AgentStatus::Done)]
+        );
+        assert!(changed(w.apply(&event(4, "t1", "turn", json!({"turn": 2})))).is_empty());
+        // The next turn is a new Done.
+        assert!(changed(w.apply(&status(5, "t1", json!({"state": "working"})))).is_empty());
+        assert_eq!(
+            changed(w.apply(&status(6, "t1", json!({"state": "done"})))).len(),
+            1
+        );
     }
 
     #[test]

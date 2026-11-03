@@ -17,6 +17,11 @@
 //! `~/Library/LaunchAgents/io.github.shiroel.aries.beacon.plist`; private
 //! state (Call records) in `~/.local/state/aries-beacon/`, which removal
 //! keeps.
+//!
+//! The Beacon also manages files in Agents' own configuration (the OpenCode
+//! plugin `${XDG_CONFIG_HOME:-~/.config}/opencode/plugins/aries-agent-state.js`):
+//! every install and update runs `aries-beacon opencode-plugin install`, which
+//! leaves a copy the user edited alone; removal deletes an unedited copy.
 
 use aries_protocol::beacon::{BeaconStatus, VersionRange, parse_version};
 use sha2::{Digest, Sha256};
@@ -220,6 +225,22 @@ fn launch_agent() -> String {
 /// (pairing 27, managed skill 34) add their own step here. The Beacon's
 /// state directory is not removed: it holds the Call records.
 pub(crate) const UNINSTALL_STEPS: &[(&str, &str)] = &[
+    // Ticket 42: the OpenCode plugin, unless the user edited it (its first
+    // line holds the SHA-256 of the rest; same check as the Beacon's
+    // `opencode-plugin remove`, in shell so it works without the binary).
+    (
+        "opencode plugin",
+        r#"c="${XDG_CONFIG_HOME:-$HOME/.config}/opencode"; f="$c/plugins/aries-agent-state.js"
+[ -f "$f" ] || exit 0
+want=$(sed -n '1s/^\/\/ aries-managed: .* sha256=\([0-9a-f]\{64\}\)$/\1/p' "$f")
+[ -n "$want" ] || exit 0
+if command -v sha256sum >/dev/null 2>&1; then got=$(tail -n +2 "$f" | sha256sum); else got=$(tail -n +2 "$f" | shasum -a 256); fi
+if [ "${got%% *}" = "$want" ]; then
+  rm -f "$f"
+  rmdir "$c/plugins" "$c" 2>/dev/null
+fi
+exit 0"#,
+    ),
     // Ticket 27: revoke the push pairing on the Relay (best effort: the
     // phone revokes it too) and drop it from the Host.
     (
@@ -295,6 +316,9 @@ const PI_EXTENSION_INSTALL: &str =
 
 /// Where the Beacon binary is installed on the Host (for `sh`).
 pub(crate) const BEACON_BIN: &str = "$HOME/.local/bin/aries-beacon";
+
+/// Installs or updates the OpenCode status plugin (it keeps a user-edited copy).
+const OPENCODE_PLUGIN_INSTALL: &str = r#""$HOME/.local/bin/aries-beacon" opencode-plugin install"#;
 
 const DISCARD_UPLOAD: &str = r#"rm -f "$HOME/.local/bin/.aries-beacon.new""#;
 
@@ -378,6 +402,10 @@ pub(crate) async fn install(
     .await?;
     // Ticket 43: and the Pi status extension.
     let _ = ssh.exec(&sh_c(PI_EXTENSION_INSTALL), &[]).await;
+    // Ticket 42: and the OpenCode status plugin. Best effort, like Pi's: an
+    // Agent's configuration the Beacon cannot write does not make the
+    // Beacon itself any less installed.
+    let _ = ssh.exec(&sh_c(OPENCODE_PLUGIN_INSTALL), &[]).await;
     Ok(BeaconInstall {
         version: release.version.clone(),
         linger,

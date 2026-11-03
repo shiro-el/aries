@@ -117,6 +117,7 @@ version = "0.1.0"
 dependencies = [
  "aries-protocol",
  "aries-test-support",
+ "rusqlite",
  "serde",
  "serde_json",
  "sha2",
@@ -163,6 +164,7 @@ dependencies = [
 name = "aries-test-support"
 version = "0.1.0"
 dependencies = [
+ "rusqlite",
  "serde_json",
  "tempfile",
 ]

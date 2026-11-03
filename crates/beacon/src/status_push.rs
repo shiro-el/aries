@@ -55,14 +55,7 @@ impl Sender {
 }
 
 pub(crate) fn policy() -> PushPolicy {
-    let path = crate::state_dir().join("push-policy.json");
-    match std::fs::read(&path) {
-        Ok(bytes) => serde_json::from_slice(&bytes).unwrap_or_else(|e| {
-            eprintln!("aries-beacon: {}: {e}; using the defaults", path.display());
-            PushPolicy::default()
-        }),
-        Err(_) => PushPolicy::default(),
-    }
+    crate::policy::read()
 }
 
 fn clip(text: Option<String>, chars: usize) -> Option<String> {

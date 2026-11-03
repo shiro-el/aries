@@ -727,6 +727,7 @@ impl HcSession {
     }
 }
 
+pub mod opencode;
 pub mod relay;
 pub use relay::{FakeRelay, RelayLog, ReverseTunnel, http_request};
 impl HcSession {

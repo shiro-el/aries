@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use aries_protocol::chat::{ChatEvent, ChatLine, ChatState};
 
-use super::jsonl::{JsonlSource, Poll};
+use super::source::{Batch, Source};
 use super::{Agent, Located, TerminalFacts};
 
 pub struct Options {
@@ -37,38 +37,39 @@ pub trait TerminalLookup {
     fn get(&mut self, terminal: &str) -> Result<Option<TerminalFacts>, String>;
 }
 
-/// `<agent>:<session>:<offset>`.
+/// `<agent>:<session>:<position>`; the position is the Agent's
+/// [`Source::position`] (a byte offset for JSONL transcripts).
 struct Cursor {
     agent: String,
     session: String,
-    offset: u64,
+    position: String,
 }
 
 impl Cursor {
     fn parse(s: &str) -> Option<Self> {
         let (agent, rest) = s.split_once(':')?;
-        let (session, offset) = rest.rsplit_once(':')?;
+        let (session, position) = rest.rsplit_once(':')?;
         Some(Self {
             agent: agent.to_owned(),
             session: session.to_owned(),
-            offset: offset.parse().ok()?,
+            position: position.to_owned(),
         })
     }
 
-    fn format(agent: &str, session: &str, offset: u64) -> String {
-        format!("{agent}:{session}:{offset}")
+    fn format(agent: &str, session: &str, position: &str) -> String {
+        format!("{agent}:{session}:{position}")
     }
 }
 
 struct Current {
     agent: &'static str,
     located: Located,
-    source: JsonlSource,
+    source: Box<dyn Source>,
 }
 
 impl Current {
     fn cursor(&self) -> String {
-        Cursor::format(self.agent, &self.located.session, self.source.offset())
+        Cursor::format(self.agent, &self.located.session, &self.source.position())
     }
 }
 
@@ -108,16 +109,13 @@ pub fn run(
                 .as_ref()
                 .is_some_and(|c| c.agent == agent.name() && c.located == *located);
             if !same {
-                let mut after = 0;
-                let resumes = resume.take().is_some_and(|c| {
-                    let fits = c.agent == agent.name() && c.session == located.session;
-                    after = c.offset;
-                    fits
-                });
-                let source = JsonlSource::new(located.path.clone(), agent.interpreter(), 0);
-                let source = if resumes && source.holds(after) {
-                    JsonlSource::new(located.path.clone(), agent.interpreter(), after)
-                } else {
+                let after = resume
+                    .take()
+                    .filter(|c| c.agent == agent.name() && c.session == located.session)
+                    .map(|c| c.position);
+                let opened = agent.open(located, after.as_deref());
+                let source = opened.source;
+                if !opened.resumed {
                     emit(
                         out,
                         ChatLine::new(ChatEvent::Reset {
@@ -126,8 +124,7 @@ pub fn run(
                         }),
                     )?;
                     last_state = None;
-                    source
-                };
+                }
                 current = Some(Current {
                     agent: agent.name(),
                     located: located.clone(),
@@ -143,8 +140,8 @@ pub fn run(
         let mut now_state = ChatState::NoAgent;
         if let Some(cur) = current.as_mut() {
             match cur.source.poll()? {
-                Poll::Missing => now_state = ChatState::Waiting,
-                Poll::Replaced => {
+                Batch::Missing => now_state = ChatState::Waiting,
+                Batch::Replaced => {
                     emit(
                         out,
                         ChatLine::new(ChatEvent::Reset {
@@ -156,21 +153,16 @@ pub fn run(
                     last_state = None;
                     let agent = agents.iter().find(|a| a.name() == cur.agent);
                     if let Some(agent) = agent {
-                        cur.source =
-                            JsonlSource::new(cur.located.path.clone(), agent.interpreter(), 0);
+                        cur.source = agent.open(&cur.located, None).source;
                     }
                     caught_up = false;
                     now_state = ChatState::Live;
                 }
-                Poll::Events { events, more } => {
-                    let ends: Vec<u64> = events.iter().map(|(_, end)| *end).collect();
-                    for (i, (event, end)) in events.into_iter().enumerate() {
+                Batch::Events { events, more } => {
+                    for (event, position) in events {
                         let mut line = ChatLine::new(event);
-                        // Only the last event of a transcript line carries
-                        // the cursor, so resuming never skips the rest of it.
-                        if ends.get(i + 1) != Some(&end) {
-                            line.cursor =
-                                Some(Cursor::format(cur.agent, &cur.located.session, end));
+                        if let Some(p) = position {
+                            line.cursor = Some(Cursor::format(cur.agent, &cur.located.session, &p));
                         }
                         emit(out, line)?;
                         wrote = true;

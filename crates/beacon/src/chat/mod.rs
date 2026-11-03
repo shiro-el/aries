@@ -3,9 +3,10 @@
 //! [`ChatLine`]s (format: `aries_protocol::chat`).
 //!
 //! Adding an Agent means one [`Agent`] (pair a Terminal with a transcript)
-//! and one [`Interpreter`] (transcript line -> events) for JSONL transcripts.
-//! The follow loop, cursor, partial lines, rotation and the app's rendering
-//! are shared.
+//! and one [`Interpreter`] (transcript line -> events) for JSONL transcripts;
+//! an Agent with another kind of transcript (OpenCode's SQLite database)
+//! overrides [`Agent::open`] with its own [`Source`]. The follow loop,
+//! cursor, rotation and the app's rendering are shared.
 
 pub mod answer;
 pub mod claude;
@@ -13,7 +14,9 @@ pub mod codex;
 mod follow;
 mod jsonl;
 pub mod media;
+pub mod opencode;
 pub mod pi;
+mod source;
 
 use std::path::PathBuf;
 
@@ -24,6 +27,7 @@ pub use answer::{KeysError, TerminalInput};
 
 pub use follow::{Options, TerminalLookup, run};
 pub use jsonl::{JsonlSource, Poll};
+pub use source::{Batch, Opened, Source};
 
 /// One Agent kind the Beacon can read.
 pub trait Agent {
@@ -32,8 +36,29 @@ pub trait Agent {
     /// The transcript the Agent running in `terminal` writes right now.
     /// `None`: this Agent does not run there.
     fn locate(&self, terminal: &TerminalFacts) -> Option<Located>;
-    /// A fresh reader for one transcript.
+    /// A fresh reader for one JSONL transcript.
     fn interpreter(&self) -> Box<dyn Interpreter>;
+    /// Opens `located` for reading. `resume`: the position part of an
+    /// earlier cursor for this transcript. Default: a [`JsonlSource`] over
+    /// `located.path` with [`Agent::interpreter`].
+    fn open(&self, located: &Located, resume: Option<&str>) -> Opened {
+        let after = resume.and_then(|p| p.parse::<u64>().ok());
+        let fresh = JsonlSource::new(located.path.clone(), self.interpreter(), 0);
+        match after {
+            Some(after) if fresh.holds(after) => Opened {
+                source: Box::new(JsonlSource::new(
+                    located.path.clone(),
+                    self.interpreter(),
+                    after,
+                )),
+                resumed: true,
+            },
+            _ => Opened {
+                source: Box::new(fresh),
+                resumed: false,
+            },
+        }
+    }
     /// The TUI keys (herdr-core `terminal.keys` names) that answer the open
     /// `question` with `picks` (already checked by [`answer::validate`]).
     fn answer_keys(
@@ -66,6 +91,9 @@ pub struct Located {
 pub struct TerminalFacts {
     pub pid: Option<u32>,
     pub foreground_pid: Option<u32>,
+    /// The foreground process's argv, as herdr-core sees it (also where
+    /// `/proc` is missing).
+    pub foreground_argv: Vec<String>,
     pub labels: serde_json::Map<String, serde_json::Value>,
     /// The OSC 7501 status (`None` if the program never reported one).
     pub status: Option<StatusRecord>,
@@ -77,6 +105,9 @@ impl TerminalFacts {
         Self {
             pid: pid(&v["pid"]),
             foreground_pid: pid(&v["foreground"]["pid"]),
+            foreground_argv: (v["foreground"]["argv"].as_array().into_iter().flatten())
+                .filter_map(|a| a.as_str().map(str::to_owned))
+                .collect(),
             labels: v["labels"].as_object().cloned().unwrap_or_default(),
             status: serde_json::from_value(v["status"].clone()).ok(),
         }
@@ -119,6 +150,7 @@ pub fn agents() -> Vec<Box<dyn Agent>> {
     vec![
         Box::new(claude::ClaudeCode::from_env()),
         Box::new(codex::Codex),
+        Box::new(opencode::OpenCode::from_env()),
         Box::new(pi::Pi),
     ]
 }

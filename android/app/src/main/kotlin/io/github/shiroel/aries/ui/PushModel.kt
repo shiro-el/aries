@@ -9,6 +9,7 @@ import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Host
 import io.github.shiroel.aries.core.HttpClient
 import io.github.shiroel.aries.core.PushDevice
+import io.github.shiroel.aries.core.PushPolicy
 import io.github.shiroel.aries.core.PushProgress
 import io.github.shiroel.aries.core.PushStep
 import kotlinx.coroutines.CoroutineScope
@@ -82,8 +83,22 @@ class PushModel(
     /** `true` when this build has a default Relay (otherwise the user must give one). */
     val hasDefaultRelay: Boolean get() = platform.relayUrl != null
 
+    /** What the Host's Beacon notifies about; `null` until read from the Host (over SSH). */
+    var policy by mutableStateOf<PushPolicy?>(null)
+        private set
+
+    /** Reading or saving [policy] on the Host. */
+    var policyBusy by mutableStateOf(false)
+        private set
+
+    /** Why reading or saving [policy] failed. */
+    var policyProblem by mutableStateOf<Message?>(null)
+        private set
+
     fun load(host: Host) {
         this.host = host
+        policy = null
+        policyProblem = null
         problem = null
         notice = null
         changingRelay = false
@@ -98,6 +113,44 @@ class PushModel(
                 ?: PushUi.Off
         } catch (e: CoreException) {
             PushUi.Off
+        }
+        if (ui is PushUi.On && policy == null && policyProblem == null) loadPolicy()
+    }
+
+    /** Reads the Host's push policy (again, after a failure). */
+    fun loadPolicy() {
+        val host = host ?: return
+        if (policyBusy) return
+        policyBusy = true
+        policyProblem = null
+        scope.launch {
+            try {
+                val read = core.pushPolicy(host.id)
+                if (this@PushModel.host?.id == host.id) policy = read
+            } catch (e: CoreException) {
+                policyProblem = policyFailed(e)
+            } finally {
+                policyBusy = false
+            }
+        }
+    }
+
+    /** Saves the policy with one option changed; on failure the old one stays. */
+    fun changePolicy(change: (PushPolicy) -> PushPolicy) {
+        val host = host ?: return
+        val old = policy ?: return
+        if (policyBusy) return
+        policyBusy = true
+        policyProblem = null
+        scope.launch {
+            try {
+                val saved = core.setPushPolicy(host.id, change(old))
+                if (this@PushModel.host?.id == host.id) policy = saved
+            } catch (e: CoreException) {
+                policyProblem = policyFailed(e)
+            } finally {
+                policyBusy = false
+            }
         }
     }
 
@@ -216,5 +269,10 @@ fun stepLabel(step: PushStep): Int = when (step) {
 
 fun pushProblem(e: CoreException): Message = when (e) {
     is CoreException.PushFailed -> Message(R.string.push_failed, listOf(Message(stepLabel(e.step)), e.detail))
+    else -> problemFor(e).body
+}
+
+private fun policyFailed(e: CoreException): Message = when (e) {
+    is CoreException.BeaconStep -> Message(R.string.push_policy_failed, listOf(e.detail))
     else -> problemFor(e).body
 }

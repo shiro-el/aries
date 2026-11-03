@@ -473,6 +473,8 @@ async fn updates_an_old_beacon_when_connecting() {
         BeaconState::Installed { version, supported: true, .. } if version == env!("CARGO_PKG_VERSION")
     ));
     assert_eq!(server.requests().len(), 1);
+    // The new Beacon brought its OpenCode plugin.
+    assert!(s.host.check(&format!("test -f {PLUGIN}")));
     // The old release had no skill; the update brings it.
     assert!(s.host.check(&format!(
         "test -f {CLAUDE_SKILL}/SKILL.md && test -f {AGENTS_SKILL}/SKILL.md"
@@ -670,6 +672,71 @@ async fn installs_the_pinned_release_built_by_the_pipeline() {
         }
         other => panic!("{other:?}"),
     }
+}
+
+const PLUGINS: &str = "/home/aries/.config/opencode/plugins";
+const PLUGIN: &str = "/home/aries/.config/opencode/plugins/aries-agent-state.js";
+
+/// Ticket 42: the Beacon keeps the OpenCode status plugin in the user's
+/// OpenCode configuration, never overwrites or removes a copy the user
+/// edited, and leaves the user's other plugins alone.
+#[tokio::test]
+#[ignore = "needs docker"]
+async fn manages_the_opencode_plugin_and_keeps_the_users_edits() {
+    let s = setup();
+    let bytes = std::fs::read(beacon_bin()).unwrap();
+    s.core
+        .set_beacon_release(release(env!("CARGO_PKG_VERSION"), sha256sum(&bytes)));
+    let fetcher = Fetcher::new(bytes);
+    let install = || async {
+        s.core
+            .install_beacon(s.id.clone(), fetcher.clone())
+            .await
+            .unwrap();
+    };
+    // The user's own plugin, there before Aries.
+    s.host.root(&format!(
+        "mkdir -p {PLUGINS} && echo 'export const Mine = async () => ({{}});' > {PLUGINS}/mine.js \
+         && chown -R aries:aries /home/aries/.config"
+    ));
+
+    install().await;
+    assert!(s.host.check(&format!(
+        "head -n 1 {PLUGIN} | grep -q '^// aries-managed: aries-agent-state ' \
+         && grep -q 'aries.opencode.session' {PLUGIN} && grep -q '7501' {PLUGIN}"
+    )));
+    s.core.uninstall_beacon(s.id.clone()).await.unwrap();
+    assert!(s.host.check(&format!("test ! -e {PLUGIN}")));
+    assert!(s.host.check(&format!("test -f {PLUGINS}/mine.js")));
+
+    // Installed again, then edited by the user: an update keeps the edit,
+    // and so does removal.
+    install().await;
+    s.host.root(&format!("echo '// mine now' >> {PLUGIN}"));
+    let edited = s.host.root(&format!("sha256sum {PLUGIN}"));
+    install().await;
+    assert_eq!(s.host.root(&format!("sha256sum {PLUGIN}")), edited);
+    s.core.uninstall_beacon(s.id.clone()).await.unwrap();
+    assert_eq!(s.host.root(&format!("sha256sum {PLUGIN}")), edited);
+    assert!(s.host.check(&format!("test -f {PLUGINS}/mine.js")));
+}
+
+/// With nothing else of the user's there, removal leaves no empty OpenCode
+/// directories behind.
+#[tokio::test]
+#[ignore = "needs docker"]
+async fn removing_the_beacon_leaves_no_empty_opencode_directories() {
+    let s = setup();
+    let bytes = std::fs::read(beacon_bin()).unwrap();
+    s.core
+        .set_beacon_release(release(env!("CARGO_PKG_VERSION"), sha256sum(&bytes)));
+    s.core
+        .install_beacon(s.id.clone(), Fetcher::new(bytes))
+        .await
+        .unwrap();
+    assert!(s.host.check(&format!("test -f {PLUGIN}")));
+    s.core.uninstall_beacon(s.id.clone()).await.unwrap();
+    assert!(s.host.check("test ! -e /home/aries/.config/opencode"));
 }
 
 const PI_EXT: &str = "/home/aries/.pi/agent/extensions/aries-status.ts";

@@ -16,16 +16,22 @@
 //!   as JSON lines (`aries_protocol::chat`).
 //! - `answer <terminal> <question> <picks>...`: answers the question the
 //!   Terminal's Agent shows (`aries_protocol::answer`); one reply line.
+//! - `policy [set]`: prints or (from stdin) changes the push policy
+//!   ([`policy`]); run by the phone over SSH.
 //! - `skill install` / `skill uninstall`: the managed `call-human` skill
 //!   for Agents ([`aries_beacon::skill`]); run by the phone over SSH when it
 //!   installs, updates or removes the Beacon. One `SkillReport` line.
 //! - `pi-extension install|remove`: the managed Pi status extension
 //!   ([`aries_beacon::pi_extension`]); the phone runs `install` after
 //!   installing or updating the Beacon.
+//! - `opencode-plugin install|remove`: the managed OpenCode status plugin
+//!   ([`aries_beacon::opencode_plugin`]); the phone runs `install` after
+//!   installing or updating the Beacon. One JSON line of what it did.
 //! - `--version`: `aries-beacon <version> (contract <n>)`.
 
 mod call_push;
 mod calls;
+mod policy;
 mod push;
 mod status_push;
 
@@ -61,12 +67,14 @@ fn main() {
         Some("chat") => chat(std::env::args().skip(2).collect()),
         Some("answer") => answer(std::env::args().skip(2).collect()),
         Some("skill") => exit_on_error(skill(&rest_args())),
+        Some("policy") => std::process::exit(policy::command(&rest_args())),
+        Some("opencode-plugin") => opencode_plugin(std::env::args().nth(2).as_deref()),
         Some("pi-extension") => {
             std::process::exit(aries_beacon::pi_extension::command(&rest_args()))
         }
         _ => {
             eprintln!(
-                "usage: aries-beacon --version | status | serve | call ... | calls [--follow] | reply CALL CHOICE | pair | push-test | unpair | chat TERMINAL [--follow] [--cursor C] | answer TERMINAL QUESTION PICKS... | skill install|uninstall | pi-extension install|remove"
+                "usage: aries-beacon --version | status | serve | call ... | calls [--follow] | reply CALL CHOICE | pair | push-test | unpair | chat TERMINAL [--follow] [--cursor C] | answer TERMINAL QUESTION PICKS... | skill install|uninstall | pi-extension install|remove | opencode-plugin install|remove | policy [set]"
             );
             std::process::exit(2);
         }
@@ -376,6 +384,32 @@ fn answer(args: Vec<String>) {
     println!("{}", reply.to_json());
     if !reply.outcome.is_sent() {
         std::process::exit(1);
+    }
+}
+
+/// `opencode-plugin install`: `{"opencode":"installed"|"updated"|"unchanged"|"kept_user_copy"}`.
+/// `opencode-plugin remove`: `{"opencode":"removed"|"kept"}`.
+fn opencode_plugin(action: Option<&str>) {
+    use aries_beacon::opencode_plugin as i;
+    let home = i::config_home();
+    let result = match action {
+        Some("install") => {
+            i::install_opencode_plugin(&home).map(|o| serde_json::json!({ "opencode": o }))
+        }
+        Some("remove") => i::remove_opencode_plugin(&home).map(
+            |removed| serde_json::json!({ "opencode": if removed { "removed" } else { "kept" } }),
+        ),
+        _ => {
+            eprintln!("usage: aries-beacon opencode-plugin install|remove");
+            std::process::exit(2);
+        }
+    };
+    match result {
+        Ok(v) => println!("{v}"),
+        Err(e) => {
+            eprintln!("aries-beacon opencode-plugin: {}: {e}", home.display());
+            std::process::exit(1);
+        }
     }
 }
 
