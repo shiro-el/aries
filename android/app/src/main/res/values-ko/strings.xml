@@ -5,6 +5,26 @@
   Glossary terms: Host = 호스트, Terminal = 터미널, Agent = 에이전트.
 -->
 <resources>
+    <!-- Remote file browser (90) -->
+    <string name="files_open_button">파일</string>
+    <string name="files_title">Host 파일</string>
+    <string name="files_close_button">파일 닫기</string>
+    <string name="files_up_button">상위 폴더</string>
+    <string name="files_refresh_button">새로고침</string>
+    <string name="files_back_folder_button">폴더로 돌아가기</string>
+    <string name="files_send_file_button">Agent에게 파일 보내기</string>
+    <string name="files_send_line_label">Agent에게 %1$d행 보내기</string>
+    <string name="files_line_hint">줄을 누르면 Chat 초안에 추가합니다.</string>
+    <string name="files_not_text">미리 볼 수 없음: 바이너리 또는 UTF-8이 아닌 파일입니다.</string>
+    <string name="files_loading">파일을 불러오는 중…</string>
+    <string name="files_failed">폴더 또는 파일을 불러오지 못했습니다. 연결, 경로, 권한을 확인한 뒤 다시 시도하세요.</string>
+    <string name="files_empty_folder">빈 폴더입니다.</string>
+    <string name="files_empty_file">빈 파일입니다.</string>
+    <string name="files_range">전체 %3$d행 중 %1$d–%2$d행</string>
+    <string name="files_previous_button">이전 페이지</string>
+    <string name="files_next_button">다음 페이지</string>
+
+
     <string name="agents_elapsed_less_than_minute">1분 미만</string>
     <string name="agents_elapsed_minutes">%1$d분</string>
     <string name="agents_elapsed_hours">%1$d시간</string>

@@ -5,6 +5,26 @@
   Add every new string to values-ko/strings.xml too (TranslationsTest checks it).
 -->
 <resources>
+    <!-- Remote file browser (90) -->
+    <string name="files_open_button">Files</string>
+    <string name="files_title">Host files</string>
+    <string name="files_close_button">Close files</string>
+    <string name="files_up_button">Parent folder</string>
+    <string name="files_refresh_button">Refresh</string>
+    <string name="files_back_folder_button">Back to folder</string>
+    <string name="files_send_file_button">Send file to Agent</string>
+    <string name="files_send_line_label">Send line %1$d to Agent</string>
+    <string name="files_line_hint">Tap a line to add it to the Chat draft.</string>
+    <string name="files_not_text">Cannot preview this file: binary or non-UTF-8 text.</string>
+    <string name="files_loading">Loading files…</string>
+    <string name="files_failed">Could not load this folder or file. Check the connection, path and permissions, then retry.</string>
+    <string name="files_empty_folder">This folder is empty.</string>
+    <string name="files_empty_file">This file is empty.</string>
+    <string name="files_range">Lines %1$d–%2$d of %3$d</string>
+    <string name="files_previous_button">Previous page</string>
+    <string name="files_next_button">Next page</string>
+
+
     <string name="agents_elapsed_less_than_minute">&lt;1m</string>
     <string name="agents_elapsed_minutes">%1$dm</string>
     <string name="agents_elapsed_hours">%1$dh</string>
