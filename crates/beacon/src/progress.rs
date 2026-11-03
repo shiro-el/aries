@@ -12,6 +12,7 @@ pub struct WatchedAgent {
     pub status: Option<AgentStatus>,
     pub status_ms: u64,
     pub created_ms: u64,
+    pub turn: u64,
     pub child_agents: u32,
 }
 
@@ -103,6 +104,9 @@ impl ProgressWatch {
                     title: a.title,
                     top_level: a.top_level,
                     status,
+                    turn: Some(a.turn),
+                    question: None,
+                    excerpt: None,
                     at: now_ms / 1000,
                 });
             }

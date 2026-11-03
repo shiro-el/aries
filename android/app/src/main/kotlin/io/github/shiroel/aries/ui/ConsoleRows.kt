@@ -75,12 +75,7 @@ internal fun ConsoleTerminalRow(
                     color = if (waiting) statusColor(AgentStatus.Blocked(null, null)) else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            // The core reports no timestamp. Keep the prototype's age slot honest.
-            if (status != null) {
-                val unavailable = stringResource(R.string.console_agent_age_unavailable)
-                Text(stringResource(R.string.console_agent_age_unknown), style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.semantics { contentDescription = unavailable })
-            }
+            if (status != null) AgentElapsedTime(terminal.statusMs)
         }
         trailing()
     }

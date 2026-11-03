@@ -38,6 +38,17 @@ pub const ENVELOPE_LEN: usize = 1 + 32 + PADDED_LEN + 16;
 
 const INFO: &[u8] = b"aries push v1";
 
+/// A compact question for notification buttons. `id` is the Chat tool item's
+/// ID passed to `answer_question`; option indexes are unchanged from Chat.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PushQuestion {
+    pub id: String,
+    pub text: String,
+    /// One to three single-choice labels. Larger / multi-part questions are
+    /// omitted by the Beacon, never shortened to a misleading subset.
+    pub options: Vec<String>,
+}
+
 /// What a push says. Kinds are added by the tickets that send them (Agent
 /// status, Call); the phone ignores none silently: an unknown kind fails to
 /// parse and is reported.
@@ -64,6 +75,15 @@ pub enum PushMessage {
         top_level: bool,
         /// The new status ([`crate::agent_status::agent_status`]).
         status: crate::agent_status::AgentStatus,
+        /// The Host's turn for this status, for answering / marking seen.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        turn: Option<u64>,
+        /// One open, single-choice question with at most three options.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        question: Option<PushQuestion>,
+        /// First ~200 characters of the last assistant reply, on Done.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        excerpt: Option<String>,
         /// Unix seconds on the Host.
         at: u64,
     },

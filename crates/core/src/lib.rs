@@ -13,7 +13,9 @@ mod error;
 mod hc;
 mod host_edit;
 mod host_model;
+mod last_known_state;
 mod launch;
+mod layout_edit;
 mod push;
 mod removal;
 mod send;
@@ -47,10 +49,12 @@ pub use chat::{
 pub use error::{AnswerProblem, CoreError, Incompatibility, VaultError};
 pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
 pub use host_model::{AgentStatus, BlockedReason, TerminalWatch};
+pub use last_known_state::{LastKnownState, LastKnownStateWatch};
 pub use launch::{AgentPreset, LaunchRequest, RECENT_CWDS_KEPT, SavedLaunch};
+pub use layout_edit::{ExecOutput, LayoutEdit};
 pub use push::{
     HttpClient, HttpRequest, HttpResponse, PushContent, PushDevice, PushDisable, PushNotice,
-    PushPairing, PushPolicy, PushProgress, PushStep,
+    PushPairing, PushPolicy, PushProgress, PushQuestion, PushStep,
 };
 pub use send::{HELD_AFTER, SendListener, SendOutcome};
 pub use settings::{AgentView, AttachMode};
@@ -167,7 +171,7 @@ pub struct Host {
 }
 
 /// One Terminal as listed by herdr-core.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, uniffi::Record)]
 pub struct TerminalInfo {
     /// Address such as `t7` or `machine/t7`.
     pub address: String,
@@ -198,8 +202,13 @@ pub struct TerminalInfo {
     /// Terminal that started this one, as reported by herdr-core.
     #[uniffi(default = None)]
     pub parent: Option<String>,
+    /// When herdr-core's root status last changed, milliseconds since the epoch.
+    /// Seeing a completed turn does not reset this clock.
+    #[uniffi(default = None)]
+    pub status_ms: Option<u64>,
     /// Explicit progress watching, shared with the Beacon through aries.watch.
     #[uniffi(default = false)]
+    #[serde(default)]
     pub watched: bool,
 }
 
@@ -232,7 +241,8 @@ async fn on_runtime<T: Send + 'static>(
 pub struct AriesCore {
     store: Store,
     vault: Arc<dyn KeyVault>,
-    hosts: Mutex<Vec<SavedHost>>,
+    hosts: Arc<Mutex<Vec<SavedHost>>>,
+    last_known: last_known_state::States,
     sessions: host_edit::HostSessions,
     beacon_release: Mutex<BeaconRelease>,
     chat_cache: chat_cache::ChatCache,
@@ -250,11 +260,18 @@ impl AriesCore {
             vault.clone(),
             store.read_settings().chat_cache_days,
         );
+        let hosts = Arc::new(Mutex::new(saved.hosts));
+        let last_known = last_known_state::States {
+            store: store.clone(),
+            hosts: hosts.clone(),
+            changes: tokio::sync::watch::channel(0).0,
+        };
         Ok(Arc::new(Self {
             store,
+            last_known,
             vault,
             chat_cache,
-            hosts: Mutex::new(saved.hosts),
+            hosts,
             sessions: Default::default(),
             beacon_release: Mutex::new(pinned_release()),
         }))
@@ -582,10 +599,8 @@ impl AriesCore {
     /// Host's connection settings and trusted Host key. If a step fails the
     /// Host stays registered and removal can be retried.
     pub fn remove_host(&self, host_id: String) -> Result<(), CoreError> {
-        let host = self
-            .hosts
-            .lock()
-            .expect("hosts lock")
+        let mut hosts = self.hosts.lock().expect("hosts lock");
+        let host = hosts
             .iter()
             .find(|h| h.id == host_id)
             .cloned()
@@ -593,7 +608,13 @@ impl AriesCore {
                 id: host_id.clone(),
             })?;
         removal::run(&host, &self.store)?;
-        self.update_hosts(|hosts| hosts.retain(|h| h.id != host_id))
+        let next: Vec<_> = hosts.iter().filter(|h| h.id != host_id).cloned().collect();
+        self.store.save(&store::Saved {
+            hosts: next.clone(),
+        })?;
+        *hosts = next;
+        self.last_known.changed();
+        Ok(())
     }
 
     /// Connects to a Host and checks its herdr-core is compatible.
@@ -627,6 +648,8 @@ impl AriesCore {
             return Err(CoreError::Closed);
         }
         Ok(Arc::new(HostConnection {
+            last_known: self.last_known.clone(),
+            host_id,
             client,
             names: Default::default(),
             recent: launch::RecentCwds::in_host_dir(self.store.host_dir(&host.id)),
@@ -1207,6 +1230,8 @@ fn ssh_for_saved_host(
 /// A live connection to one Host's herdr-core.
 #[derive(uniffi::Object)]
 pub struct HostConnection {
+    last_known: last_known_state::States,
+    host_id: String,
     client: Arc<HcClient>,
     names: Arc<tokio::sync::Mutex<structure::Names>>,
     recent: launch::RecentCwds,
@@ -1227,7 +1252,9 @@ impl HostConnection {
             on_runtime(async move { client.call("terminal.list", serde_json::json!({})).await })
                 .await?;
         let list = result["terminals"].as_array().cloned().unwrap_or_default();
-        Ok(list.iter().map(terminal_info).collect())
+        let infos: Vec<_> = list.iter().map(terminal_info).collect();
+        self.last_known.save(&self.host_id, infos.clone())?;
+        Ok(infos)
     }
 
     /// Attaches to the Terminal at `address` (`t7`, `machine/t7`) and
@@ -1250,7 +1277,14 @@ impl HostConnection {
     /// Watches the Host's Terminals and their Agent status live.
     pub async fn watch_terminals(&self) -> Result<Arc<TerminalWatch>, CoreError> {
         let client = self.client.clone();
-        on_runtime(async move { TerminalWatch::start(client).await.map(Arc::new) }).await
+        let states = self.last_known.clone();
+        let host_id = self.host_id.clone();
+        on_runtime(async move {
+            TerminalWatch::start(client, states, host_id)
+                .await
+                .map(Arc::new)
+        })
+        .await
     }
 
     /// The Host's Spaces, Tabs and Panes as herdr-app arranges them, read
@@ -1507,6 +1541,7 @@ pub(crate) fn terminal_info(v: &serde_json::Value) -> TerminalInfo {
         agent_status,
         needs_attention,
         turn: v["turn"].as_u64().unwrap_or(0),
+        status_ms: v["status_ms"].as_u64(),
     }
 }
 

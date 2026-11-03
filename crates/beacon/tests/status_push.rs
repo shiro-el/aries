@@ -426,6 +426,169 @@ fn real_claude_code_waiting_for_permission_is_pushed() {
 }
 
 #[test]
+fn a_question_push_has_the_chat_id_options_and_current_turn() {
+    let mut host = Host::new();
+    host.serve();
+    let config = host.home.path().join(".claude");
+    let transcript = config.join("projects/-work-a/S1.jsonl");
+    std::fs::create_dir_all(transcript.parent().unwrap()).unwrap();
+    let script = format!(
+        "claude-session {} S1 /work/a\nlines claude-code/main-session.jsonl 1 65 {}\nstatus working\nstatus blocked question Which color?\nwait\n",
+        config.display(),
+        transcript.display()
+    );
+    let t = host.agent("claude", None, &script);
+    let pushes = host.pushes(1);
+    let json = serde_json::to_value(&pushes[0]).unwrap();
+    assert_eq!(json["terminal"], t);
+    assert_eq!(json["turn"], 1);
+    assert_eq!(
+        json["question"],
+        serde_json::json!({
+            "id":"toolu_012hzhteG39obz5TwRGEb26o",
+            "text":"Which color do you prefer?",
+            "options":["Red", "Blue", "Green"]
+        })
+    );
+    assert!(json.get("excerpt").is_none());
+}
+
+/// Synthetic transcript records use the same parser as the recorded fixtures.
+fn question_record(questions: serde_json::Value) -> String {
+    serde_json::json!({"type":"assistant","uuid":"m1","message":{"content":[{
+        "type":"tool_use","id":"ask-1","name":"AskUserQuestion","input":{"questions":questions}
+    }]}})
+    .to_string()
+}
+
+fn one_question(multi: bool, options: &[&str]) -> serde_json::Value {
+    serde_json::json!({"question":"Choose?","multiSelect":multi,
+        "options":options.iter().map(|o| serde_json::json!({"label":o})).collect::<Vec<_>>()})
+}
+
+fn transcript_agent(host: &Host, records: &str, steps: &str) -> String {
+    let config = host.home.path().join(".claude");
+    let path = config.join("projects/-work-a/S1.jsonl");
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(path, format!("{records}\n")).unwrap();
+    host.agent(
+        "claude",
+        None,
+        &format!(
+            "claude-session {} S1 /work/a\nstatus working\n{steps}",
+            config.display()
+        ),
+    )
+}
+
+#[test]
+fn permission_multi_part_multi_select_and_large_questions_have_no_buttons() {
+    for (questions, reason) in [
+        (
+            serde_json::json!([one_question(false, &["Yes", "No"])]),
+            "permission",
+        ),
+        (
+            serde_json::json!([
+                one_question(false, &["Yes", "No"]),
+                one_question(false, &["A", "B"])
+            ]),
+            "question",
+        ),
+        (
+            serde_json::json!([one_question(true, &["Yes", "No"])]),
+            "question",
+        ),
+        (
+            serde_json::json!([one_question(false, &["A", "B", "C", "D"])]),
+            "question",
+        ),
+        (
+            serde_json::json!([one_question(false, &[&"한".repeat(800), "No"])]),
+            "question",
+        ),
+    ] {
+        let mut host = Host::new();
+        host.serve();
+        transcript_agent(
+            &host,
+            &question_record(questions),
+            &format!("status blocked {reason} Choose?\nwait\n"),
+        );
+        let push = serde_json::to_value(&host.pushes(1)[0]).unwrap();
+        assert!(push.get("question").is_none(), "{push}");
+        assert_eq!(push["turn"], 1);
+        assert!(push.get("excerpt").is_none());
+    }
+}
+
+#[test]
+fn done_has_the_last_assistant_text_clipped_on_a_unicode_boundary() {
+    let mut host = Host::new();
+    host.set_policy(r#"{"done":true}"#);
+    host.serve();
+    let record = |id: &str, content: serde_json::Value| {
+        serde_json::json!({"type":"assistant","uuid":id,"message":{"content":content}}).to_string()
+    };
+    let records = format!(
+        "{}\n{}\n{}",
+        record(
+            "m1",
+            serde_json::json!([{"type":"text","text":"Older reply"}])
+        ),
+        record(
+            "m2",
+            serde_json::json!([{"type":"text","text":"한🦀".repeat(150)}])
+        ),
+        record(
+            "m3",
+            serde_json::json!([{"type":"thinking","thinking":"Private reasoning"}])
+        )
+    );
+    transcript_agent(&host, &records, "status done\nwait\n");
+    let push = serde_json::to_value(&host.pushes(1)[0]).unwrap();
+    assert_eq!(push["turn"], 1);
+    assert_eq!(push["excerpt"], format!("{}…", "한🦀".repeat(100)));
+    assert!(push.get("question").is_none());
+}
+
+#[test]
+fn a_status_transition_carries_its_own_turn_before_the_turn_event_arrives() {
+    use aries_beacon::status_watch::{StatusWatch, Step};
+    use serde_json::json;
+    let mut watch = StatusWatch::new();
+    watch.snapshot(&json!({"seq":1,"terminals":[{"address":"t1","created_ms":1,
+        "status":{"state":"working"},"turn":5,"labels":{}}]}));
+    let event = |seq, kind, data| {
+        json!({"method":"event","params":{
+        "seq":seq,"terminal":"t1","type":kind,"data":data}})
+    };
+    let Step::Changes(changes) = watch.apply(&event(
+        2,
+        "status",
+        json!({"status":{"state":"blocked","kind":"permission"}}),
+    )) else {
+        panic!("no transition")
+    };
+    assert_eq!(changes[0].turn, 6);
+    assert_eq!(
+        watch.apply(&event(3, "turn", json!({"turn":6}))),
+        Step::Changes(vec![])
+    );
+    let Step::Changes(changes) = watch.apply(&event(
+        4,
+        "status",
+        json!({"status":{"state":"blocked","kind":"question"}}),
+    )) else {
+        panic!("no transition")
+    };
+    assert_eq!(
+        changes[0].turn, 6,
+        "changing a Blocked reason does not end another turn"
+    );
+}
+
+#[test]
 fn progress_leaves_room_for_attention_and_all_commands_share_the_pairing_budget() {
     let mut host = Host::new();
     host.serve();

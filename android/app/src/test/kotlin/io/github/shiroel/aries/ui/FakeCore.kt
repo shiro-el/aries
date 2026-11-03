@@ -1,5 +1,7 @@
 package io.github.shiroel.aries.ui
 
+import io.github.shiroel.aries.core.LastKnownState
+import io.github.shiroel.aries.core.LastKnownStateWatch
 import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.core.AriesCoreInterface
 import io.github.shiroel.aries.core.AgentView
@@ -124,6 +126,7 @@ class FakeCore : AriesCoreInterface {
 
     /** What `structure`/`watchStructure` deliver; default: [terminals], all unplaced. */
     var structure: HostStructure? = null
+    var herdrAppAvailable = true
 
     /** The last connection `connect` returned. */
     var connection: FakeConnection? = null
@@ -159,6 +162,38 @@ class FakeCore : AriesCoreInterface {
         installFailWith?.let { throw it }
         ensureKey()
         return if (installed.add(hostId)) KeyInstall.ADDED else KeyInstall.ALREADY_PRESENT
+    }
+
+    val snapshotsRequested = mutableListOf<String>()
+    val snapshotFailures = mutableSetOf<String>()
+    val storedStates = mutableMapOf<String, LastKnownState>()
+    private val stateChanges = mutableListOf<Channel<Unit>>()
+
+    override suspend fun snapshot(hostId: String): LastKnownState {
+        snapshotsRequested += hostId
+        host(hostId)
+        if (hostId in snapshotFailures) throw CoreException.Unreachable("offline")
+        return LastKnownState(hostId, (terminalsOf[hostId] ?: terminals).filter { it.agentStatus != null }, System.currentTimeMillis().toULong())
+            .also { storedStates[hostId] = it; stateChanges.forEach { channel -> channel.trySend(Unit) } }
+    }
+
+    override fun lastKnownState(hostId: String): LastKnownState? {
+        host(hostId)
+        return storedStates[hostId]
+    }
+
+    override fun lastKnownStates(): List<LastKnownState> = storedStates.values.toList()
+
+    override fun watchLastKnownStates(): LastKnownStateWatch {
+        val changes = Channel<Unit>(Channel.CONFLATED).also { stateChanges += it; it.trySend(Unit) }
+        return object : LastKnownStateWatch(NoHandle) {
+            override suspend fun next(): List<LastKnownState> {
+                changes.receive()
+                return lastKnownStates()
+            }
+            override fun stop() { stateChanges.remove(changes); changes.close() }
+            override fun close() {}
+        }
     }
 
     override fun hosts(): List<Host> = hosts.toList()
@@ -215,6 +250,8 @@ class FakeCore : AriesCoreInterface {
 
     override fun removeHost(hostId: String) {
         if (!hosts.removeIf { it.id == hostId }) throw CoreException.UnknownHost(hostId)
+        storedStates.remove(hostId)
+        stateChanges.forEach { it.trySend(Unit) }
         pushPaired.remove(hostId) // queued for revocation, like the core
     }
 
@@ -266,10 +303,10 @@ class FakeCore : AriesCoreInterface {
         failFor[hostId]?.let { throw it }
         terminalsOf[hostId]?.let { list ->
             return FakeConnection(list, structure ?: HostStructure(emptyList(), list, null), updatesOf(hostId), hostId, this)
-                .also { connection = it; connectionsOf[hostId] = it }
+                .also { it.herdrAvailable = herdrAppAvailable; connection = it; connectionsOf[hostId] = it }
         }
         return FakeConnection(terminals, structure ?: HostStructure(emptyList(), terminals, null), updates, saved = savedLaunches)
-            .also { connection = it }
+            .also { it.herdrAvailable = herdrAppAvailable; connection = it }
     }
 
     /** Saved launch configs, kept across connections like the core keeps them per Host. */
@@ -398,7 +435,8 @@ class FakeCore : AriesCoreInterface {
         return 0u
     }
 
-    override fun openPush(envelope: ByteArray): PushNotice = throw CoreException.PushRejected("fake")
+    var openedPush: PushNotice? = null
+    override fun openPush(envelope: ByteArray): PushNotice = openedPush ?: throw CoreException.PushRejected("fake")
 
     /** Chat snapshots `watchChat` delivers, in order (see [pushChat]). */
     val chat = Channel<ChatSnapshot>(Channel.UNLIMITED)
@@ -545,6 +583,20 @@ class FakeConnection(
     private val core: FakeCore? = null,
     private val saved: MutableList<SavedLaunch> = core?.savedLaunches ?: mutableListOf(),
 ) : HostConnection(NoHandle) {
+    val edits = mutableListOf<io.github.shiroel.aries.core.LayoutEdit>()
+    var editFailure: CoreException? = null
+    override suspend fun editLayout(edit: io.github.shiroel.aries.core.LayoutEdit): String {
+        edits += edit
+        editFailure?.let { throw it }
+        return "{}"
+    }
+    var herdrAvailable = true
+    override suspend fun herdrAppAvailable(): Boolean = herdrAvailable
+    val killed = mutableListOf<String>()
+    override suspend fun killTerminal(address: String): TerminalInfo {
+        killed += address
+        return TerminalInfo(address, null, "", emptyList(), null, "finished")
+    }
     override suspend fun markSeen(address: String, turn: ULong): TerminalInfo =
         core!!.label(hostId, address, "seen=$turn") {
             if (it.agentStatus == AgentStatus.Done && turn >= it.turn) it.copy(agentStatus = AgentStatus.Idle) else it

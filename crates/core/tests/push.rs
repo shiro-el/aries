@@ -832,6 +832,12 @@ async fn a_blocked_agent_reaches_the_phone_once() {
                 reason: Some(BlockedReason::Permission),
                 message: Some("Allow Bash?".into()),
             },
+            turn: match notices[0].content {
+                PushContent::Status { turn, .. } => turn,
+                _ => None,
+            },
+            question: None,
+            excerpt: None,
             at: match notices[0].content {
                 PushContent::Status { at, .. } => at,
                 _ => 0,
@@ -1040,6 +1046,94 @@ async fn a_choice_from_a_call_push_reaches_the_agent_once() {
     assert_eq!(again.outcome, CallReplyOutcome::Answered);
     tokio::time::sleep(Duration::from_millis(800)).await;
     assert_eq!(inputs().trim(), "Stop");
+}
+
+/// Full notification payload path: a transcript-backed question, then Done,
+/// through the resident Beacon, encrypted Relay envelope and public core API.
+#[tokio::test]
+#[ignore = "needs docker"]
+async fn question_and_done_details_reach_the_phone() {
+    use base64::Engine;
+    let s = setup_with(true).await;
+    s.enable("dev-1").await;
+    s.core
+        .set_push_policy(
+            s.id.clone(),
+            PushPolicy {
+                done: true,
+                ..PushPolicy::default()
+            },
+        )
+        .await
+        .unwrap();
+    s.relay.wait_pushes(1, Duration::from_secs(10));
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    while !as_user(&s.host, "~/.local/bin/aries-beacon status").contains("\"core_version\":\"") {
+        assert!(std::time::Instant::now() < deadline, "serve never attached");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    let question = serde_json::json!({"type":"assistant","uuid":"m1","message":{"content":[{"type":"tool_use","id":"ask-1","name":"AskUserQuestion","input":{"questions":[{"question":"Ship?","multiSelect":false,"options":[{"label":"Yes"},{"label":"No"}]}]}}]}});
+    let done = serde_json::json!({"type":"assistant","uuid":"m2","message":{"content":[{"type":"text","text":"완료".repeat(150)}]}});
+    let transcript =
+        base64::engine::general_purpose::STANDARD.encode(format!("{question}\n{done}\n"));
+    let agent = base64::engine::general_purpose::STANDARD
+        .encode(std::fs::read(aries_test_support::fake_agent_path()).unwrap());
+    let script = base64::engine::general_purpose::STANDARD.encode(
+        "claude-session /home/aries/.claude S1 /work/a\nstatus working\nstatus blocked question Ship?\nkeys 1\nstatus working\nstatus done\nwait\n"
+    );
+    s.host.root(&format!("mkdir -p /home/aries/.claude/projects/-work-a && echo {transcript} | base64 -d > /home/aries/.claude/projects/-work-a/S1.jsonl && chown -R aries:aries /home/aries/.claude && echo {agent} | base64 -d > /tmp/fake-agent && echo {script} | base64 -d > /tmp/script && chmod 644 /tmp/fake-agent /tmp/script"));
+    let run = as_user(
+        &s.host,
+        "herdr-core run --bg --json --no-parent --name claude -- env FAKE_AGENT_INPUT=/tmp/in sh /tmp/fake-agent /tmp/script",
+    );
+    let address = serde_json::from_str::<serde_json::Value>(run.trim()).unwrap()["address"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let pushes = s.relay.wait_pushes(2, Duration::from_secs(20));
+    let notice = s.core.open_push(pushes[1].1.clone()).unwrap();
+    match notice.content {
+        PushContent::Status {
+            terminal,
+            turn,
+            question,
+            excerpt,
+            ..
+        } => {
+            assert_eq!(terminal, address);
+            assert_eq!(turn, Some(1));
+            assert_eq!(
+                question,
+                Some(aries_core::PushQuestion {
+                    id: "ask-1".into(),
+                    text: "Ship?".into(),
+                    options: vec!["Yes".into(), "No".into()]
+                })
+            );
+            assert_eq!(excerpt, None);
+        }
+        other => panic!("{other:?}"),
+    }
+    s.core
+        .answer_question(s.id.clone(), address, "ask-1".into(), vec![vec![0]])
+        .await
+        .unwrap();
+    let pushes = s.relay.wait_pushes(3, Duration::from_secs(20));
+    let notice = s.core.open_push(pushes[2].1.clone()).unwrap();
+    match notice.content {
+        PushContent::Status {
+            status: AgentStatus::Done,
+            turn,
+            question,
+            excerpt,
+            ..
+        } => {
+            assert_eq!(turn, Some(2));
+            assert_eq!(question, None);
+            assert_eq!(excerpt, Some(format!("{}…", "완료".repeat(100))));
+        }
+        other => panic!("{other:?}"),
+    }
 }
 
 /// Real resident Beacon + real herdr-core over a docker SSH Host: no events

@@ -353,6 +353,12 @@ private fun MessageInput(chat: ChatModel) {
         lineHeight = 20.sp,
     )
     HorizontalDivider()
+    io.github.shiroel.aries.dictation.DictationInput(
+        names = listOf(chat.host.name, displayName(chat.terminal), chat.terminal.cwd.orEmpty().trimEnd('/').substringAfterLast('/')),
+        lastResponse = chat.snapshot?.entries?.asReversed()?.firstNotNullOfOrNull { (it.body as? ChatEntryBody.Agent)?.text }.orEmpty(),
+        onTranscript = { text -> chat.draft = if (chat.draft.isBlank()) text else chat.draft + " " + text },
+        enabled = chat.sending == null,
+    )
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
         BasicTextField(
             value = chat.draft,

@@ -19,6 +19,7 @@ internal fun <T> terminalTree(
     entries: List<T>,
     rootGuides: Boolean = false,
     namespace: (T) -> String = { "" },
+    preserveSiblingOrder: Boolean = false,
     terminal: (T) -> TerminalInfo,
 ): List<TerminalTreeRow<T>> {
     val byAddress = entries.associateBy { namespace(it) to terminal(it).address }
@@ -32,7 +33,9 @@ internal fun <T> terminalTree(
         result += TerminalTreeRow(entry, guide, depth)
         if (depth >= 32) return
         val next = if (depth == 0) "" else ancestorGuides + if (last) "  " else "│ "
-        val descendants = children[namespace(entry) to info.address].orEmpty().sortedBy { terminal(it).address }
+        val descendants = children[namespace(entry) to info.address].orEmpty().let {
+            if (preserveSiblingOrder) it else it.sortedBy { child -> terminal(child).address }
+        }
         descendants.forEachIndexed { index, child -> visit(child, next, depth + 1, index == descendants.lastIndex) }
     }
     val roots = entries.filter { (namespace(it) to terminal(it).parent) !in byAddress }
@@ -42,7 +45,7 @@ internal fun <T> terminalTree(
     return result
 }
 
-/** Agent lists also retain a listed plain Terminal when it is an Agent's ancestor. */
+/** Agent families retain plain ancestors and all live descendants, like herdr-app. */
 internal fun agentFamily(host: Host, terminals: List<TerminalInfo>): List<AgentEntry> {
     val byAddress = terminals.associateBy { it.address }
     val included = mutableSetOf<String>()
@@ -54,7 +57,14 @@ internal fun agentFamily(host: Host, terminals: List<TerminalInfo>): List<AgentE
             else current = null
         }
     }
-    return terminals.filter { it.address in included }.map { AgentEntry(host, it) }
+    val children = terminals.filter { it.state == "live" }.groupBy { it.parent }
+    val queue = ArrayDeque(included)
+    while (queue.isNotEmpty()) {
+        children[queue.removeFirst()].orEmpty().forEach { child ->
+            if (included.add(child.address)) queue.addLast(child.address)
+        }
+    }
+    return terminals.withIndex().filter { it.value.address in included }.map { AgentEntry(host, it.value, sequence = it.index) }
 }
 
 @Composable

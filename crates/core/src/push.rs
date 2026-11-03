@@ -147,6 +147,15 @@ impl From<PushPolicy> for aries_protocol::push_policy::PushPolicy {
     }
 }
 
+/// A notification's single-choice question. The ID and option indexes are
+/// passed unchanged to `answer_question`.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct PushQuestion {
+    pub id: String,
+    pub text: String,
+    pub options: Vec<String>,
+}
+
 /// What an opened push says.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum PushContent {
@@ -163,6 +172,9 @@ pub enum PushContent {
         status: crate::AgentStatus,
         /// Unix seconds on the Host.
         at: u64,
+        turn: Option<u64>,
+        question: Option<PushQuestion>,
+        excerpt: Option<String>,
     },
     /// Live progress for an explicitly Watched Agent; cancelled removes its card.
     Progress {
@@ -734,6 +746,9 @@ pub(crate) fn open(
                         top_level,
                         status,
                         at,
+                        turn,
+                        question,
+                        excerpt,
                     } => PushContent::Status {
                         terminal,
                         name,
@@ -741,6 +756,13 @@ pub(crate) fn open(
                         top_level,
                         status: status.into(),
                         at,
+                        turn,
+                        question: question.map(|q| PushQuestion {
+                            id: q.id,
+                            text: q.text,
+                            options: q.options,
+                        }),
+                        excerpt,
                     },
                     envelope::PushMessage::Progress {
                         terminal,

@@ -70,10 +70,7 @@ internal fun AgentScreenHeader(
         }
         Text(terminal.cwd ?: stringResource(R.string.console_agent_unknown_folder), Modifier.weight(1f),
             color = colors.onSurfaceVariant, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        // TerminalInfo exposes a turn counter, not a timestamp. Do not turn it into a fabricated age.
-        val ageLabel = stringResource(R.string.console_agent_unknown_age)
-        Text(stringResource(R.string.console_agent_missing_value), Modifier.semantics { contentDescription = ageLabel },
-            color = colors.onSurfaceVariant, fontSize = 12.sp)
+        AgentElapsedTime(terminal.statusMs, R.string.console_agent_missing_value, R.string.console_agent_unknown_age)
     }
     WatchAgentToggle(terminal, link, onTerminalUpdate)
     HorizontalDivider()

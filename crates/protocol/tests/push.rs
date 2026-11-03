@@ -162,6 +162,73 @@ fn message_json_is_tagged_by_kind() {
 }
 
 #[test]
+fn status_details_round_trip_and_old_readers_ignore_them() {
+    use aries_protocol::agent_status::AgentStatus;
+    use aries_protocol::push::PushQuestion;
+    let message = PushMessage::Status {
+        terminal: "t7".into(),
+        name: None,
+        title: None,
+        top_level: true,
+        status: AgentStatus::Done,
+        at: 42,
+        turn: Some(5),
+        question: Some(PushQuestion {
+            id: "ask-1".into(),
+            text: "Ship?".into(),
+            options: vec!["Yes".into(), "No".into()],
+        }),
+        excerpt: Some("Tests passed.".into()),
+    };
+    let p = pair();
+    let envelope = seal(&message, &p.phone.public, &p.beacon).unwrap();
+    assert_eq!(
+        open(&envelope, &p.phone, &p.beacon.public).unwrap(),
+        message
+    );
+    let json = serde_json::to_value(&message).unwrap();
+    assert_eq!(
+        json["question"],
+        serde_json::json!({"id":"ask-1","text":"Ship?","options":["Yes","No"]})
+    );
+    // The old enum had these fields and serde's default unknown-field behavior.
+    #[derive(serde::Deserialize)]
+    #[serde(tag = "kind", rename_all = "snake_case")]
+    enum OldPush {
+        Status {
+            terminal: String,
+            status: AgentStatus,
+            at: u64,
+        },
+    }
+    let OldPush::Status {
+        terminal,
+        status,
+        at,
+    } = serde_json::from_value(json).unwrap();
+    assert_eq!(
+        (terminal.as_str(), status, at),
+        ("t7", AgentStatus::Done, 42)
+    );
+}
+
+#[test]
+fn old_status_pushes_have_no_optional_details() {
+    let json = serde_json::json!({"kind":"status","terminal":"t7","top_level":true,"status":{"status":"done"},"at":42});
+    let message: PushMessage = serde_json::from_value(json.clone()).unwrap();
+    assert!(matches!(
+        &message,
+        PushMessage::Status {
+            turn: None,
+            question: None,
+            excerpt: None,
+            ..
+        }
+    ));
+    assert_eq!(serde_json::to_value(message).unwrap(), json);
+}
+
+#[test]
 fn progress_round_trips_without_changing_the_v1_envelope_or_old_status_json() {
     let p = pair();
     let json = r#"{"kind":"progress","terminal":"t7","name":"Builder","elapsed_secs":125,"child_agents":3,"at":1700000000}"#;
