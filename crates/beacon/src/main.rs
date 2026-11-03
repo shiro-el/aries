@@ -13,6 +13,9 @@
 //!   as JSON lines (`aries_protocol::chat`).
 //! - `answer <terminal> <question> <picks>...`: answers the question the
 //!   Terminal's Agent shows (`aries_protocol::answer`); one reply line.
+//! - `pi-extension install|remove`: the managed Pi status extension
+//!   ([`aries_beacon::pi_extension`]); the phone runs `install` after
+//!   installing or updating the Beacon.
 //! - `--version`: `aries-beacon <version> (contract <n>)`.
 
 mod calls;
@@ -46,9 +49,12 @@ fn main() {
         Some("unpair") => exit_on_error(push::unpair_command()),
         Some("chat") => chat(std::env::args().skip(2).collect()),
         Some("answer") => answer(std::env::args().skip(2).collect()),
+        Some("pi-extension") => {
+            std::process::exit(aries_beacon::pi_extension::command(&rest_args()))
+        }
         _ => {
             eprintln!(
-                "usage: aries-beacon --version | status | serve | call ... | calls [--follow] | pair | push-test | unpair | chat TERMINAL [--follow] [--cursor C] | answer TERMINAL QUESTION PICKS..."
+                "usage: aries-beacon --version | status | serve | call ... | calls [--follow] | pair | push-test | unpair | chat TERMINAL [--follow] [--cursor C] | answer TERMINAL QUESTION PICKS... | pi-extension install|remove"
             );
             std::process::exit(2);
         }

@@ -112,6 +112,30 @@ class ChatScreenTest {
         compose.onNodeWithText(str(R.string.chat_agent_error)).assertExists()
     }
 
+    /** Pi's `/tree`: a new branch replaces the abandoned one's entries. */
+    @Test
+    fun entriesOfAnAbandonedBranchLeaveTheChat() {
+        val core = FakeCore()
+        openChat(core)
+        val first = listOf(
+            entry("u1", ChatEntryBody.User("first question")),
+            entry("a1", ChatEntryBody.Agent("first answer")),
+        )
+        core.pushChat(
+            ChatSnapshot(first + entry("u2", ChatEntryBody.User("branch A question")), ChatStatus.LIVE, "pi:s:1"),
+        )
+        compose.waitForIdle()
+        compose.onNodeWithText("branch A question").assertExists()
+
+        core.pushChat(
+            ChatSnapshot(first + entry("u3", ChatEntryBody.User("branch B question")), ChatStatus.LIVE, "pi:s:2"),
+        )
+        compose.waitForIdle()
+        compose.onNodeWithText("branch A question").assertDoesNotExist()
+        compose.onNodeWithText("branch B question").assertExists()
+        compose.onNodeWithText("first answer").assertExists()
+    }
+
     @Test
     fun aToolCallIsCollapsedUntilTapped() {
         val core = FakeCore()
