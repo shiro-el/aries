@@ -14,6 +14,7 @@ mod hc;
 mod host_edit;
 mod host_model;
 mod launch;
+mod layout_edit;
 mod push;
 mod removal;
 mod send;
@@ -48,6 +49,7 @@ pub use error::{AnswerProblem, CoreError, Incompatibility, VaultError};
 pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
 pub use host_model::{AgentStatus, BlockedReason, TerminalWatch};
 pub use launch::{AgentPreset, LaunchRequest, RECENT_CWDS_KEPT, SavedLaunch};
+pub use layout_edit::{ExecOutput, LayoutEdit};
 pub use push::{
     HttpClient, HttpRequest, HttpResponse, PushContent, PushDevice, PushDisable, PushNotice,
     PushPairing, PushPolicy, PushProgress, PushStep,
