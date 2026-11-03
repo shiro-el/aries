@@ -36,6 +36,9 @@ pub struct ChatEntry {
 pub enum ChatEntryBody {
     User {
         text: String,
+        /// Pictures the user attached.
+        #[uniffi(default)]
+        images: Vec<ChatImage>,
     },
     Agent {
         text: String,
@@ -52,12 +55,51 @@ pub enum ChatEntryBody {
         input: String,
         status: ChatToolStatus,
         output: Option<String>,
+        /// What a file edit changed; render it instead of raw input.
+        #[uniffi(default)]
+        diff: Option<ChatDiff>,
+        /// Pictures in the result.
+        #[uniffi(default)]
+        images: Vec<ChatImage>,
     },
     AgentError {
         detail: String,
     },
     /// Something a newer Beacon sends that this app cannot show yet.
     Unsupported,
+}
+
+/// An image in the Chat. The entry only describes it; the bytes come from
+/// [`ChatWatch::image`] when the app draws it, so snapshots stay small.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ChatImage {
+    /// Key for [`ChatWatch::image`].
+    pub id: String,
+    pub media_type: String,
+    /// Decoded size in bytes.
+    pub bytes: u64,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    /// `false` when the image is over the size cap
+    /// (`aries_protocol::chat::IMAGE_MAX_BYTES`): show a placeholder.
+    pub available: bool,
+}
+
+/// A file edit as unified-diff hunks.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ChatDiff {
+    pub path: String,
+    pub hunks: Vec<ChatDiffHunk>,
+    /// The Beacon cut a very large diff.
+    pub truncated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ChatDiffHunk {
+    pub old_start: u32,
+    pub new_start: u32,
+    /// Each starts with `-`, `+` or ` `.
+    pub lines: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
@@ -114,7 +156,11 @@ pub(crate) struct ChatModel {
     index: HashMap<String, usize>,
     pub status: ChatStatus,
     pub cursor: Option<String>,
+    /// Decoded image bytes by [`ChatImage::id`], shared with [`ChatWatch`].
+    pub images: Images,
 }
+
+pub(crate) type Images = Arc<std::sync::Mutex<HashMap<String, Arc<Vec<u8>>>>>;
 
 impl ChatModel {
     pub fn new(cursor: Option<String>) -> Self {
@@ -124,16 +170,16 @@ impl ChatModel {
             index: HashMap::new(),
             status: ChatStatus::Connecting,
             cursor,
+            images: Images::default(),
         }
     }
 
-    /// A model holding a cached Chat.
-    pub fn cached(chat: CachedChat) -> Self {
-        let mut model = Self::new(chat.cursor);
+    /// Shows a cached Chat (its images included) and resumes after its cursor.
+    pub fn seed(&mut self, chat: CachedChat) {
+        self.cursor = chat.cursor;
         for item in chat.items {
-            model.upsert(item);
+            self.upsert(item);
         }
-        model
     }
 
     pub fn to_cache(&self) -> CachedChat {
@@ -144,7 +190,7 @@ impl ChatModel {
     }
 
     fn upsert(&mut self, item: ChatItem) {
-        let entry = entry(item.clone());
+        let entry = self.entry(item.clone());
         match self.index.get(&entry.id) {
             Some(&i) => {
                 self.entries[i] = entry;
@@ -156,6 +202,51 @@ impl ChatModel {
                 self.items.push(item);
             }
         }
+    }
+
+    fn images(&self) -> std::sync::MutexGuard<'_, HashMap<String, Arc<Vec<u8>>>> {
+        self.images.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    fn forget_images(&self, entry: &str) {
+        let prefix = format!("{entry}#");
+        self.images().retain(|k, _| !k.starts_with(&prefix));
+    }
+
+    /// Describes an item's images and keeps their bytes for
+    /// [`ChatWatch::image`].
+    fn keep_images(
+        &self,
+        entry: &str,
+        images: Vec<aries_protocol::chat::ChatImage>,
+    ) -> Vec<ChatImage> {
+        use base64::Engine as _;
+        self.forget_images(entry);
+        let mut store = self.images();
+        images
+            .into_iter()
+            .enumerate()
+            .map(|(i, image)| {
+                let id = format!("{entry}#{i}");
+                let data = image.data.and_then(|d| {
+                    base64::engine::general_purpose::STANDARD
+                        .decode(d.trim())
+                        .ok()
+                });
+                let available = data.is_some();
+                if let Some(data) = data {
+                    store.insert(id.clone(), Arc::new(data));
+                }
+                ChatImage {
+                    id,
+                    media_type: image.media_type,
+                    bytes: image.bytes,
+                    width: image.width,
+                    height: image.height,
+                    available,
+                }
+            })
+            .collect()
     }
 
     pub fn snapshot(&self) -> ChatSnapshot {
@@ -182,9 +273,11 @@ impl ChatModel {
                 self.entries.clear();
                 self.items.clear();
                 self.index.clear();
+                self.images().clear();
             }
             ChatEvent::Item { item } => self.upsert(item),
             ChatEvent::Remove { id } => {
+                self.forget_images(&id);
                 if self.index.remove(&id).is_some() {
                     self.entries.retain(|e| e.id != id);
                     self.items.retain(|e| e.id != id);
@@ -219,39 +312,58 @@ fn status(state: ChatState) -> Option<ChatStatus> {
     })
 }
 
-fn entry(item: ChatItem) -> ChatEntry {
-    let body = match item.body {
-        ChatBody::User { text } => ChatEntryBody::User { text },
-        ChatBody::Agent { text } => ChatEntryBody::Agent { text },
-        ChatBody::Thinking { text } => ChatEntryBody::Thinking { text },
-        ChatBody::Tool {
-            name,
-            title,
-            input,
-            status,
-            output,
-        } => ChatEntryBody::Tool {
-            name,
-            title,
-            input: match input {
-                serde_json::Value::Null => String::new(),
-                serde_json::Value::String(s) => s,
-                v => serde_json::to_string_pretty(&v).unwrap_or_default(),
+impl ChatModel {
+    fn entry(&self, item: ChatItem) -> ChatEntry {
+        let body = match item.body {
+            ChatBody::User { text, images } => ChatEntryBody::User {
+                text,
+                images: self.keep_images(&item.id, images),
             },
-            status: match status {
-                ToolStatus::Running | ToolStatus::Unknown => ChatToolStatus::Running,
-                ToolStatus::Done => ChatToolStatus::Done,
-                ToolStatus::Error => ChatToolStatus::Failed,
+            ChatBody::Agent { text } => ChatEntryBody::Agent { text },
+            ChatBody::Thinking { text } => ChatEntryBody::Thinking { text },
+            ChatBody::Tool {
+                name,
+                title,
+                input,
+                status,
+                output,
+                diff,
+                images,
+            } => ChatEntryBody::Tool {
+                images: self.keep_images(&item.id, images),
+                diff: diff.map(|d| ChatDiff {
+                    path: d.path,
+                    truncated: d.truncated,
+                    hunks: (d.hunks.into_iter())
+                        .map(|h| ChatDiffHunk {
+                            old_start: h.old_start,
+                            new_start: h.new_start,
+                            lines: h.lines,
+                        })
+                        .collect(),
+                }),
+                name,
+                title,
+                input: match input {
+                    serde_json::Value::Null => String::new(),
+                    serde_json::Value::String(s) => s,
+                    v => serde_json::to_string_pretty(&v).unwrap_or_default(),
+                },
+                status: match status {
+                    ToolStatus::Running | ToolStatus::Unknown => ChatToolStatus::Running,
+                    ToolStatus::Done => ChatToolStatus::Done,
+                    ToolStatus::Error => ChatToolStatus::Failed,
+                },
+                output,
             },
-            output,
-        },
-        ChatBody::Error { message } => ChatEntryBody::AgentError { detail: message },
-        ChatBody::Unsupported => ChatEntryBody::Unsupported,
-    };
-    ChatEntry {
-        id: item.id,
-        timestamp: item.ts,
-        body,
+            ChatBody::Error { message } => ChatEntryBody::AgentError { detail: message },
+            ChatBody::Unsupported => ChatEntryBody::Unsupported,
+        };
+        ChatEntry {
+            id: item.id,
+            timestamp: item.ts,
+            body,
+        }
     }
 }
 
@@ -339,6 +451,7 @@ pub struct ChatWatch {
     rx: Arc<Mutex<watch::Receiver<Option<ChatSnapshot>>>>,
     task: JoinHandle<()>,
     wake: Arc<Wake>,
+    images: Images,
 }
 
 /// The app's reconnect signals (see [`ChatWatch::reconnect`]).
@@ -360,6 +473,7 @@ impl ChatWatch {
     ) -> Self {
         let model = ChatModel::new(cursor);
         let (tx, rx) = watch::channel(Some(model.snapshot()));
+        let images = model.images.clone();
         let wake = Arc::new(Wake::default());
         let signals = wake.clone();
         let task = crate::runtime().spawn(async move {
@@ -369,7 +483,7 @@ impl ChatWatch {
                 // An explicit cursor wins unless it is the cached one.
                 && (model.cursor.is_none() || model.cursor == cached.cursor)
             {
-                model = ChatModel::cached(cached);
+                model.seed(cached);
                 if tx.send(Some(model.snapshot())).is_err() {
                     return;
                 }
@@ -380,6 +494,7 @@ impl ChatWatch {
             rx: Arc::new(Mutex::new(rx)),
             task,
             wake,
+            images,
         }
     }
 }
@@ -529,6 +644,13 @@ impl ChatWatch {
             rx.borrow_and_update().clone().ok_or(CoreError::Closed)
         })
         .await
+    }
+
+    /// The bytes (PNG, JPEG, ...) of a [`ChatImage`] in the current Chat;
+    /// `None` when it is over the cap or no longer in the Chat.
+    pub fn image(&self, id: String) -> Option<Vec<u8>> {
+        let store = self.images.lock().unwrap_or_else(|e| e.into_inner());
+        store.get(&id).map(|b| b.as_ref().clone())
     }
 
     /// Stops following; the Beacon on the Host exits.

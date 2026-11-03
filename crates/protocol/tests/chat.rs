@@ -1,7 +1,8 @@
 //! The Chat line format and its version rule, from the reader's side.
 
 use aries_protocol::chat::{
-    CHAT_FORMAT, ChatBody, ChatEvent, ChatItem, ChatLine, ChatLineError, ChatState, ToolStatus,
+    CHAT_FORMAT, ChatBody, ChatDiff, ChatEvent, ChatImage, ChatItem, ChatLine, ChatLineError,
+    ChatState, DiffHunk, ToolStatus,
 };
 use serde_json::json;
 
@@ -23,6 +24,8 @@ fn a_tool_item_line_reads_back_with_its_cursor() {
                         input: json!({"file_path": "hello.txt"}),
                         status: ToolStatus::Done,
                         output: Some("File created".into()),
+                        diff: None,
+                        images: Vec::new(),
                     },
                 },
             },
@@ -119,4 +122,78 @@ fn non_chat_lines_are_malformed() {
             "{line}"
         );
     }
+}
+
+#[test]
+fn an_edit_carries_its_diff_and_a_read_its_image() {
+    let line = r#"{"v":1,"type":"item","item":{"id":"t","kind":"tool","name":"Edit","title":"a.txt","input":{},"status":"done","output":"ok","diff":{"path":"a.txt","hunks":[{"old_start":1,"old_lines":1,"new_start":1,"new_lines":1,"lines":["-hi","+hello"]}]},"images":[{"media_type":"image/png","data":"iVBO","bytes":3,"width":8,"height":8}]}}"#;
+    let ChatEvent::Item { item } = ChatLine::parse(line).unwrap().event else {
+        panic!()
+    };
+    let ChatBody::Tool { diff, images, .. } = item.body else {
+        panic!()
+    };
+    assert_eq!(
+        diff,
+        Some(ChatDiff {
+            path: "a.txt".into(),
+            hunks: vec![DiffHunk {
+                old_start: 1,
+                old_lines: 1,
+                new_start: 1,
+                new_lines: 1,
+                lines: vec!["-hi".into(), "+hello".into()],
+            }],
+            truncated: false,
+        })
+    );
+    assert_eq!(
+        images,
+        [ChatImage {
+            media_type: "image/png".into(),
+            data: Some("iVBO".into()),
+            bytes: 3,
+            width: Some(8),
+            height: Some(8),
+        }]
+    );
+}
+
+#[test]
+fn a_user_line_may_carry_images_and_old_lines_still_read() {
+    let with = r#"{"v":1,"type":"item","item":{"id":"u","kind":"user","text":"look","images":[{"media_type":"image/jpeg","bytes":9000000}]}}"#;
+    let ChatEvent::Item { item } = ChatLine::parse(with).unwrap().event else {
+        panic!()
+    };
+    let ChatBody::User { text, images } = item.body else {
+        panic!()
+    };
+    assert_eq!(text, "look");
+    // Over the size cap: described, not carried.
+    assert_eq!(images[0].data, None);
+    assert_eq!(images[0].bytes, 9_000_000);
+    // A ticket-37 Beacon's lines have neither field.
+    let old = r#"{"v":1,"type":"item","item":{"id":"u","kind":"user","text":"hi"}}"#;
+    let ChatEvent::Item { item } = ChatLine::parse(old).unwrap().event else {
+        panic!()
+    };
+    assert_eq!(
+        item.body,
+        ChatBody::User {
+            text: "hi".into(),
+            images: Vec::new()
+        }
+    );
+    // Writing without them adds nothing a ticket-37 reader would see.
+    assert_eq!(ChatLine::new(ChatEvent::Item { item }).to_json(), old);
+    // A shape this reader does not understand reads as absent, not as a
+    // lost message.
+    let odd = r#"{"v":1,"type":"item","item":{"id":"t","kind":"tool","name":"Edit","status":"done","diff":[1],"images":{"x":1}}}"#;
+    let ChatEvent::Item { item } = ChatLine::parse(odd).unwrap().event else {
+        panic!()
+    };
+    assert!(matches!(
+        item.body,
+        ChatBody::Tool { diff: None, ref images, .. } if images.is_empty()
+    ));
 }

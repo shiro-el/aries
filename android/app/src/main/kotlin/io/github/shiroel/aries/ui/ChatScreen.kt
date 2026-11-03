@@ -81,6 +81,9 @@ class ChatModel(
         }
     }
 
+    /** Bytes of a [ChatImage]; blocking but cheap (the core holds them in memory). */
+    fun image(id: String): ByteArray? = watch?.image(id)
+
     fun toggle(id: String) {
         expanded = if (id in expanded) expanded - id else expanded + id
     }
@@ -125,7 +128,7 @@ fun ChatScreen(chat: ChatModel, onBack: () -> Unit) {
         }
         LazyColumn(state = list, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(entries, key = { it.id }) { entry ->
-                ChatEntryView(entry, expanded = entry.id in chat.expanded) { chat.toggle(entry.id) }
+                ChatEntryView(entry, expanded = entry.id in chat.expanded, chat::image) { chat.toggle(entry.id) }
             }
         }
     }
@@ -156,18 +159,25 @@ private fun ChatNotice(text: String) {
 }
 
 @Composable
-private fun ChatEntryView(entry: ChatEntry, expanded: Boolean, onToggle: () -> Unit) {
+private fun ChatEntryView(
+    entry: ChatEntry,
+    expanded: Boolean,
+    image: (String) -> ByteArray?,
+    onToggle: () -> Unit,
+) {
     when (val b = entry.body) {
         is ChatEntryBody.User -> Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
             Column(
                 Modifier.background(MaterialTheme.colorScheme.primaryContainer).padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
                     stringResource(R.string.chat_you),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
-                Text(b.text, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                if (b.text.isNotEmpty()) Text(b.text, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                b.images.forEach { ChatImageView(it, image) }
             }
         }
         is ChatEntryBody.Agent -> Text(b.text)
@@ -182,7 +192,7 @@ private fun ChatEntryView(entry: ChatEntry, expanded: Boolean, onToggle: () -> U
                 Text(it, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        is ChatEntryBody.Tool -> ToolView(b, expanded, onToggle)
+        is ChatEntryBody.Tool -> ToolView(b, expanded, image, onToggle)
         is ChatEntryBody.AgentError -> Column(
             Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.errorContainer).padding(8.dp),
         ) {
@@ -202,7 +212,12 @@ private fun ChatEntryView(entry: ChatEntry, expanded: Boolean, onToggle: () -> U
 }
 
 @Composable
-private fun ToolView(tool: ChatEntryBody.Tool, expanded: Boolean, onToggle: () -> Unit) {
+private fun ToolView(
+    tool: ChatEntryBody.Tool,
+    expanded: Boolean,
+    image: (String) -> ByteArray?,
+    onToggle: () -> Unit,
+) {
     val label = stringResource(R.string.chat_tool_expand_label, tool.name)
     val failed = tool.status == ChatToolStatus.FAILED
     Column(
@@ -234,6 +249,8 @@ private fun ToolView(tool: ChatEntryBody.Tool, expanded: Boolean, onToggle: () -
                 ChatToolStatus.DONE -> {}
             }
         }
+        tool.diff?.let { DiffView(it, expanded) }
+        tool.images.forEach { ChatImageView(it, image) }
         if (expanded) {
             Text(stringResource(R.string.chat_tool_input), style = MaterialTheme.typography.labelMedium)
             Text(tool.input, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)

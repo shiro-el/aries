@@ -191,7 +191,7 @@ fn texts(s: &ChatSnapshot) -> Vec<String> {
     s.entries
         .iter()
         .map(|e| match &e.body {
-            ChatEntryBody::User { text } => format!("user: {text}"),
+            ChatEntryBody::User { text, .. } => format!("user: {text}"),
             ChatEntryBody::Agent { text } => format!("agent: {text}"),
             ChatEntryBody::Tool { name, status, .. } => format!("tool {name} {status:?}"),
             other => format!("{other:?}"),
@@ -440,5 +440,43 @@ async fn coming_back_retries_a_waiting_reconnect_at_once() {
     .await
     .expect("retry_now did not retry");
     assert_eq!(s.entries.len(), 2);
+    watch.stop();
+}
+
+#[tokio::test]
+async fn a_cached_chat_keeps_its_images() {
+    let env = Env::new();
+    let core = env.core();
+    let host = env.host(&core, "h");
+    env.beacon_printing(
+        "h",
+        concat!(
+            r#"{"v":1,"type":"reset","agent":"claude-code","session":"s"}"#, "\n",
+            r#"{"v":1,"type":"item","item":{"id":"u1","kind":"user","text":"see","images":[{"media_type":"image/png","data":"aGVsbG8=","bytes":5}]},"cursor":"cc:s:9"}"#, "\n",
+            r#"{"v":1,"type":"state","state":"live"}"#, "\n",
+        ),
+    );
+    let first = watch(&core, &host);
+    wait_for(&first, "image", |s| s.status == ChatStatus::Live).await;
+    first.stop();
+    cached(&core, &host, "image chat", |s| s.entries.len() == 1).await;
+    drop(core);
+    assert!(
+        !contains(&env.at_rest(), "aGVsbG8="),
+        "image stored in the clear"
+    );
+
+    let core = env.core();
+    env.beacon("h", "exit 1");
+    let watch = watch(&core, &host);
+    let s = wait_for(&watch, "cached image", |s| !s.entries.is_empty()).await;
+    let ChatEntryBody::User { images, .. } = &s.entries[0].body else {
+        panic!("{s:?}")
+    };
+    assert!(images[0].available);
+    assert_eq!(
+        watch.image(images[0].id.clone()).as_deref(),
+        Some(&b"hello"[..])
+    );
     watch.stop();
 }

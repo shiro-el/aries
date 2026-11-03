@@ -881,7 +881,9 @@ impl AriesCore {
                     detail: format!("cache task failed: {e}"),
                 })??;
             Ok(cached.map(|c| {
-                let mut s = chat::ChatModel::cached(c).snapshot();
+                let mut model = chat::ChatModel::new(None);
+                model.seed(c);
+                let mut s = model.snapshot();
                 s.status = ChatStatus::Reconnecting;
                 s
             }))
