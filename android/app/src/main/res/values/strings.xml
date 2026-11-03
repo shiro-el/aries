@@ -5,6 +5,26 @@
   Add every new string to values-ko/strings.xml too (TranslationsTest checks it).
 -->
 <resources>
+    <!-- Quick open and command palette -->
+    <string name="quick_open_title">Quick open</string>
+    <string name="quick_open_hint">Search names, or &gt; for commands</string>
+    <string name="quick_open_empty">No matches.</string>
+    <string name="quick_open_host">Host</string>
+    <string name="quick_open_space">Space</string>
+    <string name="quick_open_tab">Tab</string>
+    <string name="quick_open_agent">Agent</string>
+    <string name="quick_open_result_context">%1$s · %2$s</string>
+    <string name="quick_open_live">Live</string>
+    <string name="quick_open_unknown">No Last-known state yet</string>
+    <string name="quick_open_age">Last known · %1$d min ago</string>
+    <string name="quick_open_gone">%1$s is no longer available on this Host.</string>
+    <string name="quick_open_run_agent">Run Agent</string>
+    <string name="quick_open_choose_host">Open a Host first.</string>
+    <string name="quick_open_choose_space">Open a Space first.</string>
+    <string name="quick_open_choose_tab">Open a Tab first.</string>
+    <string name="quick_open_choose_terminal">Focus a Terminal first.</string>
+    <string name="quick_open_busy">An action is in progress.</string>
+
     <!-- Onboarding and app updates (93) -->
     <string name="app_update_settings_title">App updates and guide</string>
     <string name="app_update_installed">Installed: %1$s (%2$d)</string>
