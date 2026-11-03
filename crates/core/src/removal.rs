@@ -26,16 +26,30 @@ use crate::store::{SavedHost, Store};
 pub(crate) struct Removal<'a> {
     pub host: &'a SavedHost,
     pub store: &'a Store,
+    pub diagnostics: &'a crate::diagnostics::Log,
 }
 
 pub(crate) type Step = fn(&Removal) -> Result<(), CoreError>;
 
 /// Cleanup steps, in order. Tickets append theirs (see the module doc).
-pub(crate) const STEPS: &[Step] = &[queue_push_revocation, remove_local_state, remove_chat_cache];
+pub(crate) const STEPS: &[Step] = &[
+    queue_push_revocation,
+    remove_local_state,
+    remove_chat_cache,
+    remove_diagnostics,
+];
 
 /// Runs every step for `host`. The caller drops the Host record afterwards.
-pub(crate) fn run(host: &SavedHost, store: &Store) -> Result<(), CoreError> {
-    let removal = Removal { host, store };
+pub(crate) fn run(
+    host: &SavedHost,
+    store: &Store,
+    diagnostics: &crate::diagnostics::Log,
+) -> Result<(), CoreError> {
+    let removal = Removal {
+        host,
+        store,
+        diagnostics,
+    };
     for step in STEPS {
         step(&removal)?;
     }
@@ -57,4 +71,9 @@ fn queue_push_revocation(r: &Removal) -> Result<(), CoreError> {
 /// Deletes the Host's cached Chats (ticket 44). Works without the cache key.
 fn remove_chat_cache(r: &Removal) -> Result<(), CoreError> {
     crate::chat_cache::remove_host(r.store.root(), &r.host.id)
+}
+
+/// Ticket 122: erase only this Host’s diagnostic metadata, without network work.
+fn remove_diagnostics(r: &Removal) -> Result<(), CoreError> {
+    r.diagnostics.remove_host(&r.host.id)
 }

@@ -788,6 +788,56 @@
 
     <!-- Console appearance settings -->
     <string name="settings_title">Settings</string>
+    <!-- Local diagnostics -->
+    <string name="diagnostics_title">Diagnostics</string>
+    <string name="diagnostics_retention">Up to 500 local events. Errors use categories; credentials and message contents are excluded. Copy and export include the current filter.</string>
+    <string name="diagnostics_all">All</string>
+    <string name="diagnostics_all_hosts">All Hosts</string>
+    <string name="diagnostics_failures">Failures only</string>
+    <string name="diagnostics_refresh">Refresh</string>
+    <string name="diagnostics_copy">Copy</string>
+    <string name="diagnostics_export">Export</string>
+    <string name="diagnostics_copied">Copied filtered history.</string>
+    <string name="diagnostics_export_failed">Could not export history.</string>
+    <string name="diagnostics_read_failed">Could not read history. Try refreshing.</string>
+    <string name="diagnostics_empty">No matching events.</string>
+    <string name="diagnostics_unknown_host">Device / unknown Host</string>
+    <string name="diagnostics_success">Success</string>
+    <string name="diagnostics_ssh">SSH</string>
+    <string name="diagnostics_beacon">Beacon</string>
+    <string name="diagnostics_relay">Relay</string>
+    <string name="diagnostics_push">Push</string>
+    <string name="diagnostics_connect">Connect</string>
+    <string name="diagnostics_beacon_install">Install Beacon</string>
+    <string name="diagnostics_beacon_status">Beacon status</string>
+    <string name="diagnostics_beacon_check">Check / update Beacon</string>
+    <string name="diagnostics_beacon_remove">Remove Beacon</string>
+    <string name="diagnostics_push_enable">Enable push</string>
+    <string name="diagnostics_push_disable">Disable push</string>
+    <string name="diagnostics_push_test">Test push</string>
+    <string name="diagnostics_relay_request">Relay request</string>
+    <string name="diagnostics_push_receive">Receive push</string>
+    <string name="diagnostics_error_key">Key unavailable or locked</string>
+    <string name="diagnostics_error_untrusted">Host key needs confirmation</string>
+    <string name="diagnostics_error_changed">Host key changed</string>
+    <string name="diagnostics_error_auth">Authentication rejected</string>
+    <string name="diagnostics_error_unreachable">Connection failed</string>
+    <string name="diagnostics_error_incompatible">Incompatible herdr-core</string>
+    <string name="diagnostics_error_protocol">Protocol / RPC failure</string>
+    <string name="diagnostics_error_closed">Connection closed</string>
+    <string name="diagnostics_error_storage">Local storage failed</string>
+    <string name="diagnostics_error_host">Host unavailable</string>
+    <string name="diagnostics_error_beacon">Beacon unavailable</string>
+    <string name="diagnostics_error_download">Beacon download failed</string>
+    <string name="diagnostics_error_checksum">Beacon checksum mismatch</string>
+    <string name="diagnostics_error_operation">Beacon operation failed</string>
+    <string name="diagnostics_error_register">Relay registration failed</string>
+    <string name="diagnostics_error_revoke">Relay removal failed</string>
+    <string name="diagnostics_error_push">Push rejected</string>
+    <string name="diagnostics_error_http">Relay HTTP failure</string>
+    <string name="diagnostics_http">%1$s · HTTP %2$d</string>
+    <string name="diagnostics_entry">%1$s · %2$s\n%3$s · %4$s · %5$s</string>
+
     <string name="theme_title">Theme</string>
     <string name="theme_system">System</string>
     <string name="theme_light">Light</string>
