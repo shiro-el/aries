@@ -12,11 +12,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -36,9 +34,7 @@ internal fun TerminalComposer(viewer: TerminalViewer) {
     if (!viewer.composerOpen) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             TerminalInput(viewer, Modifier.weight(1f))
-            TextButton(onClick = viewer::openComposer, shape = RectangleShape) {
-                Text(stringResource(R.string.terminal_compose_button), style = style)
-            }
+            ActionIcon(R.drawable.ic_square_pen, R.string.terminal_compose_button, viewer::openComposer)
         }
         return
     }
@@ -70,20 +66,11 @@ internal fun TerminalComposer(viewer: TerminalViewer) {
             },
         )
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = viewer::closeComposer, shape = RectangleShape) {
-                Text(stringResource(R.string.terminal_direct_input_button), style = style)
-            }
+            ActionIcon(R.drawable.ic_keyboard, R.string.terminal_direct_input_button, viewer::closeComposer)
             Spacer(Modifier.weight(1f))
-            TextButton(
-                onClick = { viewer.startTyping(); viewer.press(TerminalKey.Enter) },
-                enabled = active,
-                shape = RectangleShape,
-            ) {
-                Text(stringResource(R.string.terminal_enter_button), style = style)
-            }
-            TextButton(onClick = viewer::pasteDraft, enabled = viewer.canPasteDraft, shape = RectangleShape) {
-                Text(stringResource(R.string.terminal_composer_send_button), style = style)
-            }
+            ActionIcon(R.drawable.ic_corner_down_left, R.string.terminal_enter_button,
+                onClick = { viewer.startTyping(); viewer.press(TerminalKey.Enter) }, enabled = active)
+            ActionIcon(R.drawable.ic_send, R.string.terminal_composer_send_button, viewer::pasteDraft, enabled = viewer.canPasteDraft)
         }
     }
 }

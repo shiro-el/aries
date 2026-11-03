@@ -6,7 +6,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -111,35 +110,35 @@ fun AgentsScreen(
     showHeader: Boolean = true,
 ) {
     val folds = rememberTreeFolds("agents")
-    LazyColumn(Modifier.fillMaxSize()) {
-        if (showHeader) item {
-            TreeBackButton(onBack)
-            Text(stringResource(R.string.agents_title), style = MaterialTheme.typography.headlineSmall)
-        }
-        if (board.hosts.isEmpty()) item { Text(stringResource(R.string.agents_no_hosts)) }
-        items(board.hosts.filter { it.id in board.unavailable }, key = { "down:" + it.id }) { host ->
-            Column {
-                Text(
-                    stringResource(R.string.agents_host_unavailable, host.name),
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.titleSmall,
-                )
-                board.unavailable[host.id]?.let { Text(stringResource(it.res, *it.args.toTypedArray()), style = MaterialTheme.typography.bodySmall) }
+    Column(Modifier.fillMaxSize()) {
+        if (showHeader) ConsoleTopBar(stringResource(R.string.agents_title), onMenu = {}, onBack = onBack,
+            showMark = false, inbox = {})
+        LazyColumn(Modifier.weight(1f)) {
+            if (board.hosts.isEmpty()) item { Text(stringResource(R.string.agents_no_hosts)) }
+            items(board.hosts.filter { it.id in board.unavailable }, key = { "down:" + it.id }) { host ->
+                Column {
+                    Text(
+                        stringResource(R.string.agents_host_unavailable, host.name),
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    board.unavailable[host.id]?.let { Text(stringResource(it.res, *it.args.toTypedArray()), style = MaterialTheme.typography.bodySmall) }
+                }
             }
+            items(board.hosts.filter { board.links[it.id]?.state == LinkState.Reconnecting }, key = { "again:" + it.id }) { host ->
+                Text(stringResource(R.string.agents_host_reconnecting, host.name), style = MaterialTheme.typography.bodySmall)
+            }
+            val down = { h: Host -> board.closed[h.id] == true || board.links[h.id]?.state is LinkState.Down }
+            items(board.hosts.filter(down), key = { "closed:" + it.id }) { host ->
+                Text(
+                    stringResource(R.string.agents_host_closed, host.name),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            val agents = board.agents
+            if (board.hosts.isNotEmpty() && agents.isEmpty()) item { Text(stringResource(R.string.agents_empty)) }
+            agentTreeItems(agents, folds, onOpen, onPin)
         }
-        items(board.hosts.filter { board.links[it.id]?.state == LinkState.Reconnecting }, key = { "again:" + it.id }) { host ->
-            Text(stringResource(R.string.agents_host_reconnecting, host.name), style = MaterialTheme.typography.bodySmall)
-        }
-        val down = { h: Host -> board.closed[h.id] == true || board.links[h.id]?.state is LinkState.Down }
-        items(board.hosts.filter(down), key = { "closed:" + it.id }) { host ->
-            Text(
-                stringResource(R.string.agents_host_closed, host.name),
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
-        val agents = board.agents
-        if (board.hosts.isNotEmpty() && agents.isEmpty()) item { Text(stringResource(R.string.agents_empty)) }
-        agentTreeItems(agents, folds, onOpen, onPin)
     }
 }

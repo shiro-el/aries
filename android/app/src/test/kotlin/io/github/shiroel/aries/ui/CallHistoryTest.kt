@@ -1,5 +1,11 @@
 package io.github.shiroel.aries.ui
 
+import androidx.compose.ui.test.hasText
+
+import androidx.compose.ui.test.hasAnyDescendant
+
+import androidx.compose.ui.test.assert
+
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -216,11 +222,11 @@ class CallHistoryTest {
         compose.onNodeWithTag("console-inbox-count", useUnmergedTree = true).assertTextEquals("1")
         openCalls()
         compose.onNodeWithTag("call-inbox-panel").assertExists()
-        compose.onNodeWithText(str(R.string.terminals_title, "home")).assertExists()
+        compose.onNodeWithTag("console-top-bar").assert(hasAnyDescendant(hasText("home")))
         compose.onNodeWithTag("call-c1").assertExists()
         compose.onNodeWithTag("console-inbox").performClick()
         compose.onNodeWithTag("call-inbox-panel").assertDoesNotExist()
-        compose.onNodeWithText(str(R.string.terminals_title, "home")).assertExists()
+        compose.onNodeWithTag("console-top-bar").assert(hasAnyDescendant(hasText("home")))
     }
 
     @Test
@@ -276,7 +282,7 @@ class CallHistoryTest {
         openCalls()
         compose.runOnIdle { back.onBackPressed() }
         compose.onNodeWithTag("call-inbox-panel").assertDoesNotExist()
-        compose.onNodeWithText(str(R.string.terminals_title, "home")).assertExists()
+        compose.onNodeWithTag("console-top-bar").assert(hasAnyDescendant(hasText("home")))
         openCalls()
         compose.openConsoleDrawer()
         compose.onNodeWithTag("call-inbox-panel").assertDoesNotExist()
@@ -328,7 +334,7 @@ class CallHistoryTest {
         compose.onNodeWithTag("call-inbox-panel").assertDoesNotExist()
         compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.terminals_title, "home")).assertExists()
+        compose.onNodeWithTag("console-top-bar").assert(hasAnyDescendant(hasText("home")))
         assertTrue(core.chatStopped)
         openCalls()
         compose.onNodeWithTag("call-c1").assertExists()
@@ -369,7 +375,7 @@ class CallHistoryTest {
         compose.waitForIdle()
         assertTrue(view.detached)
         compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
-        compose.onNodeWithText(str(R.string.terminals_title, "home")).assertExists()
+        compose.onNodeWithTag("console-top-bar").assert(hasAnyDescendant(hasText("home")))
     }
 
     @Test

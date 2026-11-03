@@ -43,12 +43,8 @@ internal fun PdfPreview(file: File) {
     Column(Modifier.fillMaxSize()) {
         if (pages > 0) Text(stringResource(R.string.files_pdf_page, index + 1, pages))
         Row {
-            TextButton(enabled = !loading && index > 0, onClick = { index-- }) {
-                Text(stringResource(R.string.files_previous_button))
-            }
-            TextButton(enabled = !loading && index + 1 < pages, onClick = { index++ }) {
-                Text(stringResource(R.string.files_next_button))
-            }
+            ActionIcon(R.drawable.ic_chevron_left, R.string.files_previous_button, { index-- }, enabled = !loading && index > 0)
+            ActionIcon(R.drawable.ic_chevron_right, R.string.files_next_button, { index++ }, enabled = !loading && index + 1 < pages)
         }
         when {
             loading -> Text(stringResource(R.string.files_loading))

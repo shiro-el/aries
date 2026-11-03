@@ -1,5 +1,7 @@
 package io.github.shiroel.aries.ui
 
+import androidx.compose.ui.test.onNodeWithContentDescription
+
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -54,6 +56,7 @@ class LayoutEditTest {
             structure = HostStructure(emptyList(), listOf(terminal), null)
         }
         open(core)
+        compose.onNodeWithContentDescription(str(R.string.hosts_actions_label)).performClick()
         compose.onNodeWithText(str(R.string.layout_new_space_button)).performClick()
         assertEquals(emptyList<LayoutEdit>(), core.connection!!.edits)
         compose.onNodeWithText(str(R.string.layout_app_unavailable)).assertExists()
@@ -89,6 +92,7 @@ class LayoutEditTest {
             structure = HostStructure(listOf(SpaceInfo("s1", "repo", "/repo", listOf(TabInfo("tab1", "build", emptyList())))), emptyList(), null)
         }
         open(core)
+        compose.onNodeWithContentDescription(str(R.string.hosts_actions_label)).performClick()
         compose.onNodeWithText(str(R.string.layout_new_space_button)).performClick()
         compose.onNodeWithTag("layout-name").performTextReplacement("new space")
         compose.onNodeWithTag("layout-folder").performTextReplacement("/new/repo")
@@ -96,22 +100,24 @@ class LayoutEditTest {
         compose.waitForIdle()
         assertEquals(listOf(LayoutEdit.NewSpace("new space", "/new/repo")), core.connection!!.edits)
 
+        compose.onNodeWithContentDescription(str(R.string.hosts_actions_label)).performClick()
         compose.onNodeWithTag("host-layout-context").performClick()
         compose.onNodeWithTag("host-context-space:s1").performClick()
+        compose.onNodeWithContentDescription(str(R.string.hosts_actions_label)).performClick()
         compose.onNodeWithText(str(R.string.layout_new_tab_button)).performClick()
         compose.onNodeWithTag("layout-name").performTextReplacement("tests")
         compose.onNodeWithText(str(R.string.layout_save_button)).performClick()
         compose.waitForIdle()
         assertEquals(LayoutEdit.NewTab("s1", "tests", "/repo", null), core.connection!!.edits.last())
 
-        compose.onNodeWithText(str(R.string.layout_actions_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.hosts_actions_label)).performClick()
         compose.onNodeWithText(str(R.string.layout_rename_space_button)).performClick()
         compose.onNodeWithTag("layout-name").performTextReplacement("renamed")
         compose.onNodeWithText(str(R.string.layout_save_button)).performClick()
         compose.waitForIdle()
         assertEquals(LayoutEdit.RenameSpace("s1", "renamed"), core.connection!!.edits.last())
 
-        compose.onNodeWithText(str(R.string.layout_actions_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.hosts_actions_label)).performClick()
         compose.onNodeWithText(str(R.string.layout_rename_tab_button)).performClick()
         compose.onNodeWithTag("layout-name").performTextReplacement("")
         compose.onNodeWithText(str(R.string.layout_save_button)).performClick()
@@ -131,9 +137,10 @@ class LayoutEditTest {
             ))), emptyList(), null)
         }
         open(core)
+        compose.onNodeWithContentDescription(str(R.string.hosts_actions_label)).performClick()
         compose.onNodeWithTag("host-layout-context").performClick()
         compose.onNodeWithTag("host-context-space:s1").performClick()
-        compose.onNodeWithText(str(R.string.layout_actions_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.hosts_actions_label)).performClick()
         compose.onNodeWithText(str(R.string.layout_close_space_button)).performClick()
         compose.onNodeWithText(str(R.string.layout_confirm_title, "repo")).assertExists()
         compose.onNodeWithText(str(R.string.layout_impact, 3, 1)).assertExists()
@@ -147,7 +154,7 @@ class LayoutEditTest {
         compose.onNodeWithText(str(R.string.cancel_button)).performClick()
         assertEquals(emptyList<LayoutEdit>(), core.connection!!.edits)
 
-        compose.onNodeWithText(str(R.string.layout_actions_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.hosts_actions_label)).performClick()
         compose.onNodeWithText(str(R.string.layout_close_space_button)).performClick()
         compose.onNodeWithText(str(R.string.layout_hold_button)).performTouchInput { longClick(durationMillis = 2_100) }
         compose.waitForIdle()
@@ -159,9 +166,10 @@ class LayoutEditTest {
             structure = HostStructure(listOf(SpaceInfo("s1", "repo", null, listOf(TabInfo("only", "build", emptyList())))), emptyList(), null)
         }
         open(core)
+        compose.onNodeWithContentDescription(str(R.string.hosts_actions_label)).performClick()
         compose.onNodeWithTag("host-layout-context").performClick()
         compose.onNodeWithTag("host-context-space:s1").performClick()
-        compose.onNodeWithText(str(R.string.layout_actions_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.hosts_actions_label)).performClick()
         compose.onNodeWithText(str(R.string.layout_close_tab_button)).performClick()
         compose.onNodeWithText(str(R.string.layout_confirm_title, "build")).assertExists()
         compose.onNodeWithText(str(R.string.layout_impact, 0, 0)).assertExists()
@@ -177,9 +185,10 @@ class LayoutEditTest {
         }
         open(core)
         core.connection!!.editFailure = CoreException.Rpc("herdr_app_failed", "closed window")
+        compose.onNodeWithContentDescription(str(R.string.hosts_actions_label)).performClick()
         compose.onNodeWithTag("host-layout-context").performClick()
         compose.onNodeWithTag("host-context-space:s1").performClick()
-        compose.onNodeWithText(str(R.string.layout_actions_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.hosts_actions_label)).performClick()
         compose.onNodeWithText(str(R.string.layout_close_tab_button)).performClick()
         compose.onNodeWithText(str(R.string.layout_confirm_button)).performClick()
         compose.waitForIdle()

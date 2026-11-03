@@ -1,5 +1,7 @@
 package io.github.shiroel.aries.ui
 
+import androidx.compose.ui.test.onNodeWithContentDescription
+
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -44,6 +46,7 @@ class WorktreeScreenTest {
         }
         compose.onNodeWithText("home").performClick()
         if (!unplaced) {
+            compose.onNodeWithContentDescription(str(R.string.hosts_actions_label)).performClick()
             compose.onNodeWithTag("host-layout-context").performClick()
             compose.onNodeWithTag("host-context-space:s1").performClick()
         }
@@ -58,7 +61,7 @@ class WorktreeScreenTest {
             WorktreeInfo("/bare", null, null, false, true, null, null),
             WorktreeInfo("/gone", "abc123", null, true, false, null, "missing"),
         )
-        compose.onNodeWithText(str(R.string.worktrees_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.worktrees_button)).performClick()
         compose.onNodeWithText(str(R.string.worktrees_open_button)).assertIsNotEnabled()
         compose.onNodeWithTag("worktree:/bare").assertIsNotEnabled()
         compose.onNodeWithTag("worktree:/gone").assertIsNotEnabled()
@@ -75,7 +78,7 @@ class WorktreeScreenTest {
         val conn = open()
         conn.worktrees = listOf(WorktreeInfo("/linked", "abc123", null, true, false, "", null))
         conn.worktreeFailure = CoreException.Rpc("herdr_app_failed", "closed window")
-        compose.onNodeWithText(str(R.string.worktrees_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.worktrees_button)).performClick()
         compose.onNodeWithTag("worktree:/linked").performClick()
         compose.onNodeWithText(str(R.string.worktrees_open_button)).performClick()
         compose.waitForIdle()
@@ -90,7 +93,7 @@ class WorktreeScreenTest {
         val conn = open(unplaced = true)
         compose.onNodeWithText("build").performTouchInput { longClick() }
         conn.worktrees = listOf(WorktreeInfo("/linked", "abc123", null, true, false, null, null))
-        compose.onNodeWithText(str(R.string.worktrees_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.worktrees_button)).performClick()
         compose.onNodeWithTag("worktree:/linked").performClick()
         compose.onNodeWithText(str(R.string.worktrees_open_button)).performClick()
         compose.waitForIdle()
