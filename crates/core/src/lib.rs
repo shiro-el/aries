@@ -20,6 +20,7 @@ mod last_known_state;
 mod launch;
 mod layout_edit;
 mod push;
+mod push_replay;
 mod removal;
 mod send;
 mod settings;
@@ -75,7 +76,7 @@ use hc::HcClient;
 use store::{SavedHost, SavedKey, Store};
 use transport::{LocalProcess, PasswordLogin, Ssh, SshHop, Transport};
 
-/// Id of the key [`AriesCore::ensure_key`] creates, in [`AriesCore::keys`].
+/// Id of the default key, created by `ensure_key` or the first `import_key`.
 pub const DEFAULT_KEY_ID: &str = "default";
 
 uniffi::setup_scaffolding!();
@@ -115,7 +116,7 @@ pub struct PublicKeyInfo {
 /// One of the app's SSH keys. Every key is sealed by the [`KeyVault`].
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct KeyInfo {
-    /// [`DEFAULT_KEY_ID`] for the key `ensure_key` made.
+    /// [`DEFAULT_KEY_ID`] for the default key (generated or imported).
     pub id: String,
     pub label: String,
     pub openssh: String,
@@ -265,6 +266,7 @@ pub struct AriesCore {
     sessions: host_edit::HostSessions,
     beacon_release: Mutex<BeaconRelease>,
     chat_cache: chat_cache::ChatCache,
+    push_replay: push_replay::Ledger,
 }
 
 #[uniffi::export]
@@ -290,6 +292,7 @@ impl AriesCore {
             last_known,
             vault,
             chat_cache,
+            push_replay: Default::default(),
             hosts,
             sessions: Default::default(),
             beacon_release: Mutex::new(pinned_release()),
@@ -489,6 +492,64 @@ impl AriesCore {
             public,
         };
         self.store.add_key(&saved, protection, &sealed)?;
+        key_info(&saved)
+    }
+
+    /// Imports an existing OpenSSH ed25519, RSA or ECDSA private key. The
+    /// passphrase is used only to decode it: the unencrypted key is sealed
+    /// by the vault under the same policy as generated keys. Neither input
+    /// nor passphrase is written to app storage.
+    /// Without a default key, this becomes the default (and `label` is
+    /// ignored); otherwise it is a named additional key.
+    pub fn import_key(
+        &self,
+        label: String,
+        private_key: String,
+        passphrase: String,
+    ) -> Result<KeyInfo, CoreError> {
+        if private_key.len() > 64 * 1024 {
+            return Err(CoreError::InvalidPrivateKey);
+        }
+        let key = russh::keys::decode_secret_key(private_key.trim(), Some(&passphrase))
+            .map_err(|_| CoreError::InvalidPrivateKey)?;
+        if !matches!(
+            key.algorithm(),
+            Algorithm::Ed25519 | Algorithm::Rsa { .. } | Algorithm::Ecdsa { .. }
+        ) {
+            return Err(CoreError::InvalidPrivateKey);
+        }
+        let private = key
+            .to_openssh(LineEnding::LF)
+            .map_err(|_| CoreError::InvalidPrivateKey)?;
+        let public = key
+            .public_key()
+            .to_openssh()
+            .map_err(|_| CoreError::InvalidPrivateKey)?;
+        let current = self.key_protection()?;
+        let protection = current.unwrap_or(KeyProtection::Plain);
+        let sealed = self.vault.seal(private.as_bytes().to_vec(), protection)?;
+        let saved = SavedKey {
+            id: if current.is_none() {
+                DEFAULT_KEY_ID.into()
+            } else {
+                new_id()
+            },
+            label: if current.is_none() {
+                String::new()
+            } else {
+                label
+            },
+            public,
+        };
+        if current.is_none() {
+            self.store.write_identity(&store::Identity {
+                protection,
+                sealed,
+                public: saved.public.clone(),
+            })?;
+        } else {
+            self.store.add_key(&saved, protection, &sealed)?;
+        }
         key_info(&saved)
     }
 
@@ -930,7 +991,9 @@ impl AriesCore {
 
     /// Opens a push envelope as it arrived (FCM data `e`, base64-decoded).
     /// Works while the phone is locked. Rejects tampered envelopes, unknown
-    /// versions and envelopes from no paired Host.
+    /// versions, envelopes from no paired Host, envelopes already received,
+    /// and timestamps older than 24 hours or over 5 minutes in the future.
+    /// Remembers at most 4,096 envelope IDs per Host, oldest received evicted first.
     pub fn open_push(&self, envelope: Vec<u8>) -> Result<PushNotice, CoreError> {
         let paired = self.hosts().into_iter().flat_map(|h| {
             push::pairings_of(&self.store, self.vault.as_ref(), &h.id)
@@ -938,7 +1001,9 @@ impl AriesCore {
                 .into_iter()
                 .map(move |p| (h.id.clone(), h.name.clone(), p))
         });
-        push::open(&envelope, paired)
+        let notice = push::open(&envelope, paired)?;
+        self.push_replay.record(&self.store, &notice, &envelope)?;
+        Ok(notice)
     }
 
     /// Call when connecting: reads the Beacon and, if it is older than the
@@ -1054,10 +1119,49 @@ impl AriesCore {
     ) -> Result<(), CoreError> {
         let host = self.chat_host(&host_id)?;
         let answer = aries_protocol::answer::Answer {
+            free_text: vec![],
             question: question_id,
             picks: (picks.into_iter())
                 .map(|p| p.into_iter().map(|n| n as usize).collect())
                 .collect(),
+        };
+        on_runtime(async move { chat::answer(&host, &terminal, &answer).await }).await
+    }
+
+    /// Answers a live question with either picks or free text per part.
+    /// A text part must have no picks. The Beacon revalidates the live menu;
+    /// a stale question is refused, never converted to a normal message.
+    pub async fn answer_question_with_text(
+        &self,
+        host_id: String,
+        terminal: String,
+        question_id: String,
+        picks: Vec<Vec<u32>>,
+        free_text: Vec<Option<String>>,
+    ) -> Result<(), CoreError> {
+        let host = self.chat_host(&host_id)?;
+        if picks.len() != free_text.len()
+            || picks.iter().zip(&free_text).any(|(p, text)| {
+                text.as_ref().is_some_and(|text| {
+                    !p.is_empty()
+                        || text.trim().is_empty()
+                        || text.len() > 4096
+                        || text.chars().any(char::is_control)
+                })
+            })
+        {
+            return Err(CoreError::AnswerRefused {
+                reason: AnswerProblem::Invalid,
+                detail: "invalid answer parts".into(),
+            });
+        }
+        let answer = aries_protocol::answer::Answer {
+            question: question_id,
+            picks: picks
+                .into_iter()
+                .map(|p| p.into_iter().map(|n| n as usize).collect())
+                .collect(),
+            free_text,
         };
         on_runtime(async move { chat::answer(&host, &terminal, &answer).await }).await
     }
@@ -1078,6 +1182,7 @@ impl AriesCore {
         }
         let host = self.chat_host(&host_id)?;
         let answer = aries_protocol::answer::Answer {
+            free_text: vec![],
             question: question_id,
             picks: picks
                 .into_iter()
@@ -1188,9 +1293,10 @@ impl AriesCore {
         )
     }
 
-    /// Moves the Chat cache's clock forward (tests of the retention period).
+    /// Moves retention clocks forward (Rust tests of Chat and push expiry).
     pub fn shift_clock(&self, by: std::time::Duration) {
         self.chat_cache.shift_clock(by);
+        self.push_replay.shift_clock(by);
     }
 
     fn chat_host(&self, host_id: &str) -> Result<chat::ChatHost, CoreError> {

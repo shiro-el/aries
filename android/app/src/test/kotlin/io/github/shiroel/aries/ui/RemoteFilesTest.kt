@@ -5,6 +5,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -132,7 +133,7 @@ class RemoteFilesTest {
             RemoteFilePage("val answer = 42\n", offset, offset, 800u)
         }
         core.pushChat(ChatSnapshot(listOf(ChatEntry("a1", null, ChatEntryBody.Agent("See src/Main.kt:415."))), ChatStatus.LIVE, null))
-        compose.waitForIdle()
+        compose.waitUntil(5000) { compose.onAllNodesWithText("See src/Main.kt:415.").fetchSemanticsNodes().isNotEmpty() }
         val text = compose.onNodeWithText("See src/Main.kt:415.")
         var layout: TextLayoutResult? = null
         text.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { action ->
@@ -147,6 +148,7 @@ class RemoteFilesTest {
         compose.onNodeWithText(str(R.string.files_close_button)).performClick()
         core.push(core.terminals.map { it.copy(foreground = ForegroundInfo(42u, "codex", listOf("codex"), "/current")) })
         core.pushChat(ChatSnapshot(listOf(ChatEntry("a2", null, ChatEntryBody.Agent("README.md"))), ChatStatus.LIVE, null))
+        compose.waitUntil(5000) { compose.onAllNodesWithText("README.md").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("README.md").performFirstLinkClick()
         compose.waitForIdle()
         compose.waitUntil(5000) { reads.size >= 2 }
@@ -154,12 +156,14 @@ class RemoteFilesTest {
         compose.onNodeWithText(str(R.string.files_close_button)).performClick()
         core.push(core.terminals.map { it.copy(cwd = null, foreground = null) })
         core.pushChat(ChatSnapshot(listOf(ChatEntry("a3", null, ChatEntryBody.Agent("/etc/hosts"))), ChatStatus.LIVE, null))
+        compose.waitUntil(5000) { compose.onAllNodesWithText("/etc/hosts").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("/etc/hosts").performFirstLinkClick()
         compose.waitForIdle()
         compose.waitUntil(5000) { reads.size >= 3 }
         assertEquals(Triple("box/t7", "/etc/hosts", 1uL), reads.last())
         compose.onNodeWithText(str(R.string.files_close_button)).performClick()
         core.pushChat(ChatSnapshot(listOf(ChatEntry("a4", null, ChatEntryBody.Agent("missing.kt"))), ChatStatus.LIVE, null))
+        compose.waitUntil(5000) { compose.onAllNodesWithText("missing.kt").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("missing.kt").performFirstLinkClick()
         compose.onNodeWithText(str(R.string.files_no_folder)).assertExists()
         assertEquals(3, reads.size)

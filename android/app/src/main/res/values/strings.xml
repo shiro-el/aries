@@ -226,6 +226,11 @@
     <string name="key_esc">Esc</string>
     <string name="key_tab">Tab</string>
     <string name="key_ctrl">Ctrl</string>
+    <string name="key_alt">Alt</string>
+    <string name="key_home">Home</string>
+    <string name="key_end">End</string>
+    <string name="key_page_up">PgUp</string>
+    <string name="key_page_down">PgDn</string>
     <string name="key_up">↑</string>
     <string name="key_down">↓</string>
     <string name="key_left">←</string>
@@ -287,6 +292,10 @@
     <string name="chat_status_no_core">The Beacon cannot reach herdr-core on this Host. Retrying…</string>
     <string name="chat_status_incompatible">The Beacon on this Host is newer than this app. Update Aries to read the Chat.</string>
     <string name="chat_you">You</string>
+    <!-- Chat Markdown code blocks (94) -->
+    <string name="chat_code_label">Code</string>
+    <string name="chat_code_copy_button">Copy code</string>
+    <string name="chat_code_copied">Copied</string>
     <!-- Chat text selection and clipboard actions. -->
     <string name="chat_text_actions">Text actions</string>
     <string name="chat_copy_all">Copy all</string>
@@ -316,6 +325,10 @@
     <string name="chat_question_label">Question</string>
     <string name="chat_question_option_label">Answer %1$s</string>
     <string name="chat_question_multi_hint">Choose one or more.</string>
+    <string name="chat_question_text_label">Write an answer to %1$s</string>
+    <string name="chat_question_text_hint">Write your own answer</string>
+    <string name="chat_question_queued">Queued · answer the question above first.</string>
+    <string name="chat_question_history">Past question · replies are sent as messages.</string>
     <string name="chat_question_send">Send answer</string>
     <string name="chat_question_sending">Sending…</string>
     <string name="chat_question_sent">Answer sent.</string>
@@ -467,6 +480,18 @@
     <string name="beacon_macos_login_limit">On macOS the Beacon runs only while you are logged in to the Mac.</string>
 
     <string name="key_default_label">Default key</string>
+    <!-- SSH key import -->
+    <string name="key_import_button">Import existing key</string>
+    <string name="key_import_title">Import SSH private key</string>
+    <string name="key_import_hint">Choose a file or paste an OpenSSH ed25519, RSA or ECDSA private key (up to 64 KiB). Its passphrase is used once and is not saved. The imported key uses the same biometric setting as your other keys. Select additional keys in the Host’s SSH route settings.</string>
+    <string name="key_import_file_button">Choose key file</string>
+    <string name="key_import_private_label">Private key</string>
+    <string name="key_import_passphrase_label">Passphrase (if encrypted)</string>
+    <string name="key_import_busy">Importing…</string>
+    <string name="key_import_invalid">Could not import the key. Check the private key format and passphrase, then try again.</string>
+    <string name="key_import_file_error">Could not read the key file. Choose a readable text file no larger than 64 KiB.</string>
+    <string name="key_import_too_large">The private key must be no larger than 64 KiB.</string>
+
     <string name="keys_title">Other SSH keys</string>
     <string name="key_new_label">Label for a new key</string>
     <string name="key_new_button">Create another key</string>
