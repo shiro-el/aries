@@ -11,6 +11,7 @@ mod hc;
 mod host_model;
 mod launch;
 mod removal;
+mod settings;
 mod store;
 mod structure;
 mod terminal;
@@ -32,10 +33,11 @@ pub use error::{CoreError, Incompatibility, VaultError};
 pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
 pub use host_model::{AgentStatus, BlockedReason, TerminalWatch};
 pub use launch::{LaunchRequest, RECENT_CWDS_KEPT};
+pub use settings::AttachMode;
 pub use structure::{HostStructure, PaneInfo, SpaceInfo, StructureProblem, TabInfo};
 pub use terminal::{
-    AttachOptions, CellRun, CursorPos, FRAME_INTERVAL, ScreenFrame, ScreenLine, TerminalExit,
-    TerminalUpdate, TerminalView, ViewStats,
+    AttachOptions, CellRun, CursorPos, FRAME_INTERVAL, KeyMods, ScreenFrame, ScreenLine,
+    TerminalExit, TerminalKey, TerminalUpdate, TerminalView, ViewStats,
 };
 
 use hc::HcClient;

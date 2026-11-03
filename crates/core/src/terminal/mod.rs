@@ -9,7 +9,10 @@
 //! pressure: a UI that draws slowly gets fewer, larger frames, while the
 //! stream is still read and credited at network speed.
 
+mod keys;
 mod vt;
+
+pub use keys::{KeyMods, TerminalKey};
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -148,6 +151,8 @@ struct Inner {
     frames: AtomicU64,
     hold_credit: watch::Sender<bool>,
     detached: AtomicBool,
+    /// Attached with `observe: true`: no typing, no resizing.
+    observe: bool,
 }
 
 impl TerminalView {
@@ -211,6 +216,7 @@ impl TerminalView {
             frames: AtomicU64::new(0),
             hold_credit,
             detached: AtomicBool::new(false),
+            observe: options.observe,
         };
         Ok(Self {
             inner: Arc::new(inner),
@@ -268,6 +274,33 @@ impl Inner {
         }
     }
 
+    async fn input(&self, bytes: &[u8]) -> Result<(), CoreError> {
+        if self.observe {
+            return Err(protocol("an observe-mode view cannot type"));
+        }
+        if bytes.is_empty() {
+            return Ok(());
+        }
+        self.client.send(self.channel, KIND_DATA, bytes).await
+    }
+
+    async fn resize(&self, cols: u16, rows: u16) -> Result<(), CoreError> {
+        if self.observe {
+            return Err(protocol("an observe-mode view cannot resize"));
+        }
+        let (cols, rows) = (cols.max(1), rows.max(1));
+        let mut payload = cols.to_le_bytes().to_vec();
+        payload.extend_from_slice(&rows.to_le_bytes());
+        self.client
+            .send(self.channel, KIND_RESIZE, &payload)
+            .await?;
+        // herdr-core sends no RESIZE back to the viewer that set the size.
+        self.state.lock().expect("state lock").vt.resize(cols, rows);
+        self.state.lock().expect("state lock").dirty = true;
+        self.wake.notify_one();
+        Ok(())
+    }
+
     async fn detach(&self) {
         if self.detached.swap(true, Ordering::SeqCst) {
             return;
@@ -293,6 +326,38 @@ impl TerminalView {
     pub async fn next(&self) -> Result<TerminalUpdate, CoreError> {
         let inner = self.inner.clone();
         crate::on_runtime(async move { inner.next().await }).await
+    }
+
+    /// Whether this view watches only (`observe: true` at attach). Typing
+    /// needs a new attach with `observe: false`.
+    pub fn observing(&self) -> bool {
+        self.inner.observe
+    }
+
+    /// Types `text` (sent as UTF-8, unchanged: a `\n` is a line feed, not
+    /// Enter). Fails on an observing view.
+    pub async fn send_text(&self, text: String) -> Result<(), CoreError> {
+        let inner = self.inner.clone();
+        crate::on_runtime(async move { inner.input(text.as_bytes()).await }).await
+    }
+
+    /// Presses `key` with `mods`, encoded as xterm does and following the
+    /// program's cursor-key mode. Ctrl-C (`Char { text: "c" }` + ctrl) is
+    /// the interrupt. Fails on an observing view.
+    pub async fn send_key(&self, key: TerminalKey, mods: KeyMods) -> Result<(), CoreError> {
+        let inner = self.inner.clone();
+        crate::on_runtime(async move {
+            let app_cursor = inner.state.lock().expect("state lock").vt.app_cursor();
+            inner.input(&keys::encode(&key, mods, app_cursor)).await
+        })
+        .await
+    }
+
+    /// Sets the Terminal's grid (input mode: the phone decides the size).
+    /// The next frame is a full one at the new size. Fails on an observing view.
+    pub async fn resize(&self, cols: u16, rows: u16) -> Result<(), CoreError> {
+        let inner = self.inner.clone();
+        crate::on_runtime(async move { inner.resize(cols, rows).await }).await
     }
 
     /// Detaches from the Terminal (the program keeps running). Later `next`

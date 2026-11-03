@@ -154,6 +154,16 @@ impl Store {
         self.write_atomic("keys.json", &bytes)
     }
 
+    /// A file directly under the data dir.
+    pub fn path(&self, name: &str) -> PathBuf {
+        self.dir.join(name)
+    }
+
+    /// Replaces `name` under the data dir in one step.
+    pub fn write_file(&self, name: &str, bytes: &[u8]) -> Result<(), CoreError> {
+        self.write_atomic(name, bytes)
+    }
+
     fn write_atomic(&self, name: &str, bytes: &[u8]) -> Result<(), CoreError> {
         let tmp = self.dir.join(format!(".{name}.tmp"));
         std::fs::write(&tmp, bytes).map_err(storage)?;

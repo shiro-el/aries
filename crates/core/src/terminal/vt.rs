@@ -99,6 +99,11 @@ impl Vt {
         self.full = true;
     }
 
+    /// The program asked for application cursor keys (`CSI ?1h`).
+    pub fn app_cursor(&self) -> bool {
+        self.term.mode().contains(TermMode::APP_CURSOR)
+    }
+
     pub fn cols(&self) -> u16 {
         self.term.columns() as u16
     }

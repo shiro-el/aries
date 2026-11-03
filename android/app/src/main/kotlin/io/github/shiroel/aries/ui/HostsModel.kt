@@ -8,7 +8,9 @@ import io.github.shiroel.aries.HttpBeaconFetcher
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.core.AriesCoreInterface
+import io.github.shiroel.aries.core.AttachMode
 import io.github.shiroel.aries.core.AttachOptions
+import io.github.shiroel.aries.core.TerminalView
 import io.github.shiroel.aries.core.BeaconFetcher
 import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Endpoint
@@ -31,7 +33,14 @@ import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.dropWhile
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.withContext
 
 /** A message for the user: a string resource and its format arguments. */
@@ -119,6 +128,10 @@ class HostsModel(
     var jumps by mutableStateOf<Map<String, List<JumpHost>>>(emptyMap())
         private set
 
+    /** How opening a Terminal attaches (the user's option; observe by default). */
+    var attachMode by mutableStateOf(AttachMode.OBSERVE)
+        private set
+
     /** The open Host's connection and structure watch, while [Screen.Browse] shows. */
     private var open: Pair<HostConnection, StructureWatch?>? = null
 
@@ -128,6 +141,7 @@ class HostsModel(
             keyProtection = core.keyProtection()
             hosts = core.hosts()
             refreshRoutes()
+            attachMode = core.attachMode()
         }
     }
 
@@ -375,28 +389,87 @@ class HostsModel(
 
     private fun observe(conn: HostConnection, terminal: TerminalInfo, returnTo: Screen) {
         val viewer = TerminalViewer(terminal)
+        if (attachMode == AttachMode.INPUT) viewer.startTyping()
         screen = Screen.Terminal(viewer, returnTo)
         viewing = scope.launch {
-            val view = try {
-                conn.attachTerminal(terminal.address, AttachOptions(observe = true, cols = 80u, rows = 24u, history = 0u))
-            } catch (e: CoreException) {
-                viewer.markClosed()
-                return@launch
+            if (!viewer.typing) {
+                // Watch until the input is focused, then let go of the observer.
+                val watching = launch {
+                    stream(conn, viewer, AttachOptions(observe = true, cols = 80u, rows = 24u, history = 0u)) {}
+                }
+                snapshotFlow { viewer.typing }.first { it }
+                watching.cancelAndJoin()
             }
-            try {
-                while (true) {
-                    when (val u = view.next()) {
-                        is TerminalUpdate.Screen -> viewer.apply(u.frame)
-                        is TerminalUpdate.Exited -> viewer.exited(u.exit)
+            // An ordinary viewer at the phone's grid; from now on the phone sets the size.
+            val (cols, rows) = snapshotFlow { viewer.phoneGrid }.filterNotNull().first()
+            stream(conn, viewer, AttachOptions(observe = false, cols = cols.toUShort(), rows = rows.toUShort(), history = 0u)) { view ->
+                // A failed send means the stream is ending; next() reports it.
+                launch {
+                    try {
+                        snapshotFlow { viewer.phoneGrid }.filterNotNull().distinctUntilChanged().dropWhile { it == cols to rows }.collect { (c, r) ->
+                            view.resize(c.toUShort(), r.toUShort())
+                        }
+                    } catch (e: CoreException) {
                     }
                 }
-            } catch (e: CoreException) {
-                viewer.markClosed()
-            } finally {
-                withContext(NonCancellable) { view.detach() }
-                view.close()
+                launch {
+                    try {
+                        // One at a time, so keys arrive in the order they were typed.
+                        for (input in viewer.inputs) {
+                            when (input) {
+                                is TerminalInput.Text -> view.sendText(input.text)
+                                is TerminalInput.Key -> view.sendKey(input.key, input.mods)
+                            }
+                        }
+                    } catch (e: CoreException) {
+                    }
+                }
             }
         }
+    }
+
+    /**
+     * Attaches [viewer] with [options] and draws its updates until the
+     * stream ends or the caller is cancelled; [alongside] runs next to it
+     * (typing, resizing) and stops with it. Detaches on the way out.
+     */
+    private suspend fun stream(
+        conn: HostConnection,
+        viewer: TerminalViewer,
+        options: AttachOptions,
+        alongside: CoroutineScope.(TerminalView) -> Unit,
+    ) {
+        val view = try {
+            conn.attachTerminal(viewer.terminal.address, options)
+        } catch (e: CoreException) {
+            viewer.markClosed()
+            return
+        }
+        try {
+            coroutineScope {
+                val side = launch { alongside(view) }
+                try {
+                    while (true) {
+                        when (val u = view.next()) {
+                            is TerminalUpdate.Screen -> viewer.apply(u.frame)
+                            is TerminalUpdate.Exited -> viewer.exited(u.exit)
+                        }
+                    }
+                } catch (e: CoreException) {
+                    viewer.markClosed()
+                } finally {
+                    side.cancel()
+                }
+            }
+        } finally {
+            withContext(NonCancellable) { view.detach() }
+            view.close()
+        }
+    }
+
+    fun setDefaultAttachMode(mode: AttachMode) = guard {
+        core.setAttachMode(mode)
+        attachMode = core.attachMode()
     }
 
     /** Leaves the open Terminal (it keeps running) and shows where it was opened from. */

@@ -2,7 +2,10 @@ package io.github.shiroel.aries.ui
 
 import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.core.AriesCoreInterface
+import io.github.shiroel.aries.core.AttachMode
 import io.github.shiroel.aries.core.AttachOptions
+import io.github.shiroel.aries.core.KeyMods
+import io.github.shiroel.aries.core.TerminalKey
 import io.github.shiroel.aries.core.BeaconFetcher
 import io.github.shiroel.aries.core.BeaconInstall
 import io.github.shiroel.aries.core.BeaconRelease
@@ -170,6 +173,14 @@ class FakeCore : AriesCoreInterface {
     private var protection = KeyProtection.PLAIN
 
     override fun keyProtection(): KeyProtection? = key?.let { protection }
+
+    private var attach = AttachMode.OBSERVE
+
+    override fun attachMode(): AttachMode = attach
+
+    override fun setAttachMode(mode: AttachMode) {
+        attach = mode
+    }
 
     override fun setKeyProtection(protection: KeyProtection) {
         if (key == null) throw CoreException.NoKey()
@@ -361,6 +372,34 @@ class FakeTerminalView(val address: String, val options: AttachOptions) : Termin
     override suspend fun detach() {
         detached = true
         updates.close()
+    }
+
+    /** What was typed, in order: `text:ls`, `key:Enter`, `key:ctrl+c`. */
+    val sent = mutableListOf<String>()
+
+    /** Grids asked for with `resize`, in order. */
+    val resizes = mutableListOf<Pair<Int, Int>>()
+
+    override fun observing(): Boolean = options.observe
+
+    override suspend fun sendText(text: String) {
+        check(!options.observe) { "an observer cannot type" }
+        sent += "text:$text"
+    }
+
+    override suspend fun sendKey(key: TerminalKey, mods: KeyMods) {
+        check(!options.observe) { "an observer cannot type" }
+        val name = when (key) {
+            is TerminalKey.Char -> key.text
+            is TerminalKey.F -> "F${key.n}"
+            else -> key::class.simpleName
+        }
+        sent += "key:" + (if (mods.ctrl) "ctrl+" else "") + (if (mods.alt) "alt+" else "") + (if (mods.shift) "shift+" else "") + name
+    }
+
+    override suspend fun resize(cols: UShort, rows: UShort) {
+        check(!options.observe) { "an observer cannot resize" }
+        resizes += cols.toInt() to rows.toInt()
     }
 
     override fun close() {}
