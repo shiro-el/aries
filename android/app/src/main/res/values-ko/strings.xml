@@ -401,4 +401,15 @@
     <string name="console_local">local</string>
     <string name="console_more">···</string>
     <string name="console_host_menu">%1$s 작업</string>
+
+    <!-- Call inbox -->
+    <string name="call_inbox_label">Call %1$d개 기다림</string>
+    <string name="call_inbox_expanded">펼쳐짐</string>
+    <string name="call_inbox_collapsed">접힘</string>
+    <string name="call_inbox_past">지난 Call</string>
+    <string name="call_inbox_empty">기다리는 Call이 없습니다.</string>
+    <string name="call_inbox_caller">%2$s의 %1$s</string>
+    <string name="call_open_chat">Chat에서 열기</string>
+    <string name="call_open_chat_label">Call: %2$s — %1$s의 Chat 열기</string>
+    <string name="call_inbox_close">Call 닫기</string>
 </resources>

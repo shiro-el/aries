@@ -1,0 +1,77 @@
+package io.github.shiroel.aries.ui
+
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.*
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import io.github.shiroel.aries.R
+import io.github.shiroel.aries.core.AgentStatus
+
+internal class CallInboxAction(val calls: CallsModel, val open: Boolean, val toggle: () -> Unit)
+
+/** Also supplies the inbox to Agent headers when they adopt ConsoleTopBar. */
+internal val LocalCallInbox = staticCompositionLocalOf<CallInboxAction?> { null }
+
+@Composable
+internal fun ConsoleInboxAction() {
+    val action = LocalCallInbox.current ?: return
+    val count = action.calls.calls.count { it.answerable }
+    val label = stringResource(R.string.call_inbox_label, count)
+    val state = stringResource(if (action.open) R.string.call_inbox_expanded else R.string.call_inbox_collapsed)
+    val ink = MaterialTheme.colorScheme.onSurfaceVariant
+    Row(
+        Modifier.height(44.dp).widthIn(min = 44.dp).testTag("console-inbox")
+            .clickable(role = Role.Button, onClick = action.toggle)
+            .semantics { contentDescription = label; stateDescription = state }
+            .padding(horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Canvas(Modifier.size(20.dp)) {
+            val path = Path().apply {
+                moveTo(3f, 11.5f); lineTo(3f, 16f); lineTo(17f, 16f); lineTo(17f, 11.5f)
+                moveTo(3f, 11.5f); lineTo(5f, 4f); lineTo(15f, 4f); lineTo(17f, 11.5f)
+                moveTo(3f, 11.5f); lineTo(7f, 11.5f); lineTo(8f, 13.5f); lineTo(12f, 13.5f); lineTo(13f, 11.5f); lineTo(17f, 11.5f)
+            }
+            scale(size.width / 20f, size.height / 20f, pivot = Offset.Zero) {
+                drawPath(path, ink, style = Stroke(width = 1.5f))
+            }
+        }
+        if (count > 0) Text(
+            count.toString(), Modifier.testTag("console-inbox-count"), fontSize = 12.sp,
+            fontWeight = FontWeight.Bold, color = statusColor(AgentStatus.Blocked(null, null)),
+        )
+    }
+}
+
+@Composable
+internal fun CallInboxOverlay(model: HostsModel, modifier: Modifier = Modifier) {
+    val title = stringResource(R.string.calls_title)
+    val close = stringResource(R.string.call_inbox_close)
+    BoxWithConstraints(modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().testTag("call-inbox-scrim")
+            .background(MaterialTheme.colorScheme.scrim.copy(alpha = .45f))
+            .semantics { contentDescription = close }
+            .clickable(onClick = model::closeCallInbox))
+        Box(Modifier.fillMaxWidth().heightIn(max = maxHeight * .7f)
+            .background(MaterialTheme.colorScheme.surface).testTag("call-inbox-panel")
+            .semantics { paneTitle = title }) {
+            CallInboxPanel(model.calls, model::openCallChat)
+        }
+    }
+}

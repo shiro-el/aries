@@ -5,6 +5,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
@@ -25,7 +26,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** Seam 3: answering a Call with a Choice from Call history, against a fake core. */
+/** Seam 3: answering a Call with a Choice from the inbox, against a fake core. */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "h1200dp")
 class CallReplyTest {
@@ -55,7 +56,7 @@ class CallReplyTest {
             MaterialTheme { AriesApp(model) }
         }
         compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.calls_button)).performClick()
+        compose.onNodeWithTag("console-inbox").performClick()
         compose.waitForIdle()
     }
 
@@ -71,6 +72,7 @@ class CallReplyTest {
         }
         openCalls(core)
 
+        compose.onNodeWithTag("console-inbox-count", useUnmergedTree = true).assertExists()
         choice("Wait").performClick()
         compose.waitForIdle()
         assertEquals(listOf(Triple("h1", "c1", 1u)), core.replies)
@@ -83,6 +85,8 @@ class CallReplyTest {
         compose.onNodeWithText(str(R.string.call_answer_sending)).assertDoesNotExist()
         choice("Merge").assertDoesNotExist()
         choice("Wait").assertDoesNotExist()
+        compose.onNodeWithTag("console-inbox-count", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithTag("call-inbox-past").assertExists()
     }
 
     @Test

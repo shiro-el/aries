@@ -411,4 +411,15 @@
     <string name="console_local">local</string>
     <string name="console_more">···</string>
     <string name="console_host_menu">Actions for %1$s</string>
+
+    <!-- Call inbox -->
+    <string name="call_inbox_label">Calls, %1$d waiting</string>
+    <string name="call_inbox_expanded">Expanded</string>
+    <string name="call_inbox_collapsed">Collapsed</string>
+    <string name="call_inbox_past">Past Calls</string>
+    <string name="call_inbox_empty">No waiting Calls.</string>
+    <string name="call_inbox_caller">%1$s on %2$s</string>
+    <string name="call_open_chat">Open in Chat</string>
+    <string name="call_open_chat_label">Open %1$s in Chat for Call: %2$s</string>
+    <string name="call_inbox_close">Close Calls</string>
 </resources>

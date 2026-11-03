@@ -149,9 +149,9 @@ class AgentViewToggleTest {
     }
 
     @Test
-    fun aCallFromAnAgentOpensTheSavedViewAndBackIsCallHistory() {
+    fun aCallOpensChatWithoutChangingTheSavedAgentView() {
         val core = FakeCore().apply {
-            savedView = AgentView.CHAT
+            savedView = AgentView.TERMINAL
             addHost("home", Endpoint.Ssh("10.0.0.2", 22u, "me"))
             ensureKey()
             terminalsOf["h1"] = listOf(claude)
@@ -160,13 +160,14 @@ class AgentViewToggleTest {
             )
         }
         show(core)
-        click(str(R.string.calls_button))
-        compose.onNodeWithContentDescription(str(R.string.call_open_terminal_label, "t1", "Review ready")).performClick()
+        compose.onNodeWithTag("console-inbox").performClick()
+        compose.onNodeWithContentDescription(str(R.string.call_open_chat_label, "t1", "Review ready")).performClick()
         compose.waitForIdle()
         assertTrue(model.screen is Screen.Chat)
         assertFalse(core.chatsOpened.isEmpty())
 
         click(str(R.string.back_button))
-        compose.onNodeWithText(str(R.string.calls_title)).assertExists()
+        assertEquals(AgentView.TERMINAL, core.savedView)
+        compose.onNodeWithText("me@10.0.0.2:22").assertExists()
     }
 }
