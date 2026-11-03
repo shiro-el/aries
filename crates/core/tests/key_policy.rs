@@ -436,3 +436,21 @@ async fn a_failed_policy_change_keeps_the_old_protection_on_every_key() {
     let err = background_connect(&core, &vault, &host).await;
     assert!(matches!(err, CoreError::Unreachable { .. }), "{err:?}");
 }
+
+#[tokio::test]
+async fn a_background_question_answer_never_asks_to_unlock_a_biometric_key() {
+    let dir = tempfile::tempdir().unwrap();
+    let vault = PhoneVault::new();
+    let core = core_with(dir.path(), &vault);
+    core.ensure_key().unwrap();
+    let host = core.add_host("desk".into(), closed_ssh()).unwrap();
+    core.set_key_protection(KeyProtection::Biometric).unwrap();
+    vault.asked.lock().unwrap().clear();
+    // Even with authorization available, background work must not open it.
+    let err = core
+        .answer_question_background(host.id, "t1".into(), "q1".into(), vec![vec![0]])
+        .await
+        .unwrap_err();
+    assert!(matches!(err, CoreError::KeyLocked), "{err:?}");
+    assert!(vault.asked.lock().unwrap().is_empty());
+}

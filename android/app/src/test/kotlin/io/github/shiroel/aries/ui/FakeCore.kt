@@ -527,6 +527,15 @@ class FakeCore : AriesCoreInterface {
         answerFailure?.let { answerFailure = null; throw it }
     }
 
+    val backgroundAnswers = mutableListOf<Triple<String, String, List<List<UInt>>>>()
+    var answerHold: CompletableDeferred<Unit>? = null
+
+    override suspend fun answerQuestionBackground(hostId: String, terminal: String, questionId: String, picks: List<List<UInt>>) {
+        backgroundAnswers += Triple(terminal, questionId, picks)
+        answerHold?.await()
+        answerQuestion(hostId, terminal, questionId, picks)
+    }
+
     /** Each Host's Call history (newest first), by Host id. */
     val callsOf = mutableMapOf<String, List<CallInfo>>()
 
@@ -717,6 +726,16 @@ class FakeConnection(
     fun push(structure: HostStructure) {
         current = structure
         listener?.onStructure(structure)
+    }
+
+    val uploads = mutableListOf<Triple<String, String, ByteArray>>()
+    var uploadHold: CompletableDeferred<Unit>? = null
+    var uploadFailWith: CoreException? = null
+    override suspend fun uploadAttachment(terminal: String, name: String, bytes: ByteArray): String {
+        uploadHold?.await()
+        uploadFailWith?.let { throw it }
+        uploads += Triple(terminal, name, bytes)
+        return "/host/it's file.jpg"
     }
 
     /** The fake Agents' input record: (address, text) of each message typed in. */

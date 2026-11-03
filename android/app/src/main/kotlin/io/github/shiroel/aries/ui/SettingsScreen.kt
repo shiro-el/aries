@@ -122,6 +122,14 @@ fun SettingsScreen(
             }
             item { SettingsField(R.string.accent_title) { AccentControls(settings) } }
             item { SettingsField(R.string.accent_custom) { HsvPicker(settings) } }
+            item {
+                val context = androidx.compose.ui.platform.LocalContext.current
+                val attachments = remember(context) { AttachmentSettings.from(context) }
+                SettingsField {
+                    OptionToggle(R.string.attachments_resize_label, R.string.attachments_resize_hint,
+                        attachments.resizeImages, attachments::chooseResizeImages)
+                }
+            }
             item { SettingsField { ChatCacheSettings(model.chatCache) } }
             item(key = "quiet-hours") { SettingsField { QuietHoursSection() } }
             item {

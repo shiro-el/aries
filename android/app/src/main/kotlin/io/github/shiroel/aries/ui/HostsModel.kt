@@ -739,6 +739,20 @@ class HostsModel(
         get() = agentLinks.mapNotNull { (id, link) -> link.connection?.let { id to it } }.toMap()
     private val agentJobs = mutableListOf<Job>()
 
+    /** Shared content awaiting an explicit Agent selection. */
+    var pendingShare by mutableStateOf<SharedContent?>(null)
+        private set
+
+    /** Both cold and warm ACTION_SEND routes use the existing multi-Host Agent list. */
+    fun receiveShare(intent: android.content.Intent): Boolean {
+        val content = SharedContent.from(intent) ?: return false
+        openAgents()
+        pendingShare = content
+        return true
+    }
+
+    fun cancelShare() { pendingShare = null }
+
     /** Connects to every Host and shows all their Agents in one list. */
     fun openAgents() {
         back()
@@ -748,20 +762,20 @@ class HostsModel(
     /**
      * A tapped Agent notification (warm or cold start): leaves whatever is
      * open, shows the Agents list and, once [hostId]'s list arrives, opens
-     * that Agent in its saved view (back returns to the list). A Terminal that is
+     * that Agent in its saved view, or Chat for a question action (back returns to the list). A Terminal that is
      * no longer live, or a Host that was removed, is explained instead.
      */
-    fun openPushedAgent(hostId: String, address: String) {
+    fun openPushedAgent(hostId: String, address: String, openChat: Boolean = false) {
         back()
         val host = hosts.find { it.id == hostId }
-        openAgents(focus = host?.let { AgentKey(it.id, address) })
+        openAgents(focus = host?.let { AgentKey(it.id, address) }, openChat = openChat)
         if (host == null) {
             prompt = Prompt.Problem(Message(R.string.push_terminal_gone_title), Message(R.string.push_host_gone_body, listOf(address)))
         }
     }
 
     /** [focus]: the Agent whose Terminal to open once its Host's list arrives. */
-    private fun openAgents(focus: AgentKey?) {
+    private fun openAgents(focus: AgentKey?, openChat: Boolean = false) {
         val board = AgentBoard(hosts)
         val agents = Screen.Agents(board)
         screen = agents
@@ -797,7 +811,7 @@ class HostsModel(
                                     terminalOn(host.id)?.update(list)
                                     focusing?.let { key ->
                                         focusing = null
-                                        if (screen === agents) focusOn(agents, host, key, list)
+                                        if (screen === agents) focusOn(agents, host, key, list, openChat)
                                     }
                                 }
                             } finally {
@@ -814,7 +828,7 @@ class HostsModel(
         }
     }
 
-    private fun focusOn(agents: Screen.Agents, host: Host, key: AgentKey, list: List<TerminalInfo>) {
+    private fun focusOn(agents: Screen.Agents, host: Host, key: AgentKey, list: List<TerminalInfo>, openChat: Boolean) {
         val terminal = list.find { it.address == key.address && it.state == "live" }
         if (terminal == null) {
             prompt = Prompt.Problem(
@@ -823,17 +837,23 @@ class HostsModel(
             )
             return
         }
-        openAgent(agents.board, AgentEntry(host, terminal))
+        openAgent(agents.board, AgentEntry(host, terminal), openChat = openChat)
     }
 
-    /** Opens an Agent in its saved view over the list; the visible screen owns seen sync. */
-    fun openAgent(board: AgentBoard, entry: AgentEntry) {
+    /** Opens an Agent in its saved view (or Chat for a question); the visible screen owns seen sync. */
+    fun openAgent(board: AgentBoard, entry: AgentEntry, openChat: Boolean = false) {
         val agents = screen as? Screen.Agents ?: return
         if (agents.board !== board) return
         val current = board.find(entry.key) ?: return
         val link = agentLinks[current.host.id] ?: return
         val t = current.terminal
-        show(link, t, agents)
+        val shared = pendingShare
+        if (shared != null) {
+            if (t.agentStatus == null || t.state != "live") return
+            chat(link, t, agents)
+            (screen as Screen.Chat).chat.pendingShare = shared
+            pendingShare = null
+        } else if (openChat) chat(link, t, agents) else show(link, t, agents)
     }
 
     /** Pins or unpins an Agent for every client. */
@@ -1042,6 +1062,7 @@ class HostsModel(
         (screen as? Screen.Terminal)?.viewer?.takeIf { it.link?.host?.id == hostId }
 
     fun back() {
+        pendingShare = null
         (screen as? Screen.Chat)?.chat?.stop()
         ((screen as? Screen.Terminal)?.returnTo as? Screen.Chat)?.chat?.stop()
         viewing?.cancel()

@@ -8,6 +8,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.R
+import io.github.shiroel.aries.core.AgentView
 import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.core.BlockedReason
 import io.github.shiroel.aries.core.Endpoint
@@ -78,6 +79,19 @@ class NotificationTapTest {
         assertTrue(model.screen is Screen.Agents)
         compose.onNodeWithText("codex").assertExists()
         compose.onNodeWithText("claude").assertExists()
+    }
+
+    @Test
+    fun aQuestionAnswerActionOpensTheExactChatWithoutChangingTheDefaultView() {
+        val core = twoHosts().apply { savedView = AgentView.TERMINAL }
+        show(core)
+        compose.runOnIdle { model.openPushedAgent("h1", "box/t1", openChat = true) }
+        compose.waitForIdle()
+
+        assertTrue(model.screen is Screen.Chat)
+        assertEquals(listOf("h1" to "box/t1"), core.chatsOpened)
+        assertTrue(core.connectionsOf.getValue("h1").views.isEmpty())
+        assertEquals(AgentView.TERMINAL, core.savedView)
     }
 
     @Test
