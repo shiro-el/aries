@@ -135,4 +135,18 @@ class ChatSearchUiTest {
         assertTrue(cleared.getStringAnnotations("chat-search", 0, cleared.length).isEmpty())
     }
 
+    @Test
+    fun aRawToolInputMatchOpensBothToolAndRawInputDisclosures() {
+        val core = FakeCore()
+        openChat(core)
+        core.pushChat(ChatSnapshot(listOf(
+            entry("raw", ChatEntryBody.Tool("Bash", "command", "raw needle", ChatToolStatus.DONE, "finished")),
+            entry("tail", ChatEntryBody.Agent("tail")),
+        ), ChatStatus.RECONNECTING, null))
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("tail").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("raw needle").assertDoesNotExist()
+        search("needle", 1)
+        compose.onNodeWithText("raw needle").assertIsDisplayed()
+        assertHighlight("raw needle", "needle", true)
+    }
 }
