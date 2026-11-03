@@ -199,10 +199,22 @@ async fn reach(
     trusted: Option<String>,
 ) -> Result<Session, HopFailure> {
     let mut session = handshake_hop(config, via, address, port, trusted).await?;
+    // RSA keys imported from OpenSSH need RSA-SHA2 on modern sshd. `None`
+    // would select legacy SHA-1, which those servers reject. Negotiate for
+    // each hop; absent extension information, prefer SHA-256.
+    let hash_alg = if key.algorithm().is_rsa() {
+        session
+            .best_supported_rsa_hash()
+            .await
+            .map_err(|e| HopFailure::Unreachable(e.to_string()))?
+            .unwrap_or(Some(HashAlg::Sha256))
+    } else {
+        None
+    };
     let auth = session
         .authenticate_publickey(
             user.to_owned(),
-            PrivateKeyWithHashAlg::new(Arc::new(key.clone()), None),
+            PrivateKeyWithHashAlg::new(Arc::new(key.clone()), hash_alg),
         )
         .await
         .map_err(|e| HopFailure::Unreachable(e.to_string()))?;
