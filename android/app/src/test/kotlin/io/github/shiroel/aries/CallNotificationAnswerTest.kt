@@ -150,7 +150,7 @@ class CallNotificationAnswerTest {
 
         assertEquals(listOf(Triple(hostId, "c1", 1u)), core.replies)
         val n = shown()
-        assertEquals(1, manager.activeNotifications.size)
+        assertEquals(1, manager.activeNotifications.count { it.notification.flags and Notification.FLAG_GROUP_SUMMARY == 0 })
         assertEquals(str(R.string.call_answer_delivered, "Wait"), text(n))
         assertEquals(emptyList<String>(), buttons(n))
     }

@@ -175,6 +175,41 @@ async fn typed_text_and_enter_reach_the_agent() {
     .await;
 }
 
+#[tokio::test]
+async fn edited_multiline_paste_is_one_bracketed_block_then_follows_mode_off() {
+    let hc = HcSession::start();
+    // Raw input records the bytes without line discipline changing CR/LF.
+    let agent = hc.run_fake_agent(
+        "paste",
+        "run stty raw -echo; printf '\\033[?2004hbracket-ready'\nkeys 24\nrun printf '\\033[?2004lplain-ready'\nkeys 5\n",
+    );
+    let s = connect(&hc).await;
+    let view = s
+        .conn
+        .attach_terminal(agent.address.clone(), typing(60, 15))
+        .await
+        .unwrap();
+    let mut screen = Screen::default();
+    until(&view, &mut screen, "bracket-ready", |s| {
+        s.contains("bracket-ready")
+    })
+    .await;
+
+    view.paste_text("one\ntwo\r\n세\x1b[201~".into())
+        .await
+        .unwrap();
+    assert_eq!(
+        inputs(&agent, 1)[0],
+        "keys 1b 5b 32 30 30 7e 6f 6e 65 0a 74 77 6f 0d 0a ec 84 b8 1b 5b 32 30 31 7e"
+    );
+    until(&view, &mut screen, "plain-ready", |s| {
+        s.contains("plain-ready")
+    })
+    .await;
+    view.paste_text("a\r\nb\nc".into()).await.unwrap();
+    assert_eq!(inputs(&agent, 2)[1], "keys 61 0d 62 0d 63");
+}
+
 #[test]
 fn the_default_attach_mode_is_observe_and_the_choice_is_kept() {
     let data = tempfile::tempdir().unwrap();
@@ -289,6 +324,7 @@ async fn an_input_view_takes_the_phones_size_and_follows_its_resizes() {
         .unwrap();
     assert!(watcher.observing());
     assert!(watcher.send_text("x".into()).await.is_err());
+    assert!(watcher.paste_text("x\ny".into()).await.is_err());
     assert!(watcher.resize(40, 10).await.is_err());
     watcher.detach().await;
     assert_eq!(grid_of(&hc, &address), (200, 120));

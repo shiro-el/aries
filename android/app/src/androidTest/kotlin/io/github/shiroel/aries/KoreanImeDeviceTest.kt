@@ -127,6 +127,7 @@ class KoreanImeDeviceTest {
                 val input = viewer.inputs.tryReceive().getOrNull() ?: break
                 new += when (input) {
                     is TerminalInput.Text -> "text:${input.text}"
+                    is TerminalInput.Paste -> "paste:${input.text}"
                     is TerminalInput.Key -> "key:" + when (val k = input.key) {
                         is TerminalKey.Char -> k.text
                         else -> k::class.simpleName
