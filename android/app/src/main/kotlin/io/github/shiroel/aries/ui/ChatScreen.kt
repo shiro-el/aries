@@ -45,6 +45,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -103,7 +105,11 @@ class ChatModel(
         private set
 
     /** What the user is typing into the input. */
-    var draft by mutableStateOf("")
+    var input by mutableStateOf(TextFieldValue(""))
+    // Keep the String seam for attachments, dictation and existing callers.
+    var draft: String
+        get() = input.text
+        set(value) { input = TextFieldValue(value, TextRange(value.length)) }
     var sending by mutableStateOf<Sending?>(null)
         private set
     /** The Blocked Agent refused the last message; cleared once it is no longer Blocked. */
@@ -399,7 +405,7 @@ fun ChatScreen(
         }
         chat.attachmentError?.let { Text(stringResource(it.res, *it.args.toTypedArray()), color = MaterialTheme.colorScheme.error) }
         if (chat.link != null) {
-            AttachmentControls(chat)
+            ChatCatalogControls(chat)
             MessageInput(chat)
         }
     }
@@ -422,8 +428,8 @@ private fun MessageInput(chat: ChatModel) {
     )
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
         BasicTextField(
-            value = chat.draft,
-            onValueChange = { chat.draft = it },
+            value = chat.input,
+            onValueChange = { chat.input = it },
             modifier = Modifier.weight(1f)
                 .heightIn(min = 48.dp)
                 .semantics { contentDescription = inputLabel },
