@@ -202,7 +202,8 @@ pub struct TerminalInfo {
     /// Terminal that started this one, as reported by herdr-core.
     #[uniffi(default = None)]
     pub parent: Option<String>,
-    /// Server time of the last Agent status change (Unix epoch milliseconds).
+    /// When herdr-core's root status last changed, milliseconds since the epoch.
+    /// Seeing a completed turn does not reset this clock.
     #[uniffi(default = None)]
     pub status_ms: Option<u64>,
 }
@@ -1508,7 +1509,6 @@ pub(crate) fn terminal_info(v: &serde_json::Value) -> TerminalInfo {
         pinned: host_model::pinned(v),
         address,
         parent: s("parent"),
-        status_ms: v["status_ms"].as_u64(),
         name: s("name"),
         title: s("title").unwrap_or_default(),
         argv: v["argv"]
@@ -1524,6 +1524,7 @@ pub(crate) fn terminal_info(v: &serde_json::Value) -> TerminalInfo {
         agent_status,
         needs_attention,
         turn: v["turn"].as_u64().unwrap_or(0),
+        status_ms: v["status_ms"].as_u64(),
     }
 }
 

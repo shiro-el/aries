@@ -192,6 +192,9 @@ impl Terminals {
                 t["status"] = data["status"].clone();
                 t["records"] = data.get("records").cloned().unwrap_or(json!({}));
                 t["reported"] = data.get("reported").cloned().unwrap_or(json!(true));
+                // The event omits status_ms. Only the Terminal record has the
+                // authoritative timestamp (also for an unchanged status word).
+                return Applied::Refetch(address.to_owned());
             }
             "turn" => t["turn"] = data["turn"].clone(),
             "title" => t["title"] = data["title"].clone(),
@@ -257,22 +260,6 @@ impl TerminalWatch {
                     }
                 };
                 if changed {
-                    // Status events omit status_ms. Fetch the server value
-                    // before publishing/persisting the changed list.
-                    if msg["params"]["type"] == "status"
-                        && let Some(address) = msg["params"]["terminal"].as_str()
-                    {
-                        match client
-                            .call("terminal.get", json!({"terminal": address}))
-                            .await
-                        {
-                            Ok(t) => model.replace(address, Some(t)),
-                            Err(CoreError::Rpc { kind, .. }) if kind == "not_found" => {
-                                model.replace(address, None)
-                            }
-                            Err(_) => break,
-                        }
-                    }
                     if states.save(&host_id, model.infos()).is_err()
                         || tx.send(Latest::List(model.infos())).is_err()
                     {
@@ -373,7 +360,7 @@ mod tests {
             "status",
             json!({"status": {"state": "error", "msg": "boom"}}),
         );
-        assert_eq!(m.apply(&next), Applied::Changed);
+        assert_eq!(m.apply(&next), Applied::Refetch("t2".into()));
         assert_eq!(
             status(&m, "t2"),
             Some(AgentStatus::Error {
