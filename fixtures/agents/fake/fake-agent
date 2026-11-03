@@ -17,6 +17,8 @@
 #                                   them as one line "keys <hex> <hex> ..."
 #   claude-session DIR ID CWD       act as a running Claude Code: write its session
 #                                   registry entry DIR/sessions/<pid>.json (sessionId ID)
+#   hold FILE                       keep FILE open (for appending) until exit, as Codex
+#                                   keeps its rollout open; creates it and its directory
 #   sleep SECONDS
 #   say TEXT...                     print TEXT on the screen
 #   exit CODE
@@ -85,6 +87,10 @@ while IFS= read -r step <&3 || [ -n "$step" ]; do
         printf '{"pid":%s,"sessionId":"%s","cwd":"%s","procStart":"%s","kind":"interactive"}\n' \
             "$$" "$2" "$3" "$start" >"$1/sessions/$$.json.tmp"
         mv "$1/sessions/$$.json.tmp" "$1/sessions/$$.json"
+        ;;
+    hold)
+        mkdir -p "$(dirname "$1")"
+        exec 4>>"$1"
         ;;
     sleep) sleep "$1" ;;
     say) printf '%s\n' "$*" ;;
