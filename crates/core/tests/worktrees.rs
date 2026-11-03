@@ -237,3 +237,33 @@ async fn incomplete_or_non_utf8_porcelain_is_an_error_instead_of_a_damaged_path(
     }
     conn.disconnect().await;
 }
+
+#[tokio::test]
+async fn launch_fallback_preserves_trailing_whitespace_in_a_worktree_path() {
+    let parent = tempfile::tempdir().unwrap();
+    let folder = parent.path().join("worktree\n  ");
+    std::fs::create_dir(&folder).unwrap();
+    let hc = HcSession::start();
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    let host = core.add_host("test".into(), local_endpoint(&hc)).unwrap();
+    let conn = core.connect(host.id).await.unwrap();
+    let result = conn
+        .open_worktree(folder.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let aries_core::WorktreeOpen::Terminal { address } = result else {
+        panic!("expected fallback")
+    };
+    let terminal = conn
+        .terminals()
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|t| t.address == address)
+        .unwrap();
+    assert_eq!(terminal.cwd.as_deref(), folder.to_str());
+    assert_eq!(conn.recent_cwds(), [folder.to_str().unwrap()]);
+    conn.kill_terminal(address).await.unwrap();
+    conn.disconnect().await;
+}
