@@ -13,8 +13,8 @@ use std::time::Duration;
 
 use aries_core::{
     AgentStatus, AriesCore, BeaconArtifact, BeaconFetcher, BeaconRelease, BlockedReason,
-    CallUrgency, CoreError, Endpoint, FetchError, HttpClient, HttpRequest, HttpResponse,
-    PushContent, PushDevice, PushProgress, PushStep,
+    CallReplyOutcome, CallUrgency, CoreError, Endpoint, FetchError, HttpClient, HttpRequest,
+    HttpResponse, PushContent, PushDevice, PushProgress, PushStep,
 };
 use aries_test_support::{FakeRelay, ReverseTunnel, SystemdHost, beacon_bin, http_request};
 use common::core_in;
@@ -744,4 +744,79 @@ async fn a_call_reaches_the_phone_with_its_urgency_and_choices() {
         }
         other => panic!("not a Call push: {other:?}"),
     }
+}
+
+// ---- Answering a Call from its notification (ticket 36) ---------------------
+
+/// The path behind a notification's Choice button: a fake Agent sends a
+/// Call, the fake Relay gets the envelope, the core opens it, and the
+/// Choice (picked by index from the push) is typed into the Agent's
+/// Terminal. Tapping it again (or a retry after an unknown result) types
+/// nothing more.
+#[tokio::test]
+#[ignore = "needs docker"]
+async fn a_choice_from_a_call_push_reaches_the_agent_once() {
+    use base64::Engine;
+    let s = setup_with(true).await;
+    s.enable("dev-1").await;
+    s.relay.wait_pushes(1, Duration::from_secs(10)); // the test push
+
+    let agent = std::fs::read(aries_test_support::fake_agent_path()).unwrap();
+    let agent = base64::engine::general_purpose::STANDARD.encode(agent);
+    let script = base64::engine::general_purpose::STANDARD.encode(
+        "status working\n\
+         run $HOME/.local/bin/aries-beacon call --title Deploy? --urgency urgent --choice Go --choice Stop >/dev/null 2>&1\n\
+         status idle\nwait\nstatus working\n",
+    );
+    s.host.root(&format!(
+        "echo {agent} | base64 -d > /tmp/fake-agent && echo {script} | base64 -d > /tmp/script && chmod 644 /tmp/fake-agent /tmp/script"
+    ));
+    let run = as_user(
+        &s.host,
+        "herdr-core run --bg --json --no-parent --name claude -- env FAKE_AGENT_INPUT=/tmp/in sh /tmp/fake-agent /tmp/script",
+    );
+    let address = serde_json::from_str::<serde_json::Value>(run.trim()).unwrap()["address"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    let pushes = s.relay.wait_pushes(2, Duration::from_secs(20));
+    let notice = s.core.open_push(pushes[1].1.clone()).unwrap();
+    let PushContent::Call {
+        id,
+        terminal,
+        choices,
+        ..
+    } = notice.content
+    else {
+        panic!("not a Call push: {:?}", notice.content);
+    };
+    assert_eq!(terminal, address);
+    assert_eq!(choices, ["Go", "Stop"]);
+    assert!(
+        s.core
+            .can_answer_in_background(notice.host_id.clone())
+            .unwrap()
+    );
+
+    let reply = s
+        .core
+        .reply_call(notice.host_id.clone(), id.clone(), 1)
+        .await
+        .unwrap();
+    assert_eq!(reply.outcome, CallReplyOutcome::Delivered, "{reply:?}");
+    assert_eq!(reply.answer.unwrap().text, "Stop");
+    let inputs = || s.host.root("cat /tmp/in");
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while inputs().trim().is_empty() {
+        assert!(std::time::Instant::now() < deadline, "nothing typed");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert_eq!(inputs().trim(), "Stop");
+
+    // The same button again: the Host already has the answer.
+    let again = s.core.reply_call(notice.host_id, id, 1).await.unwrap();
+    assert_eq!(again.outcome, CallReplyOutcome::Answered);
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    assert_eq!(inputs().trim(), "Stop");
 }

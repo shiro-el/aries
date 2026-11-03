@@ -451,34 +451,50 @@ impl ChatHost {
     pub(crate) async fn open(&self, command: &str) -> Result<Stream, CoreError> {
         match self {
             Self::Ssh(ssh) => ssh.exec_stream(command).await,
-            Self::Local(env) => {
-                let mut cmd = tokio::process::Command::new("/bin/sh");
-                cmd.arg("-c").arg(command);
-                for k in LEAKY_ENV {
-                    if !env.contains_key(*k) {
-                        cmd.env_remove(k);
-                    }
-                }
-                let mut child = cmd
-                    .envs(env)
-                    .stdin(std::process::Stdio::piped())
-                    .stdout(std::process::Stdio::piped())
-                    .stderr(std::process::Stdio::null())
-                    .kill_on_drop(true)
-                    .spawn()
-                    .map_err(|e| CoreError::Unreachable {
-                        detail: format!("sh: {e}"),
-                    })?;
-                let stdin = child.stdin.take().expect("piped stdin");
-                let stdout = child.stdout.take().expect("piped stdout");
-                Ok(Stream {
-                    reader: Box::new(stdout),
-                    writer: Box::new(stdin),
-                    guard: Box::new(std::sync::Mutex::new(child)),
-                })
-            }
+            Self::Local(env) => open_local(env, command),
         }
     }
+
+    /// [`ChatHost::open`] with at most `sign_in` for reaching and signing
+    /// in to an SSH Host (all hops together); see [`Ssh::exec_stream_within`].
+    pub(crate) async fn open_within(
+        &self,
+        command: &str,
+        sign_in: std::time::Duration,
+    ) -> Result<Stream, CoreError> {
+        match self {
+            Self::Ssh(ssh) => ssh.exec_stream_within(command, sign_in).await,
+            Self::Local(env) => open_local(env, command),
+        }
+    }
+}
+
+/// Runs `command` with `sh -c` on this machine (Local Hosts).
+fn open_local(env: &HashMap<String, String>, command: &str) -> Result<Stream, CoreError> {
+    let mut cmd = tokio::process::Command::new("/bin/sh");
+    cmd.arg("-c").arg(command);
+    for k in LEAKY_ENV {
+        if !env.contains_key(*k) {
+            cmd.env_remove(k);
+        }
+    }
+    let mut child = cmd
+        .envs(env)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .kill_on_drop(true)
+        .spawn()
+        .map_err(|e| CoreError::Unreachable {
+            detail: format!("sh: {e}"),
+        })?;
+    let stdin = child.stdin.take().expect("piped stdin");
+    let stdout = child.stdout.take().expect("piped stdout");
+    Ok(Stream {
+        reader: Box::new(stdout),
+        writer: Box::new(stdin),
+        guard: Box::new(std::sync::Mutex::new(child)),
+    })
 }
 
 fn quote(s: &str) -> String {

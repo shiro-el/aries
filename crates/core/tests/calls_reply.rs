@@ -203,3 +203,43 @@ async fn a_reply_that_could_not_start_is_an_error() {
 
     assert!(matches!(err, CoreError::Unreachable { .. }), "{err:?}");
 }
+
+#[tokio::test]
+async fn a_host_that_never_finishes_signing_in_is_not_sent_within_the_limit() {
+    // It accepts the connection, then says nothing: no SSH banner, ever.
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    core.ensure_key().unwrap();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let silent = std::thread::spawn(move || {
+        let held: Vec<_> = listener.incoming().take(1).collect();
+        std::thread::sleep(Duration::from_secs(5));
+        drop(held);
+    });
+    let host = core
+        .add_host(
+            "silent".into(),
+            Endpoint::Ssh {
+                address: "127.0.0.1".into(),
+                port,
+                user: "nobody".into(),
+            },
+        )
+        .unwrap()
+        .id;
+
+    let started = Instant::now();
+    let err = core
+        .reply_call_within(host, "c1-x".into(), 0, Duration::from_secs(1))
+        .await
+        .unwrap_err();
+
+    assert!(
+        started.elapsed() < Duration::from_secs(4),
+        "{:?}",
+        started.elapsed()
+    );
+    assert!(matches!(err, CoreError::Unreachable { .. }), "{err:?}");
+    silent.join().unwrap();
+}

@@ -331,7 +331,35 @@ impl Ssh {
     /// Runs `command` on the Host (no PTY) and streams its stdio. Dropping
     /// the stream closes the channel.
     pub async fn exec_stream(&self, command: &str) -> Result<Stream, CoreError> {
-        let (mut sessions, session) = self.session().await?;
+        let (sessions, session) = self.session().await?;
+        Self::stream_on(sessions, session, command).await
+    }
+
+    /// [`Ssh::exec_stream`], but connecting and signing in to every hop
+    /// must finish within `sign_in` in total. Running out of time is
+    /// `Unreachable`; the command has not been sent by then.
+    pub async fn exec_stream_within(
+        &self,
+        command: &str,
+        sign_in: Duration,
+    ) -> Result<Stream, CoreError> {
+        let (sessions, session) = tokio::time::timeout(sign_in, self.session())
+            .await
+            .map_err(|_| CoreError::Unreachable {
+                detail: format!(
+                    "{}: no answer within {} s",
+                    self.address,
+                    sign_in.as_secs_f32()
+                ),
+            })??;
+        Self::stream_on(sessions, session, command).await
+    }
+
+    async fn stream_on(
+        mut sessions: Vec<Session>,
+        session: Session,
+        command: &str,
+    ) -> Result<Stream, CoreError> {
         let channel = session
             .channel_open_session()
             .await

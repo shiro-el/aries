@@ -997,6 +997,8 @@ impl AriesCore {
     /// notification action in the background (ticket 36). How it ends:
     /// - `Err(..)`: the reply never started on the Host (no key, key locked,
     ///   Host unreachable, key rejected, Host key unknown or changed).
+    ///   Reaching and signing in to the Host (every jump host included)
+    ///   that takes over 15 s also ends here as `Unreachable`.
     ///   Nothing was claimed or typed; trying again is safe.
     /// - `Ok` with [`CallReplyOutcome::Unknown`]: the Beacon was started but
     ///   its result was lost (connection dropped, timed out). It may have
@@ -1009,12 +1011,25 @@ impl AriesCore {
         call_id: String,
         choice: u32,
     ) -> Result<CallReply, CoreError> {
-        let runner = self.chat_host(&host_id)?;
-        on_runtime(async move { calls::reply(&runner, &call_id, choice).await }).await
+        self.reply_call_within(host_id, call_id, choice, calls::REPLY_SIGN_IN)
+            .await
     }
 }
 
 impl AriesCore {
+    /// [`AriesCore::reply_call`] with a custom limit for reaching and
+    /// signing in to the Host (tests).
+    pub async fn reply_call_within(
+        &self,
+        host_id: String,
+        call_id: String,
+        choice: u32,
+        sign_in: std::time::Duration,
+    ) -> Result<CallReply, CoreError> {
+        let runner = self.chat_host(&host_id)?;
+        on_runtime(async move { calls::reply(&runner, &call_id, choice, sign_in).await }).await
+    }
+
     /// [`AriesCore::watch_chat`] with a custom first retry delay (tests).
     pub fn watch_chat_retrying(
         &self,

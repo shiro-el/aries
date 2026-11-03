@@ -272,6 +272,11 @@ pub(crate) async fn history(runner: &ChatHost, host_id: &str) -> Result<Vec<Call
 /// Beacon's own 30 s limit for herdr-core to confirm the typing.
 const REPLY_WAIT: Duration = Duration::from_secs(45);
 
+/// Longest time for reaching and signing in to the Host (every hop
+/// together) before a reply counts as not sent. With [`REPLY_WAIT`] a
+/// reply from a notification ends within about a minute.
+pub(crate) const REPLY_SIGN_IN: Duration = Duration::from_secs(15);
+
 /// The Host-side `aries-beacon reply`; without a Beacon it prints a
 /// `no_beacon` line.
 fn reply_command(call_id: &str, choice: u32) -> String {
@@ -287,16 +292,20 @@ fn reply_command(call_id: &str, choice: u32) -> String {
 /// Runs `aries-beacon reply` on the Host once; never retried. An `Err`
 /// means the command never started there ([`ChatHost::open`] failed before
 /// the exec request went out); once it started, every ending is an `Ok`.
+/// Reaching and signing in to the Host may take at most `sign_in`.
 pub(crate) async fn reply(
     runner: &ChatHost,
     call_id: &str,
     choice: u32,
+    sign_in: Duration,
 ) -> Result<CallReply, CoreError> {
     let Stream {
         reader,
         writer,
         guard,
-    } = runner.open(&reply_command(call_id, choice)).await?;
+    } = runner
+        .open_within(&reply_command(call_id, choice), sign_in)
+        .await?;
     let mut lines = BufReader::new(reader).lines();
     let mut line = None;
     let read = tokio::time::timeout(REPLY_WAIT, async {
