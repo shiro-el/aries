@@ -132,6 +132,22 @@ describe("delivery", () => {
     expect(m.message.android?.priority).toBe("HIGH");
   });
 
+  it("reaches FCM through the global fetch when no FCM binding is set (as deployed)", async () => {
+    const token = await pairPhone("fcm-device-1");
+    // Like the Workers runtime: the global fetch called as a method throws.
+    vi.spyOn(globalThis, "fetch").mockImplementation(function (this: unknown, input, init) {
+      if (this !== undefined && this !== globalThis) throw new TypeError("Illegal invocation");
+      return fcm.fetch(input, init);
+    });
+    const { FCM: _, ...deployed } = relayEnv;
+    relayEnv = deployed;
+
+    const r = await call("POST", "/v1/push", { token, body: envelope() });
+
+    expect(r.status).toBe(202);
+    expect(fcm.sent).toHaveLength(1);
+  });
+
   it("never stores or logs the envelope", async () => {
     const token = await pairPhone();
     const e = envelope(0x3c);

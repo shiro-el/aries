@@ -219,6 +219,7 @@ function fcmConfig(env: Env): FcmConfig {
     privateKey: key.private_key,
     projectId: key.project_id,
     tokenUri: typeof key.token_uri === "string" ? key.token_uri : "https://oauth2.googleapis.com/token",
-    fetch: env.FCM ? env.FCM.fetch.bind(env.FCM) : fetch,
+    // Workers throw "Illegal invocation" when the global fetch is called as a method.
+    fetch: env.FCM ? env.FCM.fetch.bind(env.FCM) : (input, init) => fetch(input, init),
   };
 }
