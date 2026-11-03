@@ -147,6 +147,90 @@ async fn answering_a_call_whose_terminal_is_gone_fails_and_says_so() {
 }
 
 #[tokio::test]
+async fn a_call_reply_is_refused_after_its_agent_returns_to_a_live_shell() {
+    let s = setup();
+    let script = s._data.path().join("agent-script");
+    std::fs::write(&script, format!(
+        "status working\nrun env PATH={}:/usr/bin:/bin XDG_STATE_HOME={} {} call --title 'Question' --choice 'echo unsafe'\nwait\nexit 0\n",
+        s.hc.bin().parent().unwrap().display(), s.env_var("XDG_STATE_HOME"), beacon_bin().display()
+    )).unwrap();
+    let terminal = s.hc.run_bg(
+        "shell",
+        &[
+            "sh",
+            "-c",
+            &format!(
+                "sh {} {}; echo agent-exited; exec sleep 600",
+                aries_test_support::fake_agent_path().display(),
+                script.display()
+            ),
+        ],
+    );
+    let call = tokio::time::timeout(Duration::from_secs(20), async {
+        loop {
+            if let Some(call) = s
+                .core
+                .calls(s.host.clone())
+                .await
+                .unwrap()
+                .into_iter()
+                .find(|c| c.terminal.as_deref() == Some(&terminal))
+            {
+                break call;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .unwrap();
+    s.hc.hc(&["send", &terminal, "finish"]);
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while !s.hc.hc(&["read", &terminal]).contains("agent-exited") {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let reply = s.core.reply_call(s.host.clone(), call.id, 0).await.unwrap();
+    assert_eq!(reply.outcome, CallReplyOutcome::Failed);
+}
+
+#[tokio::test]
+async fn a_call_reply_rejects_a_different_terminal_at_the_same_address() {
+    let s = setup();
+    let (agent, call) = s.agent_with_call(&["Yes"]).await;
+    let fake = s._data.path().join("herdr-core");
+    std::fs::write(&fake, r#"#!/bin/sh
+while IFS= read -r line; do
+  id=$(printf '%s' "$line" | sed -n 's/.*"id":\([0-9]*\).*/\1/p')
+  case $line in
+    *'"hello"'*) printf '{"id":%s,"result":{"version":"0.1.17"}}\n' "$id" ;;
+    *'"terminal.get"'*) printf '{"id":%s,"result":{"state":"live","pid":1,"created_ms":1}}\n' "$id" ;;
+    *'"terminal.send"'*) touch "$(dirname "$0")/sent"; printf '{"id":%s,"result":{}}\n' "$id" ;;
+  esac
+done
+"#).unwrap();
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let Endpoint::Local { argv, mut env } = local_endpoint(&s.hc) else {
+        unreachable!()
+    };
+    env.insert("ARIES_BEACON".into(), beacon_bin().display().to_string());
+    env.insert(
+        "PATH".into(),
+        format!("{}:/usr/bin:/bin", s._data.path().display()),
+    );
+    let host = s
+        .core
+        .add_host("reused".into(), Endpoint::Local { argv, env })
+        .unwrap();
+    let reply = s.core.reply_call(host.id, call.id, 0).await.unwrap();
+    assert_eq!(reply.outcome, CallReplyOutcome::Failed);
+    assert!(!s._data.path().join("sent").exists());
+    assert!(agent.inputs().is_empty());
+}
+
+#[tokio::test]
 async fn a_reply_that_started_but_never_reported_is_unknown() {
     // The Beacon starts, then the connection dies before it prints.
     let dir = tempfile::tempdir().unwrap();

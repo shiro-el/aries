@@ -99,6 +99,7 @@ mod tests {
             id: "c1".into(),
             at_ms: 1,
             terminal: Some("t1".into()),
+            recipient: None,
             top_level: true,
             title: title.into(),
             body: body.into(),

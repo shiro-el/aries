@@ -60,6 +60,10 @@ pub struct Call {
     /// `None` when the caller could not be confirmed (the Call is then only
     /// recorded, never pushed or answered).
     pub terminal: Option<String>,
+    /// Identity of the original recipient, checked before typing. Older
+    /// Calls without one remain readable but cannot safely be answered.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recipient: Option<Recipient>,
     /// The calling Terminal has no parent Terminal: a top-level Agent, not
     /// a helper some other Agent started. `false` when unconfirmed.
     pub top_level: bool,
@@ -71,6 +75,14 @@ pub struct Call {
     /// The answer given, if any (see [`AnswerState`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub answer: Option<Answer>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Recipient {
+    pub terminal_pid: u32,
+    pub created_ms: u64,
+    pub agent_pid: u32,
+    pub process: String,
 }
 
 impl Call {

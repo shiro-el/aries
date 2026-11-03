@@ -100,6 +100,7 @@ mod tests {
             id: "c1".into(),
             at_ms: 1,
             terminal: confirmed.then(|| "t1".into()),
+            recipient: None,
             top_level,
             title: "t".into(),
             body: String::new(),
