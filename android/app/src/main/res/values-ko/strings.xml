@@ -5,6 +5,24 @@
   Glossary terms: Host = 호스트, Terminal = 터미널, Agent = 에이전트.
 -->
 <resources>
+    <!-- App lock (117) -->
+    <string name="app_lock_settings_title">앱 잠금</string>
+    <string name="app_lock_enabled_label">인증 요구</string>
+    <string name="app_lock_settings_hint">백그라운드에서 돌아올 때 앱 내용을 보호합니다. 알림 액션은 이전과 동일하게 동작합니다.</string>
+    <string name="app_lock_delay_label">앱을 떠난 뒤 잠그기</string>
+    <string name="app_lock_delay_immediate">즉시</string>
+    <string name="app_lock_delay_one_minute">1분</string>
+    <string name="app_lock_delay_five_minutes">5분</string>
+    <string name="app_lock_previews_label">앱 미리보기 숨기기</string>
+    <string name="app_lock_previews_hint">앱 잠금이 켜져 있으면 최근 앱에서 Aries를 가리고 스크린샷과 화면 공유를 차단합니다.</string>
+    <string name="app_lock_screen_title">Aries가 잠겨 있습니다</string>
+    <string name="app_lock_screen_body">계속하려면 생체인증 또는 기기 잠금 해제로 인증하세요.</string>
+    <string name="app_lock_unlock_button">Aries 잠금 해제</string>
+    <string name="app_lock_authenticating">인증 중…</string>
+    <string name="app_lock_cancelled">인증을 취소했습니다.</string>
+    <string name="app_lock_failed">인증하지 못했습니다. 다시 시도하세요.</string>
+    <string name="app_lock_unavailable">Android 설정에서 기기 PIN, 패턴 또는 비밀번호를 설정한 뒤 다시 시도하세요.</string>
+
     <!-- 퀵오픈과 명령 팔레트 -->
     <string name="quick_open_title">퀵오픈</string>
     <string name="quick_open_hint">이름 검색, 명령은 &gt; 입력</string>

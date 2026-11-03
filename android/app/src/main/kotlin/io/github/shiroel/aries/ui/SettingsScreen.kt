@@ -133,6 +133,11 @@ fun SettingsScreen(
                 }
             }
             item { SettingsField { ChatCacheSettings(model.chatCache) } }
+            item(key = "app-lock") {
+                io.github.shiroel.aries.security.LocalAppLock.current?.let {
+                    SettingsField { io.github.shiroel.aries.security.AppLockSettings(it) }
+                }
+            }
             item(key = "quiet-hours") { SettingsField { QuietHoursSection() } }
             item {
                 SettingsField(R.string.settings_agent_view) {
