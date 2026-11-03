@@ -82,6 +82,7 @@ fun SettingsScreen(
         }
         return
     }
+    val readAloud = io.github.shiroel.aries.speech.rememberReadAloud(model)
     Column(Modifier.fillMaxSize()) {
         if (showHeader) {
             Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -156,6 +157,7 @@ fun SettingsScreen(
                 SettingsField(R.string.terminal_display_title) { TerminalDisplaySection(terminalDisplay) }
             }
             item { SettingsField { io.github.shiroel.aries.dictation.DictationSettings() } }
+            item(key = "read-aloud") { SettingsField { io.github.shiroel.aries.speech.ReadAloudSettings(readAloud) } }
             item(key = "app-guidance") {
                 io.github.shiroel.aries.guidance.LocalAppGuidance.current?.let {
                     io.github.shiroel.aries.guidance.AppGuidanceSettings(it)
