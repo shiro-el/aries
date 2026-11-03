@@ -349,6 +349,14 @@ class HostsModel(
         }
     }
 
+    /** Import/decryption and vault work can block, including biometric authorization. */
+    suspend fun importKey(label: String, privateKey: String, passphrase: String) {
+        withContext(keyWork) { core.importKey(label.trim(), privateKey, passphrase) }
+        key = core.publicKey()
+        keyProtection = core.keyProtection()
+        keys = core.keys()
+    }
+
     fun editJumps(host: Host) = guard {
         screen = Screen.JumpHosts(host, core.jumpHosts(host.id), core.hostSshKey(host.id))
     }
@@ -1272,6 +1280,9 @@ fun problemFor(e: CoreException): Prompt.Problem {
         )
         is CoreException.AuthRejected -> Prompt.Problem(failed, Message(R.string.connect_auth_rejected))
         is CoreException.NoKey -> Prompt.Problem(failed, Message(R.string.connect_no_key))
+        is CoreException.InvalidPrivateKey -> Prompt.Problem(
+            Message(R.string.key_import_title), Message(R.string.key_import_invalid),
+        )
         is CoreException.KeyLocked -> Prompt.Problem(
             Message(R.string.key_locked_title),
             Message(R.string.key_locked_body),

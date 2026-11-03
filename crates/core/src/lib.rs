@@ -75,7 +75,7 @@ use hc::HcClient;
 use store::{SavedHost, SavedKey, Store};
 use transport::{LocalProcess, PasswordLogin, Ssh, SshHop, Transport};
 
-/// Id of the key [`AriesCore::ensure_key`] creates, in [`AriesCore::keys`].
+/// Id of the default key, created by `ensure_key` or the first `import_key`.
 pub const DEFAULT_KEY_ID: &str = "default";
 
 uniffi::setup_scaffolding!();
@@ -115,7 +115,7 @@ pub struct PublicKeyInfo {
 /// One of the app's SSH keys. Every key is sealed by the [`KeyVault`].
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct KeyInfo {
-    /// [`DEFAULT_KEY_ID`] for the key `ensure_key` made.
+    /// [`DEFAULT_KEY_ID`] for the default key (generated or imported).
     pub id: String,
     pub label: String,
     pub openssh: String,
@@ -489,6 +489,64 @@ impl AriesCore {
             public,
         };
         self.store.add_key(&saved, protection, &sealed)?;
+        key_info(&saved)
+    }
+
+    /// Imports an existing OpenSSH ed25519, RSA or ECDSA private key. The
+    /// passphrase is used only to decode it: the unencrypted key is sealed
+    /// by the vault under the same policy as generated keys. Neither input
+    /// nor passphrase is written to app storage.
+    /// Without a default key, this becomes the default (and `label` is
+    /// ignored); otherwise it is a named additional key.
+    pub fn import_key(
+        &self,
+        label: String,
+        private_key: String,
+        passphrase: String,
+    ) -> Result<KeyInfo, CoreError> {
+        if private_key.len() > 64 * 1024 {
+            return Err(CoreError::InvalidPrivateKey);
+        }
+        let key = russh::keys::decode_secret_key(private_key.trim(), Some(&passphrase))
+            .map_err(|_| CoreError::InvalidPrivateKey)?;
+        if !matches!(
+            key.algorithm(),
+            Algorithm::Ed25519 | Algorithm::Rsa { .. } | Algorithm::Ecdsa { .. }
+        ) {
+            return Err(CoreError::InvalidPrivateKey);
+        }
+        let private = key
+            .to_openssh(LineEnding::LF)
+            .map_err(|_| CoreError::InvalidPrivateKey)?;
+        let public = key
+            .public_key()
+            .to_openssh()
+            .map_err(|_| CoreError::InvalidPrivateKey)?;
+        let current = self.key_protection()?;
+        let protection = current.unwrap_or(KeyProtection::Plain);
+        let sealed = self.vault.seal(private.as_bytes().to_vec(), protection)?;
+        let saved = SavedKey {
+            id: if current.is_none() {
+                DEFAULT_KEY_ID.into()
+            } else {
+                new_id()
+            },
+            label: if current.is_none() {
+                String::new()
+            } else {
+                label
+            },
+            public,
+        };
+        if current.is_none() {
+            self.store.write_identity(&store::Identity {
+                protection,
+                sealed,
+                public: saved.public.clone(),
+            })?;
+        } else {
+            self.store.add_key(&saved, protection, &sealed)?;
+        }
         key_info(&saved)
     }
 
