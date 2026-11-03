@@ -1,5 +1,7 @@
-//! Installing and removing the Beacon on a Linux Host over SSH, against a
-//! docker Host running systemd (so the user service is real).
+//! Installing, updating and removing the Beacon over SSH, against a docker
+//! Host running systemd (so the user service is real). The Host downloads
+//! from a [`ReleaseServer`] standing in for GitHub Releases; macOS is played
+//! by the same Host with `uname`, `launchctl` and `shasum` faked.
 //!
 //! Needs docker. Run with `cargo test -p aries-core --test beacon -- --ignored`.
 
@@ -9,10 +11,10 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use aries_core::{
-    AriesCore, BeaconArtifact, BeaconFetcher, BeaconRelease, BeaconState, CoreError, Endpoint,
-    FetchError, Linger,
+    AriesCore, BeaconArtifact, BeaconFetcher, BeaconRelease, BeaconSource, BeaconState,
+    BeaconUpdate, CoreError, Endpoint, FetchError, Linger,
 };
-use aries_test_support::{SystemdHost, beacon_bin};
+use aries_test_support::{ReleaseServer, SystemdHost, beacon_bin};
 use common::core_in;
 
 const URL: &str = "https://example.invalid/aries-beacon-linux-x86_64";
@@ -52,12 +54,16 @@ fn sha256sum(bytes: &[u8]) -> String {
 }
 
 fn release(version: &str, sha256: String) -> BeaconRelease {
+    release_at(version, "linux", "x86_64", URL, sha256)
+}
+
+fn release_at(version: &str, os: &str, arch: &str, url: &str, sha256: String) -> BeaconRelease {
     BeaconRelease {
         version: version.into(),
         artifacts: vec![BeaconArtifact {
-            os: "linux".into(),
-            arch: "x86_64".into(),
-            url: URL.into(),
+            os: os.into(),
+            arch: arch.into(),
+            url: url.into(),
             sha256,
         }],
     }
@@ -138,7 +144,9 @@ async fn installs_the_beacon_as_a_user_service_and_removes_it_keeping_calls() {
         .install_beacon(s.id.clone(), fetcher.clone())
         .await
         .unwrap();
+    // example.invalid does not resolve on the Host: the phone downloads.
     assert_eq!(fetcher.urls.lock().unwrap().as_slice(), [URL]);
+    assert_eq!(installed.source, BeaconSource::PhoneUpload);
     assert_eq!(installed.version, version);
     // This Host denies the user `loginctl enable-linger`: the app explains.
     match &installed.linger {
@@ -157,9 +165,11 @@ async fn installs_the_beacon_as_a_user_service_and_removes_it_keeping_calls() {
             core_version,
             supported,
             linger,
+            os,
             ..
         } => {
             assert_eq!(v, version);
+            assert_eq!(os, "linux");
             assert!(running);
             assert_eq!(core_version.as_deref(), Some("0.1.17"));
             assert!(supported);
@@ -208,7 +218,9 @@ async fn refuses_a_binary_that_does_not_match_the_pinned_checksum() {
         }
         other => panic!("expected BeaconChecksum, got {other:?}"),
     }
-    assert!(s.host.check("test ! -e /home/aries/.local/bin"));
+    assert!(!s.host.check(&format!(
+        "test -e {BIN} || test -e /home/aries/.local/bin/.aries-beacon.new"
+    )));
     assert_eq!(
         s.core.beacon_status(s.id.clone()).await.unwrap(),
         BeaconState::NotInstalled
@@ -266,4 +278,335 @@ async fn needs_an_ssh_host() {
         core.install_beacon(h.id, Fetcher::new(vec![])).await,
         Err(CoreError::BeaconNeedsSsh)
     ));
+}
+
+const NAME: &str = "aries-beacon-linux-x86_64";
+
+#[tokio::test]
+#[ignore = "needs docker"]
+async fn the_host_downloads_the_beacon_itself_when_it_can_reach_the_release() {
+    let s = setup();
+    let bytes = std::fs::read(beacon_bin()).unwrap();
+    let server = ReleaseServer::start(vec![(NAME.into(), bytes.clone())]);
+    let version = env!("CARGO_PKG_VERSION");
+    s.core.set_beacon_release(release_at(
+        version,
+        "linux",
+        "x86_64",
+        &server.url(NAME),
+        sha256sum(&bytes),
+    ));
+    let fetcher = Fetcher::new(Vec::new());
+
+    let installed = s
+        .core
+        .install_beacon(s.id.clone(), fetcher.clone())
+        .await
+        .unwrap();
+    assert_eq!(installed.source, BeaconSource::HostDownload);
+    assert_eq!(server.requests(), [format!("/{NAME}")]);
+    assert!(
+        fetcher.urls.lock().unwrap().is_empty(),
+        "the phone downloaded too"
+    );
+    assert!(s.host.check(&format!("test -x {BIN} && test -f {UNIT}")));
+    match wait_attached(&s.core, &s.id).await {
+        BeaconState::Installed {
+            version: v,
+            running,
+            ..
+        } => {
+            assert_eq!(v, version);
+            assert!(running);
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
+#[tokio::test]
+#[ignore = "needs docker"]
+async fn refuses_a_host_download_that_does_not_match_the_pinned_checksum() {
+    let s = setup();
+    let bytes = std::fs::read(beacon_bin()).unwrap();
+    let mut tampered = bytes.clone();
+    tampered.extend_from_slice(b"evil");
+    let server = ReleaseServer::start(vec![(NAME.into(), tampered.clone())]);
+    s.core.set_beacon_release(release_at(
+        env!("CARGO_PKG_VERSION"),
+        "linux",
+        "x86_64",
+        &server.url(NAME),
+        sha256sum(&bytes),
+    ));
+    // The phone would hand out the genuine binary: it must not be asked.
+    let fetcher = Fetcher::new(bytes);
+
+    match s.core.install_beacon(s.id.clone(), fetcher.clone()).await {
+        Err(CoreError::BeaconChecksum { expected, actual }) => {
+            assert_eq!(expected, sha256sum(&fetcher.bytes));
+            assert_eq!(actual, sha256sum(&tampered));
+        }
+        other => panic!("expected BeaconChecksum, got {other:?}"),
+    }
+    assert_eq!(server.requests().len(), 1);
+    assert!(fetcher.urls.lock().unwrap().is_empty());
+    assert!(s.host.check(
+        "test ! -e /home/aries/.local/bin/aries-beacon && test ! -e /home/aries/.local/bin/.aries-beacon.new"
+    ));
+    assert!(!s.host.check(&format!("test -e {UNIT}")));
+}
+
+/// A stand-in Beacon of another release; `serve` just stays up.
+fn fake_beacon(version: &str) -> Vec<u8> {
+    format!(
+        r#"#!/bin/sh
+case "$1" in
+  --version) echo "aries-beacon {version} (contract 1)" ;;
+  status) echo '{{"version":"{version}","contract":1,"running":true,"core_version":"0.1.17","linger":false}}' ;;
+  serve) exec sleep 1000000 ;;
+esac
+"#
+    )
+    .into_bytes()
+}
+
+/// A Host with an old Beacon installed, and the app pinned to the current
+/// one, served by a release server.
+async fn with_old_beacon() -> (Setup, ReleaseServer, Arc<Fetcher>) {
+    let s = setup();
+    let old = fake_beacon("0.0.9");
+    s.core.set_beacon_release(release("0.0.9", sha256sum(&old)));
+    s.core
+        .install_beacon(s.id.clone(), Fetcher::new(old))
+        .await
+        .unwrap();
+
+    let bytes = std::fs::read(beacon_bin()).unwrap();
+    let server = ReleaseServer::start(vec![(NAME.into(), bytes.clone())]);
+    s.core.set_beacon_release(release_at(
+        env!("CARGO_PKG_VERSION"),
+        "linux",
+        "x86_64",
+        &server.url(NAME),
+        sha256sum(&bytes),
+    ));
+    (s, server, Fetcher::new(bytes))
+}
+
+#[tokio::test]
+#[ignore = "needs docker"]
+async fn updates_an_old_beacon_when_connecting() {
+    let (s, server, fetcher) = with_old_beacon().await;
+    assert!(s.core.beacon_auto_update());
+
+    let check = s
+        .core
+        .check_beacon(s.id.clone(), fetcher.clone())
+        .await
+        .unwrap();
+    match &check.update {
+        BeaconUpdate::Updated { from, install } => {
+            assert_eq!(from, "0.0.9");
+            assert_eq!(install.version, env!("CARGO_PKG_VERSION"));
+        }
+        other => panic!("expected an update, got {other:?}"),
+    }
+    assert!(matches!(
+        &check.state,
+        BeaconState::Installed { version, supported: true, .. } if version == env!("CARGO_PKG_VERSION")
+    ));
+    assert_eq!(server.requests().len(), 1);
+
+    // Connecting again finds it current and leaves it alone.
+    let again = s.core.check_beacon(s.id.clone(), fetcher).await.unwrap();
+    assert_eq!(again.update, BeaconUpdate::NotNeeded);
+    assert_eq!(server.requests().len(), 1);
+}
+
+#[tokio::test]
+#[ignore = "needs docker"]
+async fn with_auto_update_off_only_reports_that_an_update_is_needed() {
+    let (s, server, fetcher) = with_old_beacon().await;
+    s.core.set_beacon_auto_update(false).unwrap();
+
+    let check = s
+        .core
+        .check_beacon(s.id.clone(), fetcher.clone())
+        .await
+        .unwrap();
+    assert_eq!(check.update, BeaconUpdate::Needed);
+    assert!(matches!(
+        &check.state,
+        BeaconState::Installed { version, supported: false, .. } if version == "0.0.9"
+    ));
+    assert!(server.requests().is_empty());
+    assert!(fetcher.urls.lock().unwrap().is_empty());
+    assert!(s.host.check(&format!("{BIN} --version | grep -q 0.0.9")));
+}
+
+/// Makes the Host look like a Mac to the installer: `uname` says Darwin
+/// arm64, there is no `sha256sum` but a `shasum`, and `launchctl` records
+/// its calls in /tmp/launchctl.log and runs the agent's program on
+/// `bootstrap`. Like launchd over SSH without a desktop login, the `gui`
+/// domain is refused and the `user` domain works.
+fn pretend_macos(host: &SystemdHost) {
+    host.root(
+        r#"set -e
+mv /usr/bin/sha256sum /usr/bin/gsha256sum
+cat > /usr/local/bin/uname <<'EOF'
+#!/bin/sh
+case "$1" in -s) echo Darwin ;; -m) echo arm64 ;; *) exec /usr/bin/uname "$@" ;; esac
+EOF
+cat > /usr/local/bin/shasum <<'EOF'
+#!/bin/sh
+[ "$1" = -a ] && [ "$2" = 256 ] || { echo "fake shasum: $*" >&2; exit 2; }
+exec gsha256sum "$3"
+EOF
+cat > /usr/local/bin/launchctl <<'EOF'
+#!/bin/sh
+echo "$*" >> /tmp/launchctl.log
+pidfile=/tmp/launchctl-$(id -u).pid
+case "$1 $2" in
+  "bootstrap gui/"*) echo "Bootstrap failed: 125: Domain does not support specified action" >&2; exit 125 ;;
+  "bootstrap user/"*)
+    grep -q '<key>KeepAlive</key>' "$3" || exit 3
+    prog=$(sed -n 's|.*<string>\(/.*aries-beacon\)</string>.*|\1|p' "$3")
+    setsid nohup "$prog" serve >/dev/null 2>&1 < /dev/null &
+    echo $! > "$pidfile" ;;
+  "bootout user/"*)
+    [ -f "$pidfile" ] || exit 3
+    kill "$(cat "$pidfile")"; rm -f "$pidfile" ;;
+  "bootout "*) exit 3 ;;
+esac
+EOF
+chmod 755 /usr/local/bin/uname /usr/local/bin/shasum /usr/local/bin/launchctl
+touch /tmp/launchctl.log && chmod 666 /tmp/launchctl.log"#,
+    );
+}
+
+const PLIST: &str = "/home/aries/Library/LaunchAgents/io.github.shiroel.aries.beacon.plist";
+
+#[tokio::test]
+#[ignore = "needs docker"]
+async fn registers_a_launch_agent_on_macos_and_explains_the_login_limit() {
+    let s = setup();
+    pretend_macos(&s.host);
+    let uid = s.host.root("id -u aries").trim().to_owned();
+    let bytes = std::fs::read(beacon_bin()).unwrap();
+    let name = "aries-beacon-macos-aarch64";
+    let server = ReleaseServer::start(vec![(name.into(), bytes.clone())]);
+    s.core.set_beacon_release(release_at(
+        env!("CARGO_PKG_VERSION"),
+        "macos",
+        "aarch64",
+        &server.url(name),
+        sha256sum(&bytes),
+    ));
+
+    let installed = s
+        .core
+        .install_beacon(s.id.clone(), Fetcher::new(Vec::new()))
+        .await
+        .unwrap();
+    assert_eq!(installed.source, BeaconSource::HostDownload);
+    assert_eq!(installed.linger, Linger::LoginSession);
+    assert_eq!(server.requests(), [format!("/{name}")]);
+
+    let plist = s.host.root(&format!("cat {PLIST}"));
+    assert!(
+        plist.contains("<string>io.github.shiroel.aries.beacon</string>"),
+        "{plist}"
+    );
+    assert!(
+        plist.contains(&format!("<string>{BIN}</string>")),
+        "{plist}"
+    );
+    assert!(plist.contains("<key>RunAtLoad</key>"), "{plist}");
+    assert!(
+        !s.host.check(&format!("test -e {UNIT}")),
+        "systemd unit on a Mac"
+    );
+    let log = s.host.root("cat /tmp/launchctl.log");
+    assert!(
+        log.contains(&format!("bootstrap user/{uid} {PLIST}")),
+        "{log}"
+    );
+
+    match wait_attached(&s.core, &s.id).await {
+        BeaconState::Installed { os, running, .. } => {
+            assert_eq!(os, "macos");
+            assert!(running);
+        }
+        other => panic!("{other:?}"),
+    }
+
+    s.core.uninstall_beacon(s.id.clone()).await.unwrap();
+    assert!(
+        s.host
+            .check(&format!("test ! -e {PLIST} && test ! -e {BIN}"))
+    );
+    let log = s.host.root("cat /tmp/launchctl.log");
+    assert!(
+        log.contains(&format!(
+            "bootout user/{uid}/io.github.shiroel.aries.beacon"
+        )),
+        "{log}"
+    );
+    assert!(!s.host.check("grep -qs aries-beaco[n] /proc/[0-9]*/cmdline"));
+}
+
+#[test]
+fn the_auto_update_setting_is_remembered() {
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    assert!(core.beacon_auto_update(), "on by default");
+    core.set_beacon_auto_update(false).unwrap();
+    drop(core);
+    assert!(!core_in(data.path()).beacon_auto_update());
+}
+
+/// The release the app was built with (`ARIES_BEACON_MANIFEST`), from the
+/// binaries `scripts/build-beacon.sh` made (`ARIES_BEACON_DIST`): only the
+/// URL is swapped for the fake release server. Skipped in builds without a
+/// pinned release.
+#[tokio::test]
+#[ignore = "needs docker"]
+async fn installs_the_pinned_release_built_by_the_pipeline() {
+    let pinned = aries_core::pinned_release();
+    let (Some(artifact), Some(dist)) = (
+        pinned
+            .artifacts
+            .iter()
+            .find(|a| a.os == "linux" && a.arch == "x86_64"),
+        std::env::var_os("ARIES_BEACON_DIST"),
+    ) else {
+        eprintln!("skipped: no pinned linux-x86_64 Beacon or ARIES_BEACON_DIST");
+        return;
+    };
+    let bytes = std::fs::read(std::path::Path::new(&dist).join(NAME)).unwrap();
+    let server = ReleaseServer::start(vec![(NAME.into(), bytes)]);
+    let s = setup();
+    s.core.set_beacon_release(release_at(
+        &pinned.version,
+        "linux",
+        "x86_64",
+        &server.url(NAME),
+        artifact.sha256.clone(),
+    ));
+
+    let installed = s
+        .core
+        .install_beacon(s.id.clone(), Fetcher::new(Vec::new()))
+        .await
+        .unwrap();
+    assert_eq!(installed.source, BeaconSource::HostDownload);
+    match wait_attached(&s.core, &s.id).await {
+        BeaconState::Installed {
+            version, supported, ..
+        } => {
+            assert_eq!(version, pinned.version);
+            assert!(supported);
+        }
+        other => panic!("{other:?}"),
+    }
 }

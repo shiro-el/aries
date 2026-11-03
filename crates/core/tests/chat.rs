@@ -1,0 +1,282 @@
+//! `AriesCore::watch_chat`: the app's side of the Chat stream, against fake
+//! Beacons (scripts that print Chat lines) and the real Beacon following a
+//! fake Claude Code in an isolated herdr-core.
+
+mod common;
+
+use std::collections::HashMap;
+use std::path::Path;
+use std::sync::Arc;
+use std::time::Duration;
+
+use aries_core::{
+    AriesCore, ChatEntryBody, ChatSnapshot, ChatStatus, ChatToolStatus, ChatWatch, CoreError,
+    Endpoint,
+};
+use aries_test_support::HcSession;
+
+struct Env {
+    dir: tempfile::TempDir,
+    core: Arc<AriesCore>,
+}
+
+impl Env {
+    fn new() -> Self {
+        let dir = tempfile::tempdir().unwrap();
+        let core = common::core_in(&dir.path().join("data"));
+        Self { dir, core }
+    }
+
+    /// A Local Host whose "Beacon" is `script` (sh), getting the Beacon's
+    /// arguments.
+    fn fake_beacon(&self, script: &str) -> String {
+        let path = self.dir.path().join("beacon.sh");
+        std::fs::write(&path, format!("#!/bin/sh\n{script}\n")).unwrap();
+        std::process::Command::new("chmod")
+            .arg("+x")
+            .arg(&path)
+            .status()
+            .unwrap();
+        self.host(HashMap::from([(
+            "ARIES_BEACON".to_string(),
+            path.to_string_lossy().into_owned(),
+        )]))
+    }
+
+    fn host(&self, env: HashMap<String, String>) -> String {
+        self.core
+            .add_host("h".into(), Endpoint::Local { argv: vec![], env })
+            .unwrap()
+            .id
+    }
+
+    fn file(&self, name: &str, text: &str) -> String {
+        let path = self.dir.path().join(name);
+        std::fs::write(&path, text).unwrap();
+        path.to_string_lossy().into_owned()
+    }
+
+    fn watch(&self, host: &str) -> Arc<ChatWatch> {
+        self.core
+            .watch_chat_retrying(host.into(), "t1".into(), None, Duration::from_millis(50))
+            .unwrap()
+    }
+}
+
+/// Waits for a snapshot matching `ok`.
+async fn wait_for(
+    watch: &ChatWatch,
+    what: &str,
+    ok: impl Fn(&ChatSnapshot) -> bool,
+) -> ChatSnapshot {
+    let mut last = None;
+    let found = tokio::time::timeout(Duration::from_secs(20), async {
+        loop {
+            match watch.next().await {
+                Ok(s) if ok(&s) => return Ok(s),
+                Ok(s) => last = Some(s),
+                Err(e) => return Err(e),
+            }
+        }
+    })
+    .await;
+    match found {
+        Ok(Ok(s)) => s,
+        Ok(Err(e)) => panic!("{what}: watch ended with {e:?}; last {last:#?}"),
+        Err(_) => panic!("timed out waiting for {what}; last {last:#?}"),
+    }
+}
+
+fn texts(s: &ChatSnapshot) -> Vec<String> {
+    s.entries
+        .iter()
+        .map(|e| match &e.body {
+            ChatEntryBody::User { text } => format!("user: {text}"),
+            ChatEntryBody::Agent { text } => format!("agent: {text}"),
+            ChatEntryBody::Thinking { .. } => "thinking".into(),
+            ChatEntryBody::Tool { name, status, .. } => format!("tool {name} {status:?}"),
+            ChatEntryBody::AgentError { detail } => format!("error: {detail}"),
+            ChatEntryBody::Unsupported => "unsupported".into(),
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn a_newer_beacon_of_the_same_format_still_shows_the_chat() {
+    // Only the Beacon's interpreter changed: extra fields everywhere, an
+    // item kind and an event type this app has never heard of.
+    let env = Env::new();
+    let lines = env.file(
+        "lines",
+        concat!(
+            r#"{"v":1,"type":"reset","agent":"claude-code","session":"s","model":"x"}"#, "\n",
+            r#"{"v":1,"type":"item","item":{"id":"1","kind":"user","text":"hi","source":"typed"}}"#, "\n",
+            r#"{"v":1,"type":"typing","who":"agent"}"#, "\n",
+            r#"{"v":1,"type":"item","item":{"id":"2","kind":"question","questions":[{"q":"?"}]}}"#, "\n",
+            r#"{"v":1,"type":"item","item":{"id":"3","kind":"tool","name":"Write","title":"a.txt","input":{"file_path":"a.txt"},"status":"done","output":"ok","diff":[1]}}"#, "\n",
+            r#"{"v":1,"type":"item","item":{"id":"4","kind":"agent","text":"done","tokens":12},"cursor":"c:4"}"#, "\n",
+            r#"{"v":1,"type":"state","state":"live","since":1}"#, "\n",
+        ),
+    );
+    let host = env.fake_beacon(&format!("cat {lines}; sleep 30"));
+    let watch = env.watch(&host);
+    let s = wait_for(&watch, "live", |s| s.status == ChatStatus::Live).await;
+    assert_eq!(
+        texts(&s),
+        ["user: hi", "unsupported", "tool Write Done", "agent: done"]
+    );
+    assert_eq!(s.cursor.as_deref(), Some("c:4"));
+    let ChatEntryBody::Tool {
+        input,
+        output,
+        title,
+        ..
+    } = &s.entries[2].body
+    else {
+        panic!()
+    };
+    assert_eq!(title, "a.txt");
+    assert!(input.contains("\"file_path\": \"a.txt\""), "{input}");
+    assert_eq!(output.as_deref(), Some("ok"));
+    watch.stop();
+}
+
+#[tokio::test]
+async fn reconnects_with_the_cursor_and_shows_nothing_twice() {
+    let env = Env::new();
+    let log = env.dir.path().join("args");
+    let first = env.file(
+        "first",
+        concat!(
+            r#"{"v":1,"type":"reset","agent":"claude-code","session":"s"}"#, "\n",
+            r#"{"v":1,"type":"item","item":{"id":"u1","kind":"user","text":"run it"}}"#, "\n",
+            r#"{"v":1,"type":"item","item":{"id":"t1","kind":"tool","name":"Bash","status":"running"},"cursor":"cc:s:20"}"#, "\n",
+        ),
+    );
+    // After the cursor: the tool finishes (same id) and a reply follows.
+    let second = env.file(
+        "second",
+        concat!(
+            r#"{"v":1,"type":"item","item":{"id":"t1","kind":"tool","name":"Bash","status":"error","output":"boom"},"cursor":"cc:s:30"}"#, "\n",
+            r#"{"v":1,"type":"item","item":{"id":"a1","kind":"agent","text":"it failed"},"cursor":"cc:s:40"}"#, "\n",
+            r#"{"v":1,"type":"state","state":"live"}"#, "\n",
+        ),
+    );
+    let host = env.fake_beacon(&format!(
+        r#"echo "$*" >> {log}
+if [ "$(wc -l < {log})" -eq 1 ]; then cat {first}; exit 0; fi
+cat {second}; sleep 30"#,
+        log = log.display()
+    ));
+    let watch = env.watch(&host);
+    let s = wait_for(&watch, "reply", |s| s.entries.len() == 3).await;
+    assert_eq!(
+        texts(&s),
+        ["user: run it", "tool Bash Failed", "agent: it failed"]
+    );
+    assert_eq!(s.cursor.as_deref(), Some("cc:s:40"));
+    let args = std::fs::read_to_string(&log).unwrap();
+    assert_eq!(
+        args.lines().collect::<Vec<_>>(),
+        ["chat t1 --follow", "chat t1 --follow --cursor cc:s:20"]
+    );
+    watch.stop();
+}
+
+#[tokio::test]
+async fn a_newer_chat_format_is_incompatible() {
+    let env = Env::new();
+    let host = env.fake_beacon(r#"echo '{"v":2,"type":"reset"}'; sleep 30"#);
+    let watch = env.watch(&host);
+    wait_for(&watch, "incompatible", |s| {
+        s.status == ChatStatus::Incompatible
+    })
+    .await;
+    assert!(matches!(watch.next().await, Err(CoreError::Closed)));
+}
+
+#[tokio::test]
+async fn a_host_without_a_beacon_says_so() {
+    let env = Env::new();
+    let host = env.host(HashMap::from([(
+        "ARIES_BEACON".to_string(),
+        "/nonexistent/aries-beacon".to_string(),
+    )]));
+    let watch = env.watch(&host);
+    wait_for(&watch, "no beacon", |s| s.status == ChatStatus::NoBeacon).await;
+}
+
+#[tokio::test]
+async fn a_broken_stream_shows_reconnecting() {
+    let env = Env::new();
+    let host = env.fake_beacon("exit 1");
+    let watch = env.watch(&host);
+    wait_for(&watch, "reconnecting", |s| {
+        s.status == ChatStatus::Reconnecting
+    })
+    .await;
+    watch.stop();
+}
+
+/// The real Beacon, following a fake Claude Code (session registry plus
+/// the ticket-02 transcript) in an isolated herdr-core.
+#[tokio::test]
+async fn follows_a_claude_code_agent_through_the_real_beacon() {
+    let env = Env::new();
+    let hc = HcSession::start();
+    let config = env.dir.path().join("claude");
+    let projects = config.join("projects/-work-a");
+    std::fs::create_dir_all(&projects).unwrap();
+    let agent = hc.run_fake_agent(
+        "claude",
+        &format!(
+            "claude-session {} S1 /work/a\nwait\ntranscript claude-code/main-session.jsonl {}/S1.jsonl\n",
+            config.display(),
+            projects.display()
+        ),
+    );
+    let beacon = aries_test_support::beacon_bin();
+    let bin_dir = hc.bin().parent().unwrap().to_path_buf();
+    let mut vars: HashMap<String, String> = hc.env().into_iter().collect();
+    vars.insert("ARIES_BEACON".into(), path(&beacon));
+    vars.insert("CLAUDE_CONFIG_DIR".into(), path(&config));
+    vars.insert(
+        "PATH".into(),
+        format!("{}:/usr/bin:/bin", bin_dir.display()),
+    );
+    let host = env.host(vars);
+    let watch = env
+        .core
+        .watch_chat_retrying(host, agent.address.clone(), None, Duration::from_millis(50))
+        .unwrap();
+    wait_for(&watch, "waiting", |s| s.status == ChatStatus::Waiting).await;
+
+    hc.hc(&["send", &agent.address, "go"]);
+    let s = wait_for(&watch, "conversation", |s| {
+        s.status == ChatStatus::Live && s.entries.len() == 20
+    })
+    .await;
+    let t = texts(&s);
+    assert_eq!(t[0], "user: Reply with exactly: pong");
+    assert_eq!(t[2], "agent: pong");
+    assert_eq!(t[4], "tool Write Done");
+    let failed = s.entries.iter().filter(|e| {
+        matches!(
+            &e.body,
+            ChatEntryBody::Tool {
+                status: ChatToolStatus::Failed,
+                ..
+            }
+        )
+    });
+    assert_eq!(failed.count(), 1);
+    assert!(s.cursor.as_deref().unwrap().starts_with("claude-code:S1:"));
+
+    hc.hc(&["kill", &agent.address]);
+    wait_for(&watch, "ended", |s| s.status == ChatStatus::Ended).await;
+    watch.stop();
+}
+
+fn path(p: &Path) -> String {
+    p.to_string_lossy().into_owned()
+}

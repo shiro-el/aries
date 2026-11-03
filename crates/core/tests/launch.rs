@@ -21,6 +21,7 @@ fn request(
         cwd: cwd.map(Into::into),
         space_id: space.map(Into::into),
         tab_id: tab.map(Into::into),
+        preset: None,
     }
 }
 

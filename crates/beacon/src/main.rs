@@ -1,9 +1,12 @@
 //! `aries-beacon`: runs on a Host.
 //!
-//! - `serve`: the resident service (a systemd user service on Linux). Stays
+//! - `serve`: the resident service (a systemd user service on Linux, a
+//!   launchd LaunchAgent on macOS). Stays
 //!   attached to the user's local herdr-core (default session) and records
 //!   that in its service file.
 //! - `status`: prints one [`BeaconStatus`] JSON line.
+//! - `chat <terminal> [--follow] [--cursor C]`: the Terminal's Agent Chat
+//!   as JSON lines (`aries_protocol::chat`).
 //! - `--version`: `aries-beacon <version> (contract <n>)`.
 
 use std::io::{BufRead, BufReader, Write};
@@ -11,6 +14,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
+use aries_beacon::{herdr_core, home};
 use aries_protocol::beacon::BeaconStatus;
 use serde::{Deserialize, Serialize};
 
@@ -26,8 +30,11 @@ fn main() {
             println!("{line}");
         }
         Some("serve") => serve(),
+        Some("chat") => chat(std::env::args().skip(2).collect()),
         _ => {
-            eprintln!("usage: aries-beacon --version | status | serve");
+            eprintln!(
+                "usage: aries-beacon --version | status | serve | chat TERMINAL [--follow] [--cursor C]"
+            );
             std::process::exit(2);
         }
     }
@@ -54,12 +61,6 @@ fn service_file() -> PathBuf {
     state_dir().join("service.json")
 }
 
-fn home() -> PathBuf {
-    std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("/"))
-}
-
 fn status() -> BeaconStatus {
     let state: Option<ServiceState> = std::fs::read(service_file())
         .ok()
@@ -74,12 +75,26 @@ fn status() -> BeaconStatus {
     }
 }
 
-/// `pid` is a live `aries-beacon` process (not a reused pid).
+/// `pid` is a live `aries-beacon` process (not a reused pid). Linux reads
+/// `/proc`; macOS, which has none, asks `ps`.
 fn is_beacon(pid: u32) -> bool {
-    std::fs::read(format!("/proc/{pid}/cmdline"))
-        .map(|c| {
-            let argv0 = c.split(|b| *b == 0).next().unwrap_or_default();
-            String::from_utf8_lossy(argv0).ends_with("aries-beacon")
+    if Path::new("/proc/self").exists() {
+        return std::fs::read(format!("/proc/{pid}/cmdline"))
+            .map(|c| {
+                let argv0 = c.split(|b| *b == 0).next().unwrap_or_default();
+                String::from_utf8_lossy(argv0).ends_with("aries-beacon")
+            })
+            .unwrap_or(false);
+    }
+    Command::new("ps")
+        .args(["-p", &pid.to_string(), "-o", "comm="])
+        .stderr(Stdio::null())
+        .output()
+        .map(|o| {
+            o.status.success()
+                && String::from_utf8_lossy(&o.stdout)
+                    .trim()
+                    .ends_with("aries-beacon")
         })
         .unwrap_or(false)
 }
@@ -184,11 +199,39 @@ fn attach(on_attached: impl FnOnce(&str)) -> Result<(), String> {
     result
 }
 
-/// Same lookup the phone uses over SSH: `PATH`, then `~/.local/bin`.
-fn herdr_core() -> Option<PathBuf> {
-    let path = std::env::var_os("PATH").unwrap_or_default();
-    std::env::split_paths(&path)
-        .map(|d| d.join("herdr-core"))
-        .chain(std::iter::once(home().join(".local/bin/herdr-core")))
-        .find(|p| p.is_file())
+fn chat(args: Vec<String>) {
+    let mut opts = None;
+    let mut follow = false;
+    let mut cursor = None;
+    let mut args = args.into_iter();
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--follow" => follow = true,
+            "--cursor" => cursor = args.next(),
+            _ if opts.is_none() && !arg.starts_with('-') => {
+                opts = Some(aries_beacon::chat::Options::new(arg))
+            }
+            _ => {
+                eprintln!("aries-beacon chat: unexpected argument {arg}");
+                std::process::exit(2);
+            }
+        }
+    }
+    let Some(mut opts) = opts else {
+        eprintln!("usage: aries-beacon chat TERMINAL [--follow] [--cursor C]");
+        std::process::exit(2);
+    };
+    opts.follow = follow;
+    opts.cursor = cursor.filter(|c| !c.is_empty());
+    let mut lookup = aries_beacon::core_link::CoreLookup::default();
+    let agents = aries_beacon::chat::agents();
+    let stdout = std::io::stdout();
+    let mut out = std::io::LineWriter::new(stdout.lock());
+    if let Err(e) = aries_beacon::chat::run(opts, &mut lookup, &agents, &mut out) {
+        // A closed stdout is how the app stops following.
+        if e.kind() != std::io::ErrorKind::BrokenPipe {
+            eprintln!("aries-beacon chat: {e}");
+            std::process::exit(1);
+        }
+    }
 }

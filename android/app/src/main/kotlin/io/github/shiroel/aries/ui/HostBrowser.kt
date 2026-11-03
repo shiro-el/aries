@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -22,12 +23,16 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.Host
 import io.github.shiroel.aries.core.HostStructure
 import io.github.shiroel.aries.core.PaneInfo
+import io.github.shiroel.aries.core.SavedLaunch
 import io.github.shiroel.aries.core.SpaceInfo
 import io.github.shiroel.aries.core.StructureProblem
 import io.github.shiroel.aries.core.TabInfo
@@ -67,6 +72,9 @@ class HostBrowser(val host: Host) {
 
     /** The "new Terminal" form, while it is open. */
     var launchForm by mutableStateOf<LaunchForm?>(null)
+
+    /** The Host's saved launch configs, each started with one tap. */
+    var savedLaunches by mutableStateOf<List<SavedLaunch>>(emptyList())
 
     /** A just-launched Terminal to open once the structure lists it: (space, tab, address). */
     private var pendingReveal: Triple<String, String, String>? = null
@@ -155,8 +163,12 @@ fun BrowseScreen(
     browser: HostBrowser,
     onBack: () -> Unit,
     onOpen: (TerminalInfo) -> Unit = {},
+    onOpenChat: (TerminalInfo) -> Unit = {},
     onNewTerminal: (() -> Unit)? = null,
     onLaunch: (LaunchForm) -> Unit = {},
+    onSaveLaunch: (LaunchForm) -> Unit = {},
+    onDeleteLaunch: (LaunchForm, SavedLaunch) -> Unit = { _, _ -> },
+    onRunSaved: (SavedLaunch) -> Unit = {},
     hostSections: @Composable () -> Unit = {},
 ) {
     val space = browser.openSpace
@@ -169,15 +181,32 @@ fun BrowseScreen(
                 TextButton(onClick = onNewTerminal) { Text(stringResource(R.string.launch_open_button)) }
             }
         }
+        if (onNewTerminal != null && browser.structure != null && !browser.closed && browser.savedLaunches.isNotEmpty()) {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(browser.savedLaunches, key = { "saved:" + it.id }) { s ->
+                    AssistChip(
+                        modifier = Modifier.testTag("saved_run:" + s.id),
+                        onClick = { onRunSaved(s) },
+                        label = { Text(s.name) },
+                    )
+                }
+            }
+        }
         browser.launchForm?.let { form ->
-            LaunchDialog(form, onLaunch = { onLaunch(form) }, onDismiss = { browser.launchForm = null })
+            LaunchDialog(
+                form,
+                onLaunch = { onLaunch(form) },
+                onDismiss = { browser.launchForm = null },
+                onSave = { onSaveLaunch(form) },
+                onDelete = { onDeleteLaunch(form, it) },
+            )
         }
         if (browser.closed) Notice(stringResource(R.string.structure_connection_closed))
         browser.structure?.problem?.let { Notice(problemText(it)) }
         when {
             browser.structure == null -> Text(stringResource(R.string.connecting, browser.host.name))
-            space == null -> SpaceList(browser, browser.structure!!, hostSections, onOpen)
-            else -> SpaceView(browser, space, onOpen)
+            space == null -> SpaceList(browser, browser.structure!!, hostSections, onOpen, onOpenChat)
+            else -> SpaceView(browser, space, onOpen, onOpenChat)
         }
     }
 }
@@ -205,6 +234,7 @@ private fun SpaceList(
     s: HostStructure,
     hostSections: @Composable () -> Unit,
     onOpen: (TerminalInfo) -> Unit,
+    onOpenChat: (TerminalInfo) -> Unit,
 ) {
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
@@ -227,7 +257,10 @@ private fun SpaceList(
                 HorizontalDivider()
                 Text(stringResource(R.string.unplaced_title), style = MaterialTheme.typography.titleMedium)
             }
-            items(s.unplaced, key = { "unplaced:" + it.address }) { TerminalRow(browser.current(it)) { onOpen(it) } }
+            items(s.unplaced, key = { "unplaced:" + it.address }) {
+                val t = browser.current(it)
+                TerminalRow(t, onOpenChat) { onOpen(t) }
+            }
         }
         item {
             HorizontalDivider()
@@ -237,7 +270,12 @@ private fun SpaceList(
 }
 
 @Composable
-private fun SpaceView(browser: HostBrowser, space: SpaceInfo, onOpen: (TerminalInfo) -> Unit) {
+private fun SpaceView(
+    browser: HostBrowser,
+    space: SpaceInfo,
+    onOpen: (TerminalInfo) -> Unit,
+    onOpenChat: (TerminalInfo) -> Unit,
+) {
     Text(space.name.ifBlank { stringResource(R.string.space_unnamed) }, style = MaterialTheme.typography.headlineSmall)
     val tab = browser.tab
     if (tab == null) {
@@ -257,7 +295,7 @@ private fun SpaceView(browser: HostBrowser, space: SpaceInfo, onOpen: (TerminalI
     val focused = browser.focusedPane(tab)
     if (zoomed != null) {
         TextButton(onClick = { browser.unzoom(tab) }) { Text(stringResource(R.string.pane_unzoom_button)) }
-        PaneRow(zoomed, browser, focused = true, onOpen = onOpen) {}
+        PaneRow(zoomed, browser, focused = true, onOpen = onOpen, onOpenChat = onOpenChat) {}
         return
     }
     if (focused != null) {
@@ -266,7 +304,7 @@ private fun SpaceView(browser: HostBrowser, space: SpaceInfo, onOpen: (TerminalI
     if (tab.panes.isEmpty()) Text(stringResource(R.string.tab_empty))
     LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         items(tab.panes, key = { "pane:" + it.id + ":" + it.terminalAddress }) { pane ->
-            PaneRow(pane, browser, focused = pane.id == focused, onOpen = onOpen) { browser.focus(tab, pane) }
+            PaneRow(pane, browser, focused = pane.id == focused, onOpen = onOpen, onOpenChat = onOpenChat) { browser.focus(tab, pane) }
         }
     }
 }
@@ -277,6 +315,7 @@ private fun PaneRow(
     browser: HostBrowser,
     focused: Boolean,
     onOpen: (TerminalInfo) -> Unit,
+    onOpenChat: (TerminalInfo) -> Unit,
     onClick: () -> Unit,
 ) {
     val modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
@@ -291,15 +330,27 @@ private fun PaneRow(
             Text(stringResource(R.string.terminal_subtitle, t.address, t.state), style = MaterialTheme.typography.bodySmall)
             AgentStatusLine(t)
             TextButton(onClick = { onOpen(t) }) { Text(stringResource(R.string.terminal_open_button)) }
+            ChatButton(t, onOpenChat)
         }
     }
 }
 
 @Composable
-private fun TerminalRow(t: TerminalInfo, onOpen: () -> Unit) {
+private fun TerminalRow(t: TerminalInfo, onOpenChat: (TerminalInfo) -> Unit, onOpen: () -> Unit) {
     Column(Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(vertical = 4.dp)) {
         Text(displayName(t), style = MaterialTheme.typography.titleMedium)
         Text(stringResource(R.string.terminal_subtitle, t.address, t.state), style = MaterialTheme.typography.bodySmall)
         AgentStatusLine(t)
+        ChatButton(t, onOpenChat)
+    }
+}
+
+/** Agents (Terminals that report Agent status) have a Chat. */
+@Composable
+private fun ChatButton(t: TerminalInfo, onOpenChat: (TerminalInfo) -> Unit) {
+    if (t.agentStatus == null) return
+    val label = stringResource(R.string.chat_open_label, displayName(t))
+    TextButton(onClick = { onOpenChat(t) }, modifier = Modifier.semantics { contentDescription = label }) {
+        Text(stringResource(R.string.chat_open_button))
     }
 }

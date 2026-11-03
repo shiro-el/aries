@@ -122,10 +122,11 @@ fun AgentsScreen(
     onOpen: (AgentEntry) -> Unit,
     onPin: (AgentEntry, Boolean) -> Unit,
     onTerminal: (AgentEntry) -> Unit = {},
+    onChat: (AgentEntry) -> Unit = {},
 ) {
     val key = board.openKey
     if (key != null) {
-        AgentDetail(board, key, onPin, onTerminal)
+        AgentDetail(board, key, onPin, onTerminal, onChat)
         return
     }
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -203,6 +204,7 @@ private fun AgentDetail(
     key: AgentKey,
     onPin: (AgentEntry, Boolean) -> Unit,
     onTerminal: (AgentEntry) -> Unit,
+    onChat: (AgentEntry) -> Unit,
 ) {
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         TextButton(onClick = board::closeDetail) { Text(stringResource(R.string.back_button)) }
@@ -219,6 +221,10 @@ private fun AgentDetail(
         AgentStatusLine(t)
         PinButton(entry) { onPin(entry, it) }
         Button(onClick = { onTerminal(entry) }) { Text(stringResource(R.string.terminal_open_button)) }
+        val chatLabel = stringResource(R.string.chat_open_label, displayName(t))
+        Button(onClick = { onChat(entry) }, modifier = Modifier.semantics { contentDescription = chatLabel }) {
+            Text(stringResource(R.string.chat_open_button))
+        }
         Text(stringResource(R.string.agent_detail_host, entry.host.name), style = MaterialTheme.typography.bodySmall)
         Text(stringResource(R.string.agent_detail_address, t.address), style = MaterialTheme.typography.bodySmall)
         t.cwd?.let { Text(stringResource(R.string.agent_detail_folder, it), style = MaterialTheme.typography.bodySmall) }
