@@ -476,6 +476,15 @@ class FakeCore : AriesCoreInterface {
         answerFailure?.let { answerFailure = null; throw it }
     }
 
+    val backgroundAnswers = mutableListOf<Triple<String, String, List<List<UInt>>>>()
+    var answerHold: CompletableDeferred<Unit>? = null
+
+    override suspend fun answerQuestionBackground(hostId: String, terminal: String, questionId: String, picks: List<List<UInt>>) {
+        backgroundAnswers += Triple(terminal, questionId, picks)
+        answerHold?.await()
+        answerQuestion(hostId, terminal, questionId, picks)
+    }
+
     /** Each Host's Call history (newest first), by Host id. */
     val callsOf = mutableMapOf<String, List<CallInfo>>()
 

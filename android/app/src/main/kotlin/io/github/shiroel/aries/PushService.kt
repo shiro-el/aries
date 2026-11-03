@@ -117,6 +117,7 @@ class PushService : FirebaseMessagingService() {
                 .setAutoCancel(true)
             // One notification per Agent: its newer status replaces the older.
             if (content is PushContent.Status) {
+                QuestionNotifications.decorate(context, notice, content, builder, canAnswerInBackground)
                 val tag = content.terminal
                 NotificationGroups.decorate(context, builder, notice.hostId, notice.hostName, tag, content.terminal)
                 val status = content.status

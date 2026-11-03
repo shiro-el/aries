@@ -59,7 +59,7 @@ class MainActivity : ComponentActivity() {
         if (!resumed) return
         val target = pushTarget ?: return
         pushTarget = null
-        m.openPushedAgent(target.hostId, target.terminal)
+        m.openPushedAgent(target.hostId, target.terminal, openChat = target.chat)
     }
 
     override fun onStart() {
