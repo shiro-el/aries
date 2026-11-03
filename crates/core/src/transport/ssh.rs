@@ -137,6 +137,9 @@ fn client_config() -> Arc<client::Config> {
     Arc::new(client::Config {
         keepalive_interval: Some(Duration::from_secs(15)),
         keepalive_max: 4,
+        // Keystrokes are tiny writes: with Nagle on, each one after the
+        // first waits for the previous one's (delayed) ACK, ~40-60 ms.
+        nodelay: true,
         ..Default::default()
     })
 }

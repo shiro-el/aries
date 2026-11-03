@@ -319,12 +319,14 @@ private fun TerminalCanvas(viewer: TerminalViewer, modifier: Modifier) {
         val cols = viewer.cols.coerceAtLeast(1)
         val widthPx = with(density) { maxWidth.toPx() }
         val per100 = probe.size.width.toFloat().coerceAtLeast(1f)
+        // The probe's font size in px: cell sizes scale with font px over it.
+        val probePx = with(density) { 100.sp.toPx() }
         val maxPx = with(density) { MaxFont.toPx() }
         // Typing: the phone sets the grid, at the base text size. Watching:
         // the desktop's grid, shrunk to fit the width.
-        val fontPx = if (viewer.typing) maxPx else minOf(maxPx, widthPx / cols / per100 * 100f)
-        val cellW = per100 * fontPx / 100f
-        val cellH = (probe.size.height * fontPx / 100f).coerceAtLeast(1f)
+        val fontPx = if (viewer.typing) maxPx else minOf(maxPx, widthPx / cols / per100 * probePx)
+        val cellW = per100 * fontPx / probePx
+        val cellH = (probe.size.height * fontPx / probePx).coerceAtLeast(1f)
         if (viewer.typing) {
             val heightPx = with(density) { maxHeight.toPx() }
             val grid = (widthPx / cellW).toInt().coerceAtLeast(1) to (heightPx / cellH).toInt().coerceAtLeast(1)
