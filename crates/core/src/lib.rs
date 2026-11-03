@@ -6,6 +6,7 @@
 //! chat, push, calls and beacon manager modules arrive with their tickets.
 
 mod beacon;
+mod calls;
 mod error;
 mod hc;
 mod host_model;
@@ -27,6 +28,9 @@ use serde::{Deserialize, Serialize};
 pub use beacon::{
     ALLOWED_BEACON, BeaconArtifact, BeaconFetcher, BeaconInstall, BeaconRelease, BeaconState,
     FetchError, Linger, pinned_release,
+};
+pub use calls::{
+    CallAnswer, CallAnswerState, CallFeedState, CallInfo, CallListener, CallUrgency, CallWatch,
 };
 pub use error::{CoreError, Incompatibility, VaultError};
 pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
@@ -206,6 +210,8 @@ pub struct AriesCore {
     vault: Arc<dyn KeyVault>,
     hosts: Mutex<Vec<SavedHost>>,
     beacon_release: Mutex<BeaconRelease>,
+    /// Beacon command for Local Hosts (tests, dev); see `set_local_beacon`.
+    local_beacon: Mutex<Option<Vec<String>>>,
 }
 
 #[uniffi::export]
@@ -220,6 +226,7 @@ impl AriesCore {
             vault,
             hosts: Mutex::new(saved.hosts),
             beacon_release: Mutex::new(pinned_release()),
+            local_beacon: Mutex::new(None),
         }))
     }
 
@@ -704,6 +711,54 @@ impl AriesCore {
     pub async fn uninstall_beacon(&self, host_id: String) -> Result<(), CoreError> {
         let ssh = self.beacon_ssh(&host_id)?;
         on_runtime(async move { beacon::uninstall(&ssh).await }).await
+    }
+}
+
+/// Calls (`calls` module).
+#[uniffi::export]
+impl AriesCore {
+    /// The Host's whole Call history, newest first, as its Beacon keeps it.
+    pub async fn calls(&self, host_id: String) -> Result<Vec<CallInfo>, CoreError> {
+        let runner = self.beacon_runner(&host_id)?;
+        on_runtime(async move { calls::history(&runner, &host_id).await }).await
+    }
+
+    /// Follows the Host's Call history: `listener` gets the whole list after
+    /// the first sync and each change, and each Call that arrives while
+    /// watching once. Reconnects by itself (reported through `on_state`)
+    /// until `stop`. Uses its own SSH connection, not a [`HostConnection`].
+    pub fn watch_calls(
+        &self,
+        host_id: String,
+        listener: Arc<dyn CallListener>,
+    ) -> Result<Arc<CallWatch>, CoreError> {
+        let runner = self.beacon_runner(&host_id)?;
+        Ok(Arc::new(calls::watch(runner, host_id, listener)))
+    }
+}
+
+impl AriesCore {
+    /// Runs `argv` (an `aries-beacon` binary, with the Local endpoint's
+    /// environment) as the Beacon of every Local Host. For tests and
+    /// development; not exposed to the app.
+    pub fn set_local_beacon(&self, argv: Vec<String>) {
+        *self.local_beacon.lock().expect("local beacon lock") = Some(argv);
+    }
+
+    fn beacon_runner(&self, host_id: &str) -> Result<calls::BeaconRunner, CoreError> {
+        let host = self.saved_host(host_id)?;
+        match host.endpoint {
+            Endpoint::Ssh { .. } => Ok(calls::BeaconRunner::Ssh(Box::new(
+                self.beacon_ssh(host_id)?,
+            ))),
+            Endpoint::Local { env, .. } => {
+                let argv = self.local_beacon.lock().expect("local beacon lock").clone();
+                Ok(calls::BeaconRunner::Local {
+                    argv: argv.ok_or(CoreError::BeaconNeedsSsh)?,
+                    env,
+                })
+            }
+        }
     }
 }
 

@@ -326,15 +326,18 @@ impl Ssh {
     }
 
     async fn open_inner(&self) -> Result<Stream, CoreError> {
+        self.exec_stream(REMOTE_COMMAND).await
+    }
+
+    /// Runs `command` on the Host (no PTY) and streams its stdio, for
+    /// long-running commands such as `aries-beacon calls --follow`.
+    pub async fn exec_stream(&self, command: &str) -> Result<Stream, CoreError> {
         let (mut sessions, session) = self.session().await?;
         let channel = session
             .channel_open_session()
             .await
             .map_err(unreachable_err)?;
-        channel
-            .exec(true, REMOTE_COMMAND)
-            .await
-            .map_err(unreachable_err)?;
+        channel.exec(true, command).await.map_err(unreachable_err)?;
         sessions.push(session);
         let (reader, writer) = tokio::io::split(channel.into_stream());
         Ok(Stream {
