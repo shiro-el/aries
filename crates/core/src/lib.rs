@@ -54,7 +54,7 @@ pub use launch::{AgentPreset, LaunchRequest, RECENT_CWDS_KEPT, SavedLaunch};
 pub use layout_edit::{ExecOutput, LayoutEdit};
 pub use push::{
     HttpClient, HttpRequest, HttpResponse, PushContent, PushDevice, PushDisable, PushNotice,
-    PushPairing, PushPolicy, PushProgress, PushStep,
+    PushPairing, PushPolicy, PushProgress, PushQuestion, PushStep,
 };
 pub use send::{HELD_AFTER, SendListener, SendOutcome};
 pub use settings::{AgentView, AttachMode};
