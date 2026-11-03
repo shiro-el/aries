@@ -1,5 +1,7 @@
 package io.github.shiroel.aries.ui
 
+import android.app.TimePickerDialog
+import android.content.DialogInterface
 import android.content.Context
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -13,6 +15,8 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ApplicationProvider
+import io.github.shiroel.aries.QuietHours
+import io.github.shiroel.aries.QuietHoursSettings
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AttachMode
 import org.junit.Assert.assertEquals
@@ -21,6 +25,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowDialog
 
 /** Settings as reached from Hosts, with real appearance persistence and the core's existing settings. */
 @RunWith(RobolectricTestRunner::class)
@@ -29,6 +34,36 @@ class SettingsScreenTest {
     @get:Rule val compose = createComposeRule()
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private fun str(id: Int, vararg args: Any) = context.getString(id, *args)
+
+    @Test
+    fun settingsPersistQuietHoursAndAllowChangingBothTimes() {
+        QuietHoursSettings.from(context).update(QuietHours())
+        compose.setContent {
+            val scope = rememberCoroutineScope()
+            val model = remember { HostsModel(FakeCore(), scope) }
+            AriesApp(model)
+        }
+        compose.openConsoleDrawer()
+        compose.onNodeWithTag("settings-open").performClick()
+        compose.onNodeWithTag("quiet-hours-enabled").performScrollTo().performClick()
+        compose.onNodeWithTag("quiet-hours-start").performScrollTo().performClick()
+        compose.runOnIdle {
+            val picker = ShadowDialog.getLatestDialog() as TimePickerDialog
+            picker.updateTime(21, 30)
+            picker.getButton(DialogInterface.BUTTON_POSITIVE).performClick()
+        }
+        compose.onNodeWithTag("quiet-hours-end").performClick()
+        compose.runOnIdle {
+            val picker = ShadowDialog.getLatestDialog() as TimePickerDialog
+            picker.updateTime(6, 15)
+            picker.getButton(DialogInterface.BUTTON_POSITIVE).performClick()
+            assertEquals(QuietHours(true, 1290, 375), QuietHoursSettings.from(context).hours)
+        }
+        compose.onNodeWithTag("quiet-hours-enabled").performClick()
+        compose.runOnIdle {
+            assertEquals(QuietHours(false, 1290, 375), QuietHoursSettings.from(context).hours)
+        }
+    }
 
     @Test
     fun settingsEditsAppearanceAndKeepsCacheAndAttachControlsReachable() {

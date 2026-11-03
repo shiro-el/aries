@@ -90,7 +90,7 @@ object CallNotifications {
 
     fun post(context: Context, notice: CallNotice, view: CallView) {
         val manager = context.getSystemService(NotificationManager::class.java)
-        manager.notify(notice.tag, notice.hostId.hashCode(), build(context, manager, notice, view))
+        NotificationGroups.post(context, notice.hostId, notice.hostName, notice.tag, build(context, manager, notice, view))
     }
 
     fun build(context: Context, manager: NotificationManager, notice: CallNotice, view: CallView): Notification {

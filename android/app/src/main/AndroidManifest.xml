@@ -27,6 +27,9 @@
         <receiver
             android:name=".ChoiceReceiver"
             android:exported="false" />
+        <receiver
+            android:name=".NotificationDismissReceiver"
+            android:exported="false" />
         <service
             android:name=".PushService"
             android:exported="false">
