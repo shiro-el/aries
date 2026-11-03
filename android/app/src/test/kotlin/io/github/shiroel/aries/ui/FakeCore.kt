@@ -2,11 +2,14 @@ package io.github.shiroel.aries.ui
 
 import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.core.AriesCoreInterface
+import io.github.shiroel.aries.core.BeaconCheck
 import io.github.shiroel.aries.core.AttachOptions
 import io.github.shiroel.aries.core.BeaconFetcher
 import io.github.shiroel.aries.core.BeaconInstall
 import io.github.shiroel.aries.core.BeaconRelease
+import io.github.shiroel.aries.core.BeaconSource
 import io.github.shiroel.aries.core.BeaconState
+import io.github.shiroel.aries.core.BeaconUpdate
 import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.Host
@@ -210,16 +213,38 @@ class FakeCore : AriesCoreInterface {
     /** How `installBeacon` ends: its linger result, or this error. */
     var beaconLinger: Linger = Linger.Enabled
     var beaconFailWith: CoreException? = null
+    var beaconOs = "linux"
+    var autoUpdate = true
+    var installs = 0
 
     override fun beaconRelease(): BeaconRelease = BeaconRelease("0.1.0", emptyList())
 
     override suspend fun installBeacon(hostId: String, fetcher: BeaconFetcher): BeaconInstall {
         beaconFailWith?.let { throw it }
-        beacon = BeaconState.Installed("0.1.0", 1u, true, "0.1.17", beaconLinger == Linger.Enabled, true, ">=0.1.0, <0.2.0")
-        return BeaconInstall("0.1.0", beaconLinger)
+        installs++
+        beacon = installed("0.1.0", supported = true, linger = beaconLinger == Linger.Enabled)
+        return BeaconInstall("0.1.0", beaconLinger, BeaconSource.HOST_DOWNLOAD)
     }
 
     override suspend fun beaconStatus(hostId: String): BeaconState = beacon
+
+    /** Like the core: an unsupported Beacon is updated, or reported when auto update is off. */
+    override suspend fun checkBeacon(hostId: String, fetcher: BeaconFetcher): BeaconCheck {
+        val state = beacon
+        if (state !is BeaconState.Installed || state.supported) return BeaconCheck(state, BeaconUpdate.NotNeeded)
+        if (!autoUpdate) return BeaconCheck(state, BeaconUpdate.Needed)
+        val install = installBeacon(hostId, fetcher)
+        return BeaconCheck(beacon, BeaconUpdate.Updated(state.version, install))
+    }
+
+    override fun beaconAutoUpdate(): Boolean = autoUpdate
+
+    override fun setBeaconAutoUpdate(on: Boolean) {
+        autoUpdate = on
+    }
+
+    fun installed(version: String, supported: Boolean = true, linger: Boolean = true) =
+        BeaconState.Installed(version, 1u, true, "0.1.17", linger, supported, ">=0.1.0, <0.2.0", beaconOs)
 
     override suspend fun uninstallBeacon(hostId: String) {
         beacon = BeaconState.NotInstalled

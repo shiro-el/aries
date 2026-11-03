@@ -7,6 +7,7 @@ import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AriesCoreInterface
 import io.github.shiroel.aries.core.BeaconFetcher
 import io.github.shiroel.aries.core.BeaconState
+import io.github.shiroel.aries.core.BeaconUpdate
 import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.Host
@@ -43,16 +44,34 @@ class BeaconModel(
         private set
     var confirmRemove by mutableStateOf(false)
         private set
+    /** What connecting did about the Beacon's version. */
+    var update by mutableStateOf<BeaconUpdate>(BeaconUpdate.NotNeeded)
+        private set
+    var autoUpdate by mutableStateOf(true)
+        private set
 
-    /** Reads the Host's Beacon version; called when a Host is connected. */
+    /** The release this app installs. */
+    val pinnedVersion: String get() = core.beaconRelease().version
+
+    /**
+     * Reads the Host's Beacon when a Host is connected, updating an
+     * out-of-date one unless automatic updates are off.
+     */
     fun load(host: Host) {
         this.host = host
+        autoUpdate = core.beaconAutoUpdate()
+        update = BeaconUpdate.NotNeeded
         if (host.endpoint !is Endpoint.Ssh) {
             ui = BeaconUi.Unavailable(Message(R.string.beacon_needs_ssh))
             return
         }
         ui = BeaconUi.Loading
-        run { onKey { core.beaconStatus(host.id) } }
+        run {
+            val check = onKey { core.checkBeacon(host.id, fetcher) }
+            update = check.update
+            (check.update as? BeaconUpdate.Updated)?.let { explainLinger(host, it.install.linger) }
+            check.state
+        }
     }
 
     fun install() {
@@ -60,13 +79,32 @@ class BeaconModel(
         ui = BeaconUi.Working
         run {
             val result = onKey { core.installBeacon(host.id, fetcher) }
-            (result.linger as? Linger.Failed)?.let {
-                prompt = Prompt.Problem(
-                    Message(R.string.beacon_linger_title),
-                    Message(R.string.beacon_linger_body, listOf(it.reason, userOf(host))),
-                )
-            }
+            update = BeaconUpdate.NotNeeded
+            explainLinger(host, result.linger)
             onKey { core.beaconStatus(host.id) }
+        }
+    }
+
+    fun changeAutoUpdate(on: Boolean) {
+        try {
+            core.setBeaconAutoUpdate(on)
+            autoUpdate = on
+        } catch (e: CoreException) {
+            prompt = problemFor(e)
+        }
+    }
+
+    private fun explainLinger(host: Host, linger: Linger) {
+        prompt = when (linger) {
+            is Linger.Failed -> Prompt.Problem(
+                Message(R.string.beacon_linger_title),
+                Message(R.string.beacon_linger_body, listOf(linger.reason, userOf(host))),
+            )
+            Linger.LoginSession -> Prompt.Problem(
+                Message(R.string.beacon_macos_login_title),
+                Message(R.string.beacon_macos_login_body),
+            )
+            Linger.Enabled -> return
         }
     }
 

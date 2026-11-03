@@ -3,7 +3,8 @@
 //! `identity.sealed` (the SSH private key, sealed by the [`KeyVault`] under
 //! the key's [`KeyProtection`]) and `identity.pub`; extra SSH keys in
 //! `keys.json` (id, label, public half) and `key-<id>.sealed` (same format
-//! as `identity.sealed`). Per-Host local state goes under `hosts/<id>/`
+//! as `identity.sealed`); app settings in `settings.json`. Per-Host local
+//! state goes under `hosts/<id>/`
 //! ([`Store::host_dir`]), which Host removal deletes.
 
 use std::path::{Path, PathBuf};
@@ -39,6 +40,22 @@ pub(crate) struct SavedKey {
     pub id: String,
     pub label: String,
     pub public: String,
+}
+
+/// `settings.json`: app-wide preferences. Missing fields take their default.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub(crate) struct Settings {
+    /// Connecting updates an out-of-date Beacon (ticket 26).
+    pub beacon_auto_update: bool,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            beacon_auto_update: true,
+        }
+    }
 }
 
 pub(crate) struct Store {
@@ -152,6 +169,19 @@ impl Store {
         keys.push(key.clone());
         let bytes = serde_json::to_vec_pretty(&keys).map_err(storage)?;
         self.write_atomic("keys.json", &bytes)
+    }
+
+    /// App settings; defaults if `settings.json` is missing or unreadable.
+    pub fn read_settings(&self) -> Settings {
+        std::fs::read(self.dir.join("settings.json"))
+            .ok()
+            .and_then(|b| serde_json::from_slice(&b).ok())
+            .unwrap_or_default()
+    }
+
+    pub fn write_settings(&self, settings: &Settings) -> Result<(), CoreError> {
+        let bytes = serde_json::to_vec_pretty(settings).map_err(storage)?;
+        self.write_atomic("settings.json", &bytes)
     }
 
     fn write_atomic(&self, name: &str, bytes: &[u8]) -> Result<(), CoreError> {

@@ -9,15 +9,20 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.BeaconState
+import io.github.shiroel.aries.core.BeaconUpdate
 
 /** The Host's Beacon: version, service health, install and remove. */
 @Composable
@@ -49,7 +54,23 @@ fun BeaconSection(model: BeaconModel) {
                             color = MaterialTheme.colorScheme.error,
                         )
                     }
-                    if (!s.linger) {
+                    when (val u = model.update) {
+                        is BeaconUpdate.Updated -> Text(
+                            stringResource(R.string.beacon_updated, u.from, u.install.version),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        BeaconUpdate.Needed -> {
+                            Text(
+                                stringResource(R.string.beacon_update_needed, s.version, model.pinnedVersion),
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                            Button(onClick = model::install) { Text(stringResource(R.string.beacon_update_button)) }
+                        }
+                        BeaconUpdate.NotNeeded -> {}
+                    }
+                    if (s.os == "macos") {
+                        Text(stringResource(R.string.beacon_macos_login_limit), style = MaterialTheme.typography.bodySmall)
+                    } else if (!s.linger) {
                         Text(
                             stringResource(R.string.beacon_no_linger, userOf(host)),
                             style = MaterialTheme.typography.bodySmall,
@@ -58,6 +79,18 @@ fun BeaconSection(model: BeaconModel) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = model::install) { Text(stringResource(R.string.beacon_reinstall_button)) }
                         OutlinedButton(onClick = model::askRemove) { Text(stringResource(R.string.beacon_remove_button)) }
+                    }
+                    Row(
+                        Modifier.fillMaxWidth().toggleable(
+                            value = model.autoUpdate,
+                            role = Role.Switch,
+                            onValueChange = model::changeAutoUpdate,
+                        ),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(stringResource(R.string.beacon_auto_update))
+                        Switch(checked = model.autoUpdate, onCheckedChange = null)
                     }
                 }
             }

@@ -9,6 +9,10 @@
 //!   Beacon install tests.
 //!   [`DockerNetwork`] + [`SshdHost::start_on`] chain several of them for
 //!   jump host tests.
+//! - [`ReleaseServer`]: a local fake of GitHub Releases for Beacon downloads.
+
+mod release_server;
+pub use release_server::ReleaseServer;
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
@@ -494,8 +498,16 @@ fn docker(args: &[&str]) -> String {
     String::from_utf8_lossy(&out.stdout).into_owned()
 }
 
-/// Image tag built from `fixtures/sshd-systemd/Dockerfile`.
-pub const SYSTEMD_IMAGE: &str = "aries-test-sshd-systemd:1";
+/// Image built from `fixtures/sshd-systemd/Dockerfile`, tagged by a hash of
+/// the Dockerfile like [`sshd_image`].
+pub fn systemd_image() -> String {
+    use std::hash::{Hash, Hasher};
+    let dockerfile = std::fs::read(repo_root().join("fixtures/sshd-systemd/Dockerfile"))
+        .expect("read sshd-systemd Dockerfile");
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    dockerfile.hash(&mut h);
+    format!("aries-test-sshd-systemd:{:016x}", h.finish())
+}
 
 /// A docker Linux Host with systemd as PID 1 and a real sshd: an SSH login
 /// gets a logind session and a systemd user manager, so `systemctl --user`
@@ -519,13 +531,8 @@ impl SystemdHost {
     pub fn start() -> Self {
         let bin = herdr_core_bin();
         let fixture = repo_root().join("fixtures/sshd-systemd");
-        docker(&[
-            "build",
-            "-q",
-            "-t",
-            SYSTEMD_IMAGE,
-            &fixture.to_string_lossy(),
-        ]);
+        let image = systemd_image();
+        docker(&["build", "-q", "-t", &image, &fixture.to_string_lossy()]);
         let prefix =
             std::env::var("ARIES_TEST_CONTAINER_PREFIX").unwrap_or_else(|_| "aries-test".into());
         let container = unique(&format!("{prefix}-systemd"));
@@ -554,7 +561,7 @@ impl SystemdHost {
             &mount,
             "--entrypoint",
             "/bin/sh",
-            SYSTEMD_IMAGE,
+            &image,
             "-c",
             "mount -o remount,rw /sys/fs/cgroup && exec /sbin/init",
         ]);
