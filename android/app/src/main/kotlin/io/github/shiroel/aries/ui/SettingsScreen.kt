@@ -136,6 +136,7 @@ fun SettingsScreen(
                     ) { model.setDefaultAttachMode(if (it) AttachMode.INPUT else AttachMode.OBSERVE) }
                 }
             }
+            item { SettingsField { io.github.shiroel.aries.dictation.DictationSettings() } }
         }
     }
 }
