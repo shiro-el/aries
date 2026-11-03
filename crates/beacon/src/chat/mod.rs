@@ -11,6 +11,7 @@
 pub mod answer;
 pub mod claude;
 pub mod codex;
+mod details;
 mod follow;
 mod jsonl;
 pub mod media;

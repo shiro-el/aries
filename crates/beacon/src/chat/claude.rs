@@ -12,7 +12,7 @@ use std::path::PathBuf;
 
 use aries_protocol::chat::{
     ChatBody, ChatDiff, ChatEvent, ChatImage, ChatItem, ChatQuestion, DiffHunk, Question,
-    QuestionOption, ToolStatus,
+    QuestionOption, ResponseMetadata, ToolDetails, ToolStatus,
 };
 use serde_json::Value;
 
@@ -116,6 +116,7 @@ fn proc_start(pid: u32) -> Option<String> {
 #[derive(Default)]
 pub struct ClaudeInterpreter {
     tools: HashMap<String, ChatItem>,
+    last_agent: Option<ChatItem>,
 }
 
 impl Interpreter for ClaudeInterpreter {
@@ -126,11 +127,32 @@ impl Interpreter for ClaudeInterpreter {
         if record["isSidechain"] == true || record["isMeta"] == true {
             return Vec::new();
         }
+        if record["type"] == "system" && record["subtype"] == "turn_duration" {
+            let Some(duration) = record["durationMs"].as_u64() else {
+                return Vec::new();
+            };
+            let Some(agent) = &mut self.last_agent else {
+                return Vec::new();
+            };
+            if let ChatBody::Agent { metadata, .. } = &mut agent.body {
+                metadata.get_or_insert_default().duration_ms = Some(duration);
+            }
+            return vec![ChatEvent::Item {
+                item: agent.clone(),
+            }];
+        }
         let items = match record["type"].as_str() {
             Some("user") => self.user(&record),
             Some("assistant") => self.assistant(&record),
             _ => Vec::new(),
         };
+        for item in &items {
+            match &item.body {
+                ChatBody::User { .. } | ChatBody::Error { .. } => self.last_agent = None,
+                ChatBody::Agent { .. } => self.last_agent = Some(item.clone()),
+                _ => {}
+            }
+        }
         items
             .into_iter()
             .map(|item| ChatEvent::Item { item })
@@ -207,6 +229,7 @@ impl ClaudeInterpreter {
             diff,
             images,
             input,
+            details,
             ..
         } = &mut item.body
         {
@@ -219,6 +242,11 @@ impl ClaudeInterpreter {
             *output = Some(result_text(&block["content"]));
             if !failed {
                 *diff = edit_diff(structured, input);
+            }
+            let cwd = details.as_ref().and_then(|d| d.cwd.clone());
+            *details = super::details::tool(input, structured);
+            if let Some(cwd) = cwd {
+                details.get_or_insert_default().cwd = Some(cwd);
             }
             *images = result_images(&block["content"], structured);
         }
@@ -249,7 +277,23 @@ impl ClaudeInterpreter {
                     } else if text.trim().is_empty() {
                         continue;
                     } else {
-                        ChatBody::Agent { text }
+                        ChatBody::Agent {
+                            text,
+                            metadata: super::details::metadata(ResponseMetadata {
+                                model: super::details::text(&record["message"]["model"]),
+                                input_tokens: record["message"]["usage"]["input_tokens"].as_u64(),
+                                output_tokens: record["message"]["usage"]["output_tokens"].as_u64(),
+                                cache_read_tokens:
+                                    record["message"]["usage"]["cache_read_input_tokens"].as_u64(),
+                                cache_write_tokens:
+                                    record["message"]["usage"]["cache_creation_input_tokens"]
+                                        .as_u64(),
+                                completion: super::details::completion(
+                                    &record["message"]["stop_reason"],
+                                ),
+                                ..ResponseMetadata::default()
+                            }),
+                        }
                     }
                 }
                 Some("thinking") => ChatBody::Thinking {
@@ -269,6 +313,13 @@ impl ClaudeInterpreter {
                         id: call.to_owned(),
                         ts: ts.clone(),
                         body: ChatBody::Tool {
+                            details: {
+                                let mut d = super::details::tool(&input, &Value::Null);
+                                if let Some(cwd) = super::details::text(&record["cwd"]) {
+                                    d.get_or_insert_with(ToolDetails::default).cwd = Some(cwd);
+                                }
+                                d
+                            },
                             title: tool_title(&name, &input),
                             question: (name == "AskUserQuestion")
                                 .then(|| question(&input))

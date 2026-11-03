@@ -528,6 +528,7 @@ private fun ChatEntryView(
         is ChatEntryBody.Agent -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(agentName, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             ChatFileText(b.text)
+            b.metadata?.let { ChatResponseMetadataView(it) }
         }
         is ChatEntryBody.Thinking -> Column {
             Text(
@@ -573,11 +574,15 @@ private fun ToolView(
     Column(
         Modifier.fillMaxWidth()
             .background(MaterialTheme.colorScheme.surfaceVariant)
-            .clickable(onClick = onToggle)
-            .semantics { contentDescription = label }
             .padding(8.dp),
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                .clickable(onClick = onToggle)
+                .semantics { contentDescription = label },
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Text(tool.name, style = MaterialTheme.typography.labelLarge)
             Text(
                 tool.title,
@@ -602,8 +607,8 @@ private fun ToolView(
         tool.diff?.let { DiffView(it, expanded) }
         tool.images.forEach { ChatImageView(it, image) }
         if (expanded) {
-            Text(stringResource(R.string.chat_tool_input), style = MaterialTheme.typography.labelMedium)
-            Text(tool.input, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+            tool.details?.let { ChatToolDetailsView(it) }
+            if (tool.input.isNotBlank()) ChatRawInput(tool.input)
             tool.output?.let {
                 Text(stringResource(R.string.chat_tool_output), style = MaterialTheme.typography.labelMedium)
                 Text(

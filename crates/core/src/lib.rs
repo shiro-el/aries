@@ -47,8 +47,8 @@ pub use calls::{
     CallReplyOutcome, CallUrgency, CallWatch,
 };
 pub use chat::{
-    ChatEntry, ChatEntryBody, ChatQuestionOption, ChatQuestionPart, ChatSnapshot, ChatStatus,
-    ChatToolStatus, ChatWatch,
+    ChatEntry, ChatEntryBody, ChatQuestionOption, ChatQuestionPart, ChatResponseCompletion,
+    ChatResponseMetadata, ChatSnapshot, ChatStatus, ChatToolDetails, ChatToolStatus, ChatWatch,
 };
 pub use error::{AnswerProblem, CoreError, Incompatibility, VaultError};
 pub use files::{RemoteDirectory, RemoteFileBytes, RemoteFileEntry, RemoteFilePage};

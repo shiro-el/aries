@@ -150,12 +150,73 @@ class ChatScreenTest {
         compose.onNodeWithContentDescription(str(R.string.chat_tool_expand_label, "Write")).performClick()
         compose.waitForIdle()
         compose.onNodeWithText("File created successfully").assertExists()
-        compose.onNodeWithText(str(R.string.chat_tool_input)).assertExists()
+        compose.onNodeWithText(write.body.let { (it as ChatEntryBody.Tool).input }).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.chat_tool_raw_input)).performClick()
         compose.onNodeWithText(write.body.let { (it as ChatEntryBody.Tool).input }).assertExists()
+        compose.onNodeWithText(str(R.string.chat_tool_raw_input)).performClick()
+        compose.onNodeWithText(write.body.let { (it as ChatEntryBody.Tool).input }).assertDoesNotExist()
 
         compose.onNodeWithContentDescription(str(R.string.chat_tool_expand_label, "Write")).performClick()
         compose.waitForIdle()
         compose.onNodeWithText("File created successfully").assertDoesNotExist()
+    }
+
+    @Test
+    @Config(qualifiers = "h1200dp")
+    fun commandDetailsAndResponseMetadataShowOnlyRecordedFields() {
+        val core = FakeCore()
+        openChat(core)
+        val command = entry("cmd", ChatEntryBody.Tool(
+            "Bash", "pwd", "{raw command input}", ChatToolStatus.DONE, "/repo",
+            details = io.github.shiroel.aries.core.ChatToolDetails(
+                command = "pwd", cwd = "/repo", exitCode = 0L, durationMs = 12uL,
+            ),
+        ))
+        val reply = entry("reply", ChatEntryBody.Agent("Done.", metadata = io.github.shiroel.aries.core.ChatResponseMetadata(
+            model = "agent-model", inputTokens = 5uL, outputTokens = 2uL, cacheReadTokens = 0uL,
+            durationMs = 1234uL, completion = io.github.shiroel.aries.core.ChatResponseCompletion.INTERRUPTED,
+        )))
+        core.pushChat(ChatSnapshot(listOf(command, reply), ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.chat_tool_command, "pwd")).assertDoesNotExist()
+        compose.onNodeWithContentDescription(str(R.string.chat_tool_expand_label, "Bash")).performClick()
+        compose.onNodeWithText(str(R.string.chat_tool_command, "pwd")).assertExists()
+        compose.onNodeWithText(str(R.string.chat_tool_cwd, "/repo")).assertExists()
+        compose.onNodeWithText(str(R.string.chat_tool_exit_code, "0")).assertExists()
+        compose.onNodeWithText(str(R.string.chat_tool_duration, "12")).assertExists()
+        compose.onNodeWithText(str(R.string.chat_tool_result_count, "0")).assertDoesNotExist()
+        compose.onNodeWithText("{raw command input}").assertDoesNotExist()
+        val metadata = listOf(
+            str(R.string.chat_response_model, "agent-model"),
+            str(R.string.chat_response_input_tokens, "5"),
+            str(R.string.chat_response_output_tokens, "2"),
+            str(R.string.chat_response_cache_read_tokens, "0"),
+            str(R.string.chat_response_duration, "1234"),
+            str(R.string.chat_response_interrupted),
+        ).joinToString(" · ")
+        compose.onNodeWithText(metadata).assertExists()
+        compose.onNodeWithText(str(R.string.chat_response_cache_write_tokens, "0"), substring = true).assertDoesNotExist()
+    }
+
+    @Test
+    fun searchDetailsShowThePatternPathAndZeroResults() {
+        val core = FakeCore()
+        openChat(core)
+        val search = entry("grep", ChatEntryBody.Tool(
+            "Grep", "TODO", "{raw search input}", ChatToolStatus.DONE, "No matches",
+            details = io.github.shiroel.aries.core.ChatToolDetails(
+                pattern = "TODO", path = "src", resultCount = 0uL,
+            ),
+        ))
+        core.pushChat(ChatSnapshot(listOf(search), ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription(str(R.string.chat_tool_expand_label, "Grep")).performClick()
+        compose.onNodeWithText(str(R.string.chat_tool_pattern, "TODO")).assertExists()
+        compose.onNodeWithText(str(R.string.chat_tool_path, "src")).assertExists()
+        compose.onNodeWithText(str(R.string.chat_tool_result_count, "0")).assertExists()
+        compose.onNodeWithText(str(R.string.chat_tool_exit_code, "0")).assertDoesNotExist()
+        compose.onNodeWithText("{raw search input}").assertDoesNotExist()
+        compose.onNodeWithText("No matches").assertExists()
     }
 
     private fun edit(lines: List<String>, truncated: Boolean = false) = entry(

@@ -66,7 +66,7 @@ fn short(body: &ChatBody) -> String {
     let cut = |s: &str| s.chars().take(40).collect::<String>();
     match body {
         ChatBody::User { text, images } => format!("user: {} [{}]", cut(text), images.len()),
-        ChatBody::Agent { text } => format!("agent: {}", cut(text)),
+        ChatBody::Agent { text, .. } => format!("agent: {}", cut(text)),
         ChatBody::Thinking { text } => format!("thinking: {text:?}"),
         ChatBody::Tool {
             name,
