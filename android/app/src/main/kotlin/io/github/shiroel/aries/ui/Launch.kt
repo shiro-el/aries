@@ -146,6 +146,7 @@ fun LaunchDialog(
     onDismiss: () -> Unit,
     onSave: () -> Unit = {},
     onDelete: (SavedLaunch) -> Unit = {},
+    onPin: ((SavedLaunch) -> Unit)? = null,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -169,6 +170,11 @@ fun LaunchDialog(
                                 enabled = !form.busy,
                                 onClick = { onDelete(s) },
                             ) { Text(stringResource(R.string.launch_saved_delete)) }
+                        }
+                        onPin?.let { pin ->
+                            TextButton(onClick = { pin(s) }, enabled = !form.busy) {
+                                Text(stringResource(R.string.shortcuts_pin_button))
+                            }
                         }
                     }
                 }

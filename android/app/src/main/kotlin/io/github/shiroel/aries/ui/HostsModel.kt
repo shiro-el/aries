@@ -120,6 +120,7 @@ class HostsModel(
     private val keyWork: CoroutineContext = EmptyCoroutineContext,
     private val pushPlatform: PushPlatform = NoPush,
     private val http: HttpClient = HttpRelayClient(),
+    private val onSavedLaunchesChanged: () -> Unit = {},
     private val locationStore: LastLocationStore? = null,
 ) {
     /** Current Host's settings models; a previous Host's pending work keeps its own state. */
@@ -385,6 +386,7 @@ class HostsModel(
         get() = (screen as? Screen.Chat ?: (screen as? Screen.Terminal)?.returnTo as? Screen.Chat)?.chat
 
     private var started = false
+    private var explicitSurfaceEntry = false
     private var startupHostId: String? = null
     private var restoring by mutableStateOf(false)
 
@@ -399,7 +401,7 @@ class HostsModel(
         if (target != null) {
             startupHostId = target.hostId
             openPushedAgent(target.hostId, target.terminal, openChat = target.chat)
-        } else if (screen == Screen.Hosts) {
+        } else if (!explicitSurfaceEntry && screen == Screen.Hosts) {
             hosts.find { it.id == saved?.hostId }?.let {
                 startupHostId = it.id
                 connect(it, saved)
@@ -537,7 +539,7 @@ class HostsModel(
 
     fun connect(host: Host) = connect(host, null)
 
-    private fun connect(host: Host, restore: LastLocation?) {
+    private fun connect(host: Host, restore: LastLocation?, savedLaunchId: String? = null) {
         restoring = restore != null
         missingKeyHostId = null
         val connecting = Screen.Connecting(host)
@@ -558,7 +560,7 @@ class HostsModel(
                 open = conn to null
                 screen = Screen.Browse(browser)
                 loadHostSettings(host)
-                status = watchBrowse(link, browser, restore)
+                status = watchBrowse(link, browser, restore, savedLaunchId)
             } catch (e: CoreException) {
                 if (screen !== connecting) return@launch
                 restoring = false
@@ -593,6 +595,7 @@ class HostsModel(
         try {
             form.stored(conn.saveLaunch(form.toSaved()))
             browser.savedLaunches = form.saved.toList()
+            onSavedLaunchesChanged()
         } catch (e: CoreException) {
             form.error = launchProblem(e)
         }
@@ -605,6 +608,7 @@ class HostsModel(
             conn.deleteSavedLaunch(saved.id)
             form.removed(saved.id)
             browser.savedLaunches = form.saved.toList()
+            onSavedLaunchesChanged()
         } catch (e: CoreException) {
             form.error = launchProblem(e)
         }
@@ -730,7 +734,8 @@ class HostsModel(
     /** The open Host's structure and live Agent status, on each line [HostLink] brings; cancelled on [back]. */
     private var status: Job? = null
 
-    private fun watchBrowse(link: HostLink, browser: HostBrowser, restore: LastLocation? = null): Job = scope.launch {
+    private fun watchBrowse(link: HostLink, browser: HostBrowser, restore: LastLocation? = null, savedLaunchId: String? = null): Job = scope.launch {
+        var pendingLaunch = savedLaunchId
         var pending = restore
         var terminals: List<TerminalInfo>? = null
         fun restoreIfReady() {
@@ -765,6 +770,12 @@ class HostsModel(
                     override fun onStructure(structure: HostStructure) {
                         scope.launch {
                             browser.update(structure)
+                            val id = pendingLaunch
+                            pendingLaunch = null
+                            if (id != null && (screen as? Screen.Browse)?.browser === browser) {
+                                val saved = browser.savedLaunches.find { it.id == id }
+                                if (saved != null) runSaved(browser, saved) else savedLaunchMissing()
+                            }
                             restoreIfReady()
                             pendingQuickOpen?.takeIf { it.host.id == browser.host.id }?.let {
                                 if ((screen as? Screen.Browse)?.browser === browser) revealQuickOpen(browser, it)
@@ -1018,6 +1029,25 @@ class HostsModel(
         openAgents(focus = null)
     }
 
+    /** Resolve QS taps from the latest persisted pull, including the whole machine address. */
+    fun openTile() {
+        explicitSurfaceEntry = true
+        val target = io.github.shiroel.aries.AgentSurfaces.attention(core)
+        if (target == null) openAgents() else openPushedAgent(target.hostId, target.terminal)
+    }
+
+    /** Connect through the existing biometric/trust path before resolving and executing a preset. */
+    fun openSavedLaunch(hostId: String, launchId: String) {
+        explicitSurfaceEntry = true
+        back()
+        val host = hosts.find { it.id == hostId }
+        if (host == null) savedLaunchMissing() else connect(host, restore = null, savedLaunchId = launchId)
+    }
+
+    private fun savedLaunchMissing() {
+        prompt = Prompt.Problem(Message(R.string.shortcuts_missing_title), Message(R.string.shortcuts_missing_body))
+    }
+
     /**
      * A tapped Agent notification (warm or cold start): leaves whatever is
      * open, shows the Agents list and, once [hostId]'s list arrives, opens
@@ -1168,6 +1198,7 @@ class HostsModel(
     }
 
     private fun hostsChanged() {
+        onSavedLaunchesChanged()
         if (callsActive || callInboxOpen) calls.watch(hosts, everyHost = callInboxOpen)
     }
 

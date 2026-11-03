@@ -4,6 +4,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import io.github.shiroel.aries.weardata.OpenWatchAgent
 
 /**
  * What tapping an Agent notification opens: the Terminal [terminal] (whole
@@ -35,8 +36,10 @@ data class PushTarget(val hostId: String, val terminal: String, val chat: Boolea
 
         /** The target of a tapped notification, or null (a launcher start, or a relaunch from Recents). */
         fun from(intent: Intent?): PushTarget? {
-            if (intent?.action != ACTION) return null
+            if (intent == null) return null
             if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return null
+            OpenWatchAgent.fromIntent(intent)?.let { return PushTarget(it.hostId, it.terminal) }
+            if (intent.action != ACTION) return null
             val host = intent.getStringExtra(EXTRA_HOST) ?: return null
             val terminal = intent.getStringExtra(EXTRA_TERMINAL) ?: return null
             return PushTarget(host, terminal, intent.getBooleanExtra(EXTRA_CHAT, false))
