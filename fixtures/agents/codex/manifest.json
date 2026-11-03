@@ -1,0 +1,56 @@
+{
+  "codex_version": "0.165.0",
+  "source": "real Codex (stock npm build) in an isolated herdr-core 0.1.17 session, 2026-11-03",
+  "scrubbed": "account ids, credits/plan, encrypted reasoning, base/developer instructions, tool schemas; paths rewritten to /home/user/...",
+  "scenarios": [
+    {
+      "name": "simple-reply",
+      "file": "sessions/simple-reply.rollout.jsonl",
+      "thread_id": "01a1a00f-e299-7fd3-b26c-0677d2e90184",
+      "original_file_name": "rollout-2026-11-03T15-19-18-01a1a00f-e299-7fd3-b26c-0677d2e90184.jsonl",
+      "shows": "One turn, plain text reply ('pong'). t1 status working -> done."
+    },
+    {
+      "name": "permission-exec",
+      "file": "sessions/permission-exec.rollout.jsonl",
+      "thread_id": "01a1a010-c30c-75e1-b108-01e1c0e77e9e",
+      "original_file_name": "rollout-2026-11-03T15-20-15-01a1a010-c30c-75e1-b108-01e1c0e77e9e.jsonl",
+      "shows": "Read-only sandbox: exec fails, retried with sandbox_permissions=require_escalated; terminal blocked kind=permission; answered with key 'y'; CommandExecution item; empty final answer."
+    },
+    {
+      "name": "rotation-new-diff-image",
+      "file": "sessions/rotation-new-diff-image.rollout.jsonl",
+      "thread_id": "01a1a011-99e0-7ce0-9897-761972ab3825",
+      "original_file_name": "rollout-2026-11-03T15-21-10-01a1a011-99e0-7ce0-9897-761972ab3825.jsonl",
+      "shows": "Second thread in the same process after '/new' (rotation). apply_patch FileChange needing approval (blocked kind=permission, answered with 'enter'), then view_image ImageView, final answer 'Red'."
+    },
+    {
+      "name": "question-then-resume",
+      "file": "sessions/question-then-resume.rollout.jsonl",
+      "thread_id": "01a1a012-3af0-7c01-97e4-7e2adbc2ae4f",
+      "original_file_name": "rollout-2026-11-03T15-21-51-01a1a012-3af0-7c01-97e4-7e2adbc2ae4f.jsonl",
+      "shows": "request_user_input question (blocked kind=question, answered 'down enter' = Blue), then the process quit and `codex resume <id>` appended a second turn to the SAME rollout file."
+    },
+    {
+      "name": "thinking-user-image",
+      "file": "sessions/thinking-user-image.rollout.jsonl",
+      "thread_id": "01a1a014-02e4-73c1-918a-131632bef27a",
+      "original_file_name": "rollout-2026-11-03T15-23-48-01a1a014-02e4-73c1-918a-131632bef27a.jsonl",
+      "shows": "Reasoning item with summary_text (encrypted_content redacted), user-attached image via -i (input_image data URL + local_image), plus -i read errors for comma-split bogus paths."
+    },
+    {
+      "name": "error-model",
+      "file": "sessions/error-model.rollout.jsonl",
+      "thread_id": "01a1a014-0175-7803-b31f-ace13717d4e6",
+      "original_file_name": "rollout-2026-11-03T15-23-48-01a1a014-0175-7803-b31f-ace13717d4e6.jsonl",
+      "shows": "Turn fails before any model output: task_complete.error {message, codex_error_info=model_not_found}; terminal status error."
+    },
+    {
+      "name": "daemon-mode",
+      "file": "sessions/daemon-mode.rollout.jsonl",
+      "thread_id": "01a1a013-4a06-7f02-aead-6a8f33ac0e0c",
+      "original_file_name": "rollout-2026-11-03T15-23-01-01a1a013-4a06-7f02-aead-6a8f33ac0e0c.jsonl",
+      "shows": "Codex typed into a plain shell terminal WITHOUT --no-daemon; rollout written by the app-server daemon."
+    }
+  ]
+}
