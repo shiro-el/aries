@@ -17,7 +17,7 @@ fn porcelain_preserves_paths_and_consumes_rename_sources() {
 }
 
 #[test]
-fn diff_tracks_each_side_across_hunks_and_formats_a_selection() {
+fn diff_tracks_each_side_across_hunks_and_no_newline_markers() {
     let diff = aries_core::parse_git_diff(
         "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -2,2 +2,3 @@\n same\n-old\n+new\n+extra\n@@ -9 +10 @@\n-last\n+done\n\\ No newline at end of file\n",
         false,
@@ -52,7 +52,7 @@ fn git(repo: &std::path::Path, args: &[&str]) {
 async fn reader_uses_launch_folder_and_reads_staged_unstaged_and_untracked_without_writes() {
     let repo = tempfile::tempdir().unwrap();
     git(repo.path(), &["init", "-q"]);
-    std::fs::write(repo.path().join("both"), "first\n").unwrap();
+    std::fs::write(repo.path().join("both [1]"), "first\n").unwrap();
     git(repo.path(), &["add", "."]);
     git(
         repo.path(),
@@ -66,10 +66,17 @@ async fn reader_uses_launch_folder_and_reads_staged_unstaged_and_untracked_witho
             "base",
         ],
     );
-    std::fs::write(repo.path().join("both"), "staged\n").unwrap();
+    std::fs::write(repo.path().join("both [1]"), "staged\n").unwrap();
     git(repo.path(), &["add", "."]);
-    std::fs::write(repo.path().join("both"), "unstaged\n").unwrap();
+    std::fs::write(repo.path().join("both [1]"), "unstaged\n").unwrap();
     std::fs::write(repo.path().join("-[x] 한글\n.txt"), "untracked\n").unwrap();
+    // Both configured hooks fail if executed. Read-only previews must bypass them.
+    git(repo.path(), &["config", "diff.external", "/bin/false"]);
+    git(
+        repo.path(),
+        &["config", "diff.preview.textconv", "/bin/false"],
+    );
+    std::fs::write(repo.path().join(".git/info/attributes"), "* diff=preview\n").unwrap();
     let before = std::fs::read(repo.path().join(".git/index")).unwrap();
     let hc = HcSession::start();
     let launched = hc.rpc(
@@ -84,11 +91,11 @@ async fn reader_uses_launch_folder_and_reads_staged_unstaged_and_untracked_witho
     let changes = conn.git_changes(address.clone()).await.unwrap();
     assert!(!changes.not_repository);
     assert_eq!(changes.files.len(), 2);
-    let both = changes.files.iter().find(|f| f.path == "both").unwrap();
+    let both = changes.files.iter().find(|f| f.path == "both [1]").unwrap();
     assert!(both.staged && both.unstaged);
     for (kind, path, expected) in [
-        (aries_core::GitDiffKind::Staged, "both", "+staged"),
-        (aries_core::GitDiffKind::Unstaged, "both", "+unstaged"),
+        (aries_core::GitDiffKind::Staged, "both [1]", "+staged"),
+        (aries_core::GitDiffKind::Unstaged, "both [1]", "+unstaged"),
         (
             aries_core::GitDiffKind::Untracked,
             "-[x] 한글\n.txt",
