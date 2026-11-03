@@ -111,6 +111,12 @@
     <string name="files_range">Lines %1$d–%2$d of %3$d</string>
     <string name="files_previous_button">Previous page</string>
     <string name="files_next_button">Next page</string>
+    <!-- Remote image and PDF preview (111) -->
+    <string name="files_pdf_title">PDF page</string>
+    <string name="files_pdf_page">Page %1$d of %2$d</string>
+    <string name="files_preview_open">Open preview</string>
+    <string name="files_preview_too_large">This file exceeds the %1$d MiB preview limit.</string>
+    <string name="files_preview_failed">Could not preview this file. Check the file and connection, then refresh to retry.</string>
     <!-- File code view and Chat links (110) -->
     <string name="files_wrap_lines">Wrap lines</string>
     <string name="files_missing">File not found: %1$s</string>
@@ -269,6 +275,18 @@
     <string name="terminal_open_link">Open link</string>
     <string name="terminal_copy_link">Copy link</string>
 
+    <!-- Terminal output search -->
+    <string name="terminal_search_button">Search output</string>
+    <string name="terminal_search_hint">Find in output</string>
+    <string name="terminal_search_case">Match case</string>
+    <string name="terminal_search_regex">Regex</string>
+    <string name="terminal_search_previous">Previous match</string>
+    <string name="terminal_search_next">Next match</string>
+    <string name="terminal_search_close">Close search</string>
+    <string name="terminal_search_count">%1$d of %2$d</string>
+    <string name="terminal_search_no_matches">No matches</string>
+    <string name="terminal_search_invalid">Invalid search pattern or query too long</string>
+
     <string name="agents_button">All Agents</string>
     <string name="agents_title">Agents</string>
     <string name="agents_empty">No Agents are running on your Hosts.</string>
@@ -299,6 +317,13 @@
     <string name="agent_open_button">Open</string>
     <string name="agent_view_terminal">term</string>
     <string name="agent_view_chat">chat</string>
+    <!-- Terminal and Chat input history (108) -->
+    <string name="input_history_title">Input history</string>
+    <string name="input_history_hint">Recent inputs on this phone. Select one to edit before sending.</string>
+    <string name="input_history_empty">No input history yet.</string>
+    <string name="input_history_clear_button">Clear history</string>
+    <string name="input_history_failed">Could not read or save input history.</string>
+
     <string name="chat_title">Chat: %1$s</string>
     <!-- Chat reading position -->
     <string name="chat_latest_button">Latest</string>

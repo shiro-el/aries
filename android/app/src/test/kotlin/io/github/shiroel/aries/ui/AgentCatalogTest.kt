@@ -60,7 +60,7 @@ class AgentCatalogTest {
         compose.onNodeWithText(str(R.string.chat_catalog_failed)).assertExists()
         input.assertTextEquals("/rev")
         compose.runOnIdle { connection.catalogFailure = null }
-        compose.onNodeWithText(str(R.string.chat_catalog_refresh)).performClick()
+        compose.onNodeWithText(str(R.string.chat_catalog_refresh)).performScrollTo().performClick()
         compose.onNodeWithText("/review").assertExists()
         compose.onNodeWithText(str(R.string.chat_catalog_failed)).assertDoesNotExist()
         assertEquals(listOf(false, true), connection.catalogRequests)
@@ -70,7 +70,7 @@ class AgentCatalogTest {
     @Test fun skillsSearchDescriptionsAndReplaceSelectionWithoutSending() {
         open()
         compose.runOnIdle { chat.input = TextFieldValue("please OLD next", TextRange(7, 10)) }
-        compose.onNodeWithText(str(R.string.chat_skills_button)).performClick()
+        compose.onNodeWithText(str(R.string.chat_skills_button)).performScrollTo().performClick()
         compose.onNodeWithContentDescription(str(R.string.chat_skills_search)).performTextInput("regressions")
         compose.onNodeWithText("/testing").performClick()
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("please /testing next")

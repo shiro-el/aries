@@ -87,6 +87,7 @@ class ChatModel(
     /** Runs the calls that sign in to the Host (see [HostsModel]). */
     private val keyWork: CoroutineContext = EmptyCoroutineContext,
 ) {
+    val inputHistory = InputHistoryModel(core, host.id, terminal.address)
     /** The Agent's Terminal, its Agent status kept live by [update]. */
     var terminal by mutableStateOf(terminal)
         private set
@@ -238,7 +239,10 @@ class ChatModel(
         scope.launch {
             try {
                 when (val outcome = conn.sendMessage(terminal.address, text, HeldListener())) {
-                    SendOutcome.Sent -> if (draft == text) draft = ""
+                    SendOutcome.Sent -> {
+                        inputHistory.remember(text)
+                        if (draft == text) draft = ""
+                    }
                     is SendOutcome.Blocked -> {
                         refused = true
                         terminal = terminal.copy(

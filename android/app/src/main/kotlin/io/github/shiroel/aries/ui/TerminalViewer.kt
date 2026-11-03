@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -65,12 +66,14 @@ import io.github.shiroel.aries.core.ScreenFrame
 import io.github.shiroel.aries.core.ScreenLine
 import io.github.shiroel.aries.core.TerminalExit
 import io.github.shiroel.aries.core.TerminalInfo
+import io.github.shiroel.aries.core.TerminalSearch
 
 /**
  * One open Terminal's screen as the core's frames built it. The grid is
  * the Terminal's own size (observe mode): the desktop decides it.
  */
 class TerminalViewer(terminal: TerminalInfo) {
+    var inputHistory: InputHistoryModel? = null
     var terminal by mutableStateOf(terminal)
         private set
 
@@ -116,6 +119,11 @@ class TerminalViewer(terminal: TerminalInfo) {
     /** Moves the core's view (`TerminalView.scrollTo`); set while attached. */
     var scroller: ((UInt) -> UInt)? = null
 
+    var search by mutableStateOf<TerminalSearch?>(null)
+        private set
+    var searcher by mutableStateOf<((String, Boolean, Boolean) -> Unit)?>(null)
+    var searchNavigator: ((Boolean) -> Unit)? = null
+
     /** Reads [lines] further back (negative: towards live), within the scrollback. */
     fun scrollBack(lines: Int) {
         val to = (scrolled + lines).coerceIn(0, maxOf(history, scrolled))
@@ -145,6 +153,7 @@ class TerminalViewer(terminal: TerminalInfo) {
         title = frame.title
         scrolled = frame.scrolled.toInt()
         history = frame.history.toInt()
+        search = frame.search
         version++
     }
 
@@ -370,6 +379,7 @@ fun TerminalScreen(
     onSelectionSend: ((String) -> Unit)? = null,
 ) {
     var showGit by remember(viewer) { mutableStateOf(false) }
+    var searching by remember(viewer) { mutableStateOf(false) }
     if (showGit) GitChangesDialog(viewer.link, viewer.terminal, { showGit = false }, onGitSend)
     // The keyboard pushes the input and key bar up and shrinks the screen
     // (the Scaffold already keeps clear of the navigation bar).
@@ -377,12 +387,18 @@ fun TerminalScreen(
         AgentScreenHeader(viewer.terminal, viewer.link?.host?.name, onBack, AgentView.TERMINAL, onView,
             title = viewer.terminal.name?.takeIf { it.isNotBlank() } ?: viewer.title?.takeIf { it.isNotBlank() } ?: displayName(viewer.terminal),
             onChanges = { showGit = true }, link = viewer.link, onTerminalUpdate = { viewer.update(listOf(it)) })
-        Text(
-            stringResource(if (viewer.typing) R.string.terminal_typing else R.string.terminal_observing,
-                viewer.terminal.address, viewer.cols, viewer.rows),
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                stringResource(if (viewer.typing) R.string.terminal_typing else R.string.terminal_observing,
+                    viewer.terminal.address, viewer.cols, viewer.rows),
+                Modifier.weight(1f).padding(horizontal = 16.dp, vertical = 4.dp),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (!searching) TextButton(onClick = { searching = true }) {
+                Text(stringResource(R.string.terminal_search_button))
+            }
+        }
+        TerminalSearchBar(viewer, searching, onClose = { searching = false })
         viewer.exit?.let { Banner(exitText(it)) }
         val line = viewer.link?.state
         if (viewer.exit == null && line == LinkState.Reconnecting) Banner(stringResource(R.string.reconnecting))
@@ -520,6 +536,7 @@ private fun TerminalCanvas(viewer: TerminalViewer, look: TerminalLook, settings:
             SideEffect { if (viewer.phoneGrid != grid) viewer.phoneGrid = grid }
         }
         look.layout(baseCellW, baseCellH, widthPx, heightPx)
+        LaunchedEffect(viewer.search, look.cellW, look.cellH, heightPx) { look.revealSearchMatch() }
         // Zoom and pan: the phone's view only, the grid stays the Terminal's.
         val fontPx = baseFontPx * look.zoom
         val cellW = look.cellW
@@ -553,6 +570,13 @@ private fun TerminalCanvas(viewer: TerminalViewer, look: TerminalLook, settings:
                         }
                     }
                 }
+            }
+            for (mark in viewer.search?.highlights.orEmpty()) {
+                drawRect(
+                    if (mark.current) Color(0x99FFB300) else Color(0x55FFE082),
+                    Offset(mark.column.toInt() * cellW, mark.row.toInt() * cellH),
+                    Size(mark.width.toInt() * cellW, cellH),
+                )
             }
             viewer.cursor?.let { c ->
                 drawRect(

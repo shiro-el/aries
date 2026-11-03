@@ -65,6 +65,14 @@ val inKeyWork = ThreadLocal<Boolean>()
 
 /** In-memory stand-in for the Rust core, for UI tests. */
 class FakeCore : AriesCoreInterface {
+    private val inputs = mutableMapOf<Pair<String, String>, List<String>>()
+    override fun inputHistory(hostId: String, terminal: String): List<String> = inputs[hostId to terminal].orEmpty()
+    override fun rememberInput(hostId: String, terminal: String, text: String) {
+        inputs[hostId to terminal] = (listOf(text) + inputHistory(hostId, terminal)).take(50)
+    }
+    override fun clearInputHistory(hostId: String, terminal: String) {
+        inputs.remove(hostId to terminal)
+    }
     /**
      * Calls that open the SSH key outside [inKeyWork]. On a phone a
      * biometric key cannot be opened on the main thread, so each is a crash.
@@ -932,6 +940,14 @@ class FakeTerminalView(val address: String, val options: AttachOptions) : Termin
     val scrolls = mutableListOf<UInt>()
 
     override fun scrollTo(lines: UInt): UInt = lines.also { scrolls += it }
+
+    val searches = mutableListOf<Triple<String, Boolean, Boolean>>()
+    val searchMoves = mutableListOf<Boolean>()
+    override fun search(query: String, caseSensitive: Boolean, regex: Boolean) {
+        if (regex && query == "[") throw CoreException.Protocol("invalid terminal search pattern")
+        searches += Triple(query, caseSensitive, regex)
+    }
+    override fun searchNext(backwards: Boolean) { searchMoves += backwards }
 
     override fun close() {}
 }

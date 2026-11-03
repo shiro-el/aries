@@ -82,6 +82,26 @@ class ChatSendTest {
     }
 
     @Test
+    fun sentMessagesCanBeSelectedEditedAndClearedFromInputHistory() {
+        val conn = openChat(FakeCore())
+        val input = compose.onNodeWithContentDescription(str(R.string.chat_input_label))
+        input.performTextInput("first\n한국어")
+        compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
+        compose.onNodeWithText("Input history").performClick()
+        compose.onNodeWithText("first\n한국어").performClick()
+        input.assertTextEquals("first\n한국어")
+        assertEquals(listOf("t1" to "first\n한국어"), conn.typed)
+        input.performTextReplacement("edited message")
+        compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
+        assertEquals(listOf("t1" to "first\n한국어", "t1" to "edited message"), conn.typed)
+        compose.onNodeWithText("Input history").performClick()
+        compose.onNodeWithText("Clear history").performClick()
+        compose.onNodeWithText("No input history yet.").assertExists()
+        compose.onNodeWithText(str(R.string.cancel_button)).performClick()
+        input.assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
+    }
+
+    @Test
     fun enterAddsANewlineAndOnlyTheSendActionSubmits() {
         val conn = openChat(FakeCore())
         val input = compose.onNodeWithContentDescription(str(R.string.chat_input_label))
@@ -186,6 +206,9 @@ class ChatSendTest {
         compose.onNodeWithText("Write: /repo/hello.txt").assertExists()
         // The message stays, to send again once the Agent is free.
         compose.onNodeWithText("go on").assertExists()
+        compose.onNodeWithText("Input history").performClick()
+        compose.onNodeWithText("No input history yet.").assertExists()
+        compose.onNodeWithText(str(R.string.cancel_button)).performClick()
 
         compose.onNodeWithText(str(R.string.terminal_open_button)).performClick()
         compose.waitForIdle()
