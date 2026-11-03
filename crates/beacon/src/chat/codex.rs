@@ -183,6 +183,11 @@ pub struct CodexInterpreter {
     /// `request_user_input` question ids, in order, per call.
     question_ids: HashMap<String, Vec<String>>,
     user_images: Vec<ChatImage>,
+    model: Option<String>,
+    last_agent: Option<ChatItem>,
+    /// Consume usage once for a visible response; later tool-only responses
+    /// and duplicate token_count events must not overwrite it.
+    awaiting_usage: bool,
 }
 
 impl Interpreter for CodexInterpreter {
@@ -193,6 +198,11 @@ impl Interpreter for CodexInterpreter {
         let ts = record["timestamp"].as_str().map(str::to_owned);
         let payload = &record["payload"];
         match record["type"].as_str() {
+            Some("turn_context") => {
+                self.model = super::details::text(&payload["model"]);
+                Vec::new()
+            }
+            Some("token_usage_record") => self.response_usage(&payload["usage"]),
             Some("response_item") => self.response_item(payload, ts),
             Some("event_msg") => self.event(payload, ts),
             _ => Vec::new(),
@@ -214,6 +224,7 @@ fn tool(name: &str, title: String, input: Value, status: ToolStatus) -> ChatBody
     ChatBody::Tool {
         name: name.to_owned(),
         title: one_line(&title),
+        details: super::details::tool(&input, &Value::Null),
         input,
         status,
         output: None,
@@ -358,28 +369,97 @@ impl CodexInterpreter {
             Some(ids) => answers(&raw, &ids).unwrap_or(raw),
             None => raw,
         };
-        if let ChatBody::Tool { status, output, .. } = &mut it.body {
-            *status = ToolStatus::Done;
-            *output = Some(text);
+        if let ChatBody::Tool {
+            status,
+            output,
+            input,
+            details,
+            ..
+        } = &mut it.body
+        {
+            // Some Codex versions record command results as JSON strings;
+            // others also emit a CommandExecution item. Read only explicit fields.
+            let structured = serde_json::from_str::<Value>(&text).ok();
+            let result = structured.as_ref().unwrap_or(&Value::Null);
+            *details = super::details::tool(input, result);
+            *status = if details
+                .as_ref()
+                .and_then(|d| d.exit_code)
+                .is_some_and(|c| c != 0)
+            {
+                ToolStatus::Error
+            } else {
+                ToolStatus::Done
+            };
+            *output = Some(result["output"].as_str().map(str::to_owned).unwrap_or(text));
         }
         vec![ChatEvent::Item { item: it }]
     }
 
+    fn response_usage(&mut self, usage: &Value) -> Vec<ChatEvent> {
+        if !self.awaiting_usage || !usage.is_object() {
+            return Vec::new();
+        }
+        self.awaiting_usage = false;
+        let Some(agent) = &mut self.last_agent else {
+            return Vec::new();
+        };
+        if let ChatBody::Agent { metadata, .. } = &mut agent.body {
+            let m = metadata.get_or_insert_default();
+            m.input_tokens = usage["input_tokens"].as_u64();
+            m.output_tokens = usage["output_tokens"].as_u64();
+            m.cache_read_tokens = usage["cached_input_tokens"].as_u64();
+            m.cache_write_tokens = usage["cache_write_input_tokens"].as_u64();
+        }
+        vec![ChatEvent::Item {
+            item: agent.clone(),
+        }]
+    }
+
+    fn finish_response(&mut self, p: &Value, interrupted: bool) -> Vec<ChatEvent> {
+        let Some(agent) = &mut self.last_agent else {
+            return Vec::new();
+        };
+        if let ChatBody::Agent { metadata, .. } = &mut agent.body {
+            let m = metadata.get_or_insert_default();
+            m.duration_ms = p["duration_ms"].as_u64();
+            m.completion = Some(if interrupted {
+                aries_protocol::chat::ResponseCompletion::Interrupted
+            } else if p["error"].is_object() {
+                aries_protocol::chat::ResponseCompletion::Error
+            } else {
+                aries_protocol::chat::ResponseCompletion::Complete
+            });
+        }
+        vec![ChatEvent::Item {
+            item: agent.clone(),
+        }]
+    }
+
     fn event(&mut self, p: &Value, ts: Option<String>) -> Vec<ChatEvent> {
         match p["type"].as_str() {
+            Some("task_started") => {
+                self.last_agent = None;
+                self.awaiting_usage = false;
+                Vec::new()
+            }
+            Some("token_count") => self.response_usage(&p["info"]["last_token_usage"]),
+            Some("turn_aborted" | "task_interrupted") => self.finish_response(p, true),
             Some("item_completed") => self.completed(&p["item"], ts),
             Some("task_complete") => {
+                let mut events = self.finish_response(p, false);
                 let Some(message) = p["error"]["message"].as_str() else {
-                    return Vec::new();
+                    return events;
                 };
                 let turn = p["turn_id"].as_str().unwrap_or("turn");
-                vec![item(
+                events.push(item(
                     format!("{turn}:error"),
                     &ts,
                     ChatBody::Error {
                         message: message.to_owned(),
                     },
-                )]
+                ));
+                events
             }
             _ => Vec::new(),
         }
@@ -406,7 +486,13 @@ impl CodexInterpreter {
                 if text.trim().is_empty() {
                     return Vec::new();
                 }
-                ChatBody::Agent { text }
+                ChatBody::Agent {
+                    text,
+                    metadata: super::details::metadata(aries_protocol::chat::ResponseMetadata {
+                        model: self.model.clone(),
+                        ..Default::default()
+                    }),
+                }
             }
             Some("Reasoning") => {
                 let mut parts = texts(&it["summary_text"], |_| true);
@@ -432,6 +518,10 @@ impl CodexInterpreter {
             ts,
             body,
         };
+        if matches!(part.body, ChatBody::Agent { .. }) {
+            self.last_agent = Some(part.clone());
+            self.awaiting_usage = true;
+        }
         if matches!(part.body, ChatBody::Tool { .. })
             && let Some(call) = &self.open_exec
         {
@@ -475,7 +565,20 @@ fn command(it: &Value) -> ChatBody {
         })
         .or_else(|| it["command"].as_str().map(str::to_owned))
         .unwrap_or_default();
-    let mut body = tool("command", script, it.clone(), status(it));
+    let mut body = tool("command", script.clone(), it.clone(), status(it));
+    if let ChatBody::Tool { details, .. } = &mut body {
+        let d = details.get_or_insert_default();
+        d.command = Some(script);
+        d.cwd = super::details::text(&it["cwd"])
+            .map(|s| s.strip_prefix("file://").unwrap_or(&s).to_owned());
+        d.exit_code = it["exit_code"].as_i64();
+        d.duration_ms = it["duration_ms"].as_u64().or_else(|| {
+            it["duration"]["secs"]
+                .as_u64()?
+                .checked_mul(1000)?
+                .checked_add(it["duration"]["nanos"].as_u64()? / 1_000_000)
+        });
+    }
     if let ChatBody::Tool { output, .. } = &mut body {
         *output = it["aggregated_output"].as_str().map(str::to_owned);
     }
