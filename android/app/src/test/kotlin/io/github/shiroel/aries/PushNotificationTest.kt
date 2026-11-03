@@ -30,6 +30,18 @@ class PushNotificationTest {
     private fun shown(): List<Notification> = manager.activeNotifications.map { it.notification }.filter { it.flags and Notification.FLAG_GROUP_SUMMARY == 0 }
 
     @Test
+    fun doneShowsItsExcerptButOnlyDoneOnTheLockScreen() {
+        PushService.show(context, PushNotice("h1", "box", PushContent.Status("t1", "agent", null, true, AgentStatus.Done, 1uL, 7uL, null, "All tests passed.")))
+        val n = shown().single()
+        assertEquals("All tests passed.", n.extras.getCharSequence(Notification.EXTRA_TEXT).toString())
+        assertEquals(Notification.VISIBILITY_PRIVATE, n.visibility)
+        org.junit.Assert.assertNotNull(n.publicVersion)
+        assertEquals(context.getString(R.string.agent_status_done), n.publicVersion.extras.getCharSequence(Notification.EXTRA_TEXT).toString())
+        assertNull(n.publicVersion.extras.getCharSequence(Notification.EXTRA_TITLE))
+        assertEquals(0, n.publicVersion.actions.orEmpty().size)
+    }
+
+    @Test
     fun openingANotificationUpdatesTheSummaryAndPreservesItsAgentTarget() {
         PushService.show(context, status("t1", null, AgentStatus.Done))
         PushService.show(context, status("t2", null, AgentStatus.Done))

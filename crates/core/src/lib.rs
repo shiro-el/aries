@@ -5,6 +5,7 @@
 //! client), `store` (what survives a relaunch). The Host model, terminal,
 //! chat, push, calls and beacon manager modules arrive with their tickets.
 
+mod background;
 mod beacon;
 mod calls;
 mod chat;
@@ -1302,18 +1303,7 @@ impl HostConnection {
     /// as it is after the change.
     pub async fn mark_seen(&self, address: String, turn: u64) -> Result<TerminalInfo, CoreError> {
         let client = self.client.clone();
-        on_runtime(async move {
-            let now = client
-                .call("terminal.get", serde_json::json!({ "terminal": address }))
-                .await?;
-            if host_model::seen_turn(&now) >= turn {
-                return Ok(terminal_info(&now));
-            }
-            let labels =
-                serde_json::json!({ aries_protocol::agent_status::SEEN_LABEL: turn.to_string() });
-            set_labels(&client, &address, labels).await
-        })
-        .await
+        on_runtime(async move { background::mark_seen(&client, &address, turn).await }).await
     }
 
     /// Pins or unpins the Agent at `address` for every client through the

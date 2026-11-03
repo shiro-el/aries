@@ -352,6 +352,17 @@
     <string name="push_call_channel_urgent">Urgent Calls</string>
     <string name="push_call_channel_emergency">Emergency Calls</string>
     <string name="push_no_firebase">this build has no Firebase configuration</string>
+    <!-- Inline notification actions -->
+    <string name="notification_reply_button">Reply</string>
+    <string name="notification_reply_hint">Message the Agent</string>
+    <string name="notification_seen_button">Seen</string>
+    <string name="notification_snooze_button">In 1 hour</string>
+    <string name="notification_message_sent">Message sent</string>
+    <string name="notification_action_failed">Could not confirm the action. Open the Terminal to check before trying again.</string>
+    <string name="notification_action_offline">Not sent: no network. Open Aries to try again.</string>
+    <string name="notification_action_key_locked">Not sent: open Aries to unlock this Host’s SSH key.</string>
+    <string name="notification_marking_seen">Marking seen…</string>
+
     <string name="call_notify_open_app">Open app</string>
     <string name="call_notify_try_again">Try again</string>
     <string name="call_notify_sending">Sending “%1$s”…</string>
