@@ -287,6 +287,11 @@
     <string name="chat_status_no_core">The Beacon cannot reach herdr-core on this Host. Retrying…</string>
     <string name="chat_status_incompatible">The Beacon on this Host is newer than this app. Update Aries to read the Chat.</string>
     <string name="chat_you">You</string>
+    <!-- Chat text selection and clipboard actions. -->
+    <string name="chat_text_actions">Text actions</string>
+    <string name="chat_copy_all">Copy all</string>
+    <string name="chat_select_text">Select text</string>
+    <string name="chat_select_hint">Long press a word, then drag the handles to select the text to copy.</string>
     <string name="chat_thinking">Thinking</string>
     <string name="chat_tool_running">running</string>
     <string name="chat_tool_failed">failed</string>
