@@ -97,7 +97,8 @@ private fun String.languageSearchKey() = filterNot { it.isWhitespace() }.lowerca
 @Composable
 private fun LanguageRow(label: String, selected: Boolean, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().selectable(selected, role = Role.RadioButton, onClick = onClick).padding(vertical = 4.dp),
+        Modifier.fillMaxWidth().heightIn(min = 48.dp)
+            .selectable(selected, role = Role.RadioButton, onClick = onClick).padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         RadioButton(selected = selected, onClick = null)
