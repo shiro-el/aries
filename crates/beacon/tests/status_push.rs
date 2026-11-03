@@ -3,7 +3,6 @@
 //! as the push policy says. Fake Agents report their status with OSC 7501.
 
 use std::io::Write;
-use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
@@ -52,17 +51,6 @@ impl Host {
         cmd
     }
 
-    fn state_dir(&self) -> PathBuf {
-        let state = self
-            .hc
-            .env()
-            .into_iter()
-            .find(|(k, _)| k == "XDG_STATE_HOME")
-            .unwrap()
-            .1;
-        PathBuf::from(state).join("aries-beacon")
-    }
-
     fn pair(&mut self) {
         let body = serde_json::json!({"platform": "fcm", "device_token": "dev"}).to_string();
         let (status, body) = http_request(
@@ -96,9 +84,23 @@ impl Host {
         self.beacon_key = reply.beacon_key.parse().unwrap();
     }
 
+    /// Changes the policy the way the phone does: `aries-beacon policy set`.
     fn set_policy(&self, json: &str) {
-        std::fs::create_dir_all(self.state_dir()).unwrap();
-        std::fs::write(self.state_dir().join("push-policy.json"), json).unwrap();
+        let mut child = self
+            .command("policy")
+            .arg("set")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(json.as_bytes())
+            .unwrap();
+        let out = child.wait_with_output().unwrap();
+        assert!(out.status.success(), "policy set: {out:?}");
     }
 
     /// Starts `serve` and waits until it watches the core.
@@ -315,6 +317,26 @@ fn the_policy_file_can_add_done_and_subagents() {
         PushMessage::Status { top_level, .. } => assert!(!top_level),
         other => panic!("{other:?}"),
     }
+}
+
+#[test]
+fn done_is_pushed_only_for_a_turn_the_user_has_not_seen() {
+    let mut host = Host::new();
+    host.set_policy(r#"{"done": true}"#);
+    host.serve();
+    // Another client (the desktop app) already marked the turn seen
+    // (`herdr.seen`), so finishing it is Idle, not Done.
+    let seen = host.agent("seen", None, "status working\nwait\nstatus done\nwait\n");
+    host.hc.hc(&["label", &seen, "herdr.seen=1000"]);
+    host.hc.hc(&["send", &seen, "go"]);
+    std::thread::sleep(Duration::from_millis(500));
+    let unseen = host.agent(
+        "unseen",
+        None,
+        "status working\nsleep 0.2\nstatus done\nwait\n",
+    );
+
+    assert_eq!(host.exactly(1), [(unseen, AgentStatus::Done)]);
 }
 
 #[test]

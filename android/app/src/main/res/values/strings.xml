@@ -297,7 +297,7 @@
     <string name="call_answer_failed">Answer failed: %1$s</string>
     <string name="call_answer_unconfirmed">Answer not confirmed: %1$s</string>
     <string name="call_unconfirmed">The Beacon could not confirm which Terminal sent this Call, so it was only recorded.</string>
-    <string name="call_from_helper">From a helper Agent: only recorded, not pushed.</string>
+    <string name="call_from_helper">From a subagent: recorded in Call history; notified only when \"Include subagents\" is on.</string>
     <string name="call_open_terminal">Open Terminal</string>
     <string name="call_open_terminal_label">Open Terminal %1$s, which sent %2$s</string>
     <string name="call_terminal_gone_title">Terminal is gone</string>
@@ -353,4 +353,16 @@
     <string name="push_call_channel_urgent">Urgent Calls</string>
     <string name="push_call_channel_emergency">Emergency Calls</string>
     <string name="push_no_firebase">this build has no Firebase configuration</string>
+    <string name="push_policy_title">Notify me when</string>
+    <string name="push_policy_body">Saved on this Host, so the Beacon follows it while Aries is closed.</string>
+    <string name="push_policy_blocked">An Agent is blocked</string>
+    <string name="push_policy_blocked_hint">It waits for a permission, an answer or a login. Repeats for the same reason are not notified again.</string>
+    <string name="push_policy_error">An Agent reports an error</string>
+    <string name="push_policy_error_hint">It stopped because something went wrong.</string>
+    <string name="push_policy_done">An Agent finishes a turn</string>
+    <string name="push_policy_done_hint">Only turns you have not seen yet, here or in another Herdr app.</string>
+    <string name="push_policy_child_agents">Include subagents</string>
+    <string name="push_policy_child_agents_hint">Also notify for Agents started by another Agent, and for their Calls. When off, only top-level Agents notify and subagent Calls are only recorded in Call history.</string>
+    <string name="push_policy_failed">Could not read or change the notification options on the Host: %1$s</string>
+    <string name="push_policy_retry">Load the options again</string>
 </resources>

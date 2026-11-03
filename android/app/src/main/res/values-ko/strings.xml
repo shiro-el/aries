@@ -292,7 +292,7 @@
     <string name="call_answer_failed">답 전달 실패: %1$s</string>
     <string name="call_answer_unconfirmed">답 전달 미확인: %1$s</string>
     <string name="call_unconfirmed">Beacon이 이 Call을 보낸 터미널을 확인하지 못해 기록만 했습니다.</string>
-    <string name="call_from_helper">하위 에이전트의 Call입니다. 기록만 하고 알림은 보내지 않습니다.</string>
+    <string name="call_from_helper">하위 에이전트의 Call입니다. Call 기록에 남고, \"하위 에이전트 포함\"이 켜져 있을 때만 알립니다.</string>
     <string name="call_open_terminal">터미널 열기</string>
     <string name="call_open_terminal_label">%2$s을(를) 보낸 터미널 %1$s 열기</string>
     <string name="call_terminal_gone_title">터미널이 없습니다</string>
@@ -343,4 +343,16 @@
     <string name="push_call_channel_urgent">긴급 Call</string>
     <string name="push_call_channel_emergency">비상 Call</string>
     <string name="push_no_firebase">이 빌드에는 Firebase 설정이 없습니다</string>
+    <string name="push_policy_title">알림 받을 때</string>
+    <string name="push_policy_body">이 Host에 저장되므로 Aries가 꺼져 있어도 Beacon이 이 설정을 따릅니다.</string>
+    <string name="push_policy_blocked">에이전트가 막혔을 때</string>
+    <string name="push_policy_blocked_hint">권한, 답변 또는 로그인을 기다리는 경우입니다. 같은 이유로 반복되면 다시 알리지 않습니다.</string>
+    <string name="push_policy_error">에이전트가 오류를 보고할 때</string>
+    <string name="push_policy_error_hint">문제가 생겨 멈춘 경우입니다.</string>
+    <string name="push_policy_done">에이전트가 한 턴을 마쳤을 때</string>
+    <string name="push_policy_done_hint">여기나 다른 Herdr 앱에서 아직 확인하지 않은 턴만 알립니다.</string>
+    <string name="push_policy_child_agents">하위 에이전트 포함</string>
+    <string name="push_policy_child_agents_hint">다른 에이전트가 시작한 에이전트와 그 Call도 알립니다. 끄면 최상위 에이전트만 알리고, 하위 에이전트의 Call은 Call 기록에만 남습니다.</string>
+    <string name="push_policy_failed">Host의 알림 옵션을 읽거나 바꾸지 못했습니다: %1$s</string>
+    <string name="push_policy_retry">옵션 다시 불러오기</string>
 </resources>

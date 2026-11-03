@@ -14,7 +14,7 @@ use std::time::Duration;
 use aries_core::{
     AgentStatus, AriesCore, BeaconArtifact, BeaconFetcher, BeaconRelease, BlockedReason,
     CallUrgency, CoreError, Endpoint, FetchError, HttpClient, HttpRequest, HttpResponse,
-    PushContent, PushDevice, PushProgress, PushStep,
+    PushContent, PushDevice, PushPolicy, PushProgress, PushStep,
 };
 use aries_test_support::{FakeRelay, ReverseTunnel, SystemdHost, beacon_bin, http_request};
 use common::core_in;
@@ -89,6 +89,23 @@ async fn needs_an_ssh_host() {
         .await;
     assert!(matches!(r, Err(CoreError::BeaconNeedsSsh)), "{r:?}");
     assert!(relay.log().pairings.is_empty());
+}
+
+#[tokio::test]
+async fn the_push_policy_needs_an_ssh_host() {
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    let h = core
+        .add_host("local".into(), common::script_endpoint("true"))
+        .unwrap();
+    assert!(matches!(
+        core.push_policy(h.id.clone()).await,
+        Err(CoreError::BeaconNeedsSsh)
+    ));
+    assert!(matches!(
+        core.set_push_policy(h.id, PushPolicy::default()).await,
+        Err(CoreError::BeaconNeedsSsh)
+    ));
 }
 
 #[tokio::test]
@@ -744,4 +761,84 @@ async fn a_call_reaches_the_phone_with_its_urgency_and_choices() {
         }
         other => panic!("not a Call push: {other:?}"),
     }
+}
+
+// ---- Push policy (ticket 30) ---------------------------------------------------
+
+#[tokio::test]
+#[ignore = "needs docker"]
+async fn the_push_policy_is_kept_on_the_host_and_turns_on_done() {
+    use base64::Engine;
+    let s = setup_with(true).await;
+    s.enable("dev-1").await;
+    s.relay.wait_pushes(1, Duration::from_secs(10)); // the test push
+
+    let defaults = s.core.push_policy(s.id.clone()).await.unwrap();
+    assert_eq!(
+        defaults,
+        PushPolicy {
+            blocked: true,
+            error: true,
+            done: false,
+            child_agents: false,
+        }
+    );
+    let chosen = PushPolicy {
+        blocked: false,
+        done: true,
+        ..defaults
+    };
+    assert_eq!(
+        s.core.set_push_policy(s.id.clone(), chosen).await.unwrap(),
+        chosen
+    );
+    assert_eq!(s.core.push_policy(s.id.clone()).await.unwrap(), chosen);
+    let file = "/home/aries/.local/state/aries-beacon/push-policy.json";
+    assert!(s.host.check(&format!(
+        "test \"$(stat -c %a {file})\" = 600 && test \"$(stat -c %U {file})\" = aries"
+    )));
+
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    while !as_user(&s.host, "~/.local/bin/aries-beacon status").contains("\"core_version\":\"") {
+        assert!(std::time::Instant::now() < deadline, "serve never attached");
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+    let agent = std::fs::read(aries_test_support::fake_agent_path()).unwrap();
+    let agent = base64::engine::general_purpose::STANDARD.encode(agent);
+    // Blocked is off now; the finished (unseen) turn is the only push.
+    let script = base64::engine::general_purpose::STANDARD.encode(
+        "status working\nstatus blocked permission Allow Bash?\nsleep 0.3\n\
+         status working\nsleep 0.2\nstatus done\nwait\n",
+    );
+    s.host.root(&format!(
+        "echo {agent} | base64 -d > /tmp/fake-agent && echo {script} | base64 -d > /tmp/script && chmod 644 /tmp/fake-agent /tmp/script"
+    ));
+    let run = as_user(
+        &s.host,
+        "herdr-core run --bg --json --no-parent --name claude -- env FAKE_AGENT_INPUT=/tmp/in sh /tmp/fake-agent /tmp/script",
+    );
+    let address = serde_json::from_str::<serde_json::Value>(run.trim()).unwrap()["address"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    let pushes = s.relay.wait_pushes(2, Duration::from_secs(20));
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let all: Vec<_> = s
+        .relay
+        .log()
+        .pushes
+        .iter()
+        .map(|(_, e)| s.core.open_push(e.clone()).unwrap().content)
+        .collect();
+    assert_eq!(all.len(), 2, "{all:?}");
+    let notice = s.core.open_push(pushes[1].1.clone()).unwrap();
+    assert!(
+        matches!(
+            &notice.content,
+            PushContent::Status { terminal, status: AgentStatus::Done, .. } if *terminal == address
+        ),
+        "{:?}",
+        notice.content
+    );
 }

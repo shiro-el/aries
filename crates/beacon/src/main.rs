@@ -16,6 +16,8 @@
 //!   as JSON lines (`aries_protocol::chat`).
 //! - `answer <terminal> <question> <picks>...`: answers the question the
 //!   Terminal's Agent shows (`aries_protocol::answer`); one reply line.
+//! - `policy [set]`: prints or (from stdin) changes the push policy
+//!   ([`policy`]); run by the phone over SSH.
 //! - `skill install` / `skill uninstall`: the managed `call-human` skill
 //!   for Agents ([`aries_beacon::skill`]); run by the phone over SSH when it
 //!   installs, updates or removes the Beacon. One `SkillReport` line.
@@ -29,6 +31,7 @@
 
 mod call_push;
 mod calls;
+mod policy;
 mod push;
 mod status_push;
 
@@ -64,13 +67,14 @@ fn main() {
         Some("chat") => chat(std::env::args().skip(2).collect()),
         Some("answer") => answer(std::env::args().skip(2).collect()),
         Some("skill") => exit_on_error(skill(&rest_args())),
+        Some("policy") => std::process::exit(policy::command(&rest_args())),
         Some("opencode-plugin") => opencode_plugin(std::env::args().nth(2).as_deref()),
         Some("pi-extension") => {
             std::process::exit(aries_beacon::pi_extension::command(&rest_args()))
         }
         _ => {
             eprintln!(
-                "usage: aries-beacon --version | status | serve | call ... | calls [--follow] | reply CALL CHOICE | pair | push-test | unpair | chat TERMINAL [--follow] [--cursor C] | answer TERMINAL QUESTION PICKS... | skill install|uninstall | pi-extension install|remove | opencode-plugin install|remove"
+                "usage: aries-beacon --version | status | serve | call ... | calls [--follow] | reply CALL CHOICE | pair | push-test | unpair | chat TERMINAL [--follow] [--cursor C] | answer TERMINAL QUESTION PICKS... | skill install|uninstall | pi-extension install|remove | opencode-plugin install|remove | policy [set]"
             );
             std::process::exit(2);
         }
