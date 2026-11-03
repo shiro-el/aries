@@ -440,6 +440,7 @@ impl Names {
                         "machine.exec",
                         serde_json::json!({
                             "argv": argv, "on": machine, "timeout": 2.0,
+                            "env": crate::layout_edit::machine_exec_env(),
                         }),
                     )
                     .await

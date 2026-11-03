@@ -286,6 +286,11 @@
     <string name="chat_code_label">코드</string>
     <string name="chat_code_copy_button">코드 복사</string>
     <string name="chat_code_copied">복사됨</string>
+    <!-- Chat 텍스트 선택 및 클립보드 동작. -->
+    <string name="chat_text_actions">텍스트 메뉴</string>
+    <string name="chat_copy_all">전체 복사</string>
+    <string name="chat_select_text">텍스트 선택</string>
+    <string name="chat_select_hint">단어를 길게 누른 뒤 선택 핸들을 끌어 복사할 텍스트를 선택하세요.</string>
     <string name="chat_thinking">생각함</string>
     <string name="chat_tool_running">실행 중</string>
     <string name="chat_tool_failed">실패</string>

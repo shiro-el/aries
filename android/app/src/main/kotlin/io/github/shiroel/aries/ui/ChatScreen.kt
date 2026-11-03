@@ -6,7 +6,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -557,7 +556,9 @@ private fun ChatEntryView(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             b.text?.let {
-                Text(it, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                ChatTextActions(it) { modifier ->
+                    Text(it, modifier, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
         is ChatEntryBody.Tool -> ToolView(b, expanded, image, onToggle)
@@ -569,7 +570,7 @@ private fun ChatEntryView(
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onErrorContainer,
             )
-            Text(b.detail, color = MaterialTheme.colorScheme.onErrorContainer)
+            ChatTextActions(b.detail) { Text(b.detail, it, color = MaterialTheme.colorScheme.onErrorContainer) }
         }
         // Rendered by QuestionView, which needs the model.
         is ChatEntryBody.Question -> {}
@@ -590,48 +591,54 @@ private fun ToolView(
 ) {
     val label = stringResource(R.string.chat_tool_expand_label, tool.name)
     val failed = tool.status == ChatToolStatus.FAILED
-    Column(
-        Modifier.fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .clickable(onClick = onToggle)
-            .semantics { contentDescription = label }
-            .padding(8.dp),
-    ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(tool.name, style = MaterialTheme.typography.labelLarge)
-            Text(
-                tool.title,
-                Modifier.weight(1f, fill = false),
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 1,
-                fontFamily = FontFamily.Monospace,
-            )
-            when (tool.status) {
-                ChatToolStatus.RUNNING -> Text(
-                    stringResource(R.string.chat_tool_running),
-                    style = MaterialTheme.typography.labelSmall,
-                )
-                ChatToolStatus.FAILED -> Text(
-                    stringResource(R.string.chat_tool_failed),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-                ChatToolStatus.DONE -> {}
-            }
-        }
-        tool.diff?.let { DiffView(it, expanded) }
-        tool.images.forEach { ChatImageView(it, image) }
-        if (expanded) {
-            Text(stringResource(R.string.chat_tool_input), style = MaterialTheme.typography.labelMedium)
-            Text(tool.input, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
-            tool.output?.let {
-                Text(stringResource(R.string.chat_tool_output), style = MaterialTheme.typography.labelMedium)
+    ChatTextActions(tool.output?.takeIf { it.isNotEmpty() } ?: tool.input, onClick = onToggle) { actions ->
+        Column(
+            Modifier.fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .then(actions)
+                .semantics { contentDescription = label }
+                .padding(8.dp),
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(tool.name, style = MaterialTheme.typography.labelLarge)
                 Text(
-                    it,
-                    fontFamily = FontFamily.Monospace,
+                    tool.title,
+                    Modifier.weight(1f, fill = false),
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    fontFamily = FontFamily.Monospace,
                 )
+                when (tool.status) {
+                    ChatToolStatus.RUNNING -> Text(
+                        stringResource(R.string.chat_tool_running),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                    ChatToolStatus.FAILED -> Text(
+                        stringResource(R.string.chat_tool_failed),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    ChatToolStatus.DONE -> {}
+                }
+            }
+            tool.diff?.let { DiffView(it, expanded) }
+            tool.images.forEach { ChatImageView(it, image) }
+            if (expanded) {
+                Text(stringResource(R.string.chat_tool_input), style = MaterialTheme.typography.labelMedium)
+                ChatTextActions(tool.input, onClick = onToggle) {
+                    Text(tool.input, it, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+                }
+                tool.output?.let {
+                    Text(stringResource(R.string.chat_tool_output), style = MaterialTheme.typography.labelMedium)
+                    ChatTextActions(it, onClick = onToggle) { modifier ->
+                        Text(
+                            it, modifier,
+                            fontFamily = FontFamily.Monospace,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                }
             }
         }
     }

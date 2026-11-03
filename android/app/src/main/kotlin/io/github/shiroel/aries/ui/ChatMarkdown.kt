@@ -115,12 +115,14 @@ internal fun LazyListScope.chatMarkdownItems(id: String, document: ChatMarkdownD
         key = { index, _ -> "transcript:$id:markdown:$index" },
         contentType = { _, block -> block::class },
     ) { _, block ->
-        ChatMarkdownBlockView(block)
+        ChatTextActions(document?.source.orEmpty(), interceptChildLongPress = true) { actions ->
+            ChatMarkdownBlockView(block, actions)
+        }
     }
 }
 
 @Composable
-private fun ChatMarkdownBlockView(block: ChatMarkdownBlock) {
+private fun ChatMarkdownBlockView(block: ChatMarkdownBlock, actions: Modifier) {
     when (block) {
         is ChatMarkdownBlock.Prose -> {
             val open = LocalOpenRemoteFile.current
@@ -138,6 +140,7 @@ private fun ChatMarkdownBlockView(block: ChatMarkdownBlock) {
             Text(
                 linked,
                 Modifier.fillMaxWidth().padding(start = 16.dp + 12.dp * block.depth.coerceAtMost(8), end = 16.dp, top = 4.dp, bottom = 4.dp)
+                    .then(actions)
                     .then(if (block.quoted) Modifier.drawBehind {
                         drawLine(quoteColor, Offset(1.dp.toPx(), 0f), Offset(1.dp.toPx(), size.height), 2.dp.toPx())
                     }.padding(start = 12.dp) else Modifier)
@@ -153,6 +156,7 @@ private fun ChatMarkdownBlockView(block: ChatMarkdownBlock) {
                 Text(
                     linked,
                     Modifier.width(160.dp)
+                        .then(actions)
                         .background(if (cell.header) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface)
                         .padding(8.dp),
                     fontWeight = if (cell.header) FontWeight.Bold else null,
@@ -164,7 +168,7 @@ private fun ChatMarkdownBlockView(block: ChatMarkdownBlock) {
                 )
             }
         }
-        ChatMarkdownBlock.Rule -> HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+        ChatMarkdownBlock.Rule -> HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).then(actions))
         is ChatMarkdownBlock.CodeHeader -> {
             val context = LocalContext.current
             val label = stringResource(R.string.chat_code_label)
@@ -173,7 +177,7 @@ private fun ChatMarkdownBlockView(block: ChatMarkdownBlock) {
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp).background(MaterialTheme.colorScheme.surfaceVariant).padding(start = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(block.code.language.ifEmpty { label }, Modifier.weight(1f), style = MaterialTheme.typography.labelMedium)
+                Text(block.code.language.ifEmpty { label }, Modifier.weight(1f).then(actions), style = MaterialTheme.typography.labelMedium)
                 TextButton(onClick = {
                     context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText(label, block.code.source))
                     copied = true
@@ -198,7 +202,7 @@ private fun ChatMarkdownBlockView(block: ChatMarkdownBlock) {
             Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp).background(palette.surfaceVariant).horizontalScroll(block.code.scroll)) {
                 Text(
                     highlighted,
-                    Modifier.width(width).padding(horizontal = 12.dp),
+                    Modifier.width(width).padding(horizontal = 12.dp).then(actions),
                     fontFamily = FontFamily.Monospace,
                     fontSize = 14.sp,
                     lineHeight = 20.sp,
