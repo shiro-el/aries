@@ -25,6 +25,45 @@
     <string name="quick_open_choose_terminal">Focus a Terminal first.</string>
     <string name="quick_open_busy">An action is in progress.</string>
 
+    <!-- Remote file browser (90) -->
+    <string name="files_open_button">Files</string>
+    <string name="files_title">Host files</string>
+    <string name="files_close_button">Close files</string>
+    <string name="files_up_button">Parent folder</string>
+    <string name="files_refresh_button">Refresh</string>
+    <string name="files_back_folder_button">Back to folder</string>
+    <string name="files_send_file_button">Send file to Agent</string>
+    <string name="files_send_line_label">Send line %1$d to Agent</string>
+    <string name="files_line_hint">Tap a line to add it to the Chat draft.</string>
+    <string name="files_not_text">Cannot preview this file: binary or non-UTF-8 text.</string>
+    <string name="files_loading">Loading files…</string>
+    <string name="files_failed">Could not load this folder or file. Check the connection, path and permissions, then retry.</string>
+    <string name="files_empty_folder">This folder is empty.</string>
+    <string name="files_empty_file">This file is empty.</string>
+    <string name="files_range">Lines %1$d–%2$d of %3$d</string>
+    <string name="files_previous_button">Previous page</string>
+    <string name="files_next_button">Next page</string>
+    <!-- Git changes (ticket 89) -->
+    <string name="git_changes_button">Changes</string>
+    <string name="git_changes_title">Git changes · read only</string>
+    <string name="git_loading">Reading changes…</string>
+    <string name="git_not_repository">This folder is not a Git repository.</string>
+    <string name="git_clean">No changes.</string>
+    <string name="git_staged">Staged</string>
+    <string name="git_unstaged">Unstaged</string>
+    <string name="git_untracked">Untracked</string>
+    <string name="git_more_button">Show more</string>
+    <string name="git_truncated">The Host output limit was reached. Only the received portion is shown.</string>
+    <string name="git_binary">Binary file. Preview unavailable.</string>
+    <string name="git_empty_diff">No text diff for this file.</string>
+    <string name="git_send_file">Send file to Agent</string>
+    <string name="git_send_selection">Send selection to Agent</string>
+    <string name="git_select_hint">Tap a line, then another to select a range. The reference is added to your Chat draft.</string>
+    <string name="git_error">Could not read Git changes: %1$s</string>
+    <string name="git_retry_button">Refresh</string>
+    <string name="git_line_label">Old %1$s · new %2$s: %3$s</string>
+
+
     <string name="agents_elapsed_less_than_minute">&lt;1m</string>
     <string name="agents_elapsed_minutes">%1$dm</string>
     <string name="agents_elapsed_hours">%1$dh</string>
@@ -196,6 +235,11 @@
     <string name="chat_question_send">Send answer</string>
     <string name="chat_question_sending">Sending…</string>
     <string name="chat_question_sent">Answer sent.</string>
+    <!-- Notification question answers -->
+    <string name="question_notify_open_app">Answer in app</string>
+    <string name="question_notify_sent">Sent “%1$s”</string>
+    <string name="question_notify_unknown">The answer may have been sent. Check the Chat before answering again.</string>
+
     <string name="chat_answer_answered">This question was already answered.</string>
     <string name="chat_answer_gone">The Agent is no longer asking this question.</string>
     <string name="chat_answer_invalid">That answer does not fit the question.</string>
@@ -223,6 +267,21 @@
     <string name="structure_unreadable">The herdr-app layout on this Host could not be read (%1$s). Terminals are grouped by their Space and Tab labels.</string>
     <string name="structure_unknown_format">The herdr-app layout on this Host is in a format Aries does not know. Terminals are grouped by their Space and Tab labels. Update Aries.</string>
     <string name="structure_connection_closed">The connection to the Host closed. What you see may be out of date.</string>
+    <!-- Worktree picker: read-only discovery and opening. -->
+    <string name="worktrees_button">Worktrees</string>
+    <string name="worktrees_title">Open a worktree</string>
+    <string name="worktrees_open_button">Open worktree</string>
+    <string name="worktrees_refresh_button">Refresh worktrees</string>
+    <string name="worktrees_loading">Loading worktrees…</string>
+    <string name="worktrees_empty">No worktrees found.</string>
+    <string name="worktrees_program_label">Start in this worktree</string>
+    <string name="worktrees_shell">Shell</string>
+    <string name="worktrees_fallback_hint">Opens a new Tab in this Space. Without a Space or herdr-app, starts a Terminal.</string>
+    <string name="worktrees_detached">Detached · %1$s</string>
+    <string name="worktrees_bare">Bare repository</string>
+    <string name="worktrees_locked">Locked · %1$s</string>
+    <string name="worktrees_prunable">Unavailable · %1$s</string>
+
     <string name="launch_open_button">New Terminal</string>
     <string name="launch_title">Start a Terminal</string>
     <string name="launch_command">Command</string>
@@ -377,6 +436,12 @@
     <string name="push_permission_denied">Notifications are not allowed for Aries. Allow them in Android settings, then turn on push again.</string>
     <string name="push_off_host_unreachable">Push is off and the Relay deleted this pairing. The Host could not be reached, so its copy of the pairing stays until the next pairing; it no longer works.</string>
     <string name="push_channel_name">Host notifications</string>
+    <!-- Watched Agent progress -->
+    <string name="agent_watch_label">Watch progress</string>
+    <string name="agent_watch_error">Could not update watching: %1$s</string>
+    <string name="push_progress_channel">Watched Agent progress</string>
+    <string name="push_progress_body">%1$d min elapsed · %2$d subagents</string>
+
     <string name="push_test_title">Push works for %1$s</string>
     <string name="push_test_body">This test notification came from the Beacon on %1$s, end-to-end encrypted.</string>
     <string name="push_status_title">%1$s on %2$s</string>

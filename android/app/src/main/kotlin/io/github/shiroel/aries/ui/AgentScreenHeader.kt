@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -35,6 +36,9 @@ internal fun AgentScreenHeader(
     current: AgentView,
     onView: ((AgentView) -> Unit)?,
     title: String = displayName(terminal),
+    onChanges: (() -> Unit)? = null,
+    link: HostLink? = null,
+    onTerminalUpdate: (TerminalInfo) -> Unit = {},
 ) {
     val colors = MaterialTheme.colorScheme
     val hostPrefix = hostName?.let { stringResource(R.string.console_agent_host_prefix, it) }
@@ -54,7 +58,10 @@ internal fun AgentScreenHeader(
                 fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         },
-        actions = { onView?.let { AgentViewToggle(current, it) } },
+        actions = {
+            LocalRemoteFilesAction.current?.invoke()
+            onView?.let { AgentViewToggle(current, it) }
+        },
     )
     Row(
         Modifier.fillMaxWidth().testTag("agent-meta").padding(horizontal = 16.dp, vertical = 8.dp),
@@ -66,9 +73,15 @@ internal fun AgentScreenHeader(
                 Text(stringResource(agentStatusLabel(status)), color = statusColor(status), fontSize = 12.sp, maxLines = 1)
             }
         }
-        Text(terminal.cwd ?: stringResource(R.string.console_agent_unknown_folder), Modifier.weight(1f),
+        terminal.currentProgram?.let { program ->
+            Text(program, color = colors.onSurfaceVariant, fontSize = 12.sp,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(0.4f, fill = false))
+        }
+        Text(terminal.currentCwd ?: stringResource(R.string.console_agent_unknown_folder), Modifier.weight(1f),
             color = colors.onSurfaceVariant, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        onChanges?.let { TextButton(onClick = it) { Text(stringResource(R.string.git_changes_button)) } }
         AgentElapsedTime(terminal.statusMs, R.string.console_agent_missing_value, R.string.console_agent_unknown_age)
     }
+    WatchAgentToggle(terminal, link, onTerminalUpdate)
     HorizontalDivider()
 }
