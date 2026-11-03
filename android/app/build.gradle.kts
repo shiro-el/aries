@@ -32,6 +32,8 @@ android {
 
     // Keep Android Settings and the in-app picker limited to shipped translations.
     androidResources { generateLocaleConfig = false }
+    // Both picker choices must stay available in Play-delivered bundles, even offline.
+    bundle { language { enableSplit = false } }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
