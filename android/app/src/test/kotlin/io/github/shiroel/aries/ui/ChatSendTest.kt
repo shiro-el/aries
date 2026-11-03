@@ -120,7 +120,7 @@ class ChatSendTest {
         // Back from the Terminal is the Chat, still live.
         compose.onNodeWithText(str(R.string.back_button)).performClick()
         compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.chat_title, "claude")).assertExists()
+        compose.onNodeWithText(str(R.string.console_agent_host_prefix, "home") + "claude").assertExists()
         compose.onNodeWithText("go on").assertExists()
     }
 
@@ -135,7 +135,7 @@ class ChatSendTest {
 
         compose.onNodeWithText(str(R.string.agent_view_chat)).performClick()
         compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.chat_title, "claude")).assertExists()
+        compose.onNodeWithText(str(R.string.console_agent_host_prefix, "home") + "claude").assertExists()
         assertEquals("the Chat stayed live, not reopened", 1, core.chatsOpened.size)
         assertEquals(true, conn.views.single().detached)
 
@@ -143,7 +143,7 @@ class ChatSendTest {
         compose.onNodeWithText(str(R.string.back_button)).performClick()
         compose.waitForIdle()
         compose.onNodeWithText("claude").assertExists()
-        compose.onNodeWithText(str(R.string.chat_title, "claude")).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.console_agent_host_prefix, "home") + "claude").assertDoesNotExist()
     }
 
     @Test

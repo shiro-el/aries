@@ -117,8 +117,8 @@
     <string name="agent_status_idle">대기</string>
     <string name="agent_attention_label">확인 필요</string>
     <string name="agent_open_button">열기</string>
-    <string name="agent_view_terminal">터미널</string>
-    <string name="agent_view_chat">Chat</string>
+    <string name="agent_view_terminal">term</string>
+    <string name="agent_view_chat">chat</string>
     <string name="chat_title">Chat: %1$s</string>
     <string name="chat_empty">아직 메시지가 없습니다.</string>
     <string name="chat_status_connecting">Beacon에 연결하는 중…</string>

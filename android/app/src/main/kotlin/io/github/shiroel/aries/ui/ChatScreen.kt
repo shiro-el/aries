@@ -3,21 +3,25 @@ package io.github.shiroel.aries.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.exclude
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -25,6 +29,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -274,36 +279,39 @@ fun ChatScreen(
     onBack: () -> Unit,
     onOpenTerminal: () -> Unit = {},
     onView: (AgentView) -> Unit = {},
+    calls: CallsModel? = null,
 ) {
     val snapshot = chat.snapshot
     val entries = snapshot?.entries.orEmpty()
+    val agentCalls = calls?.calls.orEmpty().filter {
+        it.host.id == chat.host.id && it.call.terminal == chat.terminal.address
+    }.sortedBy { it.call.atMs }
     val list = rememberLazyListState()
     // Follow the conversation: keep the newest entry in view.
-    LaunchedEffect(entries.size) {
-        if (entries.isNotEmpty()) list.scrollToItem(entries.size - 1)
+    LaunchedEffect(entries.size, agentCalls.size) {
+        val count = entries.size + agentCalls.size
+        if (count > 0) list.scrollToItem(count - 1)
     }
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onBack) { Text(stringResource(R.string.back_button)) }
-            Text(
-                stringResource(R.string.chat_title, displayName(chat.terminal)),
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.weight(1f),
-            )
-            AgentViewToggle(AgentView.CHAT, onView)
-        }
+    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))) {
+        AgentScreenHeader(chat.terminal, chat.host.name, onBack, AgentView.CHAT, onView)
         statusText(snapshot?.status ?: ChatStatus.CONNECTING)?.let { ChatNotice(it) }
         if (snapshot != null && entries.isEmpty() && snapshot.status == ChatStatus.LIVE) {
             Text(stringResource(R.string.chat_empty))
         }
-        LazyColumn(Modifier.weight(1f), state = list, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(entries, key = { it.id }) { entry ->
+        LazyColumn(Modifier.weight(1f), state = list) {
+            items(entries, key = { "transcript:${it.id}" }) { entry ->
                 val body = entry.body
                 if (body is ChatEntryBody.Question) {
                     QuestionView(chat, entry.id, body)
                 } else {
-                    ChatEntryView(entry, expanded = entry.id in chat.expanded, chat::image) { chat.toggle(entry.id) }
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                        ChatEntryView(entry, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image) { chat.toggle(entry.id) }
+                    }
+                    HorizontalDivider()
                 }
+            }
+            items(agentCalls, key = { "call:${it.key}" }) { entry ->
+                if (calls != null) ConsoleChatCall(entry, calls)
             }
         }
         (chat.terminal.agentStatus as? AgentStatus.Blocked)?.let {
@@ -328,15 +336,19 @@ fun ChatScreen(
 
 @Composable
 private fun MessageInput(chat: ChatModel) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    val inputLabel = stringResource(R.string.chat_input_label)
+    HorizontalDivider()
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         OutlinedTextField(
             value = chat.draft,
             onValueChange = { chat.draft = it },
-            modifier = Modifier.weight(1f),
-            label = { Text(stringResource(R.string.chat_input_label)) },
+            modifier = Modifier.weight(1f).heightIn(min = 48.dp).semantics { contentDescription = inputLabel },
+            placeholder = { Text(inputLabel) },
+            singleLine = true,
+            shape = RectangleShape,
             enabled = chat.sending == null,
         )
-        Button(onClick = chat::send, enabled = chat.canSend) {
+        Button(onClick = chat::send, enabled = chat.canSend, shape = RectangleShape) {
             Text(stringResource(R.string.chat_send_button))
         }
     }
@@ -355,11 +367,8 @@ private fun BlockedNotice(status: AgentStatus.Blocked, refused: Boolean, onOpenT
         BlockedReason.AUTH -> R.string.chat_blocked_auth
         null -> R.string.chat_blocked_other
     }
-    val color = MaterialTheme.colorScheme.onErrorContainer
-    Column(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.errorContainer).padding(8.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
+    val color = statusColor(status)
+    ConsoleChatCallSurface {
         if (refused) {
             Text(stringResource(R.string.chat_send_refused), color = color, style = MaterialTheme.typography.labelLarge)
         }
@@ -367,7 +376,7 @@ private fun BlockedNotice(status: AgentStatus.Blocked, refused: Boolean, onOpenT
         status.message?.let {
             Text(it, color = color, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
         }
-        Button(onClick = onOpenTerminal) { Text(stringResource(R.string.terminal_open_button)) }
+        Button(onClick = onOpenTerminal, shape = RectangleShape) { Text(stringResource(R.string.terminal_open_button)) }
     }
 }
 
@@ -398,26 +407,29 @@ private fun ChatNotice(text: String) {
 @Composable
 private fun ChatEntryView(
     entry: ChatEntry,
+    agentName: String,
     expanded: Boolean,
     image: (String) -> ByteArray?,
     onToggle: () -> Unit,
 ) {
     when (val b = entry.body) {
-        is ChatEntryBody.User -> Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+        is ChatEntryBody.User -> {
             Column(
-                Modifier.background(MaterialTheme.colorScheme.primaryContainer).padding(8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
                     stringResource(R.string.chat_you),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
                 )
-                if (b.text.isNotEmpty()) Text(b.text, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                if (b.text.isNotEmpty()) Text(b.text)
                 b.images.forEach { ChatImageView(it, image) }
             }
         }
-        is ChatEntryBody.Agent -> Text(b.text)
+        is ChatEntryBody.Agent -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(agentName, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(b.text)
+        }
         is ChatEntryBody.Thinking -> Column {
             Text(
                 stringResource(R.string.chat_thinking),
@@ -512,18 +524,15 @@ private fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question)
     val state = chat.answers[id]
     val lone = q.questions.size == 1 && !q.questions[0].multi
     val chosen = chat.picks[id]
-    Column(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.tertiaryContainer).padding(8.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
+    ConsoleChatCallSurface {
         Text(
             stringResource(R.string.chat_question_label),
             style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onTertiaryContainer,
+            color = statusColor(AgentStatus.Blocked(null, null)),
         )
         q.questions.forEachIndexed { part, question ->
             question.header?.let { Text(it, style = MaterialTheme.typography.labelSmall) }
-            Text(question.text, color = MaterialTheme.colorScheme.onTertiaryContainer)
+            Text(question.text)
             if (open && question.multi) {
                 Text(stringResource(R.string.chat_question_multi_hint), style = MaterialTheme.typography.bodySmall)
             }
@@ -532,19 +541,8 @@ private fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question)
                     val label = stringResource(R.string.chat_question_option_label, option.label)
                     val selected = chosen?.getOrNull(part)?.contains(i) == true
                     val enabled = state != AnswerState.Sending && state != AnswerState.Sent
-                    val onClick = { chat.pick(id, q, part, i) }
-                    val modifier = Modifier.fillMaxWidth().semantics { contentDescription = label }
-                    val content: @Composable () -> Unit = {
-                        Column(Modifier.fillMaxWidth()) {
-                            Text(option.label)
-                            option.description?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-                        }
-                    }
-                    if (selected) {
-                        Button(onClick = onClick, modifier = modifier, enabled = enabled) { content() }
-                    } else {
-                        OutlinedButton(onClick = onClick, modifier = modifier, enabled = enabled) { content() }
-                    }
+                    ConsoleChatChoice(i + 1, option.label, option.description, label,
+                        enabled = enabled, selected = selected, onClick = { chat.pick(id, q, part, i) })
                 }
             }
         }
@@ -552,6 +550,7 @@ private fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question)
             Button(
                 onClick = { chat.send(id, q) },
                 enabled = state != AnswerState.Sending,
+                shape = RectangleShape,
             ) { Text(stringResource(R.string.chat_question_send)) }
         }
         if (open) {

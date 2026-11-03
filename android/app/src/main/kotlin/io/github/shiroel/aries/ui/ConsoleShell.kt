@@ -39,6 +39,10 @@ fun ConsoleTopBar(
     onBack: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
     inbox: @Composable RowScope.() -> Unit = { ConsoleInboxAction() },
+    showMark: Boolean = true,
+    titleContent: @Composable RowScope.() -> Unit = {
+        Text(title, Modifier.weight(1f), fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    },
 ) {
     Row(Modifier.fillMaxWidth().height(44.dp).testTag("console-top-bar"), verticalAlignment = Alignment.CenterVertically) {
         val navigationLabel = stringResource(if (onBack == null) R.string.console_open_drawer else R.string.back_button)
@@ -47,8 +51,8 @@ fun ConsoleTopBar(
                 .clickable(onClick = onBack ?: onMenu).semantics { contentDescription = navigationLabel },
             contentAlignment = Alignment.Center,
         ) { Text(stringResource(if (onBack == null) R.string.console_menu_glyph else R.string.console_back_glyph), Modifier.clearAndSetSemantics { text = AnnotatedString(navigationLabel) }, fontSize = 20.sp) }
-        ConsoleMark()
-        Text(title, Modifier.weight(1f), fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (showMark) ConsoleMark()
+        titleContent()
         actions()
         inbox()
     }
