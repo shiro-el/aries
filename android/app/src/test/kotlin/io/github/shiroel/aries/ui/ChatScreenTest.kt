@@ -3,10 +3,12 @@ package io.github.shiroel.aries.ui
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentStatus
@@ -289,7 +291,10 @@ class ChatScreenTest {
         compose.onNodeWithText("Choose Blue").assertExists()
         compose.onNodeWithText("2").assertExists()
 
-        compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue")).performClick()
+        val blue = compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue"))
+        // The header and composer can put the second option below the viewport.
+        // Bring it into view before injecting the single tap, just as a user would.
+        blue.performScrollTo().assertIsDisplayed().performClick()
         compose.waitForIdle()
         assertEquals(listOf(Triple("t1", "toolu_q", listOf(listOf(1u)))), core.answers)
         compose.onNodeWithText(str(R.string.chat_question_sent)).assertExists()
