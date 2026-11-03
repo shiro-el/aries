@@ -405,6 +405,7 @@ fun ChatScreen(
     onView: (AgentView) -> Unit = {},
     calls: CallsModel? = null,
 ) {
+    val readAloud = io.github.shiroel.aries.speech.rememberReadAloud(chat)
     var showGit by remember(chat) { mutableStateOf(false) }
     if (showGit) GitChangesDialog(chat.link, chat.terminal, { showGit = false }) { text ->
         chat.draft = if (chat.draft.isBlank()) text else chat.draft + "\n\n" + text
@@ -434,6 +435,7 @@ fun ChatScreen(
         if (snapshot != null && entries.isEmpty() && snapshot.status == ChatStatus.LIVE) {
             Text(stringResource(R.string.chat_empty))
         }
+        io.github.shiroel.aries.speech.ReadAloudPlayback(readAloud)
         LazyColumn(Modifier.weight(1f), state = list) {
             entries.forEach { entry ->
                 val body = entry.body
@@ -456,6 +458,9 @@ fun ChatScreen(
                     // Keep the last complete document visible until the background parse swaps it.
                     chatMarkdownItems(entry.id, markdown[entry.id])
                     item(key = "transcript:${entry.id}:footer") {
+                        if (body is ChatEntryBody.Agent) {
+                            io.github.shiroel.aries.speech.ReadAloudButton(readAloud, entry.id, body.text)
+                        }
                         if (body is ChatEntryBody.User && body.images.isNotEmpty()) {
                             Column(Modifier.padding(horizontal = 16.dp)) {
                                 body.images.forEach { ChatImageView(it, chat::image) }
