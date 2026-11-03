@@ -4,6 +4,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.assertIsDisplayed
@@ -387,7 +388,7 @@ class ChatScreenTest {
         )
         compose.waitForIdle()
         compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue")).assertDoesNotExist()
-        compose.onNodeWithText("\"Which color do you prefer?\"=\"Blue\"").assertExists()
+        compose.onNode(hasText("Blue") and isSelected()).assertExists()
     }
 
     @Test

@@ -194,6 +194,7 @@ fn a_question_is_open_until_its_answer_then_the_resumed_turn_follows() {
         question.as_ref().unwrap(),
         &ChatQuestion {
             questions: vec![Question {
+                answer: None,
                 text: "Which color do you prefer?".into(),
                 header: Some("Color".into()),
                 multi: false,
@@ -309,6 +310,7 @@ fn single_choice_questions_advance_in_order_with_down_and_enter() {
     let q = |n: usize, multi: bool| ChatQuestion {
         questions: (0..n)
             .map(|_| Question {
+                answer: None,
                 text: "Q".into(),
                 header: None,
                 multi,
@@ -586,6 +588,35 @@ fn a_rewritten_rollout_is_read_again_from_the_start() {
         ],
     );
     assert_eq!(line_items(&lines), feed("error-model"));
+}
+
+#[test]
+fn answers_are_attached_by_id_even_when_result_order_differs_and_text_has_newlines() {
+    // Regression: joining Codex answers with newlines reassigned multiline
+    // Other text to the next prompt and discarded notes.
+    let mut interpreter = CodexInterpreter::default();
+    let call = serde_json::json!({"type":"response_item","payload":{"type":"function_call","name":"request_user_input","call_id":"q","arguments":serde_json::json!({"questions":[
+        {"id":"scope","question":"Scope?","options":[{"label":"Chat"},{"label":"Calls"}],"multiSelect":true},
+        {"id":"color","question":"Color?","options":[{"label":"Blue"}]}
+    ]}).to_string()}});
+    interpreter.line(&call.to_string());
+    let result = serde_json::json!({"type":"response_item","payload":{"type":"function_call_output","call_id":"q","output":serde_json::json!({"answers":{
+        "color":{"answers":["Purple\nViolet"]},"scope":{"answers":["Chat","Calls"],"notes":"Only these"}
+    }}).to_string()}});
+    let events = interpreter.line(&result.to_string());
+    let ChatEvent::Item { item } = &events[0] else {
+        panic!()
+    };
+    let item = serde_json::to_value(item).unwrap();
+    let questions = &item["question"]["questions"];
+    assert_eq!(
+        questions[0]["answer"],
+        serde_json::json!({"choices":[0,1],"notes":"Only these"})
+    );
+    assert_eq!(
+        questions[1]["answer"],
+        serde_json::json!({"choices":[],"text":"Purple\nViolet"})
+    );
 }
 
 #[test]

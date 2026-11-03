@@ -50,7 +50,8 @@ class ChatQuestionTest {
         compose.waitForIdle()
         assertEquals(listOf(listOf<String?>("보라색")), core.textAnswers.map { it.second })
         assertTrue(core.connection!!.typed.isEmpty())
-        compose.onNodeWithText(str(R.string.chat_question_send)).assertIsNotEnabled()
+        compose.onNodeWithText(str(R.string.chat_question_send)).assertDoesNotExist()
+        compose.onNodeWithText("보라색").assertExists()
     }
 
     @Test fun queuedCodexRequestsAdvanceAfterTheFirstGetsAResult() {
@@ -83,7 +84,8 @@ class ChatQuestionTest {
         compose.waitForIdle()
         assertEquals(listOf("t1" to "Blue"), core.connection!!.typed)
         assertTrue(core.answers.isEmpty())
-        compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue")).assertIsNotEnabled()
+        compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue")).assertDoesNotExist()
+        compose.onNode(hasText("Blue") and isSelected()).assertExists()
     }
     @Test fun historyRefusedByANewPermissionShowsTheFailureAndTypesNothing() {
         val core = FakeCore()
@@ -97,6 +99,57 @@ class ChatQuestionTest {
         compose.onNodeWithText(str(R.string.chat_answer_gone)).assertExists()
         compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue")).assertDoesNotExist()
     }
+
+    @Test fun hostAnswersStaySelectedBesideTheirPromptsAfterReopeningChat() {
+        // Regression: no local picks exist after reopening; completed Host
+        // answers used to lose their choices and appear as raw tool prose.
+        val core = FakeCore()
+        open(core, AgentStatus.Working)
+        core.pushChat(ChatSnapshot(listOf(ChatEntry("host-q", null, ChatEntryBody.Question(
+            "AskUserQuestion", "Scope?", listOf(
+                ChatQuestionPart("Scope?", "Scope", true, listOf(
+                    ChatQuestionOption("Chat", null), ChatQuestionOption("Terminal", null), ChatQuestionOption("Calls", null))),
+                ChatQuestionPart("Color?", "Color", false, listOf(ChatQuestionOption("Blue", null))),
+            ), ChatToolStatus.DONE,
+            "User has answered your questions: \"Scope?\"=\"Chat, Calls\", \"Color?\"=\"Purple\". You can now continue.",
+        ))), ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        compose.onNode(hasText("Chat") and isSelected()).assertExists()
+        compose.onNode(hasText("Calls") and isSelected()).assertExists()
+        compose.onNodeWithText("Purple").assertExists()
+        compose.onNodeWithText(str(R.string.chat_question_send)).assertDoesNotExist()
+        assertTrue(core.answers.isEmpty())
+    }
+
+    @Test fun fourRecordedCodexAnswersKeepMultilineOtherAndNotesWithTheRightPrompt() {
+        // Regression: the old newline-flattened output cannot distinguish
+        // multiline Other text from the next answer in a multi-question call.
+        val core = FakeCore()
+        open(core, AgentStatus.Working)
+        val parts = listOf(
+            ChatQuestionPart("First?", "First", false, listOf(ChatQuestionOption("Blue", null)),
+                ChatQuestionAnswer(listOf(0u), null, null)),
+            ChatQuestionPart("Second?", "Second", false, listOf(ChatQuestionOption("Green", null)),
+                ChatQuestionAnswer(emptyList(), "Purple\nViolet", "Use the darker shade")),
+            ChatQuestionPart("Third?", "Third", true, listOf(ChatQuestionOption("A, B", null), ChatQuestionOption("C", null)),
+                ChatQuestionAnswer(listOf(0u, 1u), null, null)),
+            ChatQuestionPart("Fourth?", "Fourth", false, listOf(ChatQuestionOption("D", null)),
+                ChatQuestionAnswer(emptyList(), "Custom fourth answer", null)),
+        )
+        core.pushChat(ChatSnapshot(listOf(ChatEntry("codex-q", null, ChatEntryBody.Question(
+            "request_user_input", "First?", parts, ChatToolStatus.DONE, "{\"answers\":{}}",
+        ))), ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        compose.onNode(hasText("Blue") and isSelected()).assertExists()
+        compose.onNode(hasText("A, B") and isSelected()).assertExists()
+        compose.onNode(hasText("C") and isSelected()).assertExists()
+        compose.onNodeWithText("Purple\nViolet").assertExists()
+        compose.onNodeWithText("Use the darker shade").assertExists()
+        compose.onNodeWithText("Custom fourth answer").assertExists()
+        compose.onNodeWithText(str(R.string.chat_question_send)).assertDoesNotExist()
+        assertTrue(core.answers.isEmpty())
+    }
+
 
 
     @Test fun waitingUserInputDoesNotRetireAnOpenQuestion() {

@@ -478,6 +478,38 @@ fn unknown_and_broken_lines_are_ignored() {
 }
 
 #[test]
+fn answered_questions_keep_multiselect_other_and_notes_on_their_own_prompt() {
+    // Regression: flattening tool_result hid selections and lost Other/notes
+    // when reading an answer made on the Host (no phone-side picks exist).
+    let mut interpreter = ClaudeInterpreter::default();
+    let mut chat = Chat::default();
+    chat.apply(interpreter.line(&json!({"type":"assistant","uuid":"a","message":{"content":[{
+        "type":"tool_use","id":"q","name":"AskUserQuestion","input":{"questions":[
+            {"question":"Scope?","header":"Scope","multiSelect":true,"options":[{"label":"Chat"},{"label":"Terminal"},{"label":"Calls"}]},
+            {"question":"Color?","header":"Color","options":[{"label":"Blue"},{"label":"Red"}]}
+        ]}
+    }]}}).to_string()));
+    chat.apply(interpreter.line(&json!({"type":"user","uuid":"u","message":{"content":[{
+        "type":"tool_result","tool_use_id":"q","content":"User has answered your questions: \"Scope?\"=\"Chat, Calls\", \"Color?\"=\"Purple\". You can now continue."
+    }]},"toolUseResult":{"answers":{"Color?":"Purple","Scope?":"Chat, Calls"},"annotations":{"Scope?":{"notes":"Keep it compact"}}}}).to_string()));
+    assert_eq!(
+        chat.items.len(),
+        1,
+        "a tool answer must never become a user message"
+    );
+    let item = serde_json::to_value(&chat.items[0]).unwrap();
+    let questions = &item["question"]["questions"];
+    assert_eq!(
+        questions[0]["answer"],
+        json!({"choices":[0,2],"notes":"Keep it compact"})
+    );
+    assert_eq!(
+        questions[1]["answer"],
+        json!({"choices":[],"text":"Purple"})
+    );
+}
+
+#[test]
 fn mid_turn_messages_appear_once_at_delivery_instead_of_disappearing() {
     let chat = Chat::feed(&fixture("mid-turn-messages.jsonl"));
     assert_eq!(

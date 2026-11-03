@@ -17,6 +17,7 @@ mod jsonl;
 pub mod media;
 pub mod opencode;
 pub mod pi;
+mod question;
 mod source;
 
 use std::path::PathBuf;

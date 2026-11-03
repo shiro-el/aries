@@ -520,7 +520,11 @@
     <string name="chat_question_history">지난 질문</string>
     <string name="chat_question_send">답변 보내기</string>
     <string name="chat_question_sending">보내는 중…</string>
-    <string name="chat_question_sent">답변을 보냈어요.</string>
+    <string name="chat_question_sent">답변 완료</string>
+    <string name="chat_question_cancelled">취소됨</string>
+    <string name="chat_question_expired">만료됨</string>
+    <string name="chat_question_other">직접 입력</string>
+    <string name="chat_question_notes">메모</string>
     <!-- Notification question answers -->
     <string name="question_notify_open_app">앱에서 답하기</string>
     <string name="question_notify_sent">“%1$s” 보냄</string>

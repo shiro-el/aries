@@ -220,6 +220,15 @@ pub struct ChatQuestionPart {
     /// Several options may be picked.
     pub multi: bool,
     pub options: Vec<ChatQuestionOption>,
+    #[uniffi(default = None)]
+    pub answer: Option<ChatQuestionAnswer>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ChatQuestionAnswer {
+    pub choices: Vec<u32>,
+    pub text: Option<String>,
+    pub notes: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -472,6 +481,11 @@ impl ChatModel {
                         text: q.text,
                         header: q.header,
                         multi: q.multi,
+                        answer: q.answer.map(|a| ChatQuestionAnswer {
+                            choices: a.choices,
+                            text: a.text,
+                            notes: a.notes,
+                        }),
                         options: (q.options.into_iter())
                             .map(|o| ChatQuestionOption {
                                 label: o.label,
