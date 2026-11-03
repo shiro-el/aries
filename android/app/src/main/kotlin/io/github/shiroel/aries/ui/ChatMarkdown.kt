@@ -238,8 +238,10 @@ private fun parseChatMarkdown(source: String): ChatMarkdownDocument {
                 while (start < text.length) {
                     var end = (start + 2048).coerceAtMost(text.length)
                     if (end < text.length) {
-                        val space = text.text.lastIndexOf(' ', end - 1)
-                        if (space > start + 1024) end = space + 1
+                        // Keep the search bounded for long identifiers / unbroken logs too.
+                        for (space in end - 1 downTo start + 1024) {
+                            if (text[space] == ' ') { end = space + 1; break }
+                        }
                         if (text[end - 1].isHighSurrogate()) end--
                     }
                     blocks += ChatMarkdownBlock.Prose(text.subSequence(start, end), (node as? Heading)?.level ?: 0, depth, quoted)

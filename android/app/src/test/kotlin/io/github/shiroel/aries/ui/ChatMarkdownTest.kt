@@ -198,6 +198,18 @@ class ChatMarkdownTest {
     }
 
     @Test
+    fun anUnbrokenUnicodeParagraphStaysLazyWithoutSplittingEmoji() {
+        val core = FakeCore()
+        openChat(core)
+        core.pushChat(ChatSnapshot(listOf(entry("a1", ChatEntryBody.Agent("x" + "한글🙂".repeat(10_000) + "마지막"))), ChatStatus.LIVE, null))
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("마지막", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        val tail = compose.onNodeWithText("마지막", substring = true).fetchSemanticsNode().config[SemanticsProperties.Text].single().text
+        assertTrue(tail.length < 3000)
+        assertTrue(!tail.first().isLowSurrogate() && !tail.last().isHighSurrogate())
+        assertTrue(compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.Text)).fetchSemanticsNodes().size < 40)
+    }
+
+    @Test
     fun longMarkdownKeepsOffscreenContentLazyAndCopiesCodeAcrossChunks() {
         val core = FakeCore()
         openChat(core)
