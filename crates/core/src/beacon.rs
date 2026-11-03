@@ -23,7 +23,9 @@
 //! every install and update runs `aries-beacon opencode-plugin install`, which
 //! leaves a copy the user edited alone; removal deletes an unedited copy.
 
-use aries_protocol::beacon::{BeaconStatus, VersionRange, parse_version};
+use aries_protocol::beacon::{
+    BeaconStatus, SkillOutcome, SkillReport, VersionRange, parse_version,
+};
 use sha2::{Digest, Sha256};
 
 use crate::error::CoreError;
@@ -106,11 +108,31 @@ pub enum BeaconSource {
     PhoneUpload,
 }
 
+/// A call-human path and the result of installing or inspecting it.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct BeaconSkillRoot {
+    pub path: String,
+    pub outcome: BeaconSkillOutcome,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum BeaconSkillOutcome {
+    Installed,
+    Updated,
+    Unchanged,
+    Removed,
+    Absent,
+    KeptModified,
+    KeptForeign,
+    KeptSymlink,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct BeaconInstall {
     pub version: String,
     pub linger: Linger,
     pub source: BeaconSource,
+    pub skills: Vec<BeaconSkillRoot>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
@@ -131,7 +153,35 @@ pub enum BeaconState {
         allowed: String,
         /// The Host's OS: `linux` or `macos`.
         os: String,
+        /// None means this Beacon did not report skill state.
+        skills: Option<Vec<BeaconSkillRoot>>,
     },
+}
+
+fn skill_roots(report: SkillReport) -> Vec<BeaconSkillRoot> {
+    report
+        .roots
+        .into_iter()
+        .map(|root| BeaconSkillRoot {
+            path: root.path,
+            outcome: match root.outcome {
+                SkillOutcome::Installed => BeaconSkillOutcome::Installed,
+                SkillOutcome::Updated => BeaconSkillOutcome::Updated,
+                SkillOutcome::Unchanged => BeaconSkillOutcome::Unchanged,
+                SkillOutcome::Removed => BeaconSkillOutcome::Removed,
+                SkillOutcome::Absent => BeaconSkillOutcome::Absent,
+                SkillOutcome::KeptModified => BeaconSkillOutcome::KeptModified,
+                SkillOutcome::KeptForeign => BeaconSkillOutcome::KeptForeign,
+                SkillOutcome::KeptSymlink => BeaconSkillOutcome::KeptSymlink,
+            },
+        })
+        .collect()
+}
+
+fn parse_skill_report(stdout: &[u8]) -> Result<Vec<BeaconSkillRoot>, CoreError> {
+    let report = serde_json::from_str::<SkillReport>(&last_line(stdout))
+        .map_err(|e| step_failed("skill", format!("invalid skill report: {e}")))?;
+    Ok(skill_roots(report))
 }
 
 /// What connecting found, and what it did about the Beacon's version.
@@ -393,13 +443,14 @@ pub(crate) async fn install(
     };
     // Ticket 34: the new binary installs or updates its `call-human` skill
     // (it leaves the user's own version alone).
-    run(
+    let skill_output = run(
         ssh,
         "skill",
         &sh_c(r#""$HOME/.local/bin/aries-beacon" skill install"#),
         &[],
     )
     .await?;
+    let skills = parse_skill_report(&skill_output.stdout)?;
     // Ticket 43: and the Pi status extension.
     let _ = ssh.exec(&sh_c(PI_EXTENSION_INSTALL), &[]).await;
     // Ticket 42: and the OpenCode status plugin. Best effort, like Pi's: an
@@ -410,6 +461,7 @@ pub(crate) async fn install(
         version: release.version.clone(),
         linger,
         source,
+        skills,
     })
 }
 
@@ -567,6 +619,7 @@ pub(crate) async fn status(ssh: &Ssh) -> Result<BeaconState, CoreError> {
         core_version: s.core_version,
         linger: s.linger,
         os,
+        skills: s.skills.map(skill_roots),
     })
 }
 
@@ -816,6 +869,53 @@ mod tests {
             supported,
             allowed: ALLOWED_BEACON.to_string(),
             os: "linux".into(),
+            skills: None,
+        }
+    }
+
+    #[test]
+    fn skill_reports_preserve_paths_and_every_outcome_after_a_login_banner() {
+        let outcomes = [
+            ("installed", BeaconSkillOutcome::Installed),
+            ("updated", BeaconSkillOutcome::Updated),
+            ("unchanged", BeaconSkillOutcome::Unchanged),
+            ("removed", BeaconSkillOutcome::Removed),
+            ("absent", BeaconSkillOutcome::Absent),
+            ("kept_modified", BeaconSkillOutcome::KeptModified),
+            ("kept_foreign", BeaconSkillOutcome::KeptForeign),
+            ("kept_symlink", BeaconSkillOutcome::KeptSymlink),
+        ];
+        let roots: Vec<_> = outcomes
+            .iter()
+            .map(|(outcome, _)| {
+                serde_json::json!({
+                    "path": "/home/u/.agents/skills/call-human", "outcome": outcome,
+                })
+            })
+            .collect();
+        let stdout = format!(
+            "Welcome to the Host\n{}\n",
+            serde_json::json!({ "roots": roots })
+        );
+        let parsed = parse_skill_report(stdout.as_bytes()).unwrap();
+        assert_eq!(parsed.len(), outcomes.len());
+        for (root, (_, expected)) in parsed.iter().zip(outcomes) {
+            assert_eq!(root.path, "/home/u/.agents/skills/call-human");
+            assert_eq!(root.outcome, expected);
+        }
+    }
+
+    #[test]
+    fn empty_or_malformed_skill_output_is_not_a_quiet_success() {
+        for stdout in [
+            "",
+            "Welcome\n",
+            "{}",
+            r#"{"roots":[{"path":"p","outcome":"typo"}]}"#,
+        ] {
+            assert!(
+                matches!(parse_skill_report(stdout.as_bytes()), Err(CoreError::BeaconStep { step, .. }) if step == "skill")
+            );
         }
     }
 

@@ -10,6 +10,7 @@ import io.github.shiroel.aries.core.KeyMods
 import io.github.shiroel.aries.core.TerminalKey
 import io.github.shiroel.aries.core.BeaconFetcher
 import io.github.shiroel.aries.core.BeaconInstall
+import io.github.shiroel.aries.core.BeaconSkillRoot
 import io.github.shiroel.aries.core.BeaconRelease
 import io.github.shiroel.aries.core.BeaconSource
 import io.github.shiroel.aries.core.BeaconState
@@ -269,6 +270,7 @@ class FakeCore : AriesCoreInterface {
     /** How `installBeacon` ends: its linger result, or this error. */
     var beaconLinger: Linger = Linger.Enabled
     var beaconFailWith: CoreException? = null
+    var beaconSkills: List<BeaconSkillRoot>? = emptyList()
     var beaconOs = "linux"
     var autoUpdate = true
     var installs = 0
@@ -280,7 +282,7 @@ class FakeCore : AriesCoreInterface {
         beaconFailWith?.let { throw it }
         installs++
         beacon = installed("0.1.0", supported = true, linger = beaconLinger == Linger.Enabled)
-        return BeaconInstall("0.1.0", beaconLinger, BeaconSource.HOST_DOWNLOAD)
+        return BeaconInstall("0.1.0", beaconLinger, BeaconSource.HOST_DOWNLOAD, beaconSkills.orEmpty())
     }
 
     override suspend fun beaconStatus(hostId: String): BeaconState {
@@ -305,7 +307,7 @@ class FakeCore : AriesCoreInterface {
     }
 
     fun installed(version: String, supported: Boolean = true, linger: Boolean = true) =
-        BeaconState.Installed(version, 1u, true, "0.1.17", linger, supported, ">=0.1.0, <0.2.0", beaconOs)
+        BeaconState.Installed(version, 1u, true, "0.1.17", linger, supported, ">=0.1.0, <0.2.0", beaconOs, beaconSkills)
 
     override suspend fun uninstallBeacon(hostId: String) {
         signsIn("uninstallBeacon")

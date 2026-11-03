@@ -154,6 +154,7 @@ fn status() -> BeaconStatus {
         running: live.is_some(),
         core_version: live.and_then(|s| s.core_version),
         linger: lingering(),
+        skills: aries_beacon::skill::status(&home()).ok(),
     }
 }
 

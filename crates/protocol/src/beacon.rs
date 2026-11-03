@@ -17,6 +17,9 @@ pub struct BeaconStatus {
     pub core_version: Option<String>,
     /// systemd keeps the user's services running without a login.
     pub linger: bool,
+    /// Absent on older Beacons or when the skills could not be inspected.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skills: Option<SkillReport>,
 }
 
 /// Half-open range of Beacon releases `[minimum, limit)`.
