@@ -21,6 +21,7 @@
 #                                   keeps its rollout open; creates it and its directory
 #   sleep SECONDS
 #   say TEXT...                     print TEXT on the screen
+#   appcursor                       ask for application cursor keys (DECCKM, CSI ?1h)
 #   exit CODE
 #   # ...                           comment
 set -uf
@@ -94,6 +95,7 @@ while IFS= read -r step <&3 || [ -n "$step" ]; do
         ;;
     sleep) sleep "$1" ;;
     say) printf '%s\n' "$*" ;;
+    appcursor) printf '\033[?1h' ;;
     exit) exit "$1" ;;
     *) printf 'fake-agent: unknown step: %s\n' "$step" >&2 ;;
     esac
