@@ -20,6 +20,21 @@
     <string name="key_copy_button">Copy public key</string>
     <string name="key_copy_hint">Add it to ~/.ssh/authorized_keys on each Host.</string>
     <string name="key_clip_label">Aries SSH public key</string>
+    <string name="key_qr_button">Show QR code</string>
+    <string name="key_qr_title">Public key QR code</string>
+    <string name="key_qr_description">QR code of this phone\'s SSH public key</string>
+
+    <string name="host_install_key_button">Install key with password</string>
+    <string name="key_install_title">Install the key on %1$s</string>
+    <string name="key_install_body">Sign in once with the password for %1$s. Aries adds this phone\'s public key to ~/.ssh/authorized_keys and uses only the key after that. The password is not saved.</string>
+    <string name="key_install_password">Password</string>
+    <string name="key_install_button">Install key</string>
+    <string name="key_install_done_title">Key installed</string>
+    <string name="key_install_added_body">This phone\'s key was added on %1$s. Aries now connects with the key.</string>
+    <string name="key_install_present_body">%1$s already had this phone\'s key. Nothing was changed.</string>
+    <string name="key_install_failed_title">Could not install the key</string>
+    <string name="key_install_password_rejected">The Host did not accept the user name or password. The Host may also have password login turned off; then add the public key to ~/.ssh/authorized_keys by hand.</string>
+    <string name="key_install_write_failed">Signed in, but could not write ~/.ssh/authorized_keys on the Host: %1$s\n\nCheck that the user owns ~/.ssh and can write to it.</string>
 
     <string name="host_ssh_address">%1$s@%2$s:%3$d</string>
     <string name="host_local_address">Local process</string>

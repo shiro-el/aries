@@ -23,7 +23,7 @@ pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
 
 use hc::HcClient;
 use store::{SavedHost, Store};
-use transport::{LocalProcess, Ssh, Transport};
+use transport::{LocalProcess, PasswordLogin, Ssh, Transport};
 
 uniffi::setup_scaffolding!();
 
@@ -42,6 +42,22 @@ pub struct PublicKeyInfo {
     pub openssh: String,
     /// `SHA256:...`
     pub fingerprint: String,
+}
+
+/// A QR code as a square of modules, row by row; `true` is dark. The app
+/// draws it and adds the quiet zone around it.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct QrMatrix {
+    pub size: u32,
+    pub modules: Vec<bool>,
+}
+
+/// What a password bootstrap did to the Host's `authorized_keys`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum KeyInstall {
+    Added,
+    /// The same key was already there; nothing was written.
+    AlreadyPresent,
 }
 
 /// How to reach a Host's herdr-core.
@@ -136,6 +152,28 @@ impl AriesCore {
         Ok(Some(public_key_info(&public)?))
     }
 
+    /// The app's public key line as a QR code, if a key was created.
+    pub fn public_key_qr(&self) -> Result<Option<QrMatrix>, CoreError> {
+        let Some(info) = self.public_key()? else {
+            return Ok(None);
+        };
+        let code = qrcode::QrCode::with_error_correction_level(
+            info.openssh.as_bytes(),
+            qrcode::EcLevel::M,
+        )
+        .map_err(|e| CoreError::Storage {
+            detail: format!("QR code: {e}"),
+        })?;
+        Ok(Some(QrMatrix {
+            size: code.width() as u32,
+            modules: code
+                .to_colors()
+                .into_iter()
+                .map(|c| c == qrcode::Color::Dark)
+                .collect(),
+        }))
+    }
+
     /// Creates the app's ed25519 SSH key unless one exists, and returns its
     /// public half. The private key is stored sealed by the [`KeyVault`].
     pub fn ensure_key(&self) -> Result<PublicKeyInfo, CoreError> {
@@ -202,16 +240,40 @@ impl AriesCore {
         }
     }
 
+    /// Logs in to an SSH Host once with `password` and adds the app's public
+    /// key to its `~/.ssh/authorized_keys`, so later connections use the key.
+    /// The password is not stored. The Host key is checked like `connect`
+    /// does, so the first call may return [`CoreError::HostKeyUnknown`].
+    pub async fn install_key_with_password(
+        &self,
+        host_id: String,
+        password: String,
+    ) -> Result<KeyInstall, CoreError> {
+        let host = self.saved_host(host_id)?;
+        let Endpoint::Ssh {
+            address,
+            port,
+            user,
+        } = host.endpoint
+        else {
+            return Err(CoreError::KeyInstallFailed {
+                detail: "this Host is not reached over SSH".into(),
+            });
+        };
+        let public = self.ensure_key()?.openssh;
+        let login = PasswordLogin {
+            address,
+            port,
+            user,
+            password,
+            trusted: host.host_key,
+        };
+        on_runtime(async move { login.install_key(&public).await }).await
+    }
+
     /// Connects to a Host and checks its herdr-core is compatible.
     pub async fn connect(&self, host_id: String) -> Result<Arc<HostConnection>, CoreError> {
-        let host = self
-            .hosts
-            .lock()
-            .expect("hosts lock")
-            .iter()
-            .find(|h| h.id == host_id)
-            .cloned()
-            .ok_or(CoreError::UnknownHost { id: host_id })?;
+        let host = self.saved_host(host_id)?;
         let transport: Box<dyn Transport> = match host.endpoint {
             Endpoint::Local { argv, env } => Box::new(LocalProcess { argv, env }),
             Endpoint::Ssh {
@@ -235,6 +297,16 @@ impl AriesCore {
 }
 
 impl AriesCore {
+    fn saved_host(&self, host_id: String) -> Result<SavedHost, CoreError> {
+        self.hosts
+            .lock()
+            .expect("hosts lock")
+            .iter()
+            .find(|h| h.id == host_id)
+            .cloned()
+            .ok_or(CoreError::UnknownHost { id: host_id })
+    }
+
     fn private_key(&self) -> Result<PrivateKey, CoreError> {
         let (sealed, _) = self.store.read_identity()?.ok_or(CoreError::NoKey)?;
         let pem = self.vault.open(sealed)?;
