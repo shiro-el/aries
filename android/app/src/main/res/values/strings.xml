@@ -5,6 +5,43 @@
   Add every new string to values-ko/strings.xml too (TranslationsTest checks it).
 -->
 <resources>
+    <!-- Onboarding and app updates (93) -->
+    <string name="app_update_settings_title">App updates and guide</string>
+    <string name="app_update_installed">Installed: %1$s (%2$d)</string>
+    <string name="onboarding_open_button">Getting started</string>
+    <string name="whats_new_open_button">What’s New</string>
+    <string name="onboarding_permission_button">Allow notifications</string>
+    <string name="onboarding_permission_granted">Notifications are allowed. Enable push in your Host’s settings next.</string>
+    <string name="onboarding_permission_denied">Notifications are off. You can allow them later in Android settings.</string>
+    <string name="app_update_url_label">Update metadata URL</string>
+    <string name="app_update_url_hint">Use HTTPS. HTTP is supported for the default development server. Save the URL before checking.</string>
+    <string name="app_update_url_invalid">Enter an HTTP or HTTPS URL without credentials.</string>
+    <string name="app_update_save_button">Save update URL</string>
+    <string name="app_update_check_button">Check for updates</string>
+    <string name="app_update_checking">Checking for updates…</string>
+    <string name="app_update_current">No newer version is available.</string>
+    <string name="app_update_found">A newer version is available. Use the banner to open the download.</string>
+    <string name="app_update_failed">Could not check for updates. Check the URL and connection, then retry.</string>
+
+    <string name="app_update_available">Aries %1$s is available</string>
+    <string name="app_update_download_button">Open APK download</string>
+    <string name="app_update_browser_failed">Could not open a browser. Try again after installing a browser.</string>
+
+    <string name="whats_new_title">What’s New · %1$s</string>
+    <string name="whats_new_body">This release adds a three-step getting started guide, bundled release notes and an app update banner. Find the guide, release notes and update feed in Settings.</string>
+
+    <string name="onboarding_title">Get started · %1$d of 3</string>
+    <string name="onboarding_host_title">Add a Host</string>
+    <string name="onboarding_host_body">Create an SSH key in Settings → SSH keys, then use Add Host on the Hosts screen. A Host is a computer running herdr-core.</string>
+    <string name="onboarding_beacon_title">Install Beacon</string>
+    <string name="onboarding_beacon_body">Open your Host’s settings and install Beacon. Beacon runs on that Host and sends Agent notifications and Calls.</string>
+    <string name="onboarding_notifications_title">Allow notifications</string>
+    <string name="onboarding_notifications_body">Allow notifications so Aries can show Agent updates and Calls. Then enable push in your Host’s settings to pair that Host with this phone.</string>
+    <string name="onboarding_next_button">Next</string>
+    <string name="onboarding_finish_button">Finish</string>
+    <string name="onboarding_skip_button">Skip guide</string>
+
+
     <!-- Remote file browser (90) -->
     <string name="files_open_button">Files</string>
     <string name="files_title">Host files</string>
@@ -260,6 +297,15 @@
     <string name="structure_unreadable">The herdr-app layout on this Host could not be read (%1$s). Terminals are grouped by their Space and Tab labels.</string>
     <string name="structure_unknown_format">The herdr-app layout on this Host is in a format Aries does not know. Terminals are grouped by their Space and Tab labels. Update Aries.</string>
     <string name="structure_connection_closed">The connection to the Host closed. What you see may be out of date.</string>
+    <!-- Phone surfaces: QS tile and saved launch shortcuts. -->
+    <string name="qs_waiting_label">Aries · Waiting %1$d</string>
+    <string name="qs_label_with_age">%1$s · %2$s</string>
+    <string name="surfaces_age_minutes">%1$d min ago</string>
+    <string name="surfaces_age_unknown">Not refreshed</string>
+    <string name="shortcuts_host_label">%1$s · %2$s</string>
+    <string name="shortcuts_missing_title">Saved launch unavailable</string>
+    <string name="shortcuts_missing_body">This saved launch or its Host was removed. Choose another saved launch in Aries.</string>
+    <string name="shortcuts_pin_button">Pin shortcut</string>
     <!-- Worktree picker: read-only discovery and opening. -->
     <string name="worktrees_button">Worktrees</string>
     <string name="worktrees_title">Open a worktree</string>
