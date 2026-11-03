@@ -45,6 +45,9 @@
             android:name=".ChoiceReceiver"
             android:exported="false" />
         <receiver
+            android:name=".QuestionChoiceReceiver"
+            android:exported="false" />
+        <receiver
             android:name=".NotificationDismissReceiver"
             android:exported="false" />
         <service
