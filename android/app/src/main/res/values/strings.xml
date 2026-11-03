@@ -21,6 +21,14 @@
     <string name="key_copy_button">Copy public key</string>
     <string name="key_copy_hint">Add it to ~/.ssh/authorized_keys on each Host.</string>
     <string name="key_clip_label">Aries SSH public key</string>
+    <string name="key_biometric_label">Require biometric unlock</string>
+    <string name="key_biometric_hint">Every use of the SSH key asks for your fingerprint or face. Call notifications then show Open app instead of Choices, because the key cannot be used without you.</string>
+    <string name="key_biometric_prompt_title">Unlock the SSH key</string>
+    <string name="key_biometric_prompt_subtitle">Aries needs the key to sign in to a Host.</string>
+    <string name="key_locked_title">SSH key locked</string>
+    <string name="key_locked_body">The SSH key needs a biometric unlock, which did not happen. Try again and confirm the prompt.</string>
+    <string name="key_biometric_unavailable_title">Biometric unlock unavailable</string>
+    <string name="key_biometric_unavailable_body">Set up a screen lock and enroll a fingerprint or face on this phone first.</string>
 
     <string name="host_ssh_address">%1$s@%2$s:%3$d</string>
     <string name="host_local_address">Local process</string>

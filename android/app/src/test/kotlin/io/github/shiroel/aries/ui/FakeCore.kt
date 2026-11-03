@@ -5,6 +5,7 @@ import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.Host
 import io.github.shiroel.aries.core.HostConnection
+import io.github.shiroel.aries.core.KeyProtection
 import io.github.shiroel.aries.core.NoHandle
 import io.github.shiroel.aries.core.PublicKeyInfo
 import io.github.shiroel.aries.core.TerminalInfo
@@ -40,6 +41,24 @@ class FakeCore : AriesCoreInterface {
 
     override fun removeHost(hostId: String) {
         if (!hosts.removeIf { it.id == hostId }) throw CoreException.UnknownHost(hostId)
+    }
+
+    /** When set, `setKeyProtection` fails with it and the policy stays. */
+    var failProtectionWith: CoreException? = null
+
+    private var protection = KeyProtection.PLAIN
+
+    override fun keyProtection(): KeyProtection? = key?.let { protection }
+
+    override fun setKeyProtection(protection: KeyProtection) {
+        if (key == null) throw CoreException.NoKey()
+        failProtectionWith?.let { throw it }
+        this.protection = protection
+    }
+
+    override fun canAnswerInBackground(hostId: String): Boolean {
+        val host = hosts.find { it.id == hostId } ?: throw CoreException.UnknownHost(hostId)
+        return host.endpoint is Endpoint.Local || keyProtection() == KeyProtection.PLAIN
     }
 
     override suspend fun connect(hostId: String): HostConnection {
