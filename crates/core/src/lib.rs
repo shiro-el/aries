@@ -71,7 +71,8 @@ pub use settings::{AgentView, AttachMode};
 pub use structure::{HostStructure, PaneInfo, SpaceInfo, StructureProblem, TabInfo};
 pub use terminal::{
     AttachOptions, CellRun, CursorPos, FRAME_INTERVAL, KeyMods, ScreenFrame, ScreenLine,
-    TerminalExit, TerminalKey, TerminalUpdate, TerminalView, ViewStats,
+    TerminalExit, TerminalKey, TerminalSearch, TerminalSearchHighlight, TerminalUpdate,
+    TerminalView, ViewStats,
 };
 pub use worktrees::{WorktreeInfo, WorktreeOpen};
 

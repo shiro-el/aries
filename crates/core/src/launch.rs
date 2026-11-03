@@ -82,6 +82,16 @@ pub struct LaunchRequest {
     #[uniffi(default = None)]
     #[serde(default)]
     pub preset: Option<AgentPreset>,
+    /// Agent model ID (or alias), passed as one argument. Replaces model flags in
+    /// `command` when set; ignored for custom commands.
+    #[uniffi(default = None)]
+    #[serde(default)]
+    pub model: Option<String>,
+    /// Agent reasoning effort. OpenCode's interactive launcher has no effort flag.
+    /// Ignored for OpenCode and custom commands; blank means the Agent's default.
+    #[uniffi(default = None)]
+    #[serde(default)]
+    pub effort: Option<String>,
 }
 
 /// A named [`LaunchRequest`] the user saved for this Host.
@@ -97,13 +107,70 @@ fn non_blank(s: &Option<String>) -> Option<&str> {
     s.as_deref().map(str::trim).filter(|s| !s.is_empty())
 }
 
+/// Keep advanced arguments, replacing only options explicitly selected in the form.
+/// With default selections, old saved command strings run exactly as before.
+fn extra_args(req: &LaunchRequest, preset: AgentPreset) -> Vec<&str> {
+    let mut replaced = Vec::new();
+    if non_blank(&req.model).is_some() {
+        replaced.push("--model");
+        if matches!(preset, AgentPreset::Codex | AgentPreset::OpenCode) {
+            replaced.push("-m");
+        }
+    }
+    if non_blank(&req.effort).is_some() {
+        match preset {
+            AgentPreset::ClaudeCode => replaced.push("--effort"),
+            AgentPreset::Pi => replaced.push("--thinking"),
+            // Codex accepts repeated -c overrides; the selected effort is appended last.
+            AgentPreset::Codex | AgentPreset::OpenCode => {}
+        }
+    }
+    let mut words = req.command.split_whitespace();
+    let mut args = Vec::new();
+    while let Some(word) = words.next() {
+        if replaced.contains(&word) {
+            words.next();
+        } else if !replaced.iter().any(|flag| {
+            word.strip_prefix(flag).is_some_and(|suffix| {
+                suffix.starts_with('=') || (*flag == "-m" && !suffix.is_empty())
+            })
+        }) {
+            args.push(word);
+        }
+    }
+    args
+}
+
 /// `terminal.run` params for `req`.
 pub(crate) fn run_params(req: &LaunchRequest) -> Value {
     let mut params = Map::new();
     let command = req.command.trim();
     if let Some(preset) = req.preset {
         let mut argv = preset.argv();
-        argv.extend(command.split_whitespace());
+        argv.extend(extra_args(req, preset));
+        if let Some(model) = non_blank(&req.model) {
+            argv.extend([
+                if preset == AgentPreset::Codex {
+                    "-m"
+                } else {
+                    "--model"
+                },
+                model,
+            ]);
+        }
+        let codex_effort;
+        if let Some(effort) = non_blank(&req.effort) {
+            match preset {
+                AgentPreset::ClaudeCode => argv.extend(["--effort", effort]),
+                AgentPreset::Codex => {
+                    // A quoted TOML string: never reinterpret the value as config syntax.
+                    codex_effort = format!("model_reasoning_effort={}", json!(effort));
+                    argv.extend(["-c", &codex_effort]);
+                }
+                AgentPreset::Pi => argv.extend(["--thinking", effort]),
+                AgentPreset::OpenCode => {}
+            }
+        }
         params.insert("argv".into(), json!(argv));
     } else if needs_shell(command) {
         params.insert("line".into(), json!(command));
@@ -263,6 +330,8 @@ mod tests {
             space_id: Some("".into()),
             tab_id: Some("t".into()),
             preset: None,
+            model: None,
+            effort: None,
         }
     }
 

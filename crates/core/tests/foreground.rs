@@ -33,6 +33,8 @@ async fn foreground_tracks_the_current_program_and_folder_and_clears_on_exit() {
             space_id: None,
             tab_id: None,
             preset: None,
+            model: None,
+            effort: None,
         })
         .await
         .unwrap();
