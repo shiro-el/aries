@@ -6,6 +6,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
@@ -113,7 +114,7 @@ class ChatCacheTest {
         val core = FakeCore()
         openChat(core)
         core.pushChat(cached)
-        compose.waitForIdle()
+        compose.waitUntil(5000) { compose.onAllNodesWithText("read me offline").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("read me offline").assertExists()
         compose.onNodeWithText(str(R.string.chat_status_reconnecting)).assertExists()
     }
@@ -124,6 +125,7 @@ class ChatCacheTest {
         core.failChatWith = CoreException.KeyLocked()
         core.cachedChats["h1" to "t1"] = cached
         openChat(core)
+        compose.waitUntil(5000) { compose.onAllNodesWithText("read me offline").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("read me offline").assertExists()
     }
 
