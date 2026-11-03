@@ -284,7 +284,7 @@ class CallHistoryTest {
         openCalls()
         compose.onNodeWithTag("console-drawer").assertIsNotDisplayed()
         compose.onNodeWithTag("call-inbox-panel").assertExists()
-        compose.onNodeWithText(str(R.string.back_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         compose.onNodeWithTag("call-inbox-panel").assertDoesNotExist()
         compose.onNodeWithText("me@10.0.0.2:22").assertExists()
     }
@@ -326,7 +326,7 @@ class CallHistoryTest {
         compose.waitForIdle()
         assertEquals(listOf("h1" to "t3"), core.chatsOpened)
         compose.onNodeWithTag("call-inbox-panel").assertDoesNotExist()
-        compose.onNodeWithText(str(R.string.back_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         compose.waitForIdle()
         compose.onNodeWithText(str(R.string.terminals_title, "home")).assertExists()
         assertTrue(core.chatStopped)
@@ -368,7 +368,7 @@ class CallHistoryTest {
         compose.onNodeWithContentDescription(str(R.string.call_open_chat_label, "t3", "Review ready")).performClick()
         compose.waitForIdle()
         assertTrue(view.detached)
-        compose.onNodeWithText(str(R.string.back_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         compose.onNodeWithText(str(R.string.terminals_title, "home")).assertExists()
     }
 

@@ -105,7 +105,7 @@ class SettingsScreenTest {
         compose.onNodeWithText(str(R.string.attach_input_label)).performClick()
         compose.runOnIdle { assertEquals(AttachMode.INPUT, core.attachMode()) }
 
-        compose.onNodeWithText(str(R.string.back_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         compose.onNodeWithText(str(R.string.hosts_title)).assertExists()
     }
 }

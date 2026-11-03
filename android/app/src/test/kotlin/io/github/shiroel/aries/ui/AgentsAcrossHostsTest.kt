@@ -126,7 +126,7 @@ class AgentsAcrossHostsTest {
         compose.onNodeWithText(str(R.string.agent_status_idle)).assertExists()
 
         // Viewing a Working Agent joins the shared seen rules even at turn zero.
-        compose.onNodeWithText(str(R.string.back_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         compose.waitForIdle()
         compose.onNodeWithText("claude").performClick()
         compose.waitForIdle()
@@ -136,7 +136,7 @@ class AgentsAcrossHostsTest {
         // A disappearing Agent must not leave a stale detail screen on Back.
         core.push("h1", emptyList())
         compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.back_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         compose.waitForIdle()
         compose.onNodeWithText("claude").assertDoesNotExist()
         compose.onNodeWithText("pi").assertExists()
@@ -194,7 +194,7 @@ class AgentsAcrossHostsTest {
         compose.waitForIdle()
         compose.onNode(hasContentDescription("pi> ready", substring = true)).assertExists()
 
-        compose.onNodeWithText(str(R.string.back_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         compose.waitForIdle()
         assertTrue(view.detached)
         assertTrue("the Agents list stays connected", !core.connectionsOf.getValue("h2").disconnected)

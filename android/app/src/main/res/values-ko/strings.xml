@@ -690,6 +690,9 @@
     <string name="push_step_pair">Beacon과 키 교환</string>
     <string name="push_step_test">테스트 알림 보내기</string>
     <string name="push_step_unpair">Relay에서 페어링 삭제</string>
+    <string name="push_step_running_description">진행 중</string>
+    <string name="push_step_done_description">완료</string>
+    <string name="push_step_failed_description">실패</string>
     <string name="push_failed">\"%1$s\" 단계 실패: %2$s</string>
     <string name="push_on_body">푸시가 켜져 있습니다. Relay: %1$s</string>
     <string name="push_test_sent">테스트 알림을 보냈습니다.</string>
@@ -814,8 +817,6 @@
     <string name="accent_saturation">채도</string>
     <string name="accent_brightness">밝기</string>
     <string name="console_open_drawer">Host와 Agent 열기</string>
-    <string name="console_menu_glyph">☰</string>
-    <string name="console_back_glyph">←</string>
     <string name="console_agents_waiting">%1$d개 기다림</string>
     <string name="console_all_hosts">Hosts</string>
     <!-- i18n-ok: decorative tree guides, shared across languages. -->
