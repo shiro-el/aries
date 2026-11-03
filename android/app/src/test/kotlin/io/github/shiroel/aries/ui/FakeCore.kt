@@ -66,6 +66,11 @@ val inKeyWork = ThreadLocal<Boolean>()
 
 /** In-memory stand-in for the Rust core, for UI tests. */
 class FakeCore : AriesCoreInterface {
+    var diagnosticEntries = emptyList<io.github.shiroel.aries.core.DiagnosticEntry>()
+    override fun diagnostics(source: io.github.shiroel.aries.core.DiagnosticSource?, hostId: String?, failuresOnly: Boolean) =
+        diagnosticEntries.filter { (source == null || it.source == source) &&
+            (hostId == null || it.hostId == hostId) && (!failuresOnly || it.error != null) }
+
     private val inputs = mutableMapOf<Pair<String, String>, List<String>>()
     override fun inputHistory(hostId: String, terminal: String): List<String> = inputs[hostId to terminal].orEmpty()
     override fun rememberInput(hostId: String, terminal: String, text: String) {
@@ -490,7 +495,12 @@ class FakeCore : AriesCoreInterface {
     }
 
     var openedPush: PushNotice? = null
-    override fun openPush(envelope: ByteArray): PushNotice = openedPush ?: throw CoreException.PushRejected("fake")
+    val receivedPushEnvelopes = mutableListOf<ByteArray>()
+    var rejectPushReason = "fake"
+    override fun openPush(envelope: ByteArray): PushNotice {
+        receivedPushEnvelopes += envelope
+        return openedPush ?: throw CoreException.PushRejected(rejectPushReason)
+    }
 
     /** Chat snapshots `watchChat` delivers, in order (see [pushChat]). */
     val chat = Channel<ChatSnapshot>(Channel.UNLIMITED)
@@ -671,6 +681,47 @@ class FakeConnection(
     private val core: FakeCore? = null,
     private val saved: MutableList<SavedLaunch> = core?.savedLaunches ?: mutableListOf(),
 ) : HostConnection(NoHandle) {
+    var githubRepo = io.github.shiroel.aries.core.GithubRepository("/repo", null, "octo/project", "github.com")
+    var githubRepoReads = 0
+    var githubFailure: CoreException? = null
+    var githubPage = io.github.shiroel.aries.core.GithubPage(listOf(
+        io.github.shiroel.aries.core.GithubItem(42u, "Issue title", "open", "octocat", "2026-11-04", "**Issue body**", io.github.shiroel.aries.core.GithubKind.ISSUE),
+    ), true, false)
+    val githubRequests = mutableListOf<List<String>>()
+    override suspend fun githubRepository(address: String): io.github.shiroel.aries.core.GithubRepository {
+        githubRepoReads++
+        githubFailure?.let { throw it }
+        return githubRepo
+    }
+    override suspend fun githubList(repo: io.github.shiroel.aries.core.GithubRepository, kind: io.github.shiroel.aries.core.GithubKind, state: io.github.shiroel.aries.core.GithubState, search: String, page: UInt): io.github.shiroel.aries.core.GithubPage {
+        githubRequests += listOf(kind.name, state.name, search, page.toString())
+        githubFailure?.let { throw it }
+        return githubPage
+    }
+    var githubThread: io.github.shiroel.aries.core.GithubDetail? = null
+    override suspend fun githubDetail(repo: io.github.shiroel.aries.core.GithubRepository, number: UInt): io.github.shiroel.aries.core.GithubDetail {
+        githubFailure?.let { throw it }
+        return githubThread ?: io.github.shiroel.aries.core.GithubDetail(githubPage.items.first(), emptyList())
+    }
+    val githubComments = mutableListOf<Triple<io.github.shiroel.aries.core.GithubKind, UInt, String>>()
+    override suspend fun githubComment(repo: io.github.shiroel.aries.core.GithubRepository, kind: io.github.shiroel.aries.core.GithubKind, number: UInt, body: String) {
+        githubComments += Triple(kind, number, body)
+        githubFailure?.let { throw it }
+        val current = githubThread ?: io.github.shiroel.aries.core.GithubDetail(githubPage.items.first(), emptyList())
+        githubThread = current.copy(comments = current.comments + io.github.shiroel.aries.core.GithubComment((current.comments.size + 1).toULong(), body, "me", "2026-11-04"))
+    }
+    val githubStateChanges = mutableListOf<Pair<UInt, Boolean>>()
+    override suspend fun githubSetIssueClosed(repo: io.github.shiroel.aries.core.GithubRepository, number: UInt, closed: Boolean) {
+        githubFailure?.let { throw it }
+        githubStateChanges += number to closed
+        val current = githubThread ?: io.github.shiroel.aries.core.GithubDetail(githubPage.items.first(), emptyList())
+        githubThread = current.copy(item = current.item.copy(state = if (closed) "closed" else "open"))
+    }
+    val githubDrafts = mutableMapOf<Pair<String, UInt>, String>()
+    override fun githubLoadDraft(repo: io.github.shiroel.aries.core.GithubRepository, number: UInt): String = githubDrafts[repo.nameWithOwner to number].orEmpty()
+    override fun githubSaveDraft(repo: io.github.shiroel.aries.core.GithubRepository, number: UInt, body: String) {
+        githubDrafts[repo.nameWithOwner to number] = body
+    }
     var worktrees = emptyList<io.github.shiroel.aries.core.WorktreeInfo>()
     val worktreeFolders = mutableListOf<String>()
     val openedWorktrees = mutableListOf<Triple<String, String?, io.github.shiroel.aries.core.AgentPreset?>>()

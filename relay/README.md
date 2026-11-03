@@ -2,8 +2,9 @@
 
 The Relay delivers push notifications from a Host's Beacon to the phone. It
 only forwards end-to-end encrypted envelopes: it cannot read them, and it
-stores only pairing/challenge hashes, verification IDs, device push tokens and rate limit counters
-(never an envelope, never a request body in its logs). You can still run your
+stores only pairing/challenge hashes, verification IDs, device push tokens,
+rate limit counters and expiring replay hashes (never an envelope, never a
+request body in its logs). You can still run your
 own instead of the one your Aries build uses, and choose it per Host in the
 app.
 
@@ -52,8 +53,34 @@ Keep the service account key file out of the repository; delete your copy once
 it is stored as the secret.
 
 Limits are Worker variables in `wrangler.jsonc` (`vars`):
-`PUSH_LIMIT_PER_MINUTE` (pushes per pairing, default 30) and
+`PUSH_LIMIT_PER_MINUTE` (pushes per pairing, default 30),
+`PUSH_DEVICE_LIMIT_PER_MINUTE` (pushes across all pairings for the same FCM
+device token, default 30), and
 `PAIR_LIMIT_PER_HOUR` (new pairings per client IP, default 20).
+These use fixed windows (60 seconds for pushes, one hour for registration).
+Push limits return `429` with `Retry-After` in seconds. Attempts admitted by
+the pairing limit count against the device budget even when FCM fails.
+Deleting a pairing leaves the shared device budget intact; rotating an FCM
+token starts a budget for the new token.
+
+The Relay uses SHA-256 of the encrypted envelope as its event ID, matching
+the phone's v1 replay identity. It remembers accepted IDs per hashed device
+token for 24 hours. Retrying the same envelope returns `202` without another
+FCM send or consuming either push budget, including through another Host
+pairing for that device. Re-encrypting a message creates a different ID.
+Neither the ID nor the envelope is added to the FCM data payload.
+
+Concurrent copies acquire one D1 claim before spending budget. While a send
+is in flight, copies return `503` (`event_in_flight`, `Retry-After: 1`); they
+are acknowledged as accepted only after FCM succeeds. Failed or rate-limited
+sends release their claim for retry. Abandoned claims expire after 60 seconds,
+and expired claims/IDs are deleted on subsequent valid push requests. As
+with any external send, an ambiguous FCM response or a crash after delivery
+can still cause a retry to be delivered again; the phone's authenticated
+replay check remains the final guard.
+
+Apply all D1 migrations before deploying this version (including
+`0002_device_delivery.sql`). Deploying is a separate operator action.
 
 ## Check it
 
@@ -117,7 +144,7 @@ pairing per minute, in addition to the existing IP registration limit.
 Pending or failed verification appears in the Host's Push notifications
 settings; setup can be retried after failure.
 
-Migration `0002_token_ownership.sql` keeps already registered pairings
+Migration `0003_token_ownership.sql` keeps already registered pairings
 active. Ship the app that understands challenges before deploying this
 Relay version: older apps retain existing push delivery, but cannot
 complete new registrations or token changes on this Relay. The new app
