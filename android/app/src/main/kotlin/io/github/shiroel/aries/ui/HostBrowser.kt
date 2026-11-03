@@ -198,7 +198,7 @@ fun BrowseScreen(
     val space = browser.openSpace
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val editor = remember(browser) { LayoutEditor(browser, scope).also { browser.layoutEditor = it } }
+    val editor = remember(browser) { browser.layoutEditor ?: LayoutEditor(browser, scope).also { browser.layoutEditor = it } }
     Column(Modifier.fillMaxSize()) {
         Row {
             if (showHeader) TextButton(onClick = if (space != null) browser::closeSpace else onBack) {
