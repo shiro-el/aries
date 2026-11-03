@@ -73,6 +73,11 @@
     <string name="files_range">Lines %1$d–%2$d of %3$d</string>
     <string name="files_previous_button">Previous page</string>
     <string name="files_next_button">Next page</string>
+    <!-- File code view and Chat links (110) -->
+    <string name="files_wrap_lines">Wrap lines</string>
+    <string name="files_missing">File not found: %1$s</string>
+    <string name="files_line_unavailable">Line %1$d is no longer in this file. Showing the start.</string>
+    <string name="files_no_folder">This Terminal has no current folder. Use an absolute file path.</string>
     <!-- Git changes (ticket 89) -->
     <string name="git_changes_button">Changes</string>
     <string name="git_changes_title">Git changes · read only</string>

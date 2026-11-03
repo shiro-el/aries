@@ -29,27 +29,43 @@ fun RemoteFilesScreen(
     address: String,
     onClose: () -> Unit,
     onSend: ((String) -> Unit)? = null,
+    initialLocation: FileLocation? = null,
 ) {
-    var folder by remember(address) { mutableStateOf<String?>(null) }
+    var folder by remember(address, initialLocation) { mutableStateOf(initialLocation?.path?.substringBeforeLast('/')?.ifEmpty { "/" }) }
     var directory by remember(address) { mutableStateOf<RemoteDirectory?>(null) }
-    var file by remember(address) { mutableStateOf<String?>(null) }
-    var offsets by remember(address) { mutableStateOf(listOf(1uL)) }
+    var file by remember(address, initialLocation) { mutableStateOf(initialLocation?.path) }
+    var offsets by remember(address, initialLocation) { mutableStateOf(listOf(initialLocation?.line ?: 1uL)) }
     var page by remember(address) { mutableStateOf<RemoteFilePage?>(null) }
+    var wrap by remember(address) { mutableStateOf(false) }
     var retry by remember { mutableIntStateOf(0) }
     var loading by remember { mutableStateOf(true) }
     var failed by remember { mutableStateOf(false) }
     var notText by remember { mutableStateOf(false) }
+    var missing by remember { mutableStateOf(false) }
+    var unavailableLine by remember { mutableStateOf<ULong?>(null) }
     LaunchedEffect(connection, address, folder, file, offsets, retry) {
         loading = true
         failed = false
         notText = false
+        missing = false
+        unavailableLine = null
         page = null
         try {
             checkNotNull(connection)
             if (file == null) {
                 directory = connection.listFiles(address, folder)
             } else {
-                val result = connection.readFilePage(address, file!!, offsets.last(), 200u)
+                val requested = offsets.last()
+                val result = try {
+                    connection.readFilePage(address, file!!, requested, 200u)
+                } catch (e: CoreException.Rpc) {
+                    // A transcript can outlive the referenced lines. Keep the file readable.
+                    if (e.kind != "invalid_params" || requested <= 1uL) throw e
+                    val start = connection.readFilePage(address, file!!, 1uL, 200u)
+                    if (start.lines >= requested) throw e
+                    unavailableLine = requested
+                    start
+                }
                 // herdr-core rejects non-UTF-8; valid UTF-8 containing NUL is binary too.
                 notText = '\u0000' in result.text
                 if (!notText) page = result
@@ -57,7 +73,11 @@ fun RemoteFilesScreen(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            if (e is CoreException.Rpc && e.kind == "not_text") notText = true else failed = true
+            when {
+                e is CoreException.Rpc && e.kind == "not_text" -> notText = true
+                e is CoreException.Rpc && e.kind == "not_found" -> missing = true
+                else -> failed = true
+            }
         } finally {
             loading = false
         }
@@ -89,6 +109,7 @@ fun RemoteFilesScreen(
         when {
             loading -> Text(stringResource(R.string.files_loading))
             notText -> Text(stringResource(R.string.files_not_text))
+            missing -> Text(stringResource(R.string.files_missing, file.orEmpty()), color = MaterialTheme.colorScheme.error)
             failed -> Text(stringResource(R.string.files_failed), color = MaterialTheme.colorScheme.error)
             file == null -> {
                 val entries = directory?.entries.orEmpty()
@@ -108,11 +129,19 @@ fun RemoteFilesScreen(
                 }
             }
             else -> page?.let { content ->
+                unavailableLine?.let { Text(stringResource(R.string.files_line_unavailable, it.toLong())) }
                 if (content.lines == 0uL) Text(stringResource(R.string.files_empty_file))
                 else Text(stringResource(R.string.files_range, content.first.toLong(), content.last.toLong(), content.lines.toLong()))
                 if (onSend != null) Text(stringResource(R.string.files_line_hint), style = MaterialTheme.typography.bodySmall)
+                TextButton(onClick = { wrap = !wrap }) {
+                    Checkbox(checked = wrap, onCheckedChange = null)
+                    Text(stringResource(R.string.files_wrap_lines))
+                }
                 Row {
-                    TextButton(enabled = offsets.size > 1, onClick = { offsets = offsets.dropLast(1) }) {
+                    TextButton(enabled = offsets.size > 1 || content.first > 1uL, onClick = {
+                        offsets = if (offsets.size > 1) offsets.dropLast(1)
+                            else listOf(if (content.first > 200uL) content.first - 200uL else 1uL)
+                    }) {
                         Text(stringResource(R.string.files_previous_button))
                     }
                     TextButton(enabled = content.last < content.lines, onClick = { offsets = offsets + (content.last + 1uL) }) {
@@ -124,18 +153,26 @@ fun RemoteFilesScreen(
                     if (content.text.isEmpty()) emptyList()
                     else content.text.split('\n').let { if (content.text.endsWith('\n')) it.dropLast(1) else it }
                 }
+                val colors = MaterialTheme.colorScheme
+                val highlighted = remember(content, file, colors) { highlightFileCode(content.text, file.orEmpty(), colors) }
+                val starts = remember(lines) {
+                    var offset = 0
+                    lines.map { line -> offset.also { offset += line.length + 1 } }
+                }
                 val scroll = rememberScrollState()
-                LazyColumn(Modifier.weight(1f).horizontalScroll(scroll)) {
+                LazyColumn(Modifier.weight(1f).then(if (wrap) Modifier.fillMaxWidth() else Modifier.horizontalScroll(scroll))) {
                     itemsIndexed(lines) { index, line ->
                         val number = content.first + index.toULong()
                         val label = stringResource(R.string.files_send_line_label, number.toLong())
-                        Row(Modifier.testTag("files-line:$number")
+                        Row(Modifier.then(if (wrap) Modifier.fillMaxWidth() else Modifier).testTag("files-line:$number")
                             .then(if (onSend == null) Modifier else Modifier.clickable {
                                 onSend(quotedFileReference(file!!) + ":$number\n" + line)
                             }.semantics { contentDescription = label })
                             .padding(vertical = 6.dp)) {
                             Text(number.toString(), Modifier.widthIn(min = 48.dp), fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(line, fontFamily = FontFamily.Monospace, softWrap = false)
+                            Text(highlighted.subSequence(starts[index], starts[index] + line.length),
+                                modifier = if (wrap) Modifier.weight(1f) else Modifier,
+                                fontFamily = FontFamily.Monospace, softWrap = wrap)
                         }
                     }
                 }
@@ -165,17 +202,28 @@ internal fun RemoteFilesAccess(model: HostsModel, content: @Composable () -> Uni
         is Screen.Terminal -> screen.viewer.link
     } ?: run { body(); return }
     var open by remember(screen) { mutableStateOf(false) }
+    var noFolder by remember(screen) { mutableStateOf(false) }
+    var location by remember(screen) { mutableStateOf<FileLocation?>(null) }
     CompositionLocalProvider(LocalRemoteFilesAction provides {
-        TextButton(onClick = { open = true }, modifier = Modifier.testTag("files-open")) {
+        TextButton(onClick = { noFolder = false; location = null; open = true }, modifier = Modifier.testTag("files-open")) {
             Text(stringResource(R.string.files_open_button))
         }
+    }, LocalOpenRemoteFile provides { target ->
+        noFolder = !target.path.startsWith('/') && terminal.currentCwd.isNullOrBlank()
+        location = target.copy(path = if (target.path.startsWith('/')) target.path
+            else terminal.currentCwd.orEmpty().trimEnd('/') + "/" + target.path)
+        open = true
     }) { body() }
     if (open) androidx.compose.ui.window.Dialog(
         onDismissRequest = { open = false },
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Surface(Modifier.fillMaxSize()) {
-            RemoteFilesScreen(link.connection, terminal.address, { open = false },
+            if (noFolder) Column(Modifier.padding(16.dp)) {
+                Text(stringResource(R.string.files_no_folder))
+                TextButton(onClick = { open = false }) { Text(stringResource(R.string.files_close_button)) }
+            } else RemoteFilesScreen(link.connection, terminal.address, { open = false },
+                initialLocation = location,
                 onSend = if (terminal.agentStatus == null) null else { reference ->
                     if (model.screen === screen) {
                         model.switchView(io.github.shiroel.aries.core.AgentView.CHAT)
