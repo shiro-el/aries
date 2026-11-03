@@ -16,6 +16,10 @@ internal object StatusChannels {
                 DONE, context.getString(R.string.push_channel_done),
                 legacy?.importance ?: NotificationManager.IMPORTANCE_DEFAULT,
             )
+            channel.vibrationPattern = longArrayOf(0, 150)
+            channel.enableVibration(true)
+            // An upgrade keeps the old alert preferences, including disabled vibration.
+            // Distinct patterns are defaults for new channels, never a forced reset.
             if (legacy != null) {
                 channel.setSound(legacy.sound, legacy.audioAttributes)
                 channel.vibrationPattern = legacy.vibrationPattern
@@ -30,7 +34,10 @@ internal object StatusChannels {
         }
         manager.createNotificationChannel(NotificationChannel(
             ATTENTION, context.getString(R.string.push_channel_attention), NotificationManager.IMPORTANCE_HIGH,
-        ))
+        ).apply {
+            vibrationPattern = longArrayOf(0, 300, 150, 300)
+            enableVibration(true)
+        })
         return if (done) DONE else ATTENTION
     }
 }
