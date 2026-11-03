@@ -43,7 +43,7 @@ internal fun ConsoleChoice(selected: Boolean, onClick: () -> Unit, modifier: Mod
         }) { label() }
 }
 
-/** Console row shared by Agents and Browse's Terminal leaves. */
+/** Two-line Console row shared by Agents and Browse's Terminal leaves. */
 @Composable
 internal fun ConsoleTerminalRow(
     terminal: TerminalInfo,
@@ -70,17 +70,22 @@ internal fun ConsoleTerminalRow(
         ) {
             if (status != null) AgentStatusMark(status) else TerminalMark()
             Column(Modifier.weight(1f)) {
-                Text(displayName(terminal), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                terminal.currentProgram?.let { program ->
-                    Text(program, style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(displayName(terminal), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    terminal.currentProgram?.takeIf { it != displayName(terminal) }?.let { program ->
+                        Text(program, Modifier.weight(0.4f, fill = false), style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                 }
-                if (waiting) Text(stringResource(R.string.console_agent_location, host, terminal.currentCwd ?: terminal.address),
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(sub, style = MaterialTheme.typography.bodySmall,
-                    color = if (waiting) statusColor(AgentStatus.Blocked(null, null)) else MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(sub, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
+                        color = if (waiting) statusColor(AgentStatus.Blocked(null, null)) else MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (waiting) Text(terminal.currentCwd ?: terminal.address, Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
             if (status != null) AgentElapsedTime(terminal.statusMs)
         }
