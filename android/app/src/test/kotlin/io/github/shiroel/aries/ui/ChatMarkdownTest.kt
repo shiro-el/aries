@@ -55,6 +55,31 @@ class ChatMarkdownTest {
 
     @Test
     @Config(qualifiers = "h1200dp")
+    fun thinkingFromAgentHistoryRendersMarkdownAndReplacesItsParsedText() {
+        // Real Claude histories put Markdown-bearing prose in thinking blocks too.
+        // Content is rewritten; no private transcript is stored in this fixture.
+        val core = FakeCore()
+        openChat(core)
+        core.pushChat(ChatSnapshot(listOf(
+            entry("th1", ChatEntryBody.Thinking("Inspect `Runner.kt` before **retrying**.")),
+        ), ChatStatus.LIVE, null))
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithText("Inspect Runner.kt before retrying.").fetchSemanticsNodes().isNotEmpty()
+        }
+        val rendered = compose.onNodeWithText("Inspect Runner.kt before retrying.")
+            .fetchSemanticsNode().config[SemanticsProperties.Text].single()
+        assertTrue(rendered.spanStyles.any { it.item.fontWeight == FontWeight.Bold })
+        assertTrue(rendered.spanStyles.any { it.item.fontFamily == androidx.compose.ui.text.font.FontFamily.Monospace })
+        core.pushChat(ChatSnapshot(listOf(
+            entry("th1", ChatEntryBody.Thinking("Checked `Runner.kt`.\n\n**Ready** to retry.")),
+        ), ChatStatus.LIVE, null))
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Ready to retry.").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Checked Runner.kt.").assertExists()
+        compose.onNodeWithText("Inspect Runner.kt before retrying.").assertDoesNotExist()
+    }
+
+    @Test
+    @Config(qualifiers = "h1200dp")
     fun userAndAgentMessagesRenderMarkdownInsteadOfSourceMarkers() {
         val core = FakeCore()
         openChat(core)
