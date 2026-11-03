@@ -365,7 +365,7 @@
     <string name="key_left">←</string>
     <string name="key_right">→</string>
     <string name="key_interrupt">^C</string>
-    <string name="attach_input_label">Open Terminals ready to type</string>
+    <string name="attach_input_label">Type as soon as a Terminal opens</string>
     <string name="terminal_exited_code">The program exited with code %1$d.</string>
     <string name="terminal_exited_signal">The program was stopped by signal %1$s.</string>
     <string name="terminal_exited_reason">The program ended (%1$s).</string>
@@ -669,7 +669,7 @@
     <string name="beacon_unsupported_host_body">The Beacon does not support %1$s/%2$s Hosts.</string>
     <string name="beacon_unavailable_body">This version of Aries has no Beacon for %1$s/%2$s yet.</string>
     <string name="beacon_download_body">Could not download the Beacon: %1$s</string>
-    <string name="beacon_step_body">Step "%1$s" failed on the Host: %2$s</string>
+    <string name="beacon_step_body">Step \"%1$s\" failed on the Host: %2$s</string>
     <string name="beacon_updated">Updated the Beacon from %1$s to %2$s.</string>
     <string name="beacon_update_needed">The Beacon needs an update (%1$s to %2$s). Automatic updates are off, so nothing was installed.</string>
     <string name="beacon_update_button">Update Beacon</string>
