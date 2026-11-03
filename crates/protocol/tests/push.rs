@@ -227,3 +227,30 @@ fn old_status_pushes_have_no_optional_details() {
     ));
     assert_eq!(serde_json::to_value(message).unwrap(), json);
 }
+
+#[test]
+fn progress_round_trips_without_changing_the_v1_envelope_or_old_status_json() {
+    let p = pair();
+    let json = r#"{"kind":"progress","terminal":"t7","name":"Builder","elapsed_secs":125,"child_agents":3,"at":1700000000}"#;
+    let message: PushMessage = serde_json::from_str(json).unwrap();
+    let envelope = seal(&message, &p.phone.public, &p.beacon).unwrap();
+    assert_eq!(envelope.len(), ENVELOPE_LEN);
+    assert_eq!(
+        open(&envelope, &p.phone, &p.beacon.public).unwrap(),
+        message
+    );
+    assert!(matches!(
+        message,
+        PushMessage::Progress {
+            elapsed_secs: 125,
+            child_agents: 3,
+            cancelled: false,
+            ..
+        }
+    ));
+    let old: PushMessage = serde_json::from_str(
+        r#"{"kind":"status","terminal":"t7","top_level":true,"status":{"status":"done"},"at":1}"#,
+    )
+    .unwrap();
+    assert!(matches!(old, PushMessage::Status { .. }));
+}

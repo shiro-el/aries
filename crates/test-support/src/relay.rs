@@ -18,6 +18,8 @@ pub struct RelayLog {
     pub deleted: Vec<String>,
     /// Envelopes posted to `/v1/push` with a live token: (token, body).
     pub pushes: Vec<(String, Vec<u8>)>,
+    /// Requested delivery priority, in the same order as pushes (old clients: high).
+    pub push_priorities: Vec<String>,
     /// `PUT /v1/pairing` updates: (token, new device token).
     pub updates: Vec<(String, String)>,
 }
@@ -184,6 +186,12 @@ fn serve(
         }
         ("POST", "/v1/push") => match bearer.filter(|t| log.pairings.contains_key(t)) {
             Some(t) => {
+                log.push_priorities.push(
+                    req.headers
+                        .get("x-aries-priority")
+                        .cloned()
+                        .unwrap_or_else(|| "high".into()),
+                );
                 log.pushes.push((t, req.body));
                 (202, String::new())
             }

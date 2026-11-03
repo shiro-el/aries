@@ -372,6 +372,12 @@
     <string name="push_permission_denied">Aries 알림이 허용되지 않았습니다. Android 설정에서 허용한 뒤 다시 푸시를 켜세요.</string>
     <string name="push_off_host_unreachable">푸시를 껐고 Relay에서 이 페어링을 삭제했습니다. Host에 연결할 수 없어 Host 쪽 페어링 사본은 다음 페어링 때까지 남지만 더는 동작하지 않습니다.</string>
     <string name="push_channel_name">Host 알림</string>
+    <!-- Watched Agent progress -->
+    <string name="agent_watch_label">진행 상황 지켜보기</string>
+    <string name="agent_watch_error">지켜보기를 변경하지 못했습니다: %1$s</string>
+    <string name="push_progress_channel">지켜보는 Agent 진행 상황</string>
+    <string name="push_progress_body">%1$d분 경과 · 하위 Agent %2$d개</string>
+
     <string name="push_test_title">%1$s 푸시 동작 확인</string>
     <string name="push_test_body">%1$s의 Beacon이 보낸 테스트 알림입니다. 종단 간 암호화돼 있습니다.</string>
     <string name="push_status_title">%2$s의 %1$s</string>

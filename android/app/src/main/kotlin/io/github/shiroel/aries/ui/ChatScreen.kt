@@ -355,7 +355,8 @@ fun ChatScreen(
         if (count > 0) list.scrollToItem(count - 1)
     }
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))) {
-        AgentScreenHeader(chat.terminal, chat.host.name, onBack, AgentView.CHAT, onView, onChanges = { showGit = true })
+        AgentScreenHeader(chat.terminal, chat.host.name, onBack, AgentView.CHAT, onView,
+            onChanges = { showGit = true }, link = chat.link, onTerminalUpdate = { chat.update(listOf(it)) })
         statusText(snapshot?.status ?: ChatStatus.CONNECTING)?.let { ChatNotice(it) }
         if (snapshot != null && entries.isEmpty() && snapshot.status == ChatStatus.LIVE) {
             Text(stringResource(R.string.chat_empty))
