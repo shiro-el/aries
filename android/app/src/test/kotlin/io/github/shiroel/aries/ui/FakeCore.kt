@@ -9,6 +9,10 @@ import io.github.shiroel.aries.core.BeaconInstall
 import io.github.shiroel.aries.core.BeaconRelease
 import io.github.shiroel.aries.core.BeaconSource
 import io.github.shiroel.aries.core.BeaconState
+import io.github.shiroel.aries.core.CallFeedState
+import io.github.shiroel.aries.core.CallInfo
+import io.github.shiroel.aries.core.CallListener
+import io.github.shiroel.aries.core.CallWatch
 import io.github.shiroel.aries.core.BeaconUpdate
 import io.github.shiroel.aries.core.ChatSnapshot
 import io.github.shiroel.aries.core.ChatWatch
@@ -348,6 +352,41 @@ class FakeCore : AriesCoreInterface {
     override suspend fun answerQuestion(hostId: String, terminal: String, questionId: String, picks: List<List<UInt>>) {
         answers += Triple(terminal, questionId, picks)
         answerFailure?.let { answerFailure = null; throw it }
+    }
+
+    /** Each Host's Call history (newest first), by Host id. */
+    val callsOf = mutableMapOf<String, List<CallInfo>>()
+
+    /** The live Call watch of each Host, by Host id. */
+    val callListeners = mutableMapOf<String, CallListener>()
+
+    /** Host ids `watchCalls` was called for, in order. */
+    val callWatchesStarted = mutableListOf<String>()
+
+    override suspend fun calls(hostId: String): List<CallInfo> = callsOf[hostId].orEmpty()
+
+    override suspend fun watchCalls(hostId: String, listener: CallListener): CallWatch {
+        host(hostId)
+        callWatchesStarted += hostId
+        callListeners[hostId] = listener
+        listener.onState(CallFeedState.Live)
+        listener.onCalls(callsOf[hostId].orEmpty())
+        return object : CallWatch(NoHandle) {
+            override fun stop() {
+                if (callListeners[hostId] === listener) callListeners.remove(hostId)
+            }
+
+            override fun close() {}
+        }
+    }
+
+    /** An Agent on [call]'s Host sent it: the Host's watch hears of it. */
+    fun sendCall(call: CallInfo) {
+        callsOf[call.hostId] = listOf(call) + callsOf[call.hostId].orEmpty()
+        callListeners[call.hostId]?.let {
+            it.onNewCall(call)
+            it.onCalls(callsOf[call.hostId].orEmpty())
+        }
     }
 
     companion object {

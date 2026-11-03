@@ -420,7 +420,7 @@ const LEAKY_ENV: &[&str] = &[
 ];
 
 impl ChatHost {
-    async fn open(&self, command: &str) -> Result<Stream, CoreError> {
+    pub(crate) async fn open(&self, command: &str) -> Result<Stream, CoreError> {
         match self {
             Self::Ssh(ssh) => ssh.exec_stream(command).await,
             Self::Local(env) => {

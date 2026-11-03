@@ -90,6 +90,9 @@ pub enum CoreError {
     /// Installing or managing the Beacon needs an SSH Host.
     #[error("the Beacon can only be managed on an SSH Host")]
     BeaconNeedsSsh,
+    /// The Host has no Beacon, so it keeps no Call history.
+    #[error("the Beacon is not installed on this Host")]
+    BeaconNotInstalled,
     /// The Host's OS/CPU is not one the Beacon supports (yet).
     #[error("the Beacon does not support {os}/{arch} Hosts")]
     UnsupportedHost { os: String, arch: String },

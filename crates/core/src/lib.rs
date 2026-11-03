@@ -6,6 +6,7 @@
 //! chat, push, calls and beacon manager modules arrive with their tickets.
 
 mod beacon;
+mod calls;
 mod chat;
 mod error;
 mod hc;
@@ -29,6 +30,9 @@ use serde::{Deserialize, Serialize};
 pub use beacon::{
     ALLOWED_BEACON, BeaconArtifact, BeaconCheck, BeaconFetcher, BeaconInstall, BeaconRelease,
     BeaconSource, BeaconState, BeaconUpdate, FetchError, Linger, pinned_release,
+};
+pub use calls::{
+    CallAnswer, CallAnswerState, CallFeedState, CallInfo, CallListener, CallUrgency, CallWatch,
 };
 pub use chat::{
     ChatEntry, ChatEntryBody, ChatQuestionOption, ChatQuestionPart, ChatSnapshot, ChatStatus,
@@ -888,6 +892,31 @@ impl AriesCore {
                 .collect(),
         };
         on_runtime(async move { chat::answer(&host, &terminal, &answer).await }).await
+    }
+}
+
+/// Calls (`calls` module).
+#[uniffi::export]
+impl AriesCore {
+    /// The Host's whole Call history, newest first, as its Beacon keeps it.
+    pub async fn calls(&self, host_id: String) -> Result<Vec<CallInfo>, CoreError> {
+        let runner = self.chat_host(&host_id)?;
+        on_runtime(async move { calls::history(&runner, &host_id).await }).await
+    }
+
+    /// Follows the Host's Call history: `listener` gets the whole list after
+    /// the first sync and each change, and each Call that arrives while
+    /// watching once. Reconnects by itself (reported through `on_state`)
+    /// until `stop`. Uses its own SSH connection, not a [`HostConnection`].
+    /// Opening the Host's key may ask for a biometric unlock, so call it
+    /// off the UI thread.
+    pub async fn watch_calls(
+        &self,
+        host_id: String,
+        listener: Arc<dyn CallListener>,
+    ) -> Result<Arc<CallWatch>, CoreError> {
+        let runner = self.chat_host(&host_id)?;
+        Ok(Arc::new(calls::watch(runner, host_id, listener)))
     }
 }
 
