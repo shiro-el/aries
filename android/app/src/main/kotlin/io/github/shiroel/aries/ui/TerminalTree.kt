@@ -66,38 +66,40 @@ internal fun agentFamily(host: Host, terminals: List<TerminalInfo>): List<AgentE
     return terminals.withIndex().filter { it.value.address in included }.map { AgentEntry(host, it.value, sequence = it.index) }
 }
 
-/** Geometric guides span the entire row, including its subtitle and divider. */
+/** Nine-dp guide lanes with rounded elbows meeting the centre of each child row. */
 @Composable
 internal fun TerminalBranch(
     guide: String,
     depth: Int,
     modifier: Modifier = Modifier,
-    leading: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
-    val color = MaterialTheme.colorScheme.outline
-    val density = androidx.compose.ui.platform.LocalDensity.current
-    val titleCenter = with(density) { 8.dp + MaterialTheme.typography.bodyMedium.lineHeight.toDp() / 2 }
-    // Keep very deep families usable on a phone; identity/folding retain full depth.
+    val color = MaterialTheme.colorScheme.outlineVariant
+    // Bound only the visual indent; full addresses and folds retain the complete tree.
     val visibleDepth = depth.coerceAtMost(3)
-    val indent = (visibleDepth * 16).dp
-    val leadingWidth = if (leading != null) 32.dp else 0.dp
+    val inset = if (depth > 0) 31.dp else 0.dp
+    val indent = inset + (visibleDepth * 13).dp
     androidx.compose.foundation.layout.Box(modifier.fillMaxWidth().drawBehind {
-        val step = 16.dp.toPx()
-        val y = titleCenter.toPx()
+        val step = 13.dp.toPx()
+        val lane = 9.dp.toPx()
+        val y = size.height / 2
+        val stroke = 1.5.dp.toPx()
+        val radius = minOf(6.dp.toPx(), y, lane)
         guide.chunked(2).takeLast(visibleDepth).forEachIndexed { index, part ->
-            val x = index * step + step / 2
-            if (part.startsWith("│")) drawLine(color, androidx.compose.ui.geometry.Offset(x, 0f),
-                androidx.compose.ui.geometry.Offset(x, size.height), 1.dp.toPx())
+            val x = inset.toPx() + index * step
+            if (part.startsWith("│") || part.startsWith("├")) drawLine(color,
+                androidx.compose.ui.geometry.Offset(x, 0f), androidx.compose.ui.geometry.Offset(x, size.height), stroke)
             if (part.startsWith("├") || part.startsWith("└")) {
-                drawLine(color, androidx.compose.ui.geometry.Offset(x, 0f),
-                    androidx.compose.ui.geometry.Offset(x, if (part.startsWith("└")) y else size.height), 1.dp.toPx())
-                drawLine(color, androidx.compose.ui.geometry.Offset(x, y),
-                    androidx.compose.ui.geometry.Offset((index + 1) * step, y), 1.dp.toPx())
+                val elbow = androidx.compose.ui.graphics.Path().apply {
+                    moveTo(x, 0f)
+                    lineTo(x, y - radius)
+                    quadraticTo(x, y, x + radius, y)
+                    lineTo(x + lane, y)
+                }
+                drawPath(elbow, color, style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke))
             }
         }
     }) {
-        androidx.compose.foundation.layout.Box(Modifier.padding(start = indent + leadingWidth)) { content() }
-        if (leading != null) androidx.compose.foundation.layout.Box(Modifier.padding(start = indent)) { leading() }
+        androidx.compose.foundation.layout.Box(Modifier.padding(start = indent)) { content() }
     }
 }

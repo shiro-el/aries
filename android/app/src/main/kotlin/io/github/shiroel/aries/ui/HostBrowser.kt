@@ -1,6 +1,10 @@
 package io.github.shiroel.aries.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -61,6 +65,7 @@ class HostBrowser(val host: Host) {
 
     /** The latest facts per Terminal address, from the live Agent status watch. */
     private val live = mutableStateMapOf<String, TerminalInfo>()
+    private var liveOrder by mutableStateOf<List<String>>(emptyList())
 
     /** A Terminal as the status watch last saw it (the structure may be older). */
     fun current(t: TerminalInfo): TerminalInfo = live[t.address] ?: t
@@ -75,14 +80,23 @@ class HostBrowser(val host: Host) {
     fun replaceTerminal(terminal: TerminalInfo) { live[terminal.address] = terminal }
 
     fun updateTerminals(list: List<TerminalInfo>) {
+        liveOrder = list.map { it.address }
         val addresses = list.map { it.address }.toSet()
         live.keys.retainAll(addresses)
         list.forEach { live[it.address] = it }
     }
 
-    /** Latest Agent snapshot for the navigation drawer; no additional watch is opened. */
+    /** Structure bootstraps Browse before the status watch delivers its first list. */
+    val terminals: List<TerminalInfo>
+        get() = (liveOrder.mapNotNull(live::get) + structure?.let { snapshot ->
+            snapshot.unplaced + snapshot.spaces.flatMap { space ->
+                space.tabs.flatMap { tab -> tab.panes.flatMap { listOfNotNull(it.terminal) + it.subAgents } }
+            }
+        }.orEmpty().map(::current)).distinctBy { it.address }
+
+    /** Latest Agent snapshot for Browse and its drawer; no additional watch is opened. */
     val agents: List<AgentEntry>
-        get() = orderAgents(withAgentSpaces(agentFamily(host, live.values.toList()), structure))
+        get() = orderAgents(withAgentSpaces(agentFamily(host, terminals), structure))
 
     /** The "new Terminal" form, while it is open. */
     var launchForm by mutableStateOf<LaunchForm?>(null)
@@ -194,13 +208,12 @@ fun BrowseScreen(
     val editor = remember(browser) { browser.layoutEditor ?: LayoutEditor(browser, scope).also { browser.layoutEditor = it } }
     Column(Modifier.fillMaxSize()) {
         Row {
-            if (showHeader) TextButton(onClick = onBack) {
-                Text(stringResource(R.string.back_button))
-            }
+            if (showHeader) TreeBackButton(onBack)
             if (onNewTerminal != null && browser.structure != null && !browser.closed) {
                 TextButton(onClick = onNewTerminal) { Text(stringResource(R.string.launch_open_button)) }
             }
         }
+        HostLayoutContext(browser)
         LayoutEditControls(browser, editor)
         WorktreeControls(browser)
         if (onNewTerminal != null && browser.structure != null && !browser.closed && browser.savedLaunches.isNotEmpty()) {
@@ -260,59 +273,89 @@ private fun HostTreeList(
 ) {
     val folds = rememberTreeFolds("host:${browser.host.id}")
     val agentFolds = rememberTreeFolds("agents")
+    val agents = browser.agents
+    val family = agents.map { it.key.address }.toSet()
+    val plain = withAgentSpaces(browser.terminals.filterNot { it.address in family }
+        .mapIndexed { index, terminal -> AgentEntry(browser.host, terminal, sequence = index) }, structure)
+    val plainKey = "plain-terminals"
     androidx.compose.runtime.LaunchedEffect(browser.revealRequest) {
-        browser.revealRequest?.let { (space, tab, _) ->
-            folds.expand("space:$space")
-            folds.expand("tab:$space:$tab")
-        }
+        if (browser.revealRequest != null) folds.expand(plainKey)
+    }
+    val actions: @Composable ColumnScope.(AgentEntry, () -> Unit) -> Unit = { entry, close ->
+        // Selecting context here retains Space/Tab edits without adding tree levels.
+        if (entry.space != null) TextButton(onClick = {
+            selectTerminalContext(browser, entry.terminal.address)
+            close()
+        }) { Text(stringResource(R.string.hosts_layout_context_button)) }
+        if (entry.space == null) WorktreeControls(browser, entry.terminal)
+        browser.layoutEditor?.let { EndTerminalButton(it, entry.terminal, close) }
     }
     LazyColumn {
         item {
             Text(stringResource(R.string.terminals_title, browser.host.name), Modifier.padding(12.dp),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        if (structure.spaces.isEmpty() && structure.unplaced.isEmpty()) item { Text(stringResource(R.string.terminals_empty)) }
-        structure.spaces.forEach { space ->
-            val spaceKey = "space:${space.id}"
-            item(key = spaceKey) {
-                TreeSectionRow(space.name, 0, folds.contains(spaceKey), {
-                    browser.openSpace(space.id)
-                    folds.toggle(spaceKey)
-                }, Modifier.testTag("host-space:${space.id}"))
+        if (browser.terminals.isEmpty()) item { Text(stringResource(R.string.terminals_empty)) }
+        agentTreeItems(agents, agentFolds, { onOpen(it.terminal) }, onPin, tag = "host-agent",
+            sectionNamespace = "all", actions = actions)
+        if (plain.isNotEmpty()) {
+            item {
+                TreeSectionRow(stringResource(R.string.terminals_plain_group, plain.size), 0, folds.contains(plainKey),
+                    { folds.toggle(plainKey) }, Modifier.testTag("host-plain-terminals"))
             }
-            if (!folds.contains(spaceKey)) space.tabs.forEach { tab ->
-                val tabKey = "tab:${space.id}:${tab.id}"
-                item(key = tabKey) {
-                    TreeSectionRow(tab.name, 1, folds.contains(tabKey), {
-                        browser.openSpace(space.id)
-                        browser.selectTab(tab)
-                        folds.toggle(tabKey)
-                    }, Modifier.testTag("host-tab:${space.id}:${tab.id}"))
-                }
-                if (!folds.contains(tabKey)) {
-                    val terminals = tab.panes.flatMap { listOfNotNull(it.terminal) + it.subAgents }.map(browser::current)
-                    val entries = withAgentSpaces(terminals.mapIndexed { index, t -> AgentEntry(browser.host, t, sequence = index) }, structure)
-                    agentTreeItems(orderAgents(entries), agentFolds, { onOpen(it.terminal) }, onPin,
-                        tag = "host-terminal:${space.id}:${tab.id}", sections = false,
-                        actions = { entry, close -> browser.layoutEditor?.let { EndTerminalButton(it, entry.terminal, close) } })
-                    tab.panes.filter { it.terminal == null }.forEach { pane ->
-                        item(key = "gone:${space.id}:${tab.id}:${pane.id}") {
-                            Text(stringResource(R.string.pane_terminal_gone, pane.terminalAddress), Modifier.padding(start = 48.dp, top = 8.dp, bottom = 8.dp),
-                                style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
-                }
-            }
+            if (!folds.contains(plainKey)) agentTreeItems(orderAgents(plain), agentFolds,
+                { onOpen(it.terminal) }, onPin, tag = "host-terminal", sections = false, actions = actions)
         }
-        if (structure.unplaced.isNotEmpty()) {
-            item { Text(stringResource(R.string.unplaced_title), Modifier.padding(12.dp), style = MaterialTheme.typography.titleSmall) }
-            val entries = structure.unplaced.map(browser::current).mapIndexed { index, t -> AgentEntry(browser.host, t, sequence = index) }
-            agentTreeItems(orderAgents(entries), agentFolds, { onOpen(it.terminal) }, onPin, tag = "host-unplaced", sections = false,
-                actions = { entry, close ->
-                    WorktreeControls(browser, entry.terminal)
-                    browser.layoutEditor?.let { EndTerminalButton(it, entry.terminal, close) }
-                })
+        val missing = structure.spaces.flatMap { it.tabs }.flatMap { it.panes }.filter { it.terminal == null }
+        items(missing, key = { "gone:${it.id}" }) { pane ->
+            Text(stringResource(R.string.pane_terminal_gone, pane.terminalAddress), Modifier.padding(12.dp),
+                style = MaterialTheme.typography.bodySmall)
         }
         item { Column(Modifier.padding(horizontal = 12.dp)) { hostSections() } }
+    }
+}
+
+private fun selectTerminalContext(browser: HostBrowser, address: String) {
+    browser.structure?.spaces?.forEach { space ->
+        space.tabs.firstOrNull { tab -> tab.panes.any { pane ->
+            pane.terminalAddress == address || pane.subAgents.any { it.address == address }
+        } }?.let { tab ->
+            browser.openSpace(space.id)
+            browser.selectTab(tab)
+            tab.panes.firstOrNull { pane -> pane.terminalAddress == address || pane.subAgents.any { it.address == address } }
+                ?.let { browser.focus(tab, it) }
+            return
+        }
+    }
+}
+
+/** Explicit edit/launch target, including empty Tabs; never another level in the Agent list. */
+@Composable
+private fun HostLayoutContext(browser: HostBrowser) {
+    val structure = browser.structure ?: return
+    if (structure.spaces.isEmpty()) return
+    var expanded by remember(browser) { mutableStateOf(false) }
+    Box {
+        TextButton(onClick = { expanded = true }, modifier = Modifier.testTag("host-layout-context")) {
+            Text(browser.openSpace?.let { space -> listOfNotNull(space.name, browser.tab?.name).joinToString(" · ") }
+                ?: stringResource(R.string.hosts_layout_context_button), maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            structure.spaces.forEach { space ->
+                DropdownMenuItem(text = { Text(space.name) }, modifier = Modifier.testTag("host-context-space:${space.id}"), onClick = {
+                    browser.openSpace(space.id)
+                    expanded = false
+                })
+                space.tabs.forEach { tab ->
+                    DropdownMenuItem(text = { Text(tab.name, Modifier.padding(start = 16.dp)) },
+                        modifier = Modifier.testTag("host-context-tab:${space.id}:${tab.id}"), onClick = {
+                            browser.openSpace(space.id)
+                            browser.selectTab(tab)
+                            expanded = false
+                        })
+                }
+            }
+        }
     }
 }

@@ -28,7 +28,7 @@ class LocaleTest {
     @Config(qualifiers = "ko-rKR")
     fun koreanDeviceShowsKorean() {
         show()
-        compose.onNodeWithText("호스트").assertExists()
+        compose.onNodeWithText("Host").assertExists()
         compose.openKeyDetails()
         compose.onNodeWithText("SSH 키 만들기").assertExists()
     }

@@ -43,7 +43,10 @@ class WorktreeScreenTest {
             MaterialTheme { AriesApp(model) }
         }
         compose.onNodeWithText("home").performClick()
-        if (!unplaced) compose.onNodeWithText("repo").performClick()
+        if (!unplaced) {
+            compose.onNodeWithTag("host-layout-context").performClick()
+            compose.onNodeWithTag("host-context-space:s1").performClick()
+        }
         compose.waitForIdle()
         return core.connection!!
     }
