@@ -9,10 +9,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.text
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
@@ -49,8 +47,8 @@ internal fun AgentScreenHeader(
     val quickOpen = LocalQuickOpen.current
     Row(Modifier.fillMaxWidth().height(56.dp).testTag("console-top-bar"), verticalAlignment = Alignment.CenterVertically) {
         val backLabel = stringResource(R.string.back_button)
-        TextButton(onClick = onBack, modifier = Modifier.size(48.dp).testTag("console-back").semantics { contentDescription = backLabel }, contentPadding = PaddingValues(0.dp)) {
-            Text(stringResource(R.string.console_back_glyph), Modifier.clearAndSetSemantics { text = AnnotatedString(backLabel) }, fontSize = 20.sp)
+        IconButton(onClick = onBack, modifier = Modifier.size(48.dp).testTag("console-back")) {
+            Icon(painterResource(R.drawable.ic_arrow_left), contentDescription = backLabel, modifier = Modifier.size(20.dp))
         }
         Column(Modifier.weight(1f).padding(end = 4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

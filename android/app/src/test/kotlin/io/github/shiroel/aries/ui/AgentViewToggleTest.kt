@@ -108,7 +108,7 @@ class AgentViewToggleTest {
         assertEquals(AgentView.TERMINAL, core.savedView)
 
         // Back skips the Terminal/Chat round trip: it is the Host again.
-        click(str(R.string.back_button))
+        compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         assertTrue(model.screen is Screen.Browse)
         assertTrue(conn.views.last().detached)
         compose.onNodeWithText("vim").assertExists()
@@ -130,7 +130,7 @@ class AgentViewToggleTest {
         assertEquals(listOf("h1" to "t1"), core.chatsOpened)
         assertTrue(core.connectionsOf.getValue("h1").views.isEmpty())
 
-        click(str(R.string.back_button))
+        compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         assertTrue(model.screen is Screen.Agents)
         compose.onNodeWithTag("agent-row:h1:t1").assertExists()
     }
@@ -160,7 +160,7 @@ class AgentViewToggleTest {
 
         click(str(R.string.agent_view_terminal))
         assertTrue(model.screen is Screen.Terminal)
-        click(str(R.string.back_button))
+        compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         assertTrue(model.screen is Screen.Agents)
         compose.onNodeWithTag("agent-row:h1:t1").assertExists()
     }
@@ -183,7 +183,7 @@ class AgentViewToggleTest {
         assertTrue(model.screen is Screen.Chat)
         assertFalse(core.chatsOpened.isEmpty())
 
-        click(str(R.string.back_button))
+        compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         assertEquals(AgentView.TERMINAL, core.savedView)
         compose.onNodeWithText("me@10.0.0.2:22").assertExists()
     }
