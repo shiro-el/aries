@@ -198,6 +198,7 @@ impl Terminals {
                 // authoritative timestamp (also for an unchanged status word).
                 return Applied::Refetch(address.to_owned());
             }
+            "foreground" => t["foreground"] = data.clone(),
             "turn" => t["turn"] = data["turn"].clone(),
             "title" => t["title"] = data["title"].clone(),
             "labels" => t["labels"] = data["labels"].clone(),
@@ -208,11 +209,12 @@ impl Terminals {
                     }
                 }
                 t["state"] = json!("finished");
+                t["foreground"] = Value::Null;
                 // herdr-core reports no status once the program exited.
                 t["status"] = Value::Null;
             }
             "lost" | "restarted" | "keep" => return Applied::Refetch(address.to_owned()),
-            // size, foreground, doc: nothing the Terminal list shows.
+            // size, doc: nothing the Terminal list shows.
             _ => return Applied::Unchanged,
         }
         Applied::Changed

@@ -50,7 +50,7 @@ const CLAUDE_CLEAN_ENV: &str = r#"for v in $(env | sed -n 's/^\(CLAUDE[A-Za-z0-9
 
 impl AgentPreset {
     /// The argv starting this Agent, before the user's extra arguments.
-    fn argv(self) -> Vec<&'static str> {
+    pub(crate) fn argv(self) -> Vec<&'static str> {
         match self {
             AgentPreset::ClaudeCode => vec!["sh", "-c", CLAUDE_CLEAN_ENV, "claude"],
             AgentPreset::Codex => vec!["codex", "--no-daemon"],
@@ -71,7 +71,8 @@ pub struct LaunchRequest {
     /// With a preset: extra arguments for the Agent (`--model haiku`), split
     /// on whitespace, never through a shell.
     pub command: String,
-    /// Working directory on the Host. `None`: herdr-core's default.
+    /// Working directory on the Host, preserved verbatim unless blank.
+    /// `None`: herdr-core's default.
     pub cwd: Option<String>,
     /// Space to put the Terminal in (`herdr.space` label).
     pub space_id: Option<String>,
@@ -112,7 +113,7 @@ pub(crate) fn run_params(req: &LaunchRequest) -> Value {
             json!(command.split_whitespace().collect::<Vec<_>>()),
         );
     }
-    if let Some(cwd) = non_blank(&req.cwd) {
+    if let Some(cwd) = cwd_to_remember(req) {
         params.insert("cwd".into(), json!(cwd));
     }
     let mut labels = Map::new();
@@ -248,7 +249,7 @@ impl SavedLaunches {
 
 /// The cwd to remember after a successful launch of `req`.
 pub(crate) fn cwd_to_remember(req: &LaunchRequest) -> Option<&str> {
-    non_blank(&req.cwd)
+    req.cwd.as_deref().filter(|cwd| !cwd.trim().is_empty())
 }
 
 #[cfg(test)]
