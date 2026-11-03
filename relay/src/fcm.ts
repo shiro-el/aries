@@ -76,13 +76,13 @@ async function accessToken(c: FcmConfig): Promise<string> {
 }
 
 /** Sends a data-only message; throws [FcmError] on failure. */
-export async function sendFcm(c: FcmConfig, deviceToken: string, data: Record<string, string>, priority: "HIGH" | "NORMAL" = "HIGH"): Promise<void> {
+export async function sendFcm(c: FcmConfig, deviceToken: string, data: Record<string, string>, priority: "HIGH" | "NORMAL" = "HIGH", ttl = "86400s"): Promise<void> {
   const token = await accessToken(c);
   const r = await c.fetch(`https://fcm.googleapis.com/v1/projects/${c.projectId}/messages:send`, {
     method: "POST",
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
     body: JSON.stringify({
-      message: { token: deviceToken, data, android: { priority, ttl: "86400s" } },
+      message: { token: deviceToken, data, android: { priority, ttl } },
     }),
   });
   if (r.ok) return;

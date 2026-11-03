@@ -14,6 +14,7 @@ let envelopeSequence: number;
 
 beforeEach(async () => {
   await env.DB.batch([
+    env.DB.prepare("DELETE FROM pairing_challenges"),
     env.DB.prepare("DELETE FROM pairings"), env.DB.prepare("DELETE FROM rate_limits"),
     env.DB.prepare("DELETE FROM push_events"),
   ]);
@@ -49,10 +50,17 @@ function call(method: string, path: string, opts: { token?: string; json?: unkno
   return worker.fetch(new Request(`${BASE}${path}`, { method, headers, body }), relayEnv);
 }
 
+function freshId(): string {
+  return btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32)))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
 async function pairPhone(device = "fcm-device-1"): Promise<string> {
-  const r = await call("POST", "/v1/pairings", { json: { platform: "fcm", device_token: device } });
-  expect(r.status).toBe(201);
+  const id = freshId();
+  const r = await call("POST", "/v1/pairings", { json: { platform: "fcm", device_token: device, verification_id: id } });
+  expect(r.status).toBe(202);
   const { token } = (await r.json()) as { token: string };
+  expect((await call("POST", "/v1/pairing/confirm", { json: fcm.sent.at(-1)!.message.data })).status).toBe(204);
+  fcm.sent.length = 0;
   return token;
 }
 
@@ -88,6 +96,112 @@ async function everythingStored(): Promise<string> {
   return dump;
 }
 
+describe("token ownership", () => {
+  it("requires the proof delivered to the device before accepting envelopes", async () => {
+    const verificationId = "a".repeat(43);
+    const r = await call("POST", "/v1/pairings", {
+      json: { platform: "fcm", device_token: "victim-phone", verification_id: verificationId },
+    });
+    expect(r.status).toBe(202);
+    const body = await r.json() as { token: string; status: string };
+    expect(body.status).toBe("pending");
+    expect((await call("POST", "/v1/push", { token: body.token, body: envelope() })).status).toBe(403);
+    const data = fcm.sent[0].message.data;
+    expect(data).toMatchObject({ v: "1", kind: "pairing_challenge", verification_id: verificationId });
+    expect(data.challenge).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(JSON.stringify(body)).not.toContain(data.challenge);
+    expect(await everythingStored()).not.toContain(data.challenge);
+    expect((await call("POST", "/v1/pairing/confirm", { json: { verification_id: verificationId, challenge: "wrong" } })).status).toBe(401);
+    expect((await call("POST", "/v1/pairing/confirm", { json: data })).status).toBe(204);
+    expect((await call("GET", "/v1/pairing", { token: body.token })).status).toBe(200);
+    expect((await call("POST", "/v1/push", { token: body.token, body: envelope() })).status).toBe(202);
+    expect((await call("POST", "/v1/pairing/confirm", { json: data })).status).toBe(401);
+  });
+});
+
+describe("ownership lifecycle", () => {
+  it("keeps legacy registrations usable and verifies a replacement before switching delivery", async () => {
+    // Seed an actual pre-ownership database, then apply the real upgrade.
+    await env.DB.batch([
+      env.DB.prepare("DROP TABLE pairing_challenges"),
+      env.DB.prepare("DROP TABLE push_events"),
+      env.DB.prepare("DROP TABLE pairings"),
+      env.DB.prepare("DROP TABLE rate_limits"),
+    ]);
+    await env.DB.batch(env.TEST_MIGRATIONS[0].queries.map(q => env.DB.prepare(q)));
+    const hash = [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode("legacy-token")))].map(b => b.toString(16).padStart(2, "0")).join("");
+    await env.DB.prepare("INSERT INTO pairings (token_hash, platform, device_token, created_at) VALUES (?1, 'fcm', 'old-phone', 1)").bind(hash).run();
+    for (const migration of env.TEST_MIGRATIONS.slice(1)) {
+      await env.DB.batch(migration.queries.map(q => env.DB.prepare(q)));
+    }
+    const token = "legacy-token";
+    expect((await call("POST", "/v1/push", { token, body: envelope() })).status).toBe(202);
+    const id = freshId();
+    expect((await call("PUT", "/v1/pairing", { token, json: { device_token: "new-phone", verification_id: id } })).status).toBe(202);
+    const challenge = fcm.sent.at(-1)!.message.data;
+    expect(fcm.sent.at(-1)!.message.token).toBe("new-phone");
+    expect((await (await call("GET", "/v1/pairing", { token })).json() as {status: string}).status).toBe("pending");
+    await call("POST", "/v1/push", { token, body: envelope() });
+    expect(fcm.sent.at(-1)!.message.token).toBe("old-phone");
+    expect((await call("POST", "/v1/pairing/confirm", { json: challenge })).status).toBe(204);
+    const status = await (await call("GET", "/v1/pairing", { token })).json();
+    expect(status).toEqual({ status: "active", verification_id: id });
+    await call("POST", "/v1/push", { token, body: envelope() });
+    expect(fcm.sent.at(-1)!.message.token).toBe("new-phone");
+  });
+
+  it("expires unanswered registrations and rotations without disabling the verified device", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-11-03T10:00:00Z"));
+      const token = await pairPhone("old-phone");
+      await call("PUT", "/v1/pairing", { token, json: { device_token: "new-phone", verification_id: freshId() } });
+      const rotation = fcm.sent.at(-1)!.message.data;
+      const pending = await call("POST", "/v1/pairings", { json: { platform: "fcm", device_token: "unreachable", verification_id: freshId() } });
+      const pendingToken = (await pending.json() as {token: string}).token;
+      const registration = fcm.sent.at(-1)!.message.data;
+      expect(fcm.sent.at(-1)!.message.android?.ttl).toBe("120s");
+      vi.setSystemTime(new Date("2026-11-03T10:02:00Z"));
+      for (const data of [rotation, registration]) {
+        expect((await call("POST", "/v1/pairing/confirm", { json: data })).status).toBe(401);
+      }
+      expect((await call("POST", "/v1/push", { token: pendingToken, body: envelope() })).status).toBe(401);
+      expect((await call("POST", "/v1/push", { token, body: envelope() })).status).toBe(202);
+      expect(fcm.sent.at(-1)!.message.token).toBe("old-phone");
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("binds a proof to its registration and invalidates superseded rotations and deleted pairings", async () => {
+    const a = await pairPhone("a");
+    const b = await pairPhone("b");
+    const first = freshId(), second = freshId();
+    await call("PUT", "/v1/pairing", { token: a, json: { device_token: "a2", verification_id: first } });
+    const oldProof = fcm.sent.at(-1)!.message.data;
+    await call("PUT", "/v1/pairing", { token: b, json: { device_token: "b2", verification_id: second } });
+    const otherProof = fcm.sent.at(-1)!.message.data;
+    expect((await call("POST", "/v1/pairing/confirm", { json: { ...otherProof, challenge: oldProof.challenge } })).status).toBe(401);
+    await call("PUT", "/v1/pairing", { token: a, json: { device_token: "a3", verification_id: freshId() } });
+    expect((await call("POST", "/v1/pairing/confirm", { json: oldProof })).status).toBe(401);
+    await call("DELETE", "/v1/pairing", { token: b });
+    expect((await call("POST", "/v1/pairing/confirm", { json: otherProof })).status).toBe(401);
+    expect((await call("GET", "/v1/pairing", { token: "unknown" })).status).toBe(401);
+  });
+
+  it("fails registration cleanly when FCM is unavailable and preserves a failed rotation", async () => {
+    const token = await pairPhone("old-phone");
+    for (const method of ["POST", "PUT"]) {
+      fcm.failNext = { status: 503, body: {} };
+      const r = await call(method, method === "POST" ? "/v1/pairings" : "/v1/pairing", {
+        token, json: { platform: "fcm", device_token: "new-phone", verification_id: freshId() },
+      });
+      expect(r.status).toBe(502);
+    }
+    await call("POST", "/v1/push", { token, body: envelope() });
+    expect(fcm.sent.at(-1)!.message.token).toBe("old-phone");
+    expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM pairings").first<{n: number}>())?.n).toBe(1);
+  });
+});
+
 describe("pairing", () => {
   it("issues a token and stores only its hash with the device token", async () => {
     const token = await pairPhone("fcm-device-1");
@@ -109,19 +223,21 @@ describe("pairing", () => {
     relayEnv.PAIR_LIMIT_PER_HOUR = "2";
     await pairPhone();
     await pairPhone();
-    const r = await call("POST", "/v1/pairings", { json: { platform: "fcm", device_token: "d" } });
+    const r = await call("POST", "/v1/pairings", { json: { platform: "fcm", device_token: "d", verification_id: freshId() } });
     expect(r.status).toBe(429);
     expect(Number(r.headers.get("retry-after"))).toBeGreaterThan(0);
     // Another IP is not affected.
-    const other = await call("POST", "/v1/pairings", { json: { platform: "fcm", device_token: "d" }, ip: "198.51.100.1" });
-    expect(other.status).toBe(201);
+    const other = await call("POST", "/v1/pairings", { json: { platform: "fcm", device_token: "d", verification_id: freshId() }, ip: "198.51.100.1" });
+    expect(other.status).toBe(202);
     // The IP itself is not stored, only a hash of it.
     expect(await everythingStored()).not.toContain("203.0.113.7");
   });
 
   it("updates the device token when FCM rotates it", async () => {
     const token = await pairPhone("old-device");
-    expect((await call("PUT", "/v1/pairing", { token, json: { device_token: "new-device" } })).status).toBe(204);
+    expect((await call("PUT", "/v1/pairing", { token, json: { device_token: "new-device", verification_id: freshId() } })).status).toBe(202);
+    expect((await call("POST", "/v1/pairing/confirm", { json: fcm.sent.at(-1)!.message.data })).status).toBe(204);
+    fcm.sent.length = 0;
     await call("POST", "/v1/push", { token, body: envelope() });
     expect(fcm.sent[0].message.token).toBe("new-device");
     expect((await call("PUT", "/v1/pairing", { token: "unknown", json: { device_token: "x" } })).status).toBe(401);
@@ -427,9 +543,13 @@ describe("rate limit", () => {
     const a = await pairPhone("device-a");
     const b = await pairPhone("device-b");
     expect((await call("POST", "/v1/push", { token: a, body: envelope() })).status).toBe(202);
-    expect((await call("PUT", "/v1/pairing", { token: b, json: { device_token: "device-a" } })).status).toBe(204);
+    expect((await call("PUT", "/v1/pairing", { token: b, json: { device_token: "device-a", verification_id: freshId() } })).status).toBe(202);
+    const challengeb = fcm.sent.pop()!;
+    expect((await call("POST", "/v1/pairing/confirm", { json: challengeb.message.data })).status).toBe(204);
     expect((await call("POST", "/v1/push", { token: b, body: envelope() })).status).toBe(429);
-    expect((await call("PUT", "/v1/pairing", { token: a, json: { device_token: "device-new" } })).status).toBe(204);
+    expect((await call("PUT", "/v1/pairing", { token: a, json: { device_token: "device-new", verification_id: freshId() } })).status).toBe(202);
+    const challengea = fcm.sent.pop()!;
+    expect((await call("POST", "/v1/pairing/confirm", { json: challengea.message.data })).status).toBe(204);
     expect((await call("POST", "/v1/push", { token: a, body: envelope() })).status).toBe(202);
     expect(fcm.sent.map(({ message }) => message.token)).toEqual(["device-a", "device-new"]);
   });
