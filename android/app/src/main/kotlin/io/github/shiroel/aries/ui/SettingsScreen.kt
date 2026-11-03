@@ -74,6 +74,7 @@ fun SettingsScreen(
     if (model.settingsKeys) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             KeySection(model)
+            KeyImportButton(model)
             if (model.key != null) {
                 HorizontalDivider()
                 ExtraKeysSection(model)

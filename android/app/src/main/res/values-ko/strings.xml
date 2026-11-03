@@ -244,6 +244,11 @@
     <string name="key_esc">Esc</string>
     <string name="key_tab">Tab</string>
     <string name="key_ctrl">Ctrl</string>
+    <string name="key_alt">Alt</string>
+    <string name="key_home">Home</string>
+    <string name="key_end">End</string>
+    <string name="key_page_up">PgUp</string>
+    <string name="key_page_down">PgDn</string>
     <string name="key_up">↑</string>
     <string name="key_down">↓</string>
     <string name="key_left">←</string>
@@ -333,6 +338,19 @@
     <string name="chat_image_loading">이미지 불러오는 중…</string>
     <string name="chat_image_unreadable">이 이미지는 표시할 수 없습니다.</string>
     <string name="chat_image_too_large">이미지가 너무 커서 표시하지 않습니다(%1$s MB)</string>
+
+    <!-- 전체 화면 이미지 뷰어 (Chat 및 원격 파일). -->
+    <string name="image_viewer_title">이미지 뷰어</string>
+    <string name="image_viewer_open">전체 화면으로 이미지 열기</string>
+    <string name="image_viewer_save">이미지 저장</string>
+    <string name="image_viewer_share">이미지 공유</string>
+    <string name="image_viewer_zoom">%1$d%% 확대</string>
+    <string name="image_viewer_zoom_in">확대</string>
+    <string name="image_viewer_zoom_out">축소</string>
+    <string name="image_viewer_reset">화면에 이미지 맞추기</string>
+    <string name="image_viewer_export_failed">이미지를 저장하거나 공유하지 못했습니다. 다시 시도하세요.</string>
+    <string name="image_viewer_saved">이미지 저장됨</string>
+    <string name="image_viewer_exporting">이미지 준비 중…</string>
     <string name="chat_diff_more">%1$d줄 더 있음</string>
     <string name="chat_diff_truncated">diff가 너무 커서 나머지는 표시하지 않습니다.</string>
     <string name="chat_question_label">질문</string>
@@ -472,6 +490,18 @@
     <string name="beacon_macos_login_limit">macOS에서는 Mac에 로그인해 있는 동안에만 Beacon이 실행됩니다.</string>
 
     <string name="key_default_label">기본 키</string>
+    <!-- SSH key import -->
+    <string name="key_import_button">기존 키 가져오기</string>
+    <string name="key_import_title">SSH 개인키 가져오기</string>
+    <string name="key_import_hint">OpenSSH ed25519, RSA 또는 ECDSA 개인키를 파일로 선택하거나 붙여넣으세요(최대 64 KiB). 암호는 한 번만 사용하고 저장하지 않습니다. 가져온 키에도 다른 키와 같은 생체인증 설정이 적용됩니다. 추가 키는 Host의 SSH 경로 설정에서 선택하세요.</string>
+    <string name="key_import_file_button">키 파일 선택</string>
+    <string name="key_import_private_label">개인키</string>
+    <string name="key_import_passphrase_label">암호(암호화된 키)</string>
+    <string name="key_import_busy">가져오는 중…</string>
+    <string name="key_import_invalid">키를 가져오지 못했습니다. 개인키 형식과 암호를 확인한 뒤 다시 시도하세요.</string>
+    <string name="key_import_file_error">키 파일을 읽지 못했습니다. 64 KiB 이하의 읽을 수 있는 텍스트 파일을 선택하세요.</string>
+    <string name="key_import_too_large">개인키는 64 KiB 이하여야 합니다.</string>
+
     <string name="keys_title">다른 SSH 키</string>
     <string name="key_new_label">새 키 이름</string>
     <string name="key_new_button">키 하나 더 만들기</string>
