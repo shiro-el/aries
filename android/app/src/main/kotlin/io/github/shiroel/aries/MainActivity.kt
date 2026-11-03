@@ -36,7 +36,13 @@ class MainActivity : ComponentActivity() {
                 ).also { this@MainActivity.model = it }
             }
             LaunchedEffect(model) { resumeModel() }
-            AriesApp(model)
+            val guidance = remember {
+                io.github.shiroel.aries.guidance.AppGuidanceState(
+                    getSharedPreferences("app-guidance", MODE_PRIVATE), BuildConfig.VERSION_CODE, BuildConfig.VERSION_NAME,
+                )
+            }
+            LaunchedEffect(guidance) { guidance.checkForUpdate() }
+            AriesApp(model, guidance = guidance, allowNotifications = push::allowNotifications)
         }
         network = NetworkWatch(this) { model?.networkChanged() }.also { it.start() }
     }

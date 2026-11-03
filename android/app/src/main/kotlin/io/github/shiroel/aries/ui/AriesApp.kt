@@ -66,9 +66,14 @@ import io.github.shiroel.aries.core.QrMatrix
 fun AriesApp(
     model: HostsModel,
     settings: ThemeSettings = rememberThemeSettings(),
+    guidance: io.github.shiroel.aries.guidance.AppGuidanceState? = null,
+    allowNotifications: suspend () -> Boolean = { false },
     terminalDisplay: TerminalDisplaySettings = rememberTerminalDisplaySettings(),
 ) {
-    AriesTheme(settings) { AriesContent(model, settings, terminalDisplay) }
+    AriesTheme(settings) {
+        if (guidance == null) AriesContent(model, settings, terminalDisplay)
+        else io.github.shiroel.aries.guidance.AppGuidance(guidance, allowNotifications) { AriesContent(model, settings, terminalDisplay) }
+    }
 }
 
 @Composable

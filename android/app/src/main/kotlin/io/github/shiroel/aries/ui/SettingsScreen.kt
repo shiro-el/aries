@@ -150,6 +150,11 @@ fun SettingsScreen(
                 SettingsField(R.string.terminal_display_title) { TerminalDisplaySection(terminalDisplay) }
             }
             item { SettingsField { io.github.shiroel.aries.dictation.DictationSettings() } }
+            item(key = "app-guidance") {
+                io.github.shiroel.aries.guidance.LocalAppGuidance.current?.let {
+                    io.github.shiroel.aries.guidance.AppGuidanceSettings(it)
+                }
+            }
         }
     }
 }
