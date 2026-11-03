@@ -1,0 +1,16 @@
+# OSC 7501 records emitted by the prototype Aries Pi extension (aries-pi-status.ts), one per line,
+# ESC shown as \e and ST as \e\\. `msg` is base64. Observed via `hc get` on a real Pi 0.73.1 in herdr-core 0.1.17.
+# startup / /new / /clone / /resume (session_start)
+\e]7501;state=idle:app=pi\e\\
+# prompt accepted (agent_start)
+\e]7501;state=working:app=pi\e\\
+# turn finished (agent_end, last assistant stopReason != error)
+\e]7501;state=done:app=pi\e\\
+# retryable provider error while Pi auto-retries (stays working; hc shows msg)
+\e]7501;state=working:app=pi:msg=cmV0cnlpbmcgMS8zOiA1MDAgZmFrZSB1cHN0cmVhbSBmYWlsdXJl\e\\
+# final failure after retries exhausted
+\e]7501;state=error:app=pi:msg=NTAwIGZha2UgdXBzdHJlYW0gZmFpbHVyZQ==\e\\
+# extension question tool waiting on ctx.ui.select
+\e]7501;state=blocked:kind=question:app=pi:msg=V2hpY2ggY29sb3I/\e\\
+# extension permission gate waiting on ctx.ui.confirm
+\e]7501;state=blocked:kind=permission:app=pi:msg=QWxsb3c6IHJtIC1mIC9ob21lL3VzZXIvcHJvai9kb29tZWQudHh0\e\\

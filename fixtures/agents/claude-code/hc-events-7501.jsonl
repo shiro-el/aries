@@ -1,0 +1,130 @@
+{"channel":null,"seq":0,"terminals":[{"address":"t1","argv":["claude","--model","haiku"],"cols":200,"created_ms":1793686595625,"cwd":"/tmp/aries-fixture/work-a","die_with_parent":false,"exit_code":129,"finished_ms":1793686657629,"identity":"ghostty","keep":false,"labels":{},"name":"ca","notify":true,"parent":null,"pid":857345,"reason":"killed","reported":true,"rm":false,"rows":120,"screen":"exact","signal":null,"state":"finished","status":null,"status_ms":1793686657244,"template":null,"title":"","turn":0}]}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"address":"t2","argv":["claude","--model","haiku","--permission-mode","default"],"cols":200,"created_ms":1793686676179,"cwd":"/tmp/aries-fixture/work-a","die_with_parent":false,"exit_code":null,"finished_ms":null,"identity":"ghostty","keep":false,"labels":{},"name":"ca","notify":true,"parent":null,"pid":866271,"reason":null,"reported":false,"rm":false,"rows":120,"screen":"exact","signal":null,"state":"live","status":null,"status_ms":null,"template":null,"title":"","turn":0},"seq":1,"terminal":"t2","type":"created"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"argv":["claude","--model","haiku","--permission-mode","default"],"cwd":"/tmp/aries-fixture/work-a","name":"claude","pid":866271},"seq":2,"terminal":"t2","type":"foreground"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","state":"idle"}},"seq":3,"terminal":"t2","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"title":"Claude Code"},"seq":4,"terminal":"t2","type":"title"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","state":"working"}},"seq":5,"terminal":"t2","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","state":"done"}},"seq":6,"terminal":"t2","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"state":"done","turn":1},"seq":7,"terminal":"t2","type":"turn"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","state":"working"}},"seq":8,"terminal":"t2","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"title":"Pong 응답 테스트"},"seq":9,"terminal":"t2","type":"title"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","msg":"Writing hello.txt","state":"working"}},"seq":10,"terminal":"t2","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","kind":"permission","msg":"approve Write: /tmp/aries-fixture/work-a/hello.txt","state":"blocked"}},"seq":11,"terminal":"t2","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"state":"blocked","turn":2},"seq":12,"terminal":"t2","type":"turn"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","state":"working"}},"seq":13,"terminal":"t2","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","state":"done"}},"seq":14,"terminal":"t2","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"state":"done","turn":3},"seq":15,"terminal":"t2","type":"turn"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","state":"working"}},"seq":16,"terminal":"t2","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","msg":"Which color do you prefer?","state":"working"}},"seq":17,"terminal":"t2","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","kind":"question","msg":"answer: Which color do you prefer? (Red · Blue · Green)","state":"blocked"}},"seq":18,"terminal":"t2","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"state":"blocked","turn":4},"seq":19,"terminal":"t2","type":"turn"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","state":"working"}},"seq":20,"terminal":"t2","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","state":"done"}},"seq":21,"terminal":"t2","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"state":"done","turn":5},"seq":22,"terminal":"t2","type":"turn"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","state":"working"}},"seq":23,"terminal":"t2","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","msg":"Reading missing.txt","state":"working"}},"seq":24,"terminal":"t2","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","state":"done"}},"seq":25,"terminal":"t2","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"state":"done","turn":6},"seq":26,"terminal":"t2","type":"turn"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","state":"working"}},"seq":27,"terminal":"t2","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","msg":"Reading hello.txt","state":"working"}},"seq":28,"terminal":"t2","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","kind":"permission","msg":"approve Update: /tmp/aries-fixture/work-a/hello.txt","state":"blocked"}},"seq":29,"terminal":"t2","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"state":"blocked","turn":7},"seq":30,"terminal":"t2","type":"turn"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","state":"working"}},"seq":31,"terminal":"t2","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","state":"done"}},"seq":32,"terminal":"t2","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"state":"done","turn":8},"seq":33,"terminal":"t2","type":"turn"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"address":"t3","argv":["claude","--model","haiku","--permission-mode","default"],"cols":200,"created_ms":1793686811835,"cwd":"/tmp/aries-fixture/work-a","die_with_parent":false,"exit_code":null,"finished_ms":null,"identity":"ghostty","keep":false,"labels":{},"name":"cb","notify":true,"parent":null,"pid":882989,"reason":null,"reported":false,"rm":false,"rows":120,"screen":"exact","signal":null,"state":"live","status":null,"status_ms":null,"template":null,"title":"","turn":0},"seq":34,"terminal":"t3","type":"created"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"argv":["claude","--model","haiku","--permission-mode","default"],"cwd":"/tmp/aries-fixture/work-a","name":"claude","pid":882989},"seq":35,"terminal":"t3","type":"foreground"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"title":"✳ Claude Code"},"seq":36,"terminal":"t3","type":"title"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","state":"idle"}},"seq":37,"terminal":"t3","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"title":"Claude Code"},"seq":38,"terminal":"t3","type":"title"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","state":"working"}},"seq":39,"terminal":"t3","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"title":"Second"},"seq":40,"terminal":"t3","type":"title"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","state":"done"}},"seq":41,"terminal":"t3","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"state":"done","turn":1},"seq":42,"terminal":"t3","type":"turn"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","state":"working"}},"seq":43,"terminal":"t2","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"title":"Claude Code"},"seq":44,"terminal":"t2","type":"title"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","state":"idle"}},"seq":45,"terminal":"t2","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"state":"idle","turn":9},"seq":46,"terminal":"t2","type":"turn"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","state":"working"}},"seq":47,"terminal":"t2","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"title":"after-clear 응답 테스트"},"seq":48,"terminal":"t2","type":"title"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","msg":"Checking shell is responsive","state":"working"}},"seq":49,"terminal":"t2","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","state":"done"}},"seq":50,"terminal":"t2","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"state":"done","turn":10},"seq":51,"terminal":"t2","type":"turn"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":null},"seq":52,"terminal":"t2","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":null},"seq":53,"terminal":"t2","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":null},"seq":54,"terminal":"t2","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"title":""},"seq":55,"terminal":"t2","type":"title"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"exit_code":129,"finished_ms":1793686853805,"reason":"killed","signal":null},"seq":56,"terminal":"t2","type":"finished"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"address":"t4","argv":["claude","--model","haiku","--permission-mode","default","--resume","59258ef8-7348-4939-933a-d6ed06c5e7f1"],"cols":200,"created_ms":1793686882359,"cwd":"/tmp/aries-fixture/work-a","die_with_parent":false,"exit_code":null,"finished_ms":null,"identity":"ghostty","keep":false,"labels":{},"name":"cr","notify":true,"parent":null,"pid":889160,"reason":null,"reported":false,"rm":false,"rows":120,"screen":"exact","signal":null,"state":"live","status":null,"status_ms":null,"template":null,"title":"","turn":0},"seq":57,"terminal":"t4","type":"created"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"argv":["claude","--model","haiku","--permission-mode","default","--resume","59258ef8-7348-4939-933a-d6ed06c5e7f1"],"cwd":"/tmp/aries-fixture/work-a","name":"claude","pid":889160},"seq":58,"terminal":"t4","type":"foreground"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"title":"✳ after-clear 응답 테스트"},"seq":59,"terminal":"t4","type":"title"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","state":"idle"}},"seq":60,"terminal":"t4","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"title":"after-clear 응답 테스트"},"seq":61,"terminal":"t4","type":"title"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","state":"working"}},"seq":62,"terminal":"t4","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","state":"done"}},"seq":63,"terminal":"t4","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"state":"done","turn":1},"seq":64,"terminal":"t4","type":"turn"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","state":"working"}},"seq":65,"terminal":"t4","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","state":"idle"}},"seq":66,"terminal":"t4","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"state":"idle","turn":2},"seq":67,"terminal":"t4","type":"turn"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"title":"Pong 응답 테스트"},"seq":68,"terminal":"t4","type":"title"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":null},"seq":69,"terminal":"t4","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":null},"seq":70,"terminal":"t4","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":null},"seq":71,"terminal":"t4","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"title":""},"seq":72,"terminal":"t4","type":"title"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"exit_code":129,"finished_ms":1793686926120,"reason":"killed","signal":null},"seq":73,"terminal":"t4","type":"finished"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"address":"t5","argv":["bash"],"cols":200,"created_ms":1793686926134,"cwd":"/tmp/aries-mvp-run/02","die_with_parent":false,"exit_code":null,"finished_ms":null,"identity":"ghostty","keep":false,"labels":{},"name":"gen","notify":true,"parent":null,"pid":892868,"reason":null,"reported":false,"rm":false,"rows":120,"screen":"exact","signal":null,"state":"live","status":null,"status_ms":null,"template":null,"title":"","turn":0},"seq":74,"terminal":"t5","type":"created"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"title":"user@host: /tmp/aries-mvp-run/02"},"seq":75,"terminal":"t5","type":"title"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"argv":["bash"],"cwd":"/tmp/aries-mvp-run/02","name":"bash","pid":892868},"seq":76,"terminal":"t5","type":"foreground"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"argv":["claude","--model","haiku","--permission-mode","default"],"cwd":"/tmp/aries-fixture/work-b","name":"claude","pid":892985},"seq":77,"terminal":"t5","type":"foreground"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"title":"✳ Claude Code"},"seq":78,"terminal":"t5","type":"title"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","state":"idle"}},"seq":79,"terminal":"t5","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"title":"Claude Code"},"seq":80,"terminal":"t5","type":"title"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","state":"working"}},"seq":81,"terminal":"t5","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":null},"seq":82,"terminal":"t5","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"state":null,"turn":1},"seq":83,"terminal":"t5","type":"turn"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":null},"seq":84,"terminal":"t5","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":null},"seq":85,"terminal":"t5","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"title":""},"seq":86,"terminal":"t5","type":"title"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"title":"user@host: /tmp/aries-fixture/work-b"},"seq":87,"terminal":"t5","type":"title"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"argv":["bash"],"cwd":"/tmp/aries-fixture/work-b","name":"bash","pid":892868},"seq":88,"terminal":"t5","type":"foreground"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"argv":["bash"],"cwd":"/tmp/aries-fixture/work-b","name":"bash","pid":901217},"seq":89,"terminal":"t5","type":"foreground"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"title":"user@host: /tmp/aries-fixture/work-b"},"seq":90,"terminal":"t5","type":"title"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"argv":["bash"],"cwd":"/tmp/aries-fixture/work-b","name":"bash","pid":892868},"seq":91,"terminal":"t5","type":"foreground"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"argv":["claude","--model","claude-nonexistent-9","--permission-mode","default"],"cwd":"/tmp/aries-fixture/work-b","name":"claude","pid":906810},"seq":92,"terminal":"t5","type":"foreground"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"title":"✳ Claude Code"},"seq":93,"terminal":"t5","type":"title"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","state":"idle"}},"seq":94,"terminal":"t5","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"title":"Claude Code"},"seq":95,"terminal":"t5","type":"title"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","state":"working"}},"seq":96,"terminal":"t5","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","msg":"There's an issue with the selected model (claude-nonexistent-9). It may not exist or you may not have access to it. Run /model to pick a different model.","state":"error"}},"seq":97,"terminal":"t5","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"state":"error","turn":2},"seq":98,"terminal":"t5","type":"turn"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","state":"working"}},"seq":99,"terminal":"t5","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":null},"seq":100,"terminal":"t5","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"state":null,"turn":3},"seq":101,"terminal":"t5","type":"turn"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":null},"seq":102,"terminal":"t5","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":null},"seq":103,"terminal":"t5","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"title":""},"seq":104,"terminal":"t5","type":"title"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","state":"working"}},"seq":105,"terminal":"t3","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"title":"user@host: /tmp/aries-fixture/work-b"},"seq":106,"terminal":"t5","type":"title"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"argv":["bash"],"cwd":"/tmp/aries-fixture/work-b","name":"bash","pid":892868},"seq":107,"terminal":"t5","type":"foreground"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","msg":"Which size?","state":"working"}},"seq":108,"terminal":"t3","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","kind":"question","msg":"answer: Which size? (S · M)","state":"blocked"}},"seq":109,"terminal":"t3","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"state":"blocked","turn":2},"seq":110,"terminal":"t3","type":"turn"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","state":"working"}},"seq":111,"terminal":"t3","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","state":"done"}},"seq":112,"terminal":"t3","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"state":"done","turn":3},"seq":113,"terminal":"t3","type":"turn"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"address":"t6","argv":["claude","--model","haiku","--session-id","11111111-2222-4333-8444-555555555555"],"cols":200,"created_ms":1793687131391,"cwd":"/tmp/aries-fixture/work-b","die_with_parent":false,"exit_code":null,"finished_ms":null,"identity":"ghostty","keep":false,"labels":{},"name":"cs","notify":true,"parent":null,"pid":915013,"reason":null,"reported":false,"rm":false,"rows":120,"screen":"exact","signal":null,"state":"live","status":null,"status_ms":null,"template":null,"title":"","turn":0},"seq":114,"terminal":"t6","type":"created"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"argv":["claude","--model","haiku","--session-id","11111111-2222-4333-8444-555555555555"],"cwd":"/tmp/aries-fixture/work-b","name":"claude","pid":915013},"seq":115,"terminal":"t6","type":"foreground"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"title":"✳ Claude Code"},"seq":116,"terminal":"t6","type":"title"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":{"app":"claude-code","state":"idle"}},"seq":117,"terminal":"t6","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"title":"Claude Code"},"seq":118,"terminal":"t6","type":"title"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":null},"seq":119,"terminal":"t6","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":null},"seq":120,"terminal":"t6","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":null},"seq":121,"terminal":"t6","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"title":""},"seq":122,"terminal":"t6","type":"title"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"exit_code":129,"finished_ms":1793687156857,"reason":"killed","signal":null},"seq":123,"terminal":"t6","type":"finished"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"exit_code":null,"finished_ms":1793687156877,"reason":"killed","signal":1},"seq":124,"terminal":"t5","type":"finished"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":null},"seq":125,"terminal":"t3","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":null},"seq":126,"terminal":"t3","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"records":{},"reported":true,"status":null},"seq":127,"terminal":"t3","type":"status"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"title":""},"seq":128,"terminal":"t3","type":"title"}}
+{"jsonrpc":"2.0","method":"event","params":{"data":{"exit_code":129,"finished_ms":1793687175227,"reason":"killed","signal":null},"seq":129,"terminal":"t3","type":"finished"}}

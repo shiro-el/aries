@@ -1,0 +1,25 @@
+{
+  "pid": 866271,
+  "sessionId": "c4bae699-6ba8-4e3f-80e1-aeff84952ed3",
+  "cwd": "/tmp/aries-fixture/work-a",
+  "startedAt": 1793686677230,
+  "procStart": "254496047",
+  "version": "2.1.317",
+  "peerProtocol": 1,
+  "peerFeatures": [
+    "notify_idle",
+    "reply_across_default_dirs",
+    "artifact_yield"
+  ],
+  "kind": "interactive",
+  "entrypoint": "cli",
+  "pidDomain": "linux:00000000000000000000000000000000:pid:[4026531836]",
+  "asksForConvertedSkills": false,
+  "messagingSocketPath": "/run/user/1000/cc-socks/866271.sock",
+  "name": "work-a-b4",
+  "nameSource": "derived",
+  "nameSince": 1793686677230,
+  "status": "idle",
+  "updatedAt": 1793686759291,
+  "statusUpdatedAt": 1793686759291
+}

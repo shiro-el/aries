@@ -1,0 +1,121 @@
+{"t": 1793686924687, "event": "session.created", "props": {"sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5", "info": {"id": "ses_e5fed9273ffe3XexHeUg20WxR5", "slug": "brave-eagle", "version": "1.19.5", "projectID": "global", "directory": "/tmp/aries-mvp-run/oc04/work", "path": "", "title": "New session - 2026-11-03T06:22:04.684Z", "agent": "build", "model": {"id": "big-pickle", "providerID": "opencode"}, "cost": 0, "tokens": {"input": 0, "output": 0, "reasoning": 0, "cache": {"read": 0, "write": 0}}, "time": {"created": 1793686924684, "updated": 1793686924684}}}}
+{"t": 1793686924697, "osc": "state=working:app=opencode"}
+{"t": 1793686924703, "event": "session.status", "props": {"sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5", "status": {"type": "busy"}}}
+{"t": 1793686924706, "label": "ses_e5fed9273ffe3XexHeUg20WxR5"}
+{"t": 1793686925342, "event": "session.status", "props": {"sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5", "status": {"type": "busy"}}}
+{"t": 1793686926746, "event": "permission.asked", "props": {"id": "per_1a012759a001sF4mt0IiuGaRSH", "sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5", "permission": "bash", "patterns": ["date > d.txt"], "metadata": {"command": "date > d.txt"}, "always": ["date *"], "tool": {"messageID": "msg_1a0126da00011Ys1N53OU9LtML", "callID": "call_00_e53pkwod3qr09hf16484sjls"}}}
+{"t": 1793686926746, "osc": "state=blocked:kind=permission:app=opencode"}
+{"t": 1793686932224, "event": "permission.replied", "props": {"sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5", "requestID": "per_1a012759a001sF4mt0IiuGaRSH", "reply": "once"}}
+{"t": 1793686932224, "osc": "state=working:app=opencode"}
+{"t": 1793686932256, "event": "session.status", "props": {"sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5", "status": {"type": "busy"}}}
+{"t": 1793686932269, "event": "session.status", "props": {"sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5", "status": {"type": "busy"}}}
+{"t": 1793686933498, "event": "session.status", "props": {"sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5", "status": {"type": "busy"}}}
+{"t": 1793686933499, "event": "session.status", "props": {"sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5", "status": {"type": "idle"}}}
+{"t": 1793686933499, "osc": "state=idle:app=opencode"}
+{"t": 1793686933499, "event": "session.idle", "props": {"sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5"}}
+{"t": 1793686947563, "osc": "state=working:app=opencode"}
+{"t": 1793686947566, "event": "session.status", "props": {"sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5", "status": {"type": "busy"}}}
+{"t": 1793686947580, "event": "session.status", "props": {"sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5", "status": {"type": "busy"}}}
+{"t": 1793686948991, "event": "question.asked", "props": {"id": "que_1a012cc7f001T2SUDxBTVnxJ1o", "sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5", "questions": [{"question": "Which color do you prefer?", "header": "Color preference", "options": [{"label": "Red", "description": "The color red"}, {"label": "Green", "description": "The color green"}, {"label": "Blue", "description": "The color blue"}]}], "tool": {"messageID": "msg_1a012c6ef0017OaPkGFhAVI2rO", "callID": "call_00_1d7wj3fjwnv9wd0d8jb2rx7a"}}}
+{"t": 1793686948991, "osc": "state=blocked:kind=question:app=opencode"}
+{"t": 1793686952743, "event": "question.replied", "props": {"sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5", "requestID": "que_1a012cc7f001T2SUDxBTVnxJ1o", "answers": [["Green"]]}}
+{"t": 1793686952743, "osc": "state=working:app=opencode"}
+{"t": 1793686952761, "event": "session.status", "props": {"sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5", "status": {"type": "busy"}}}
+{"t": 1793686952771, "event": "session.status", "props": {"sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5", "status": {"type": "busy"}}}
+{"t": 1793686954177, "event": "session.status", "props": {"sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5", "status": {"type": "busy"}}}
+{"t": 1793686954178, "event": "session.status", "props": {"sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5", "status": {"type": "idle"}}}
+{"t": 1793686954178, "osc": "state=idle:app=opencode"}
+{"t": 1793686954178, "event": "session.idle", "props": {"sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5"}}
+{"t": 1793686964671, "osc": "state=working:app=opencode"}
+{"t": 1793686964674, "event": "session.status", "props": {"sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5", "status": {"type": "busy"}}}
+{"t": 1793686964691, "event": "session.status", "props": {"sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5", "status": {"type": "busy"}}}
+{"t": 1793686966268, "event": "session.status", "props": {"sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5", "status": {"type": "busy"}}}
+{"t": 1793686966278, "event": "session.status", "props": {"sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5", "status": {"type": "busy"}}}
+{"t": 1793686967582, "event": "permission.asked", "props": {"id": "per_1a013151e001Jl3z2Ns1WKhuRH", "sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5", "permission": "edit", "patterns": ["notes.txt"], "metadata": {"filepath": "/tmp/aries-mvp-run/oc04/work/notes.txt", "diff": "Index: /tmp/aries-mvp-run/oc04/work/notes.txt\n===================================================================\n--- /tmp/aries-mvp-run/oc04/work/notes.txt\n+++ /tmp/aries-mvp-run/oc04/work/notes.txt\n@@ -1,3 +1,3 @@\n line one\n-line two\n+line 2\n line three\n"}, "always": ["*"], "tool": {"messageID": "msg_1a0130ffc00166R3ERo56pTunE", "callID": "call_00_3efjcsr8ijoyzx3v6s6wn4l2"}}}
+{"t": 1793686967583, "osc": "state=blocked:kind=permission:app=opencode"}
+{"t": 1793686977108, "event": "permission.replied", "props": {"sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5", "requestID": "per_1a013151e001Jl3z2Ns1WKhuRH", "reply": "reject"}}
+{"t": 1793686977108, "osc": "state=working:app=opencode"}
+{"t": 1793686977126, "event": "session.status", "props": {"sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5", "status": {"type": "idle"}}}
+{"t": 1793686977126, "osc": "state=idle:app=opencode"}
+{"t": 1793686977126, "event": "session.idle", "props": {"sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5"}}
+{"t": 1793686983630, "osc": "state=working:app=opencode"}
+{"t": 1793686983632, "event": "session.status", "props": {"sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5", "status": {"type": "busy"}}}
+{"t": 1793686983644, "event": "session.status", "props": {"sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5", "status": {"type": "busy"}}}
+{"t": 1793686985320, "event": "permission.asked", "props": {"id": "per_1a0135a680019TnxvHMLnrW3CI", "sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5", "permission": "edit", "patterns": ["notes.txt"], "metadata": {"filepath": "/tmp/aries-mvp-run/oc04/work/notes.txt", "diff": "Index: /tmp/aries-mvp-run/oc04/work/notes.txt\n===================================================================\n--- /tmp/aries-mvp-run/oc04/work/notes.txt\n+++ /tmp/aries-mvp-run/oc04/work/notes.txt\n@@ -1,3 +1,3 @@\n line one\n-line two\n+line 2\n line three\n"}, "always": ["*"], "tool": {"messageID": "msg_1a01353d1001HNvPaI70vSgN8h", "callID": "call_00_p9co5sruajd15tdnb6tv1ske"}}}
+{"t": 1793686985320, "osc": "state=blocked:kind=permission:app=opencode"}
+{"t": 1793686985343, "event": "permission.replied", "props": {"sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5", "requestID": "per_1a0135a680019TnxvHMLnrW3CI", "reply": "once"}}
+{"t": 1793686985343, "osc": "state=working:app=opencode"}
+{"t": 1793686985367, "event": "session.status", "props": {"sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5", "status": {"type": "busy"}}}
+{"t": 1793686985377, "event": "session.status", "props": {"sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5", "status": {"type": "busy"}}}
+{"t": 1793686986529, "event": "session.status", "props": {"sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5", "status": {"type": "busy"}}}
+{"t": 1793686986530, "event": "session.status", "props": {"sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5", "status": {"type": "idle"}}}
+{"t": 1793686986530, "osc": "state=idle:app=opencode"}
+{"t": 1793686986530, "event": "session.idle", "props": {"sessionID": "ses_e5fed9273ffe3XexHeUg20WxR5"}}
+{"t": 1793687199021, "event": "session.created", "props": {"sessionID": "ses_e5fe962d6ffexjG0R0h9Baru7K", "info": {"id": "ses_e5fe962d6ffexjG0R0h9Baru7K", "slug": "silent-eagle", "version": "1.19.5", "projectID": "global", "directory": "/tmp/aries-mvp-run/oc04/work", "path": "", "title": "New session - 2026-11-03T06:26:39.017Z", "agent": "build", "model": {"id": "big-pickle", "providerID": "opencode"}, "cost": 0, "tokens": {"input": 0, "output": 0, "reasoning": 0, "cache": {"read": 0, "write": 0}}, "time": {"created": 1793687199017, "updated": 1793687199017}}}}
+{"t": 1793687199028, "osc": "state=working:app=opencode"}
+{"t": 1793687199033, "event": "session.status", "props": {"sessionID": "ses_e5fe962d6ffexjG0R0h9Baru7K", "status": {"type": "busy"}}}
+{"t": 1793687199035, "label": "ses_e5fe962d6ffexjG0R0h9Baru7K"}
+{"t": 1793687199055, "event": "session.status", "props": {"sessionID": "ses_e5fe962d6ffexjG0R0h9Baru7K", "status": {"type": "busy"}}}
+{"t": 1793687200040, "event": "session.status", "props": {"sessionID": "ses_e5fe962d6ffexjG0R0h9Baru7K", "status": {"type": "busy"}}}
+{"t": 1793687200041, "event": "session.status", "props": {"sessionID": "ses_e5fe962d6ffexjG0R0h9Baru7K", "status": {"type": "idle"}}}
+{"t": 1793687200041, "osc": "state=idle:app=opencode"}
+{"t": 1793687200041, "event": "session.idle", "props": {"sessionID": "ses_e5fe962d6ffexjG0R0h9Baru7K"}}
+{"t": 1793687088595, "event": "session.created", "props": {"sessionID": "ses_e5feb1230ffe0anp9Be2hPtRoI", "info": {"id": "ses_e5feb1230ffe0anp9Be2hPtRoI", "slug": "jolly-moon", "version": "1.19.5", "projectID": "global", "directory": "/tmp/aries-mvp-run/oc04/work", "path": "", "title": "New session - 2026-11-03T06:24:48.592Z", "agent": "build", "model": {"id": "dead", "providerID": "bogus"}, "cost": 0, "tokens": {"input": 0, "output": 0, "reasoning": 0, "cache": {"read": 0, "write": 0}}, "time": {"created": 1793687088592, "updated": 1793687088592}}}}
+{"t": 1793687088604, "osc": "state=working:app=opencode"}
+{"t": 1793687088611, "event": "session.status", "props": {"sessionID": "ses_e5feb1230ffe0anp9Be2hPtRoI", "status": {"type": "busy"}}}
+{"t": 1793687088615, "label": "ses_e5feb1230ffe0anp9Be2hPtRoI"}
+{"t": 1793687089248, "event": "session.status", "props": {"sessionID": "ses_e5feb1230ffe0anp9Be2hPtRoI", "status": {"type": "busy"}}}
+{"t": 1793687089252, "event": "session.status", "props": {"sessionID": "ses_e5feb1230ffe0anp9Be2hPtRoI", "status": {"type": "retry", "attempt": 1, "message": "Cannot connect to API: ECONNREFUSED: Unable to connect. Is the computer able to access the url?", "next": 1793687091477}}}
+{"t": 1793687091481, "event": "session.status", "props": {"sessionID": "ses_e5feb1230ffe0anp9Be2hPtRoI", "status": {"type": "busy"}}}
+{"t": 1793687091483, "event": "session.status", "props": {"sessionID": "ses_e5feb1230ffe0anp9Be2hPtRoI", "status": {"type": "retry", "attempt": 2, "message": "Cannot connect to API: ECONNREFUSED: Unable to connect. Is the computer able to access the url?", "next": 1793687095727}}}
+{"t": 1793687095732, "event": "session.status", "props": {"sessionID": "ses_e5feb1230ffe0anp9Be2hPtRoI", "status": {"type": "busy"}}}
+{"t": 1793687095735, "event": "session.status", "props": {"sessionID": "ses_e5feb1230ffe0anp9Be2hPtRoI", "status": {"type": "retry", "attempt": 3, "message": "Cannot connect to API: ECONNREFUSED: Unable to connect. Is the computer able to access the url?", "next": 1793687105441}}}
+{"t": 1793687105442, "event": "session.status", "props": {"sessionID": "ses_e5feb1230ffe0anp9Be2hPtRoI", "status": {"type": "busy"}}}
+{"t": 1793687105446, "event": "session.status", "props": {"sessionID": "ses_e5feb1230ffe0anp9Be2hPtRoI", "status": {"type": "retry", "attempt": 4, "message": "Cannot connect to API: ECONNREFUSED: Unable to connect. Is the computer able to access the url?", "next": 1793687124123}}}
+{"t": 1793687124124, "event": "session.status", "props": {"sessionID": "ses_e5feb1230ffe0anp9Be2hPtRoI", "status": {"type": "busy"}}}
+{"t": 1793687124127, "event": "session.status", "props": {"sessionID": "ses_e5feb1230ffe0anp9Be2hPtRoI", "status": {"type": "retry", "attempt": 5, "message": "Cannot connect to API: ECONNREFUSED: Unable to connect. Is the computer able to access the url?", "next": 1793687154127}}}
+{"t": 1793687154128, "event": "session.status", "props": {"sessionID": "ses_e5feb1230ffe0anp9Be2hPtRoI", "status": {"type": "busy"}}}
+{"t": 1793687154132, "event": "session.error", "props": {"sessionID": "ses_e5feb1230ffe0anp9Be2hPtRoI", "error": {"name": "APIError", "data": {"message": "Cannot connect to API: ECONNREFUSED: Unable to connect. Is the computer able to access the url?", "isRetryable": true, "metadata": {"url": "http://127.0.0.1:9/v1/chat/completions"}}}}}
+{"t": 1793687154132, "osc": "state=error:app=opencode:msg=Q2Fubm90IGNvbm5lY3QgdG8gQVBJOiBFQ09OTlJFRlVTRUQ6IFVuYWJsZSB0byBjb25uZWN0LiBJcyB0aGUgY29tcHV0ZXIgYWJsZSB0byBhY2Nlc3MgdGhlIHVybD8="}
+{"t": 1793687154132, "event": "session.status", "props": {"sessionID": "ses_e5feb1230ffe0anp9Be2hPtRoI", "status": {"type": "idle"}}}
+{"t": 1793687154132, "event": "session.idle", "props": {"sessionID": "ses_e5feb1230ffe0anp9Be2hPtRoI"}}
+{"t": 1793687154144, "event": "session.status", "props": {"sessionID": "ses_e5feb1230ffe0anp9Be2hPtRoI", "status": {"type": "idle"}}}
+{"t": 1793687154144, "event": "session.idle", "props": {"sessionID": "ses_e5feb1230ffe0anp9Be2hPtRoI"}}
+{"hc_event": {"data": {"labels": {"aries.opencode.session": "ses_e5fed9273ffe3XexHeUg20WxR5"}}, "seq": 13, "terminal": "t2", "type": "labels"}}
+{"hc_event": {"data": {"records": {}, "reported": true, "status": {"app": "opencode", "state": "working"}}, "seq": 14, "terminal": "t2", "type": "status"}}
+{"hc_event": {"data": {"records": {}, "reported": true, "status": {"app": "opencode", "kind": "permission", "state": "blocked"}}, "seq": 18, "terminal": "t2", "type": "status"}}
+{"hc_event": {"data": {"records": {}, "reported": true, "status": {"app": "opencode", "state": "working"}}, "seq": 20, "terminal": "t2", "type": "status"}}
+{"hc_event": {"data": {"records": {}, "reported": true, "status": {"app": "opencode", "state": "idle"}}, "seq": 21, "terminal": "t2", "type": "status"}}
+{"hc_event": {"data": {"records": {}, "reported": true, "status": {"app": "opencode", "state": "working"}}, "seq": 23, "terminal": "t2", "type": "status"}}
+{"hc_event": {"data": {"records": {}, "reported": true, "status": {"app": "opencode", "kind": "question", "state": "blocked"}}, "seq": 24, "terminal": "t2", "type": "status"}}
+{"hc_event": {"data": {"records": {}, "reported": true, "status": {"app": "opencode", "state": "working"}}, "seq": 26, "terminal": "t2", "type": "status"}}
+{"hc_event": {"data": {"records": {}, "reported": true, "status": {"app": "opencode", "state": "idle"}}, "seq": 27, "terminal": "t2", "type": "status"}}
+{"hc_event": {"data": {"records": {}, "reported": true, "status": {"app": "opencode", "state": "working"}}, "seq": 29, "terminal": "t2", "type": "status"}}
+{"hc_event": {"data": {"records": {}, "reported": true, "status": {"app": "opencode", "kind": "permission", "state": "blocked"}}, "seq": 30, "terminal": "t2", "type": "status"}}
+{"hc_event": {"data": {"records": {}, "reported": true, "status": {"app": "opencode", "state": "working"}}, "seq": 32, "terminal": "t2", "type": "status"}}
+{"hc_event": {"data": {"records": {}, "reported": true, "status": {"app": "opencode", "state": "idle"}}, "seq": 33, "terminal": "t2", "type": "status"}}
+{"hc_event": {"data": {"records": {}, "reported": true, "status": {"app": "opencode", "state": "working"}}, "seq": 35, "terminal": "t2", "type": "status"}}
+{"hc_event": {"data": {"records": {}, "reported": true, "status": {"app": "opencode", "kind": "permission", "state": "blocked"}}, "seq": 36, "terminal": "t2", "type": "status"}}
+{"hc_event": {"data": {"records": {}, "reported": true, "status": {"app": "opencode", "state": "working"}}, "seq": 38, "terminal": "t2", "type": "status"}}
+{"hc_event": {"data": {"records": {}, "reported": true, "status": {"app": "opencode", "state": "idle"}}, "seq": 39, "terminal": "t2", "type": "status"}}
+{"hc_event": {"data": {"labels": {"aries.opencode.session": "ses_e5fec7a4fffeb0lAgHdKg5mOIL"}}, "seq": 43, "terminal": "t3", "type": "labels"}}
+{"hc_event": {"data": {"records": {}, "reported": true, "status": {"app": "opencode", "state": "working"}}, "seq": 44, "terminal": "t3", "type": "status"}}
+{"hc_event": {"data": {"records": {}, "reported": true, "status": {"app": "opencode", "state": "idle"}}, "seq": 45, "terminal": "t3", "type": "status"}}
+{"hc_event": {"data": {"records": {}, "reported": true, "status": null}, "seq": 47, "terminal": "t3", "type": "status"}}
+{"hc_event": {"data": {"labels": {"aries.opencode.session": "ses_e5fec3f65ffegT0Zm4M1j8oC45"}}, "seq": 52, "terminal": "t4", "type": "labels"}}
+{"hc_event": {"data": {"records": {}, "reported": true, "status": {"app": "opencode", "state": "working"}}, "seq": 53, "terminal": "t4", "type": "status"}}
+{"hc_event": {"data": {"records": {}, "reported": true, "status": {"app": "opencode", "msg": "Cannot connect to API: ECONNREFUSED: Unable to connect. Is the computer able to access the url?", "state": "error"}}, "seq": 56, "terminal": "t4", "type": "status"}}
+{"hc_event": {"data": {"records": {}, "reported": true, "status": {"app": "opencode", "state": "idle"}}, "seq": 58, "terminal": "t4", "type": "status"}}
+{"hc_event": {"data": {"records": {}, "reported": true, "status": null}, "seq": 60, "terminal": "t4", "type": "status"}}
+{"hc_event": {"data": {"labels": {"aries.opencode.session": "ses_e5feb1230ffe0anp9Be2hPtRoI"}}, "seq": 66, "terminal": "t5", "type": "labels"}}
+{"hc_event": {"data": {"records": {}, "reported": true, "status": {"app": "opencode", "state": "working"}}, "seq": 67, "terminal": "t5", "type": "status"}}
+{"hc_event": {"data": {"records": {}, "reported": true, "status": {"app": "opencode", "msg": "Cannot connect to API: ECONNREFUSED: Unable to connect. Is the computer able to access the url?", "state": "error"}}, "seq": 70, "terminal": "t5", "type": "status"}}
+{"hc_event": {"data": {"records": {}, "reported": true, "status": {"app": "opencode", "state": "working"}}, "seq": 77, "terminal": "t6", "type": "status"}}
+{"hc_event": {"data": {"labels": {"aries.opencode.session": "ses_e5fed9273ffe3XexHeUg20WxR5"}}, "seq": 78, "terminal": "t6", "type": "labels"}}
+{"hc_event": {"data": {"records": {}, "reported": true, "status": {"app": "opencode", "state": "idle"}}, "seq": 79, "terminal": "t6", "type": "status"}}
+{"hc_event": {"data": {"labels": {"aries.opencode.session": "ses_e5fe962d6ffexjG0R0h9Baru7K"}}, "seq": 82, "terminal": "t2", "type": "labels"}}
+{"hc_event": {"data": {"records": {}, "reported": true, "status": {"app": "opencode", "state": "working"}}, "seq": 83, "terminal": "t2", "type": "status"}}
+{"hc_event": {"data": {"records": {}, "reported": true, "status": {"app": "opencode", "state": "idle"}}, "seq": 86, "terminal": "t2", "type": "status"}}
+{"hc_event": {"data": {"records": {}, "reported": true, "status": null}, "seq": 91, "terminal": "t2", "type": "status"}}
+{"hc_event": {"data": {"records": {}, "reported": true, "status": null}, "seq": 94, "terminal": "t5", "type": "status"}}
+{"hc_event": {"data": {"records": {}, "reported": true, "status": null}, "seq": 97, "terminal": "t6", "type": "status"}}
