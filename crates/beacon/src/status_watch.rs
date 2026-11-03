@@ -54,6 +54,7 @@ enum Entered {
 struct Facts {
     /// Tells a Terminal from a later one at the same address.
     created_ms: u64,
+    status_ms: u64,
     name: Option<String>,
     title: String,
     parent: Option<String>,
@@ -68,6 +69,7 @@ impl Facts {
     fn from_terminal(t: &Value) -> Self {
         let mut f = Self {
             created_ms: t["created_ms"].as_u64().unwrap_or(0),
+            status_ms: t["status_ms"].as_u64().unwrap_or(0),
             name: t["name"].as_str().map(str::to_owned),
             title: t["title"].as_str().unwrap_or_default().to_owned(),
             parent: t["parent"].as_str().map(str::to_owned),
@@ -129,6 +131,58 @@ pub struct StatusWatch {
 impl StatusWatch {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Status notifications omit status_ms. A lookup may already describe a
+    /// later event: take only its timestamp when its status still agrees.
+    pub fn refresh_status_time(&mut self, address: &str, terminal: &Value) {
+        if let Some(f) = self.terminals.get_mut(address)
+            && f.agent_status() == Facts::from_terminal(terminal).agent_status()
+        {
+            f.status_ms = terminal["status_ms"].as_u64().unwrap_or(0);
+        }
+    }
+
+    /// Current Watched Agents, including their descendant Agent counts.
+    pub fn watched(&self) -> Vec<crate::progress::WatchedAgent> {
+        self.terminals
+            .iter()
+            .filter(|(_, f)| f.labels.get("aries.watch").is_some_and(|v| v == "1"))
+            .map(|(address, f)| {
+                let children = self
+                    .terminals
+                    .iter()
+                    .filter(|(child, facts)| {
+                        if facts.agent_status().is_none() || *child == address {
+                            return false;
+                        }
+                        let mut parent = facts.parent.as_deref();
+                        let mut visited = std::collections::HashSet::new();
+                        while let Some(p) = parent {
+                            if p == address {
+                                return true;
+                            }
+                            if !visited.insert(p) {
+                                break;
+                            }
+                            parent = self.terminals.get(p).and_then(|f| f.parent.as_deref());
+                        }
+                        false
+                    })
+                    .count() as u32;
+                crate::progress::WatchedAgent {
+                    terminal: address.clone(),
+                    name: f.name.clone(),
+                    title: Some(f.title.clone()).filter(|t| !t.is_empty()),
+                    top_level: f.parent.is_none(),
+                    status: f.agent_status(),
+                    status_ms: f.status_ms,
+                    created_ms: f.created_ms,
+                    turn: f.turn,
+                    child_agents: children,
+                }
+            })
+            .collect()
     }
 
     /// An `events.subscribe` result or a `missed` notification's params.

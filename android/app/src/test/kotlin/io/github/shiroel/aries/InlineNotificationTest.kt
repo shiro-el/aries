@@ -53,6 +53,22 @@ class InlineNotificationTest {
         .build().doWork()
 
     @Test
+    fun anOversizedReplyReportsFailureInsteadOfLeavingSending() {
+        WorkManagerTestInitHelper.initializeTestWorkManager(context)
+        online()
+        PushService.show(context, status())
+        val action = shown().actions.single { !it.remoteInputs.isNullOrEmpty() }
+        val fill = Intent()
+        RemoteInput.addResultsToIntent(action.remoteInputs, fill, Bundle().apply {
+            putCharSequence(InlineNotifications.REPLY_TEXT, "a".repeat(20_000))
+        })
+        action.actionIntent.send(context, 0, fill)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(context.getString(R.string.notification_action_failed), text())
+        assertTrue(core.backgroundMessages.isEmpty())
+    }
+
+    @Test
     fun anOfflineRemoteInputFailsImmediatelyWithoutWaitingForWork() {
         online(false)
         PushService.show(context, status())

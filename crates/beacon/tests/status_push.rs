@@ -587,3 +587,69 @@ fn a_status_transition_carries_its_own_turn_before_the_turn_event_arrives() {
         "changing a Blocked reason does not end another turn"
     );
 }
+
+#[test]
+fn progress_leaves_room_for_attention_and_all_commands_share_the_pairing_budget() {
+    let mut host = Host::new();
+    host.serve();
+    for i in 0..30 {
+        let t = host.agent(&format!("watched-{i}"), None, "status working\nwait\n");
+        host.hc.hc(&["label", &t, "aries.watch=1"]);
+    }
+    let pushes = host.pushes(25);
+    assert!(pushes.iter().all(|m| matches!(
+        m,
+        PushMessage::Progress {
+            cancelled: false,
+            ..
+        }
+    )));
+    assert!(
+        host.relay
+            .log()
+            .push_priorities
+            .iter()
+            .all(|p| p == "normal")
+    );
+    for i in 0..5 {
+        host.agent(
+            &format!("error-{i}"),
+            None,
+            "status error - attention\nwait\n",
+        );
+    }
+    let all = host.pushes(30);
+    assert_eq!(
+        all.iter()
+            .filter(|m| matches!(m, PushMessage::Status { .. }))
+            .count(),
+        5
+    );
+    std::thread::sleep(Duration::from_millis(500));
+    assert_eq!(host.relay.log().pushes.len(), 30);
+    let out = host.command("push-test").output().unwrap();
+    assert!(
+        !out.status.success(),
+        "a separate command must use the same budget"
+    );
+    assert!(String::from_utf8_lossy(&out.stderr).contains("budget exhausted"));
+    assert_eq!(host.relay.log().pushes.len(), 30);
+}
+
+#[test]
+fn restarting_serve_does_not_bypass_the_per_agent_minute_budget() {
+    let mut host = Host::new();
+    host.serve();
+    let t = host.agent("watched", None, "status working\nwait\n");
+    host.hc.hc(&["label", &t, "aries.watch=1"]);
+    assert!(matches!(
+        &host.pushes(1)[..],
+        [PushMessage::Progress { .. }]
+    ));
+    let mut child = host.serve.take().unwrap();
+    child.kill().unwrap();
+    child.wait().unwrap();
+    host.serve();
+    std::thread::sleep(Duration::from_secs(2));
+    assert_eq!(host.relay.log().pushes.len(), 1);
+}

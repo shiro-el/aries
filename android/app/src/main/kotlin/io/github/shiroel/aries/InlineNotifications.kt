@@ -141,6 +141,12 @@ class InlineActionReceiver : BroadcastReceiver() {
         }
         InlineNotifications.update(context, target, context.getString(
             if (action == InlineNotifications.REPLY) R.string.chat_sending else R.string.notification_marking_seen))
-        InlineActionWorker.enqueue(context, target, action, text)
+        try {
+            InlineActionWorker.enqueue(context, target, action, text)
+        } catch (_: IllegalStateException) {
+            // WorkManager has a 10 KiB input limit; a long RemoteInput must
+            // fail visibly instead of crashing the receiver at Sending.
+            InlineNotifications.update(context, target, context.getString(R.string.notification_action_failed))
+        }
     }
 }

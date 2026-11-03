@@ -362,6 +362,12 @@
     <string name="push_permission_denied">Notifications are not allowed for Aries. Allow them in Android settings, then turn on push again.</string>
     <string name="push_off_host_unreachable">Push is off and the Relay deleted this pairing. The Host could not be reached, so its copy of the pairing stays until the next pairing; it no longer works.</string>
     <string name="push_channel_name">Host notifications</string>
+    <!-- Watched Agent progress -->
+    <string name="agent_watch_label">Watch progress</string>
+    <string name="agent_watch_error">Could not update watching: %1$s</string>
+    <string name="push_progress_channel">Watched Agent progress</string>
+    <string name="push_progress_body">%1$d min elapsed · %2$d subagents</string>
+
     <string name="push_test_title">Push works for %1$s</string>
     <string name="push_test_body">This test notification came from the Beacon on %1$s, end-to-end encrypted.</string>
     <string name="push_status_title">%1$s on %2$s</string>

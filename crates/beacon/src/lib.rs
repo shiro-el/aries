@@ -5,6 +5,7 @@ pub mod chat;
 pub mod core_link;
 pub mod opencode_plugin;
 pub mod pi_extension;
+pub mod progress;
 pub mod skill;
 pub mod status_watch;
 
