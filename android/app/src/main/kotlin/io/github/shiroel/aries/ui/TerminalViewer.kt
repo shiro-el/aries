@@ -355,6 +355,7 @@ fun TerminalScreen(
     onView: ((AgentView) -> Unit)? = null,
     onGitSend: ((String) -> Unit)? = null,
     displaySettings: TerminalDisplaySettings = rememberTerminalDisplaySettings(),
+    onSelectionSend: ((String) -> Unit)? = null,
 ) {
     var showGit by remember(viewer) { mutableStateOf(false) }
     if (showGit) GitChangesDialog(viewer.link, viewer.terminal, { showGit = false }, onGitSend)
@@ -377,7 +378,7 @@ fun TerminalScreen(
             Banner(stringResource(R.string.terminal_connection_closed))
         }
         val look = remember(viewer) { TerminalLook(viewer) }
-        TerminalLookBar(viewer, look)
+        TerminalLookBar(viewer, look, onSelectionSend)
         TerminalCanvas(viewer, look, displaySettings, Modifier.fillMaxWidth().weight(1f))
         if (viewer.typing) KeyBar(viewer)
         TerminalComposer(viewer)

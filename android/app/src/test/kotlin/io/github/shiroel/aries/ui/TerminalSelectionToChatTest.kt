@@ -1,0 +1,151 @@
+package io.github.shiroel.aries.ui
+
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.test.core.app.ApplicationProvider
+import io.github.shiroel.aries.R
+import io.github.shiroel.aries.core.CellRun
+import io.github.shiroel.aries.core.AgentStatus
+import io.github.shiroel.aries.core.Endpoint
+import io.github.shiroel.aries.core.ScreenFrame
+import io.github.shiroel.aries.core.ScreenLine
+import io.github.shiroel.aries.core.TerminalInfo
+import io.github.shiroel.aries.core.TerminalUpdate
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+
+/** Selection gestures and draft routing at the Android UI/core seam. */
+@RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(qualifiers = "h1200dp")
+class TerminalSelectionToChatTest {
+    @get:Rule val compose = createComposeRule()
+    private val terminal = TerminalInfo("remote/t7", "build", "", listOf("make"), "/repo", "live")
+    private lateinit var model: HostsModel
+    private lateinit var core: FakeCore
+    private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+    private fun str(id: Int) = context.getString(id)
+
+    private fun open(info: TerminalInfo = terminal): FakeTerminalView {
+        core = FakeCore().apply {
+            terminals = listOf(info)
+            addHost("home", Endpoint.Ssh("10.0.0.2", 22u, "me"))
+        }
+        compose.setContent {
+            val scope = rememberCoroutineScope()
+            model = remember { HostsModel(core, scope) }
+            AriesApp(model)
+        }
+        compose.onNodeWithText("home").performClick()
+        compose.onNodeWithText(info.name!!).performClick()
+        return core.connection!!.views.single()
+    }
+
+    private fun selectWord(view: FakeTerminalView, text: String = "error details") {
+        val run = CellRun(0u, text.length.toUShort(), text, false, null, null, false, false, false, false, false, false)
+        view.push(TerminalUpdate.Screen(ScreenFrame(40u, 2u, true, listOf(ScreenLine(0u, listOf(run))), null, null)))
+        compose.waitForIdle()
+        val screen = compose.onNodeWithTag("terminal-screen")
+        val width = screen.fetchSemanticsNode().size.width
+        screen.performTouchInput { longClick(Offset(1.5f * width / 40, 1f)) }
+    }
+
+    @Test
+    fun terminalWithoutAgentAppendsSelectedCodeToItsComposerWithoutTyping() {
+        val view = open()
+        lateinit var viewer: TerminalViewer
+        compose.runOnIdle {
+            viewer = (model.screen as Screen.Terminal).viewer
+            viewer.draft = "Explain this"
+        }
+        selectWord(view)
+        compose.onNodeWithText(str(R.string.terminal_send_to_agent)).performClick()
+        compose.onNodeWithTag("terminal-composer").assertTextEquals("Explain this\n\n```\nerror\n```")
+        compose.runOnIdle {
+            assertSame(viewer, (model.screen as Screen.Terminal).viewer)
+            assertTrue(viewer.composerOpen)
+            assertFalse(viewer.typing)
+            assertTrue(view.sent.isEmpty())
+            assertTrue(core.connection!!.typed.isEmpty())
+        }
+        compose.onNodeWithText(str(R.string.terminal_send_to_agent)).assertDoesNotExist()
+    }
+
+    @Test
+    fun agentSelectionReturnsToItsOwnChatAndPreservesTheDraftAcrossViewSwitches() {
+        val view = open(terminal.copy(agentStatus = AgentStatus.Working))
+        compose.onNodeWithText(str(R.string.agent_view_chat)).performClick()
+        compose.runOnIdle { (model.screen as Screen.Chat).chat.draft = "Why did this fail?" }
+        compose.onNodeWithText(str(R.string.agent_view_terminal)).performClick()
+        val currentView = core.connection!!.views.last()
+        selectWord(currentView)
+        compose.onNodeWithText(str(R.string.terminal_send_to_agent)).performClick()
+        compose.runOnIdle {
+            val chat = (model.screen as Screen.Chat).chat
+            assertEquals("h1", chat.host.id)
+            assertEquals("remote/t7", chat.terminal.address)
+            assertEquals("Why did this fail?\n\n```\nerror\n```", chat.draft)
+            assertTrue(core.connection!!.typed.isEmpty())
+            assertTrue(view.sent.isEmpty())
+            assertTrue(currentView.sent.isEmpty())
+            assertTrue(currentView.detached)
+        }
+    }
+
+    @Test
+    fun multilineSelectionKeepsIndentationAndUsesAFenceLongerThanItsContents() {
+        val view = open()
+        val lines = listOf("failure", "```", "  details").mapIndexed { row, text ->
+            ScreenLine(row.toUShort(), listOf(CellRun(0u, text.length.toUShort(), text, false, null, null,
+                false, false, false, false, false, false)))
+        }
+        view.push(TerminalUpdate.Screen(ScreenFrame(40u, 3u, true, lines, null, null)))
+        compose.waitForIdle()
+        compose.onNodeWithTag("terminal-screen").performTouchInput {
+            down(Offset(1f, 1f))
+            advanceEventTime(1_000)
+            moveTo(bottomRight - Offset(1f, 1f), delayMillis = 500)
+            up()
+        }
+        compose.onNodeWithText(str(R.string.terminal_send_to_agent)).performClick()
+        compose.onNodeWithTag("terminal-composer").assertTextEquals("````\nfailure\n```\n  details\n````")
+        compose.runOnIdle { assertTrue(view.sent.isEmpty()) }
+    }
+
+    @Test
+    fun terminalOpenedOverALiveChatAppendsToThatExistingChat() {
+        open(terminal.copy(agentStatus = AgentStatus.Working))
+        compose.onNodeWithText(str(R.string.agent_view_chat)).performClick()
+        lateinit var chat: ChatModel
+        compose.runOnIdle {
+            chat = (model.screen as Screen.Chat).chat
+            chat.draft = "Existing draft"
+            model.openTerminal(chat.terminal)
+        }
+        val view = core.connection!!.views.last()
+        selectWord(view)
+        compose.onNodeWithText(str(R.string.terminal_send_to_agent)).performClick()
+        compose.runOnIdle {
+            assertSame(chat, (model.screen as Screen.Chat).chat)
+            assertEquals("Existing draft\n\n```\nerror\n```", chat.draft)
+            assertTrue(core.connection!!.typed.isEmpty())
+            assertTrue(view.detached)
+        }
+    }
+}
