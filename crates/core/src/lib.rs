@@ -20,6 +20,7 @@ mod last_known_state;
 mod launch;
 mod layout_edit;
 mod push;
+mod push_replay;
 mod removal;
 mod send;
 mod settings;
@@ -265,6 +266,7 @@ pub struct AriesCore {
     sessions: host_edit::HostSessions,
     beacon_release: Mutex<BeaconRelease>,
     chat_cache: chat_cache::ChatCache,
+    push_replay: push_replay::Ledger,
 }
 
 #[uniffi::export]
@@ -290,6 +292,7 @@ impl AriesCore {
             last_known,
             vault,
             chat_cache,
+            push_replay: Default::default(),
             hosts,
             sessions: Default::default(),
             beacon_release: Mutex::new(pinned_release()),
@@ -988,7 +991,9 @@ impl AriesCore {
 
     /// Opens a push envelope as it arrived (FCM data `e`, base64-decoded).
     /// Works while the phone is locked. Rejects tampered envelopes, unknown
-    /// versions and envelopes from no paired Host.
+    /// versions, envelopes from no paired Host, envelopes already received,
+    /// and timestamps older than 24 hours or over 5 minutes in the future.
+    /// Remembers at most 4,096 envelope IDs per Host, oldest received evicted first.
     pub fn open_push(&self, envelope: Vec<u8>) -> Result<PushNotice, CoreError> {
         let paired = self.hosts().into_iter().flat_map(|h| {
             push::pairings_of(&self.store, self.vault.as_ref(), &h.id)
@@ -996,7 +1001,9 @@ impl AriesCore {
                 .into_iter()
                 .map(move |p| (h.id.clone(), h.name.clone(), p))
         });
-        push::open(&envelope, paired)
+        let notice = push::open(&envelope, paired)?;
+        self.push_replay.record(&self.store, &notice, &envelope)?;
+        Ok(notice)
     }
 
     /// Call when connecting: reads the Beacon and, if it is older than the
@@ -1286,9 +1293,10 @@ impl AriesCore {
         )
     }
 
-    /// Moves the Chat cache's clock forward (tests of the retention period).
+    /// Moves retention clocks forward (Rust tests of Chat and push expiry).
     pub fn shift_clock(&self, by: std::time::Duration) {
         self.chat_cache.shift_clock(by);
+        self.push_replay.shift_clock(by);
     }
 
     fn chat_host(&self, host_id: &str) -> Result<chat::ChatHost, CoreError> {
