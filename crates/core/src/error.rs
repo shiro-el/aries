@@ -46,6 +46,10 @@ pub enum CoreError {
     /// Deliberately carries no input or decoder details that could expose secrets.
     #[error("could not import the private key; check its format and passphrase")]
     InvalidPrivateKey,
+    #[error("invalid or expired Host pairing QR")]
+    InvalidPairingQr,
+    #[error("pairing was refused, expired, or already used; generate a new QR")]
+    PairingRefused,
     #[error("invalid Host: {detail}")]
     InvalidHost { detail: String },
     #[error("no Host with id {id}")]

@@ -225,6 +225,23 @@ class FakeCore : AriesCoreInterface {
 
     override fun hosts(): List<Host> = hosts.toList()
 
+    var pairingDetails: io.github.shiroel.aries.core.HostPairingDetails? = null
+    var pairingScanError: CoreException? = null
+    var pairingError: CoreException? = null
+    val pairingRequests = mutableListOf<String>()
+    override fun inspectPairingQr(qr: String): io.github.shiroel.aries.core.HostPairingDetails {
+        pairingScanError?.let { throw it }
+        return pairingDetails ?: throw CoreException.InvalidPairingQr()
+    }
+    override suspend fun pairHostQr(name: String, qr: String): Host {
+        pairingRequests += name
+        pairingError?.let { throw it }
+        val details = inspectPairingQr(qr)
+        val host = addHost(name, Endpoint.Ssh(details.address, details.port, details.user))
+        trustHostKey(host.id, details.hostKey)
+        return hosts().first { it.id == host.id }
+    }
+
     override fun addHost(name: String, endpoint: Endpoint): Host =
         Host("h${hosts.size + 1}", name, endpoint, null).also { hosts += it }
 

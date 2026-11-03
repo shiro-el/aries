@@ -530,6 +530,15 @@ class HostsModel(
         hostsChanged()
     }
 
+    fun inspectPairingQr(qr: String) = core.inspectPairingQr(qr)
+
+    suspend fun pairHostQr(name: String, qr: String) {
+        withContext(keyWork) { core.pairHostQr(name, qr) }
+        hosts = core.hosts()
+        refreshRoutes()
+        hostsChanged()
+    }
+
     /** Saves in place; the core closes old lines only when the endpoint changed. */
     suspend fun saveHost(host: Host, name: String, address: String, port: Int, user: String): Boolean {
         return try {

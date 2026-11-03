@@ -196,10 +196,12 @@ pub(crate) fn category(error: &CoreError) -> DiagnosticError {
         | C::BiometricUnavailable { .. } => D::KeyUnavailable,
         C::HostKeyUnknown { .. } | C::JumpHostKeyUnknown { .. } => D::HostKeyUntrusted,
         C::HostKeyChanged { .. } | C::JumpHostKeyChanged { .. } => D::HostKeyChanged,
-        C::AuthRejected | C::PasswordRejected | C::JumpAuthRejected { .. } => D::Authentication,
+        C::AuthRejected | C::PasswordRejected | C::PairingRefused | C::JumpAuthRejected { .. } => {
+            D::Authentication
+        }
         C::Unreachable { .. } => D::Unreachable,
         C::Incompatible { .. } => D::Incompatible,
-        C::Protocol { .. } | C::Rpc { .. } => D::Protocol,
+        C::Protocol { .. } | C::Rpc { .. } | C::InvalidPairingQr => D::Protocol,
         C::Closed => D::Closed,
         C::Storage { .. } => D::Storage,
         C::InvalidHost { .. } | C::UnknownHost { .. } | C::UnknownJumpHost { .. } => {
