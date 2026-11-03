@@ -259,12 +259,11 @@ impl TerminalWatch {
                         true
                     }
                 };
-                if changed {
-                    if states.save(&host_id, model.infos()).is_err()
-                        || tx.send(Latest::List(model.infos())).is_err()
-                    {
-                        break;
-                    }
+                if changed
+                    && (states.save(&host_id, model.infos()).is_err()
+                        || tx.send(Latest::List(model.infos())).is_err())
+                {
+                    break;
                 }
             }
             let _ = tx.send(Latest::Ended);
