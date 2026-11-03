@@ -22,6 +22,15 @@ pub enum CoreError {
     Storage { detail: String },
     #[error("key vault failed: {detail}")]
     Vault { detail: String },
+    /// The SSH key needs a biometric unlock and nobody unlocked it (for
+    /// example in the background, or the user cancelled the prompt). The key
+    /// was not used.
+    #[error("the SSH key needs a biometric unlock")]
+    KeyLocked,
+    /// A biometric-protected key cannot be made on this phone (no secure
+    /// lock screen or no enrolled biometric).
+    #[error("biometric unlock is not available: {detail}")]
+    BiometricUnavailable { detail: String },
     #[error("could not reach the Host: {detail}")]
     Unreachable { detail: String },
     /// First connection: the user must confirm `fingerprint` with
@@ -101,6 +110,12 @@ pub enum CoreError {
 pub enum VaultError {
     #[error("{detail}")]
     Failed { detail: String },
+    /// The key needs user authentication that did not happen.
+    #[error("the key needs user authentication")]
+    Locked,
+    /// The requested protection cannot be set up on this device.
+    #[error("biometric unavailable: {detail}")]
+    BiometricUnavailable { detail: String },
 }
 
 impl From<uniffi::UnexpectedUniFFICallbackError> for VaultError {
@@ -111,8 +126,10 @@ impl From<uniffi::UnexpectedUniFFICallbackError> for VaultError {
 
 impl From<VaultError> for CoreError {
     fn from(e: VaultError) -> Self {
-        Self::Vault {
-            detail: e.to_string(),
+        match e {
+            VaultError::Failed { detail } => Self::Vault { detail },
+            VaultError::Locked => Self::KeyLocked,
+            VaultError::BiometricUnavailable { detail } => Self::BiometricUnavailable { detail },
         }
     }
 }

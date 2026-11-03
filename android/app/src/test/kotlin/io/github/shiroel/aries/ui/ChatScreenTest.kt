@@ -139,6 +139,33 @@ class ChatScreenTest {
     }
 
     @Test
+    fun opensFromTheAgentsListAndReturnsToTheAgent() {
+        val core = FakeCore().apply {
+            addHost("home", Endpoint.Ssh("10.0.0.2", 22u, "me"))
+            addHost("server", Endpoint.Ssh("10.0.0.3", 22u, "me"))
+            terminalsOf["h2"] = listOf(claude)
+        }
+        compose.setContent {
+            val scope = rememberCoroutineScope()
+            val model = remember { HostsModel(core, scope) }
+            MaterialTheme { AriesApp(model) }
+        }
+        compose.onNodeWithText(str(R.string.agents_button)).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("claude").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription(str(R.string.chat_open_label, "claude")).performClick()
+        compose.waitForIdle()
+        assertEquals(listOf("h2" to "t1"), core.chatsOpened)
+        compose.onNodeWithText(str(R.string.chat_title, "claude")).assertExists()
+
+        compose.onNodeWithText(str(R.string.back_button)).performClick()
+        compose.waitForIdle()
+        assertTrue(core.chatStopped)
+        compose.onNodeWithText(str(R.string.agent_detail_host, "server")).assertExists()
+    }
+
+    @Test
     fun backLeavesTheChatAndStopsFollowing() {
         val core = FakeCore()
         openChat(core)

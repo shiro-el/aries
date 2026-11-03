@@ -3,6 +3,7 @@
 //! a fresh snapshot). The Agent status rule itself lives in
 //! [`aries_protocol::agent_status`] so the Beacon computes the same thing.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use serde_json::{Value, json};
@@ -64,10 +65,7 @@ pub(crate) fn status_of(terminal: &Value) -> (Option<AgentStatus>, bool) {
         .get("status")
         .filter(|s| !s.is_null())
         .and_then(|s| serde_json::from_value(s.clone()).ok());
-    let labels = terminal
-        .get("labels")
-        .and_then(|l| serde_json::from_value(l.clone()).ok())
-        .unwrap_or_default();
+    let labels = labels_of(terminal);
     let turn = terminal["turn"].as_u64().unwrap_or(0);
     match rule::agent_status(record.as_ref(), turn, &labels) {
         Some(s) => {
@@ -76,6 +74,23 @@ pub(crate) fn status_of(terminal: &Value) -> (Option<AgentStatus>, bool) {
         }
         None => (None, false),
     }
+}
+
+fn labels_of(terminal: &Value) -> HashMap<String, String> {
+    terminal
+        .get("labels")
+        .and_then(|l| serde_json::from_value(l.clone()).ok())
+        .unwrap_or_default()
+}
+
+/// Whether the shared `herdr.pinned` label pins this Terminal.
+pub(crate) fn pinned(terminal: &Value) -> bool {
+    rule::is_pinned(&labels_of(terminal))
+}
+
+/// The `herdr.seen` turn of this Terminal.
+pub(crate) fn seen_turn(terminal: &Value) -> u64 {
+    rule::seen_turn(&labels_of(terminal))
 }
 
 /// What applying one notification asks of the caller.

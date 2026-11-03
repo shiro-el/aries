@@ -11,8 +11,11 @@ import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.Host
 import io.github.shiroel.aries.core.Linger
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** What the Beacon section of a Host shows. */
 sealed interface BeaconUi {
@@ -22,11 +25,15 @@ sealed interface BeaconUi {
     data class Unavailable(val reason: Message) : BeaconUi
 }
 
-/** Install / inspect / remove the Beacon on the Host being shown. */
+/**
+ * Install / inspect / remove the Beacon on the Host being shown. Every call
+ * signs in to the Host, so it runs in [keyWork] (see [HostsModel]).
+ */
 class BeaconModel(
     private val core: AriesCoreInterface,
     private val scope: CoroutineScope,
     private val fetcher: BeaconFetcher,
+    private val keyWork: CoroutineContext = EmptyCoroutineContext,
 ) {
     var host by mutableStateOf<Host?>(null)
         private set
@@ -45,21 +52,21 @@ class BeaconModel(
             return
         }
         ui = BeaconUi.Loading
-        run { core.beaconStatus(host.id) }
+        run { onKey { core.beaconStatus(host.id) } }
     }
 
     fun install() {
         val host = host ?: return
         ui = BeaconUi.Working
         run {
-            val result = core.installBeacon(host.id, fetcher)
+            val result = onKey { core.installBeacon(host.id, fetcher) }
             (result.linger as? Linger.Failed)?.let {
                 prompt = Prompt.Problem(
                     Message(R.string.beacon_linger_title),
                     Message(R.string.beacon_linger_body, listOf(it.reason, userOf(host))),
                 )
             }
-            core.beaconStatus(host.id)
+            onKey { core.beaconStatus(host.id) }
         }
     }
 
@@ -72,8 +79,10 @@ class BeaconModel(
         val host = host ?: return
         ui = BeaconUi.Working
         run {
-            core.uninstallBeacon(host.id)
-            core.beaconStatus(host.id)
+            onKey {
+                core.uninstallBeacon(host.id)
+                core.beaconStatus(host.id)
+            }
         }
     }
 
@@ -81,6 +90,8 @@ class BeaconModel(
         prompt = null
         confirmRemove = false
     }
+
+    private suspend fun <T> onKey(block: suspend () -> T): T = withContext(keyWork) { block() }
 
     private fun run(block: suspend () -> BeaconState) {
         scope.launch {

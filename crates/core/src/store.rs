@@ -1,8 +1,9 @@
 //! What the app remembers between launches, under the app's data dir:
 //! `hosts.json` (Hosts and their trusted Host key fingerprints),
-//! `identity.sealed` (the SSH private key, sealed by the [`KeyVault`]) and
-//! `identity.pub`; extra SSH keys in `keys.json` (id, label, public half) and
-//! `key-<id>.sealed`. Per-Host local state goes under `hosts/<id>/`
+//! `identity.sealed` (the SSH private key, sealed by the [`KeyVault`] under
+//! the key's [`KeyProtection`]) and `identity.pub`; extra SSH keys in
+//! `keys.json` (id, label, public half) and `key-<id>.sealed` (same format
+//! as `identity.sealed`). Per-Host local state goes under `hosts/<id>/`
 //! ([`Store::host_dir`]), which Host removal deletes.
 
 use std::path::{Path, PathBuf};
@@ -10,7 +11,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{CoreError, storage};
-use crate::{Endpoint, JumpHost};
+use crate::{Endpoint, JumpHost, KeyProtection};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub(crate) struct Saved {
@@ -65,19 +66,28 @@ impl Store {
         self.write_atomic("hosts.json", &bytes)
     }
 
-    pub fn read_identity(&self) -> Result<Option<(Vec<u8>, String)>, CoreError> {
-        let sealed = match std::fs::read(self.dir.join("identity.sealed")) {
+    /// The sealed SSH private key, the protection it was sealed under, and
+    /// the public key.
+    pub fn read_identity(&self) -> Result<Option<Identity>, CoreError> {
+        let bytes = match std::fs::read(self.dir.join("identity.sealed")) {
             Ok(b) => b,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(e) => return Err(storage(e)),
         };
+        let (protection, sealed) = decode_sealed(bytes)?;
         let public = std::fs::read_to_string(self.dir.join("identity.pub")).map_err(storage)?;
-        Ok(Some((sealed, public.trim().to_owned())))
+        Ok(Some(Identity {
+            protection,
+            sealed,
+            public: public.trim().to_owned(),
+        }))
     }
 
-    pub fn write_identity(&self, sealed: &[u8], public: &str) -> Result<(), CoreError> {
-        self.write_atomic("identity.pub", format!("{public}\n").as_bytes())?;
-        self.write_atomic("identity.sealed", sealed)
+    /// Writes the identity. `identity.sealed` is replaced in one rename, so
+    /// the sealed bytes and their protection never disagree.
+    pub fn write_identity(&self, id: &Identity) -> Result<(), CoreError> {
+        self.write_atomic("identity.pub", format!("{}\n", id.public).as_bytes())?;
+        self.write_atomic("identity.sealed", &encode_sealed(id.protection, &id.sealed))
     }
 
     /// Where per-Host local state (caches, pairing, ...) lives. Not created
@@ -109,15 +119,36 @@ impl Store {
         }
     }
 
-    pub fn read_key_sealed(&self, id: &str) -> Result<Vec<u8>, CoreError> {
-        std::fs::read(self.dir.join(format!("key-{id}.sealed"))).map_err(storage)
+    /// The sealed private half of extra key `id` and the protection it was
+    /// sealed under.
+    pub fn read_key_sealed(&self, id: &str) -> Result<(KeyProtection, Vec<u8>), CoreError> {
+        let bytes = std::fs::read(self.dir.join(format!("key-{id}.sealed"))).map_err(storage)?;
+        decode_sealed(bytes)
+    }
+
+    /// Replaces the sealed private half of extra key `id` in one rename.
+    pub fn write_key_sealed(
+        &self,
+        id: &str,
+        protection: KeyProtection,
+        sealed: &[u8],
+    ) -> Result<(), CoreError> {
+        self.write_atomic(
+            &format!("key-{id}.sealed"),
+            &encode_sealed(protection, sealed),
+        )
     }
 
     /// Adds a key: the sealed private half first, so `keys.json` never lists
     /// a key whose private half is missing.
-    pub fn add_key(&self, key: &SavedKey, sealed: &[u8]) -> Result<(), CoreError> {
+    pub fn add_key(
+        &self,
+        key: &SavedKey,
+        protection: KeyProtection,
+        sealed: &[u8],
+    ) -> Result<(), CoreError> {
         let mut keys = self.read_keys()?;
-        self.write_atomic(&format!("key-{}.sealed", key.id), sealed)?;
+        self.write_key_sealed(&key.id, protection, sealed)?;
         keys.push(key.clone());
         let bytes = serde_json::to_vec_pretty(&keys).map_err(storage)?;
         self.write_atomic("keys.json", &bytes)
@@ -128,4 +159,37 @@ impl Store {
         std::fs::write(&tmp, bytes).map_err(storage)?;
         std::fs::rename(&tmp, self.dir.join(name)).map_err(storage)
     }
+}
+
+pub(crate) struct Identity {
+    pub protection: KeyProtection,
+    pub sealed: Vec<u8>,
+    pub public: String,
+}
+
+/// `identity.sealed` starts with this, then one protection byte, then the
+/// vault's bytes. Files without it predate key policies and are `Plain`.
+const SEALED_MAGIC: &[u8] = b"ARIESKEY1";
+
+fn encode_sealed(protection: KeyProtection, sealed: &[u8]) -> Vec<u8> {
+    let tag = match protection {
+        KeyProtection::Plain => 0,
+        KeyProtection::Biometric => 1,
+    };
+    let mut out = SEALED_MAGIC.to_vec();
+    out.push(tag);
+    out.extend_from_slice(sealed);
+    out
+}
+
+fn decode_sealed(bytes: Vec<u8>) -> Result<(KeyProtection, Vec<u8>), CoreError> {
+    let Some(rest) = bytes.strip_prefix(SEALED_MAGIC) else {
+        return Ok((KeyProtection::Plain, bytes));
+    };
+    let protection = match rest.first() {
+        Some(0) => KeyProtection::Plain,
+        Some(1) => KeyProtection::Biometric,
+        other => return Err(storage(format!("unknown key protection {other:?}"))),
+    };
+    Ok((protection, rest[1..].to_vec()))
 }
