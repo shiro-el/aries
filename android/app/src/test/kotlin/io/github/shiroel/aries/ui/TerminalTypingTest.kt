@@ -17,6 +17,9 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.performClick
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentStatus
@@ -32,6 +35,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /** Seam 3: typing into a Terminal (input mode, key bar), against a fake core. */
 @RunWith(RobolectricTestRunner::class)
@@ -165,6 +169,65 @@ class TerminalTypingTest {
                 "key:ctrl+r", "text:r",
             ),
             typing.sent,
+        )
+    }
+
+    @Test
+    fun altAppliesToTheNextCharacterOnlyAndCanBeCancelled() {
+        val core = FakeCore()
+        open(core)
+        val ic = focusInput()
+        val alt = compose.onNodeWithText(str(R.string.key_alt))
+        alt.assertIsNotSelected().performClick().assertIsSelected()
+        ic.commitText("😀next", 1)
+        compose.waitForIdle()
+        alt.assertIsNotSelected()
+        alt.performClick().assertIsSelected().performClick().assertIsNotSelected()
+        ic.commitText("plain", 1)
+        compose.waitForIdle()
+        assertEquals(listOf("key:alt+😀", "text:next", "text:plain"), core.connection!!.views.last().sent)
+    }
+
+    @Test
+    @Config(qualifiers = "w360dp")
+    fun navigationKeysAreVisibleAndConsumeAltAndCtrlTogether() {
+        val core = FakeCore()
+        open(core)
+        val ic = focusInput()
+        for (label in listOf(R.string.key_home, R.string.key_end, R.string.key_page_up, R.string.key_page_down)) {
+            compose.onNodeWithText(str(label)).assertIsDisplayed().performClick()
+        }
+        val alt = compose.onNodeWithText(str(R.string.key_alt))
+        val ctrl = compose.onNodeWithText(str(R.string.key_ctrl))
+        alt.performClick()
+        ctrl.performClick()
+        compose.onNodeWithText(str(R.string.key_home)).performClick()
+        alt.assertIsNotSelected()
+        ctrl.assertIsNotSelected()
+        ic.commitText("x", 1)
+        compose.waitForIdle()
+        assertEquals(
+            listOf("key:Home", "key:End", "key:PageUp", "key:PageDown", "key:ctrl+alt+Home", "text:x"),
+            core.connection!!.views.last().sent,
+        )
+    }
+
+    @Test
+    fun heldHangulFinishesBeforeLatchingModifiersForTheNextKey() {
+        val core = FakeCore()
+        open(core)
+        val ic = focusInput()
+        ic.setComposingText("한", 1)
+        compose.onNodeWithText(str(R.string.key_alt)).performClick()
+        ic.commitText("x", 1)
+        ic.setComposingText("국", 1)
+        compose.onNodeWithText(str(R.string.key_ctrl)).performClick()
+        compose.onNodeWithText(str(R.string.key_alt)).performClick()
+        compose.onNodeWithText(str(R.string.key_end)).performClick()
+        compose.waitForIdle()
+        assertEquals(
+            listOf("text:한", "key:alt+x", "text:국", "key:ctrl+alt+End"),
+            core.connection!!.views.last().sent,
         )
     }
 
