@@ -4,6 +4,12 @@ use serde_json::{Value, json};
 
 use crate::{CoreError, HostConnection, TerminalInfo, error::protocol, on_runtime, terminal_info};
 
+/// Stable output for non-terminal commands, including Git diagnostics and
+/// binary diff markers. Send with each RPC so forwarded commands use it too.
+pub(crate) fn machine_exec_env() -> Value {
+    json!({"LC_ALL": "C", "LANG": "C"})
+}
+
 /// Output of a bounded, non-terminal Host program. Bytes are decoded from
 /// the protocol's base64 without assuming UTF-8 (Git can contain any bytes).
 #[derive(Debug, Clone, uniffi::Record)]
@@ -61,8 +67,8 @@ impl HostConnection {
         Ok(terminal_info(&result))
     }
 
-    /// Runs argv directly, with no shell interpretation. Kept shorter than
-    /// the RPC timeout so the Host always has time to sweep the subprocess.
+    /// Runs argv directly in the C locale, with no shell interpretation. Kept
+    /// shorter than the RPC timeout so the Host can sweep the subprocess.
     pub async fn machine_exec(
         &self,
         argv: Vec<String>,
@@ -91,6 +97,7 @@ impl HostConnection {
                     "machine.exec",
                     json!({
                         "argv": argv, "cwd": cwd, "timeout": timeout_seconds, "on": on,
+                        "env": machine_exec_env(),
                     }),
                 )
                 .await

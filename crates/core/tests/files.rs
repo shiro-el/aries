@@ -4,6 +4,33 @@ use aries_test_support::HcSession;
 use common::{core_in, local_endpoint};
 
 #[tokio::test]
+async fn listing_and_binary_reads_use_c_locale_on_a_korean_nested_machine() {
+    let hc = HcSession::start();
+    let (remote, _tools) = common::korean_host_with_c_locale_shell(&[]);
+    hc.add_machine("box", &remote);
+    let folder = tempfile::tempdir().unwrap();
+    let name = "한글 'file\n.bin";
+    std::fs::write(folder.path().join(name), [0, 255, 128, 42]).unwrap();
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    let host = core.add_host("test".into(), local_endpoint(&hc)).unwrap();
+    let conn = core.connect(host.id).await.unwrap();
+    let listing = conn
+        .list_files("box/t1".into(), Some(folder.path().display().to_string()))
+        .await
+        .unwrap();
+    assert_eq!(listing.entries.len(), 1);
+    assert_eq!(listing.entries[0].name, name);
+    let bytes = conn
+        .read_file_bytes("box/t1".into(), format!("{}/{name}", listing.path), 0, 4)
+        .await
+        .unwrap();
+    assert_eq!(bytes.data, [0, 255, 128, 42]);
+    assert!(bytes.eof);
+    conn.disconnect().await;
+}
+
+#[tokio::test]
 async fn browses_terminal_folder_and_reads_whole_line_pages() {
     let hc = HcSession::start();
     let folder = tempfile::tempdir().unwrap();
@@ -142,5 +169,108 @@ async fn forwards_listing_and_reads_to_the_terminals_machine() {
         .await
         .unwrap_err();
     assert!(matches!(read, aries_core::CoreError::Rpc { kind, .. } if kind == "not_found"));
+    conn.disconnect().await;
+}
+
+#[tokio::test]
+async fn reads_binary_ranges_without_interpreting_paths_or_bytes() {
+    let hc = HcSession::start();
+    let folder = tempfile::tempdir().unwrap();
+    let path = folder.path().join("한글 ' $(touch should-not-exist)\n.bin");
+    std::fs::write(&path, [0, 255, 128, 13, 10, 42]).unwrap();
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    let host = core.add_host("test".into(), local_endpoint(&hc)).unwrap();
+    let conn = core.connect(host.id).await.unwrap();
+    let first = conn
+        .read_file_bytes("t1".into(), path.display().to_string(), 0, 4)
+        .await
+        .unwrap();
+    assert_eq!(first.data, [0, 255, 128, 13]);
+    assert_eq!((first.offset, first.total_size, first.eof), (0, 6, false));
+    let last = conn
+        .read_file_bytes("t1".into(), path.display().to_string(), 4, 4)
+        .await
+        .unwrap();
+    assert_eq!(last.data, [10, 42]);
+    assert_eq!((last.offset, last.total_size, last.eof), (4, 6, true));
+    conn.disconnect().await;
+}
+
+#[tokio::test]
+async fn binary_ranges_cross_blocks_and_obey_limits_empty_files_and_machine_routing() {
+    let hc = HcSession::start();
+    let remote = HcSession::start();
+    hc.add_machine("box", &remote);
+    let folder = tempfile::tempdir().unwrap();
+    let path = folder.path().join("large.bin");
+    let mut bytes = vec![0x81; 4 * 1024 * 1024 + 3];
+    bytes[65535..65539].copy_from_slice(&[0, 255, 1, 254]);
+    std::fs::write(&path, &bytes).unwrap();
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    let host = core.add_host("test".into(), local_endpoint(&hc)).unwrap();
+    let conn = core.connect(host.id).await.unwrap();
+    let path = path.display().to_string();
+    let chunk = conn
+        .read_file_bytes("box/t1".into(), path.clone(), 65535, 4)
+        .await
+        .unwrap();
+    assert_eq!(chunk.data, [0, 255, 1, 254]);
+    assert_eq!(
+        (chunk.offset, chunk.total_size, chunk.eof),
+        (65535, 4194307, false)
+    );
+    let chunk = conn
+        .read_file_bytes("box/t1".into(), path.clone(), 0, 4 * 1024 * 1024)
+        .await
+        .unwrap();
+    assert_eq!(chunk.data, bytes[..4 * 1024 * 1024]);
+    assert!(!chunk.eof);
+    for (offset, length) in [
+        (0, 0),
+        (0, 4 * 1024 * 1024 + 1),
+        (u64::MAX, 1),
+        (4194308, 1),
+    ] {
+        assert!(
+            conn.read_file_bytes("box/t1".into(), path.clone(), offset, length)
+                .await
+                .is_err()
+        );
+    }
+    // An unknown machine must fail rather than accidentally reading locally.
+    assert!(
+        conn.read_file_bytes("missing/t1".into(), path.clone(), 0, 1)
+            .await
+            .is_err()
+    );
+    let end = conn
+        .read_file_bytes("box/t1".into(), path.clone(), 4194307, 1)
+        .await
+        .unwrap();
+    assert!(end.data.is_empty() && end.eof);
+    std::fs::write(&path, []).unwrap();
+    let empty = conn
+        .read_file_bytes("box/t1".into(), path.clone(), 0, 1)
+        .await
+        .unwrap();
+    assert!(empty.data.is_empty() && empty.eof);
+    assert_eq!(empty.total_size, 0);
+    assert!(
+        conn.read_file_bytes("t1".into(), folder.path().display().to_string(), 0, 1)
+            .await
+            .is_err()
+    );
+    assert!(
+        conn.read_file_bytes("t1".into(), format!("{path}.missing"), 0, 1)
+            .await
+            .is_err()
+    );
+    assert!(
+        conn.read_file_bytes("t1".into(), "relative.bin".into(), 0, 1)
+            .await
+            .is_err()
+    );
     conn.disconnect().await;
 }

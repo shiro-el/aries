@@ -21,6 +21,7 @@ use std::time::{Duration, Instant};
 
 use base64::Engine;
 
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{TerminalInfo, hc::HcClient, terminal_info};
@@ -31,7 +32,7 @@ pub(crate) const SPACE_LABEL: &str = "herdr.space";
 pub(crate) const TAB_LABEL: &str = "herdr.tab";
 
 /// A Host's Terminals as herdr-app arranges them.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, uniffi::Record)]
 pub struct HostStructure {
     pub spaces: Vec<SpaceInfo>,
     /// Terminals with neither their own Pane nor a listed ancestor in a Pane.
@@ -41,7 +42,7 @@ pub struct HostStructure {
     pub problem: Option<StructureProblem>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, uniffi::Record)]
 pub struct SpaceInfo {
     pub id: String,
     /// Display name: the explicit name, or the first Terminal's checkout folder.
@@ -53,7 +54,7 @@ pub struct SpaceInfo {
     pub named: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, uniffi::Record)]
 pub struct TabInfo {
     pub id: String,
     /// Display name: the explicit name, or the 1-based position in its Space.
@@ -64,7 +65,7 @@ pub struct TabInfo {
     pub named: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, uniffi::Record)]
 pub struct PaneInfo {
     pub id: String,
     pub terminal_address: String,
@@ -76,7 +77,7 @@ pub struct PaneInfo {
 }
 
 /// Why the structure came from labels rather than the document.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, uniffi::Enum)]
 pub enum StructureProblem {
     /// The Host has no `herdr-app` document (herdr-app never ran there).
     NoDocument,
@@ -439,6 +440,7 @@ impl Names {
                         "machine.exec",
                         serde_json::json!({
                             "argv": argv, "on": machine, "timeout": 2.0,
+                            "env": crate::layout_edit::machine_exec_env(),
                         }),
                     )
                     .await

@@ -10,7 +10,11 @@ import android.os.Build
 import io.github.shiroel.aries.core.PushContent
 import io.github.shiroel.aries.core.PushNotice
 
-/** One quiet local card per Watched Agent, replaced by its ordinary status tag. */
+/**
+ * One quiet local card per Watched Agent, replaced by its ordinary status tag.
+ * Wear OS excludes ongoing notifications from bridging; localOnly also makes
+ * that boundary explicit. Its later dismissible Done card can bridge normally.
+ */
 internal object ProgressNotifications {
     private const val CHANNEL = "agent_progress"
     private fun stampKey(host: String, terminal: String) = "$host/$terminal"

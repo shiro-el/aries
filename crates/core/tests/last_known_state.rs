@@ -199,3 +199,73 @@ async fn snapshot_retains_child_agents_and_their_parent_addresses() {
         Some(state)
     );
 }
+
+#[tokio::test]
+async fn quick_open_structure_survives_relaunch_and_live_renames() {
+    use serde_json::json;
+    let hc = HcSession::start();
+    hc.set_doc(
+        "herdr-app",
+        json!({"spaces": [{"id": "s1", "name": "Aries", "folder": "/repo", "tabs": [
+            {"id": "tab1", "name": "Review", "root": {"id": "r", "type": "row", "children": []}}
+        ]}]}),
+    );
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    let host = core.add_host("dev".into(), local_endpoint(&hc)).unwrap();
+    let state = core.clone().snapshot(host.id.clone()).await.unwrap();
+    let structure = state.structure.unwrap();
+    assert_eq!(structure.spaces[0].name, "Aries");
+    assert_eq!(structure.spaces[0].tabs[0].name, "Review");
+    assert_eq!(
+        core_in(data.path())
+            .last_known_state(host.id.clone())
+            .unwrap()
+            .unwrap()
+            .structure,
+        Some(structure)
+    );
+
+    hc.set_doc(
+        "herdr-app",
+        json!({"spaces": [{"id": "s1", "name": "Renamed", "folder": "/repo", "tabs": []}]}),
+    );
+    let conn = core.connect(host.id.clone()).await.unwrap();
+    conn.structure().await.unwrap();
+    // Terminal status refreshes must keep the last structure.
+    conn.terminals().await.unwrap();
+    assert_eq!(
+        core.last_known_state(host.id)
+            .unwrap()
+            .unwrap()
+            .structure
+            .unwrap()
+            .spaces[0]
+            .name,
+        "Renamed"
+    );
+    conn.disconnect().await;
+}
+
+#[test]
+fn quick_open_reads_agent_only_state_from_previous_versions() {
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    let host = core
+        .add_host("dev".into(), common::script_endpoint("exit 1"))
+        .unwrap();
+    let dir = data.path().join("hosts").join(&host.id);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("last-known-state.json"),
+        serde_json::json!({
+            "host_id": host.id, "agents": [], "fetched_at_ms": 1234
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let state = core.last_known_state(host.id).unwrap().unwrap();
+    assert_eq!(state.fetched_at_ms, 1234);
+    assert!(state.structure.is_none());
+    assert!(state.structure_fetched_at_ms.is_none());
+}
