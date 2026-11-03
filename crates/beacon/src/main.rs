@@ -60,7 +60,6 @@ fn service_file() -> PathBuf {
     state_dir().join("service.json")
 }
 
-
 fn status() -> BeaconStatus {
     let state: Option<ServiceState> = std::fs::read(service_file())
         .ok()
@@ -184,7 +183,6 @@ fn attach(on_attached: impl FnOnce(&str)) -> Result<(), String> {
     let _ = child.wait();
     result
 }
-
 
 fn chat(args: Vec<String>) {
     let mut opts = None;

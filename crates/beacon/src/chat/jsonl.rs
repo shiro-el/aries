@@ -101,7 +101,10 @@ impl JsonlSource {
 
         let mut events = Vec::new();
         let mut start = 0;
-        while let Some(nl) = self.partial[start..complete].iter().position(|b| *b == b'\n') {
+        while let Some(nl) = self.partial[start..complete]
+            .iter()
+            .position(|b| *b == b'\n')
+        {
             let line = &self.partial[start..start + nl];
             let end = self.offset + (start + nl + 1) as u64;
             let produced = self.interpreter.line(&String::from_utf8_lossy(line));

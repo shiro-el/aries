@@ -101,9 +101,7 @@ pub fn run(
                 return out.flush();
             }
         };
-        let found = agents
-            .iter()
-            .find_map(|a| a.locate(&facts).map(|l| (a, l)));
+        let found = agents.iter().find_map(|a| a.locate(&facts).map(|l| (a, l)));
 
         if let Some((agent, located)) = &found {
             let same = current

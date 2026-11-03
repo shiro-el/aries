@@ -184,7 +184,9 @@ fn a_half_written_line_waits_for_its_newline() {
 fn every_fixture_reads_the_same_however_it_is_written() {
     let mut seed: u64 = 0x5eed;
     let mut next = move |n: usize| {
-        seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         (seed >> 33) as usize % n
     };
     for name in FIXTURES {
@@ -220,7 +222,11 @@ fn every_fixture_reads_the_same_however_it_is_written() {
                 matches!(lines[0].event, ChatEvent::Reset { ref session, .. } if session == "s"),
                 "{name}: starts with a reset"
             );
-            assert_eq!(states(&lines).iter().rev().nth(1), Some(&ChatState::Live), "{name}");
+            assert_eq!(
+                states(&lines).iter().rev().nth(1),
+                Some(&ChatState::Live),
+                "{name}"
+            );
         }
     }
 }
@@ -242,7 +248,9 @@ fn resuming_from_a_cursor_neither_repeats_nor_skips() {
         append(&path, &(lines[cut..].join("\n") + "\n"));
         let second = env.run(Some(cursor), vec![nothing()]);
         assert!(
-            !second.iter().any(|l| matches!(l.event, ChatEvent::Reset { .. })),
+            !second
+                .iter()
+                .any(|l| matches!(l.event, ChatEvent::Reset { .. })),
             "cut {cut}: a valid cursor does not reset"
         );
         let mut all = first.clone();
@@ -304,7 +312,10 @@ fn a_new_transcript_resets_and_waits_until_its_file_appears() {
             ChatState::NoTerminal
         ]
     );
-    assert_eq!(items(&lines), whole(&fixture("after-clear-then-resumed.jsonl")));
+    assert_eq!(
+        items(&lines),
+        whole(&fixture("after-clear-then-resumed.jsonl"))
+    );
 }
 
 #[test]
@@ -353,7 +364,11 @@ fn an_exited_agent_leaves_its_chat_ended() {
     let located = env.located.clone();
     let lines = env.run(
         None,
-        vec![nothing(), Box::new(move || *located.borrow_mut() = None), nothing()],
+        vec![
+            nothing(),
+            Box::new(move || *located.borrow_mut() = None),
+            nothing(),
+        ],
     );
     assert_eq!(
         states(&lines),

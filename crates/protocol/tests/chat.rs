@@ -86,10 +86,19 @@ fn additions_within_the_same_version_are_tolerated() {
             state: ChatState::Unknown
         }
     );
-    let status = r#"{"v":1,"type":"item","item":{"id":"t","kind":"tool","name":"x","status":"queued"}}"#;
+    let status =
+        r#"{"v":1,"type":"item","item":{"id":"t","kind":"tool","name":"x","status":"queued"}}"#;
     assert!(matches!(
         ChatLine::parse(status).unwrap().event,
-        ChatEvent::Item { item: ChatItem { body: ChatBody::Tool { status: ToolStatus::Unknown, .. }, .. } }
+        ChatEvent::Item {
+            item: ChatItem {
+                body: ChatBody::Tool {
+                    status: ToolStatus::Unknown,
+                    ..
+                },
+                ..
+            }
+        }
     ));
 }
 

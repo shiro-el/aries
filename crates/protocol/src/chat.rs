@@ -55,10 +55,19 @@ pub struct ChatLine {
 pub enum ChatEvent {
     /// Forget every item: what follows is transcript `session` of `agent`
     /// (`claude-code`, `codex`, `opencode`, `pi`).
-    Reset { agent: String, session: String },
-    Item { item: ChatItem },
-    Remove { id: String },
-    State { state: ChatState },
+    Reset {
+        agent: String,
+        session: String,
+    },
+    Item {
+        item: ChatItem,
+    },
+    Remove {
+        id: String,
+    },
+    State {
+        state: ChatState,
+    },
     Heartbeat,
     /// An event type this reader does not know; skip it.
     #[serde(other)]

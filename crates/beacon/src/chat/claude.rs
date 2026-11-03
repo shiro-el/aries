@@ -289,10 +289,20 @@ fn result_text(content: &Value) -> String {
 fn tool_title(name: &str, input: &Value) -> String {
     let field = |k: &str| input[k].as_str().map(str::to_owned);
     let title = match name {
-        "AskUserQuestion" => input["questions"][0]["question"].as_str().map(str::to_owned),
-        _ => ["file_path", "command", "pattern", "url", "path", "description", "prompt"]
-            .iter()
-            .find_map(|k| field(k)),
+        "AskUserQuestion" => input["questions"][0]["question"]
+            .as_str()
+            .map(str::to_owned),
+        _ => [
+            "file_path",
+            "command",
+            "pattern",
+            "url",
+            "path",
+            "description",
+            "prompt",
+        ]
+        .iter()
+        .find_map(|k| field(k)),
     };
     let title = title
         .or_else(|| {

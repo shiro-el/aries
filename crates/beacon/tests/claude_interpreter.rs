@@ -114,10 +114,7 @@ fn a_tool_item_carries_its_full_input_and_result() {
     };
     assert_eq!(*status, ToolStatus::Done);
     assert_eq!(input["content"], "hi\n");
-    assert_eq!(
-        input["file_path"],
-        "/tmp/aries-fixture/work-a/hello.txt"
-    );
+    assert_eq!(input["file_path"], "/tmp/aries-fixture/work-a/hello.txt");
     assert!(
         output
             .as_deref()
@@ -130,7 +127,9 @@ fn a_tool_item_carries_its_full_input_and_result() {
     };
     assert_eq!(
         output.as_deref(),
-        Some("File does not exist. Note: your current working directory is /tmp/aries-fixture/work-a.")
+        Some(
+            "File does not exist. Note: your current working directory is /tmp/aries-fixture/work-a."
+        )
     );
 }
 
@@ -168,7 +167,10 @@ fn slash_commands_show_as_the_command_and_meta_lines_are_hidden() {
     let summary = chat.summary();
     assert_eq!(summary[0], "user: /clear");
     assert_eq!(summary[1], "user: Reply with exactly: after-clear");
-    assert!(summary.contains(&"agent: resumed".to_string()), "{summary:#?}");
+    assert!(
+        summary.contains(&"agent: resumed".to_string()),
+        "{summary:#?}"
+    );
     assert!(
         !summary.iter().any(|s| s.contains("local-command")),
         "{summary:#?}"
@@ -182,7 +184,9 @@ fn several_questions_title_with_the_first() {
         .items
         .iter()
         .find_map(|i| match &i.body {
-            ChatBody::Tool { name, title, input, .. } if name == "AskUserQuestion" => {
+            ChatBody::Tool {
+                name, title, input, ..
+            } if name == "AskUserQuestion" => {
                 Some((title.clone(), input["questions"].as_array().unwrap().len()))
             }
             _ => None,
@@ -204,7 +208,13 @@ fn nothing_outside_the_conversation_leaks_into_the_chat() {
     ] {
         let chat = Chat::feed(&fixture(name));
         let all = serde_json::to_string(&chat.items).unwrap();
-        for secret in ["redacted-hook-command", "session-owner", "signature", "api-request", "00000000-0000-4000-8000-000000000000"] {
+        for secret in [
+            "redacted-hook-command",
+            "session-owner",
+            "signature",
+            "api-request",
+            "00000000-0000-4000-8000-000000000000",
+        ] {
             assert!(!all.contains(secret), "{name} leaks {secret}");
         }
     }

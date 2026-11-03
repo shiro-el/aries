@@ -128,7 +128,10 @@ fn follows_a_claude_code_terminal_across_clear() {
     hc.hc(&["send", &agent.address, "go"]);
     let chat = follow.until(ChatState::Live);
     let users = user_texts(&chat);
-    assert_eq!(users.first().map(String::as_str), Some("Reply with exactly: pong"));
+    assert_eq!(
+        users.first().map(String::as_str),
+        Some("Reply with exactly: pong")
+    );
     assert_eq!(users.len(), 5, "{users:#?}");
     let cursor = chat.iter().rev().find_map(|l| l.cursor.clone()).unwrap();
     assert!(cursor.starts_with("claude-code:S1:"), "{cursor}");
@@ -141,7 +144,10 @@ fn follows_a_claude_code_terminal_across_clear() {
     let after = follow.until(ChatState::Live);
     assert_eq!(
         user_texts(&after)[..2],
-        ["/clear".to_string(), "Reply with exactly: after-clear".to_string()]
+        [
+            "/clear".to_string(),
+            "Reply with exactly: after-clear".to_string()
+        ]
     );
 
     // The Agent exits: its Chat stays, marked ended.
@@ -179,13 +185,21 @@ fn resumes_from_a_cursor_without_repeating() {
                 .lines()
                 .map(|l| ChatLine::parse(l).unwrap())
                 .collect();
-            let live = lines
-                .iter()
-                .any(|l| matches!(l.event, ChatEvent::State { state: ChatState::Live }));
+            let live = lines.iter().any(|l| {
+                matches!(
+                    l.event,
+                    ChatEvent::State {
+                        state: ChatState::Live
+                    }
+                )
+            });
             if live {
                 return lines;
             }
-            assert!(std::time::Instant::now() < deadline, "never live: {lines:#?}");
+            assert!(
+                std::time::Instant::now() < deadline,
+                "never live: {lines:#?}"
+            );
             std::thread::sleep(Duration::from_millis(100));
         }
     };
@@ -211,7 +225,9 @@ fn an_unknown_terminal_is_reported_and_ends_the_run() {
     assert!(out.status.success(), "{out:?}");
     let text = String::from_utf8(out.stdout).unwrap();
     assert_eq!(
-        text.lines().map(|l| ChatLine::parse(l).unwrap().event).collect::<Vec<_>>(),
+        text.lines()
+            .map(|l| ChatLine::parse(l).unwrap().event)
+            .collect::<Vec<_>>(),
         [ChatEvent::State {
             state: ChatState::NoTerminal
         }]
@@ -223,10 +239,14 @@ fn a_plain_terminal_has_no_agent() {
     let hc = HcSession::start();
     let home = tempfile::tempdir().unwrap();
     let t = hc.run_bg("plain", &["/bin/sh", "-c", "sleep 30"]);
-    let out = beacon(&hc, &home.path().join(".claude"), &[&t]).output().unwrap();
+    let out = beacon(&hc, &home.path().join(".claude"), &[&t])
+        .output()
+        .unwrap();
     let text = String::from_utf8(out.stdout).unwrap();
     assert_eq!(
-        text.lines().map(|l| ChatLine::parse(l).unwrap().event).collect::<Vec<_>>(),
+        text.lines()
+            .map(|l| ChatLine::parse(l).unwrap().event)
+            .collect::<Vec<_>>(),
         [ChatEvent::State {
             state: ChatState::NoAgent
         }]

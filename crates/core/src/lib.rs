@@ -6,6 +6,7 @@
 //! chat, push, calls and beacon manager modules arrive with their tickets.
 
 mod beacon;
+mod chat;
 mod error;
 mod hc;
 mod host_model;
@@ -26,6 +27,7 @@ pub use beacon::{
     ALLOWED_BEACON, BeaconArtifact, BeaconFetcher, BeaconInstall, BeaconRelease, BeaconState,
     FetchError, Linger, pinned_release,
 };
+pub use chat::{ChatEntry, ChatEntryBody, ChatSnapshot, ChatStatus, ChatToolStatus, ChatWatch};
 pub use error::{CoreError, Incompatibility, VaultError};
 pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
 pub use host_model::{AgentStatus, BlockedReason, TerminalWatch};
@@ -581,7 +583,48 @@ impl AriesCore {
     }
 }
 
+#[uniffi::export]
 impl AriesCore {
+    /// Follows the Chat of the Agent in `terminal` (address or name) through
+    /// the Host's Beacon. Pass the `cursor` of an earlier snapshot to resume
+    /// after it. Reconnects by itself; call `next` for each change.
+    pub fn watch_chat(
+        &self,
+        host_id: String,
+        terminal: String,
+        cursor: Option<String>,
+    ) -> Result<Arc<ChatWatch>, CoreError> {
+        let host = self.chat_host(&host_id)?;
+        Ok(Arc::new(ChatWatch::start(
+            host,
+            terminal,
+            cursor,
+            std::time::Duration::from_secs(1),
+        )))
+    }
+}
+
+impl AriesCore {
+    /// [`AriesCore::watch_chat`] with a custom first retry delay (tests).
+    pub fn watch_chat_retrying(
+        &self,
+        host_id: String,
+        terminal: String,
+        cursor: Option<String>,
+        retry: std::time::Duration,
+    ) -> Result<Arc<ChatWatch>, CoreError> {
+        let host = self.chat_host(&host_id)?;
+        Ok(Arc::new(ChatWatch::start(host, terminal, cursor, retry)))
+    }
+
+    fn chat_host(&self, host_id: &str) -> Result<chat::ChatHost, CoreError> {
+        let host = self.saved_host(host_id)?;
+        Ok(match host.endpoint {
+            Endpoint::Local { env, .. } => chat::ChatHost::Local(env),
+            Endpoint::Ssh { .. } => chat::ChatHost::Ssh(Box::new(self.beacon_ssh(host_id)?)),
+        })
+    }
+
     /// Replaces the pinned Beacon release. For tests and development
     /// builds; not exposed to the app.
     pub fn set_beacon_release(&self, release: BeaconRelease) {
