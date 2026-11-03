@@ -5,8 +5,11 @@ import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.Host
 import io.github.shiroel.aries.core.HostConnection
+import io.github.shiroel.aries.core.HostStructure
 import io.github.shiroel.aries.core.NoHandle
 import io.github.shiroel.aries.core.PublicKeyInfo
+import io.github.shiroel.aries.core.StructureListener
+import io.github.shiroel.aries.core.StructureWatch
 import io.github.shiroel.aries.core.TerminalInfo
 
 /** In-memory stand-in for the Rust core, for UI tests. */
@@ -18,6 +21,13 @@ class FakeCore : AriesCoreInterface {
     var failWith: CoreException? = null
 
     var terminals: List<TerminalInfo> = emptyList()
+
+    /** What `structure`/`watchStructure` deliver; default: [terminals], all unplaced. */
+    var structure: HostStructure? = null
+
+    /** The last connection `connect` returned. */
+    var connection: FakeConnection? = null
+        private set
 
     private var key: PublicKeyInfo? = null
     private val hosts = mutableListOf<Host>()
@@ -42,7 +52,8 @@ class FakeCore : AriesCoreInterface {
         failWith?.let { throw it }
         val host = hosts.find { it.id == hostId } ?: throw CoreException.UnknownHost(hostId)
         requireTrust?.let { if (host.hostKey != it) throw CoreException.HostKeyUnknown(it) }
-        return FakeConnection(terminals)
+        return FakeConnection(terminals, structure ?: HostStructure(emptyList(), terminals, null))
+            .also { connection = it }
     }
 
     companion object {
@@ -51,12 +62,47 @@ class FakeCore : AriesCoreInterface {
 }
 
 /** A connection that answers from memory; never touches the native handle. */
-class FakeConnection(private val list: List<TerminalInfo>) : HostConnection(NoHandle) {
+class FakeConnection(
+    private val list: List<TerminalInfo>,
+    private var current: HostStructure,
+) : HostConnection(NoHandle) {
+    /** Core API methods called on this connection, in order. */
+    val calls = mutableListOf<String>()
+    var disconnected = false
+        private set
+    var watchStopped = false
+        private set
+    private var listener: StructureListener? = null
+
     override fun coreVersion(): String = "0.1.17"
 
-    override suspend fun terminals(): List<TerminalInfo> = list
+    override suspend fun terminals(): List<TerminalInfo> = list.also { calls += "terminals" }
 
-    override suspend fun disconnect() {}
+    override suspend fun structure(): HostStructure = current.also { calls += "structure" }
+
+    override suspend fun watchStructure(listener: StructureListener): StructureWatch {
+        calls += "watchStructure"
+        this.listener = listener
+        listener.onStructure(current)
+        return object : StructureWatch(NoHandle) {
+            override fun stop() {
+                watchStopped = true
+                this@FakeConnection.listener = null
+            }
+
+            override fun close() {}
+        }
+    }
+
+    /** The desktop changed the structure. */
+    fun push(structure: HostStructure) {
+        current = structure
+        listener?.onStructure(structure)
+    }
+
+    override suspend fun disconnect() {
+        disconnected = true
+    }
 
     override fun close() {}
 }

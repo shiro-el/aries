@@ -6,11 +6,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -38,7 +35,6 @@ import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.Host
-import io.github.shiroel.aries.core.TerminalInfo
 
 @Composable
 fun AriesApp(model: HostsModel) {
@@ -47,9 +43,11 @@ fun AriesApp(model: HostsModel) {
             when (val s = model.screen) {
                 Screen.Hosts -> HostListScreen(model)
                 is Screen.Connecting -> Connecting(s.host)
-                is Screen.Terminals -> {
-                    BackHandler { model.back() }
-                    TerminalListScreen(s.host, s.terminals, onBack = model::back)
+                is Screen.Browse -> {
+                    BackHandler {
+                        if (s.browser.openSpaceId != null) s.browser.closeSpace() else model.back()
+                    }
+                    BrowseScreen(s.browser, onBack = model::back)
                 }
             }
         }
@@ -138,26 +136,6 @@ private fun Connecting(host: Host) {
     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         CircularProgressIndicator()
         Text(stringResource(R.string.connecting, host.name))
-    }
-}
-
-@Composable
-private fun TerminalListScreen(host: Host, terminals: List<TerminalInfo>, onBack: () -> Unit) {
-    LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        item {
-            Row {
-                TextButton(onClick = onBack) { Text(stringResource(R.string.back_button)) }
-            }
-            Text(stringResource(R.string.terminals_title, host.name), style = MaterialTheme.typography.headlineSmall)
-            Spacer(Modifier.height(8.dp))
-        }
-        if (terminals.isEmpty()) item { Text(stringResource(R.string.terminals_empty)) }
-        items(terminals, key = { it.address }) { t ->
-            Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                Text(t.name ?: t.title.ifBlank { t.argv.joinToString(" ") }, style = MaterialTheme.typography.titleMedium)
-                Text(stringResource(R.string.terminal_subtitle, t.address, t.state), style = MaterialTheme.typography.bodySmall)
-            }
-        }
     }
 }
 

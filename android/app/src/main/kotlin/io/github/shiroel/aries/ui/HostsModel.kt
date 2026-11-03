@@ -9,9 +9,12 @@ import io.github.shiroel.aries.core.AriesCoreInterface
 import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.Host
+import io.github.shiroel.aries.core.HostConnection
+import io.github.shiroel.aries.core.HostStructure
 import io.github.shiroel.aries.core.Incompatibility
 import io.github.shiroel.aries.core.PublicKeyInfo
-import io.github.shiroel.aries.core.TerminalInfo
+import io.github.shiroel.aries.core.StructureListener
+import io.github.shiroel.aries.core.StructureWatch
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -21,7 +24,8 @@ data class Message(@StringRes val res: Int, val args: List<Any> = emptyList())
 sealed interface Screen {
     data object Hosts : Screen
     data class Connecting(val host: Host) : Screen
-    data class Terminals(val host: Host, val terminals: List<TerminalInfo>) : Screen
+    /** An open Host: its Spaces, Tabs and Panes. */
+    data class Browse(val browser: HostBrowser) : Screen
 }
 
 sealed interface Prompt {
@@ -43,6 +47,9 @@ class HostsModel(private val core: AriesCoreInterface, private val scope: Corout
     var prompt by mutableStateOf<Prompt?>(null)
         private set
 
+    /** The open Host's connection and structure watch, while [Screen.Browse] shows. */
+    private var open: Pair<HostConnection, StructureWatch?>? = null
+
     init {
         guard {
             key = core.publicKey()
@@ -63,10 +70,24 @@ class HostsModel(private val core: AriesCoreInterface, private val scope: Corout
         scope.launch {
             try {
                 val conn = core.connect(host.id)
+                val browser = HostBrowser(host)
+                open = conn to null
+                screen = Screen.Browse(browser)
                 try {
-                    screen = Screen.Terminals(host, conn.terminals())
-                } finally {
+                    val watch = conn.watchStructure(object : StructureListener {
+                        override fun onStructure(structure: HostStructure) {
+                            scope.launch { browser.update(structure) }
+                        }
+
+                        override fun onClosed() {
+                            scope.launch { browser.markClosed() }
+                        }
+                    })
+                    if (open?.first === conn) open = conn to watch else watch.stop()
+                } catch (e: CoreException) {
+                    if (open?.first === conn) open = null
                     conn.disconnect()
+                    throw e
                 }
             } catch (e: CoreException) {
                 screen = Screen.Hosts
@@ -93,6 +114,10 @@ class HostsModel(private val core: AriesCoreInterface, private val scope: Corout
 
     fun back() {
         screen = Screen.Hosts
+        val (conn, watch) = open ?: return
+        open = null
+        watch?.stop()
+        scope.launch { conn.disconnect() }
     }
 
     private inline fun guard(block: () -> Unit) {
