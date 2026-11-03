@@ -16,6 +16,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.AnnotatedString
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.ChatResponseCompletion
 import io.github.shiroel.aries.core.ChatResponseMetadata
@@ -44,7 +45,7 @@ internal fun ChatRawInput(input: String) {
 internal fun ChatToolDetailsView(details: ChatToolDetails) {
     details.command?.let { Detail(R.string.chat_tool_command, it) }
     details.cwd?.let { Detail(R.string.chat_tool_cwd, it) }
-    details.path?.let { Detail(R.string.chat_tool_path, it) }
+    details.path?.let { Detail(R.string.chat_tool_path, it, filePath = true) }
     details.pattern?.let { Detail(R.string.chat_tool_pattern, it) }
     details.resultCount?.let { Detail(R.string.chat_tool_result_count, it.toString()) }
     details.exitCode?.let { Detail(R.string.chat_tool_exit_code, it.toString()) }
@@ -52,10 +53,15 @@ internal fun ChatToolDetailsView(details: ChatToolDetails) {
 }
 
 @Composable
-private fun Detail(@StringRes label: Int, value: String) {
+private fun Detail(@StringRes label: Int, value: String, filePath: Boolean = false) {
     val text = stringResource(label, value)
+    val open = LocalOpenRemoteFile.current
+    val color = MaterialTheme.colorScheme.primary
+    val annotated = remember(text, filePath, open, color) {
+        if (filePath) annotateChatFileLinks(chatToolPathText(text, value), open, color) else AnnotatedString(text)
+    }
     ChatTextActions(text) { modifier ->
-        Text(text, modifier, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+        Text(annotated, modifier, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
     }
 }
 

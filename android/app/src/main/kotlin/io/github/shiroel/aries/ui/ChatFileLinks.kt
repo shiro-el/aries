@@ -14,11 +14,23 @@ import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.style.TextDecoration
 
 /** A Host path and a one-based line. Shared by Chat and the file viewer. */
-data class FileLocation(val path: String, val line: ULong = 1uL)
+data class FileLocation(val path: String, val line: ULong = 1uL, val preview: FilePreview? = null)
+
+/** Bytes already supplied by the transcript; retain its MIME when the Agent resized the file. */
+data class FilePreview(val bytes: ByteArray, val mediaType: String)
 
 internal val LocalOpenRemoteFile = staticCompositionLocalOf<((FileLocation) -> Unit)?> { null }
 internal const val CHAT_INLINE_CODE = "chat-inline-code"
 internal const val CHAT_FILE_DESTINATION = "chat-file-destination"
+
+/** A structured tool path can contain spaces, unlike an unquoted prose token. */
+internal fun chatToolPathText(text: String, path: String?): AnnotatedString {
+    if (path.isNullOrBlank()) return AnnotatedString(text)
+    val start = text.indexOf(path)
+    return AnnotatedString.Builder(text).apply {
+        if (start >= 0) addStringAnnotation(CHAT_FILE_DESTINATION, path, start, start + path.length)
+    }.toAnnotatedString()
+}
 
 /** File links remain in the text, so selecting/copying a message preserves it. */
 @Composable

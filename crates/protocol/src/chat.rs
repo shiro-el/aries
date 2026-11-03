@@ -13,7 +13,7 @@
 //!   appended, a known one is replaced in place. A tool call whose result
 //!   arrives later, or an OpenCode part that grows while streaming, is the
 //!   same id sent again. Replaying events is therefore harmless.
-//! - [`ChatEvent::Remove`] drops an item (a Pi branch switch).
+//! - [`ChatEvent::Remove`] drops an item (a Pi branch switch or a consumed input queue entry).
 //! - [`ChatEvent::State`] says what the Beacon is doing (see [`ChatState`]).
 //! - [`ChatEvent::Heartbeat`] keeps an idle stream observably alive.
 //!
@@ -123,6 +123,9 @@ pub enum ChatBody {
     /// images they attached.
     User {
         text: String,
+        /// Accepted into the Agent's input queue, but not delivered yet.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        queued: bool,
         #[serde(
             default,
             deserialize_with = "lenient",

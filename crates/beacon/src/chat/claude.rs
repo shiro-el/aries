@@ -7,7 +7,7 @@
 //! created with the first message. `<config>` is `$CLAUDE_CONFIG_DIR`, or
 //! `~/.claude`.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use aries_protocol::chat::{
@@ -153,6 +153,12 @@ fn proc_start(pid: u32) -> Option<String> {
 pub struct ClaudeInterpreter {
     tools: HashMap<String, ChatItem>,
     last_agent: Option<ChatItem>,
+    /// Queue entries have no UUID; replay order gives each occurrence its own ID.
+    pending: Vec<(String, Value)>,
+    next_pending: u64,
+    /// A removal and its attachment may be logged in either order. Reconcile
+    /// each delivery once, without consuming another identical queued input.
+    reconciled_deliveries: HashSet<String>,
 }
 
 impl Interpreter for ClaudeInterpreter {
@@ -177,9 +183,26 @@ impl Interpreter for ClaudeInterpreter {
                 item: agent.clone(),
             }];
         }
+        if record["type"] == "queue-operation" {
+            return self.queue_operation(&record);
+        }
         let items = match record["type"].as_str() {
             Some("user") => self.user(&record),
             Some("assistant") => self.assistant(&record),
+            Some("attachment") if record["attachment"]["type"] == "queued_command" => {
+                let attachment = &record["attachment"];
+                let origin = attachment["origin"]["kind"].as_str();
+                if attachment["isMeta"] == true
+                    || attachment["commandMode"]
+                        .as_str()
+                        .is_some_and(|mode| mode != "prompt")
+                    || origin.is_some_and(|kind| kind != "human")
+                {
+                    Vec::new()
+                } else {
+                    self.user_content(&record, &attachment["prompt"])
+                }
+            }
             _ => Vec::new(),
         };
         for item in &items {
@@ -189,25 +212,102 @@ impl Interpreter for ClaudeInterpreter {
                 _ => {}
             }
         }
-        items
-            .into_iter()
-            .map(|item| ChatEvent::Item { item })
-            .collect()
+        let mut events =
+            if record["type"] == "attachment" && record["attachment"]["type"] == "queued_command" {
+                self.reconcile_queue(
+                    &record["attachment"]["delivery_id"],
+                    &record["attachment"]["prompt"],
+                )
+            } else {
+                Vec::new()
+            };
+        events.extend(items.into_iter().map(|item| ChatEvent::Item { item }));
+        events
     }
 }
 
 impl ClaudeInterpreter {
+    fn queue_operation(&mut self, record: &Value) -> Vec<ChatEvent> {
+        match record["operation"].as_str() {
+            Some("enqueue") => {
+                self.next_pending += 1;
+                let id = format!("claude-queue:{}", self.next_pending);
+                let mut source = record.clone();
+                source["uuid"] = Value::String(id.clone());
+                let mut items = self.user_content(&source, &record["content"]);
+                for item in &mut items {
+                    if let ChatBody::User { queued, .. } = &mut item.body {
+                        *queued = true;
+                    }
+                }
+                // Keep invisible entries too: content-less dequeue records
+                // still consume their position in the queue.
+                self.pending.push((id, record["content"].clone()));
+                items
+                    .into_iter()
+                    .map(|item| ChatEvent::Item { item })
+                    .collect()
+            }
+            Some("remove") => self.reconcile_queue(&record["deliveryId"], &record["content"]),
+            Some("dequeue") => {
+                // Older queue drains log no content and consume in FIFO order.
+                if self.pending.is_empty() {
+                    return Vec::new();
+                }
+                vec![ChatEvent::Remove {
+                    id: self.pending.remove(0).0,
+                }]
+            }
+            Some("popAll") => self
+                .pending
+                .drain(..)
+                .map(|(id, _)| ChatEvent::Remove { id })
+                .collect(),
+            _ => Vec::new(),
+        }
+    }
+
+    fn reconcile_queue(&mut self, delivery: &Value, content: &Value) -> Vec<ChatEvent> {
+        if let Some(delivery) = delivery.as_str()
+            && self.reconciled_deliveries.contains(delivery)
+        {
+            return Vec::new();
+        }
+        let text = queued_text(content);
+        let Some(index) = self.pending.iter().position(|(_, value)| {
+            value == content
+                || text
+                    .as_ref()
+                    .is_some_and(|text| queued_text(value).as_ref() == Some(text))
+        }) else {
+            return Vec::new();
+        };
+        // A hook may rewrite the delivered prompt. If it did not match,
+        // leave this delivery unclaimed so its removal can use the original.
+        if let Some(delivery) = delivery.as_str() {
+            self.reconciled_deliveries.insert(delivery.to_owned());
+        }
+        vec![ChatEvent::Remove {
+            id: self.pending.remove(index).0,
+        }]
+    }
+
     fn user(&mut self, record: &Value) -> Vec<ChatItem> {
+        self.user_content(record, &record["message"]["content"])
+    }
+
+    fn user_content(&mut self, record: &Value, content: &Value) -> Vec<ChatItem> {
         let Some(uuid) = record["uuid"].as_str() else {
             return Vec::new();
         };
         let ts = timestamp(record);
-        match &record["message"]["content"] {
+        match content {
             Value::String(text) => user_text(text)
                 .map(|text| ChatItem {
                     id: uuid.to_owned(),
                     ts,
                     body: ChatBody::User {
+                        queued: false,
                         text,
                         images: Vec::new(),
                     },
@@ -245,7 +345,11 @@ impl ClaudeInterpreter {
                         ChatItem {
                             id: uuid.to_owned(),
                             ts,
-                            body: ChatBody::User { text, images },
+                            body: ChatBody::User {
+                                text,
+                                images,
+                                queued: false,
+                            },
                         },
                     );
                 }
@@ -439,6 +543,22 @@ fn question(input: &Value) -> Option<ChatQuestion> {
 
 fn timestamp(record: &Value) -> Option<String> {
     record["timestamp"].as_str().map(str::to_owned)
+}
+
+/// Queue-operation content is text-only; delivered prompts may include images.
+fn queued_text(content: &Value) -> Option<String> {
+    match content {
+        Value::String(text) => Some(text.clone()),
+        Value::Array(blocks) => Some(
+            blocks
+                .iter()
+                .filter(|block| block["type"] == "text")
+                .filter_map(|block| block["text"].as_str())
+                .collect::<Vec<_>>()
+                .join("\n"),
+        ),
+        _ => None,
+    }
 }
 
 /// What to show for a typed user line: slash commands as the command,

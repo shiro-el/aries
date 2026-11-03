@@ -661,6 +661,7 @@ impl OpenCodeChat {
             p.message_id.clone(),
             rfc3339(created),
             ChatBody::User {
+                queued: false,
                 text: text.join("\n\n"),
                 images,
             },

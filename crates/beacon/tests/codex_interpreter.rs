@@ -65,7 +65,7 @@ fn feed(name: &str) -> Vec<ChatItem> {
 fn short(body: &ChatBody) -> String {
     let cut = |s: &str| s.chars().take(40).collect::<String>();
     match body {
-        ChatBody::User { text, images } => format!("user: {} [{}]", cut(text), images.len()),
+        ChatBody::User { text, images, .. } => format!("user: {} [{}]", cut(text), images.len()),
         ChatBody::Agent { text, .. } => format!("agent: {}", cut(text)),
         ChatBody::Thinking { text } => format!("thinking: {text:?}"),
         ChatBody::Tool {
@@ -617,4 +617,30 @@ fn answers_are_attached_by_id_even_when_result_order_differs_and_text_has_newlin
         questions[1]["answer"],
         serde_json::json!({"choices":[],"text":"Purple\nViolet"})
     );
+}
+
+#[test]
+fn steering_during_a_tool_call_is_one_user_message_with_pasted_text_and_image() {
+    let chat = feed("mid-turn-steer");
+    assert_eq!(chat.len(), 3);
+    assert_eq!(chat[2].id, "steered-user");
+    assert_eq!(chat[2].ts.as_deref(), Some("2026-11-04T10:00:03Z"));
+    let ChatBody::User {
+        text,
+        images,
+        queued,
+    } = &chat[2].body
+    else {
+        panic!()
+    };
+    assert!(!queued);
+    assert_eq!(text, "Also inspect this pasted note.\nKeep the image.");
+    assert_eq!(images[0].data.as_deref(), Some("iVBO"));
+    assert!(matches!(
+        chat[1].body,
+        ChatBody::Tool {
+            status: ToolStatus::Done,
+            ..
+        }
+    ));
 }

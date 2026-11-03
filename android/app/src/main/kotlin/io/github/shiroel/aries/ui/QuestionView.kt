@@ -37,8 +37,11 @@ internal fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question
     val answered = !cancelled && (q.status == ChatToolStatus.DONE || state == AnswerState.Sent)
     val entries = chat.snapshot?.entries.orEmpty()
     val expired = !answered && !cancelled && mode == ChatModel.QuestionMode.ReadOnly &&
-        (chat.snapshot?.status == ChatStatus.ENDED ||
-            entries.dropWhile { it.id != id }.drop(1).any { it.body is ChatEntryBody.User || it.body is ChatEntryBody.Question })
+        (chat.snapshot?.status == ChatStatus.ENDED || chat.terminal.state != "live" ||
+            entries.dropWhile { it.id != id }.drop(1).any {
+                val body = it.body
+                body is ChatEntryBody.Question || (body is ChatEntryBody.User && !body.queued)
+            })
     val open = !answered && !cancelled && (mode == ChatModel.QuestionMode.Live || mode == ChatModel.QuestionMode.History)
     val enabled = state != AnswerState.Sending
     val recorded = questionAnswers(q)

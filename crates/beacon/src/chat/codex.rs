@@ -382,10 +382,11 @@ impl CodexInterpreter {
         let Some(mut it) = self.calls.remove(call) else {
             return Vec::new();
         };
+        let (result_text, failed, result_images) = exec_result(&p["output"]);
         let raw = match &p["output"] {
             Value::String(s) => s.clone(),
             Value::Null => String::new(),
-            other => exec_result(other).0,
+            _ => result_text,
         };
         let ids = self.question_ids.remove(call);
         if let (
@@ -421,6 +422,7 @@ impl CodexInterpreter {
             output,
             input,
             details,
+            images,
             ..
         } = &mut it.body
         {
@@ -429,10 +431,12 @@ impl CodexInterpreter {
             let structured = serde_json::from_str::<Value>(&text).ok();
             let result = structured.as_ref().unwrap_or(&Value::Null);
             *details = super::details::tool(input, result);
-            *status = if details
-                .as_ref()
-                .and_then(|d| d.exit_code)
-                .is_some_and(|c| c != 0)
+            *images = result_images;
+            *status = if failed
+                || details
+                    .as_ref()
+                    .and_then(|d| d.exit_code)
+                    .is_some_and(|c| c != 0)
             {
                 ToolStatus::Error
             } else {
@@ -524,6 +528,7 @@ impl CodexInterpreter {
                     return Vec::new();
                 }
                 ChatBody::User {
+                    queued: false,
                     text: text.trim().to_owned(),
                     images,
                 }

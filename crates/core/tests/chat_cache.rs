@@ -537,7 +537,7 @@ async fn a_chat_image_cache_keeps_newest_images_within_its_size_cap() {
         .entries
         .iter()
         .map(|e| {
-            let ChatEntryBody::User { text, images } = &e.body else {
+            let ChatEntryBody::User { text, images, .. } = &e.body else {
                 panic!("user entry")
             };
             assert!(text.starts_with("message "));

@@ -70,7 +70,7 @@ impl Chat {
 
 fn short(body: &ChatBody) -> String {
     match body {
-        ChatBody::User { text, images } => format!("user {text} +{}img", images.len()),
+        ChatBody::User { text, images, .. } => format!("user {text} +{}img", images.len()),
         ChatBody::Agent { text, .. } => format!("agent {text}"),
         ChatBody::Thinking { text } => format!("thinking {}", text.as_deref().unwrap_or("")),
         ChatBody::Tool {

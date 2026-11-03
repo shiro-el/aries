@@ -25,7 +25,8 @@ pub fn tool(input: &Value, result: &Value) -> Option<ToolDetails> {
     let value = ToolDetails {
         command: first(input, &["command", "cmd"]),
         cwd: first(input, &["cwd", "workdir"]),
-        path: first(input, &["file_path", "filePath", "path"]),
+        path: first(input, &["file_path", "filePath", "path", "local_path"])
+            .map(|path| path.strip_prefix("file://").unwrap_or(&path).to_owned()),
         pattern: first(input, &["pattern", "query"]),
         exit_code: result["exitCode"]
             .as_i64()

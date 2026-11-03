@@ -217,7 +217,7 @@ fn a_user_line_may_carry_images_and_old_lines_still_read() {
     let ChatEvent::Item { item } = ChatLine::parse(with).unwrap().event else {
         panic!()
     };
-    let ChatBody::User { text, images } = item.body else {
+    let ChatBody::User { text, images, .. } = item.body else {
         panic!()
     };
     assert_eq!(text, "look");
@@ -232,6 +232,7 @@ fn a_user_line_may_carry_images_and_old_lines_still_read() {
     assert_eq!(
         item.body,
         ChatBody::User {
+            queued: false,
             text: "hi".into(),
             images: Vec::new()
         }
