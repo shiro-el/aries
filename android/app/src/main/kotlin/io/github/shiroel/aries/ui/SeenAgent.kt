@@ -5,6 +5,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
+import io.github.shiroel.aries.ObserveNotificationTarget
+import io.github.shiroel.aries.PushTarget
 import io.github.shiroel.aries.core.CoreException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -23,6 +25,8 @@ internal fun SeenAgentEffect(screen: Screen, enabled: Boolean) {
         is Screen.Terminal -> screen.viewer.link to screen.viewer.terminal.address
         else -> null to null
     }
+    // Share the same drawn/uncovered Agent boundary with system notifications.
+    ObserveNotificationTarget(if (enabled && link != null && address != null) PushTarget(link.host.id, address) else null)
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(link, address, enabled, lifecycle) {
         if (!enabled || link == null || address == null) return@LaunchedEffect

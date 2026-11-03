@@ -986,6 +986,7 @@
     <string name="terminal_enter_button">Enter</string>
     <string name="push_channel_done">Done</string>
     <string name="push_channel_attention">Blocked 및 Error</string>
+    <string name="push_channel_foreground">Aries 사용 중</string>
     <string name="push_host_summary">%1$s: 알림 %2$d개</string>
     <string name="quiet_hours_title">조용한 시간</string>
     <string name="quiet_hours_start">시작</string>

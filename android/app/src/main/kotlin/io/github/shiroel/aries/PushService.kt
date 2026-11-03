@@ -89,7 +89,12 @@ class PushService : FirebaseMessagingService() {
                 ProgressNotifications.post(context, notice, content)
                 return
             }
-            if (content is PushContent.Status && !ProgressNotifications.acceptStatus(context, notice.hostId, content.terminal, content.at)) return
+            if (content is PushContent.Status) {
+                if (!ProgressNotifications.acceptStatus(context, notice.hostId, content.terminal, content.at)) return
+                // Delivery can be suppressed while progress is hidden by the app.
+                // Still retire older progress, including for a Watched child.
+                ProgressNotifications.completed(context, notice.hostId, content.terminal, content.at)
+            }
             // A child explicitly watched by the user can complete its local card.
             val wasWatched = content is PushContent.Status && manager.activeNotifications.any {
                 it.id == notice.hostId.hashCode() && it.tag == content.terminal && it.notification.flags and Notification.FLAG_ONGOING_EVENT != 0
@@ -135,10 +140,10 @@ class PushService : FirebaseMessagingService() {
                 .setAutoCancel(true)
             // One notification per Agent: its newer status replaces the older.
             if (content is PushContent.Status) {
-                ProgressNotifications.completed(context, notice.hostId, content.terminal, content.at)
                 val tag = content.terminal
                 builder.setStyle(Notification.BigTextStyle().bigText(body))
                 if (content.status == AgentStatus.Done) {
+                    builder.addExtras(android.os.Bundle().apply { putBoolean(NotificationVisibility.PASSIVE, true) })
                     builder.setVisibility(Notification.VISIBILITY_PRIVATE)
                         .setPublicVersion(Notification.Builder(context, channel)
                             .setSmallIcon(R.drawable.ic_stat_aries)

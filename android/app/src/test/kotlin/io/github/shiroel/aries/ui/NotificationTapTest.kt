@@ -8,6 +8,16 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
+import android.app.Notification
+import android.app.NotificationManager
+import io.github.shiroel.aries.CallNotice
+import io.github.shiroel.aries.CallNotifications
+import io.github.shiroel.aries.CallView
+import io.github.shiroel.aries.PushService
+import io.github.shiroel.aries.core.CallUrgency
+import io.github.shiroel.aries.core.PushContent
+import io.github.shiroel.aries.core.PushNotice
+import io.github.shiroel.aries.core.PushQuestion
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentView
 import io.github.shiroel.aries.core.AgentStatus
@@ -59,6 +69,64 @@ class NotificationTapTest {
     private fun tap(hostId: String, address: String) {
         compose.runOnIdle { model.openPushedAgent(hostId, address) }
         compose.waitForIdle()
+    }
+
+    @Test
+    fun foregroundRequestsAreQuietAndOnlyTheViewedHostAndAgentAreSuppressed() {
+        show(twoHosts())
+        val manager = context.getSystemService(NotificationManager::class.java)
+        val question = PushQuestion("q1", "Which color?", listOf("Red", "Blue"))
+        fun ask(host: String = "h1") = PushService.show(context, PushNotice(host, "box",
+            PushContent.Status("t1", "claude", null, true,
+                AgentStatus.Blocked(BlockedReason.QUESTION, question.text), 10uL, 1uL, question, null))) { true }
+        fun call() = PushService.show(context, PushNotice("h1", "box",
+            PushContent.Call("c1", "t1", true, "Review", "Ready", CallUrgency.URGENT, listOf("Continue", "Stop"), 10uL))) { true }
+        fun quietCard(host: String, tag: String): Notification {
+            val notification = manager.activeNotifications.single { it.id == host.hashCode() && it.tag == tag }.notification
+            val channel = manager.getNotificationChannel(notification.channelId)
+            assertEquals(NotificationManager.IMPORTANCE_LOW, channel.importance)
+            assertEquals(null, channel.sound)
+            assertEquals(false, channel.shouldVibrate())
+            assertEquals(Notification.GROUP_ALERT_SUMMARY, notification.groupAlertBehavior)
+            assertEquals(notification.actions.map { it.actionIntent }, Notification.WearableExtender(notification).actions.map { it.actionIntent })
+            assertEquals(2, notification.actions.size)
+            return notification
+        }
+
+        compose.runOnIdle { ask(); call() }
+        quietCard("h1", "t1")
+        quietCard("h1", "call:c1")
+
+        tap("h1", "t1") // Terminal view of the requesting Agent.
+        compose.runOnIdle { ask(); call(); ask("h2") }
+        assertTrue(manager.activeNotifications.none { it.id == "h1".hashCode() })
+        quietCard("h2", "t1") // Same Terminal address on a different Host must still notify.
+
+        compose.runOnIdle { model.openQuickOpen() }
+        compose.waitForIdle()
+        compose.runOnIdle { ask(); call() }
+        quietCard("h1", "t1") // A covered Agent is not the screen the user is viewing.
+        quietCard("h1", "call:c1")
+        compose.runOnIdle { model.closeQuickOpen() }
+        compose.waitForIdle()
+
+        compose.runOnIdle { model.switchView(AgentView.CHAT) }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            ask()
+            // Local Call updates share the same gate as the FCM entry point.
+            CallNotifications.post(context,
+                CallNotice("h1", "box", PushContent.Call("c1", "t1", true,
+                    "Review", "Ready", CallUrgency.URGENT, listOf("Continue", "Stop"), 10uL)),
+                CallView.Choices)
+        }
+        assertTrue(manager.activeNotifications.none { it.id == "h1".hashCode() })
+
+        compose.runOnIdle { model.closeChat() }
+        compose.waitForIdle()
+        compose.runOnIdle { ask(); call() }
+        quietCard("h1", "t1")
+        quietCard("h1", "call:c1")
     }
 
     @Test

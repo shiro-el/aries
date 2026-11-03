@@ -3,6 +3,8 @@ package io.github.shiroel.aries.ui
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -13,6 +15,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import io.github.shiroel.aries.core.ChatEntry
 import org.json.JSONArray
@@ -27,6 +32,37 @@ internal class ChatScrollState(following: Boolean) {
         private set
 
     fun latest() { latestRequest++ }
+}
+
+/** Keep the reading position relative to the bottom as the IME resizes Chat. */
+@Composable
+internal fun Modifier.chatImeAnchor(list: LazyListState): Modifier {
+    val ime = WindowInsets.ime
+    return this.then(remember(list, ime) {
+        var previousIme: Int? = null
+        Modifier.layout { measurable, constraints ->
+            val bottom = ime.getBottom(this)
+            val imeChanged = previousIme != null && previousIme != bottom
+            previousIme = bottom
+            if (imeChanged && constraints.hasBoundedHeight) {
+                // Request the offset before LazyColumn measures this animation
+                // frame. A post-layout effect would show the old position for a
+                // frame, then jump. Do not observe scroll state from this layout.
+                Snapshot.withoutReadObservation {
+                    val layout = list.layoutInfo
+                    val delta = layout.viewportSize.height - constraints.maxHeight
+                    if (delta != 0 && layout.visibleItemsInfo.isNotEmpty()) {
+                        list.requestScrollToItem(
+                            list.firstVisibleItemIndex,
+                            list.firstVisibleItemScrollOffset + delta,
+                        )
+                    }
+                }
+            }
+            val placeable = measurable.measure(constraints)
+            layout(placeable.width, placeable.height) { placeable.placeRelative(0, 0) }
+        }
+    })
 }
 
 @Composable
