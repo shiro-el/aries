@@ -112,10 +112,12 @@ class PushService : FirebaseMessagingService() {
                     val message = when (val s = content.status) {
                         is AgentStatus.Blocked -> s.message
                         is AgentStatus.Error -> s.message
+                        AgentStatus.Done -> content.excerpt
                         else -> null
                     }
                     context.getString(R.string.push_status_title, agent, notice.hostName) to
-                        (message?.let { context.getString(R.string.push_status_body, label, it) } ?: label)
+                        (if (content.status == AgentStatus.Done) message ?: label
+                        else message?.let { context.getString(R.string.push_status_body, label, it) } ?: label)
                 }
                 is PushContent.Progress -> return // handled above
                 is PushContent.Call -> return // shown by showCall
@@ -128,11 +130,24 @@ class PushService : FirebaseMessagingService() {
                 .setAutoCancel(true)
             // One notification per Agent: its newer status replaces the older.
             if (content is PushContent.Status) {
-                QuestionNotifications.decorate(context, notice, content, builder, canAnswerInBackground)
                 ProgressNotifications.completed(context, notice.hostId, content.terminal, content.at)
                 val tag = content.terminal
+                builder.setStyle(Notification.BigTextStyle().bigText(body))
+                if (content.status == AgentStatus.Done) {
+                    builder.setVisibility(Notification.VISIBILITY_PRIVATE)
+                        .setPublicVersion(Notification.Builder(context, channel)
+                            .setSmallIcon(R.drawable.ic_stat_aries)
+                            .setContentText(context.getString(R.string.agent_status_done))
+                            .build())
+                }
                 NotificationGroups.decorate(context, builder, notice.hostId, notice.hostName, tag, content.terminal)
                 val status = content.status
+                if (status == AgentStatus.Done || status is AgentStatus.Error) {
+                    InlineNotifications.add(context, builder, notice.hostId, notice.hostName, content.terminal, tag,
+                        reply = true,
+                        turn = content.turn.takeIf { status == AgentStatus.Done })
+                }
+                QuestionNotifications.decorate(context, notice, content, builder, canAnswerInBackground)
                 if ((status == AgentStatus.Done || status is AgentStatus.Blocked || status is AgentStatus.Error) &&
                     QuietHoursSettings.from(context).hours.contains(LocalTime.now())
                 ) {
