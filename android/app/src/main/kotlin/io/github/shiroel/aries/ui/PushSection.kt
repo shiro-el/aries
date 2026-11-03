@@ -5,11 +5,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -30,6 +29,7 @@ import io.github.shiroel.aries.R
 @Composable
 fun PushSection(model: PushModel, beaconInstalled: Boolean) {
     model.host ?: return
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(stringResource(R.string.push_title), style = MaterialTheme.typography.titleMedium)
         if (!beaconInstalled) {
@@ -43,7 +43,7 @@ fun PushSection(model: PushModel, beaconInstalled: Boolean) {
                 Text(stringResource(R.string.push_force_stop_note), style = MaterialTheme.typography.bodySmall)
                 if (!model.hasDefaultRelay) Text(stringResource(R.string.push_no_relay))
                 RelayField(model)
-                Button(onClick = model::enable, enabled = model.relayDraft.isNotBlank()) {
+                TextButton(onClick = model::enable, enabled = model.relayDraft.isNotBlank()) {
                     Text(stringResource(if (model.problem == null) R.string.push_enable_button else R.string.push_retry_button))
                 }
             }
@@ -58,7 +58,7 @@ fun PushSection(model: PushModel, beaconInstalled: Boolean) {
                     Text(stringResource(format, stringResource(stepLabel(step))))
                 }
                 if (ui.steps.any { it.second == StepState.Failed }) {
-                    Button(onClick = model::enable) { Text(stringResource(R.string.push_retry_button)) }
+                    TextButton(onClick = model::enable) { Text(stringResource(R.string.push_retry_button)) }
                 }
             }
             is PushUi.On -> {
@@ -68,15 +68,15 @@ fun PushSection(model: PushModel, beaconInstalled: Boolean) {
                     Text(stringResource(R.string.push_change_relay_body), style = MaterialTheme.typography.bodySmall)
                     RelayField(model)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = model::enable, enabled = model.relayDraft.isNotBlank()) {
+                        TextButton(onClick = model::enable, enabled = model.relayDraft.isNotBlank()) {
                             Text(stringResource(R.string.push_use_relay_button))
                         }
                         TextButton(onClick = model::cancelRelayChange) { Text(stringResource(R.string.cancel_button)) }
                     }
                 } else {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = model::sendTest) { Text(stringResource(R.string.push_test_button)) }
-                        OutlinedButton(onClick = model::disable) { Text(stringResource(R.string.push_disable_button)) }
+                        TextButton(onClick = model::sendTest) { Text(stringResource(R.string.push_test_button)) }
+                        TextButton(onClick = model::disable) { Text(stringResource(R.string.push_disable_button)) }
                     }
                     TextButton(onClick = model::changeRelay) { Text(stringResource(R.string.push_change_relay_button)) }
                 }

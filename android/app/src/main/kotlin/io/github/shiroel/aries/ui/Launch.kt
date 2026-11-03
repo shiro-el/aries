@@ -9,8 +9,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -176,14 +174,14 @@ fun LaunchDialog(
                 }
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     item(key = "custom") {
-                        FilterChip(
+                        ConsoleChoice(
                             selected = form.preset == null,
                             onClick = { form.preset = null },
                             label = { Text(stringResource(R.string.preset_custom)) },
                         )
                     }
                     items(AgentPreset.entries, key = { "preset:" + it.name }) { p ->
-                        FilterChip(
+                        ConsoleChoice(
                             modifier = Modifier.testTag("preset:" + p.name),
                             selected = form.preset == p,
                             onClick = { form.preset = p },
@@ -210,28 +208,27 @@ fun LaunchDialog(
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (folder != null) {
                             item(key = "folder") {
-                                AssistChip(
-                                    onClick = { form.cwd = folder },
-                                    label = { Text(stringResource(R.string.launch_cwd_space_folder, folder)) },
-                                )
+                                TextButton(onClick = { form.cwd = folder }) {
+                                    Text(stringResource(R.string.launch_cwd_space_folder, folder))
+                                }
                             }
                         }
                         items(form.recentCwds.filter { it != folder }, key = { "recent:$it" }) { dir ->
-                            AssistChip(onClick = { form.cwd = dir }, label = { Text(dir) })
+                            TextButton(onClick = { form.cwd = dir }) { Text(dir) }
                         }
                     }
                 }
                 Text(stringResource(R.string.launch_space), style = MaterialTheme.typography.labelLarge)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     item(key = "none") {
-                        FilterChip(
+                        ConsoleChoice(
                             selected = form.spaceId == null,
                             onClick = { form.selectSpace(null) },
                             label = { Text(stringResource(R.string.launch_space_none)) },
                         )
                     }
                     items(form.spaces, key = { "space:" + it.id }) { s ->
-                        FilterChip(
+                        ConsoleChoice(
                             modifier = Modifier.testTag("launch_space:" + s.id),
                             selected = s.id == form.spaceId,
                             onClick = { form.selectSpace(s.id) },
@@ -244,7 +241,7 @@ fun LaunchDialog(
                     Text(stringResource(R.string.launch_tab), style = MaterialTheme.typography.labelLarge)
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(space.tabs, key = { "tab:" + it.id }) { t ->
-                            FilterChip(
+                            ConsoleChoice(
                                 modifier = Modifier.testTag("launch_tab:" + t.id),
                                 selected = t.id == form.tabId,
                                 onClick = { form.selectTab(t.id) },

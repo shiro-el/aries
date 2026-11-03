@@ -11,8 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -22,6 +21,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -177,7 +184,7 @@ fun BrowseScreen(
     showHeader: Boolean = true,
 ) {
     val space = browser.openSpace
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.fillMaxSize()) {
         Row {
             if (showHeader) TextButton(onClick = if (space != null) browser::closeSpace else onBack) {
                 Text(stringResource(R.string.back_button))
@@ -189,11 +196,9 @@ fun BrowseScreen(
         if (onNewTerminal != null && browser.structure != null && !browser.closed && browser.savedLaunches.isNotEmpty()) {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(browser.savedLaunches, key = { "saved:" + it.id }) { s ->
-                    AssistChip(
-                        modifier = Modifier.testTag("saved_run:" + s.id),
-                        onClick = { onRunSaved(s) },
-                        label = { Text(s.name) },
-                    )
+                    TextButton(modifier = Modifier.testTag("saved_run:" + s.id), onClick = { onRunSaved(s) }) {
+                        Text(s.name, style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             }
         }
@@ -229,8 +234,8 @@ private fun problemText(p: StructureProblem): String = when (p) {
 private fun Notice(text: String) {
     Text(
         text,
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.errorContainer).padding(8.dp),
-        color = MaterialTheme.colorScheme.onErrorContainer,
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+        color = MaterialTheme.colorScheme.error,
         style = MaterialTheme.typography.bodySmall,
     )
 }
@@ -242,35 +247,41 @@ private fun SpaceList(
     hostSections: @Composable () -> Unit,
     onOpen: (TerminalInfo) -> Unit,
 ) {
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    LazyColumn {
         item {
-            Text(stringResource(R.string.terminals_title, browser.host.name), style = MaterialTheme.typography.headlineSmall)
+            Text(stringResource(R.string.terminals_title, browser.host.name), Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (s.spaces.isEmpty() && s.unplaced.isEmpty()) item { Text(stringResource(R.string.terminals_empty)) }
         items(s.spaces, key = { "space:" + it.id }) { space ->
-            Column(Modifier.fillMaxWidth().clickable { browser.openSpace(space.id) }.padding(vertical = 8.dp)) {
-                Text(space.name.ifBlank { stringResource(R.string.space_unnamed) }, style = MaterialTheme.typography.titleMedium)
-                val count = space.tabs.sumOf { it.panes.size }
-                Text(
-                    listOfNotNull(space.folder, stringResource(R.string.space_summary, space.tabs.size, count))
-                        .joinToString(" · "),
-                    style = MaterialTheme.typography.bodySmall,
-                )
+            Row(Modifier.fillMaxWidth().clickable { browser.openSpace(space.id) }.heightIn(min = 48.dp).padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Text("▸", Modifier.width(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Column(Modifier.weight(1f)) {
+                    Text(space.name.ifBlank { stringResource(R.string.space_unnamed) }, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    val count = space.tabs.sumOf { it.panes.size }
+                    Text(
+                        listOfNotNull(space.folder, stringResource(R.string.space_summary, space.tabs.size, count))
+                            .joinToString(" · "),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         }
         if (s.unplaced.isNotEmpty()) {
             item {
                 HorizontalDivider()
-                Text(stringResource(R.string.unplaced_title), style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.unplaced_title), Modifier.padding(12.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             items(s.unplaced, key = { "unplaced:" + it.address }) {
                 val t = browser.current(it)
-                TerminalRow(t) { onOpen(t) }
+                ConsoleTerminalRow(t, browser.host.name, { onOpen(t) })
             }
         }
         item {
             HorizontalDivider()
-            hostSections()
+            Column(Modifier.padding(horizontal = 12.dp)) { hostSections() }
         }
     }
 }
@@ -281,7 +292,7 @@ private fun SpaceView(
     space: SpaceInfo,
     onOpen: (TerminalInfo) -> Unit,
 ) {
-    Text(space.name.ifBlank { stringResource(R.string.space_unnamed) }, style = MaterialTheme.typography.headlineSmall)
+    Text(space.name.ifBlank { stringResource(R.string.space_unnamed) }, Modifier.padding(12.dp), style = MaterialTheme.typography.titleMedium)
     val tab = browser.tab
     if (tab == null) {
         Text(stringResource(R.string.space_no_tabs))
@@ -289,11 +300,9 @@ private fun SpaceView(
     }
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         items(space.tabs, key = { it.id }) { t ->
-            FilterChip(
-                selected = t.id == tab.id,
-                onClick = { browser.selectTab(t) },
-                label = { Text(t.name.ifBlank { stringResource(R.string.tab_unnamed) }) },
-            )
+            ConsoleChoice(selected = t.id == tab.id, onClick = { browser.selectTab(t) }) {
+                Text(t.name.ifBlank { stringResource(R.string.tab_unnamed) }, style = MaterialTheme.typography.bodySmall)
+            }
         }
     }
     val zoomed = browser.zoomedPane(tab)
@@ -307,9 +316,9 @@ private fun SpaceView(
         TextButton(onClick = { browser.zoom(tab) }) { Text(stringResource(R.string.pane_zoom_button)) }
     }
     if (tab.panes.isEmpty()) Text(stringResource(R.string.tab_empty))
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        items(tab.panes, key = { "pane:" + it.id + ":" + it.terminalAddress }) { pane ->
-            PaneRow(pane, browser, focused = pane.id == focused, onOpen = onOpen) { browser.focus(tab, pane) }
+    LazyColumn {
+        itemsIndexed(tab.panes, key = { _, pane -> "pane:" + pane.id + ":" + pane.terminalAddress }) { index, pane ->
+            PaneRow(pane, browser, focused = pane.id == focused, onOpen = onOpen, last = index == tab.panes.lastIndex) { browser.focus(tab, pane) }
         }
     }
 }
@@ -320,31 +329,27 @@ private fun PaneRow(
     browser: HostBrowser,
     focused: Boolean,
     onOpen: (TerminalInfo) -> Unit,
+    last: Boolean = true,
     onClick: () -> Unit,
 ) {
-    val modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
-    Column(
-        (if (focused) modifier.background(MaterialTheme.colorScheme.secondaryContainer) else modifier).padding(8.dp),
-    ) {
+    val accent = MaterialTheme.colorScheme.primary
+    val modifier = Modifier.fillMaxWidth().semantics { selected = focused }
+        .background(if (focused) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surface)
+        .drawBehind { if (focused) drawLine(accent, Offset.Zero, Offset(0f, size.height), 3.dp.toPx()) }
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        Text(if (last) "└─" else "├─", Modifier.padding(start = 12.dp).width(24.dp), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
         val t = pane.terminal?.let(browser::current)
         if (t == null) {
-            Text(stringResource(R.string.pane_terminal_gone, pane.terminalAddress), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.pane_terminal_gone, pane.terminalAddress),
+                Modifier.clickable(onClick = onClick).padding(12.dp), style = MaterialTheme.typography.bodySmall)
         } else {
-            Text(displayName(t), style = MaterialTheme.typography.titleMedium)
-            Text(stringResource(R.string.terminal_subtitle, t.address, t.state), style = MaterialTheme.typography.bodySmall)
-            AgentStatusLine(t)
-            // An Agent opens in the view picked last (Terminal or Chat).
-            val open = if (t.agentStatus != null) R.string.agent_open_button else R.string.terminal_open_button
-            TextButton(onClick = { onOpen(t) }) { Text(stringResource(open)) }
+            Column(Modifier.weight(1f)) {
+                ConsoleTerminalRow(t, browser.host.name, onClick, trailing = {
+                    val open = if (t.agentStatus != null) R.string.agent_open_button else R.string.terminal_open_button
+                    TextButton(onClick = { onOpen(t) }) { Text(stringResource(open), style = MaterialTheme.typography.bodySmall) }
+                })
+            }
         }
-    }
-}
-
-@Composable
-private fun TerminalRow(t: TerminalInfo, onOpen: () -> Unit) {
-    Column(Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(vertical = 4.dp)) {
-        Text(displayName(t), style = MaterialTheme.typography.titleMedium)
-        Text(stringResource(R.string.terminal_subtitle, t.address, t.state), style = MaterialTheme.typography.bodySmall)
-        AgentStatusLine(t)
     }
 }

@@ -198,9 +198,9 @@ private fun DrawerRow(
     }
 }
 
-/** Ticket 03 replaces this word with its shared, accessible status mark. */
+/** Drawer seam for the shared Console status mark. */
 @Composable
 internal fun DrawerAgentStatus(status: AgentStatus?) {
     status ?: return
-    Text(stringResource(agentStatusLabel(status)), fontSize = 12.sp, color = statusColor(status))
+    AgentStatusMark(status)
 }

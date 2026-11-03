@@ -4,7 +4,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.isSelected
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -80,9 +82,9 @@ class AgentsAcrossHostsTest {
         // A program that does not report Agent status is not an Agent.
         compose.onNodeWithText("vim").assertDoesNotExist()
         // Both t1s and the machine's Terminal, each under its own Host, address whole.
-        compose.onNodeWithText(str(R.string.terminal_subtitle, "home", "t1")).assertExists()
-        compose.onNodeWithText(str(R.string.terminal_subtitle, "server", "t1")).assertExists()
-        compose.onNodeWithText(str(R.string.terminal_subtitle, "home", "box/t1")).assertExists()
+        compose.onNodeWithContentDescription(str(R.string.console_agent_accessibility, "claude", str(R.string.terminal_subtitle, "home", "t1"))).assertExists()
+        compose.onNodeWithContentDescription(str(R.string.console_agent_accessibility, "pi", str(R.string.terminal_subtitle, "server", "t1"))).assertExists()
+        compose.onNodeWithContentDescription(str(R.string.console_agent_accessibility, "codex", str(R.string.terminal_subtitle, "home", "box/t1"))).assertExists()
         compose.onNodeWithText("Which color?").assertExists()
     }
 
@@ -90,22 +92,22 @@ class AgentsAcrossHostsTest {
     fun pinningOnThePhoneWritesTheSharedLabelAndADesktopPinShowsLive() {
         val core = twoHosts()
         openAgents(core)
-        compose.onNodeWithText(str(R.string.agent_pinned_label)).assertDoesNotExist()
+        compose.onNodeWithContentDescription(str(R.string.agent_pin_button_label, "codex", "home")).assertIsNotSelected()
 
         compose.onNodeWithContentDescription(str(R.string.agent_pin_button_label, "codex", "home")).performClick()
         compose.waitForIdle()
         assertEquals(listOf("h1 box/t1 pinned=true"), core.labelWrites)
-        compose.onNodeWithText(str(R.string.agent_pinned_label)).assertExists()
+        compose.onNodeWithContentDescription(str(R.string.agent_unpin_button_label, "codex", "home")).assertIsSelected()
 
         // The desktop pins server's t1.
         core.push("h2", listOf(agent("t1", "pi", AgentStatus.Done, turn = 3uL, pinned = true)))
         compose.waitForIdle()
-        assertEquals(2, compose.onAllNodesWithText(str(R.string.agent_pinned_label)).fetchSemanticsNodes().size)
+        assertEquals(2, compose.onAllNodes(isSelected()).fetchSemanticsNodes().size)
 
         compose.onNodeWithContentDescription(str(R.string.agent_unpin_button_label, "codex", "home")).performClick()
         compose.waitForIdle()
         assertEquals("h1 box/t1 pinned=false", core.labelWrites.last())
-        assertEquals(1, compose.onAllNodesWithText(str(R.string.agent_pinned_label)).fetchSemanticsNodes().size)
+        assertEquals(1, compose.onAllNodes(isSelected()).fetchSemanticsNodes().size)
     }
 
     @Test

@@ -6,11 +6,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -36,7 +34,7 @@ fun BeaconSection(model: BeaconModel) {
             is BeaconUi.Known -> when (val s = ui.state) {
                 BeaconState.NotInstalled -> {
                     Text(stringResource(R.string.beacon_not_installed))
-                    Button(onClick = model::install) { Text(stringResource(R.string.beacon_install_button)) }
+                    TextButton(onClick = model::install) { Text(stringResource(R.string.beacon_install_button)) }
                 }
                 is BeaconState.Installed -> {
                     Text(stringResource(R.string.beacon_version, s.version))
@@ -64,7 +62,7 @@ fun BeaconSection(model: BeaconModel) {
                                 stringResource(R.string.beacon_update_needed, s.version, model.pinnedVersion),
                                 color = MaterialTheme.colorScheme.error,
                             )
-                            Button(onClick = model::install) { Text(stringResource(R.string.beacon_update_button)) }
+                            TextButton(onClick = model::install) { Text(stringResource(R.string.beacon_update_button)) }
                         }
                         BeaconUpdate.NotNeeded -> {}
                     }
@@ -77,8 +75,8 @@ fun BeaconSection(model: BeaconModel) {
                         )
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = model::install) { Text(stringResource(R.string.beacon_reinstall_button)) }
-                        OutlinedButton(onClick = model::askRemove) { Text(stringResource(R.string.beacon_remove_button)) }
+                        TextButton(onClick = model::install) { Text(stringResource(R.string.beacon_reinstall_button)) }
+                        TextButton(onClick = model::askRemove) { Text(stringResource(R.string.beacon_remove_button)) }
                     }
                     Row(
                         Modifier.fillMaxWidth().toggleable(

@@ -1,11 +1,16 @@
 package io.github.shiroel.aries.ui
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -18,7 +23,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -62,13 +66,14 @@ class AgentBoard(val hosts: List<Host>) {
         private set
 
     /**
-     * Pinned first, then what needs the user (Blocked, Error), then Done,
-     * Working and Idle; within that by Host, then address.
+     * Waiting (Blocked/Error) first, with pinned Agents first in each group;
+     * then status, Host and whole Terminal address for stable ordering.
      */
     val agents: List<AgentEntry>
         get() = hosts.flatMap { h -> lists[h.id].orEmpty().filter { it.agentStatus != null }.map { AgentEntry(h, it) } }
             .sortedWith(
                 compareBy<AgentEntry>(
+                    { !isWaiting(it.terminal.agentStatus) },
                     { !it.terminal.pinned },
                     { rank(it.terminal.agentStatus) },
                     { hosts.indexOf(it.host) },
@@ -132,7 +137,7 @@ fun AgentsScreen(
         AgentDetail(board, key, onPin, onTerminal, showHeader)
         return
     }
-    LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    LazyColumn(Modifier.fillMaxSize()) {
         if (showHeader) item {
             TextButton(onClick = onBack) { Text(stringResource(R.string.back_button)) }
             Text(stringResource(R.string.agents_title), style = MaterialTheme.typography.headlineSmall)
@@ -169,14 +174,9 @@ fun AgentsScreen(
 
 @Composable
 private fun AgentRow(entry: AgentEntry, onOpen: () -> Unit, onPin: (Boolean) -> Unit) {
-    val t = entry.terminal
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f).clickable(onClick = onOpen).padding(vertical = 8.dp)) {
-            AgentHeading(entry)
-            AgentStatusLine(t)
-        }
-        PinButton(entry, onPin)
-    }
+    ConsoleTerminalRow(entry.terminal, entry.host.name, onOpen,
+        modifier = Modifier.testTag("agent-row:${entry.key.hostId}:${entry.key.address}"),
+        trailing = { PinButton(entry, onPin) })
 }
 
 @Composable
@@ -200,8 +200,17 @@ private fun PinButton(entry: AgentEntry, onPin: (Boolean) -> Unit) {
         name,
         entry.host.name,
     )
-    TextButton(onClick = { onPin(!pinned) }, modifier = Modifier.semantics { contentDescription = label }) {
-        Text(stringResource(if (pinned) R.string.agent_unpin_button else R.string.agent_pin_button))
+    val color = if (pinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+    IconButton(onClick = { onPin(!pinned) }, modifier = Modifier.semantics { contentDescription = label; selected = pinned }) {
+        Canvas(Modifier.size(16.dp)) {
+            val u = size.width / 16f
+            val path = Path().apply {
+                moveTo(5*u, 2*u); lineTo(11*u, 2*u); lineTo(10*u, 7*u)
+                lineTo(13*u, 10*u); lineTo(3*u, 10*u); lineTo(6*u, 7*u); close()
+                moveTo(8*u, 10*u); lineTo(8*u, 15*u)
+            }
+            drawPath(path, color, style = Stroke(1.5f*u))
+        }
     }
 }
 

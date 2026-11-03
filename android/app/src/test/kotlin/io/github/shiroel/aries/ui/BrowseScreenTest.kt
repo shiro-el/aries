@@ -4,13 +4,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.Endpoint
+import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.core.HostStructure
 import io.github.shiroel.aries.core.PaneInfo
 import io.github.shiroel.aries.core.SpaceInfo
@@ -66,6 +69,22 @@ class BrowseScreenTest {
         }
         compose.onNodeWithText("home").performClick()
         compose.waitForIdle()
+    }
+
+    @Test
+    fun consoleLeavesUseAccessibleMarksAndHostFoldersWithoutMarkingPlainTerminalsAsAgents() {
+        val core = FakeCore().apply {
+            structure = HostStructure(emptyList(), listOf(
+                claude.copy(agentStatus = AgentStatus.Working), shell,
+            ), null)
+        }
+        open(core)
+        compose.onNodeWithContentDescription(str(R.string.agent_status_working), useUnmergedTree = true).assertExists()
+        compose.onNodeWithContentDescription(str(R.string.agent_status_idle), useUnmergedTree = true).assertDoesNotExist()
+        assertEquals(2, compose.onAllNodesWithText("home:/repo").fetchSemanticsNodes().size)
+        compose.onNodeWithText("build-shell").performClick()
+        compose.waitForIdle()
+        assertEquals("t3", core.connection!!.views.single().address)
     }
 
     @Test

@@ -5,6 +5,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
@@ -203,6 +204,6 @@ class ReconnectTest {
         compose.waitForIdle()
         compose.onNodeWithText(str(R.string.back_button)).performClick()
         compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.agent_status_done)).assertExists()
+        compose.onNodeWithContentDescription(str(R.string.agent_status_done), useUnmergedTree = true).assertExists()
     }
 }

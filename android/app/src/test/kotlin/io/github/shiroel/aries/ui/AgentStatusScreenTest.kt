@@ -4,7 +4,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
@@ -52,7 +57,7 @@ class AgentStatusScreenTest {
         open(core)
 
         compose.onNodeWithText("claude").assertExists()
-        compose.onNodeWithText(str(R.string.agent_status_working)).assertExists()
+        compose.onNodeWithContentDescription(str(R.string.agent_status_working), useUnmergedTree = true).assertExists()
         compose.onNodeWithText("vim").assertExists()
         // Only one status line: the program that never reported has none.
         assertEquals(1, statusLines())
@@ -75,14 +80,15 @@ class AgentStatusScreenTest {
         )
         compose.waitForIdle()
 
-        compose.onNodeWithText(str(R.string.agent_status_blocked_permission)).assertExists()
+        compose.onNodeWithContentDescription(str(R.string.agent_status_blocked), useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("approve Write: hello.txt").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, str(R.string.agent_status_blocked_permission)))
         compose.onNodeWithText("approve Write: hello.txt").assertExists()
-        compose.onNodeWithText(str(R.string.agent_attention_label)).assertExists()
-        compose.onNodeWithText(str(R.string.agent_status_working)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.agent_attention_label)).assertDoesNotExist()
+        compose.onNodeWithContentDescription(str(R.string.agent_status_working), useUnmergedTree = true).assertDoesNotExist()
 
         core.push(listOf(terminal("t1", "claude", AgentStatus.Done)))
         compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.agent_status_done)).assertExists()
+        compose.onNodeWithContentDescription(str(R.string.agent_status_done), useUnmergedTree = true).assertExists()
         compose.onNodeWithText(str(R.string.agent_attention_label)).assertDoesNotExist()
     }
 
@@ -96,15 +102,14 @@ class AgentStatusScreenTest {
         }
         open(core)
 
-        compose.onNodeWithText(str(R.string.agent_status_error)).assertExists()
+        compose.onNodeWithContentDescription(str(R.string.agent_status_error), useUnmergedTree = true).assertExists()
         compose.onNodeWithText("500 upstream failure").assertExists()
-        compose.onNodeWithText(str(R.string.agent_status_idle)).assertExists()
-        assertEquals(1, compose.onAllNodesWithText(str(R.string.agent_attention_label)).fetchSemanticsNodes().size)
+        compose.onNodeWithContentDescription(str(R.string.agent_status_idle), useUnmergedTree = true).assertExists()
+        assertEquals(0, compose.onAllNodesWithText(str(R.string.agent_attention_label)).fetchSemanticsNodes().size)
     }
 
     private fun statusLines(): Int = listOf(
-        R.string.agent_status_working, R.string.agent_status_blocked, R.string.agent_status_blocked_permission,
-        R.string.agent_status_blocked_question, R.string.agent_status_blocked_auth, R.string.agent_status_error,
+        R.string.agent_status_working, R.string.agent_status_blocked, R.string.agent_status_error,
         R.string.agent_status_done, R.string.agent_status_idle,
-    ).sumOf { compose.onAllNodesWithText(str(it)).fetchSemanticsNodes().size }
+    ).sumOf { compose.onAllNodesWithContentDescription(str(it), useUnmergedTree = true).fetchSemanticsNodes().size }
 }
