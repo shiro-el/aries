@@ -12,6 +12,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentStatus
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import io.github.shiroel.aries.core.ChatDiff
 import io.github.shiroel.aries.core.ChatDiffHunk
@@ -258,6 +259,7 @@ class ChatScreenTest {
     }
 
     @Test
+    @Config(qualifiers = "h1200dp") // Keep the Markdown prompt and image footer in view.
     fun imagesShowAndATooLargeOneIsAPlaceholder() {
         val core = FakeCore()
         core.chatImages["u1#0"] = PNG
@@ -280,7 +282,8 @@ class ChatScreenTest {
             ),
         )
         compose.waitUntil(5_000) {
-            compose.onAllNodesWithContentDescription(str(R.string.chat_image)).fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithContentDescription(str(R.string.chat_image)).fetchSemanticsNodes().isNotEmpty() &&
+                compose.onAllNodesWithText("what is this?").fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithText("what is this?").assertExists()
         compose.onNodeWithText(str(R.string.chat_image_too_large, "8.6")).assertExists()
