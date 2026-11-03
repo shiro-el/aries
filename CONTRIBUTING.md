@@ -145,9 +145,13 @@ npx wrangler deploy -c wrangler.deploy.jsonc
 ```
 
 Wrangler reads `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`. The app
-gets its Relay URL at build time from `ARIES_RELAY_URL` (repo variable in CI,
-or `-Paries.relayUrl`), and Firebase from `android/app/google-services.json`
-(never committed); without either the app says push is unavailable.
+gets its default Relay URL at build time from `ARIES_RELAY_URL` (repo variable
+in CI, or `-Paries.relayUrl`), and Firebase from
+`android/app/google-services.json` (never committed); without Firebase the app
+says push is unavailable, without a default Relay it asks for one. The user can
+set another Relay per Host (`enable_push` again with the new URL: it pairs the
+new Relay first, then unpairs the old one). Running your own Relay is in
+`relay/README.md`.
 
 ## Releases
 

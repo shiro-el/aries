@@ -266,6 +266,9 @@ class FakeCore : AriesCoreInterface {
 
     /** When set, `enablePush` reports steps up to this one and then fails there. */
     var pushFailAt: PushStep? = null
+
+    /** The Relay URL of each `enablePush` call, in order. */
+    val pushRelays = mutableListOf<String>()
     var pushDisableHostCleared = true
     var testPushes = 0
     var revocationFlushes = 0
@@ -277,6 +280,7 @@ class FakeCore : AriesCoreInterface {
         http: HttpClient,
         progress: PushProgress,
     ): PushPairing {
+        pushRelays += relayUrl
         for (step in listOf(PushStep.REGISTER, PushStep.PAIR, PushStep.TEST)) {
             progress.onStep(step)
             if (step == pushFailAt) {
