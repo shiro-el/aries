@@ -290,3 +290,90 @@ fn race(home: &Home) {
         assert_eq!(std::fs::read_dir(parent).unwrap().count(), 1);
     }
 }
+
+/// Status must surface the conflicts without installing anything or hiding
+/// them behind a healthy resident service.
+#[test]
+fn status_reports_both_foreign_skills_without_changing_them() {
+    let h = Home::new();
+    for dir in [h.claude(), h.agents()] {
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("SKILL.md"), "another tools skill\n").unwrap();
+    }
+    for _ in 0..2 {
+        let out = h.command(&["status"]).output().unwrap();
+        assert!(out.status.success());
+        let status: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        let skills: SkillReport = serde_json::from_value(status["skills"].clone())
+            .expect("status must report the preserved call-human skills");
+        assert_eq!(skills.roots.len(), 2);
+        for dir in [h.claude(), h.agents()] {
+            assert_eq!(outcome_of(&skills, &dir), SkillOutcome::KeptForeign);
+            assert_eq!(read(dir.join("SKILL.md")), "another tools skill\n");
+            assert!(!dir.join(".aries-beacon.json").exists());
+        }
+        assert!(
+            !h.path().join(".local/state").exists(),
+            "status must be read-only"
+        );
+    }
+    assert!(
+        h.install()
+            .roots
+            .iter()
+            .all(|r| r.outcome == SkillOutcome::KeptForeign)
+    );
+}
+
+#[test]
+fn status_reports_modified_and_symlink_skills_without_repairing_them() {
+    use std::os::unix::fs::symlink;
+    let h = Home::new();
+    h.install();
+    std::fs::write(h.claude().join("SKILL.md"), "my edited skill\n").unwrap();
+    std::fs::remove_dir_all(h.agents()).unwrap();
+    let target = h.path().join("foreign");
+    std::fs::create_dir(&target).unwrap();
+    std::fs::write(target.join("SKILL.md"), "linked skill\n").unwrap();
+    symlink(&target, h.agents()).unwrap();
+
+    let out = h.command(&["status"]).output().unwrap();
+    assert!(out.status.success());
+    let status: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let skills: SkillReport = serde_json::from_value(status["skills"].clone()).unwrap();
+    assert_eq!(outcome_of(&skills, &h.claude()), SkillOutcome::KeptModified);
+    assert_eq!(outcome_of(&skills, &h.agents()), SkillOutcome::KeptSymlink);
+    assert_eq!(read(h.claude().join("SKILL.md")), "my edited skill\n");
+    assert_eq!(std::fs::read_link(h.agents()).unwrap(), target);
+    assert_eq!(read(target.join("SKILL.md")), "linked skill\n");
+}
+
+#[test]
+fn status_distinguishes_missing_and_untouched_managed_skills() {
+    let h = Home::new();
+    let status = || {
+        let out = h.command(&["status"]).output().unwrap();
+        assert!(out.status.success());
+        serde_json::from_slice::<aries_protocol::beacon::BeaconStatus>(&out.stdout)
+            .unwrap()
+            .skills
+            .unwrap()
+    };
+    assert!(
+        status()
+            .roots
+            .iter()
+            .all(|r| r.outcome == SkillOutcome::Absent)
+    );
+    assert!(!h.path().join(".local").exists());
+    h.install();
+    // User-added files do not make an untouched Aries skill a conflict.
+    std::fs::write(h.claude().join("NOTES.md"), "notes\n").unwrap();
+    assert!(
+        status()
+            .roots
+            .iter()
+            .all(|r| r.outcome == SkillOutcome::Unchanged)
+    );
+    assert_eq!(read(h.claude().join("NOTES.md")), "notes\n");
+}

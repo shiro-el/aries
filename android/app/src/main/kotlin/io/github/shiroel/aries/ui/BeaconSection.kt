@@ -52,6 +52,7 @@ fun BeaconSection(model: BeaconModel) {
                             color = MaterialTheme.colorScheme.error,
                         )
                     }
+                    BeaconSkillState(s.skills)
                     when (val u = model.update) {
                         is BeaconUpdate.Updated -> Text(
                             stringResource(R.string.beacon_updated, u.from, u.install.version),
