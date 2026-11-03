@@ -68,6 +68,9 @@ class TerminalViewer(val terminal: TerminalInfo) {
     var closed by mutableStateOf(false)
         private set
 
+    /** The Host line this screen streams over; its state shows while it reconnects. */
+    var link: HostLink? = null
+
     /** Bumped on every frame; the canvas redraws when it changes. */
     var version by mutableIntStateOf(0)
         private set
@@ -129,7 +132,11 @@ fun TerminalScreen(viewer: TerminalViewer, onBack: () -> Unit) {
             }
         }
         viewer.exit?.let { Banner(exitText(it)) }
-        if (viewer.closed && viewer.exit == null) Banner(stringResource(R.string.terminal_connection_closed))
+        val line = viewer.link?.state
+        if (viewer.exit == null && line == LinkState.Reconnecting) Banner(stringResource(R.string.reconnecting))
+        if (viewer.exit == null && (viewer.closed || line is LinkState.Down)) {
+            Banner(stringResource(R.string.terminal_connection_closed))
+        }
         TerminalCanvas(viewer, Modifier.fillMaxWidth().weight(1f))
     }
 }

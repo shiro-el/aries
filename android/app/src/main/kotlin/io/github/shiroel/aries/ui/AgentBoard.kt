@@ -54,6 +54,9 @@ class AgentBoard(val hosts: List<Host>) {
     /** Hosts whose connection ended after their list arrived. */
     val closed = mutableStateMapOf<String, Boolean>()
 
+    /** Each reached Host's line, by Host id; its state shows while it reconnects. */
+    val links = mutableStateMapOf<String, HostLink>()
+
     /** The Agent whose detail is open, if any. */
     var openKey by mutableStateOf<AgentKey?>(null)
         private set
@@ -144,7 +147,11 @@ fun AgentsScreen(
                 board.unavailable[host.id]?.let { Text(stringResource(it.res, *it.args.toTypedArray()), style = MaterialTheme.typography.bodySmall) }
             }
         }
-        items(board.hosts.filter { board.closed[it.id] == true }, key = { "closed:" + it.id }) { host ->
+        items(board.hosts.filter { board.links[it.id]?.state == LinkState.Reconnecting }, key = { "again:" + it.id }) { host ->
+            Text(stringResource(R.string.agents_host_reconnecting, host.name), style = MaterialTheme.typography.bodySmall)
+        }
+        val down = { h: Host -> board.closed[h.id] == true || board.links[h.id]?.state is LinkState.Down }
+        items(board.hosts.filter(down), key = { "closed:" + it.id }) { host ->
             Text(
                 stringResource(R.string.agents_host_closed, host.name),
                 color = MaterialTheme.colorScheme.error,

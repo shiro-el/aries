@@ -39,6 +39,12 @@ pub struct AttachOptions {
     /// Scrollback lines the first paint should include.
     #[uniffi(default = 0)]
     pub history: u32,
+    /// Coming back after a dropped line (network change, app resumed): the
+    /// first paint is the whole screen as it is now, and an input viewer
+    /// takes the size only once it is active again, so re-attaching does not
+    /// resize the desktop.
+    #[uniffi(default = false)]
+    pub resumed: bool,
 }
 
 /// One row's cells of one style, left to right. Blank default cells between
@@ -167,6 +173,9 @@ impl TerminalView {
         }
         if options.history > 0 {
             params["history"] = json!(options.history);
+        }
+        if options.resumed {
+            params["resumed"] = json!(true);
         }
         let reply = client.call("terminal.attach", params).await?;
         let channel = reply["channel"]

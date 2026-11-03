@@ -68,6 +68,7 @@
     <string name="terminal_exited_signal">프로그램이 시그널 %1$s(으)로 중지되었습니다.</string>
     <string name="terminal_exited_reason">프로그램이 끝났습니다(%1$s).</string>
     <string name="terminal_connection_closed">터미널과의 연결이 끊어졌습니다. 보이는 내용이 최신이 아닐 수 있습니다.</string>
+    <string name="reconnecting">연결이 끊겼습니다. 다시 연결하는 중…</string>
 
     <string name="agents_button">모든 에이전트</string>
     <string name="agents_title">에이전트</string>
@@ -75,6 +76,7 @@
     <string name="agents_no_hosts">먼저 호스트를 추가하세요.</string>
     <string name="agents_host_unavailable">%1$s에 연결할 수 없습니다</string>
     <string name="agents_host_closed">%1$s와의 연결이 끊어졌습니다. 에이전트 정보가 최신이 아닐 수 있습니다.</string>
+    <string name="agents_host_reconnecting">%1$s에 다시 연결하는 중…</string>
     <string name="agent_pinned_label">고정됨</string>
     <string name="agent_pin_button">고정</string>
     <string name="agent_unpin_button">고정 해제</string>

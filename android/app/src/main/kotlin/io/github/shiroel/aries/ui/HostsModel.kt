@@ -119,8 +119,26 @@ class HostsModel(
     var jumps by mutableStateOf<Map<String, List<JumpHost>>>(emptyMap())
         private set
 
-    /** The open Host's connection and structure watch, while [Screen.Browse] shows. */
+    /** The open Host's connection and structure watch, while [Screen.Browse] shows (the latest line after a reconnect). */
     private var open: Pair<HostConnection, StructureWatch?>? = null
+
+    /** The open Host's line, which reconnects on its own; see [HostLink]. */
+    private var browseLink: HostLink? = null
+
+    private fun link(host: Host, conn: HostConnection) = HostLink(
+        host, conn, scope,
+        connect = { withContext(keyWork) { core.connect(host.id) } },
+        onDown = { prompt = it },
+    )
+
+    /** Every line the screens use now: the open Host's and the Agent list's. */
+    private val links: List<HostLink> get() = listOfNotNull(browseLink) + agentLinks.values
+
+    /** The phone's network changed (Wi-Fi to LTE, airplane mode): replace every line and restore the screens. */
+    fun networkChanged() = links.forEach { it.networkChanged() }
+
+    /** The app is back in the foreground: reconnect any line that died meanwhile. */
+    fun foregrounded() = links.forEach { it.check() }
 
     init {
         guard {
@@ -191,30 +209,13 @@ class HostsModel(
             try {
                 val conn = withContext(keyWork) { core.connect(host.id) }
                 val browser = HostBrowser(host)
+                val link = link(host, conn)
+                browser.link = link
+                browseLink = link
                 open = conn to null
                 screen = Screen.Browse(browser)
                 beacon.load(host)
-                try {
-                    val watch = conn.watchStructure(object : StructureListener {
-                        override fun onStructure(structure: HostStructure) {
-                            scope.launch { browser.update(structure) }
-                        }
-
-                        override fun onClosed() {
-                            scope.launch { browser.markClosed() }
-                        }
-                    })
-                    if (open?.first === conn) {
-                        open = conn to watch
-                        status = watchStatus(conn, browser)
-                    } else {
-                        watch.stop()
-                    }
-                } catch (e: CoreException) {
-                    if (open?.first === conn) open = null
-                    conn.disconnect()
-                    throw e
-                }
+                status = watchBrowse(link, browser)
             } catch (e: CoreException) {
                 screen = Screen.Hosts
                 prompt = when (e) {
@@ -327,23 +328,36 @@ class HostsModel(
         prompt = null
     }
 
-    /** Live Agent status of the open Host's Terminals; cancelled on [back]. */
+    /** The open Host's structure and live Agent status, on each line [HostLink] brings; cancelled on [back]. */
     private var status: Job? = null
 
-    private fun watchStatus(conn: HostConnection, browser: HostBrowser): Job = scope.launch {
-        val watch = try {
-            conn.watchTerminals()
-        } catch (e: CoreException) {
-            browser.markClosed()
-            return@launch
-        }
+    private fun watchBrowse(link: HostLink, browser: HostBrowser): Job = scope.launch {
         try {
-            // Each change replaces the list, so Agent status stays live.
-            while (true) browser.updateTerminals(watch.next())
+            link.keep { conn, _ ->
+                val structure = conn.watchStructure(object : StructureListener {
+                    override fun onStructure(structure: HostStructure) {
+                        scope.launch { browser.update(structure) }
+                    }
+
+                    override fun onClosed() {
+                        scope.launch { link.lost(conn) }
+                    }
+                })
+                open = conn to structure
+                try {
+                    val watch = conn.watchTerminals()
+                    try {
+                        // Each change replaces the list, so Agent status stays live.
+                        while (true) browser.updateTerminals(watch.next())
+                    } finally {
+                        watch.stop()
+                    }
+                } finally {
+                    structure.stop()
+                }
+            }
         } catch (e: CoreException) {
             browser.markClosed()
-        } finally {
-            watch.stop()
         }
     }
 
@@ -360,41 +374,46 @@ class HostsModel(
     fun openTerminal(terminal: TerminalInfo) {
         when (val s = screen) {
             is Screen.Browse -> {
-                val conn = open?.first ?: return
-                observe(conn, s.browser.current(terminal), s)
+                val link = browseLink ?: return
+                observe(link, s.browser.current(terminal), s)
             }
             is Screen.Agents -> {
                 val key = s.board.openKey ?: return
                 if (key.address != terminal.address) return
-                val conn = agentConns[key.hostId] ?: return
-                observe(conn, s.board.find(key)?.terminal ?: terminal, s)
+                val link = agentLinks[key.hostId] ?: return
+                observe(link, s.board.find(key)?.terminal ?: terminal, s)
             }
             else -> return
         }
     }
 
-    private fun observe(conn: HostConnection, terminal: TerminalInfo, returnTo: Screen) {
+    /** Re-attaches with `resumed` on each new line, so the screen comes back after a network change. */
+    private fun observe(link: HostLink, terminal: TerminalInfo, returnTo: Screen) {
         val viewer = TerminalViewer(terminal)
+        viewer.link = link
         screen = Screen.Terminal(viewer, returnTo)
         viewing = scope.launch {
-            val view = try {
-                conn.attachTerminal(terminal.address, AttachOptions(observe = true, cols = 80u, rows = 24u, history = 0u))
-            } catch (e: CoreException) {
-                viewer.markClosed()
-                return@launch
-            }
             try {
-                while (true) {
-                    when (val u = view.next()) {
-                        is TerminalUpdate.Screen -> viewer.apply(u.frame)
-                        is TerminalUpdate.Exited -> viewer.exited(u.exit)
+                link.keep { conn, resumed ->
+                    val options = AttachOptions(observe = true, cols = 80u, rows = 24u, history = 0u, resumed = resumed)
+                    val view = conn.attachTerminal(terminal.address, options)
+                    try {
+                        while (true) {
+                            when (val u = view.next()) {
+                                is TerminalUpdate.Screen -> viewer.apply(u.frame)
+                                is TerminalUpdate.Exited -> {
+                                    viewer.exited(u.exit)
+                                    return@keep
+                                }
+                            }
+                        }
+                    } finally {
+                        withContext(NonCancellable) { view.detach() }
+                        view.close()
                     }
                 }
             } catch (e: CoreException) {
                 viewer.markClosed()
-            } finally {
-                withContext(NonCancellable) { view.detach() }
-                view.close()
             }
         }
     }
@@ -407,8 +426,10 @@ class HostsModel(
         screen = s.returnTo
     }
 
-    /** Connections and watch jobs of [Screen.Agents], per Host id. */
-    private val agentConns = mutableMapOf<String, HostConnection>()
+    /** Lines and watch jobs of [Screen.Agents], per Host id. */
+    private val agentLinks = mutableMapOf<String, HostLink>()
+    private val agentConns: Map<String, HostConnection>
+        get() = agentLinks.mapNotNull { (id, link) -> link.connection?.let { id to it } }.toMap()
     private val agentJobs = mutableListOf<Job>()
 
     /** Connects to every Host and shows all their Agents in one list. */
@@ -423,13 +444,18 @@ class HostsModel(
                     board.fail(host.id, problemFor(e).body)
                     return@launch
                 }
-                agentConns[host.id] = conn
+                val link = link(host, conn)
+                agentLinks[host.id] = link
+                board.links[host.id] = link
                 try {
-                    val watch = conn.watchTerminals()
-                    try {
-                        while (true) board.update(host.id, watch.next())
-                    } finally {
-                        watch.stop()
+                    // A new line starts from its snapshot, so what changed while away shows.
+                    link.keep { c, _ ->
+                        val watch = c.watchTerminals()
+                        try {
+                            while (true) board.update(host.id, watch.next())
+                        } finally {
+                            watch.stop()
+                        }
                     }
                 } catch (e: CoreException) {
                     board.markClosed(host.id)
@@ -464,9 +490,8 @@ class HostsModel(
     private fun closeAgents() {
         agentJobs.forEach { it.cancel() }
         agentJobs.clear()
-        val conns = agentConns.values.toList()
-        agentConns.clear()
-        conns.forEach { scope.launch { it.disconnect() } }
+        agentLinks.values.forEach { it.close() }
+        agentLinks.clear()
     }
 
     fun back() {
@@ -476,10 +501,11 @@ class HostsModel(
         screen = Screen.Hosts
         status?.cancel()
         status = null
-        val (conn, watch) = open ?: return
+        browseLink?.close()
+        browseLink = null
+        val (_, watch) = open ?: return
         open = null
         watch?.stop()
-        scope.launch { conn.disconnect() }
     }
 
     private inline fun guard(block: () -> Unit) {
