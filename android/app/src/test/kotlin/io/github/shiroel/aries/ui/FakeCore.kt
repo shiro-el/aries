@@ -639,6 +639,9 @@ class FakeConnection(
             if (it.agentStatus == AgentStatus.Done && turn >= it.turn) it.copy(agentStatus = AgentStatus.Idle) else it
         }
 
+    override suspend fun setWatched(address: String, watched: Boolean): TerminalInfo =
+        core!!.label(hostId, address, "watched=$watched") { it.copy(watched = watched) }
+
     override suspend fun setPinned(address: String, pinned: Boolean): TerminalInfo =
         core!!.label(hostId, address, "pinned=$pinned") { it.copy(pinned = pinned) }
 

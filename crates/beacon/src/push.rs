@@ -37,6 +37,8 @@ struct Stored {
 /// Why a push did not reach the Relay.
 #[derive(Debug, thiserror::Error)]
 pub enum SendError {
+    #[error("local push budget exhausted")]
+    RateLimited,
     #[error("not paired with a phone")]
     NotPaired,
     #[error("pairing file unreadable: {0}")]
@@ -133,8 +135,19 @@ fn relay_error(mut resp: ureq::http::Response<ureq::Body>) -> SendError {
 pub fn send(message: &PushMessage) -> Result<(), SendError> {
     let pairing = Pairing::load()?.ok_or(SendError::NotPaired)?;
     let envelope = seal(message, &pairing.phone_key, &pairing.beacon)?;
+    let progress = matches!(message, PushMessage::Progress { .. });
+    let progress_terminal = match message {
+        PushMessage::Progress {
+            terminal,
+            cancelled: false,
+            ..
+        } => Some(terminal.as_str()),
+        _ => None,
+    };
+    reserve(&pairing, progress_terminal)?;
     let resp = agent()
         .post(format!("{}/v1/push", pairing.relay_url))
+        .header("X-Aries-Priority", if progress { "normal" } else { "high" })
         .header("Authorization", format!("Bearer {}", pairing.token))
         .content_type("application/octet-stream")
         .send(&envelope[..])
@@ -144,6 +157,65 @@ pub fn send(message: &PushMessage) -> Result<(), SendError> {
     } else {
         Err(relay_error(resp))
     }
+}
+
+/// Shared by serve, call and push-test processes, and survives service restarts.
+/// A rolling minute is stricter than the Relay's fixed minute. Progress leaves
+/// five slots for attention/completion. Reserve before HTTP, including failures.
+fn reserve(pairing: &Pairing, progress: Option<&str>) -> Result<(), SendError> {
+    use sha2::{Digest, Sha256};
+    use std::io::{Seek, Write};
+    use std::os::unix::fs::OpenOptionsExt;
+    let key: String = Sha256::digest(pairing.token.as_bytes())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    let path = crate::state_dir().join(format!("push-budget-{key}.json"));
+    let mut file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .mode(0o600)
+        .open(path)
+        .map_err(|e| SendError::BadPairing(e.to_string()))?;
+    file.lock()
+        .map_err(|e| SendError::BadPairing(e.to_string()))?;
+    let mut body = String::new();
+    file.read_to_string(&mut body)
+        .map_err(|e| SendError::BadPairing(e.to_string()))?;
+    #[derive(Default, Serialize, Deserialize)]
+    struct Budget {
+        sent: Vec<u64>,
+        progress: std::collections::HashMap<String, u64>,
+    }
+    let mut budget: Budget = if body.is_empty() {
+        Budget::default()
+    } else {
+        serde_json::from_str(&body).map_err(|e| SendError::BadPairing(e.to_string()))?
+    };
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    budget.sent.retain(|at| now.saturating_sub(*at) < 60_000);
+    budget
+        .progress
+        .retain(|_, at| now.saturating_sub(*at) < 60_000);
+    if budget.sent.len() >= if progress.is_some() { 25 } else { 30 }
+        || progress.is_some_and(|terminal| budget.progress.contains_key(terminal))
+    {
+        return Err(SendError::RateLimited);
+    }
+    budget.sent.push(now);
+    if let Some(terminal) = progress {
+        budget.progress.insert(terminal.to_owned(), now);
+    }
+    file.rewind()
+        .and_then(|_| file.set_len(0))
+        .and_then(|_| file.write_all(&serde_json::to_vec(&budget).expect("budget json")))
+        .and_then(|_| file.sync_data())
+        .map_err(|e| SendError::BadPairing(e.to_string()))
 }
 
 /// Deletes `token`'s pairing on the Relay; `true` once the Relay confirmed.

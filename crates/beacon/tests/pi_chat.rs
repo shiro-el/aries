@@ -8,7 +8,7 @@ use std::io::Write;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use aries_beacon::chat::pi::{Pi, PiInterpreter, numbered_diff};
 use aries_beacon::chat::{
@@ -463,13 +463,42 @@ fn resuming_from_any_cursor_neither_repeats_nor_skips() {
 
 // Pairing.
 
+struct Process(std::process::Child);
+
+impl Drop for Process {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
 /// A process whose title is `pi`, like Pi's.
-fn fake_pi() -> std::process::Child {
-    std::process::Command::new("sleep")
-        .arg0("pi")
-        .arg("30")
-        .spawn()
-        .unwrap()
+fn fake_pi() -> Process {
+    let mut pi = Process(
+        std::process::Command::new("sleep")
+            .arg0("pi")
+            .arg("30")
+            .spawn()
+            .unwrap(),
+    );
+    // Spawn can return before /proc exposes the new argv. Wait for the
+    // fixture, independently of Pi.locate, so pairing assertions stay immediate.
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let cmdline = std::fs::read(format!("/proc/{}/cmdline", pi.0.id())).unwrap_or_default();
+        if cmdline.starts_with(b"pi\0") {
+            return pi;
+        }
+        assert!(
+            pi.0.try_wait().unwrap().is_none(),
+            "fake Pi exited before readiness"
+        );
+        assert!(
+            Instant::now() < deadline,
+            "fake Pi never exposed its pi process title"
+        );
+        std::thread::sleep(Duration::from_millis(5));
+    }
 }
 
 fn facts(pid: u32, labels: serde_json::Value) -> TerminalFacts {
@@ -478,13 +507,13 @@ fn facts(pid: u32, labels: serde_json::Value) -> TerminalFacts {
 
 #[test]
 fn pairs_through_the_extension_labels_while_pi_runs() {
-    let mut pi = fake_pi();
+    let pi = fake_pi();
     let labels = json!({
         "aries.pi.session": "0193-abc",
         "aries.pi.file": "/home/u/.pi/agent/sessions/--proj--/2026_0193-abc.jsonl",
     });
     assert_eq!(
-        Pi.locate(&facts(pi.id(), labels.clone())),
+        Pi.locate(&facts(pi.0.id(), labels.clone())),
         Some(Located {
             session: "0193-abc".into(),
             path: "/home/u/.pi/agent/sessions/--proj--/2026_0193-abc.jsonl".into(),
@@ -493,20 +522,19 @@ fn pairs_through_the_extension_labels_while_pi_runs() {
     // Without the session label the file name stands in.
     let only_file = json!({ "aries.pi.file": "/s/2026_x.jsonl" });
     assert_eq!(
-        Pi.locate(&facts(pi.id(), only_file)).unwrap().session,
+        Pi.locate(&facts(pi.0.id(), only_file)).unwrap().session,
         "2026_x"
     );
     // No label: not paired (the extension is missing).
-    assert_eq!(Pi.locate(&facts(pi.id(), json!({}))), None);
-    pi.kill().unwrap();
-    pi.wait().unwrap();
+    assert_eq!(Pi.locate(&facts(pi.0.id(), json!({}))), None);
+    drop(pi);
 
     // The label stays after Pi exits; nothing named pi runs any more.
-    let mut other = std::process::Command::new("sleep")
-        .arg("30")
-        .spawn()
-        .unwrap();
-    assert_eq!(Pi.locate(&facts(other.id(), labels)), None);
-    other.kill().unwrap();
-    other.wait().unwrap();
+    let other = Process(
+        std::process::Command::new("sleep")
+            .arg("30")
+            .spawn()
+            .unwrap(),
+    );
+    assert_eq!(Pi.locate(&facts(other.0.id(), labels)), None);
 }
