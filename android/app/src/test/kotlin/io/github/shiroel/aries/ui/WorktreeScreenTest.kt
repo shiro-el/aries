@@ -46,6 +46,7 @@ class WorktreeScreenTest {
         }
         compose.onNodeWithText("home").performClick()
         if (!unplaced) {
+            compose.onNodeWithContentDescription(str(R.string.hosts_actions_label)).performClick()
             compose.onNodeWithTag("host-layout-context").performClick()
             compose.onNodeWithTag("host-context-space:s1").performClick()
         }

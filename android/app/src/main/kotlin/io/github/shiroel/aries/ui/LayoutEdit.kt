@@ -4,16 +4,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -162,43 +158,11 @@ class LayoutEditor(private val browser: HostBrowser, private val scope: Coroutin
 internal fun LayoutEditControls(browser: HostBrowser, editor: LayoutEditor) {
     val link = browser.link
     val connection = if (link?.state == LinkState.Up) link.connection else null
+    val enabled = connection != null && !editor.busy
     LaunchedEffect(connection) {
         while (isActive) {
             editor.check()
             delay(10_000)
-        }
-    }
-    val enabled = connection != null && !editor.busy
-    val space = browser.openSpace
-    val tab = browser.tab
-    var menu by remember { mutableStateOf(false) }
-    Row(Modifier.horizontalScroll(rememberScrollState())) {
-        ActionIcon(R.drawable.ic_folder_plus, R.string.layout_new_space_button,
-            { if (editor.requireAvailable()) editor.naming = LayoutNameForm(LayoutNameKind.NEW_SPACE) }, enabled = enabled)
-        if (space != null) {
-            ActionIcon(R.drawable.ic_list_plus, R.string.layout_new_tab_button,
-                { if (editor.requireAvailable()) editor.naming = LayoutNameForm(LayoutNameKind.NEW_TAB, space.id, folder = space.folder.orEmpty()) }, enabled = enabled)
-            Box {
-                ActionIcon(R.drawable.ic_ellipsis_vertical, R.string.layout_actions_button, { if (editor.requireAvailable()) menu = true }, enabled = enabled)
-                DropdownMenu(expanded = menu && enabled, onDismissRequest = { menu = false }) {
-                    DropdownMenuItem(text = { Text(stringResource(R.string.layout_rename_space_button)) }, onClick = {
-                        menu = false
-                        editor.naming = LayoutNameForm(LayoutNameKind.RENAME_SPACE, space.id, if (space.named) space.name else "")
-                    })
-                    DropdownMenuItem(text = { Text(stringResource(R.string.layout_close_space_button)) }, onClick = {
-                        menu = false
-                        editor.ending = LayoutEndTarget.Space(space.id)
-                    })
-                    if (tab != null) DropdownMenuItem(text = { Text(stringResource(R.string.layout_rename_tab_button)) }, onClick = {
-                        menu = false
-                        editor.naming = LayoutNameForm(LayoutNameKind.RENAME_TAB, tab.id, if (tab.named) tab.name else "")
-                    })
-                    if (tab != null) DropdownMenuItem(text = { Text(stringResource(R.string.layout_close_tab_button)) }, onClick = {
-                        menu = false
-                        editor.ending = LayoutEndTarget.Tab(tab.id)
-                    })
-                }
-            }
         }
     }
     editor.error?.let { Text(stringResource(it.res, *it.args.toTypedArray()), color = MaterialTheme.colorScheme.error) }

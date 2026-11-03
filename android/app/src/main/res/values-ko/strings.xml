@@ -333,6 +333,7 @@
     <string name="connecting">%1$s에 연결하는 중…</string>
     <string name="terminals_actions_label">Terminal 작업</string>
     <!-- Host Agent list and editing context -->
+    <string name="hosts_actions_label">Host 작업</string>
     <string name="hosts_layout_context_button">Space 및 Tab</string>
     <string name="terminals_plain_group">Terminal (%1$d)</string>
     <string name="terminals_title">%1$s의 터미널</string>
