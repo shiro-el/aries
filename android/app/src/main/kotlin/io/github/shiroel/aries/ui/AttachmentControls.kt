@@ -3,19 +3,17 @@ package io.github.shiroel.aries.ui
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Row
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.core.content.FileProvider
 import io.github.shiroel.aries.R
 import java.io.File
@@ -48,16 +46,14 @@ fun AttachmentControls(chat: ChatModel) {
     val fileLabel = stringResource(R.string.attachments_file_button)
     val cameraLabel = stringResource(R.string.attachments_camera_button)
     Row {
-        TextButton(
+        IconButton(
             enabled = enabled,
-            modifier = Modifier.semantics { contentDescription = fileLabel },
             onClick = {
                 try { files.launch(arrayOf("*/*")) } catch (e: Exception) { chat.attachmentFailed(e) }
             },
-        ) { Text("📎") }
-        TextButton(
+        ) { Icon(painterResource(R.drawable.ic_paperclip), contentDescription = fileLabel) }
+        IconButton(
             enabled = enabled,
-            modifier = Modifier.semantics { contentDescription = cameraLabel },
             onClick = {
                 try {
                     val directory = File(context.cacheDir, "attachments").apply { mkdirs() }
@@ -70,6 +66,6 @@ fun AttachmentControls(chat: ChatModel) {
                     chat.attachmentFailed(e)
                 }
             },
-        ) { Text("📷") }
+        ) { Icon(painterResource(R.drawable.ic_camera), contentDescription = cameraLabel) }
     }
 }

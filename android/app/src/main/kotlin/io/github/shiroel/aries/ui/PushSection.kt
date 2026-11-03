@@ -4,8 +4,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.text.KeyboardOptions
@@ -17,12 +19,15 @@ import androidx.compose.runtime.LaunchedEffect
 import io.github.shiroel.aries.core.PushVerificationState
 import kotlinx.coroutines.delay
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.Alignment
 import androidx.compose.material3.Switch
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -60,12 +65,30 @@ fun PushSection(model: PushModel, beaconInstalled: Boolean) {
             is PushUi.Enabling -> {
                 if (ui.steps.isEmpty()) CircularProgressIndicator()
                 ui.steps.forEach { (step, state) ->
-                    val format = when (state) {
-                        StepState.Running -> R.string.push_step_running
-                        StepState.Done -> R.string.push_step_done
-                        StepState.Failed -> R.string.push_step_failed
+                    Row(
+                        Modifier.semantics(mergeDescendants = true) {},
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        when (state) {
+                            StepState.Running -> {
+                                val description = stringResource(R.string.push_step_running_description)
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp).semantics { contentDescription = description },
+                                    strokeWidth = 2.dp,
+                                )
+                            }
+                            StepState.Done, StepState.Failed -> Icon(
+                                painterResource(if (state == StepState.Done) R.drawable.ic_check else R.drawable.ic_x),
+                                contentDescription = stringResource(
+                                    if (state == StepState.Done) R.string.push_step_done_description else R.string.push_step_failed_description,
+                                ),
+                                modifier = Modifier.size(18.dp),
+                                tint = if (state == StepState.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                        Text(stringResource(stepLabel(step)))
                     }
-                    Text(stringResource(format, stringResource(stepLabel(step))))
                 }
                 if (ui.steps.any { it.second == StepState.Failed }) {
                     TextButton(onClick = model::enable) { Text(stringResource(R.string.push_retry_button)) }

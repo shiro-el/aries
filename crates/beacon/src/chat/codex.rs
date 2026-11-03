@@ -26,6 +26,8 @@ use serde_json::Value;
 
 use super::{Agent, Interpreter, KeysError, Located, TerminalFacts, media};
 
+mod history;
+
 pub const AGENT: &str = "codex";
 
 /// The Codex question tool.
@@ -51,6 +53,10 @@ impl Agent for Codex {
 
     fn interpreter(&self) -> Box<dyn Interpreter> {
         Box::<CodexInterpreter>::default()
+    }
+
+    fn open(&self, located: &Located, resume: Option<&str>) -> super::Opened {
+        history::open(located, resume)
     }
 
     fn answer_input(
@@ -106,8 +112,12 @@ impl Agent for Codex {
 
 /// The current thread among a process's open files.
 pub fn locate_in(open: impl IntoIterator<Item = PathBuf>) -> Option<Located> {
-    // thread -> (rollout, newest mtime of its files)
-    let mut threads: HashMap<String, (Option<PathBuf>, SystemTime)> = HashMap::new();
+    #[derive(Default)]
+    struct ThreadFiles {
+        rollout: Option<(PathBuf, SystemTime)>,
+        modified: Option<SystemTime>,
+    }
+    let mut threads: HashMap<String, ThreadFiles> = HashMap::new();
     let mut lock_dir: Option<PathBuf> = None;
     for path in open {
         let (id, rollout) = if let Some(id) = rollout_thread(&path) {
@@ -121,17 +131,27 @@ pub fn locate_in(open: impl IntoIterator<Item = PathBuf>) -> Option<Located> {
         let Ok(modified) = std::fs::metadata(&path).and_then(|m| m.modified()) else {
             continue;
         };
-        let entry = threads.entry(id).or_insert((None, SystemTime::UNIX_EPOCH));
-        if rollout {
-            entry.0 = Some(path);
+        let entry = threads.entry(id).or_default();
+        if rollout
+            && entry
+                .rollout
+                .as_ref()
+                .is_none_or(|(_, time)| modified > *time)
+        {
+            entry.rollout = Some((path, modified));
         }
-        entry.1 = entry.1.max(modified);
+        entry.modified = Some(
+            entry
+                .modified
+                .unwrap_or(SystemTime::UNIX_EPOCH)
+                .max(modified),
+        );
     }
-    let (session, (rollout, _)) = threads
+    let (session, files) = threads
         .into_iter()
-        .max_by(|a, b| a.1.1.cmp(&b.1.1).then_with(|| a.0.cmp(&b.0)))?;
-    let path = match rollout {
-        Some(path) => path,
+        .max_by(|a, b| a.1.modified.cmp(&b.1.modified).then_with(|| a.0.cmp(&b.0)))?;
+    let path = match files.rollout {
+        Some((path, _)) => path,
         // No rollout yet: a path that does not exist, so the Chat waits;
         // the next poll pairs the rollout once Codex opens it.
         None => lock_dir?
@@ -149,6 +169,8 @@ fn rollout_thread(path: &Path) -> Option<String> {
     if !path.components().any(|c| c.as_os_str() == "sessions") {
         return None;
     }
+    // Backtracking keeps the thread but writes `...-<thread>_<rollout>.jsonl`.
+    let stem = stem.rsplit_once('_').map_or(stem, |(thread, _)| thread);
     let id = stem.get(stem.len().checked_sub(36)?..)?;
     is_uuid(id).then(|| id.to_owned())
 }
