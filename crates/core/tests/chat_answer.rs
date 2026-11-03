@@ -247,3 +247,173 @@ async fn without_a_beacon_answering_says_so() {
         "{r:?}"
     );
 }
+
+/// Free text must open Other and type UTF-8, without bracketed paste or
+/// terminal.send (which would answer the wrong dialog or add a message).
+#[tokio::test]
+async fn claude_free_text_uses_other_and_types_korean_literally() {
+    let env = Env::new();
+    let hc = HcSession::start();
+    let config = env.dir.path().join("claude");
+    let projects = config.join("projects/-work-a");
+    std::fs::create_dir_all(&projects).unwrap();
+    let agent = hc.run_fake_agent("claude", &format!(
+        "claude-session {} S1 /work/a\nlines claude-code/main-session.jsonl 1 65 {}\nsay Which color do you prefer?\nsay 4. Type something.\nstatus blocked question\nkeys 11\nstatus working\n",
+        config.display(), projects.join("S1.jsonl").display(),
+    ));
+    let mut vars: HashMap<String, String> = hc.env().into_iter().collect();
+    vars.insert(
+        "ARIES_BEACON".into(),
+        path(&aries_test_support::beacon_bin()),
+    );
+    vars.insert("CLAUDE_CONFIG_DIR".into(), path(&config));
+    vars.insert(
+        "PATH".into(),
+        format!("{}:/usr/bin:/bin", hc.bin().parent().unwrap().display()),
+    );
+    let host = env.host(vars);
+    for _ in 0..100 {
+        if hc
+            .hc(&["get", &agent.address, "--json"])
+            .contains("\"blocked\"")
+        {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    for text in [
+        String::new(),
+        "bad\nanswer".into(),
+        "\u{1b}[200~escape".into(),
+        "x".repeat(4097),
+    ] {
+        let invalid = env
+            .core
+            .answer_question_with_text(
+                host.clone(),
+                agent.address.clone(),
+                COLOR.into(),
+                vec![vec![]],
+                vec![Some(text)],
+            )
+            .await;
+        assert!(
+            matches!(
+                invalid,
+                Err(CoreError::AnswerRefused {
+                    reason: AnswerProblem::Invalid,
+                    ..
+                })
+            ),
+            "{invalid:?}"
+        );
+        assert!(agent.inputs().is_empty());
+    }
+    env.core
+        .answer_question_with_text(
+            host,
+            agent.address.clone(),
+            COLOR.into(),
+            vec![vec![]],
+            vec![Some("보라색".into())],
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        inputs(&agent, 1).await,
+        ["keys 34 eb b3 b4 eb 9d bc ec 83 89 0d"]
+    );
+}
+
+#[tokio::test]
+async fn codex_queued_requests_are_answered_in_order_with_text_or_options() {
+    let env = Env::new();
+    let hc = HcSession::start();
+    let rollout = env
+        .dir
+        .path()
+        .join("sessions/rollout-2026-11-04T00-00-00-01a1a012-3af0-7c01-97e4-7e2adbc2ae4f.jsonl");
+    std::fs::create_dir_all(rollout.parent().unwrap()).unwrap();
+    let call = |id: &str, prompt: &str| {
+        serde_json::json!({"type":"response_item","payload":{
+        "type":"function_call","name":"request_user_input","call_id":id,
+        "arguments":serde_json::json!({"questions":[{"id":"color","question":prompt,"header":"Color","options":[{"label":"Red","description":"red"},{"label":"Blue","description":"blue"}]}]}).to_string()
+    }}).to_string()
+    };
+    std::fs::write(
+        &rollout,
+        format!(
+            "{}\n{}\n",
+            call("q1", "First color?"),
+            call("q2", "Second color?")
+        ),
+    )
+    .unwrap();
+    let result = env.dir.path().join("q1-result");
+    std::fs::write(&result, "{\"type\":\"response_item\",\"payload\":{\"type\":\"function_call_output\",\"call_id\":\"q1\",\"output\":\"Purple\"}}\n").unwrap();
+    let agent = hc.run_fake_agent("codex", &format!(
+        "hold {}\nsay 2 questions - shift+left to answer\nstatus blocked question\nkeys 6\nsay First color?\nsay 3. Other\nkeys 14\ntranscript {} {}\nsay Second color?\nstatus blocked question\nkeys 4\nstatus working\n",
+        rollout.display(), result.display(), rollout.display(),
+    ));
+    let mut vars: HashMap<String, String> = hc.env().into_iter().collect();
+    vars.insert(
+        "ARIES_BEACON".into(),
+        path(&aries_test_support::beacon_bin()),
+    );
+    vars.insert(
+        "PATH".into(),
+        format!("{}:/usr/bin:/bin", hc.bin().parent().unwrap().display()),
+    );
+    let host = env.host(vars);
+    for _ in 0..100 {
+        if hc
+            .hc(&["get", &agent.address, "--json"])
+            .contains("\"blocked\"")
+        {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    let early = env
+        .core
+        .answer_question(
+            host.clone(),
+            agent.address.clone(),
+            "q2".into(),
+            vec![vec![1]],
+        )
+        .await;
+    assert!(
+        matches!(
+            early,
+            Err(CoreError::AnswerRefused {
+                reason: AnswerProblem::Gone,
+                ..
+            })
+        ),
+        "{early:?}"
+    );
+    assert!(agent.inputs().is_empty());
+    env.core
+        .answer_question_with_text(
+            host.clone(),
+            agent.address.clone(),
+            "q1".into(),
+            vec![vec![]],
+            vec![Some("Purple".into())],
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        inputs(&agent, 2).await,
+        [
+            "keys 1b 5b 31 3b 32 44",
+            "keys 1b 5b 42 1b 5b 42 0d 50 75 72 70 6c 65 0d"
+        ]
+    );
+    env.core
+        .answer_question(host, agent.address.clone(), "q2".into(), vec![vec![1]])
+        .await
+        .unwrap();
+    assert_eq!(inputs(&agent, 3).await[2], "keys 1b 5b 42 0d");
+}

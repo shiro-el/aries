@@ -59,6 +59,22 @@ pub trait Agent {
             },
         }
     }
+    /// Maps mixed picks/text to the Agent's own menu, without terminal.send.
+    fn answer_input(
+        &self,
+        question: &ChatQuestion,
+        picks: &[Vec<usize>],
+        text: &[Option<String>],
+    ) -> Result<Vec<answer::AnswerInput>, KeysError> {
+        if text.iter().any(Option::is_some) {
+            return Err(KeysError::Unsupported(format!(
+                "{} free text is unsupported",
+                self.name()
+            )));
+        }
+        self.answer_keys(question, picks)
+            .map(|keys| vec![answer::AnswerInput::Keys(keys)])
+    }
     /// The TUI keys (herdr-core `terminal.keys` names) that answer the open
     /// `question` with `picks` (already checked by [`answer::validate`]).
     fn answer_keys(
