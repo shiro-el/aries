@@ -1034,6 +1034,40 @@ impl AriesCore {
         };
         on_runtime(async move { chat::answer(&host, &terminal, &answer).await }).await
     }
+
+    /// Answers from a notification without a [`HostConnection`] or UI.
+    /// Every key on the route must be PLAIN; never asks for biometrics.
+    /// Sign-in is limited to 15 seconds, then the existing one-shot answer
+    /// path waits at most 30 seconds for the Beacon. Nothing is retried.
+    pub async fn answer_question_background(
+        &self,
+        host_id: String,
+        terminal: String,
+        question_id: String,
+        picks: Vec<Vec<u32>>,
+    ) -> Result<(), CoreError> {
+        if !self.can_answer_in_background(host_id.clone())? {
+            return Err(CoreError::KeyLocked);
+        }
+        let host = self.chat_host(&host_id)?;
+        let answer = aries_protocol::answer::Answer {
+            question: question_id,
+            picks: picks
+                .into_iter()
+                .map(|p| p.into_iter().map(|n| n as usize).collect())
+                .collect(),
+        };
+        on_runtime(async move {
+            chat::answer_within(
+                &host,
+                &terminal,
+                &answer,
+                std::time::Duration::from_secs(15),
+            )
+            .await
+        })
+        .await
+    }
 }
 
 /// Calls (`calls` module).

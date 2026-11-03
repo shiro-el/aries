@@ -559,11 +559,28 @@ pub(crate) async fn answer(
     terminal: &str,
     answer: &Answer,
 ) -> Result<(), CoreError> {
+    let stream = host.open(&answer_command(terminal, answer)).await?;
+    answer_result(stream).await
+}
+
+pub(crate) async fn answer_within(
+    host: &ChatHost,
+    terminal: &str,
+    answer: &Answer,
+    sign_in: Duration,
+) -> Result<(), CoreError> {
+    let stream = host
+        .open_within(&answer_command(terminal, answer), sign_in)
+        .await?;
+    answer_result(stream).await
+}
+
+async fn answer_result(stream: Stream) -> Result<(), CoreError> {
     let Stream {
         reader,
         writer,
         guard,
-    } = host.open(&answer_command(terminal, answer)).await?;
+    } = stream;
     let mut lines = BufReader::new(reader).lines();
     let mut reply = None;
     let read = tokio::time::timeout(Duration::from_secs(30), async {
