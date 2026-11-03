@@ -1,5 +1,5 @@
 //! `aries-beacon skill install` / `skill uninstall` as a black box, with a
-//! temporary `HOME`: the managed `call-human` skill in `~/.claude/skills`
+//! temporary `HOME`: the managed `aries-call-human` skill in `~/.claude/skills`
 //! and `~/.agents/skills`, and what the user changed there left alone.
 
 use std::path::{Path, PathBuf};
@@ -9,7 +9,7 @@ use aries_protocol::beacon::{SkillOutcome, SkillReport};
 
 const BEACON: &str = env!("CARGO_BIN_EXE_aries-beacon");
 /// The skill this Beacon ships: an independent copy of the source file.
-const SHIPPED: &str = include_str!("../skill/call-human/SKILL.md");
+const SHIPPED: &str = include_str!("../skill/aries-call-human/SKILL.md");
 
 struct Home {
     dir: tempfile::TempDir,
@@ -27,11 +27,11 @@ impl Home {
     }
 
     fn claude(&self) -> PathBuf {
-        self.path().join(".claude/skills/call-human")
+        self.path().join(".claude/skills/aries-call-human")
     }
 
     fn agents(&self) -> PathBuf {
-        self.path().join(".agents/skills/call-human")
+        self.path().join(".agents/skills/aries-call-human")
     }
 
     fn command(&self, args: &[&str]) -> Command {
@@ -120,7 +120,7 @@ fn installs_the_skill_for_claude_code_and_other_agents() {
     for dir in [home.claude(), home.agents()] {
         assert_eq!(read(dir.join("SKILL.md")), SHIPPED);
     }
-    assert!(SHIPPED.contains("name: call-human"));
+    assert!(SHIPPED.contains("name: aries-call-human"));
     assert!(SHIPPED.contains("aries-beacon call"));
 
     let again = home.install();
@@ -187,7 +187,7 @@ fn leaves_a_linked_or_foreign_call_human_skill_alone() {
     std::fs::create_dir_all(home.agents()).unwrap();
     std::fs::write(home.agents().join("SKILL.md"), "another tool's skill\n").unwrap();
     std::fs::create_dir_all(home.claude().parent().unwrap()).unwrap();
-    std::os::unix::fs::symlink("../../.agents/skills/call-human", home.claude()).unwrap();
+    std::os::unix::fs::symlink("../../.agents/skills/aries-call-human", home.claude()).unwrap();
 
     let r = home.install();
     assert_eq!(outcome_of(&r, &home.claude()), SkillOutcome::KeptSymlink);
@@ -305,7 +305,7 @@ fn status_reports_both_foreign_skills_without_changing_them() {
         assert!(out.status.success());
         let status: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
         let skills: SkillReport = serde_json::from_value(status["skills"].clone())
-            .expect("status must report the preserved call-human skills");
+            .expect("status must report the preserved aries-call-human skills");
         assert_eq!(skills.roots.len(), 2);
         for dir in [h.claude(), h.agents()] {
             assert_eq!(outcome_of(&skills, &dir), SkillOutcome::KeptForeign);
@@ -376,4 +376,179 @@ fn status_distinguishes_missing_and_untouched_managed_skills() {
             .all(|r| r.outcome == SkillOutcome::Unchanged)
     );
     assert_eq!(read(h.claude().join("NOTES.md")), "notes\n");
+}
+
+/// Seed an actual old-name installation without executing a previous binary.
+fn legacy_copy(home: &Home) -> Vec<PathBuf> {
+    let dirs: Vec<_> = [".claude/skills/call-human", ".agents/skills/call-human"]
+        .map(|p| home.path().join(p))
+        .into();
+    for dir in &dirs {
+        std::fs::create_dir_all(dir).unwrap();
+        std::fs::write(dir.join("SKILL.md"), "old Aries instructions\n").unwrap();
+        std::fs::write(
+            dir.join(".aries-beacon.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "version": "0.1.0", "files": {"SKILL.md": "old Aries instructions\n"}
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+    }
+    dirs
+}
+
+fn legacy_outcomes(report: &SkillReport) -> Vec<SkillOutcome> {
+    serde_json::from_value::<Vec<aries_protocol::beacon::SkillRoot>>(
+        serde_json::to_value(report).unwrap()["legacy_roots"].clone(),
+    )
+    .expect("report must distinguish legacy cleanup from new-name readiness")
+    .into_iter()
+    .map(|r| {
+        assert!(r.path.ends_with("/call-human"));
+        r.outcome
+    })
+    .collect()
+}
+
+#[test]
+fn migrates_untouched_legacy_copies_and_preserves_added_files() {
+    let home = Home::new();
+    let old = legacy_copy(&home);
+    std::fs::write(old[1].join("NOTES.md"), "my notes").unwrap();
+    let r = home.install();
+    assert_eq!(legacy_outcomes(&r), [SkillOutcome::Removed; 2]);
+    assert!(!old[0].exists());
+    assert!(!old[1].join("SKILL.md").exists());
+    assert!(!old[1].join(".aries-beacon.json").exists());
+    assert_eq!(read(old[1].join("NOTES.md")), "my notes");
+    for dir in [home.claude(), home.agents()] {
+        assert_eq!(read(dir.join("SKILL.md")), SHIPPED);
+    }
+    assert_eq!(
+        legacy_outcomes(&home.install()),
+        [SkillOutcome::Absent, SkillOutcome::KeptForeign]
+    );
+}
+
+#[test]
+fn legacy_foreign_modified_missing_and_linked_copies_are_never_touched() {
+    use std::os::unix::fs::symlink;
+    for case in [
+        "foreign",
+        "modified",
+        "missing",
+        "file_link",
+        "dir_link",
+        "invalid_marker",
+        "marker_link",
+    ] {
+        let home = Home::new();
+        let old = legacy_copy(&home);
+        let target = home.path().join("elsewhere");
+        std::fs::write(&target, "old Aries instructions\n").unwrap();
+        let expected = match case {
+            "foreign" => {
+                for dir in &old {
+                    std::fs::remove_file(dir.join(".aries-beacon.json")).unwrap();
+                }
+                SkillOutcome::KeptForeign
+            }
+            "modified" => {
+                for dir in &old {
+                    std::fs::write(dir.join("SKILL.md"), "user rules").unwrap();
+                }
+                SkillOutcome::KeptModified
+            }
+            "missing" => {
+                for dir in &old {
+                    std::fs::remove_file(dir.join("SKILL.md")).unwrap();
+                }
+                SkillOutcome::KeptModified
+            }
+            "file_link" => {
+                for dir in &old {
+                    std::fs::remove_file(dir.join("SKILL.md")).unwrap();
+                    symlink(&target, dir.join("SKILL.md")).unwrap();
+                }
+                SkillOutcome::KeptModified
+            }
+            "dir_link" => {
+                let dest = home.path().join("linked-skill");
+                std::fs::rename(&old[0], &dest).unwrap();
+                std::fs::remove_dir_all(&old[1]).unwrap();
+                for dir in &old {
+                    symlink(&dest, dir).unwrap();
+                }
+                SkillOutcome::KeptSymlink
+            }
+            "invalid_marker" => {
+                for dir in &old {
+                    std::fs::write(dir.join(".aries-beacon.json"), "not json").unwrap();
+                }
+                SkillOutcome::KeptForeign
+            }
+            "marker_link" => {
+                let marker = home.path().join("marker");
+                std::fs::copy(old[0].join(".aries-beacon.json"), &marker).unwrap();
+                for dir in &old {
+                    std::fs::remove_file(dir.join(".aries-beacon.json")).unwrap();
+                    symlink(&marker, dir.join(".aries-beacon.json")).unwrap();
+                }
+                SkillOutcome::KeptForeign
+            }
+            _ => unreachable!(),
+        };
+        let snapshot = |dir: &Path| {
+            ["SKILL.md", ".aries-beacon.json"].map(|name| {
+                let path = dir.join(name);
+                (std::fs::read(&path).ok(), std::fs::read_link(&path).ok())
+            })
+        };
+        let before: Vec<_> = old
+            .iter()
+            .map(|p| (snapshot(p), std::fs::read_link(p).ok()))
+            .collect();
+        let out = home.command(&["status"]).output().unwrap();
+        let status: aries_protocol::beacon::BeaconStatus =
+            serde_json::from_slice(&out.stdout).unwrap();
+        assert_eq!(
+            legacy_outcomes(&status.skills.unwrap()),
+            [expected; 2],
+            "{case}"
+        );
+        let r = home.install();
+        assert!(
+            r.roots.iter().all(|r| r.outcome == SkillOutcome::Installed),
+            "{case}: {r:?}"
+        );
+        assert_eq!(legacy_outcomes(&r), [expected; 2], "{case}");
+        assert_eq!(legacy_outcomes(&home.uninstall()), [expected; 2], "{case}");
+        for (dir, original) in old.iter().zip(before) {
+            assert_eq!(
+                (snapshot(dir), std::fs::read_link(dir).ok()),
+                original,
+                "{case}"
+            );
+        }
+        assert_eq!(read(target), "old Aries instructions\n");
+    }
+}
+
+#[test]
+fn uninstall_removes_both_names_even_without_a_new_install() {
+    let home = Home::new();
+    home.install();
+    let old = legacy_copy(&home);
+    let r = home.uninstall();
+    assert!(r.roots.iter().all(|r| r.outcome == SkillOutcome::Removed));
+    assert_eq!(legacy_outcomes(&r), [SkillOutcome::Removed; 2]);
+    assert!(!home.claude().exists() && !home.agents().exists());
+    assert!(old.iter().all(|p| !p.exists()));
+    let home = Home::new();
+    let old = legacy_copy(&home);
+    let r = home.uninstall();
+    assert!(r.roots.iter().all(|r| r.outcome == SkillOutcome::Absent));
+    assert_eq!(legacy_outcomes(&r), [SkillOutcome::Removed; 2]);
+    assert!(old.iter().all(|p| !p.exists()));
 }

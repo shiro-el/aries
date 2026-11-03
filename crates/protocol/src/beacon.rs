@@ -62,15 +62,20 @@ fn parse(version: &str) -> Option<[u64; 3]> {
 
 /// One JSON line printed by `aries-beacon skill install` and
 /// `aries-beacon skill uninstall`: what happened to the managed
-/// `call-human` skill in each skills directory.
+/// `aries-call-human` skill in each skills directory.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SkillReport {
+    /// Current `aries-call-human` paths; these determine readiness.
     pub roots: Vec<SkillRoot>,
+    /// Old `call-human` paths: cleanup outcomes (or inspection on status).
+    /// Kept copies do not conflict with the current-name skill.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub legacy_roots: Vec<SkillRoot>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SkillRoot {
-    /// The skill directory, e.g. `/home/u/.claude/skills/call-human`.
+    /// The skill directory, e.g. `/home/u/.claude/skills/aries-call-human`.
     pub path: String,
     pub outcome: SkillOutcome,
 }
@@ -91,7 +96,7 @@ pub enum SkillOutcome {
     /// A managed file was edited, removed or replaced by the user: the
     /// skill is left as it is.
     KeptModified,
-    /// A `call-human` skill the Beacon did not install: left alone.
+    /// A `aries-call-human` skill the Beacon did not install: left alone.
     KeptForeign,
     /// The skill directory is a symlink: left alone.
     KeptSymlink,

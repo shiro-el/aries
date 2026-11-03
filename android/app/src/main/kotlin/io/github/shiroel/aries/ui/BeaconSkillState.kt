@@ -19,20 +19,23 @@ import io.github.shiroel.aries.core.BeaconSkillRoot
 /** Read-only per-path diagnostics, reusable in the Host's Settings section. */
 @Composable
 fun BeaconSkillState(skills: List<BeaconSkillRoot>?) {
+    // Older Beacons reported the old name. Those paths cannot establish
+    // readiness or conflicts for aries-call-human.
+    val currentSkills = skills?.filter { it.path.substringAfterLast('/') == "aries-call-human" }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
             stringResource(R.string.beacon_skill_title),
             fontFamily = FontFamily.Monospace,
             fontSize = 14.sp,
         )
-        if (skills == null) {
+        if (currentSkills.isNullOrEmpty()) {
             Text(
                 stringResource(R.string.beacon_skill_unknown),
                 fontFamily = FontFamily.Monospace,
                 fontSize = 12.sp,
             )
         }
-        skills.orEmpty().forEach { skill ->
+        currentSkills.orEmpty().forEach { skill ->
             val message = when (skill.outcome) {
                 BeaconSkillOutcome.KEPT_FOREIGN -> R.string.beacon_skill_foreign
                 BeaconSkillOutcome.KEPT_MODIFIED -> R.string.beacon_skill_modified

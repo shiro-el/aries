@@ -1,14 +1,19 @@
-//! The managed `call-human` skill: `aries-beacon skill install` and
+//! The managed `aries-call-human` skill: `aries-beacon skill install` and
 //! `aries-beacon skill uninstall`.
 //!
 //! The Beacon ships the skill ([`shipped`]) and puts it in every
-//! [`roots`] directory as `<root>/call-human/`. Next to the files it writes
+//! [`roots`] directory as `<root>/aries-call-human/`. Next to the files it writes
 //! [`MARKER`], which records exactly what it installed. Only a skill with
 //! that marker whose files still read as recorded is the Beacon's to
 //! update or remove: a symlinked skill directory, a skill without the
 //! marker (another tool's, or the user's own), and a skill with an edited,
 //! removed or symlinked file are left as they are. Files the user added
 //! next to a managed skill are never touched.
+//!
+//! Install and uninstall also clean up the old `<root>/call-human/` name
+//! under the same lock. Only a marker with every recorded file intact
+//! permits removal; all other old-name copies are left entirely untouched.
+//! Reports keep current-name readiness separate from legacy cleanup.
 //!
 //! Every run holds an exclusive lock on `skill.lock` in the Beacon's state
 //! directory, files are replaced by rename, and a new skill directory is
@@ -24,11 +29,13 @@ use aries_protocol::beacon::{SkillOutcome, SkillReport, SkillRoot};
 use serde::{Deserialize, Serialize};
 
 /// The skill's directory name in each root.
-pub const NAME: &str = "call-human";
+pub const NAME: &str = "aries-call-human";
+/// The old Aries name, inspected and removed only when still wholly managed.
+const LEGACY_NAME: &str = "call-human";
 /// What the Beacon installed, inside the skill directory.
 pub const MARKER: &str = ".aries-beacon.json";
 /// Files are written as `.<name>.aries-tmp` and renamed into place; a new
-/// skill directory is built as `.call-human.aries-tmp`.
+/// skill directory is built as `.aries-call-human.aries-tmp`.
 const TMP_SUFFIX: &str = ".aries-tmp";
 
 /// Skill files by name (no subdirectories), with their contents.
@@ -38,7 +45,7 @@ pub type Files = BTreeMap<String, String>;
 pub fn shipped() -> Files {
     Files::from([(
         "SKILL.md".to_owned(),
-        include_str!("../skill/call-human/SKILL.md").to_owned(),
+        include_str!("../skill/aries-call-human/SKILL.md").to_owned(),
     )])
 }
 
@@ -85,18 +92,24 @@ pub fn uninstall(home: &Path, state: &Path) -> io::Result<SkillReport> {
 /// Inspects each path without creating state, taking an install lock, or
 /// repairing files. An untouched managed copy is reported as `Unchanged`.
 pub fn status(home: &Path) -> io::Result<SkillReport> {
-    let roots = roots(home)
-        .into_iter()
-        .map(|root| {
-            let dir = root.join(NAME);
+    let mut report = SkillReport {
+        roots: Vec::new(),
+        legacy_roots: Vec::new(),
+    };
+    for root in roots(home) {
+        for (name, results) in [
+            (NAME, &mut report.roots),
+            (LEGACY_NAME, &mut report.legacy_roots),
+        ] {
+            let dir = root.join(name);
             let outcome = inspect_one(&dir).map_err(|e| with_path(e, &dir))?;
-            Ok(SkillRoot {
+            results.push(SkillRoot {
                 path: dir.display().to_string(),
                 outcome,
-            })
-        })
-        .collect::<io::Result<Vec<_>>>()?;
-    Ok(SkillReport { roots })
+            });
+        }
+    }
+    Ok(report)
 }
 
 fn inspect_one(dir: &Path) -> io::Result<SkillOutcome> {
@@ -127,16 +140,25 @@ fn locked(
         .write(true)
         .open(state.join("skill.lock"))?;
     lock.lock()?;
-    let mut report = Vec::new();
+    let mut report = SkillReport {
+        roots: Vec::new(),
+        legacy_roots: Vec::new(),
+    };
     for root in roots(home) {
         let dir = root.join(NAME);
         let outcome = each(&dir).map_err(|e| with_path(e, &dir))?;
-        report.push(SkillRoot {
+        report.roots.push(SkillRoot {
             path: dir.display().to_string(),
             outcome,
         });
+        let legacy = root.join(LEGACY_NAME);
+        let outcome = cleanup_legacy(&legacy).map_err(|e| with_path(e, &legacy))?;
+        report.legacy_roots.push(SkillRoot {
+            path: legacy.display().to_string(),
+            outcome,
+        });
     }
-    Ok(SkillReport { roots: report })
+    Ok(report)
 }
 
 /// What is at `dir`, before deciding whether it is the Beacon's.
@@ -270,6 +292,16 @@ fn uninstall_one(dir: &Path) -> io::Result<SkillOutcome> {
     // Only if the user added nothing.
     let _ = std::fs::remove_dir(dir);
     Ok(SkillOutcome::Removed)
+}
+
+/// Legacy copies are removed only if every recorded file is still intact.
+/// In particular, do not strip the marker from an edited copy, or accept
+/// a missing recorded file as uninstall_one does for the current name.
+fn cleanup_legacy(dir: &Path) -> io::Result<SkillOutcome> {
+    match inspect_one(dir)? {
+        SkillOutcome::Unchanged => uninstall_one(dir),
+        kept => Ok(kept),
+    }
 }
 
 fn marker_json(files: &Files) -> String {

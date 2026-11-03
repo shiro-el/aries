@@ -68,7 +68,7 @@ class BeaconSectionTest {
     @Test
     fun showsBothForeignSkillPathsOnConnectAndAfterReinstall() {
         val core = FakeCore().apply {
-            beaconSkills = listOf("/home/me/.claude/skills/call-human", "/home/me/.agents/skills/call-human").map {
+            beaconSkills = listOf("/home/me/.claude/skills/aries-call-human", "/home/me/.agents/skills/aries-call-human").map {
                 BeaconSkillRoot(it, BeaconSkillOutcome.KEPT_FOREIGN)
             }
             beacon = installed("0.1.0")
@@ -87,12 +87,47 @@ class BeaconSectionTest {
         assertConflicts()
     }
 
+
+    @Test
+    fun onlyTheNewSkillNameDeterminesReadinessAndConflicts() {
+        val core = FakeCore().apply {
+            beaconSkills = listOf(
+                BeaconSkillRoot("/home/me/.claude/skills/aries-call-human", BeaconSkillOutcome.UNCHANGED),
+                BeaconSkillRoot("/home/me/.agents/skills/aries-call-human", BeaconSkillOutcome.INSTALLED),
+                BeaconSkillRoot("/home/me/.claude/skills/call-human", BeaconSkillOutcome.KEPT_FOREIGN),
+                BeaconSkillRoot("/home/me/.agents/skills/call-human", BeaconSkillOutcome.KEPT_SYMLINK),
+            )
+            beacon = installed("0.1.0")
+        }
+        connectTo(core)
+        assertEquals("aries-call-human skill", str(R.string.beacon_skill_title))
+        compose.onAllNodesWithText(str(R.string.beacon_skill_ready)).assertCountEquals(2)
+        compose.onAllNodesWithText(str(R.string.beacon_skill_foreign)).assertCountEquals(0)
+        compose.onAllNodesWithText(str(R.string.beacon_skill_symlink)).assertCountEquals(0)
+        compose.onAllNodesWithText("/home/me/.claude/skills/call-human").assertCountEquals(0)
+    }
+
+    @Test
+    fun oldNameOnlyReportsDoNotClaimNewSkillReadinessOrConflict() {
+        val core = FakeCore().apply {
+            beaconSkills = listOf(
+                BeaconSkillRoot("/home/me/.claude/skills/call-human", BeaconSkillOutcome.KEPT_FOREIGN),
+                BeaconSkillRoot("/home/me/.agents/skills/call-human", BeaconSkillOutcome.UNCHANGED),
+            )
+            beacon = installed("0.1.0")
+        }
+        connectTo(core)
+        compose.onNodeWithText(str(R.string.beacon_skill_unknown)).assertExists()
+        compose.onAllNodesWithText(str(R.string.beacon_skill_foreign)).assertCountEquals(0)
+        compose.onAllNodesWithText(str(R.string.beacon_skill_ready)).assertCountEquals(0)
+    }
+
     @Test
     fun showsModifiedAndSymlinkPreservationReasons() {
         val core = FakeCore().apply {
             beaconSkills = listOf(
-                BeaconSkillRoot("/home/me/.claude/skills/call-human", BeaconSkillOutcome.KEPT_MODIFIED),
-                BeaconSkillRoot("/home/me/.agents/skills/call-human", BeaconSkillOutcome.KEPT_SYMLINK),
+                BeaconSkillRoot("/home/me/.claude/skills/aries-call-human", BeaconSkillOutcome.KEPT_MODIFIED),
+                BeaconSkillRoot("/home/me/.agents/skills/aries-call-human", BeaconSkillOutcome.KEPT_SYMLINK),
             )
             beacon = installed("0.1.0")
         }

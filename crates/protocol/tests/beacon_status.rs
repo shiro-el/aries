@@ -44,3 +44,17 @@ fn status_with_skill_conflicts_round_trips_without_a_contract_bump() {
     );
     assert_eq!(status.skills.unwrap().roots.len(), 2);
 }
+
+#[test]
+fn report_keeps_legacy_cleanup_separate_and_accepts_older_reports() {
+    use aries_protocol::beacon::SkillReport;
+    let value = serde_json::json!({
+        "roots": [{"path": "/home/u/.agents/skills/aries-call-human", "outcome": "installed"}],
+        "legacy_roots": [{"path": "/home/u/.agents/skills/call-human", "outcome": "kept_foreign"}]
+    });
+    let report: SkillReport = serde_json::from_value(value.clone()).unwrap();
+    assert_eq!(serde_json::to_value(report).unwrap(), value);
+    let old = serde_json::json!({"roots": []});
+    let report: SkillReport = serde_json::from_value(old.clone()).unwrap();
+    assert_eq!(serde_json::to_value(report).unwrap(), old);
+}
