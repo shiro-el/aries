@@ -170,6 +170,16 @@ class TerminalLook(private val viewer: TerminalViewer) {
         panY = 0f
     }
 
+    /** Keep live input visible while the Host's resized grid is still in flight. */
+    fun revealCursor() {
+        if (!viewer.typing || viewer.scrolled != 0 || viewer.search != null) return
+        val cursor = viewer.cursor ?: return
+        val y = cursor.row.toInt() * cellH
+        if (y + panY < 0) panY = -y
+        else if (y + cellH + panY > viewH) panY = viewH - y - cellH
+        clamp()
+    }
+
     /** Bring the selected search cells into the phone's visible part of the grid. */
     fun revealSearchMatch() {
         val match = viewer.search?.highlights?.firstOrNull { it.current } ?: return

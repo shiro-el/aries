@@ -465,7 +465,10 @@ fun ChatScreen(
             }
             io.github.shiroel.aries.speech.ReadAloudPlayback(readAloud, showInactiveNotice = false)
             Box(Modifier.weight(1f).fillMaxWidth()) {
-                LazyColumn(Modifier.fillMaxSize().testTag("chat-transcript"), state = scroll.list) {
+                LazyColumn(
+                    Modifier.fillMaxSize().chatImeAnchor(scroll.list).testTag("chat-transcript"),
+                    state = scroll.list,
+                ) {
                     entries.forEach { entry ->
                         val body = entry.body
                         val source = when (body) {
