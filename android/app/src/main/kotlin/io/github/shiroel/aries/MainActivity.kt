@@ -63,6 +63,11 @@ class MainActivity : ComponentActivity() {
         m.openPushedAgent(target.hostId, target.terminal)
     }
 
+    override fun onStart() {
+        super.onStart()
+        needsForegroundRefresh = true
+    }
+
     private fun resumeModel() {
         if (!resumed) return
         val m = model ?: return
@@ -82,7 +87,6 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         app.vault.authorizer = BiometricUnlock(this)
         resumed = true
-        needsForegroundRefresh = true
         resumeModel()
     }
 
