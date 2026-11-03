@@ -44,6 +44,7 @@ for (const line of steps) {
   const step = JSON.parse(line);
   if (step.hook) await hooks[step.hook]?.(step.input ?? {}, {});
   else if (step.event) await hooks.event?.({ event: { type: step.event, properties: step.props ?? {} } });
+  else if (step.say) process.stdout.write(step.say + "\n");
   else if (step.wait === "key") await nextChunk();
   else if (step.wait) while (!/[\r\n]/.test((await nextChunk()).toString())) {}
   else if (step.sleep) await new Promise((r) => setTimeout(r, step.sleep));

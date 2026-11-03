@@ -56,8 +56,8 @@ class ChatScreenTest {
         ),
     )
 
-    private fun openChat(core: FakeCore) {
-        core.terminals = listOf(claude, vim)
+    private fun openChat(core: FakeCore, asking: Boolean = false) {
+        core.terminals = listOf(if (asking) claude.copy(agentStatus = AgentStatus.Blocked(io.github.shiroel.aries.core.BlockedReason.QUESTION, null)) else claude, vim)
         core.addHost("home", Endpoint.Ssh("10.0.0.2", 22u, "me"))
         compose.setContent {
             val scope = rememberCoroutineScope()
@@ -345,7 +345,7 @@ class ChatScreenTest {
     @Test
     fun anOpenQuestionIsAnsweredWithOneTap() {
         val core = FakeCore()
-        openChat(core)
+        openChat(core, asking = true)
         core.pushChat(ChatSnapshot(listOf(color(ChatToolStatus.RUNNING)), ChatStatus.LIVE, null))
         compose.waitForIdle()
         compose.onNodeWithText("Which color do you prefer?").assertExists()
@@ -373,7 +373,7 @@ class ChatScreenTest {
     @Config(qualifiers = "h1200dp") // the whole card on screen
     fun severalQuestionsAreChosenThenSentTogether() {
         val core = FakeCore()
-        openChat(core)
+        openChat(core, asking = true)
         val q = entry(
             "toolu_m",
             ChatEntryBody.Question(
@@ -405,7 +405,7 @@ class ChatScreenTest {
     @Test
     fun aQuestionAnsweredElsewhereSaysSo() {
         val core = FakeCore()
-        openChat(core)
+        openChat(core, asking = true)
         core.pushChat(ChatSnapshot(listOf(color(ChatToolStatus.RUNNING)), ChatStatus.LIVE, null))
         compose.waitForIdle()
         core.answerFailure = CoreException.AnswerRefused(AnswerProblem.ANSWERED, "")

@@ -1054,10 +1054,49 @@ impl AriesCore {
     ) -> Result<(), CoreError> {
         let host = self.chat_host(&host_id)?;
         let answer = aries_protocol::answer::Answer {
+            free_text: vec![],
             question: question_id,
             picks: (picks.into_iter())
                 .map(|p| p.into_iter().map(|n| n as usize).collect())
                 .collect(),
+        };
+        on_runtime(async move { chat::answer(&host, &terminal, &answer).await }).await
+    }
+
+    /// Answers a live question with either picks or free text per part.
+    /// A text part must have no picks. The Beacon revalidates the live menu;
+    /// a stale question is refused, never converted to a normal message.
+    pub async fn answer_question_with_text(
+        &self,
+        host_id: String,
+        terminal: String,
+        question_id: String,
+        picks: Vec<Vec<u32>>,
+        free_text: Vec<Option<String>>,
+    ) -> Result<(), CoreError> {
+        let host = self.chat_host(&host_id)?;
+        if picks.len() != free_text.len()
+            || picks.iter().zip(&free_text).any(|(p, text)| {
+                text.as_ref().is_some_and(|text| {
+                    !p.is_empty()
+                        || text.trim().is_empty()
+                        || text.len() > 4096
+                        || text.chars().any(char::is_control)
+                })
+            })
+        {
+            return Err(CoreError::AnswerRefused {
+                reason: AnswerProblem::Invalid,
+                detail: "invalid answer parts".into(),
+            });
+        }
+        let answer = aries_protocol::answer::Answer {
+            question: question_id,
+            picks: picks
+                .into_iter()
+                .map(|p| p.into_iter().map(|n| n as usize).collect())
+                .collect(),
+            free_text,
         };
         on_runtime(async move { chat::answer(&host, &terminal, &answer).await }).await
     }
@@ -1078,6 +1117,7 @@ impl AriesCore {
         }
         let host = self.chat_host(&host_id)?;
         let answer = aries_protocol::answer::Answer {
+            free_text: vec![],
             question: question_id,
             picks: picks
                 .into_iter()

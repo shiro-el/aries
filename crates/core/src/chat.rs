@@ -73,10 +73,14 @@ pub enum ChatEntryBody {
     AgentError {
         detail: String,
     },
-    /// The Agent asks the user to choose. While `status` is `Running` it is
-    /// open: show `questions` with their options as buttons and answer
-    /// with [`crate::AriesCore::answer_question`] (this entry's id).
-    /// `output` is the Agent's record of the answer once there is one.
+    /// A recorded Agent question. Running means unresolved, not necessarily
+    /// live. Only the current question while the Terminal is Blocked on a
+    /// question may use `answer_question` / `answer_question_with_text`.
+    /// Codex queues unresolved requests FIFO in the current user turn; other
+    /// Agents use the newest one. The Beacon validates again before input.
+    /// With no live menu, a reply to the latest unresolved historical question
+    /// is an ordinary `send_message`, subject to its Blocked gate. Older and
+    /// completed questions are read-only. `output` records an Agent's answer.
     Question {
         name: String,
         title: String,
@@ -972,6 +976,7 @@ mod tests {
     #[test]
     fn the_answer_command_quotes_terminal_and_question() {
         let answer = Answer {
+            free_text: vec![],
             question: "it's".into(),
             picks: vec![vec![1], vec![0, 2]],
         };

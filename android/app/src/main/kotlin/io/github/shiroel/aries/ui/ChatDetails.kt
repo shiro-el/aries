@@ -31,7 +31,9 @@ internal fun ChatRawInput(input: String) {
         modifier = Modifier.semantics { stateDescription = disclosureState },
     ) { Text(stringResource(R.string.chat_tool_raw_input)) }
     if (showRaw) {
-        Text(input, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+        ChatTextActions(input) { modifier ->
+            Text(input, modifier, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+        }
     }
 }
 
@@ -48,7 +50,10 @@ internal fun ChatToolDetailsView(details: ChatToolDetails) {
 
 @Composable
 private fun Detail(@StringRes label: Int, value: String) {
-    Text(stringResource(label, value), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+    val text = stringResource(label, value)
+    ChatTextActions(text) { modifier ->
+        Text(text, modifier, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+    }
 }
 
 /** A compact, scrollable line keeps every recorded value accessible on a phone. */

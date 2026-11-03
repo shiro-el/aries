@@ -70,6 +70,42 @@ impl Agent for ClaudeCode {
         Box::<ClaudeInterpreter>::default()
     }
 
+    fn answer_input(
+        &self,
+        question: &ChatQuestion,
+        picks: &[Vec<usize>],
+        text: &[Option<String>],
+    ) -> Result<Vec<super::answer::AnswerInput>, KeysError> {
+        use super::answer::AnswerInput::{Keys, Text};
+        if !text.iter().any(Option::is_some) {
+            return self
+                .answer_keys(question, picks)
+                .map(|keys| vec![Keys(keys)]);
+        }
+        if question.questions.iter().any(|q| q.options.len() > 8) {
+            return Err(KeysError::Unsupported(
+                "more than 8 options plus Other".into(),
+            ));
+        }
+        let mut actions = Vec::new();
+        for (i, q) in question.questions.iter().enumerate() {
+            if let Some(value) = text.get(i).and_then(Option::as_ref) {
+                actions.push(Keys(vec![(q.options.len() + 1).to_string()]));
+                actions.push(Text(value.clone()));
+                actions.push(Keys(vec!["enter".into()]));
+            } else {
+                actions.push(Keys(picks[i].iter().map(|n| (n + 1).to_string()).collect()));
+            }
+            if q.multi {
+                actions.push(Keys(vec!["tab".into()]));
+            }
+        }
+        if question.questions.len() > 1 || question.questions.iter().any(|q| q.multi) {
+            actions.push(Keys(vec!["1".into()]));
+        }
+        Ok(actions)
+    }
+
     /// AskUserQuestion: a single-choice question takes its option number
     /// and moves on by itself; a multi-select one toggles each number, then
     /// `tab` moves on. With several questions or any multi-select, a review
