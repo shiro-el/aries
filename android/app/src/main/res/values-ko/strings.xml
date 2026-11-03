@@ -242,6 +242,7 @@
     <string name="terminal_back_to_live">실시간으로</string>
     <string name="terminal_zoom_reset">확대 %1$d%% · 원래대로</string>
     <string name="terminal_copy">복사</string>
+    <string name="terminal_send_to_agent">Agent에게 보내기</string>
     <string name="terminal_open_link">링크 열기</string>
     <string name="terminal_copy_link">링크 복사</string>
 
@@ -307,6 +308,27 @@
     <string name="chat_thinking">생각함</string>
     <string name="chat_tool_running">실행 중</string>
     <string name="chat_tool_failed">실패</string>
+    <!-- Chat tool details and response metadata -->
+    <string name="chat_details_expanded">펼침</string>
+    <string name="chat_details_collapsed">접힘</string>
+    <string name="chat_tool_raw_input">원본 입력</string>
+    <string name="chat_tool_command">명령: %1$s</string>
+    <string name="chat_tool_cwd">작업 폴더: %1$s</string>
+    <string name="chat_tool_exit_code">종료 코드: %1$s</string>
+    <string name="chat_tool_duration">소요 시간: %1$s ms</string>
+    <string name="chat_tool_path">경로: %1$s</string>
+    <string name="chat_tool_pattern">패턴: %1$s</string>
+    <string name="chat_tool_result_count">결과 수: %1$s</string>
+    <string name="chat_response_model">모델 %1$s</string>
+    <string name="chat_response_input_tokens">입력 %1$s</string>
+    <string name="chat_response_output_tokens">출력 %1$s</string>
+    <string name="chat_response_cache_read_tokens">캐시 읽기 %1$s</string>
+    <string name="chat_response_cache_write_tokens">캐시 쓰기 %1$s</string>
+    <string name="chat_response_duration">%1$s ms</string>
+    <string name="chat_response_complete">완료</string>
+    <string name="chat_response_interrupted">중단</string>
+    <string name="chat_response_error">오류</string>
+
     <string name="chat_tool_input">입력</string>
     <string name="chat_tool_output">결과</string>
     <string name="chat_tool_expand_label">%1$s 호출 전체 보기</string>

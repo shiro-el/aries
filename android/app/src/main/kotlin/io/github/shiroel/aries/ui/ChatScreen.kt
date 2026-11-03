@@ -489,6 +489,11 @@ fun ChatScreen(
                                     body.images.forEach { ChatImageView(it, chat::image) }
                                 }
                             }
+                            if (body is ChatEntryBody.Agent) body.metadata?.let { metadata ->
+                                Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                                    ChatResponseMetadataView(metadata)
+                                }
+                            }
                             HorizontalDivider(Modifier.padding(top = 8.dp))
                         }
                     }
@@ -694,11 +699,15 @@ private fun ToolView(
         Column(
             Modifier.fillMaxWidth()
                 .background(MaterialTheme.colorScheme.surfaceVariant)
-                .then(actions)
-                .semantics { contentDescription = label }
                 .padding(8.dp),
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                    .then(actions)
+                    .semantics { contentDescription = label },
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 SearchableChatText(tool.name, "tool-name", style = MaterialTheme.typography.labelLarge)
                 SearchableChatText(
                     tool.title, "tool-title",
@@ -723,10 +732,8 @@ private fun ToolView(
             tool.diff?.let { DiffView(it, expanded) }
             tool.images.forEach { ChatImageView(it, image) }
             if (expanded) {
-                Text(stringResource(R.string.chat_tool_input), style = MaterialTheme.typography.labelMedium)
-                ChatTextActions(tool.input, onClick = onToggle) {
-                    SearchableChatText(tool.input, "tool-input", it, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
-                }
+                tool.details?.let { ChatToolDetailsView(it) }
+                if (tool.input.isNotBlank()) ChatRawInput(tool.input)
                 tool.output?.let {
                     Text(stringResource(R.string.chat_tool_output), style = MaterialTheme.typography.labelMedium)
                     ChatTextActions(it, onClick = onToggle) { modifier ->

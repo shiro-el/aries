@@ -247,6 +247,7 @@
     <string name="terminal_back_to_live">Back to live</string>
     <string name="terminal_zoom_reset">Zoom %1$d%% · Reset</string>
     <string name="terminal_copy">Copy</string>
+    <string name="terminal_send_to_agent">Send to Agent</string>
     <string name="terminal_open_link">Open link</string>
     <string name="terminal_copy_link">Copy link</string>
 
@@ -312,6 +313,27 @@
     <string name="chat_thinking">Thinking</string>
     <string name="chat_tool_running">running</string>
     <string name="chat_tool_failed">failed</string>
+    <!-- Chat tool details and response metadata -->
+    <string name="chat_details_expanded">Expanded</string>
+    <string name="chat_details_collapsed">Collapsed</string>
+    <string name="chat_tool_raw_input">Raw input</string>
+    <string name="chat_tool_command">Command: %1$s</string>
+    <string name="chat_tool_cwd">Working directory: %1$s</string>
+    <string name="chat_tool_exit_code">Exit code: %1$s</string>
+    <string name="chat_tool_duration">Duration: %1$s ms</string>
+    <string name="chat_tool_path">Path: %1$s</string>
+    <string name="chat_tool_pattern">Pattern: %1$s</string>
+    <string name="chat_tool_result_count">Results: %1$s</string>
+    <string name="chat_response_model">Model %1$s</string>
+    <string name="chat_response_input_tokens">In %1$s</string>
+    <string name="chat_response_output_tokens">Out %1$s</string>
+    <string name="chat_response_cache_read_tokens">Cache read %1$s</string>
+    <string name="chat_response_cache_write_tokens">Cache write %1$s</string>
+    <string name="chat_response_duration">%1$s ms</string>
+    <string name="chat_response_complete">Complete</string>
+    <string name="chat_response_interrupted">Interrupted</string>
+    <string name="chat_response_error">Error</string>
+
     <string name="chat_tool_input">Input</string>
     <string name="chat_tool_output">Result</string>
     <string name="chat_tool_expand_label">Show the full %1$s call</string>
