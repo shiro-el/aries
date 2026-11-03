@@ -174,7 +174,7 @@ internal fun ChatSearchBar(
     onClose: () -> Unit,
 ) {
     if (!open) {
-        TextButton(onClick = onOpen) { Text(stringResource(R.string.chat_search_button)) }
+        TextButton(onClick = onOpen, shape = RectangleShape) { Text(stringResource(R.string.chat_search_button)) }
         return
     }
     val focus = remember { FocusRequester() }
@@ -186,12 +186,12 @@ internal fun ChatSearchBar(
                 modifier = Modifier.weight(1f).focusRequester(focus).semantics { contentDescription = label },
                 label = { Text(label) }, singleLine = true, shape = RectangleShape,
             )
-            TextButton(onClick = onClose) { Text(stringResource(R.string.chat_search_close)) }
+            TextButton(onClick = onClose, shape = RectangleShape) { Text(stringResource(R.string.chat_search_close)) }
         }
         Row {
             Text(stringResource(R.string.chat_search_count, current, count), Modifier.weight(1f).padding(12.dp))
-            TextButton(onClick = { onMove(-1) }, enabled = count > 0) { Text(stringResource(R.string.chat_search_previous)) }
-            TextButton(onClick = { onMove(1) }, enabled = count > 0) { Text(stringResource(R.string.chat_search_next)) }
+            TextButton(onClick = { onMove(-1) }, enabled = count > 0, shape = RectangleShape) { Text(stringResource(R.string.chat_search_previous)) }
+            TextButton(onClick = { onMove(1) }, enabled = count > 0, shape = RectangleShape) { Text(stringResource(R.string.chat_search_next)) }
         }
     }
     LaunchedEffect(focus) { focus.requestFocus() }
