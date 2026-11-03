@@ -1,0 +1,22 @@
+{
+  "spaces": [
+    {"id": "checkout", "name": "", "folder": "/wrong/folder", "tabs": [
+      {"id": "empty", "name": "", "root": {"id": "empty-root", "type": "row", "children": []}},
+      {"id": "work", "name": "", "root": {"id": "row", "type": "row", "children": [
+        {"id": "first", "content": {"terminal": "$first"}},
+        {"id": "second", "content": {"terminal": "$second"}}
+      ]}},
+      {"id": "custom", "name": " custom ", "root": {"id": "custom-root"}}
+    ]},
+    {"id": "home", "name": "", "folder": "$home/", "tabs": []},
+    {"id": "root", "name": "", "folder": "/", "tabs": []},
+    {"id": "blank", "name": "", "folder": "", "tabs": []},
+    {"id": "fallback", "name": "", "folder": "/some/fallback/", "tabs": [
+      {"id": "gone", "name": "", "root": {"id": "gone", "content": {"terminal": "t999"}}},
+      {"id": "live", "name": "", "root": {"id": "live", "content": {"terminal": "$second"}}}
+    ]},
+    {"id": "named", "name": "  ", "folder": "/not/the/name", "tabs": [
+      {"id": "named-tab", "name": "  ", "root": {"id": "named-root"}}
+    ]}
+  ]
+}

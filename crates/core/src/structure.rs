@@ -16,11 +16,14 @@
 //! Which Space/Tab/Pane the phone shows, and any zoom, is the app's own
 //! state: nothing here writes to the Host.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::time::{Duration, Instant};
+
+use base64::Engine;
 
 use serde_json::Value;
 
-use crate::{TerminalInfo, terminal_info};
+use crate::{TerminalInfo, hc::HcClient, terminal_info};
 
 /// Name of herdr-app's document in herdr-core.
 pub(crate) const DOCUMENT: &str = "herdr-app";
@@ -41,18 +44,24 @@ pub struct HostStructure {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct SpaceInfo {
     pub id: String,
-    /// May be empty (an unnamed Space, or one known only from labels).
+    /// Display name: the explicit name, or the first Terminal's checkout folder.
     pub name: String,
     pub folder: Option<String>,
     pub tabs: Vec<TabInfo>,
+    /// Whether the user supplied the name (rather than a computed name).
+    #[uniffi(default = false)]
+    pub named: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct TabInfo {
     pub id: String,
+    /// Display name: the explicit name, or the 1-based position in its Space.
     pub name: String,
     /// In layout order (depth first, floating Panes after their node's children).
     pub panes: Vec<PaneInfo>,
+    #[uniffi(default = false)]
+    pub named: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -147,6 +156,7 @@ fn parse(value: &Value, terminals: &[Value]) -> Result<Vec<SpaceInfo>, Structure
             tab_infos.push(TabInfo {
                 id: text(tab, "id", &tat)?,
                 name: text(tab, "name", &tat)?,
+                named: !text(tab, "name", &tat)?.is_empty(),
                 panes: panes
                     .into_iter()
                     .map(|(id, address)| PaneInfo {
@@ -161,6 +171,7 @@ fn parse(value: &Value, terminals: &[Value]) -> Result<Vec<SpaceInfo>, Structure
         out.push(SpaceInfo {
             id: text(space, "id", &at)?,
             name: text(space, "name", &at)?,
+            named: !text(space, "name", &at)?.is_empty(),
             folder: (!folder.is_empty()).then_some(folder),
             tabs: tab_infos,
         });
@@ -273,12 +284,14 @@ fn by_labels(terminals: &[Value], problem: StructureProblem) -> HostStructure {
             .map(|(id, tabs)| SpaceInfo {
                 id,
                 name: String::new(),
+                named: false,
                 folder: None,
                 tabs: tabs
                     .into_iter()
                     .map(|(id, panes)| TabInfo {
                         id,
                         name: String::new(),
+                        named: false,
                         panes,
                     })
                     .collect(),
@@ -286,5 +299,201 @@ fn by_labels(terminals: &[Value], problem: StructureProblem) -> HostStructure {
             .collect(),
         unplaced,
         problem: Some(problem),
+    }
+}
+
+/// Host-side folder facts, cached for 30 seconds and scoped to a connection.
+/// Only the first Pane of each unnamed Space needs a checkout lookup. Batch
+/// those paths per machine over the existing connection, not another SSH login.
+/// `machine.exec` is optional: old/non-POSIX Hosts keep cwd-based names.
+#[derive(Default)]
+pub(crate) struct Names {
+    folders: HashMap<(Option<String>, String), Folder>,
+}
+
+struct Folder {
+    home: String,
+    top: String,
+    checked: Instant,
+}
+
+// Paths are argv elements, never interpolated into shell code. NUL separators
+// preserve spaces, quotes and newlines. rev-parse returns the worktree root,
+// rather than the common repository directory of a linked worktree.
+const FOLDERS: &str = r#"printf '%s\000' "$HOME"
+for path do
+    if [ -n "$path" ]; then
+        top=$(git --no-optional-locks -C "$path" rev-parse --show-toplevel 2>/dev/null) || top=$path
+    else
+        top=
+    fi
+    printf '%s\000' "$top"
+done"#;
+
+impl Names {
+    pub(crate) async fn apply(&mut self, client: &HcClient, structure: &mut HostStructure) {
+        let sources: Vec<_> = structure.spaces.iter().map(name_source).collect();
+        let needed: HashSet<_> = structure
+            .spaces
+            .iter()
+            .zip(&sources)
+            .filter(|(s, _)| !s.named)
+            .map(|(_, source)| source.key())
+            .collect();
+        // Do not retain paths once their Spaces/Terminals have gone away.
+        self.folders.retain(|key, _| needed.contains(key));
+        let mut groups: BTreeMap<Option<String>, BTreeSet<String>> = BTreeMap::new();
+        for key in needed {
+            if self
+                .folders
+                .get(&key)
+                .is_none_or(|f| f.checked.elapsed() >= Duration::from_secs(30))
+            {
+                groups
+                    .entry(key.0.clone())
+                    .or_default()
+                    .insert(key.1.clone());
+                self.folders.insert(
+                    key.clone(),
+                    Folder {
+                        home: String::new(),
+                        top: key.1,
+                        checked: Instant::now(),
+                    },
+                );
+            }
+        }
+        // The entire refresh has a fixed budget, independent of Space count.
+        // The server also bounds the subprocess and ends its children on timeout.
+        let _ = tokio::time::timeout(Duration::from_secs(3), async {
+            for (machine, paths) in groups {
+                let mut argv = vec!["sh", "-c", FOLDERS, "aries-space-names"];
+                argv.extend(paths.iter().map(String::as_str));
+                let Ok(result) = client
+                    .call(
+                        "machine.exec",
+                        serde_json::json!({
+                            "argv": argv, "on": machine, "timeout": 2.0,
+                        }),
+                    )
+                    .await
+                else {
+                    continue;
+                };
+                let Some(output) = result["stdout"]
+                    .as_str()
+                    .and_then(|s| base64::engine::general_purpose::STANDARD.decode(s).ok())
+                    .and_then(|b| String::from_utf8(b).ok())
+                else {
+                    continue;
+                };
+                let mut fields = output.split_terminator('\0');
+                let Some(home) = fields.next() else { continue };
+                for path in paths {
+                    if let Some(folder) = self.folders.get_mut(&(machine.clone(), path)) {
+                        folder.home = home.to_owned();
+                        // Partial output after a timeout still supplies HOME.
+                        if let Some(top) = fields.next() {
+                            folder.top = top.to_owned();
+                        }
+                    }
+                }
+            }
+        })
+        .await;
+        for (space, source) in structure.spaces.iter_mut().zip(sources) {
+            if !space.named {
+                let folder = self.folders.get(&source.key());
+                let path = if source.checkout {
+                    folder.map_or(source.path.as_str(), |f| f.top.as_str())
+                } else {
+                    &source.path
+                };
+                space.name = folder_name(path, folder.map_or("", |f| f.home.as_str()));
+            }
+            for (i, tab) in space.tabs.iter_mut().enumerate() {
+                if !tab.named {
+                    tab.name = (i + 1).to_string();
+                }
+            }
+        }
+    }
+}
+
+/// The first terminal block wins, even if its Terminal is gone; do not skip
+/// forward to the next live Pane. An empty first cwd also remains meaningful.
+struct NameSource {
+    machine: Option<String>,
+    path: String,
+    checkout: bool,
+}
+
+impl NameSource {
+    fn key(&self) -> (Option<String>, String) {
+        (
+            self.machine.clone(),
+            if self.checkout {
+                self.path.clone()
+            } else {
+                String::new()
+            },
+        )
+    }
+}
+
+fn name_source(space: &SpaceInfo) -> NameSource {
+    let first = space.tabs.iter().flat_map(|t| &t.panes).next();
+    let terminal = first.and_then(|p| p.terminal.as_ref());
+    let machine = first.and_then(|p| {
+        p.terminal_address
+            .rsplit_once('/')
+            .map(|(m, _)| m.to_owned())
+    });
+    let cwd = terminal.and_then(|t| t.cwd.as_deref());
+    NameSource {
+        machine,
+        path: cwd
+            .or(space.folder.as_deref())
+            .unwrap_or_default()
+            .to_owned(),
+        checkout: cwd.is_some(),
+    }
+}
+
+/// Herdr's folder display rule (herdr-app `src/model.rs`, Apache-2.0).
+/// Use Host HOME, never the phone's home. Both slash styles are accepted.
+fn folder_name(full: &str, home: &str) -> String {
+    let path = full.trim_end_matches(['/', '\\']);
+    let is_home = !home.is_empty() && path == home.trim_end_matches(['/', '\\']);
+    if full.is_empty() || is_home {
+        "~".into()
+    } else if path.is_empty() {
+        full[..1].to_owned()
+    } else {
+        path.rsplit(['/', '\\'])
+            .find(|s| !s.is_empty())
+            .unwrap_or(path)
+            .to_owned()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::folder_name;
+
+    #[test]
+    fn folder_display_handles_home_roots_and_both_path_separators() {
+        for (path, home, expected) in [
+            ("", "/home/me", "~"),
+            ("/home/me/", "/home/me/", "~"),
+            ("/", "/home/me", "/"),
+            ("/", "", "/"),
+            ("/", "/", "~"),
+            ("/work/aries/", "/home/me", "aries"),
+            (r"C:\Users\me\", r"C:\Users\me", "~"),
+            (r"C:\work\aries\", r"C:\Users\me", "aries"),
+        ] {
+            assert_eq!(folder_name(path, home), expected, "{path:?}, {home:?}");
+        }
     }
 }

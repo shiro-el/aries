@@ -601,6 +601,7 @@ impl AriesCore {
             on_runtime(async move { HcClient::handshake(transport.open().await?).await }).await?;
         Ok(Arc::new(HostConnection {
             client: Arc::new(client),
+            names: Default::default(),
             recent: launch::RecentCwds::in_host_dir(self.store.host_dir(&host.id)),
             saved: launch::SavedLaunches::in_host_dir(self.store.host_dir(&host.id)),
         }))
@@ -1114,6 +1115,7 @@ impl AriesCore {
 #[derive(uniffi::Object)]
 pub struct HostConnection {
     client: Arc<HcClient>,
+    names: Arc<tokio::sync::Mutex<structure::Names>>,
     recent: launch::RecentCwds,
     saved: launch::SavedLaunches,
 }
@@ -1163,7 +1165,8 @@ impl HostConnection {
     /// `herdr.space` / `herdr.tab` labels when the document is unusable.
     pub async fn structure(&self) -> Result<HostStructure, CoreError> {
         let client = self.client.clone();
-        on_runtime(async move { read_structure(&client).await }).await
+        let names = self.names.clone();
+        on_runtime(async move { read_structure(&client, &names).await }).await
     }
 
     /// Delivers the structure now and again whenever the desktop changes the
@@ -1174,10 +1177,11 @@ impl HostConnection {
         listener: Arc<dyn StructureListener>,
     ) -> Result<Arc<StructureWatch>, CoreError> {
         let client = self.client.clone();
+        let names = self.names.clone();
         let task = on_runtime(async move {
             // Subscribe before reading, so no change falls in between.
             let (_, mut events) = client.subscribe_events(serde_json::json!({})).await?;
-            listener.on_structure(read_structure(&client).await?);
+            listener.on_structure(read_structure(&client, &names).await?);
             Ok(tokio::spawn(async move {
                 while let Some(msg) = events.recv().await {
                     let mut changed = changes_structure(&msg);
@@ -1187,7 +1191,7 @@ impl HostConnection {
                     if !changed {
                         continue;
                     }
-                    match read_structure(&client).await {
+                    match read_structure(&client, &names).await {
                         Ok(s) => listener.on_structure(s),
                         Err(_) => break,
                     }
@@ -1340,7 +1344,10 @@ async fn set_labels(
     Ok(terminal_info(&t))
 }
 
-async fn read_structure(client: &HcClient) -> Result<HostStructure, CoreError> {
+async fn read_structure(
+    client: &HcClient,
+    names: &tokio::sync::Mutex<structure::Names>,
+) -> Result<HostStructure, CoreError> {
     let doc = client
         .call(
             "doc.get",
@@ -1349,7 +1356,9 @@ async fn read_structure(client: &HcClient) -> Result<HostStructure, CoreError> {
         .await?;
     let list = client.call("terminal.list", serde_json::json!({})).await?;
     let terminals = list["terminals"].as_array().cloned().unwrap_or_default();
-    Ok(structure::build(&doc, &terminals))
+    let mut structure = structure::build(&doc, &terminals);
+    names.lock().await.apply(client, &mut structure).await;
+    Ok(structure)
 }
 
 /// Whether an event-stream message can change what `read_structure` returns.

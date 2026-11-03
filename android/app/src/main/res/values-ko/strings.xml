@@ -175,10 +175,8 @@
     <string name="chat_blocked_auth">Agent가 Terminal에서 로그인을 기다립니다.</string>
     <string name="chat_blocked_other">Agent가 Terminal에서 기다리고 있습니다.</string>
 
-    <string name="space_unnamed">이름 없는 스페이스</string>
     <string name="space_summary">탭 %1$d개 · 페인 %2$d개</string>
     <string name="space_no_tabs">이 스페이스에는 탭이 없습니다.</string>
-    <string name="tab_unnamed">이름 없는 탭</string>
     <string name="tab_empty">이 탭에는 터미널이 없습니다.</string>
     <string name="pane_terminal_gone">%1$s (종료됨)</string>
     <string name="pane_zoom_button">확대</string>
