@@ -25,7 +25,7 @@ internal fun remoteMediaKind(path: String): RemoteMediaKind? =
 
 /** Owns the bounded transfer and removes even partial previews on navigation or cancellation. */
 @Composable
-internal fun RemoteFilePreview(connection: HostConnection?, address: String, path: String, modifier: Modifier = Modifier) {
+internal fun RemoteFilePreview(connection: HostConnection?, address: String, path: String, modifier: Modifier = Modifier, preview: FilePreview? = null) {
     val context = LocalContext.current
     var localFile by remember { mutableStateOf<File?>(null) }
     var bytes by remember { mutableStateOf<ByteArray?>(null) }
@@ -35,10 +35,14 @@ internal fun RemoteFilePreview(connection: HostConnection?, address: String, pat
     var open by remember { mutableStateOf(true) }
     val pdf = remoteMediaKind(path) == RemoteMediaKind.PDF
     val limitMiB = if (pdf) 64L else 16L
-    LaunchedEffect(connection, address, path) {
+    LaunchedEffect(connection, address, path, preview) {
         var temporary: File? = null
         try {
             val loaded = withContext(Dispatchers.IO) {
+                if (preview != null && !pdf) {
+                    if (preview.bytes.size > limitMiB * 1024 * 1024) throw ExportTooLarge()
+                    return@withContext preview.bytes
+                }
                 val destination = File.createTempFile("remote-preview-", ".bin", context.cacheDir)
                 temporary = destination
                 downloadExport(checkNotNull(connection), address, path, destination, limitMiB * 1024 * 1024)
@@ -68,5 +72,5 @@ internal fun RemoteFilePreview(connection: HostConnection?, address: String, pat
             else -> TextButton(onClick = { open = true }) { Text(stringResource(R.string.files_preview_open)) }
         }
     }
-    if (open) bytes?.let { ImageViewer(it, onDismiss = { open = false }, name = path) }
+    if (open) bytes?.let { ImageViewer(it, onDismiss = { open = false }, name = path, mediaType = preview?.mediaType) }
 }
