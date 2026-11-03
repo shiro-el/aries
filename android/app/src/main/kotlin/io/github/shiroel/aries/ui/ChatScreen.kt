@@ -282,9 +282,12 @@ fun ChatScreen(
 ) {
     val snapshot = chat.snapshot
     val entries = snapshot?.entries.orEmpty()
-    val agentCalls = calls?.calls.orEmpty().filter {
-        it.host.id == chat.host.id && it.call.terminal == chat.terminal.address
-    }.sortedBy { it.call.atMs }
+    val agentCalls = calls?.let { model ->
+        model.calls.filter {
+            it.host.id == chat.host.id && it.call.terminal == chat.terminal.address &&
+                (it.answerable || it.key in model.replying || it.key in model.replyNotes)
+        }.sortedBy { it.call.atMs }
+    }.orEmpty()
     val list = rememberLazyListState()
     // Follow the conversation: keep the newest entry in view.
     LaunchedEffect(entries.size, agentCalls.size) {
