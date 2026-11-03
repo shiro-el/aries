@@ -109,11 +109,12 @@ fn the_chat_of_a_codex_terminal_is_its_open_rollout() {
         matches!(&lines[0].event, ChatEvent::Reset { agent, session } if agent == "codex" && session == THREAD),
         "{text}"
     );
-    let agents: Vec<&str> = lines
+    // Metadata arrives as upserts of the same reply, not new messages.
+    let agents: std::collections::BTreeMap<&str, &str> = lines
         .iter()
         .filter_map(|l| match &l.event {
             ChatEvent::Item { item } => match &item.body {
-                ChatBody::Agent { text } => Some(text.as_str()),
+                ChatBody::Agent { text, .. } => Some((item.id.as_str(), text.as_str())),
                 _ => None,
             },
             _ => None,

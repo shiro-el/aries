@@ -496,11 +496,14 @@ pub struct OpenCodeChat {
     messages: HashMap<String, Message>,
     /// The parts of each user message, by part id.
     users: HashMap<String, BTreeMap<String, UserPart>>,
+    replies: HashMap<String, BTreeMap<String, ChatItem>>,
 }
 
 struct Message {
     user: bool,
     created: i64,
+    cwd: Option<String>,
+    metadata: Option<aries_protocol::chat::ResponseMetadata>,
 }
 
 enum UserPart {
@@ -517,6 +520,23 @@ impl OpenCodeChat {
             Message {
                 user: m.data["role"] == "user",
                 created: m.time_created,
+                cwd: super::details::text(&m.data["path"]["cwd"]),
+                metadata: super::details::metadata(aries_protocol::chat::ResponseMetadata {
+                    model: super::details::text(&m.data["modelID"]),
+                    input_tokens: m.data["tokens"]["input"].as_u64(),
+                    output_tokens: m.data["tokens"]["output"].as_u64(),
+                    cache_read_tokens: m.data["tokens"]["cache"]["read"].as_u64(),
+                    cache_write_tokens: m.data["tokens"]["cache"]["write"].as_u64(),
+                    duration_ms: super::details::elapsed(
+                        &m.data["time"]["created"],
+                        &m.data["time"]["completed"],
+                    ),
+                    completion: if m.data["error"].is_object() {
+                        Some(aries_protocol::chat::ResponseCompletion::Error)
+                    } else {
+                        super::details::completion(&m.data["finish"])
+                    },
+                }),
             },
         );
     }
@@ -529,9 +549,19 @@ impl OpenCodeChat {
     /// The items of a message row itself: a failed assistant turn's error.
     pub fn message(&mut self, m: &MessageRow) -> Vec<ChatEvent> {
         self.know(m);
+        let mut events = Vec::new();
+        if let Some(parts) = self.replies.get_mut(&m.id) {
+            let metadata = &self.messages[&m.id].metadata;
+            for part in parts.values_mut() {
+                if let ChatBody::Agent { metadata: old, .. } = &mut part.body {
+                    *old = metadata.clone();
+                    events.push(ChatEvent::Item { item: part.clone() });
+                }
+            }
+        }
         let error = &m.data["error"];
         if m.data["role"] != "assistant" || !error.is_object() {
-            return Vec::new();
+            return events;
         }
         let message = error["data"]["message"]
             .as_str()
@@ -539,11 +569,12 @@ impl OpenCodeChat {
             .or_else(|| error["name"].as_str())
             .unwrap_or("error")
             .to_owned();
-        vec![item(
+        events.push(item(
             m.id.clone(),
             rfc3339(m.time_created),
             ChatBody::Error { message },
-        )]
+        ));
+        events
     }
 
     pub fn part(&mut self, p: &PartRow) -> Vec<ChatEvent> {
@@ -556,7 +587,7 @@ impl OpenCodeChat {
         }
         let d = &p.data;
         let ts = rfc3339(d["time"]["start"].as_i64().unwrap_or(p.time_created));
-        let body = match d["type"].as_str() {
+        let mut body = match d["type"].as_str() {
             Some("text") => {
                 let text = d["text"].as_str().unwrap_or_default();
                 if text.trim().is_empty() || d["ignored"] == true {
@@ -564,6 +595,7 @@ impl OpenCodeChat {
                 }
                 ChatBody::Agent {
                     text: text.to_owned(),
+                    metadata: message.metadata.clone(),
                 }
             }
             Some("reasoning") => {
@@ -578,7 +610,25 @@ impl OpenCodeChat {
             Some("tool") => tool(d),
             _ => return Vec::new(),
         };
-        vec![item(p.id.clone(), ts, body)]
+        if let ChatBody::Tool {
+            details: Some(details),
+            ..
+        } = &mut body
+            && details.command.is_some()
+            && details.cwd.is_none()
+        {
+            details.cwd = message.cwd.clone();
+        }
+        let event = item(p.id.clone(), ts, body);
+        if let ChatEvent::Item { item } = &event
+            && matches!(item.body, ChatBody::Agent { .. })
+        {
+            self.replies
+                .entry(p.message_id.clone())
+                .or_default()
+                .insert(p.id.clone(), item.clone());
+        }
+        vec![event]
     }
 
     /// A user message is one item: its typed text and attached images.
@@ -648,6 +698,15 @@ fn tool(d: &Value) -> ChatBody {
         .filter_map(file_image)
         .collect();
     ChatBody::Tool {
+        details: {
+            let mut details = super::details::tool(&input, &state["metadata"]);
+            if let Some(duration) =
+                super::details::elapsed(&state["time"]["start"], &state["time"]["end"])
+            {
+                details.get_or_insert_default().duration_ms = Some(duration);
+            }
+            details
+        },
         title: tool_title(&name, &input, state["title"].as_str()),
         question: (name == "question").then(|| question(&input)).flatten(),
         name,

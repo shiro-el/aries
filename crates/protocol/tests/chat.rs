@@ -27,6 +27,7 @@ fn a_tool_item_line_reads_back_with_its_cursor() {
                         diff: None,
                         images: Vec::new(),
                         question: None,
+                        details: None,
                     },
                 },
             },
@@ -78,6 +79,7 @@ fn a_question_tool_carries_its_questions_and_options() {
         diff: None,
         images: Vec::new(),
         question: None,
+        details: None,
     };
     assert!(!serde_json::to_string(&plain).unwrap().contains("question"));
 }
@@ -117,7 +119,7 @@ fn additions_within_the_same_version_are_tolerated() {
     let extra = r#"{"v":1,"type":"item","later":true,"item":{"id":"a","kind":"agent","text":"hi","lang":"en"}}"#;
     assert!(matches!(
         ChatLine::parse(extra).unwrap().event,
-        ChatEvent::Item { item: ChatItem { body: ChatBody::Agent { ref text }, .. } } if text == "hi"
+        ChatEvent::Item { item: ChatItem { body: ChatBody::Agent { ref text, .. }, .. } } if text == "hi"
     ));
     let kind = r#"{"v":1,"type":"item","item":{"id":"q","kind":"question","questions":[]}}"#;
     assert!(matches!(
@@ -245,4 +247,26 @@ fn a_user_line_may_carry_images_and_old_lines_still_read() {
         item.body,
         ChatBody::Tool { diff: None, ref images, .. } if images.is_empty()
     ));
+}
+
+#[test]
+fn optional_metadata_is_backward_compatible_and_malformed_extras_do_not_hide_text() {
+    for metadata in [
+        "null",
+        r#"{"input_tokens":"bad"}"#,
+        r#"{"completion":"future_outcome"}"#,
+    ] {
+        let line = format!(
+            r#"{{"v":1,"type":"item","item":{{"id":"a","kind":"agent","text":"reply","metadata":{metadata}}}}}"#
+        );
+        let ChatEvent::Item { item } = ChatLine::parse(&line).unwrap().event else {
+            panic!()
+        };
+        assert!(matches!(item.body, ChatBody::Agent { text, metadata: None } if text == "reply"));
+    }
+    let line = r#"{"v":1,"type":"item","item":{"id":"t","kind":"tool","name":"Bash","status":"done","details":{"duration_ms":-1}}}"#;
+    let ChatEvent::Item { item } = ChatLine::parse(line).unwrap().event else {
+        panic!()
+    };
+    assert!(matches!(item.body, ChatBody::Tool { details: None, .. }));
 }

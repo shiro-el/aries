@@ -201,6 +201,7 @@ impl PiInterpreter {
                 vec![item(
                     id.to_owned(),
                     ChatBody::Tool {
+                        details: super::details::tool(message, message),
                         name: "bash".into(),
                         title: command.clone(),
                         input: serde_json::json!({ "command": command }),
@@ -242,7 +243,25 @@ impl PiInterpreter {
                 Some("text") => {
                     let text = block["text"].as_str().unwrap_or_default();
                     if !text.trim().is_empty() {
-                        items.push(item(block_id, ChatBody::Agent { text: text.into() }));
+                        items.push(item(
+                            block_id,
+                            ChatBody::Agent {
+                                text: text.into(),
+                                metadata: super::details::metadata(
+                                    aries_protocol::chat::ResponseMetadata {
+                                        model: super::details::text(&message["model"]),
+                                        input_tokens: message["usage"]["input"].as_u64(),
+                                        output_tokens: message["usage"]["output"].as_u64(),
+                                        cache_read_tokens: message["usage"]["cacheRead"].as_u64(),
+                                        cache_write_tokens: message["usage"]["cacheWrite"].as_u64(),
+                                        completion: super::details::completion(
+                                            &message["stopReason"],
+                                        ),
+                                        ..Default::default()
+                                    },
+                                ),
+                            },
+                        ));
                     }
                 }
                 Some("thinking") => {
@@ -261,6 +280,7 @@ impl PiInterpreter {
                     items.push(item(
                         call.to_owned(),
                         ChatBody::Tool {
+                            details: super::details::tool(&input, &Value::Null),
                             title: tool_title(&name, &input),
                             name,
                             input,
@@ -329,6 +349,7 @@ impl PiInterpreter {
         Some((
             call.to_owned(),
             ChatBody::Tool {
+                details: super::details::tool(&input, &message["details"]),
                 name,
                 title,
                 input,
