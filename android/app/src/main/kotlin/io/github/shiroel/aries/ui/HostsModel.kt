@@ -119,6 +119,7 @@ class HostsModel(
     private val keyWork: CoroutineContext = EmptyCoroutineContext,
     private val pushPlatform: PushPlatform = NoPush,
     private val http: HttpClient = HttpRelayClient(),
+    private val onSavedLaunchesChanged: () -> Unit = {},
 ) {
     /** Current Host's settings models; a previous Host's pending work keeps its own state. */
     var beacon by mutableStateOf(BeaconModel(core, scope, beaconFetcher, keyWork = keyWork))
@@ -320,7 +321,7 @@ class HostsModel(
         }
     }
 
-    fun connect(host: Host) {
+    fun connect(host: Host, savedLaunchId: String? = null) {
         missingKeyHostId = null
         val connecting = Screen.Connecting(host)
         screen = connecting
@@ -339,7 +340,7 @@ class HostsModel(
                 open = conn to null
                 screen = Screen.Browse(browser)
                 loadHostSettings(host)
-                status = watchBrowse(link, browser)
+                status = watchBrowse(link, browser, savedLaunchId)
             } catch (e: CoreException) {
                 if (screen !== connecting) return@launch
                 screen = Screen.Hosts
@@ -371,6 +372,7 @@ class HostsModel(
         try {
             form.stored(conn.saveLaunch(form.toSaved()))
             browser.savedLaunches = form.saved.toList()
+            onSavedLaunchesChanged()
         } catch (e: CoreException) {
             form.error = launchProblem(e)
         }
@@ -383,6 +385,7 @@ class HostsModel(
             conn.deleteSavedLaunch(saved.id)
             form.removed(saved.id)
             browser.savedLaunches = form.saved.toList()
+            onSavedLaunchesChanged()
         } catch (e: CoreException) {
             form.error = launchProblem(e)
         }
@@ -507,12 +510,21 @@ class HostsModel(
     /** The open Host's structure and live Agent status, on each line [HostLink] brings; cancelled on [back]. */
     private var status: Job? = null
 
-    private fun watchBrowse(link: HostLink, browser: HostBrowser): Job = scope.launch {
+    private fun watchBrowse(link: HostLink, browser: HostBrowser, savedLaunchId: String? = null): Job = scope.launch {
+        var pendingLaunch = savedLaunchId
         try {
             link.keep { conn, _ ->
                 val structure = conn.watchStructure(object : StructureListener {
                     override fun onStructure(structure: HostStructure) {
-                        scope.launch { browser.update(structure) }
+                        scope.launch {
+                            browser.update(structure)
+                            val id = pendingLaunch
+                            pendingLaunch = null
+                            if (id != null && (screen as? Screen.Browse)?.browser === browser) {
+                                val saved = browser.savedLaunches.find { it.id == id }
+                                if (saved != null) runSaved(browser, saved) else savedLaunchMissing()
+                            }
+                        }
                     }
 
                     override fun onClosed() {
@@ -745,6 +757,23 @@ class HostsModel(
         openAgents(focus = null)
     }
 
+    /** Resolve QS taps from the latest persisted pull, including the whole machine address. */
+    fun openTile() {
+        val target = io.github.shiroel.aries.AgentSurfaces.attention(core)
+        if (target == null) openAgents() else openPushedAgent(target.hostId, target.terminal)
+    }
+
+    /** Connect through the existing biometric/trust path before resolving and executing a preset. */
+    fun openSavedLaunch(hostId: String, launchId: String) {
+        back()
+        val host = hosts.find { it.id == hostId }
+        if (host == null) savedLaunchMissing() else connect(host, launchId)
+    }
+
+    private fun savedLaunchMissing() {
+        prompt = Prompt.Problem(Message(R.string.shortcuts_missing_title), Message(R.string.shortcuts_missing_body))
+    }
+
     /**
      * A tapped Agent notification (warm or cold start): leaves whatever is
      * open, shows the Agents list and, once [hostId]'s list arrives, opens
@@ -889,6 +918,7 @@ class HostsModel(
     }
 
     private fun hostsChanged() {
+        onSavedLaunchesChanged()
         if (callsActive || callInboxOpen) calls.watch(hosts, everyHost = callInboxOpen)
     }
 

@@ -316,15 +316,22 @@ class FakeCore : AriesCoreInterface {
         requireTrust?.let { if (host.hostKey != it) throw CoreException.HostKeyUnknown(it) }
         failFor[hostId]?.let { throw it }
         terminalsOf[hostId]?.let { list ->
-            return FakeConnection(list, structure ?: HostStructure(emptyList(), list, null), updatesOf(hostId), hostId, this)
+            return FakeConnection(list, structure ?: HostStructure(emptyList(), list, null), updatesOf(hostId), hostId, this,
+                saved = savedLaunchesOf[hostId] ?: savedLaunches)
                 .also { it.herdrAvailable = herdrAppAvailable; connection = it; connectionsOf[hostId] = it }
         }
-        return FakeConnection(terminals, structure ?: HostStructure(emptyList(), terminals, null), updates, hostId, this, saved = savedLaunches)
+        return FakeConnection(terminals, structure ?: HostStructure(emptyList(), terminals, null), updates, hostId, this, saved = savedLaunchesOf[hostId] ?: savedLaunches)
             .also { it.herdrAvailable = herdrAppAvailable; connection = it }
     }
 
     /** Saved launch configs, kept across connections like the core keeps them per Host. */
     val savedLaunches = mutableListOf<SavedLaunch>()
+    val savedLaunchesOf = mutableMapOf<String, MutableList<SavedLaunch>>()
+
+    override fun savedLaunches(hostId: String): List<SavedLaunch> {
+        host(hostId)
+        return (savedLaunchesOf[hostId] ?: savedLaunches).toList()
+    }
 
     /** What `beaconStatus` reports; `installBeacon` / `uninstallBeacon` change it. */
     var beacon: BeaconState = BeaconState.NotInstalled
