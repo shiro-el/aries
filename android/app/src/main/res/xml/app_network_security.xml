@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- The development APK feed is served here over the private network. -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain>100.117.188.97</domain>
+    </domain-config>
+</network-security-config>

@@ -153,7 +153,16 @@ async fn a_message_waits_while_a_person_types_then_goes_in() {
     let conn = connect(&hc, &data).await;
 
     let person = person_typing(&hc, &agent.address, "abcd");
-    std::thread::sleep(Duration::from_millis(600));
+    // Attach startup varies under parallel builds. Observe echoed human input
+    // before sending, so this tests the input gate rather than a startup race.
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !hc.hc(&["read", &agent.address]).contains("ab") {
+        assert!(
+            Instant::now() < deadline,
+            "the person never attached and typed"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    }
     let held = Arc::new(Held::default());
     let t0 = Instant::now();
     let outcome = conn
@@ -246,4 +255,145 @@ while True:
             "{app}: LF stays in the paste until one final Enter"
         );
     }
+}
+
+#[tokio::test]
+async fn a_notification_reply_reaches_the_terminal_without_a_foreground_connection() {
+    let hc = HcSession::start();
+    let agent = hc.run_fake_agent("agent", "status idle\nwait\nstatus working\n");
+    wait_state(&hc, &agent.address, "idle");
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    let host = core.add_host("dev".into(), local_endpoint(&hc)).unwrap();
+    let outcome = core
+        .send_message_background(
+            host.id,
+            agent.address.clone(),
+            "run the tests too".into(),
+            Arc::new(Held::default()),
+        )
+        .await
+        .unwrap();
+    assert_eq!(outcome, SendOutcome::Sent);
+    assert_eq!(inputs_after(&agent, 1), vec!["run the tests too"]);
+}
+
+#[tokio::test]
+async fn background_seen_never_replaces_a_newer_desktop_confirmation() {
+    let hc = HcSession::start();
+    let agent = hc.run_fake_agent("agent", "status working\nstatus done\n");
+    wait_state(&hc, &agent.address, "done");
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    let host = core.add_host("dev".into(), local_endpoint(&hc)).unwrap();
+    let after = core
+        .mark_seen_background(host.id.clone(), agent.address.clone(), 1)
+        .await
+        .unwrap();
+    assert_eq!(after.agent_status, Some(aries_core::AgentStatus::Idle));
+    hc.hc(&["label", &agent.address, "herdr.seen=9"]);
+    core.mark_seen_background(host.id, agent.address.clone(), 1)
+        .await
+        .unwrap();
+    let record: serde_json::Value = serde_json::from_str(&hc.hc(&["get", &agent.address])).unwrap();
+    assert_eq!(record["labels"]["herdr.seen"], "9");
+}
+
+#[tokio::test]
+async fn a_background_reply_never_answers_a_blocked_dialog() {
+    let hc = HcSession::start();
+    let agent = hc.run_fake_agent("agent", "status blocked permission Allow Write?\n");
+    wait_state(&hc, &agent.address, "blocked");
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    let host = core.add_host("dev".into(), local_endpoint(&hc)).unwrap();
+    let outcome = core
+        .send_message_background(
+            host.id,
+            agent.address.clone(),
+            "yes".into(),
+            Arc::new(Held::default()),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        outcome,
+        SendOutcome::Blocked {
+            reason: Some(BlockedReason::Permission),
+            message: Some("Allow Write?".into())
+        }
+    );
+    assert!(agent.inputs().is_empty());
+}
+
+#[tokio::test]
+async fn a_background_reply_reports_when_typing_holds_it() {
+    let hc = HcSession::start();
+    let agent = hc.run_fake_agent("agent", "status idle\nwait\nstatus working\n");
+    wait_state(&hc, &agent.address, "idle");
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    let host = core.add_host("dev".into(), local_endpoint(&hc)).unwrap();
+    let person = person_typing(&hc, &agent.address, "abcd");
+    // Attach startup varies under parallel builds. Observe echoed human input
+    // before sending, so this tests the input gate rather than a startup race.
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !hc.hc(&["read", &agent.address]).contains("ab") {
+        assert!(
+            Instant::now() < deadline,
+            "the person never attached and typed"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    let held = Arc::new(Held::default());
+    let outcome = core
+        .send_message_background(
+            host.id,
+            agent.address.clone(),
+            "after you".into(),
+            held.clone(),
+        )
+        .await;
+    finish(person);
+    assert_eq!(outcome.unwrap(), SendOutcome::Sent);
+    assert_eq!(held.count(), 1);
+    assert_eq!(inputs_after(&agent, 1), vec!["abcdafter you"]);
+}
+
+#[tokio::test]
+async fn a_background_connection_has_a_deadline_even_during_the_handshake() {
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    let host = core
+        .add_host("silent".into(), common::script_endpoint("exec sleep 60"))
+        .unwrap();
+    let start = Instant::now();
+    let result = core
+        .send_message_background(
+            host.id,
+            "t1".into(),
+            "hello".into(),
+            Arc::new(Held::default()),
+        )
+        .await;
+    assert!(matches!(
+        result,
+        Err(aries_core::CoreError::Unreachable { .. })
+    ));
+    assert!(start.elapsed() < Duration::from_secs(18));
+}
+
+#[tokio::test]
+async fn background_seen_writes_turn_zero_when_the_shared_label_is_absent() {
+    let hc = HcSession::start();
+    let agent = hc.run_fake_agent("agent", "status idle\n");
+    wait_state(&hc, &agent.address, "idle");
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    let host = core.add_host("dev".into(), local_endpoint(&hc)).unwrap();
+    core.mark_seen_background(host.id, agent.address.clone(), 0)
+        .await
+        .unwrap();
+    let record: serde_json::Value = serde_json::from_str(&hc.hc(&["get", &agent.address])).unwrap();
+    assert_eq!(record["labels"]["herdr.seen"], "0");
 }

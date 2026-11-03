@@ -76,6 +76,9 @@ class AgentBoard(val hosts: List<Host>) {
         structures[hostId] = structure
     }
 
+    /** Latest layout for retaining an Agent's navigation ancestors on the phone. */
+    fun structureOf(hostId: String): HostStructure? = structures[hostId]
+
     fun find(key: AgentKey): AgentEntry? =
         hosts.find { it.id == key.hostId }?.let { h ->
             lists[h.id]?.find { it.address == key.address }?.let { AgentEntry(h, it) }
