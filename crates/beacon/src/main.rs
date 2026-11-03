@@ -2,8 +2,9 @@
 //!
 //! - `serve`: the resident service (a systemd user service on Linux, a
 //!   launchd LaunchAgent on macOS). Stays
-//!   attached to the user's local herdr-core (default session) and records
-//!   that in its service file.
+//!   attached to the user's local herdr-core (default session), records
+//!   that in its service file and pushes Agent status changes to the paired
+//!   phone as the push policy says ([`status_push`]).
 //! - `status`: prints one [`BeaconStatus`] JSON line.
 //! - `call`: an Agent asks for the user (see `calls.rs`).
 //! - `calls [--follow]`: Call history as JSON lines (see `calls.rs`).
@@ -13,16 +14,22 @@
 //!   as JSON lines (`aries_protocol::chat`).
 //! - `answer <terminal> <question> <picks>...`: answers the question the
 //!   Terminal's Agent shows (`aries_protocol::answer`); one reply line.
+//! - `skill install` / `skill uninstall`: the managed `call-human` skill
+//!   for Agents ([`aries_beacon::skill`]); run by the phone over SSH when it
+//!   installs, updates or removes the Beacon. One `SkillReport` line.
 //! - `--version`: `aries-beacon <version> (contract <n>)`.
 
 mod calls;
 mod push;
+mod status_push;
 
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
+use aries_beacon::core_link::CoreLink;
+use aries_beacon::status_watch::{StatusWatch, Step};
 use aries_beacon::{herdr_core, home};
 use aries_protocol::beacon::BeaconStatus;
 use serde::{Deserialize, Serialize};
@@ -46,9 +53,10 @@ fn main() {
         Some("unpair") => exit_on_error(push::unpair_command()),
         Some("chat") => chat(std::env::args().skip(2).collect()),
         Some("answer") => answer(std::env::args().skip(2).collect()),
+        Some("skill") => exit_on_error(skill(&rest_args())),
         _ => {
             eprintln!(
-                "usage: aries-beacon --version | status | serve | call ... | calls [--follow] | pair | push-test | unpair | chat TERMINAL [--follow] [--cursor C] | answer TERMINAL QUESTION PICKS..."
+                "usage: aries-beacon --version | status | serve | call ... | calls [--follow] | pair | push-test | unpair | chat TERMINAL [--follow] [--cursor C] | answer TERMINAL QUESTION PICKS... | skill install|uninstall"
             );
             std::process::exit(2);
         }
@@ -60,6 +68,32 @@ fn exit_on_error(result: Result<(), String>) {
         eprintln!("aries-beacon: {e}");
         std::process::exit(1);
     }
+}
+
+/// `skill install|uninstall`. `ARIES_BEACON_SKILL_SOURCE=<dir>` installs
+/// the files in that directory instead of the shipped skill (tests use it
+/// to play an older release).
+fn skill(args: &[String]) -> Result<(), String> {
+    use aries_beacon::skill;
+    let report = match args {
+        [a] if a == "install" => {
+            let files = match std::env::var_os("ARIES_BEACON_SKILL_SOURCE") {
+                Some(dir) => {
+                    skill::files_in(Path::new(&dir)).map_err(|e| format!("skill source: {e}"))?
+                }
+                None => skill::shipped(),
+            };
+            skill::install(&home(), &state_dir(), &files)
+        }
+        [a] if a == "uninstall" => skill::uninstall(&home(), &state_dir()),
+        _ => return Err("usage: aries-beacon skill install|uninstall".into()),
+    }
+    .map_err(|e| format!("skill: {e}"))?;
+    println!(
+        "{}",
+        serde_json::to_string(&report).expect("skill report json")
+    );
+    Ok(())
 }
 
 /// What `serve` records about itself, in [`service_file`].
@@ -151,12 +185,15 @@ fn write_state(state: &ServiceState) {
 fn serve() {
     let pid = std::process::id();
     let mut backoff = Duration::from_secs(1);
+    let pushes = status_push::Sender::start();
+    // Kept across reconnects: what was already pushed is not pushed again.
+    let mut watch = StatusWatch::new();
     loop {
         write_state(&ServiceState {
             pid,
             core_version: None,
         });
-        match attach(|version| {
+        match attach(&mut watch, &pushes, |version| {
             eprintln!("aries-beacon: attached to herdr-core {version}");
             write_state(&ServiceState {
                 pid,
@@ -179,9 +216,14 @@ fn serve() {
 }
 
 /// Runs `herdr-core connect` (the user's default session), says `hello`,
-/// calls `on_attached` with the core version, then holds the connection
-/// until it ends.
-fn attach(on_attached: impl FnOnce(&str)) -> Result<(), String> {
+/// subscribes to events (plain mode: the connection then only carries
+/// notifications), calls `on_attached` with the core version, then feeds
+/// every notification to `watch` until the connection ends.
+fn attach(
+    watch: &mut StatusWatch,
+    pushes: &status_push::Sender,
+    on_attached: impl FnOnce(&str),
+) -> Result<(), String> {
     let bin = herdr_core().ok_or("herdr-core not found on PATH or in ~/.local/bin")?;
     let mut child = Command::new(&bin)
         .arg("connect")
@@ -193,33 +235,46 @@ fn attach(on_attached: impl FnOnce(&str)) -> Result<(), String> {
     let mut stdin = child.stdin.take().expect("piped stdin");
     let stdout = child.stdout.take().expect("piped stdout");
     let hello = r#"{"jsonrpc":"2.0","id":0,"method":"hello","params":{"generation":1}}"#;
+    let subscribe = r#"{"jsonrpc":"2.0","id":1,"method":"events.subscribe","params":{}}"#;
     let result = (|| {
-        writeln!(stdin, "{hello}").map_err(|e| format!("send hello: {e}"))?;
+        writeln!(stdin, "{hello}\n{subscribe}").map_err(|e| format!("send hello: {e}"))?;
         let mut lines = BufReader::new(stdout).lines();
-        let version = loop {
-            let line = lines
-                .next()
-                .ok_or("herdr-core closed before answering hello")?
-                .map_err(|e| format!("read hello: {e}"))?;
-            let Ok(v) = serde_json::from_str::<serde_json::Value>(&line) else {
-                continue; // login noise
-            };
-            if v["id"] == 0 {
-                if let Some(e) = v.get("error") {
-                    return Err(format!("hello refused: {e}"));
+        let mut reply = |id: u64| -> Result<serde_json::Value, String> {
+            loop {
+                let line = lines
+                    .next()
+                    .ok_or("herdr-core closed before answering")?
+                    .map_err(|e| format!("read: {e}"))?;
+                let Ok(v) = serde_json::from_str::<serde_json::Value>(&line) else {
+                    continue; // login noise
+                };
+                if v["id"] == id {
+                    if let Some(e) = v.get("error") {
+                        return Err(format!("herdr-core refused: {e}"));
+                    }
+                    return Ok(v["result"].clone());
                 }
-                break v["result"]["version"]
-                    .as_str()
-                    .unwrap_or_default()
-                    .to_owned();
             }
         };
+        let version = reply(0)?["version"].as_str().unwrap_or_default().to_owned();
+        let snapshot = reply(1)?;
+        pushes.send(watch.snapshot(&snapshot));
         on_attached(&version);
-        // Held open; later tickets subscribe to events here.
+        // Terminals an event does not describe are read on a second link.
+        let mut lookup: Option<CoreLink> = None;
         for line in lines {
-            if line.is_err() {
-                break;
-            }
+            let Ok(line) = line else { break };
+            let Ok(msg) = serde_json::from_str::<serde_json::Value>(&line) else {
+                continue;
+            };
+            let changes = match watch.apply(&msg) {
+                Step::Changes(c) => c,
+                Step::Refetch(address) => {
+                    let got = refetch(&mut lookup, &address)?;
+                    watch.replace(&address, got.as_ref())
+                }
+            };
+            pushes.send(changes);
         }
         Ok(())
     })();
@@ -227,6 +282,25 @@ fn attach(on_attached: impl FnOnce(&str)) -> Result<(), String> {
     let _ = child.kill();
     let _ = child.wait();
     result
+}
+
+/// `terminal.get` for `address`; `None` when the core has no such Terminal.
+fn refetch(
+    link: &mut Option<CoreLink>,
+    address: &str,
+) -> Result<Option<serde_json::Value>, String> {
+    if link.is_none() {
+        *link = Some(CoreLink::connect()?);
+    }
+    let l = link.as_mut().expect("link");
+    match l.call("terminal.get", serde_json::json!({ "terminal": address })) {
+        Ok(v) => Ok(Some(v)),
+        Err(e) if e.starts_with("rpc") => Ok(None),
+        Err(e) => {
+            *link = None;
+            Err(e)
+        }
+    }
 }
 
 fn chat(args: Vec<String>) {

@@ -14,9 +14,12 @@ import io.github.shiroel.aries.core.PushStep
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
-/** What the phone offers for push: the Relay this build uses, the FCM token, the permission. */
+/** What the phone offers for push: this build's default Relay, the FCM token, the permission. */
 interface PushPlatform {
-    /** The Relay URL of this build (`ARIES_RELAY_URL`); `null` when none is configured. */
+    /**
+     * The default Relay URL of this build (`ARIES_RELAY_URL`); `null` when none is configured.
+     * The user can use another (self-hosted) Relay per Host instead.
+     */
     val relayUrl: String?
 
     /** This phone's FCM registration token; throws [PushUnavailable]. */
@@ -40,7 +43,6 @@ enum class StepState { Running, Done, Failed }
 
 sealed interface PushUi {
     data object Loading : PushUi
-    data object NoRelay : PushUi
     data object Off : PushUi
 
     /** Turning push on: the steps reached so far. */
@@ -70,26 +72,59 @@ class PushModel(
     var notice by mutableStateOf<Message?>(null)
         private set
 
+    /** The Relay URL being typed: to turn push on with, or to change to. */
+    var relayDraft by mutableStateOf("")
+
+    /** Push is on and the user is choosing another Relay. */
+    var changingRelay by mutableStateOf(false)
+        private set
+
+    /** `true` when this build has a default Relay (otherwise the user must give one). */
+    val hasDefaultRelay: Boolean get() = platform.relayUrl != null
+
     fun load(host: Host) {
         this.host = host
         problem = null
         notice = null
+        changingRelay = false
         refresh()
+        relayDraft = (ui as? PushUi.On)?.relayUrl ?: platform.relayUrl.orEmpty()
     }
 
     private fun refresh() {
         val host = host ?: return
         ui = try {
             core.pushPairing(host.id)?.let { PushUi.On(it.relayUrl) }
-                ?: if (platform.relayUrl == null) PushUi.NoRelay else PushUi.Off
+                ?: PushUi.Off
         } catch (e: CoreException) {
             PushUi.Off
         }
     }
 
+    /** Shows the Relay URL field for a Host whose push is on. */
+    fun changeRelay() {
+        val on = ui as? PushUi.On ?: return
+        relayDraft = on.relayUrl
+        problem = null
+        notice = null
+        changingRelay = true
+    }
+
+    fun cancelRelayChange() {
+        changingRelay = false
+        (ui as? PushUi.On)?.let { relayDraft = it.relayUrl }
+    }
+
+    /**
+     * Turns push on with the Relay in [relayDraft] or, when push is on, moves
+     * the pairing to it (the core unpairs the old Relay once the new one works).
+     */
     fun enable() {
         val host = host ?: return
-        val relay = platform.relayUrl ?: return
+        val relay = relayDraft.trim()
+        if (relay.isEmpty()) return
+        val before = (ui as? PushUi.On)?.relayUrl
+        changingRelay = false
         problem = null
         notice = null
         ui = PushUi.Enabling(emptyList())
@@ -120,7 +155,13 @@ class PushModel(
                 // Paired but the test failed: push is on. Otherwise keep the
                 // steps on screen, the failed one marked.
                 finishSteps(StepState.Failed)
-                if (runCatching { core.pushPairing(host.id) }.getOrNull() != null) refresh()
+                val now = runCatching { core.pushPairing(host.id) }.getOrNull()
+                if (now != null) refresh()
+                // A failed change keeps the old Relay: keep the typed URL open to fix.
+                if (before != null && now?.relayUrl == before) {
+                    relayDraft = relay
+                    changingRelay = true
+                }
             }
         }
     }

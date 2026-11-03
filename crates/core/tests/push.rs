@@ -12,8 +12,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use aries_core::{
-    AriesCore, BeaconArtifact, BeaconFetcher, BeaconRelease, CoreError, Endpoint, FetchError,
-    HttpClient, HttpRequest, HttpResponse, PushContent, PushDevice, PushProgress, PushStep,
+    AgentStatus, AriesCore, BeaconArtifact, BeaconFetcher, BeaconRelease, BlockedReason, CoreError,
+    Endpoint, FetchError, HttpClient, HttpRequest, HttpResponse, PushContent, PushDevice,
+    PushProgress, PushStep,
 };
 use aries_test_support::{FakeRelay, ReverseTunnel, SystemdHost, beacon_bin, http_request};
 use common::core_in;
@@ -156,6 +157,141 @@ async fn a_pairing_that_fails_on_the_host_leaves_nothing_on_the_relay() {
     assert_eq!(core.push_pairing(id).unwrap(), None);
 }
 
+/// Answers every request with one canned reply and counts the calls.
+struct Canned {
+    reply: Result<(u16, &'static str), &'static str>,
+    calls: Mutex<u32>,
+}
+
+impl Canned {
+    fn new(reply: Result<(u16, &'static str), &'static str>) -> Arc<Self> {
+        Arc::new(Self {
+            reply,
+            calls: Mutex::new(0),
+        })
+    }
+}
+
+impl HttpClient for Canned {
+    fn send(&self, _request: HttpRequest) -> Result<HttpResponse, FetchError> {
+        *self.calls.lock().unwrap() += 1;
+        match self.reply {
+            Ok((status, body)) => Ok(HttpResponse {
+                status,
+                body: body.as_bytes().to_vec(),
+            }),
+            Err(detail) => Err(FetchError::Failed {
+                detail: detail.into(),
+            }),
+        }
+    }
+}
+
+/// The Register failure's detail for turning push on at `relay_url`.
+async fn register_failure(relay_url: &str, http: Arc<Canned>) -> String {
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    let id = dead_ssh_host(&core);
+    let r = core
+        .enable_push(
+            id.clone(),
+            relay_url.into(),
+            device("d"),
+            http,
+            Arc::new(Steps::default()),
+        )
+        .await;
+    assert_eq!(core.push_pairing(id).unwrap(), None);
+    match r {
+        Err(CoreError::PushFailed {
+            step: PushStep::Register,
+            detail,
+        }) => detail,
+        other => panic!("expected a Register failure, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn rejects_a_relay_url_that_is_not_https_before_calling_it() {
+    for (url, why) in [
+        ("relay.example", "https://"),
+        ("ftp://relay.example", "https://"),
+        ("http://relay.example", "https://"),
+        ("https://", "no host"),
+        ("https://me@relay.example", "user"),
+        ("https://relay.example/?a=1", "query"),
+        ("https://relay.example/#x", "query"),
+        ("https://relay example", "space"),
+    ] {
+        let http = Canned::new(Ok((201, r#"{"token":"t"}"#)));
+        let detail = register_failure(url, http.clone()).await;
+        assert!(detail.contains(why), "{url}: {detail}");
+        assert_eq!(*http.calls.lock().unwrap(), 0, "{url}");
+    }
+}
+
+#[tokio::test]
+async fn accepts_https_and_loopback_http_relay_urls() {
+    // The URL passes the check and the (dead) Host fails at Pair.
+    for url in [
+        "https://relay.example",
+        "https://relay.example:8443/aries/",
+        " HTTPS://Relay.Example ",
+        "http://127.0.0.1:8787",
+        "http://localhost:8787",
+        "http://[::1]:8787",
+    ] {
+        let data = tempfile::tempdir().unwrap();
+        let core = core_in(data.path());
+        let id = dead_ssh_host(&core);
+        let r = core
+            .enable_push(
+                id,
+                url.into(),
+                device("d"),
+                Canned::new(Ok((201, r#"{"token":"t"}"#))),
+                Arc::new(Steps::default()),
+            )
+            .await;
+        assert!(
+            matches!(
+                r,
+                Err(CoreError::PushFailed {
+                    step: PushStep::Pair,
+                    ..
+                })
+            ),
+            "{url}: {r:?}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn says_why_the_relay_did_not_register_the_phone() {
+    for (reply, why) in [
+        (Err("connection refused"), "could not reach the Relay"),
+        (Ok((404, "<html>Not Found</html>")), "no Aries Relay"),
+        (Ok((200, "<html>hello</html>")), "not an Aries Relay"),
+        (Ok((201, r#"{"ok":true}"#)), "not an Aries Relay"),
+        (Ok((429, r#"{"error":"rate_limited"}"#)), "too many"),
+        (
+            Ok((503, r#"{"error":"fcm_not_configured"}"#)),
+            "fcm_not_configured",
+        ),
+    ] {
+        let detail = register_failure("https://relay.example", Canned::new(reply)).await;
+        assert!(detail.contains(why), "{reply:?}: {detail}");
+    }
+}
+
+#[tokio::test]
+async fn shortens_a_long_relay_error_page() {
+    let page: &'static str = Box::leak("x".repeat(5000).into_boxed_str());
+    let detail = register_failure("https://relay.example", Canned::new(Ok((500, page)))).await;
+    assert!(detail.contains("HTTP 500"), "{detail}");
+    assert!(detail.len() < 400, "{} bytes", detail.len());
+}
+
 #[test]
 fn rejects_an_envelope_when_nothing_is_paired() {
     let data = tempfile::tempdir().unwrap();
@@ -190,7 +326,16 @@ struct Setup {
 
 /// A Host with the Beacon installed and a fake Relay the container reaches.
 async fn setup() -> Setup {
+    setup_with(false).await
+}
+
+/// `lingering`: the user's services keep running after SSH logins end, so
+/// the Beacon's `serve` stays up.
+async fn setup_with(lingering: bool) -> Setup {
     let host = SystemdHost::start();
+    if lingering {
+        host.enable_linger();
+    }
     let data = tempfile::tempdir().unwrap();
     let core = core_in(data.path());
     host.authorize(&core.ensure_key().unwrap().openssh);
@@ -323,6 +468,93 @@ async fn turning_push_on_pairs_and_the_test_push_opens_on_the_phone() {
 
 #[tokio::test]
 #[ignore = "needs docker"]
+async fn changing_the_relay_unpairs_the_old_one_and_pairs_the_new_one() {
+    let s = setup().await;
+    s.enable("dev-1").await;
+    let old_token = s.relay.log().pairings.keys().next().unwrap().clone();
+    s.relay.wait_pushes(1, Duration::from_secs(10));
+
+    // A Relay that does not answer: nothing changes, the old one still works.
+    let r = s
+        .core
+        .enable_push(
+            s.id.clone(),
+            "http://127.0.0.1:9".into(),
+            device("dev-1"),
+            Arc::new(Http),
+            Arc::new(Steps::default()),
+        )
+        .await;
+    assert!(
+        matches!(
+            r,
+            Err(CoreError::PushFailed {
+                step: PushStep::Register,
+                ..
+            })
+        ),
+        "{r:?}"
+    );
+    assert_eq!(
+        s.core
+            .push_pairing(s.id.clone())
+            .unwrap()
+            .unwrap()
+            .relay_url,
+        s.relay.url()
+    );
+    s.core.send_test_push(s.id.clone()).await.unwrap();
+    s.relay.wait_pushes(2, Duration::from_secs(10));
+
+    // The self-hosted Relay, reached by the Beacon through its own tunnel.
+    let mine = FakeRelay::start();
+    let local = mine.url().trim_start_matches("http://").to_owned();
+    let port = local.rsplit(':').next().unwrap().parse().unwrap();
+    let _tunnel = s.host.reverse_tunnel(port, &local);
+    let steps = Arc::new(Steps::default());
+    let on = s
+        .core
+        .enable_push(
+            s.id.clone(),
+            format!("{}/", mine.url()),
+            device("dev-1"),
+            Arc::new(Http),
+            steps.clone(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(on.relay_url, mine.url());
+    assert_eq!(
+        *steps.0.lock().unwrap(),
+        [
+            PushStep::Register,
+            PushStep::Pair,
+            PushStep::Unpair,
+            PushStep::Test
+        ]
+    );
+    let old = s.relay.log();
+    assert!(old.pairings.is_empty(), "{old:?}");
+    assert!(old.deleted.contains(&old_token));
+    assert_eq!(old.pushes.len(), 2, "nothing more went to the old Relay");
+    assert_eq!(mine.log().pairings.values().collect::<Vec<_>>(), ["dev-1"]);
+    let pushes = mine.wait_pushes(1, Duration::from_secs(10));
+    let notice = s.core.open_push(pushes[0].1.clone()).unwrap();
+    assert!(matches!(notice.content, PushContent::Test { .. }));
+    assert_eq!(
+        s.core
+            .push_pairing(s.id.clone())
+            .unwrap()
+            .unwrap()
+            .relay_url,
+        mine.url()
+    );
+    assert_eq!(s.core.flush_push_revocations(Arc::new(Http)).await, 0);
+}
+
+#[tokio::test]
+#[ignore = "needs docker"]
 async fn turning_push_off_deletes_the_pairing_on_the_relay_and_the_host() {
     let s = setup().await;
     s.enable("dev-1").await;
@@ -393,4 +625,80 @@ async fn removing_the_host_revokes_the_pairing_on_the_relay() {
     let log = s.relay.log();
     assert!(log.pairings.is_empty());
     assert_eq!(log.deleted, [token]);
+}
+
+// ---- Agent status pushes (ticket 28) ----------------------------------------
+
+/// Runs `script` as the Host user with the user's runtime dir, so it talks to
+/// the same herdr-core session as the Beacon's `serve`.
+fn as_user(host: &SystemdHost, script: &str) -> String {
+    let u = SystemdHost::USER;
+    host.root(&format!(
+        "runuser -u {u} -- env HOME=/home/{u} XDG_RUNTIME_DIR=/run/user/$(id -u {u}) PATH=/usr/local/bin:/usr/bin:/bin sh -c '{script}'"
+    ))
+}
+
+#[tokio::test]
+#[ignore = "needs docker"]
+async fn a_blocked_agent_reaches_the_phone_once() {
+    use base64::Engine;
+    let s = setup_with(true).await;
+    s.enable("dev-1").await;
+    s.relay.wait_pushes(1, Duration::from_secs(10)); // the test push
+
+    // The resident service is attached to the user's herdr-core.
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    while !as_user(&s.host, "~/.local/bin/aries-beacon status").contains("\"core_version\":\"") {
+        assert!(std::time::Instant::now() < deadline, "serve never attached");
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+
+    let agent = std::fs::read(aries_test_support::fake_agent_path()).unwrap();
+    let agent = base64::engine::general_purpose::STANDARD.encode(agent);
+    let script = base64::engine::general_purpose::STANDARD.encode(
+        "status working\nstatus blocked permission Allow Bash?\nsleep 0.3\n\
+         status blocked permission Allow Bash?\nsleep 0.3\nstatus error - marker\nwait\n",
+    );
+    s.host.root(&format!(
+        "echo {agent} | base64 -d > /tmp/fake-agent && echo {script} | base64 -d > /tmp/script && chmod 644 /tmp/fake-agent /tmp/script"
+    ));
+    let run = as_user(
+        &s.host,
+        "herdr-core run --bg --json --no-parent --name claude -- env FAKE_AGENT_INPUT=/tmp/in sh /tmp/fake-agent /tmp/script",
+    );
+    let address = serde_json::from_str::<serde_json::Value>(run.trim()).unwrap()["address"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    // Blocked once (its repeat is suppressed), then the Error marker.
+    let pushes = s.relay.wait_pushes(3, Duration::from_secs(20));
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    assert_eq!(s.relay.log().pushes.len(), 3);
+    let notices: Vec<_> = pushes[1..]
+        .iter()
+        .map(|(_, e)| s.core.open_push(e.clone()).unwrap())
+        .collect();
+    assert_eq!(notices[0].host_id, s.id);
+    assert_eq!(
+        notices[0].content,
+        PushContent::Status {
+            terminal: address.clone(),
+            name: Some("claude".into()),
+            title: None,
+            top_level: true,
+            status: AgentStatus::Blocked {
+                reason: Some(BlockedReason::Permission),
+                message: Some("Allow Bash?".into()),
+            },
+            at: match notices[0].content {
+                PushContent::Status { at, .. } => at,
+                _ => 0,
+            },
+        }
+    );
+    assert!(matches!(
+        &notices[1].content,
+        PushContent::Status { terminal, status: AgentStatus::Error { .. }, .. } if *terminal == address
+    ));
 }

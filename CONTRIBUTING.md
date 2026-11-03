@@ -126,6 +126,16 @@ a new notification kind is a new `PushMessage` variant plus its
 delete the pairing on the Relay (removal queues it; the app sends the queue
 with `flush_push_revocations`).
 
+Agent status pushes: `aries-beacon serve` subscribes to the local
+herdr-core's events (plain mode), tracks status with
+`aries_beacon::status_watch` (the shared `agent_status` rule; top-level =
+Terminal without `parent`; an Agent that stays Blocked for the same reason
+or stays in Error is pushed once; the first snapshot after start is a
+baseline) and sends `PushMessage::Status` for what
+`aries_protocol::push_policy::PushPolicy` allows (default Blocked + Error,
+top-level only; `<state>/push-policy.json` overrides). The real Claude Code
+check: `ARIES_REAL_CLAUDE=1 cargo test -p aries-beacon --test status_push -- --ignored real_claude`.
+
 The Relay is `relay/` (Cloudflare Worker + D1, TypeScript). It stores only
 pairing token hashes, device push tokens and rate limit counters, and never
 stores or logs an envelope.
@@ -147,9 +157,13 @@ npx wrangler deploy -c wrangler.deploy.jsonc
 ```
 
 Wrangler reads `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`. The app
-gets its Relay URL at build time from `ARIES_RELAY_URL` (repo variable in CI,
-or `-Paries.relayUrl`), and Firebase from `android/app/google-services.json`
-(never committed); without either the app says push is unavailable.
+gets its default Relay URL at build time from `ARIES_RELAY_URL` (repo variable
+in CI, or `-Paries.relayUrl`), and Firebase from
+`android/app/google-services.json` (never committed); without Firebase the app
+says push is unavailable, without a default Relay it asks for one. The user can
+set another Relay per Host (`enable_push` again with the new URL: it pairs the
+new Relay first, then unpairs the old one). Running your own Relay is in
+`relay/README.md`.
 
 ## Releases
 

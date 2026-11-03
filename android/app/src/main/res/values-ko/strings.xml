@@ -138,6 +138,13 @@
     <string name="chat_tool_expand_label">%1$s 호출 전체 보기</string>
     <string name="chat_agent_error">Agent 오류</string>
     <string name="chat_unsupported">이 항목을 보려면 새 버전의 Aries가 필요합니다.</string>
+    <string name="chat_cache_title">Chat 캐시</string>
+    <string name="chat_cache_hint">읽은 Chat은 이 폰의 키로 암호화해 폰에 보관하므로 Host 없이도 열립니다. 이 기간 동안 갱신되지 않은 Chat은 삭제됩니다.</string>
+    <string name="chat_cache_days">%1$d일</string>
+    <string name="chat_cache_clear_button">Chat 캐시 삭제</string>
+    <string name="chat_cache_clear_label">%1$s의 캐시된 Chat 삭제</string>
+    <string name="chat_cache_cleared">%1$s의 캐시된 Chat을 삭제했습니다.</string>
+    <string name="chat_cache_failed">Chat 캐시를 변경하지 못했습니다.</string>
     <string name="chat_image">이미지</string>
     <string name="chat_image_loading">이미지 불러오는 중…</string>
     <string name="chat_image_unreadable">이 이미지는 표시할 수 없습니다.</string>
@@ -308,12 +315,18 @@
     <string name="push_failed">\"%1$s\" 단계 실패: %2$s</string>
     <string name="push_on_body">푸시가 켜져 있습니다. Relay: %1$s</string>
     <string name="push_test_sent">테스트 알림을 보냈습니다. 도착하지 않으면 Aries 알림이 허용돼 있는지 확인하세요.</string>
-    <string name="push_no_relay">이 Aries 빌드에는 Relay가 설정돼 있지 않아 푸시 알림을 쓸 수 없습니다.</string>
+    <string name="push_no_relay">이 Aries 빌드에는 기본 Relay가 없습니다. 직접 운영하는 Relay의 URL을 입력하세요.</string>
+    <string name="push_relay_label">Relay URL</string>
+    <string name="push_relay_hint">https://만 됩니다. 직접 운영하는 Relay는 이 Aries 빌드의 Firebase 프로젝트로 보내야 합니다.</string>
+    <string name="push_change_relay_button">Relay 변경</string>
+    <string name="push_change_relay_body">Aries는 먼저 새 Relay와 페어링한 뒤 기존 Relay에서 페어링을 삭제합니다. 새 Relay가 실패하면 기존 Relay가 계속 동작합니다.</string>
+    <string name="push_use_relay_button">이 Relay 사용</string>
     <string name="push_unavailable">이 폰에서는 푸시 알림을 쓸 수 없습니다: %1$s</string>
     <string name="push_permission_denied">Aries 알림이 허용되지 않았습니다. Android 설정에서 허용한 뒤 다시 푸시를 켜세요.</string>
     <string name="push_off_host_unreachable">푸시를 껐고 Relay에서 이 페어링을 삭제했습니다. Host에 연결할 수 없어 Host 쪽 페어링 사본은 다음 페어링 때까지 남지만 더는 동작하지 않습니다.</string>
     <string name="push_channel_name">Host 알림</string>
     <string name="push_test_title">%1$s 푸시 동작 확인</string>
     <string name="push_test_body">%1$s의 Beacon이 보낸 테스트 알림입니다. 종단 간 암호화돼 있습니다.</string>
+    <string name="push_status_title">%2$s의 %1$s</string>
     <string name="push_no_firebase">이 빌드에는 Firebase 설정이 없습니다</string>
 </resources>
