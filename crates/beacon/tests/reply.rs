@@ -50,10 +50,7 @@ impl Env {
     /// Like [`Env::agent_with_call`], with `after` as the status step after
     /// the Call.
     fn agent_with_call_then(&self, name: &str, choices: &[&str], after: &str) -> (FakeAgent, Call) {
-        let choices: String = choices
-            .iter()
-            .map(|c| format!(" --choice '{c}'"))
-            .collect();
+        let choices: String = choices.iter().map(|c| format!(" --choice '{c}'")).collect();
         let script = format!(
             "status working\n\
              run env 'PATH={}' 'XDG_STATE_HOME={}' {BEACON} call --title 'Merge?'{choices} >/dev/null 2>&1\n\
@@ -161,7 +158,10 @@ fn a_second_reply_is_refused_and_types_nothing() {
     }
     std::thread::sleep(Duration::from_millis(800));
     assert_eq!(agent.inputs(), ["No"]);
-    assert_eq!(env.call(&call.id).answer.unwrap().state, AnswerState::Delivered);
+    assert_eq!(
+        env.call(&call.id).answer.unwrap().state,
+        AnswerState::Delivered
+    );
 }
 
 #[test]
@@ -203,7 +203,12 @@ fn a_reply_to_a_closed_terminal_fails_clearly_and_is_recorded() {
     let (agent, call) = env.agent_with_call("agent", &["Yes"]);
     env.hc.hc(&["kill", &agent.address]);
     wait_for("the Terminal to end", || {
-        let out = env.hc.command().args(["get", "--json", &agent.address]).output().unwrap();
+        let out = env
+            .hc
+            .command()
+            .args(["get", "--json", &agent.address])
+            .output()
+            .unwrap();
         let live = out.status.success()
             && serde_json::from_slice::<serde_json::Value>(&out.stdout)
                 .map(|v| v["state"] == "live")
@@ -232,7 +237,10 @@ fn a_blocked_agent_is_not_typed_into() {
 
     assert!(!out.status.success());
     assert_eq!(line.outcome, ReplyOutcome::Failed, "{line:?}");
-    assert_eq!(env.call(&call.id).answer.unwrap().state, AnswerState::Failed);
+    assert_eq!(
+        env.call(&call.id).answer.unwrap().state,
+        AnswerState::Failed
+    );
     std::thread::sleep(Duration::from_millis(300));
     assert!(agent.inputs().is_empty());
 }
@@ -254,7 +262,10 @@ fn unknown_calls_choices_and_unconfirmed_callers_are_refused() {
 
     assert_eq!(env.reply("c0-nope", "0").1.outcome, ReplyOutcome::NoCall);
     assert_eq!(env.reply(&call.id, "1").1.outcome, ReplyOutcome::NoChoice);
-    assert_eq!(env.reply(&outside.id, "0").1.outcome, ReplyOutcome::NotAnswerable);
+    assert_eq!(
+        env.reply(&outside.id, "0").1.outcome,
+        ReplyOutcome::NotAnswerable
+    );
     // None of them claimed anything.
     assert_eq!(env.call(&call.id).answer, None);
     assert_eq!(env.call(&outside.id).answer, None);

@@ -8,8 +8,7 @@ use std::time::{Duration, Instant};
 
 use aries_core::{
     BeaconArtifact, BeaconFetcher, BeaconRelease, CallFeedState, CallInfo, CallListener,
-    CallReplyOutcome, CoreError,
-    Endpoint, FetchError,
+    CallReplyOutcome, CoreError, Endpoint, FetchError,
 };
 use aries_test_support::{SystemdHost, beacon_bin};
 use common::core_in;

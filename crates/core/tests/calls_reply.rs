@@ -8,9 +8,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use aries_core::{
-    AriesCore, CallAnswerState, CallInfo, CallReplyOutcome, CoreError, Endpoint,
-};
+use aries_core::{AriesCore, CallAnswerState, CallInfo, CallReplyOutcome, CoreError, Endpoint};
 use aries_test_support::{FakeAgent, HcSession, beacon_bin};
 use common::{core_in, local_endpoint};
 

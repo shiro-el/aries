@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -12,6 +13,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -26,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.CallAnswerState
 import io.github.shiroel.aries.core.CallInfo
+import io.github.shiroel.aries.core.CallReplyOutcome
 import io.github.shiroel.aries.core.CallUrgency
 import java.text.DateFormat
 import java.util.Date
@@ -53,14 +56,26 @@ fun CallsScreen(model: CallsModel, onBack: () -> Unit, onTerminal: (CallEntry) -
         }
         if (model.calls.isEmpty()) item { Text(stringResource(R.string.calls_empty)) }
         items(model.calls, key = { "${it.host.id}/${it.call.id}" }) { entry ->
-            CallRow(entry, onTerminal = { onTerminal(entry) })
+            CallRow(
+                entry,
+                sending = entry.key in model.replying,
+                note = model.replyNotes[entry.key],
+                onChoice = { model.reply(entry, it) },
+                onTerminal = { onTerminal(entry) },
+            )
             HorizontalDivider()
         }
     }
 }
 
 @Composable
-private fun CallRow(entry: CallEntry, onTerminal: () -> Unit) {
+private fun CallRow(
+    entry: CallEntry,
+    sending: Boolean,
+    note: ReplyNote?,
+    onChoice: (Int) -> Unit,
+    onTerminal: () -> Unit,
+) {
     val call = entry.call
     Column(Modifier.fillMaxWidth().testTag("call-${call.id}"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(call.title, style = MaterialTheme.typography.titleMedium)
@@ -80,6 +95,36 @@ private fun CallRow(entry: CallEntry, onTerminal: () -> Unit) {
                 CallAnswerState.UNCONFIRMED -> R.string.call_answer_unconfirmed
             }
             Text(stringResource(res, a.text), style = MaterialTheme.typography.bodySmall)
+            if (a.state != CallAnswerState.DELIVERED) {
+                a.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+            }
+        }
+        when {
+            sending -> Text(stringResource(R.string.call_answer_sending), style = MaterialTheme.typography.bodySmall)
+            entry.answerable -> FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                call.choices.forEachIndexed { i, choice ->
+                    val label = stringResource(R.string.call_answer_choice_label, call.title, choice)
+                    OutlinedButton(onClick = { onChoice(i) }, modifier = Modifier.semantics { contentDescription = label }) {
+                        Text(choice)
+                    }
+                }
+            }
+        }
+        note?.let { n ->
+            val text = when (n) {
+                is ReplyNote.NotSent -> stringResource(R.string.call_reply_not_sent, n.detail)
+                is ReplyNote.Outcome -> stringResource(
+                    when (n.outcome) {
+                        CallReplyOutcome.ANSWERED -> R.string.call_reply_answered
+                        CallReplyOutcome.NO_CALL -> R.string.call_reply_no_call
+                        CallReplyOutcome.NO_CHOICE -> R.string.call_reply_no_choice
+                        CallReplyOutcome.NOT_ANSWERABLE -> R.string.call_unconfirmed
+                        CallReplyOutcome.NO_BEACON -> R.string.call_reply_no_beacon
+                        else -> R.string.call_reply_unknown
+                    },
+                )
+            }
+            Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         }
         when {
             call.terminal == null -> Text(stringResource(R.string.call_unconfirmed), style = MaterialTheme.typography.bodySmall)

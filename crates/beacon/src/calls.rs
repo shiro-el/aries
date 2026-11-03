@@ -406,7 +406,9 @@ pub fn reply_command(log: &Log, args: &[String]) -> i32 {
 }
 
 fn reply_usage(why: &str) -> i32 {
-    eprintln!("aries-beacon reply: {why}\nusage: aries-beacon reply CALL CHOICE  (CHOICE is 0-based)");
+    eprintln!(
+        "aries-beacon reply: {why}\nusage: aries-beacon reply CALL CHOICE  (CHOICE is 0-based)"
+    );
     2
 }
 
@@ -414,18 +416,29 @@ fn reply(log: &Log, id: &str, choice: u32) -> ReplyLine {
     // The durable claim: under the log lock, only a Call without any
     // answer gets one.
     let claimed = log.locked(|entries, seq| {
-        let Some((_, call)) = fold(entries.iter().cloned()).into_iter().find(|(_, c)| c.id == id)
+        let Some((_, call)) = fold(entries.iter().cloned())
+            .into_iter()
+            .find(|(_, c)| c.id == id)
         else {
             return (None, Err(ReplyLine::new(ReplyOutcome::NoCall, None, None)));
         };
         if let Some(answer) = call.answer {
-            return (None, Err(ReplyLine::new(ReplyOutcome::Answered, Some(answer), None)));
+            return (
+                None,
+                Err(ReplyLine::new(ReplyOutcome::Answered, Some(answer), None)),
+            );
         }
         let Some(terminal) = call.terminal else {
-            return (None, Err(ReplyLine::new(ReplyOutcome::NotAnswerable, None, None)));
+            return (
+                None,
+                Err(ReplyLine::new(ReplyOutcome::NotAnswerable, None, None)),
+            );
         };
         let Some(text) = call.choices.get(choice as usize) else {
-            return (None, Err(ReplyLine::new(ReplyOutcome::NoChoice, None, None)));
+            return (
+                None,
+                Err(ReplyLine::new(ReplyOutcome::NoChoice, None, None)),
+            );
         };
         let answer = Answer {
             choice,

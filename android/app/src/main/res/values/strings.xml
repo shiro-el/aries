@@ -285,6 +285,14 @@
     <string name="call_banner_from">New Call from %1$s · %2$s</string>
     <string name="call_banner_view">View</string>
     <string name="call_banner_dismiss">Dismiss</string>
+    <string name="call_answer_choice_label">Answer %1$s with %2$s</string>
+    <string name="call_answer_sending">Sending the answer…</string>
+    <string name="call_reply_not_sent">Not sent: %1$s. Nothing was typed; you can try again.</string>
+    <string name="call_reply_unknown">The answer may or may not have been delivered. Trying again is safe: it is never typed twice.</string>
+    <string name="call_reply_answered">This Call was already answered.</string>
+    <string name="call_reply_no_call">This Call is no longer in the Host\'s history.</string>
+    <string name="call_reply_no_choice">That Choice is no longer offered.</string>
+    <string name="call_reply_no_beacon">The Beacon is not installed on this Host.</string>
     <string name="push_title">Push notifications</string>
     <string name="push_needs_beacon">Install the Beacon to turn on push notifications for this Host.</string>
     <string name="push_off_body">Get notifications from this Host on this phone, also while Aries is closed or the phone is locked. They are end-to-end encrypted: the Relay that delivers them cannot read them.</string>
