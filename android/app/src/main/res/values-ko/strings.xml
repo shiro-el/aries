@@ -984,8 +984,11 @@
     <string name="dictation_key_save_button">키 저장</string>
     <string name="dictation_key_remove_button">키 삭제</string>
     <string name="dictation_key_failed">API 키를 저장하지 못했습니다. 다시 입력해 주세요.</string>
-    <string name="dictation_language_label">언어 (ISO 코드, 비워 두면 자동 감지)</string>
-    <string name="dictation_language_invalid">ko, en 같은 두 글자 언어 코드를 입력해 주세요.</string>
+    <string name="dictation_language_label">언어</string>
+    <!-- Shared searchable language picker -->
+    <string name="language_picker_auto">자동 감지</string>
+    <string name="language_picker_search">언어 검색</string>
+    <string name="language_picker_no_results">검색 결과 없음</string>
     <string name="dictation_model_label">받아쓰기 모델</string>
     <string name="dictation_vocabulary_label">사용자 어휘 (이름과 용어)</string>
     <string name="dictation_context_label">자동 컨텍스트</string>
