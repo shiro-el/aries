@@ -142,10 +142,9 @@ class PushService : FirebaseMessagingService() {
                 }
                 NotificationGroups.decorate(context, builder, notice.hostId, notice.hostName, tag, content.terminal)
                 val status = content.status
-                if (status == AgentStatus.Done || status is AgentStatus.Error ||
-                    (status is AgentStatus.Blocked && status.reason != io.github.shiroel.aries.core.BlockedReason.QUESTION)) {
+                if (status == AgentStatus.Done || status is AgentStatus.Error) {
                     InlineNotifications.add(context, builder, notice.hostId, notice.hostName, content.terminal, tag,
-                        reply = status == AgentStatus.Done || status is AgentStatus.Error,
+                        reply = true,
                         turn = content.turn.takeIf { status == AgentStatus.Done })
                 }
                 QuestionNotifications.decorate(context, notice, content, builder, canAnswerInBackground)
