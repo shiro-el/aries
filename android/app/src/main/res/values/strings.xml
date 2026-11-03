@@ -176,10 +176,8 @@
     <string name="chat_blocked_question">The Agent asks you a question in the Terminal.</string>
     <string name="chat_blocked_auth">The Agent needs you to sign in, in the Terminal.</string>
     <string name="chat_blocked_other">The Agent waits for you in the Terminal.</string>
-    <string name="space_unnamed">Unnamed Space</string>
     <string name="space_summary">Tabs: %1$d · Panes: %2$d</string>
     <string name="space_no_tabs">This Space has no Tabs.</string>
-    <string name="tab_unnamed">Unnamed Tab</string>
     <string name="tab_empty">This Tab has no Terminals.</string>
     <string name="pane_terminal_gone">%1$s (ended)</string>
     <string name="pane_zoom_button">Zoom</string>

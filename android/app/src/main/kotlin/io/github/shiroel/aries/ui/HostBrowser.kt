@@ -264,7 +264,7 @@ private fun SpaceList(
                 verticalAlignment = Alignment.CenterVertically) {
                 Text("▸", Modifier.width(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) // i18n-ok: decorative disclosure mark
                 Column(Modifier.weight(1f)) {
-                    Text(space.name.ifBlank { stringResource(R.string.space_unnamed) }, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(space.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     val count = space.tabs.sumOf { it.panes.size }
                     Text(
                         listOfNotNull(space.folder, stringResource(R.string.space_summary, space.tabs.size, count))
@@ -299,7 +299,7 @@ private fun SpaceView(
     space: SpaceInfo,
     onOpen: (TerminalInfo) -> Unit,
 ) {
-    Text(space.name.ifBlank { stringResource(R.string.space_unnamed) }, Modifier.padding(12.dp), style = MaterialTheme.typography.titleMedium)
+    Text(space.name, Modifier.padding(12.dp), style = MaterialTheme.typography.titleMedium)
     val tab = browser.tab
     if (tab == null) {
         Text(stringResource(R.string.space_no_tabs))
@@ -308,7 +308,7 @@ private fun SpaceView(
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         items(space.tabs, key = { it.id }) { t ->
             ConsoleChoice(selected = t.id == tab.id, onClick = { browser.selectTab(t) }) {
-                Text(t.name.ifBlank { stringResource(R.string.tab_unnamed) }, style = MaterialTheme.typography.bodySmall)
+                Text(t.name, style = MaterialTheme.typography.bodySmall)
             }
         }
     }

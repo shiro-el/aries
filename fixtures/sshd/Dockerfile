@@ -5,7 +5,7 @@
 # password bootstrap tests.
 FROM alpine:3.20
 
-RUN apk add --no-cache openssh-server \
+RUN apk add --no-cache openssh-server git \
  && ssh-keygen -A \
  && printf '%s\n' \
       'PasswordAuthentication no' \
