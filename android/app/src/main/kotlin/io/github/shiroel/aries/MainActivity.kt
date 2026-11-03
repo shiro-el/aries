@@ -19,7 +19,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         // Cold start from a tapped notification (not a re-creation, which already handled it).
-        if (savedInstanceState == null) pushTarget = PushTarget.from(intent)
+        if (savedInstanceState == null) {
+            pushTarget = PushTarget.from(intent)
+            NotificationGroups.opened(this, intent)
+        }
         val core = app.core
         val push = AndroidPushPlatform(this)
         setContent {
@@ -42,6 +45,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        NotificationGroups.opened(this, intent)
         // Warm start: the app was running when the notification was tapped.
         PushTarget.from(intent)?.let {
             pushTarget = it
