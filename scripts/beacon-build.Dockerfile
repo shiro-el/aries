@@ -1,6 +1,6 @@
 # Linux release toolchains, shared by local builds and release.yml.
 # Build on an x86_64 Docker host; aarch64 C code is cross-compiled, not emulated.
-FROM rust:1.99.1-bookworm
+FROM rust:1.99.1-bookworm@sha256:9181b56c2a21ab1d5e73cffe04fc762426d30aa7fac3c91141dd033f49a7fc8b
 
 RUN dpkg --add-architecture arm64 \
     && apt-get update \

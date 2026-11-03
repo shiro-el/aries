@@ -220,7 +220,7 @@ docker run --rm --name aries-beacon-build --platform linux/amd64 \
   -v "$PWD/dist/beacon:/out" aries-beacon-build \
   sh scripts/build-beacon.sh /out linux-x86_64 linux-aarch64
 docker run --rm --name aries-beacon-smoke \
-  -v "$PWD/dist/beacon:/beacon:ro" alpine:3.22 \
+  -v "$PWD/dist/beacon:/beacon:ro" alpine:3.22@sha256:2e0b81d60597f449baa56dc25d355367869d2dca4cd57e866f1e2b52af3eb55f \
   /beacon/aries-beacon-linux-x86_64 --version
 ARIES_BEACON_PARTIAL=1 scripts/beacon-manifest.sh v0.1.0 dist/beacon
 ARIES_BEACON_MANIFEST=$PWD/dist/beacon/beacon-release.json scripts/build-release.sh v0.1.0 dist/

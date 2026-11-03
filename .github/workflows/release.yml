@@ -62,7 +62,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           docker run --rm --name aries-beacon-smoke \
-            -v "$PWD/dist/beacon:/beacon:ro" alpine:3.22 \
+            -v "$PWD/dist/beacon:/beacon:ro" alpine:3.22@sha256:2e0b81d60597f449baa56dc25d355367869d2dca4cd57e866f1e2b52af3eb55f \
             /beacon/aries-beacon-linux-x86_64 --version
       - uses: actions/upload-artifact@v4
         with:

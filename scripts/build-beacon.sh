@@ -26,8 +26,14 @@ fi
 mkdir -p "$out"
 for target in "$@"; do
   case $target in
-    linux-x86_64) triple=x86_64-unknown-linux-musl ;;
-    linux-aarch64) triple=aarch64-unknown-linux-musl ;;
+    linux-x86_64)
+      triple=x86_64-unknown-linux-musl
+      export CC_x86_64_unknown_linux_musl=${CC_x86_64_unknown_linux_musl:-x86_64-linux-musl-gcc}
+      cc=$CC_x86_64_unknown_linux_musl ;;
+    linux-aarch64)
+      triple=aarch64-unknown-linux-musl
+      export CC_aarch64_unknown_linux_musl=${CC_aarch64_unknown_linux_musl:-aarch64-linux-musl-gcc}
+      cc=$CC_aarch64_unknown_linux_musl ;;
     macos-x86_64) triple=x86_64-apple-darwin ;;
     macos-aarch64) triple=aarch64-apple-darwin ;;
     *) echo "build-beacon: unknown target $target" >&2; exit 1 ;;
@@ -39,14 +45,6 @@ for target in "$@"; do
         exit 1
       fi ;;
     linux-*)
-      case $target in
-        linux-x86_64)
-          export CC_x86_64_unknown_linux_musl=${CC_x86_64_unknown_linux_musl:-x86_64-linux-musl-gcc}
-          cc=$CC_x86_64_unknown_linux_musl ;;
-        linux-aarch64)
-          export CC_aarch64_unknown_linux_musl=${CC_aarch64_unknown_linux_musl:-aarch64-linux-musl-gcc}
-          cc=$CC_aarch64_unknown_linux_musl ;;
-      esac
       if ! command -v "$cc" >/dev/null 2>&1; then
         echo "build-beacon: missing musl C compiler $cc; use scripts/beacon-build.Dockerfile (CONTRIBUTING.md)" >&2
         exit 1
