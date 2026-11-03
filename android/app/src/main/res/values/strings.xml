@@ -5,6 +5,46 @@
   Add every new string to values-ko/strings.xml too (TranslationsTest checks it).
 -->
 <resources>
+    <!-- App lock (117) -->
+    <string name="app_lock_settings_title">App lock</string>
+    <string name="app_lock_enabled_label">Require authentication</string>
+    <string name="app_lock_settings_hint">Protect app content when returning from the background. Notification actions keep working as before.</string>
+    <string name="app_lock_delay_label">Lock after leaving the app</string>
+    <string name="app_lock_delay_immediate">Immediately</string>
+    <string name="app_lock_delay_one_minute">1 minute</string>
+    <string name="app_lock_delay_five_minutes">5 minutes</string>
+    <string name="app_lock_previews_label">Hide app previews</string>
+    <string name="app_lock_previews_hint">Hide Aries in Recents and block screenshots and screen sharing while app lock is enabled.</string>
+    <string name="app_lock_screen_title">Aries is locked</string>
+    <string name="app_lock_screen_body">Authenticate with biometrics or your device lock to continue.</string>
+    <string name="app_lock_unlock_button">Unlock Aries</string>
+    <string name="app_lock_authenticating">Authenticating…</string>
+    <string name="app_lock_cancelled">Authentication cancelled.</string>
+    <string name="app_lock_failed">Authentication failed. Try again.</string>
+    <string name="app_lock_unavailable">Set up a device PIN, pattern or password in Android settings, then try again.</string>
+    <!-- Chat read aloud (105) -->
+    <string name="read_aloud_title">Read aloud</string>
+    <string name="read_aloud_button">Read</string>
+    <string name="read_aloud_stop">Stop reading</string>
+    <string name="read_aloud_loading">Starting system speech…</string>
+    <string name="read_aloud_unavailable">System speech is unavailable. Check the text-to-speech engine in Android settings.</string>
+    <string name="read_aloud_preparing">Preparing to read…</string>
+    <string name="read_aloud_playing">Reading aloud…</string>
+    <string name="read_aloud_empty">There is no text to read after skipping code blocks.</string>
+    <string name="read_aloud_failed">Could not read aloud. Check the speech engine and try again.</string>
+    <string name="read_aloud_language_unavailable">This language is unavailable. Install its voice in Android text-to-speech settings.</string>
+    <string name="read_aloud_speed">Speed · %1$.2f×</string>
+    <string name="read_aloud_speed_label">Reading speed</string>
+    <string name="read_aloud_voice">Voice · %1$s</string>
+    <string name="read_aloud_default_voice">System default</string>
+    <string name="read_aloud_voice_title">Choose a voice</string>
+    <string name="read_aloud_voice_label">%1$s · %2$s · %3$s</string>
+    <string name="read_aloud_voice_network">Network required</string>
+    <string name="read_aloud_voice_local">On device</string>
+    <string name="read_aloud_preview">Preview voice</string>
+    <string name="read_aloud_sample">Hello. Aries can read Agent responses aloud.</string>
+    <string name="read_aloud_hint">Tap Read on a Chat response to hear it with system speech. Code blocks are skipped. Playback stops when you leave the screen. Korean text uses a Korean voice when available. Network voices may send text to the speech provider.</string>
+
     <!-- Quick open and command palette -->
     <string name="quick_open_title">Quick open</string>
     <string name="quick_open_hint">Search names, or &gt; for commands</string>
@@ -93,6 +133,12 @@
     <string name="files_range">Lines %1$d–%2$d of %3$d</string>
     <string name="files_previous_button">Previous page</string>
     <string name="files_next_button">Next page</string>
+    <!-- Remote image and PDF preview (111) -->
+    <string name="files_pdf_title">PDF page</string>
+    <string name="files_pdf_page">Page %1$d of %2$d</string>
+    <string name="files_preview_open">Open preview</string>
+    <string name="files_preview_too_large">This file exceeds the %1$d MiB preview limit.</string>
+    <string name="files_preview_failed">Could not preview this file. Check the file and connection, then refresh to retry.</string>
     <!-- File code view and Chat links (110) -->
     <string name="files_wrap_lines">Wrap lines</string>
     <string name="files_missing">File not found: %1$s</string>
@@ -264,6 +310,18 @@
     <string name="terminal_open_link">Open link</string>
     <string name="terminal_copy_link">Copy link</string>
 
+    <!-- Terminal output search -->
+    <string name="terminal_search_button">Search output</string>
+    <string name="terminal_search_hint">Find in output</string>
+    <string name="terminal_search_case">Match case</string>
+    <string name="terminal_search_regex">Regex</string>
+    <string name="terminal_search_previous">Previous match</string>
+    <string name="terminal_search_next">Next match</string>
+    <string name="terminal_search_close">Close search</string>
+    <string name="terminal_search_count">%1$d of %2$d</string>
+    <string name="terminal_search_no_matches">No matches</string>
+    <string name="terminal_search_invalid">Invalid search pattern or query too long</string>
+
     <string name="agents_button">All Agents</string>
     <string name="agents_title">Agents</string>
     <string name="agents_empty">No Agents are running on your Hosts.</string>
@@ -294,6 +352,13 @@
     <string name="agent_open_button">Open</string>
     <string name="agent_view_terminal">term</string>
     <string name="agent_view_chat">chat</string>
+    <!-- Terminal and Chat input history (108) -->
+    <string name="input_history_title">Input history</string>
+    <string name="input_history_hint">Recent inputs on this phone. Select one to edit before sending.</string>
+    <string name="input_history_empty">No input history yet.</string>
+    <string name="input_history_clear_button">Clear history</string>
+    <string name="input_history_failed">Could not read or save input history.</string>
+
     <string name="chat_title">Chat: %1$s</string>
     <!-- Chat reading position -->
     <string name="chat_latest_button">Latest</string>

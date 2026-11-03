@@ -3,13 +3,14 @@ mod common;
 
 use aries_core::{AgentStatus, CoreError};
 use aries_test_support::HcSession;
-use common::{core_in, local_endpoint};
+use common::{core_in, local_endpoint, wait_state};
 
 #[tokio::test]
 async fn snapshot_persists_agents_and_fetch_time_and_removal_cleans_it() {
     let hc = HcSession::start();
     let plain = hc.run_bg("plain", &["sleep", "300"]);
     let agent = hc.run_fake_agent("writer", "status working\nwait\n");
+    wait_state(&hc, &agent.address, "working");
     let data = tempfile::tempdir().unwrap();
     let core = core_in(data.path());
     let host = core.add_host("dev".into(), local_endpoint(&hc)).unwrap();
@@ -46,6 +47,7 @@ async fn snapshot_persists_agents_and_fetch_time_and_removal_cleans_it() {
 async fn live_lists_replace_stored_state_and_notify_readers_including_removal() {
     let hc = HcSession::start();
     let agent = hc.run_fake_agent("writer", "status working\nwait\nstatus done\nwait\n");
+    wait_state(&hc, &agent.address, "working");
     let data = tempfile::tempdir().unwrap();
     let core = core_in(data.path());
     let host = core.add_host("dev".into(), local_endpoint(&hc)).unwrap();
@@ -85,7 +87,8 @@ async fn live_lists_replace_stored_state_and_notify_readers_including_removal() 
 #[tokio::test]
 async fn hosts_are_independent_and_a_failed_refresh_keeps_its_old_fetch_time() {
     let hc = HcSession::start();
-    hc.run_fake_agent("writer", "status working\nwait\n");
+    let agent = hc.run_fake_agent("writer", "status working\nwait\n");
+    wait_state(&hc, &agent.address, "working");
     let data = tempfile::tempdir().unwrap();
     let core = core_in(data.path());
     let first = core.add_host("first".into(), local_endpoint(&hc)).unwrap();

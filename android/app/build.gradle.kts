@@ -79,6 +79,7 @@ dependencies {
     implementation(libs.firebase.messaging)
     implementation(libs.androidx.work.runtime)
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+    implementation("com.caverock:androidsvg-aar:1.4")
     implementation("org.commonmark:commonmark:0.32.0")
     implementation("org.commonmark:commonmark-ext-gfm-tables:0.32.0")
 
