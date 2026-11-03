@@ -22,7 +22,7 @@ data class CallEntry(val host: Host, val call: CallInfo) {
     val key get() = "${host.id}/${call.id}"
 
     /** It can still be answered with a Choice from here. */
-    val answerable get() = call.terminal != null && call.answer == null && call.choices.isNotEmpty()
+    val answerable get() = call.topLevel && call.terminal != null && call.answer == null && call.choices.isNotEmpty()
 }
 
 /** What the last answer from Call history ran into, beyond the recorded answer. */

@@ -31,7 +31,7 @@ pub(crate) const TAB_LABEL: &str = "herdr.tab";
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct HostStructure {
     pub spaces: Vec<SpaceInfo>,
-    /// Terminals in no Pane (started outside herdr-app, or not placed yet).
+    /// Terminals with neither their own Pane nor a listed ancestor in a Pane.
     pub unplaced: Vec<TerminalInfo>,
     /// Set when the document could not be used and `spaces` was built from
     /// `herdr.space` / `herdr.tab` labels instead.
@@ -61,6 +61,9 @@ pub struct PaneInfo {
     pub terminal_address: String,
     /// `None` when the Terminal is no longer listed by herdr-core.
     pub terminal: Option<TerminalInfo>,
+    /// Pane-less descendants; `parent` keeps their tree, ordered by address.
+    #[uniffi(default = [])]
+    pub sub_agents: Vec<TerminalInfo>,
 }
 
 /// Why the structure came from labels rather than the document.
@@ -76,7 +79,7 @@ pub enum StructureProblem {
 
 /// Builds the structure from a `doc.get` result and `terminal.list` records.
 pub(crate) fn build(doc: &Value, terminals: &[Value]) -> HostStructure {
-    match parse(&doc["value"], terminals) {
+    let mut structure = match parse(&doc["value"], terminals) {
         Ok(mut spaces) => {
             place_by_labels(&mut spaces, terminals);
             let placed: HashSet<&str> = spaces
@@ -97,6 +100,58 @@ pub(crate) fn build(doc: &Value, terminals: &[Value]) -> HostStructure {
             }
         }
         Err(problem) => by_labels(terminals, problem),
+    };
+    place_sub_agents(&mut structure, terminals);
+    structure
+}
+
+/// Follow only listed ancestors, bounded like herdr-app's `write_where`.
+/// Existing Panes win; labels do not give a child a synthetic Pane.
+fn place_sub_agents(structure: &mut HostStructure, terminals: &[Value]) {
+    let live: BTreeMap<_, _> = terminals
+        .iter()
+        .filter_map(|t| Some((t["address"].as_str()?, t)))
+        .collect();
+    let placed: BTreeMap<_, _> = structure
+        .spaces
+        .iter()
+        .enumerate()
+        .flat_map(|(s, space)| {
+            space.tabs.iter().enumerate().flat_map(move |(t, tab)| {
+                tab.panes
+                    .iter()
+                    .enumerate()
+                    .map(move |(p, pane)| (pane.terminal_address.clone(), (s, t, p)))
+            })
+        })
+        .collect();
+    structure.unplaced.retain(|terminal| {
+        let mut current = terminal.address.as_str();
+        let mut visited = HashSet::from([current]);
+        for _ in 0..32 {
+            let Some(parent) = live.get(current).and_then(|t| t["parent"].as_str()) else {
+                break;
+            };
+            if !live.contains_key(parent) || !visited.insert(parent) {
+                break;
+            }
+            if let Some(&(s, t, p)) = placed.get(parent) {
+                structure.spaces[s].tabs[t].panes[p]
+                    .sub_agents
+                    .push(terminal.clone());
+                return false;
+            }
+            current = parent;
+        }
+        true
+    });
+    for pane in structure
+        .spaces
+        .iter_mut()
+        .flat_map(|s| &mut s.tabs)
+        .flat_map(|t| &mut t.panes)
+    {
+        pane.sub_agents.sort_by(|a, b| a.address.cmp(&b.address));
     }
 }
 
@@ -150,6 +205,7 @@ fn parse(value: &Value, terminals: &[Value]) -> Result<Vec<SpaceInfo>, Structure
                 panes: panes
                     .into_iter()
                     .map(|(id, address)| PaneInfo {
+                        sub_agents: vec![],
                         terminal: lookup(&address),
                         id,
                         terminal_address: address,
@@ -222,6 +278,9 @@ fn place_by_labels(spaces: &mut [SpaceInfo], terminals: &[Value]) {
         .map(|p| p.terminal_address.clone())
         .collect();
     for t in terminals {
+        if t["parent"].as_str().is_some() {
+            continue;
+        }
         let label = |k: &str| t["labels"][k].as_str();
         let (Some(space), Some(tab)) = (label(SPACE_LABEL), label(TAB_LABEL)) else {
             continue;
@@ -236,6 +295,7 @@ fn place_by_labels(spaces: &mut [SpaceInfo], terminals: &[Value]) {
             .and_then(|s| s.tabs.iter_mut().find(|x| x.id == tab))
         {
             tab.panes.push(PaneInfo {
+                sub_agents: vec![],
                 id: info.address.clone(),
                 terminal_address: info.address.clone(),
                 terminal: Some(info),
@@ -245,12 +305,16 @@ fn place_by_labels(spaces: &mut [SpaceInfo], terminals: &[Value]) {
 }
 
 /// The fallback: one Space per `herdr.space` label, one Tab per `herdr.tab`
-/// label inside it, one Pane per Terminal (Pane id = its address), ordered by
-/// id. Terminals without a `herdr.space` label are unplaced.
+/// label inside it, one Pane per top-level Terminal (Pane id = its address),
+/// ordered by id. Descendants follow their ancestors; other Terminals are unplaced.
 fn by_labels(terminals: &[Value], problem: StructureProblem) -> HostStructure {
     let mut spaces: BTreeMap<String, BTreeMap<String, Vec<PaneInfo>>> = BTreeMap::new();
     let mut unplaced = vec![];
     for t in terminals {
+        if t["parent"].as_str().is_some() {
+            unplaced.push(terminal_info(t));
+            continue;
+        }
         let label = |k: &str| t["labels"][k].as_str().map(str::to_owned);
         let info = terminal_info(t);
         match label(SPACE_LABEL) {
@@ -260,6 +324,7 @@ fn by_labels(terminals: &[Value], problem: StructureProblem) -> HostStructure {
                 .entry(label(TAB_LABEL).unwrap_or_default())
                 .or_default()
                 .push(PaneInfo {
+                    sub_agents: vec![],
                     id: info.address.clone(),
                     terminal_address: info.address.clone(),
                     terminal: Some(info),
@@ -288,3 +353,7 @@ fn by_labels(terminals: &[Value], problem: StructureProblem) -> HostStructure {
         problem: Some(problem),
     }
 }
+
+#[cfg(test)]
+#[path = "structure_sub_agents_tests.rs"]
+mod sub_agent_tests;

@@ -179,7 +179,7 @@ pub struct TerminalInfo {
     /// does not report Agent status (it is shown as a plain Terminal).
     #[uniffi(default = None)]
     pub agent_status: Option<AgentStatus>,
-    /// Blocked or Error: the Agent needs the user.
+    /// Top-level Blocked or Error: the Agent needs the user.
     #[uniffi(default = false)]
     pub needs_attention: bool,
     /// herdr-core's `turn` counter (what `herdr.seen` is compared with).
@@ -193,6 +193,9 @@ pub struct TerminalInfo {
     /// whole [`address`](Self::address) to reach the Terminal.
     #[uniffi(default = None)]
     pub machine: Option<String>,
+    /// Terminal that started this one, as reported by herdr-core.
+    #[uniffi(default = None)]
+    pub parent: Option<String>,
 }
 
 fn runtime() -> &'static tokio::runtime::Runtime {
@@ -1376,6 +1379,7 @@ pub(crate) fn terminal_info(v: &serde_json::Value) -> TerminalInfo {
         machine: address.rsplit_once('/').map(|(m, _)| m.to_owned()),
         pinned: host_model::pinned(v),
         address,
+        parent: s("parent"),
         name: s("name"),
         title: s("title").unwrap_or_default(),
         argv: v["argv"]

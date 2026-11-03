@@ -69,7 +69,7 @@ class AgentBoard(val hosts: List<Host>) {
      * then status, Host and whole Terminal address for stable ordering.
      */
     val agents: List<AgentEntry>
-        get() = hosts.flatMap { h -> lists[h.id].orEmpty().filter { it.agentStatus != null }.map { AgentEntry(h, it) } }
+        get() = hosts.flatMap { h -> agentFamily(h, lists[h.id].orEmpty()) }
             .sortedWith(
                 compareBy<AgentEntry>(
                     { !isWaiting(it.terminal.agentStatus) },
@@ -165,8 +165,12 @@ fun AgentsScreen(
         }
         val agents = board.agents
         if (board.hosts.isNotEmpty() && agents.isEmpty()) item { Text(stringResource(R.string.agents_empty)) }
-        items(agents, key = { "${it.key.hostId}\n${it.key.address}" }) { entry ->
-            AgentRow(entry, onOpen = { onOpen(entry) }, onPin = { onPin(entry, it) })
+        val rows = terminalTree(agents, namespace = { it.host.id }) { it.terminal }
+        items(rows, key = { "${it.value.key.hostId}\n${it.value.key.address}" }) { row ->
+            val entry = row.value
+            TerminalBranch(row.guide, row.depth) {
+                AgentRow(entry, onOpen = { onOpen(entry) }, onPin = { onPin(entry, it) })
+            }
         }
     }
 }
@@ -175,7 +179,7 @@ fun AgentsScreen(
 private fun AgentRow(entry: AgentEntry, onOpen: () -> Unit, onPin: (Boolean) -> Unit) {
     ConsoleTerminalRow(entry.terminal, entry.host.name, onOpen,
         modifier = Modifier.testTag("agent-row:${entry.key.hostId}:${entry.key.address}"),
-        trailing = { PinButton(entry, onPin) })
+        trailing = { if (entry.terminal.agentStatus != null) PinButton(entry, onPin) })
 }
 
 @Composable

@@ -766,8 +766,14 @@ class HostsModel(
 
     /** Opens an Agent's detail; a Done Agent counts as seen there, for every client. */
     fun openAgent(board: AgentBoard, entry: AgentEntry) {
-        board.open(entry.key)
         val t = entry.terminal
+        // A plain Terminal can appear as the parent of an Agent.
+        if (t.agentStatus == null) {
+            val link = agentLinks[entry.host.id] ?: return
+            show(link, t, screen)
+            return
+        }
+        board.open(entry.key)
         if (t.agentStatus != AgentStatus.Done) return
         labelWrite(board, entry) { it.markSeen(t.address, t.turn) }
     }
