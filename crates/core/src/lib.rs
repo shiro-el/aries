@@ -453,6 +453,12 @@ impl AriesCore {
             .collect()
     }
 
+    /// Saved launch configs for launcher shortcuts, without connecting or opening a key.
+    pub fn saved_launches(&self, host_id: String) -> Result<Vec<SavedLaunch>, CoreError> {
+        let host = self.saved_host(&host_id)?;
+        Ok(launch::SavedLaunches::in_host_dir(self.store.host_dir(&host.id)).list())
+    }
+
     /// Trusts `fingerprint` as `host_id`'s Host key, after the user compared
     /// it with the one `connect` reported in [`CoreError::HostKeyUnknown`].
     pub fn trust_host_key(&self, host_id: String, fingerprint: String) -> Result<(), CoreError> {
