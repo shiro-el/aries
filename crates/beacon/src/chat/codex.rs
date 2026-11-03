@@ -185,6 +185,9 @@ pub struct CodexInterpreter {
     user_images: Vec<ChatImage>,
     model: Option<String>,
     last_agent: Option<ChatItem>,
+    /// Consume usage once for a visible response; later tool-only responses
+    /// and duplicate token_count events must not overwrite it.
+    awaiting_usage: bool,
 }
 
 impl Interpreter for CodexInterpreter {
@@ -394,6 +397,10 @@ impl CodexInterpreter {
     }
 
     fn response_usage(&mut self, usage: &Value) -> Vec<ChatEvent> {
+        if !self.awaiting_usage || !usage.is_object() {
+            return Vec::new();
+        }
+        self.awaiting_usage = false;
         let Some(agent) = &mut self.last_agent else {
             return Vec::new();
         };
@@ -433,6 +440,7 @@ impl CodexInterpreter {
         match p["type"].as_str() {
             Some("task_started") => {
                 self.last_agent = None;
+                self.awaiting_usage = false;
                 Vec::new()
             }
             Some("token_count") => self.response_usage(&p["info"]["last_token_usage"]),
@@ -512,6 +520,7 @@ impl CodexInterpreter {
         };
         if matches!(part.body, ChatBody::Agent { .. }) {
             self.last_agent = Some(part.clone());
+            self.awaiting_usage = true;
         }
         if matches!(part.body, ChatBody::Tool { .. })
             && let Some(call) = &self.open_exec

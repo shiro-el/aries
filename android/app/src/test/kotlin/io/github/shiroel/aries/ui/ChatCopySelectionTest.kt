@@ -127,6 +127,8 @@ class ChatCopySelectionTest {
         // Long press and dismissing the menu did not expand the tool.
         compose.onNodeWithText(result).assertDoesNotExist()
         tool.performClick()
+        compose.onNodeWithText(input).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.chat_tool_raw_input)).performClick()
         for (text in listOf(input, result)) {
             compose.onNodeWithText(text, useUnmergedTree = true).performTouchInput { longClick() }
             compose.onNodeWithText(str(R.string.chat_copy_all)).performClick()

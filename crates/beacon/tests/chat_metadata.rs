@@ -221,3 +221,38 @@ fn codex_function_results_expose_recorded_exit_and_time_and_keep_unknown_output(
     assert_eq!(result[0]["output"], "bad command");
     assert_eq!(result[0]["status"], "error");
 }
+
+#[test]
+fn codex_tool_only_response_usage_does_not_replace_the_previous_text_response_usage() {
+    let mut chat = aries_beacon::chat::codex::CodexInterpreter::default();
+    feed(
+        &mut chat,
+        json!({"type":"event_msg","payload":{"type":"task_started"}}),
+    );
+    feed(
+        &mut chat,
+        json!({"type":"event_msg","payload":{"type":"item_completed","item":{"type":"AgentMessage","id":"a","content":[{"text":"Checking"}]}}}),
+    );
+    feed(
+        &mut chat,
+        json!({"type":"token_usage_record","payload":{"usage":{"input_tokens":10,"output_tokens":2}}}),
+    );
+    feed(
+        &mut chat,
+        json!({"type":"response_item","payload":{"type":"function_call","call_id":"c","name":"exec_command","arguments":"{\"cmd\":\"pwd\"}"}}),
+    );
+    feed(
+        &mut chat,
+        json!({"type":"token_usage_record","payload":{"usage":{"input_tokens":30,"output_tokens":5}}}),
+    );
+    feed(
+        &mut chat,
+        json!({"type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":30,"output_tokens":5}}}}),
+    );
+    let finished = feed(
+        &mut chat,
+        json!({"type":"event_msg","payload":{"type":"task_complete","duration_ms":100}}),
+    );
+    assert_eq!(finished[0]["metadata"]["input_tokens"], 10);
+    assert_eq!(finished[0]["metadata"]["output_tokens"], 2);
+}
