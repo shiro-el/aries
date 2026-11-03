@@ -1,0 +1,109 @@
+{"channel": null, "seq": 0, "terminals": []}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"address": "t1", "argv": ["codex", "--no-daemon", "Reply with exactly the word: pong"], "cols": 200, "created_ms": 1793686756805, "cwd": "/home/user/work/a", "die_with_parent": false, "exit_code": null, "finished_ms": null, "identity": "ghostty", "keep": false, "labels": {}, "name": "c1", "notify": true, "parent": null, "pid": 877286, "reason": null, "reported": false, "rm": false, "rows": 120, "screen": "exact", "signal": null, "state": "live", "status": null, "status_ms": null, "template": null, "title": "", "turn": 0}, "seq": 1, "terminal": "t1", "type": "created"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"argv": ["codex", "--no-daemon", "Reply with exactly the word: pong"], "cwd": "/home/user/work/a", "name": "codex-stock", "pid": 877286}, "seq": 2, "terminal": "t1", "type": "foreground"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "state": "working"}}, "seq": 4, "terminal": "t1", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "state": "done"}}, "seq": 47, "terminal": "t1", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"state": "done", "turn": 1}, "seq": 48, "terminal": "t1", "type": "turn"}}
+{"jsonrpc": "2.0", "method": "heartbeat", "params": {"seq": 48}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "state": "working"}}, "seq": 50, "terminal": "t1", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "state": "done"}}, "seq": 53, "terminal": "t1", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"state": "done", "turn": 2}, "seq": 54, "terminal": "t1", "type": "turn"}}
+{"jsonrpc": "2.0", "method": "heartbeat", "params": {"seq": 54}}
+{"jsonrpc": "2.0", "method": "heartbeat", "params": {"seq": 54}}
+{"jsonrpc": "2.0", "method": "heartbeat", "params": {"seq": 54}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"address": "t2", "argv": ["codex", "--no-daemon", "Create an empty file named x.txt in the current directory using the shell command: touch x.txt. Do nothing else."], "cols": 200, "created_ms": 1793686814657, "cwd": "/home/user/work/a", "die_with_parent": false, "exit_code": null, "finished_ms": null, "identity": "ghostty", "keep": false, "labels": {}, "name": "c2", "notify": true, "parent": null, "pid": 883338, "reason": null, "reported": false, "rm": false, "rows": 120, "screen": "exact", "signal": null, "state": "live", "status": null, "status_ms": null, "template": null, "title": "", "turn": 0}, "seq": 55, "terminal": "t2", "type": "created"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"argv": ["codex", "--no-daemon", "Create an empty file named x.txt in the current directory using the shell command: touch x.txt. Do nothing else."], "cwd": "/home/user/work/a", "name": "codex-stock", "pid": 883338}, "seq": 56, "terminal": "t2", "type": "foreground"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "state": "idle"}}, "seq": 58, "terminal": "t2", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "state": "working"}}, "seq": 59, "terminal": "t2", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "kind": "permission", "state": "blocked"}}, "seq": 127, "terminal": "t2", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"state": "blocked", "turn": 1}, "seq": 128, "terminal": "t2", "type": "turn"}}
+{"jsonrpc": "2.0", "method": "heartbeat", "params": {"seq": 133}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "state": "working"}}, "seq": 142, "terminal": "t2", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "state": "done"}}, "seq": 176, "terminal": "t2", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"state": "done", "turn": 2}, "seq": 177, "terminal": "t2", "type": "turn"}}
+{"jsonrpc": "2.0", "method": "heartbeat", "params": {"seq": 177}}
+{"jsonrpc": "2.0", "method": "heartbeat", "params": {"seq": 177}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "state": "idle"}}, "seq": 178, "terminal": "t1", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "state": "working"}}, "seq": 181, "terminal": "t1", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "state": "idle"}}, "seq": 195, "terminal": "t1", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"state": "idle", "turn": 3}, "seq": 196, "terminal": "t1", "type": "turn"}}
+{"jsonrpc": "2.0", "method": "heartbeat", "params": {"seq": 196}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "state": "working"}}, "seq": 197, "terminal": "t1", "type": "status"}}
+{"jsonrpc": "2.0", "method": "heartbeat", "params": {"seq": 234}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "kind": "permission", "state": "blocked"}}, "seq": 249, "terminal": "t1", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"state": "blocked", "turn": 4}, "seq": 250, "terminal": "t1", "type": "turn"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "state": "working"}}, "seq": 262, "terminal": "t1", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "state": "done"}}, "seq": 290, "terminal": "t1", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"state": "done", "turn": 5}, "seq": 291, "terminal": "t1", "type": "turn"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "state": "idle"}}, "seq": 292, "terminal": "t1", "type": "status"}}
+{"jsonrpc": "2.0", "method": "heartbeat", "params": {"seq": 292}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"address": "t3", "argv": ["codex", "--no-daemon", "--enable", "default_mode_request_user_input", "Before doing anything, use the request_user_input tool to ask me one multiple-choice question: which color do I prefer, with options Red and Blue. After I answer, reply with just that color."], "cols": 200, "created_ms": 1793686910983, "cwd": "/home/user/work/b", "die_with_parent": false, "exit_code": null, "finished_ms": null, "identity": "ghostty", "keep": false, "labels": {}, "name": "c3", "notify": true, "parent": null, "pid": 891186, "reason": null, "reported": false, "rm": false, "rows": 120, "screen": "exact", "signal": null, "state": "live", "status": null, "status_ms": null, "template": null, "title": "", "turn": 0}, "seq": 293, "terminal": "t3", "type": "created"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"argv": ["codex", "--no-daemon", "--enable", "default_mode_request_user_input", "Before doing anything, use the request_user_input tool to ask me one multiple-choice question: which color do I prefer, with options Red and Blue. After I answer, reply with just that color."], "cwd": "/home/user/work/b", "name": "codex-stock", "pid": 891186}, "seq": 294, "terminal": "t3", "type": "foreground"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "state": "idle"}}, "seq": 296, "terminal": "t3", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "state": "working"}}, "seq": 298, "terminal": "t3", "type": "status"}}
+{"jsonrpc": "2.0", "method": "heartbeat", "params": {"seq": 349}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "kind": "question", "state": "blocked"}}, "seq": 351, "terminal": "t3", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"state": "blocked", "turn": 1}, "seq": 352, "terminal": "t3", "type": "turn"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "state": "working"}}, "seq": 366, "terminal": "t3", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "state": "done"}}, "seq": 390, "terminal": "t3", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"state": "done", "turn": 2}, "seq": 391, "terminal": "t3", "type": "turn"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "state": "idle"}}, "seq": 392, "terminal": "t3", "type": "status"}}
+{"jsonrpc": "2.0", "method": "heartbeat", "params": {"seq": 392}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": null}, "seq": 394, "terminal": "t3", "type": "status"}}
+{"jsonrpc": "2.0", "method": "heartbeat", "params": {"seq": 394}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"exit_code": 0, "finished_ms": 1793686947101, "reason": "exited", "signal": null}, "seq": 395, "terminal": "t3", "type": "finished"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"address": "t4", "argv": ["codex", "--no-daemon", "resume", "01a1a012-3af0-7c01-97e4-7e2adbc2ae4f", "Reply with exactly: resumed"], "cols": 200, "created_ms": 1793686947124, "cwd": "/home/user/work/b", "die_with_parent": false, "exit_code": null, "finished_ms": null, "identity": "ghostty", "keep": false, "labels": {}, "name": "c3r", "notify": true, "parent": null, "pid": 894353, "reason": null, "reported": false, "rm": false, "rows": 120, "screen": "exact", "signal": null, "state": "live", "status": null, "status_ms": null, "template": null, "title": "", "turn": 0}, "seq": 396, "terminal": "t4", "type": "created"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"argv": ["codex", "--no-daemon", "resume", "01a1a012-3af0-7c01-97e4-7e2adbc2ae4f", "Reply with exactly: resumed"], "cwd": "/home/user/work/b", "name": "codex-stock", "pid": 894353}, "seq": 397, "terminal": "t4", "type": "foreground"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "state": "working"}}, "seq": 400, "terminal": "t4", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "state": "done"}}, "seq": 445, "terminal": "t4", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"state": "done", "turn": 1}, "seq": 446, "terminal": "t4", "type": "turn"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "state": "idle"}}, "seq": 447, "terminal": "t4", "type": "status"}}
+{"jsonrpc": "2.0", "method": "heartbeat", "params": {"seq": 447}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"address": "t5", "argv": ["/usr/bin/zsh"], "cols": 200, "created_ms": 1793686972548, "cwd": "/home/user/work/b", "die_with_parent": false, "exit_code": null, "finished_ms": null, "identity": "ghostty", "keep": false, "labels": {}, "name": "plain", "notify": true, "parent": null, "pid": 896411, "reason": null, "reported": false, "rm": false, "rows": 120, "screen": "exact", "signal": null, "state": "live", "status": null, "status_ms": null, "template": null, "title": "", "turn": 0}, "seq": 448, "terminal": "t5", "type": "created"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"argv": ["/usr/bin/zsh"], "cwd": "/home/user/work/b", "name": "zsh", "pid": 896411}, "seq": 450, "terminal": "t5", "type": "foreground"}}
+{"jsonrpc": "2.0", "method": "heartbeat", "params": {"seq": 450}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"argv": ["codex", "Reply with exactly: daemon"], "cwd": "/home/user/work/b", "name": "codex-stock", "pid": 896821}, "seq": 452, "terminal": "t5", "type": "foreground"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "state": "idle"}}, "seq": 454, "terminal": "t5", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "state": "working"}}, "seq": 456, "terminal": "t5", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "state": "done"}}, "seq": 489, "terminal": "t5", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"state": "done", "turn": 1}, "seq": 490, "terminal": "t5", "type": "turn"}}
+{"jsonrpc": "2.0", "method": "heartbeat", "params": {"seq": 491}}
+{"jsonrpc": "2.0", "method": "heartbeat", "params": {"seq": 491}}
+{"jsonrpc": "2.0", "method": "heartbeat", "params": {"seq": 491}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"address": "t6", "argv": ["codex", "--no-daemon", "-c", "model_reasoning_effort=medium", "-c", "model_reasoning_summary=detailed", "-i", "/home/user/work/a/red.png", "Think it through briefly, then answer in one line: the main color of the attached image, and 17*23."], "cols": 200, "created_ms": 1793687027118, "cwd": "/home/user/work/a", "die_with_parent": false, "exit_code": null, "finished_ms": null, "identity": "ghostty", "keep": false, "labels": {}, "name": "c4", "notify": true, "parent": null, "pid": 902800, "reason": null, "reported": false, "rm": false, "rows": 120, "screen": "exact", "signal": null, "state": "live", "status": null, "status_ms": null, "template": null, "title": "", "turn": 0}, "seq": 492, "terminal": "t6", "type": "created"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"address": "t7", "argv": ["codex", "--no-daemon", "-m", "does-not-exist-model", "hi"], "cols": 200, "created_ms": 1793687027184, "cwd": "/home/user/work/b", "die_with_parent": false, "exit_code": null, "finished_ms": null, "identity": "ghostty", "keep": false, "labels": {}, "name": "c5", "notify": true, "parent": null, "pid": 902895, "reason": null, "reported": false, "rm": false, "rows": 120, "screen": "exact", "signal": null, "state": "live", "status": null, "status_ms": null, "template": null, "title": "", "turn": 0}, "seq": 493, "terminal": "t7", "type": "created"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"argv": ["codex", "--no-daemon", "-c", "model_reasoning_effort=medium", "-c", "model_reasoning_summary=detailed", "-i", "/home/user/work/a/red.png", "Think it through briefly, then answer in one line: the main color of the attached image, and 17*23."], "cwd": "/home/user/work/a", "name": "codex-stock", "pid": 902800}, "seq": 494, "terminal": "t6", "type": "foreground"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"argv": ["codex", "--no-daemon", "-m", "does-not-exist-model", "hi"], "cwd": "/home/user/work/b", "name": "codex-stock", "pid": 902895}, "seq": 495, "terminal": "t7", "type": "foreground"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "state": "idle"}}, "seq": 497, "terminal": "t7", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "state": "working"}}, "seq": 499, "terminal": "t7", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "state": "idle"}}, "seq": 504, "terminal": "t6", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "state": "working"}}, "seq": 506, "terminal": "t6", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "state": "error"}}, "seq": 554, "terminal": "t7", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"state": "error", "turn": 1}, "seq": 555, "terminal": "t7", "type": "turn"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "state": "done"}}, "seq": 594, "terminal": "t6", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"state": "done", "turn": 1}, "seq": 595, "terminal": "t6", "type": "turn"}}
+{"jsonrpc": "2.0", "method": "heartbeat", "params": {"seq": 595}}
+{"jsonrpc": "2.0", "method": "heartbeat", "params": {"seq": 595}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"address": "t8", "argv": ["env", "-u", "HC_TERMINAL_ID", "-u", "HC_SCOPE", "-u", "HC_TERMINAL_SOCKET", "-u", "HC_SESSION", "codex", "--no-daemon"], "cols": 200, "created_ms": 1793687054351, "cwd": "/home/user/work/b", "die_with_parent": false, "exit_code": null, "finished_ms": null, "identity": "ghostty", "keep": false, "labels": {}, "name": "noenv", "notify": true, "parent": null, "pid": 905237, "reason": null, "reported": false, "rm": false, "rows": 120, "screen": "exact", "signal": null, "state": "live", "status": null, "status_ms": null, "template": null, "title": "", "turn": 0}, "seq": 596, "terminal": "t8", "type": "created"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"argv": ["codex", "--no-daemon"], "cwd": "/home/user/work/b", "name": "codex-stock", "pid": 905237}, "seq": 597, "terminal": "t8", "type": "foreground"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "state": "idle"}}, "seq": 599, "terminal": "t8", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "state": "working"}}, "seq": 601, "terminal": "t8", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": {"app": "codex", "state": "idle"}}, "seq": 613, "terminal": "t8", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"state": "idle", "turn": 1}, "seq": 614, "terminal": "t8", "type": "turn"}}
+{"jsonrpc": "2.0", "method": "heartbeat", "params": {"seq": 614}}
+{"jsonrpc": "2.0", "method": "heartbeat", "params": {"seq": 614}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": null}, "seq": 615, "terminal": "t1", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"exit_code": null, "finished_ms": 1793687090391, "reason": "killed", "signal": 1}, "seq": 616, "terminal": "t1", "type": "finished"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": null}, "seq": 617, "terminal": "t2", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"exit_code": null, "finished_ms": 1793687090433, "reason": "killed", "signal": 1}, "seq": 618, "terminal": "t2", "type": "finished"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": null}, "seq": 619, "terminal": "t4", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"exit_code": null, "finished_ms": 1793687090472, "reason": "killed", "signal": 1}, "seq": 620, "terminal": "t4", "type": "finished"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": null}, "seq": 621, "terminal": "t6", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"exit_code": null, "finished_ms": 1793687090519, "reason": "killed", "signal": 1}, "seq": 622, "terminal": "t6", "type": "finished"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": null}, "seq": 623, "terminal": "t7", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"exit_code": null, "finished_ms": 1793687090567, "reason": "killed", "signal": 1}, "seq": 624, "terminal": "t7", "type": "finished"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": null}, "seq": 625, "terminal": "t8", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"exit_code": null, "finished_ms": 1793687090617, "reason": "killed", "signal": 1}, "seq": 626, "terminal": "t8", "type": "finished"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"records": {}, "reported": true, "status": null}, "seq": 627, "terminal": "t5", "type": "status"}}
+{"jsonrpc": "2.0", "method": "event", "params": {"data": {"exit_code": 1, "finished_ms": 1793687090863, "reason": "killed", "signal": null}, "seq": 628, "terminal": "t5", "type": "finished"}}
+{"jsonrpc": "2.0", "method": "heartbeat", "params": {"seq": 628}}
