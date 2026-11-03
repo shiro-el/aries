@@ -9,6 +9,7 @@
 
 pub mod answer;
 pub mod claude;
+pub mod codex;
 mod follow;
 mod jsonl;
 pub mod media;
@@ -115,5 +116,9 @@ fn children(pid: u32) -> Vec<u32> {
 
 /// Every Agent this Beacon reads, in the order they are tried.
 pub fn agents() -> Vec<Box<dyn Agent>> {
-    vec![Box::new(claude::ClaudeCode::from_env()), Box::new(pi::Pi)]
+    vec![
+        Box::new(claude::ClaudeCode::from_env()),
+        Box::new(codex::Codex),
+        Box::new(pi::Pi),
+    ]
 }

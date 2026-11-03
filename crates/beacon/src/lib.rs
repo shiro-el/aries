@@ -4,6 +4,7 @@
 pub mod chat;
 pub mod core_link;
 pub mod pi_extension;
+pub mod skill;
 
 use std::path::PathBuf;
 

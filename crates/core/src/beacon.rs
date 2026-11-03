@@ -228,6 +228,14 @@ pub(crate) const UNINSTALL_STEPS: &[(&str, &str)] = &[
 if [ -x "$b" ]; then "$b" unpair >/dev/null 2>&1 || true; fi
 rm -f "${XDG_STATE_HOME:-$HOME/.local/state}/aries-beacon/pairing.json""#,
     ),
+    // Ticket 34: the managed `call-human` skill, unless the user changed it
+    // (the Beacon decides). Best effort, like the pairing: a Beacon from
+    // before the skill existed has no `skill` command.
+    (
+        "skill",
+        r#"b="$HOME/.local/bin/aries-beacon"
+if [ -x "$b" ]; then "$b" skill uninstall >/dev/null 2>&1 || true; fi"#,
+    ),
     // Ticket 43: the managed Pi extension, unless the user edited it
     // (same check as `aries_beacon::pi_extension::remove`, in plain sh so
     // it works without the Beacon binary).
@@ -359,6 +367,16 @@ pub(crate) async fn install(
     } else {
         register_systemd(ssh).await?
     };
+    // Ticket 34: the new binary installs or updates its `call-human` skill
+    // (it leaves the user's own version alone).
+    run(
+        ssh,
+        "skill",
+        &sh_c(r#""$HOME/.local/bin/aries-beacon" skill install"#),
+        &[],
+    )
+    .await?;
+    // Ticket 43: and the Pi status extension.
     let _ = ssh.exec(&sh_c(PI_EXTENSION_INSTALL), &[]).await;
     Ok(BeaconInstall {
         version: release.version.clone(),

@@ -56,3 +56,40 @@ fn parse(version: &str) -> Option<[u64; 3]> {
     let v = [parts.next()??, parts.next()??, parts.next()??];
     parts.next().is_none().then_some(v)
 }
+
+/// One JSON line printed by `aries-beacon skill install` and
+/// `aries-beacon skill uninstall`: what happened to the managed
+/// `call-human` skill in each skills directory.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SkillReport {
+    pub roots: Vec<SkillRoot>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SkillRoot {
+    /// The skill directory, e.g. `/home/u/.claude/skills/call-human`.
+    pub path: String,
+    pub outcome: SkillOutcome,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SkillOutcome {
+    /// Install: there was none; the Beacon's skill is there now.
+    Installed,
+    /// Install: an older managed copy was replaced.
+    Updated,
+    /// Install: the managed copy is already current.
+    Unchanged,
+    /// Uninstall: the managed files are gone (the user's own files stay).
+    Removed,
+    /// Uninstall: there was no skill.
+    Absent,
+    /// A managed file was edited, removed or replaced by the user: the
+    /// skill is left as it is.
+    KeptModified,
+    /// A `call-human` skill the Beacon did not install: left alone.
+    KeptForeign,
+    /// The skill directory is a symlink: left alone.
+    KeptSymlink,
+}

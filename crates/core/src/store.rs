@@ -48,12 +48,15 @@ pub(crate) struct SavedKey {
 pub(crate) struct Settings {
     /// Connecting updates an out-of-date Beacon (ticket 26).
     pub beacon_auto_update: bool,
+    /// How opening a Terminal attaches (ticket 17).
+    pub attach_mode: crate::AttachMode,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Self {
             beacon_auto_update: true,
+            attach_mode: crate::AttachMode::default(),
         }
     }
 }
