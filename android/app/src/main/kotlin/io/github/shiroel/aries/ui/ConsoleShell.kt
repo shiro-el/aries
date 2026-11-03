@@ -82,7 +82,7 @@ internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit) {
         enabled = drawer.isClosed && drawer.targetValue == DrawerValue.Closed &&
             !model.callInboxOpen && !model.quickOpenVisible && model.prompt == null,
     )
-    val drawerWidth = (LocalConfiguration.current.screenWidthDp.dp * .86f).coerceAtMost(320.dp)
+    val drawerWidth = (LocalConfiguration.current.screenWidthDp.dp - 16.dp).coerceAtMost(420.dp)
     LaunchedEffect(screen) { drawer.close(); model.closeCallInbox() }
     LaunchedEffect(model.callInboxOpen) { if (model.callInboxOpen) drawer.close() }
     val navigate: (() -> Unit) -> Unit = { action ->
@@ -155,14 +155,14 @@ private fun consoleBack(model: HostsModel): (() -> Unit)? = when (val screen = m
     is Screen.Terminal -> model::closeTerminal
     is Screen.Chat -> model::closeChat
     is Screen.Agents -> null
-    is Screen.Browse -> if (screen.browser.openSpaceId != null) screen.browser::closeSpace else null
+    is Screen.Browse -> null
     else -> model::back
 }
 
 @Composable
 private fun ConsoleDrawer(model: HostsModel, navigate: (() -> Unit) -> Unit) {
     val agents = model.drawerAgents
-    val folded = remember { mutableStateMapOf<AgentKey, Boolean>() }
+    val folds = rememberTreeFolds("agents")
     val waiting = agents.count { it.terminal.parent == null && isWaiting(it.terminal.agentStatus) }
     val current = model.screen
     val currentAgent = when (current) {
@@ -196,23 +196,9 @@ private fun ConsoleDrawer(model: HostsModel, navigate: (() -> Unit) -> Unit) {
                 DrawerRow(host.name, hostId == host.id, Modifier.testTag("drawer-host:${host.id}"), onClick = { navigate { model.openHost(host) } })
             }
             val hostAgents = agents.filter { it.host.id == host.id }
-            val children = agentTreeRows(hostAgents, folded.filterValues { it }.keys, rootGuides = true)
-            children.forEach { row ->
-                val entry = row.value
-                item(key = "agent:${entry.key.hostId}\n${entry.key.address}") {
-                    DrawerRow(
-                        displayName(entry.terminal), currentAgent == entry.key,
-                        Modifier.testTag("drawer-agent:${entry.key.hostId}:${entry.key.address}"),
-                        guide = row.guide,
-                        onClick = { navigate { model.openDrawerAgent(entry) } },
-                    ) {
-                        AgentFoldButton(entry, agentDescendants(hostAgents, entry.key), folded[entry.key] == true) {
-                            folded[entry.key] = folded[entry.key] != true
-                        }
-                        DrawerAgentStatus(entry.terminal.agentStatus)
-                    }
-                }
-            }
+            agentTreeItems(hostAgents, folds,
+                onOpen = { entry -> navigate { model.openDrawerAgent(entry) } },
+                onPin = model::pin, tag = "drawer-agent", current = currentAgent, sectionNamespace = host.id)
         }
         item {
             DrawerRow(stringResource(R.string.console_all_hosts), current == Screen.Hosts, Modifier.testTag("drawer-hosts"), onClick = { navigate(model::back) })
@@ -227,7 +213,6 @@ private fun DrawerRow(
     title: String,
     current: Boolean,
     modifier: Modifier = Modifier,
-    guide: String? = null,
     onClick: () -> Unit,
     trailing: @Composable () -> Unit = {},
 ) {
@@ -237,7 +222,6 @@ private fun DrawerRow(
     ) {
         Box(Modifier.width(3.dp).height(44.dp).background(if (current) MaterialTheme.colorScheme.primary else Color.Transparent))
         Row(Modifier.weight(1f).padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            guide?.let { Text(it, Modifier.padding(end = 8.dp), fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) } // i18n-ok: decorative tree guides
             Text(title, Modifier.weight(1f), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             trailing()
         }

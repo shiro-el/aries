@@ -52,5 +52,6 @@ internal fun AgentElapsedTime(
     }
     val label = if (duration == null) stringResource(unknownLabel) else stringResource(R.string.agents_elapsed_label, text)
     Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
         modifier = Modifier.semantics { contentDescription = label })
 }

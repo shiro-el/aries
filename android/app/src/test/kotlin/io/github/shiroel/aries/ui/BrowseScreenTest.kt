@@ -3,6 +3,7 @@ package io.github.shiroel.aries.ui
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -29,6 +30,7 @@ import org.robolectric.RobolectricTestRunner
 
 /** Seam 3: browsing a Host's Spaces, Tabs and Panes against a fake core API. */
 @RunWith(RobolectricTestRunner::class)
+@org.robolectric.annotation.Config(qualifiers = "h1200dp")
 class BrowseScreenTest {
     @get:Rule val compose = createComposeRule()
 
@@ -88,24 +90,37 @@ class BrowseScreenTest {
     }
 
     @Test
-    fun showsSpacesThenTabsAndPanesLikeHerdrApp() {
+    fun hostRowsPinWithoutOpeningTheAgent() {
+        val core = FakeCore().apply {
+            structure = HostStructure(emptyList(), listOf(claude.copy(agentStatus = AgentStatus.Working)), null)
+            terminals = structure!!.unplaced
+        }
+        open(core)
+        compose.onNodeWithContentDescription(str(R.string.agent_pin_button_label, "claude-main", "home")).performClick()
+        compose.waitForIdle()
+        assertEquals(listOf("h1 t1 pinned=true"), core.labelWrites)
+        compose.onNodeWithTag("agent-pin:h1:t1").assertIsSelected()
+        assertTrue(core.connection!!.views.isEmpty())
+    }
+
+    @Test
+    fun hostTreeStartsExpandedAndHeadersToggleWithoutNavigating() {
         val core = FakeCore().apply { structure = desktop }
         open(core)
-
-        compose.onNodeWithText("aries").assertExists()
-        compose.onNodeWithText("~").assertExists()
-
-        compose.onNodeWithText("aries").performClick()
-        // First Tab is shown, with its Panes in layout order.
-        compose.onNodeWithText("agents").assertExists()
-        compose.onNodeWithText("build").assertExists()
         compose.onNodeWithText("claude-main").assertExists()
-        compose.onNodeWithText("codex-review").assertExists()
-        compose.onNodeWithText("build-shell").assertDoesNotExist()
-
-        compose.onNodeWithText("build").performClick()
         compose.onNodeWithText("build-shell").assertExists()
+        compose.onNodeWithText("agents").performClick()
         compose.onNodeWithText("claude-main").assertDoesNotExist()
+        compose.onNodeWithText("build-shell").assertExists()
+        compose.onNodeWithText("agents").performClick()
+        compose.onNodeWithText("claude-main").assertExists()
+        compose.onNodeWithText("aries").performClick()
+        compose.onNodeWithText("agents").assertDoesNotExist()
+        compose.onNodeWithText("stray-job").performScrollTo().assertExists()
+        compose.onNodeWithText("aries").performClick()
+        compose.onNodeWithText("claude-main").performClick()
+        compose.waitForIdle()
+        assertEquals("t1", core.connection!!.views.single().address)
     }
 
     @Test
@@ -116,7 +131,7 @@ class BrowseScreenTest {
             )), emptyList(), null)
         }
         open(core)
-        compose.onNodeWithText("  ").assertExists().performClick()
+        compose.onNodeWithText("  ").assertExists()
         compose.onNodeWithText("   ").assertExists()
     }
 
@@ -134,7 +149,6 @@ class BrowseScreenTest {
         val core = FakeCore().apply { structure = desktop }
         open(core)
 
-        compose.onNodeWithText("~").performClick()
         compose.onNodeWithText("1").assertExists()
         compose.onNodeWithText(str(R.string.pane_terminal_gone, "t99")).assertExists()
     }
@@ -164,44 +178,18 @@ class BrowseScreenTest {
     }
 
     @Test
-    fun focusAndZoomStayOnThePhoneAndSurviveDesktopUpdates() {
-        val core = FakeCore().apply { structure = desktop }
-        open(core)
-
-        compose.onNodeWithText("aries").performClick()
-        compose.onNodeWithText("codex-review").performClick() // focus
-        compose.onNodeWithText(str(R.string.pane_zoom_button)).performClick()
-        compose.onNodeWithText("claude-main").assertDoesNotExist()
-        compose.onNodeWithText("codex-review").assertExists()
-
-        // The desktop changes something unrelated; the phone's view stays put.
-        core.connection!!.push(desktop.copy(unplaced = emptyList()))
-        compose.waitForIdle()
-        compose.onNodeWithText("codex-review").assertExists()
-        compose.onNodeWithText("claude-main").assertDoesNotExist()
-
-        compose.onNodeWithText(str(R.string.pane_unzoom_button)).performClick()
-        compose.onNodeWithText("claude-main").assertExists()
-
-        // Browsing only ever read from the Host.
-        assertEquals(listOf("watchStructure"), core.connection!!.calls)
-    }
-
-    @Test
-    fun zoomFallsBackWhenTheDesktopClosesThatPane() {
+    fun foldedSpaceSurvivesLeavingAndReopeningTheHost() {
         val core = FakeCore().apply { structure = desktop }
         open(core)
         compose.onNodeWithText("aries").performClick()
-        compose.onNodeWithText("codex-review").performClick()
-        compose.onNodeWithText(str(R.string.pane_zoom_button)).performClick()
-
-        val tab1 = desktop.spaces[0].tabs[0].copy(panes = listOf(pane("p1", claude)))
-        val space = desktop.spaces[0].copy(tabs = listOf(tab1, desktop.spaces[0].tabs[1]))
-        core.connection!!.push(desktop.copy(spaces = listOf(space, desktop.spaces[1])))
+        compose.onNodeWithText("claude-main").assertDoesNotExist()
+        compose.openConsoleDrawer()
+        compose.onNodeWithTag("drawer-hosts").performClick()
+        compose.onNodeWithText("home").performClick()
         compose.waitForIdle()
-
+        compose.onNodeWithText("claude-main").assertDoesNotExist()
+        compose.onNodeWithText("aries").performClick()
         compose.onNodeWithText("claude-main").assertExists()
-        compose.onNodeWithText(str(R.string.pane_unzoom_button)).assertDoesNotExist()
     }
 
     @Test
