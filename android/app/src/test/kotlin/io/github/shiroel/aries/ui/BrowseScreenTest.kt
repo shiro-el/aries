@@ -4,6 +4,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -178,7 +179,8 @@ class BrowseScreenTest {
         open(core)
         val conn = core.connection!!
 
-        compose.onNodeWithText(str(R.string.back_button)).performClick()
+        compose.openConsoleDrawer()
+        compose.onNodeWithTag("drawer-hosts").performClick()
         compose.waitForIdle()
 
         assertTrue(conn.watchStopped)

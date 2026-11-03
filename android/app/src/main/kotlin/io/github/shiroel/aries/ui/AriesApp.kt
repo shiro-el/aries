@@ -2,8 +2,16 @@ package io.github.shiroel.aries.ui
 
 import android.content.ClipData
 import android.content.ClipboardManager
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -45,8 +53,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -76,72 +82,67 @@ private fun AriesContent(model: HostsModel, settings: ThemeSettings) {
         onStopOrDispose { model.pauseCalls() }
     }
     Scaffold { padding ->
-        Column(Modifier.padding(padding).fillMaxSize()) {
-            model.calls.banner?.let { entry ->
-                CallBanner(entry, onView = model::openCalls, onDismiss = model.calls::dismissBanner)
-            }
-            when (val s = model.screen) {
-                Screen.Hosts -> HostListScreen(model)
-                Screen.Settings -> {
-                    BackHandler { model.back() }
-                    SettingsScreen(model, settings, onBack = model::back)
-                }
-                is Screen.Connecting -> Connecting(s.host)
-                is Screen.Browse -> {
-                    BackHandler {
-                        if (s.browser.openSpaceId != null) s.browser.closeSpace() else model.back()
+        Box(Modifier.padding(padding).fillMaxSize()) {
+            ConsoleShell(model) {
+                Column(Modifier.fillMaxSize()) {
+                    model.calls.banner?.let { entry ->
+                        CallBanner(entry, onView = model::openCalls, onDismiss = model.calls::dismissBanner)
                     }
-                    BrowseScreen(
-                        s.browser,
-                        onBack = model::back,
-                        onOpen = model::openTerminal,
-                        onNewTerminal = { model.newTerminal(s.browser) },
-                        onLaunch = { model.launch(s.browser, it) },
-                        onSaveLaunch = { model.saveLaunch(s.browser, it) },
-                        onDeleteLaunch = { form, saved -> model.deleteSavedLaunch(s.browser, form, saved) },
-                        onRunSaved = { model.runSaved(s.browser, it) },
-                        hostSections = {
-                            BeaconSection(model.beacon)
-                            PushSection(model.push, beaconInstalled = model.beacon.installed)
-                        },
-                    )
-                }
-                is Screen.Terminal -> {
-                    BackHandler { model.closeTerminal() }
-                    TerminalScreen(
-                        s.viewer,
-                        onBack = model::closeTerminal,
-                        onView = model::switchView.takeIf { s.viewer.terminal.agentStatus != null },
-                    )
-                }
-                is Screen.JumpHosts -> {
-                    BackHandler { model.back() }
-                    JumpHostsScreen(model, s.host, s.jumps, s.hostKeyId)
-                }
-                is Screen.Agents -> {
-                    BackHandler {
-                        if (s.board.openKey != null) s.board.closeDetail() else model.back()
+                    when (val s = model.screen) {
+                        Screen.Hosts -> HostListScreen(model)
+                        Screen.Settings -> {
+                            SettingsScreen(model, settings, onBack = model::back, showHeader = false)
+                        }
+                        is Screen.Connecting -> Connecting(s.host)
+                        is Screen.Browse -> {
+                            BrowseScreen(
+                                s.browser,
+                                showHeader = false,
+                                onBack = model::back,
+                                onOpen = model::openTerminal,
+                                onNewTerminal = { model.newTerminal(s.browser) },
+                                onLaunch = { model.launch(s.browser, it) },
+                                onSaveLaunch = { model.saveLaunch(s.browser, it) },
+                                onDeleteLaunch = { form, saved -> model.deleteSavedLaunch(s.browser, form, saved) },
+                                onRunSaved = { model.runSaved(s.browser, it) },
+                                hostSections = {
+                                    BeaconSection(model.beacon)
+                                    PushSection(model.push, beaconInstalled = model.beacon.installed)
+                                },
+                            )
+                        }
+                        is Screen.Terminal -> {
+                            TerminalScreen(
+                                s.viewer,
+                                onBack = model::closeTerminal,
+                                onView = model::switchView.takeIf { s.viewer.terminal.agentStatus != null },
+                            )
+                        }
+                        is Screen.JumpHosts -> {
+                            JumpHostsScreen(model, s.host, s.jumps, s.hostKeyId, showHeader = false)
+                        }
+                        is Screen.Agents -> {
+                            AgentsScreen(
+                                s.board,
+                                showHeader = false,
+                                onBack = model::back,
+                                onOpen = { model.openAgent(s.board, it) },
+                                onPin = { entry, pinned -> model.pin(s.board, entry, pinned) },
+                                onTerminal = { model.openTerminal(it.terminal) },
+                            )
+                        }
+                        Screen.Calls -> {
+                            CallsScreen(model.calls, onBack = model::back, onTerminal = model::openCallTerminal, showHeader = false)
+                        }
+                        is Screen.Chat -> {
+                            ChatScreen(
+                                s.chat,
+                                onBack = model::closeChat,
+                                onOpenTerminal = { model.openTerminal(s.chat.terminal) },
+                                onView = model::switchView,
+                            )
+                        }
                     }
-                    AgentsScreen(
-                        s.board,
-                        onBack = model::back,
-                        onOpen = { model.openAgent(s.board, it) },
-                        onPin = { entry, pinned -> model.pin(s.board, entry, pinned) },
-                        onTerminal = { model.openTerminal(it.terminal) },
-                    )
-                }
-                Screen.Calls -> {
-                    BackHandler { model.back() }
-                    CallsScreen(model.calls, onBack = model::back, onTerminal = model::openCallTerminal)
-                }
-                is Screen.Chat -> {
-                    BackHandler { model.closeChat() }
-                    ChatScreen(
-                        s.chat,
-                        onBack = model::closeChat,
-                        onOpenTerminal = { model.openTerminal(s.chat.terminal) },
-                        onView = model::switchView,
-                    )
                 }
             }
         }
@@ -151,54 +152,90 @@ private fun AriesContent(model: HostsModel, settings: ThemeSettings) {
 
 @Composable
 private fun HostListScreen(model: HostsModel) {
-    LazyColumn(
-        Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        item {
-            // The Agents entry shares the title row so the Host list stays reachable.
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(stringResource(R.string.hosts_title), style = MaterialTheme.typography.headlineMedium)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = model::openSettings, modifier = Modifier.testTag("settings-open")) {
-                        Text(stringResource(R.string.settings_title))
-                    }
-                    if (model.hosts.isNotEmpty()) {
-                        TextButton(onClick = model::openCalls) { Text(stringResource(R.string.calls_button)) }
-                        Button(onClick = model::openAgents) { Text(stringResource(R.string.agents_button)) }
+    var keyDetails by rememberSaveable { mutableStateOf(false) }
+    var adding by rememberSaveable { mutableStateOf(false) }
+    LazyColumn(Modifier.fillMaxSize()) {
+        item(key = "key") {
+            val key = model.key
+            if (key == null) {
+                Column(Modifier.padding(12.dp)) {
+                    Text(stringResource(R.string.key_missing), style = MaterialTheme.typography.bodySmall)
+                    TextButton(onClick = { model.createKey(); keyDetails = true }) {
+                        Text(stringResource(R.string.key_create_button))
                     }
                 }
+            } else {
+                Text(
+                    stringResource(R.string.console_key_band, key.fingerprint),
+                    Modifier.fillMaxWidth().testTag("hosts-key-band").clickable { keyDetails = !keyDetails }
+                        .background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 12.dp, vertical = 6.dp),
+                    fontSize = 12.sp, lineHeight = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (keyDetails) Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { KeySection(model) }
             }
+            HorizontalDivider()
         }
-        item { KeySection(model) }
-        item { HorizontalDivider() }
-        if (model.hosts.isEmpty()) {
-            item { Text(stringResource(R.string.hosts_empty)) }
-        }
-        items(model.hosts, key = { it.id }) { host ->
-            HostRow(host, onRemove = { model.askRemove(host) }) { model.connect(host) }
-            JumpSummary(model.jumps[host.id].orEmpty())
-            ClearChatCacheButton(model.chatCache, host)
-            if (host.endpoint is Endpoint.Ssh) {
-                TextButton(onClick = { model.editJumps(host) }) { Text(stringResource(R.string.host_jumps_button)) }
-                TextButton(onClick = { model.askPassword(host) }) {
-                    Text(stringResource(R.string.host_install_key_button))
-                }
-            }
-        }
-        // Per-Host clearing stays here, so its result must remain visible on Hosts too.
+        if (model.hosts.isEmpty()) item { Text(stringResource(R.string.hosts_empty), Modifier.padding(12.dp), fontSize = 12.sp) }
+        items(model.hosts, key = { it.id }) { host -> ConsoleHostRow(model, host) }
+        // Per-Host clearing stays here, so its result remains visible on Hosts.
         model.chatCache.notice?.let { notice ->
-            item { Text(stringResource(notice.res, *notice.args.toTypedArray()), style = MaterialTheme.typography.bodySmall) }
+            item { Text(stringResource(notice.res, *notice.args.toTypedArray()), Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall) }
         }
-        if (model.key != null) item { ExtraKeysSection(model) }
-        item { HorizontalDivider() }
-        item { AddHostForm(model) }
-        item { HorizontalDivider() }
+        item(key = "add") {
+            Text(
+                stringResource(if (adding) R.string.console_add_close else R.string.console_add_host),
+                Modifier.fillMaxWidth().testTag("hosts-add-toggle").clickable { adding = !adding }.padding(12.dp),
+                fontSize = 14.sp, color = MaterialTheme.colorScheme.primary,
+            )
+            if (adding) Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { AddHostForm(model) }
+        }
+        if (model.key != null) item { Column(Modifier.padding(12.dp)) { ExtraKeysSection(model) } }
+        // Keep the existing Calls route until ticket 04 replaces it with the inbox.
+        if (model.hosts.isNotEmpty()) item {
+            TextButton(onClick = model::openCalls) { Text(stringResource(R.string.calls_button)) }
+        }
     }
+}
+
+@Composable
+private fun ConsoleHostRow(model: HostsModel, host: Host) {
+    var menu by rememberSaveable(host.id) { mutableStateOf(false) }
+    val color = if (host.endpoint is Endpoint.Local) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
+    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.width(3.dp).height(48.dp).background(color))
+        Column(Modifier.weight(1f).clickable { model.connect(host) }.padding(horizontal = 12.dp, vertical = 6.dp)) {
+            Text(host.name, fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val where = when (val endpoint = host.endpoint) {
+                is Endpoint.Ssh -> stringResource(R.string.host_ssh_address, endpoint.user, endpoint.address, endpoint.port.toInt())
+                is Endpoint.Local -> stringResource(R.string.host_local_address)
+            }
+            Text(where, fontSize = 12.sp, lineHeight = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Text(
+            stringResource(if (host.endpoint is Endpoint.Ssh) R.string.console_ssh else R.string.console_local),
+            Modifier.border(1.dp, color.copy(alpha = .7f), RoundedCornerShape(3.dp)).padding(horizontal = 5.dp, vertical = 1.dp),
+            fontSize = 11.sp, lineHeight = 15.sp, color = color,
+        )
+        val moreLabel = stringResource(R.string.console_host_menu, host.name)
+        Box(
+            Modifier.size(48.dp).testTag("host-menu:${host.id}").clickable { menu = !menu }
+                .semantics { contentDescription = moreLabel },
+            contentAlignment = Alignment.Center,
+        ) { Text(stringResource(R.string.console_more), fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    }
+    if (menu) Column(Modifier.testTag("host-actions:${host.id}").padding(start = 15.dp, end = 12.dp)) {
+        JumpSummary(model.jumps[host.id].orEmpty())
+        if (host.endpoint is Endpoint.Ssh) {
+            TextButton(onClick = { model.editJumps(host) }) { Text(stringResource(R.string.host_jumps_button)) }
+            TextButton(onClick = { model.askPassword(host) }) { Text(stringResource(R.string.host_install_key_button)) }
+        }
+        ClearChatCacheButton(model.chatCache, host)
+        val removeLabel = stringResource(R.string.host_remove_button_label, host.name)
+        TextButton(onClick = { model.askRemove(host) }, modifier = Modifier.semantics { contentDescription = removeLabel }) {
+            Text(stringResource(R.string.host_remove_button), color = MaterialTheme.colorScheme.error)
+        }
+    }
+    HorizontalDivider()
 }
 
 @Composable
@@ -248,24 +285,6 @@ internal fun OptionToggle(label: Int, hint: Int, on: Boolean, onChange: (Boolean
             Text(stringResource(hint), style = MaterialTheme.typography.bodySmall)
         }
         Switch(checked = on, onCheckedChange = null)
-    }
-}
-
-@Composable
-private fun HostRow(host: Host, onRemove: () -> Unit, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f).clickable(onClick = onClick).padding(vertical = 8.dp)) {
-            Text(host.name, style = MaterialTheme.typography.titleMedium)
-            val where = when (val e = host.endpoint) {
-                is Endpoint.Ssh -> stringResource(R.string.host_ssh_address, e.user, e.address, e.port.toInt())
-                is Endpoint.Local -> stringResource(R.string.host_local_address)
-            }
-            Text(where, style = MaterialTheme.typography.bodySmall)
-        }
-        val removeLabel = stringResource(R.string.host_remove_button_label, host.name)
-        TextButton(onClick = onRemove, modifier = Modifier.semantics { contentDescription = removeLabel }) {
-            Text(stringResource(R.string.host_remove_button))
-        }
     }
 }
 

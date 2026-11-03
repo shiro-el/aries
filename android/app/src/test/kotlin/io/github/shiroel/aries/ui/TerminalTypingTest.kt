@@ -155,6 +155,7 @@ class TerminalTypingTest {
         }
         // Settings: observe by default, switch to input, then return to Hosts.
         assertEquals(AttachMode.OBSERVE, core.attachMode())
+        compose.openConsoleDrawer()
         compose.onNodeWithText(str(R.string.settings_title)).performClick()
         compose.onNode(hasScrollToKeyAction()).performScrollToKey("attach-mode")
         compose.onNodeWithText(str(R.string.attach_input_label)).performClick()

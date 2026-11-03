@@ -23,9 +23,11 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /** Seam 3: the Host list screen against a fake core API. */
 @RunWith(RobolectricTestRunner::class)
+@Config(qualifiers = "h1200dp")
 class HostListScreenTest {
     @get:Rule val compose = createComposeRule()
 
@@ -38,6 +40,21 @@ class HostListScreenTest {
             val model = remember { HostsModel(core, scope) }
             MaterialTheme { AriesApp(model) }
         }
+    }
+
+    @Test
+    fun hostsKeepKeyDetailsAndAddFormCollapsedUntilOpened() {
+        val core = FakeCore().apply { ensureKey() }
+        show(core)
+        compose.onNodeWithText(FakeCore.PUBLIC_KEY).assertDoesNotExist()
+        compose.onNode(hasSetTextAction() and hasText(str(R.string.host_add_address))).assertDoesNotExist()
+        compose.onNodeWithTag("hosts-key-band").performClick()
+        compose.onNodeWithText(FakeCore.PUBLIC_KEY).assertExists()
+        compose.onNodeWithText(str(R.string.key_copy_button)).assertExists()
+        compose.onNodeWithTag("hosts-key-band").performClick()
+        compose.onNodeWithText(FakeCore.PUBLIC_KEY).assertDoesNotExist()
+        compose.onNodeWithTag("hosts-add-toggle").performClick()
+        compose.onNode(hasSetTextAction() and hasText(str(R.string.host_add_address))).assertExists()
     }
 
     @Test
@@ -70,6 +87,7 @@ class HostListScreenTest {
         val core = FakeCore()
         show(core)
 
+        compose.openHostAddForm()
         fun field(label: Int) = compose.onAllNodes(hasSetTextAction() and hasText(str(label))).onFirst()
         field(R.string.host_add_name).performScrollTo().performTextInput("desk")
         field(R.string.host_add_address).performScrollTo().performTextInput("192.168.1.5")
@@ -132,6 +150,7 @@ class HostListScreenTest {
     }
 
     private fun installWithPassword(password: String) {
+        compose.openHostActionsIfClosed("h1")
         compose.onNodeWithText(str(R.string.host_install_key_button)).performScrollTo().performClick()
         compose.onNode(hasSetTextAction() and hasText(str(R.string.key_install_password))).performTextInput(password)
         compose.onNodeWithText(str(R.string.key_install_button)).performClick()
@@ -217,6 +236,7 @@ class HostListScreenTest {
         val core = FakeCore().apply { ensureKey() }
         show(core)
 
+        compose.openKeyDetails()
         compose.onNodeWithText(str(R.string.key_qr_button)).performScrollTo().performClick()
 
         compose.onNodeWithText(str(R.string.key_qr_title)).assertExists()

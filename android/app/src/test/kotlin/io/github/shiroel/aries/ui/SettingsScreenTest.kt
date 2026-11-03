@@ -42,6 +42,7 @@ class SettingsScreenTest {
             AriesApp(model, settings)
         }
 
+        compose.openConsoleDrawer()
         compose.onNodeWithTag("settings-open").performClick()
         compose.onNodeWithText(str(R.string.theme_dark)).performClick()
         compose.onNodeWithContentDescription(str(R.string.accent_iris)).performClick()

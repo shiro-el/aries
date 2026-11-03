@@ -105,6 +105,7 @@ class AgentViewToggleTest {
             terminalsOf["h1"] = listOf(claude)
         }
         show(core)
+        compose.openConsoleDrawer()
         click(str(R.string.agents_button))
         click("claude")
         compose.onNodeWithText(str(R.string.agent_view_chat)).assertDoesNotExist()

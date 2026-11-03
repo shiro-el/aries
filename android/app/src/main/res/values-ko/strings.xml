@@ -387,4 +387,18 @@
     <string name="accent_hue">색상</string>
     <string name="accent_saturation">채도</string>
     <string name="accent_brightness">밝기</string>
+    <string name="console_open_drawer">Host와 Agent 열기</string>
+    <string name="console_menu_glyph">☰</string>
+    <string name="console_back_glyph">←</string>
+    <string name="console_agents_waiting">%1$d개 기다림</string>
+    <string name="console_all_hosts">모든 Host, Host 추가</string>
+    <string name="console_tree_last">└─</string>
+    <string name="console_tree_branch">├─</string>
+    <string name="console_key_band">키 / %1$s</string>
+    <string name="console_add_host">+ Host 추가</string>
+    <string name="console_add_close">− 추가 폼 닫기</string>
+    <string name="console_ssh">ssh</string>
+    <string name="console_local">local</string>
+    <string name="console_more">···</string>
+    <string name="console_host_menu">%1$s 작업</string>
 </resources>

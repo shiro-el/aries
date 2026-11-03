@@ -66,6 +66,7 @@ class KeyWorkTest {
     fun theAgentListSignsInOffTheMainThread() {
         val core = FakeCore()
         show(core)
+        compose.openConsoleDrawer()
         compose.onNodeWithText(str(R.string.agents_button)).performClick()
         compose.waitForIdle()
 

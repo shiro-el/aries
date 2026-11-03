@@ -251,6 +251,7 @@ class ChatScreenTest {
             val model = remember { HostsModel(core, scope) }
             MaterialTheme { AriesApp(model) }
         }
+        compose.openConsoleDrawer()
         compose.onNodeWithText(str(R.string.agents_button)).performClick()
         compose.waitForIdle()
         compose.onNodeWithText("claude").performClick()

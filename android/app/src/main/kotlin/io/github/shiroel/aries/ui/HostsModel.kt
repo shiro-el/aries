@@ -272,10 +272,15 @@ class HostsModel(
     }
 
     fun connect(host: Host) {
-        screen = Screen.Connecting(host)
+        val connecting = Screen.Connecting(host)
+        screen = connecting
         scope.launch {
             try {
                 val conn = withContext(keyWork) { core.connect(host.id) }
+                if (screen !== connecting) {
+                    conn.disconnect()
+                    return@launch
+                }
                 val browser = HostBrowser(host)
                 val link = link(host, conn)
                 browser.link = link
@@ -287,6 +292,7 @@ class HostsModel(
                 push.load(host)
                 status = watchBrowse(link, browser)
             } catch (e: CoreException) {
+                if (screen !== connecting) return@launch
                 screen = Screen.Hosts
                 prompt = when (e) {
                     is CoreException.HostKeyUnknown -> Prompt.TrustHostKey(host, e.fingerprint)
@@ -679,7 +685,10 @@ class HostsModel(
     private val agentJobs = mutableListOf<Job>()
 
     /** Connects to every Host and shows all their Agents in one list. */
-    fun openAgents() = openAgents(focus = null)
+    fun openAgents() {
+        back()
+        openAgents(focus = null)
+    }
 
     /**
      * A tapped Agent notification (warm or cold start): leaves whatever is
@@ -798,7 +807,36 @@ class HostsModel(
         if (callsActive || screen == Screen.Calls) calls.watch(hosts, everyHost = screen == Screen.Calls)
     }
 
-    /** Temporary Hosts-header entry until the drawer is added. */
+    /** Available live Agent data, including the screen beneath an open Terminal/Chat. */
+    val drawerAgents: List<AgentEntry>
+        get() {
+            fun entries(screen: Screen): List<AgentEntry> = when (screen) {
+                is Screen.Agents -> screen.board.agents
+                is Screen.Browse -> screen.browser.agents
+                is Screen.Terminal -> entries(screen.returnTo)
+                is Screen.Chat -> entries(screen.returnTo)
+                else -> emptyList()
+            }
+            return entries(screen)
+        }
+
+    fun openHost(host: Host) {
+        back()
+        connect(host)
+    }
+
+    /** Uses whole Host/address identity and the existing saved-view/notification route. */
+    fun openDrawerAgent(entry: AgentEntry) {
+        val board = (screen as? Screen.Agents)?.board
+        if (board != null) {
+            openAgent(board, entry)
+            openTerminal(entry.terminal)
+        } else {
+            openPushedAgent(entry.host.id, entry.terminal.address)
+        }
+    }
+
+    /** Settings is a drawer destination. */
     fun openSettings() {
         back()
         screen = Screen.Settings

@@ -71,6 +71,10 @@ class HostBrowser(val host: Host) {
         list.forEach { live[it.address] = it }
     }
 
+    /** Latest Agent snapshot for the navigation drawer; no additional watch is opened. */
+    val agents: List<AgentEntry>
+        get() = live.values.filter { it.agentStatus != null }.sortedBy { it.address }.map { AgentEntry(host, it) }
+
     /** The "new Terminal" form, while it is open. */
     var launchForm by mutableStateOf<LaunchForm?>(null)
 
@@ -170,11 +174,12 @@ fun BrowseScreen(
     onDeleteLaunch: (LaunchForm, SavedLaunch) -> Unit = { _, _ -> },
     onRunSaved: (SavedLaunch) -> Unit = {},
     hostSections: @Composable () -> Unit = {},
+    showHeader: Boolean = true,
 ) {
     val space = browser.openSpace
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row {
-            TextButton(onClick = if (space != null) browser::closeSpace else onBack) {
+            if (showHeader) TextButton(onClick = if (space != null) browser::closeSpace else onBack) {
                 Text(stringResource(R.string.back_button))
             }
             if (onNewTerminal != null && browser.structure != null && !browser.closed) {

@@ -125,14 +125,15 @@ fun AgentsScreen(
     onOpen: (AgentEntry) -> Unit,
     onPin: (AgentEntry, Boolean) -> Unit,
     onTerminal: (AgentEntry) -> Unit = {},
+    showHeader: Boolean = true,
 ) {
     val key = board.openKey
     if (key != null) {
-        AgentDetail(board, key, onPin, onTerminal)
+        AgentDetail(board, key, onPin, onTerminal, showHeader)
         return
     }
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        item {
+        if (showHeader) item {
             TextButton(onClick = onBack) { Text(stringResource(R.string.back_button)) }
             Text(stringResource(R.string.agents_title), style = MaterialTheme.typography.headlineSmall)
         }
@@ -210,9 +211,10 @@ private fun AgentDetail(
     key: AgentKey,
     onPin: (AgentEntry, Boolean) -> Unit,
     onTerminal: (AgentEntry) -> Unit,
+    showHeader: Boolean,
 ) {
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        TextButton(onClick = board::closeDetail) { Text(stringResource(R.string.back_button)) }
+        if (showHeader) TextButton(onClick = board::closeDetail) { Text(stringResource(R.string.back_button)) }
         val entry = board.find(key)
         val host = board.hosts.find { it.id == key.hostId }
         if (entry == null || entry.terminal.agentStatus == null) {

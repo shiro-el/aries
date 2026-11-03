@@ -53,13 +53,15 @@ val AccentPresets = listOf(
 )
 
 @Composable
-fun SettingsScreen(model: HostsModel, settings: ThemeSettings, onBack: () -> Unit) {
+fun SettingsScreen(model: HostsModel, settings: ThemeSettings, onBack: () -> Unit, showHeader: Boolean = true) {
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onBack) { Text(stringResource(R.string.back_button)) }
-            Text(stringResource(R.string.settings_title), style = MaterialTheme.typography.titleMedium)
+        if (showHeader) {
+            Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = onBack) { Text(stringResource(R.string.back_button)) }
+                Text(stringResource(R.string.settings_title), style = MaterialTheme.typography.titleMedium)
+            }
+            HorizontalDivider()
         }
-        HorizontalDivider()
         LazyColumn(Modifier.fillMaxSize()) {
             item {
                 SettingsField(R.string.theme_title) {

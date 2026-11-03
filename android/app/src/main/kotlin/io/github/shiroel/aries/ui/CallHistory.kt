@@ -35,12 +35,12 @@ import java.util.Date
 
 /** Every Host's Calls, newest first; each can open the Terminal that sent it. */
 @Composable
-fun CallsScreen(model: CallsModel, onBack: () -> Unit, onTerminal: (CallEntry) -> Unit) {
+fun CallsScreen(model: CallsModel, onBack: () -> Unit, onTerminal: (CallEntry) -> Unit, showHeader: Boolean = true) {
     LazyColumn(
         Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item {
+        if (showHeader) item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = onBack) { Text(stringResource(R.string.back_button)) }
                 Text(stringResource(R.string.calls_title), style = MaterialTheme.typography.headlineMedium)

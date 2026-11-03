@@ -68,6 +68,7 @@ class JumpHostsScreenTest {
         val outer = core.keys()[1].id
         show(core)
 
+        compose.openHostActionsIfClosed("h1")
         compose.onNodeWithText(str(R.string.host_jumps_button)).performScrollTo().performClick()
         compose.onNodeWithText(str(R.string.jumps_title, "work")).assertExists()
         compose.onNodeWithText(str(R.string.jumps_empty)).assertExists()
@@ -95,9 +96,11 @@ class JumpHostsScreenTest {
             ),
             core.jumpHosts("h1"),
         )
+        compose.openHostActionsIfClosed("h1")
         compose.onNodeWithText(str(R.string.host_jumps_summary, "bastion.example → 10.0.0.1")).assertExists()
 
         // Edit: remove the first hop.
+        compose.openHostActionsIfClosed("h1")
         compose.onNodeWithText(str(R.string.host_jumps_button)).performScrollTo().performClick()
         compose.onAllNodesWithText(str(R.string.jumps_remove_button)).onFirst().performScrollTo().performClick()
         compose.onNodeWithText(str(R.string.jumps_save_button)).performScrollTo().performClick()

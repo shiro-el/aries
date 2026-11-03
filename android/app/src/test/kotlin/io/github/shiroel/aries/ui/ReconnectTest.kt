@@ -177,6 +177,7 @@ class ReconnectTest {
         val home = core.addHost("home", Endpoint.Ssh("10.0.0.2", 22u, "me"))
         core.terminalsOf[home.id] = listOf(agent)
         start(core)
+        compose.openConsoleDrawer()
         compose.onNodeWithText(str(R.string.agents_button)).performClick()
         compose.waitForIdle()
         compose.onNodeWithText("claude").performClick()

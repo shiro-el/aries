@@ -81,7 +81,7 @@ fun ExtraKeysSection(model: HostsModel) {
 }
 
 @Composable
-fun JumpHostsScreen(model: HostsModel, host: Host, jumps: List<JumpHost>, hostKeyId: String?) {
+fun JumpHostsScreen(model: HostsModel, host: Host, jumps: List<JumpHost>, hostKeyId: String?, showHeader: Boolean = true) {
     val drafts = remember(host.id) {
         mutableStateListOf(*jumps.map { HopDraft(it.address, it.port.toString(), it.user, it.keyId) }.toTypedArray())
     }
@@ -91,8 +91,8 @@ fun JumpHostsScreen(model: HostsModel, host: Host, jumps: List<JumpHost>, hostKe
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        TextButton(onClick = model::back) { Text(stringResource(R.string.back_button)) }
-        Text(stringResource(R.string.jumps_title, host.name), style = MaterialTheme.typography.headlineSmall)
+        if (showHeader) TextButton(onClick = model::back) { Text(stringResource(R.string.back_button)) }
+        if (showHeader) Text(stringResource(R.string.jumps_title, host.name), style = MaterialTheme.typography.headlineSmall)
         Text(stringResource(R.string.jumps_hint), style = MaterialTheme.typography.bodySmall)
         if (drafts.isEmpty()) Text(stringResource(R.string.jumps_empty))
         drafts.forEachIndexed { i, d ->

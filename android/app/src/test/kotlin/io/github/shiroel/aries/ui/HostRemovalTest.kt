@@ -42,6 +42,7 @@ class HostRemovalTest {
         val core = twoHosts()
         show(core)
 
+        compose.openHostActions("h1")
         compose.onNodeWithContentDescription(str(R.string.host_remove_button_label, "home")).performClick()
         compose.onNodeWithText(str(R.string.host_remove_title, "home")).assertExists()
         assertEquals(2, core.hosts().size)
@@ -59,6 +60,7 @@ class HostRemovalTest {
         val core = twoHosts()
         show(core)
 
+        compose.openHostActions("h1")
         compose.onNodeWithContentDescription(str(R.string.host_remove_button_label, "home")).performClick()
         compose.onNodeWithText(str(R.string.cancel_button)).performClick()
         compose.waitForIdle()

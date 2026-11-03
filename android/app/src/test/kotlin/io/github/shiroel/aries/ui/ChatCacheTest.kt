@@ -78,6 +78,7 @@ class ChatCacheTest {
     fun theRetentionPeriodIsTheUsersChoice() {
         val core = FakeCore()
         show(core)
+        compose.openConsoleDrawer()
         compose.onNodeWithText(str(R.string.settings_title)).performClick()
         scrollTo(str(R.string.chat_cache_days, 7))
         compose.onNodeWithText(str(R.string.chat_cache_title)).assertExists()
@@ -97,6 +98,7 @@ class ChatCacheTest {
         core.cachedChats[work.id to "t1"] = cached
         show(core)
 
+        compose.openHostActions("h1")
         compose.onNodeWithContentDescription(str(R.string.chat_cache_clear_label, "home")).performClick()
         compose.waitForIdle()
 

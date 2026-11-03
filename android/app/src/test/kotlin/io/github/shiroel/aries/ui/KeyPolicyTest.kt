@@ -41,6 +41,7 @@ class KeyPolicyTest {
     fun requiresAndReleasesBiometricUnlock() {
         val core = FakeCore().apply { ensureKey() }
         show(core)
+        compose.openKeyDetails()
         toggle().assertIsOff()
         compose.onNodeWithText(str(R.string.key_biometric_hint)).assertExists()
 
@@ -62,6 +63,7 @@ class KeyPolicyTest {
             setKeyProtection(KeyProtection.BIOMETRIC)
         }
         show(core)
+        compose.openKeyDetails()
 
         toggle().assertIsOn()
     }
@@ -73,6 +75,7 @@ class KeyPolicyTest {
             failProtectionWith = CoreException.BiometricUnavailable("no fingerprint enrolled")
         }
         show(core)
+        compose.openKeyDetails()
 
         toggle().performClick()
         compose.waitForIdle()
