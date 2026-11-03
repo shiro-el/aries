@@ -54,7 +54,8 @@ fun RemoteFilesScreen(
     var unavailableLine by remember { mutableStateOf<ULong?>(null) }
     var changes by remember(connection, address) { mutableStateOf<GitChanges?>(null) }
     var loadedRevision by remember(connection, address) { mutableIntStateOf(-1) }
-    val changesLoaded = loadedRevision == retry
+    val requestedRevision = retry
+    val changesLoaded = loadedRevision == requestedRevision
     var gitError by remember(connection, address) { mutableStateOf<String?>(null) }
     var fullFile by remember(address, file) { mutableStateOf(false) }
     val changedFile = changes?.let { git -> git.files.find { gitFilePath(git.cwd, it.path) == file?.let { path -> java.nio.file.Paths.get(path).normalize().toString() } } }
@@ -81,12 +82,12 @@ fun RemoteFilesScreen(
             finally { treeLoading = treeLoading - path }
         }
     }
-    LaunchedEffect(connection, address, retry) {
+    LaunchedEffect(connection, address, requestedRevision) {
         gitError = null
         try { changes = checkNotNull(connection).gitChanges(address) }
         catch (e: CancellationException) { throw e }
         catch (e: Exception) { changes = null; gitError = e.message ?: e.toString() }
-        finally { loadedRevision = retry }
+        finally { loadedRevision = requestedRevision }
     }
     fun backToFolder() { file = null; offsets = listOf(1uL) }
     BackHandler(enabled = file != null, onBack = ::backToFolder)
