@@ -11,5 +11,6 @@ pub mod answer;
 pub mod beacon;
 pub mod calls;
 pub mod chat;
+pub mod host_pairing;
 pub mod push;
 pub mod push_policy;

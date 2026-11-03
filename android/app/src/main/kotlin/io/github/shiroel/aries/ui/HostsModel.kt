@@ -1,5 +1,6 @@
 package io.github.shiroel.aries.ui
 
+import io.github.shiroel.aries.core.HerdrCoreState
 import androidx.annotation.StringRes
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -127,10 +128,13 @@ class HostsModel(
     /** Current Host's settings models; a previous Host's pending work keeps its own state. */
     var beacon by mutableStateOf(BeaconModel(core, scope, beaconFetcher, keyWork = keyWork))
         private set
+    var herdrInstall by mutableStateOf(HerdrInstallModel(core, scope, beaconFetcher, keyWork))
+        private set
     var push by mutableStateOf(PushModel(core, scope, pushPlatform, http, keyWork))
         private set
 
     private fun loadHostSettings(host: Host) {
+        herdrInstall = HerdrInstallModel(core, scope, beaconFetcher, keyWork).also { it.load(host) }
         val hostPush = PushModel(core, scope, pushPlatform, http, keyWork)
         push = hostPush
         beacon = BeaconModel(core, scope, beaconFetcher, onRemoved = {
@@ -530,6 +534,15 @@ class HostsModel(
         hostsChanged()
     }
 
+    fun inspectPairingQr(qr: String) = core.inspectPairingQr(qr)
+
+    suspend fun pairHostQr(name: String, qr: String) {
+        withContext(keyWork) { core.pairHostQr(name, qr) }
+        hosts = core.hosts()
+        refreshRoutes()
+        hostsChanged()
+    }
+
     /** Saves in place; the core closes old lines only when the endpoint changed. */
     suspend fun saveHost(host: Host, name: String, address: String, port: Int, user: String): Boolean {
         return try {
@@ -581,6 +594,20 @@ class HostsModel(
                 if (restore != null && e is CoreException.KeyLocked) return@launch
                 if (e is CoreException.NoKey && key == null) {
                     missingKeyHostId = host.id
+                    return@launch
+                }
+                // A missing/old core cannot open Browse. Offer the installer in
+                // Host settings, which uses SSH directly and still asks approval.
+                val canNeedCore = e is CoreException.Protocol ||
+                    (e is CoreException.Incompatible && e.reason is Incompatibility.CoreTooOld)
+                val needsCore = host.endpoint is Endpoint.Ssh && canNeedCore && try {
+                    when (val state = withContext(keyWork) { core.herdrCoreStatus(host.id) }) {
+                        HerdrCoreState.Missing -> true
+                        is HerdrCoreState.Installed -> state.needsUpdate
+                    }
+                } catch (_: CoreException) { false }
+                if (needsCore) {
+                    openHostSettings(host)
                     return@launch
                 }
                 prompt = when (e) {
@@ -1204,6 +1231,27 @@ class HostsModel(
             (screen as Screen.Chat).chat.pendingShare = shared
             pendingShare = null
         } else if (openChat) chat(link, t, agents) else show(link, t, agents)
+    }
+
+    /** Pin from any shared row, using the connection already owned by that surface. */
+    fun pin(entry: AgentEntry, pinned: Boolean) {
+        val link = agentLinks[entry.host.id] ?: browseLink?.takeIf { it.host.id == entry.host.id } ?: return
+        val conn = link.connection ?: return
+        scope.launch {
+            try {
+                val terminal = conn.setPinned(entry.terminal.address, pinned)
+                fun replace(route: Screen) {
+                    when (route) {
+                        is Screen.Agents -> route.board.replace(entry.host.id, terminal)
+                        is Screen.Browse -> if (route.browser.host.id == entry.host.id) route.browser.replaceTerminal(terminal)
+                        is Screen.Chat -> replace(route.returnTo)
+                        is Screen.Terminal -> replace(route.returnTo)
+                        else -> Unit
+                    }
+                }
+                replace(screen)
+            } catch (e: CoreException) { prompt = problemFor(e) }
+        }
     }
 
     /** Pins or unpins an Agent for every client. */

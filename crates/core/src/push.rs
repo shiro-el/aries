@@ -1,18 +1,20 @@
 //! Push: pairing a Host's Beacon with this phone through the Relay, and
 //! opening the envelopes that arrive.
 //!
-//! Turning push on ([`crate::AriesCore::enable_push`]) runs three steps:
+//! Turning push on ([`crate::AriesCore::enable_push`]) runs these steps:
 //!
 //! 1. [`PushStep::Register`]: a fresh X25519 key pair for this Host;
 //!    `POST {relay}/v1/pairings` with the device push token returns the
-//!    pairing token.
-//! 2. [`PushStep::Pair`]: over SSH, `aries-beacon pair` gets the Relay URL,
+//!    pending pairing token.
+//! 2. [`PushStep::Verify`]: wait for this phone to confirm the FCM challenge
+//!    and the Relay to report activation (newer Relays).
+//! 3. [`PushStep::Pair`]: over SSH, `aries-beacon pair` gets the Relay URL,
 //!    the token and the phone's public key, and answers with the Beacon's
 //!    public key. A failure here deletes the Relay pairing again.
-//! 3. [`PushStep::Unpair`], only when the Host was already paired (turning
+//! 4. [`PushStep::Unpair`], only when the Host was already paired (turning
 //!    push on again, or changing the Relay): the old pairing is deleted on
 //!    its Relay, queued for later if that Relay cannot be reached.
-//! 4. [`PushStep::Test`]: `aries-beacon push-test` seals a test message and
+//! 5. [`PushStep::Test`]: `aries-beacon push-test` seals a test message and
 //!    posts it to the Relay, which forwards it to the phone.
 //!
 //! Stored per Host in `hosts/<id>/push.json`: Relay URL, the Beacon's public
@@ -69,6 +71,8 @@ pub struct HttpResponse {
 pub enum PushStep {
     /// Registering this phone on the Relay.
     Register,
+    /// Waiting for this phone to receive and confirm the Relay challenge.
+    Verify,
     /// Exchanging keys with the Beacon over SSH.
     Pair,
     /// The Beacon sending the test notification.
@@ -341,7 +345,7 @@ fn forget(store: &Store, host_id: &str) -> Result<(), CoreError> {
 
 // ---- Relay -------------------------------------------------------------------
 
-async fn http(
+pub(crate) async fn http(
     client: &Arc<dyn HttpClient>,
     method: &str,
     url: String,
@@ -375,7 +379,7 @@ async fn http(
 /// The most of a Relay's error body shown (an error page can be long).
 const BODY_SHOWN: usize = 200;
 
-fn status_error(r: &HttpResponse) -> String {
+pub(crate) fn status_error(r: &HttpResponse) -> String {
     let body = String::from_utf8_lossy(&r.body);
     let body = body.split_whitespace().collect::<Vec<_>>().join(" ");
     let body = match body.char_indices().nth(BODY_SHOWN) {
@@ -430,42 +434,57 @@ pub(crate) fn normalize_relay_url(raw: &str) -> Result<String, String> {
 }
 
 async fn register(
+    store: &Store,
+    host: &str,
+    progress: &dyn PushProgress,
     client: &Arc<dyn HttpClient>,
     relay_url: &str,
     device: &PushDevice,
-) -> Result<String, String> {
-    let r = http(
-        client,
-        "POST",
-        format!("{relay_url}/v1/pairings"),
-        None,
-        Some(serde_json::json!({"platform": device.platform, "device_token": device.token})),
-    )
-    .await
-    .map_err(|e| format!("could not reach the Relay at {relay_url}: {e}"))?;
-    let not_aries = || format!("{relay_url} is not an Aries Relay: its reply has no pairing token");
-    match r.status {
-        200 | 201 => {}
-        404 | 405 => {
-            return Err(format!(
-                "no Aries Relay answers at {relay_url} ({})",
-                status_error(&r)
-            ));
-        }
-        429 => {
-            return Err(format!(
+) -> Result<String, CoreError> {
+    let id = crate::push_ownership::begin(store, host, relay_url)
+        .map_err(|e| failed(PushStep::Register, e.to_string()))?;
+    let mut step = PushStep::Register;
+    let result = async {
+        let r = http(
+            client,
+            "POST",
+            format!("{relay_url}/v1/pairings"),
+            None,
+            Some(serde_json::json!({
+                "platform": device.platform,
+                "device_token": device.token,
+                "verification_id": id,
+            })),
+        )
+        .await
+        .map_err(|e| format!("could not reach the Relay at {relay_url}: {e}"))?;
+        let not_aries = || format!("{relay_url} is not an Aries Relay: its reply has no pairing token");
+        match r.status {
+            200..=202 => {}
+            404 | 405 => return Err(format!(
+                "no Aries Relay answers at {relay_url} ({})", status_error(&r),
+            )),
+            429 => return Err(format!(
                 "the Relay refused: too many new pairings from this network, try again in an hour ({})",
-                status_error(&r)
-            ));
+                status_error(&r),
+            )),
+            _ => return Err(status_error(&r)),
         }
-        _ => return Err(status_error(&r)),
-    }
-    let v: serde_json::Value = serde_json::from_slice(&r.body).map_err(|_| not_aries())?;
-    v["token"]
-        .as_str()
-        .filter(|t| !t.is_empty())
-        .map(str::to_owned)
-        .ok_or_else(not_aries)
+        let v: serde_json::Value = serde_json::from_slice(&r.body).map_err(|_| not_aries())?;
+        let token = v["token"].as_str().filter(|t| !t.is_empty())
+            .map(str::to_owned).ok_or_else(not_aries)?;
+        if r.status == 202 {
+            step = PushStep::Verify;
+            progress.on_step(step);
+            if let Err(error) = crate::push_ownership::wait(store, host, &id, relay_url, &token, client).await {
+                let _ = revoke(client, relay_url, &token).await;
+                return Err(error);
+            }
+        }
+        Ok(token)
+    }.await;
+    crate::push_ownership::finish(store, host, &id, result.is_ok())?;
+    result.map_err(|d| failed(step, d))
 }
 
 /// `DELETE /v1/pairing`. The Relay answers 204 also for an unknown token.
@@ -486,24 +505,24 @@ async fn revoke(client: &Arc<dyn HttpClient>, relay_url: &str, token: &str) -> R
 }
 
 async fn update(
+    store: &Store,
+    host: &str,
     client: &Arc<dyn HttpClient>,
     relay_url: &str,
     token: &str,
     device: &PushDevice,
 ) -> Result<(), String> {
-    let r = http(
-        client,
-        "PUT",
-        format!("{relay_url}/v1/pairing"),
-        Some(token),
-        Some(serde_json::json!({"platform": device.platform, "device_token": device.token})),
-    )
-    .await?;
-    if (200..300).contains(&r.status) {
-        Ok(())
-    } else {
-        Err(status_error(&r))
-    }
+    let id = crate::push_ownership::begin(store, host, relay_url).map_err(|e| e.to_string())?;
+    let result = async {
+        let r = http(client, "PUT", format!("{relay_url}/v1/pairing"), Some(token),
+            Some(serde_json::json!({"platform": device.platform, "device_token": device.token, "verification_id": id}))).await?;
+        if r.status == 202 {
+            crate::push_ownership::wait(store, host, &id, relay_url, token, client).await
+        } else if (200..300).contains(&r.status) { Ok(()) }
+        else { Err(status_error(&r)) }
+    }.await;
+    crate::push_ownership::finish(store, host, &id, result.is_ok()).map_err(|e| e.to_string())?;
+    result
 }
 
 fn failed(step: PushStep, detail: impl Into<String>) -> CoreError {
@@ -567,9 +586,15 @@ pub(crate) async fn enable(e: Enable) -> Result<PushPairing, CoreError> {
         return Ok(PushPairing { relay_url });
     }
     let phone = KeyPair::generate();
-    let token = register(&e.http, &relay_url, &e.device)
-        .await
-        .map_err(|d| failed(PushStep::Register, d))?;
+    let token = register(
+        &e.store,
+        &e.host_id,
+        e.progress.as_ref(),
+        &e.http,
+        &relay_url,
+        &e.device,
+    )
+    .await?;
 
     e.progress.on_step(PushStep::Pair);
     let request = PairRequest {
@@ -715,13 +740,14 @@ pub(crate) async fn disable(
 }
 
 pub(crate) async fn update_token(
-    paired: Vec<Pairing>,
+    store: Store,
+    paired: Vec<(String, Pairing)>,
     device: PushDevice,
     client: Arc<dyn HttpClient>,
 ) -> Result<(), CoreError> {
     let mut first = None;
-    for p in paired {
-        if let Err(d) = update(&client, &p.relay_url, &p.token, &device).await {
+    for (host, p) in paired {
+        if let Err(d) = update(&store, &host, &client, &p.relay_url, &p.token, &device).await {
             first.get_or_insert(failed(PushStep::Register, d));
         }
     }

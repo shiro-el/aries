@@ -293,7 +293,7 @@ class TerminalTypingTest {
         compose.onNodeWithText(str(R.string.attach_input_label)).performClick()
         compose.waitForIdle()
         assertEquals(AttachMode.INPUT, core.attachMode())
-        compose.onNodeWithText(str(R.string.back_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
 
         core.terminals = listOf(agent)
         compose.onNodeWithText("other").performClick()

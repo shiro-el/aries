@@ -140,7 +140,10 @@ private fun diagnosticText(context: Context, entry: DiagnosticEntry, names: Map<
     val time = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM).withZone(ZoneId.systemDefault())
         .format(Instant.ofEpochMilli(entry.timestampMs.toLong()))
     val host = entry.hostId?.let { names[it] } ?: context.getString(R.string.diagnostics_unknown_host)
-    val result = context.getString(entry.error?.label() ?: R.string.diagnostics_success)
+    val resultLabel = if (entry.event == DiagnosticEvent.PUSH_VERIFICATION && entry.httpStatus == 202.toUShort() && entry.error == null) {
+        R.string.push_verification_pending
+    } else entry.error?.label() ?: R.string.diagnostics_success
+    val result = context.getString(resultLabel)
     val outcome = entry.httpStatus?.let { context.getString(R.string.diagnostics_http, result, it.toInt()) } ?: result
     return context.getString(R.string.diagnostics_entry, time, host, context.getString(entry.source.label()),
         context.getString(entry.event.label()), outcome)
@@ -154,6 +157,8 @@ private fun DiagnosticSource.label(): Int = when (this) {
 }
 
 private fun DiagnosticEvent.label(): Int = when (this) {
+    DiagnosticEvent.HERDR_INSTALL -> R.string.herdr_diagnostics_install
+    DiagnosticEvent.HERDR_STATUS -> R.string.herdr_diagnostics_status
     DiagnosticEvent.CONNECT -> R.string.diagnostics_connect
     DiagnosticEvent.BEACON_INSTALL -> R.string.diagnostics_beacon_install
     DiagnosticEvent.BEACON_STATUS -> R.string.diagnostics_beacon_status
@@ -161,12 +166,15 @@ private fun DiagnosticEvent.label(): Int = when (this) {
     DiagnosticEvent.BEACON_REMOVE -> R.string.diagnostics_beacon_remove
     DiagnosticEvent.PUSH_ENABLE -> R.string.diagnostics_push_enable
     DiagnosticEvent.PUSH_DISABLE -> R.string.diagnostics_push_disable
+    DiagnosticEvent.PUSH_VERIFICATION -> R.string.diagnostics_push_verification
     DiagnosticEvent.PUSH_TEST -> R.string.diagnostics_push_test
     DiagnosticEvent.RELAY_REQUEST -> R.string.diagnostics_relay_request
     DiagnosticEvent.PUSH_RECEIVE -> R.string.diagnostics_push_receive
 }
 
 private fun DiagnosticError.label(): Int = when (this) {
+    DiagnosticError.HERDR_INSTALL -> R.string.herdr_diagnostics_failed
+    DiagnosticError.HERDR_CHECKSUM -> R.string.herdr_diagnostics_checksum
     DiagnosticError.KEY_UNAVAILABLE -> R.string.diagnostics_error_key
     DiagnosticError.HOST_KEY_UNTRUSTED -> R.string.diagnostics_error_untrusted
     DiagnosticError.HOST_KEY_CHANGED -> R.string.diagnostics_error_changed
@@ -181,6 +189,7 @@ private fun DiagnosticError.label(): Int = when (this) {
     DiagnosticError.BEACON_DOWNLOAD -> R.string.diagnostics_error_download
     DiagnosticError.BEACON_CHECKSUM -> R.string.diagnostics_error_checksum
     DiagnosticError.BEACON_OPERATION -> R.string.diagnostics_error_operation
+    DiagnosticError.RELAY_VERIFICATION -> R.string.diagnostics_error_verify
     DiagnosticError.RELAY_REGISTRATION -> R.string.diagnostics_error_register
     DiagnosticError.RELAY_REMOVAL -> R.string.diagnostics_error_revoke
     DiagnosticError.PUSH_REJECTED -> R.string.diagnostics_error_push

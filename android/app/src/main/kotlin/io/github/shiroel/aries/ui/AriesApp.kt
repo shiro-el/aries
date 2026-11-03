@@ -109,6 +109,7 @@ private fun AriesContent(model: HostsModel, settings: ThemeSettings, terminalDis
                                 showHeader = false,
                                 onBack = model::back,
                                 onOpen = model::openTerminal,
+                                onPin = model::pin,
                                 onNewTerminal = { model.newTerminal(s.browser) },
                                 onLaunch = { model.launch(s.browser, it) },
                                 onSaveLaunch = { model.saveLaunch(s.browser, it) },
@@ -289,6 +290,7 @@ private fun AddHostForm(model: HostsModel) {
     var port by rememberSaveable { mutableStateOf("22") }
     var user by rememberSaveable { mutableStateOf("") }
     val portNumber = port.toIntOrNull()?.takeIf { it in 1..65535 }
+    QrHostPairing(model)
     Text(stringResource(R.string.host_add_title), style = MaterialTheme.typography.titleMedium)
     OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.host_add_name)) }, singleLine = true)
     OutlinedTextField(address, { address = it }, label = { Text(stringResource(R.string.host_add_address)) }, singleLine = true)

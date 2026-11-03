@@ -68,7 +68,7 @@ class ChatCallsTest {
     ).performClick()
 
     private fun openInboxFromChat() {
-        compose.onNodeWithText(str(R.string.back_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         compose.onNodeWithTag("console-inbox").performClick()
     }
 

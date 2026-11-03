@@ -18,13 +18,16 @@ mod git_changes;
 mod github;
 mod github_pr;
 mod hc;
+mod herdr_install;
 mod host_edit;
 mod host_model;
+mod host_pairing;
 mod input_history;
 mod last_known_state;
 mod launch;
 mod layout_edit;
 mod push;
+mod push_ownership;
 mod push_replay;
 mod removal;
 mod send;
@@ -66,7 +69,9 @@ pub use git_changes::*;
 pub use github::*;
 pub use github_pr::*;
 pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
+pub use herdr_install::*;
 pub use host_model::{AgentStatus, BlockedReason, TerminalWatch};
+pub use host_pairing::HostPairingDetails;
 pub use last_known_state::{LastKnownState, LastKnownStateWatch};
 pub use launch::{AgentPreset, LaunchRequest, RECENT_CWDS_KEPT, SavedLaunch};
 pub use layout_edit::{ExecOutput, LayoutEdit};
@@ -74,6 +79,7 @@ pub use push::{
     HttpClient, HttpRequest, HttpResponse, PushContent, PushDevice, PushDisable, PushNotice,
     PushPairing, PushPolicy, PushProgress, PushQuestion, PushStep,
 };
+pub use push_ownership::PushVerificationState;
 pub use send::{HELD_AFTER, SendListener, SendOutcome};
 pub use settings::{AgentView, AttachMode};
 pub use structure::{HostStructure, PaneInfo, SpaceInfo, StructureProblem, TabInfo};
@@ -277,6 +283,7 @@ pub struct AriesCore {
     last_known: last_known_state::States,
     sessions: host_edit::HostSessions,
     beacon_release: Mutex<BeaconRelease>,
+    herdr_release: Mutex<HerdrCoreRelease>,
     chat_cache: chat_cache::ChatCache,
     push_replay: push_replay::Ledger,
     diagnostics: diagnostics::Log,
@@ -310,6 +317,7 @@ impl AriesCore {
             hosts,
             sessions: Default::default(),
             beacon_release: Mutex::new(pinned_release()),
+            herdr_release: Mutex::new(pinned_herdr_core_release()),
         }))
     }
 
@@ -901,6 +909,49 @@ impl AriesCore {
     }
 }
 
+/// herdr-core is installed only after explicit user approval in the app.
+#[uniffi::export]
+impl AriesCore {
+    pub async fn herdr_core_status(&self, host_id: String) -> Result<HerdrCoreState, CoreError> {
+        let known_id = self.saved_host(&host_id).ok().map(|host| host.id);
+        let result = async {
+            let ssh = self.beacon_ssh(&host_id)?;
+            on_runtime(async move { herdr_install::status(&ssh).await }).await
+        }
+        .await;
+        self.diagnostics.outcome(
+            known_id.as_deref(),
+            DiagnosticSource::Ssh,
+            DiagnosticEvent::HerdrStatus,
+            result,
+        )
+    }
+
+    pub async fn install_herdr_core(
+        &self,
+        host_id: String,
+        fetcher: Arc<dyn BeaconFetcher>,
+        listener: Arc<dyn HerdrInstallListener>,
+    ) -> Result<HerdrCoreState, CoreError> {
+        let known_id = self.saved_host(&host_id).ok().map(|host| host.id);
+        let result = async {
+            let ssh = self.beacon_ssh(&host_id)?;
+            let release = self.herdr_release.lock().expect("release lock").clone();
+            on_runtime(
+                async move { herdr_install::install(&ssh, &release, fetcher, listener).await },
+            )
+            .await
+        }
+        .await;
+        self.diagnostics.outcome(
+            known_id.as_deref(),
+            DiagnosticSource::Ssh,
+            DiagnosticEvent::HerdrInstall,
+            result,
+        )
+    }
+}
+
 /// Beacon management (`beacon` module).
 #[uniffi::export]
 impl AriesCore {
@@ -1021,6 +1072,37 @@ impl AriesCore {
         Ok(push::relay_url_of(&self.store, &host_id)?.map(|relay_url| PushPairing { relay_url }))
     }
 
+    /// Pending/failed token proof is visible even when a previous pairing is
+    /// still active (for example while FCM rotates this phone's token).
+    pub fn push_verification_state(
+        &self,
+        host_id: String,
+    ) -> Result<Option<PushVerificationState>, CoreError> {
+        self.saved_host(&host_id)?;
+        push_ownership::state(&self.store, &host_id)
+    }
+
+    /// Handles an FCM pairing_challenge automatically, including while locked.
+    /// Unknown/expired IDs are ignored; FCM cannot choose a callback URL.
+    pub async fn confirm_push_token(
+        &self,
+        verification_id: String,
+        challenge: String,
+        http: Arc<dyn HttpClient>,
+    ) -> Result<bool, CoreError> {
+        let store = self.store.clone();
+        let hosts = self.hosts().into_iter().map(|h| h.id).collect();
+        on_runtime(async move {
+            push_ownership::confirm(store, hosts, verification_id, challenge, http)
+                .await
+                .map_err(|detail| CoreError::PushFailed {
+                    step: PushStep::Verify,
+                    detail,
+                })
+        })
+        .await
+    }
+
     /// Has the paired Beacon send another test notification.
     pub async fn send_test_push(&self, host_id: String) -> Result<(), CoreError> {
         let known_id = self.saved_host(&host_id).ok().map(|host| host.id);
@@ -1100,8 +1182,15 @@ impl AriesCore {
             if paired.is_empty() {
                 continue;
             }
+            let paired = paired.into_iter().map(|p| (host.id.clone(), p)).collect();
             let client = self.diagnostics.http(http.clone(), Some(host.id));
-            if let Err(error) = on_runtime(push::update_token(paired, device.clone(), client)).await
+            if let Err(error) = on_runtime(push::update_token(
+                self.store.clone(),
+                paired,
+                device.clone(),
+                client,
+            ))
+            .await
             {
                 first_error.get_or_insert(error);
             }
@@ -1485,6 +1574,11 @@ impl AriesCore {
         *self.beacon_release.lock().expect("release lock") = release;
     }
 
+    /// Test/development release seam; not exposed to the app.
+    pub fn set_herdr_core_release(&self, release: HerdrCoreRelease) {
+        *self.herdr_release.lock().expect("release lock") = release;
+    }
+
     fn beacon_ssh(&self, host_id: &str) -> Result<Ssh, CoreError> {
         let host = self.saved_host(host_id)?;
         ssh_for_saved_host(&self.store, self.vault.as_ref(), host)
@@ -1850,6 +1944,7 @@ async fn read_structure(
     let terminals = list["terminals"].as_array().cloned().unwrap_or_default();
     let mut structure = structure::build(&doc, &terminals);
     names.lock().await.apply(client, &mut structure).await;
+    structure::apply_where_names(&mut structure, &terminals);
     Ok(structure)
 }
 

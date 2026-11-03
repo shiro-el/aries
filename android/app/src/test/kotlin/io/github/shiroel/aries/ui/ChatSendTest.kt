@@ -20,6 +20,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
@@ -123,7 +124,10 @@ class ChatSendTest {
         val core = FakeCore()
         openChat(core)
         core.pushChat(ChatSnapshot(listOf(ChatEntry("a1", null, ChatEntryBody.Agent("Latest reply"))), ChatStatus.LIVE, null))
-        compose.waitForIdle()
+        // Measure only after the background Markdown parse reaches the transcript.
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithText("Latest reply").fetchSemanticsNodes().isNotEmpty()
+        }
         val input = compose.onNodeWithContentDescription(str(R.string.chat_input_label))
         val send = compose.onNodeWithText(str(R.string.chat_send_button))
         input.performTextInput("line 1")
@@ -216,7 +220,7 @@ class ChatSendTest {
         assertEquals(true, conn.views.single().options.observe)
 
         // Back from the Terminal is the Chat, still live.
-        compose.onNodeWithText(str(R.string.back_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         compose.waitForIdle()
         compose.onNodeWithText(str(R.string.console_agent_host_prefix, "home") + "claude").assertExists()
         compose.onNodeWithText("go on").assertExists()
@@ -238,7 +242,7 @@ class ChatSendTest {
         assertEquals(true, conn.views.single().detached)
 
         // Back is the Host, not the Terminal again.
-        compose.onNodeWithText(str(R.string.back_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         compose.waitForIdle()
         compose.onNodeWithText("claude").assertExists()
         compose.onNodeWithText(str(R.string.console_agent_host_prefix, "home") + "claude").assertDoesNotExist()
@@ -262,7 +266,7 @@ class ChatSendTest {
         assertEquals(emptyList<String>(), conn.calls.filter { it == "sendMessage" })
 
         // Approved at the Host: the Agent works again and the notice goes.
-        compose.onNodeWithText(str(R.string.back_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         compose.waitForIdle()
         core.push(listOf(claude.copy(agentStatus = AgentStatus.Working)))
         compose.waitForIdle()

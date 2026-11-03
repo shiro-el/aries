@@ -1,10 +1,9 @@
 package io.github.shiroel.aries.ui
 
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -67,13 +66,38 @@ internal fun agentFamily(host: Host, terminals: List<TerminalInfo>): List<AgentE
     return terminals.withIndex().filter { it.value.address in included }.map { AgentEntry(host, it.value, sequence = it.index) }
 }
 
+/** Geometric guides span the entire row, including its subtitle and divider. */
 @Composable
-internal fun TerminalBranch(guide: String, depth: Int, content: @Composable () -> Unit) {
-    Row {
-        if (depth > 0) Text(
-            guide, Modifier.padding(start = 12.dp).width((depth * 20).dp), // i18n-ok: decorative Console tree guides
-            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        content()
+internal fun TerminalBranch(
+    guide: String,
+    depth: Int,
+    modifier: Modifier = Modifier,
+    leading: (@Composable () -> Unit)? = null,
+    content: @Composable () -> Unit,
+) {
+    val color = MaterialTheme.colorScheme.outline
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val titleCenter = with(density) { 8.dp + MaterialTheme.typography.bodyMedium.lineHeight.toDp() / 2 }
+    // Keep very deep families usable on a phone; identity/folding retain full depth.
+    val visibleDepth = depth.coerceAtMost(3)
+    val indent = (visibleDepth * 16).dp
+    val leadingWidth = if (leading != null) 32.dp else 0.dp
+    androidx.compose.foundation.layout.Box(modifier.fillMaxWidth().drawBehind {
+        val step = 16.dp.toPx()
+        val y = titleCenter.toPx()
+        guide.chunked(2).takeLast(visibleDepth).forEachIndexed { index, part ->
+            val x = index * step + step / 2
+            if (part.startsWith("│")) drawLine(color, androidx.compose.ui.geometry.Offset(x, 0f),
+                androidx.compose.ui.geometry.Offset(x, size.height), 1.dp.toPx())
+            if (part.startsWith("├") || part.startsWith("└")) {
+                drawLine(color, androidx.compose.ui.geometry.Offset(x, 0f),
+                    androidx.compose.ui.geometry.Offset(x, if (part.startsWith("└")) y else size.height), 1.dp.toPx())
+                drawLine(color, androidx.compose.ui.geometry.Offset(x, y),
+                    androidx.compose.ui.geometry.Offset((index + 1) * step, y), 1.dp.toPx())
+            }
+        }
+    }) {
+        androidx.compose.foundation.layout.Box(Modifier.padding(start = indent + leadingWidth)) { content() }
+        if (leading != null) androidx.compose.foundation.layout.Box(Modifier.padding(start = indent)) { leading() }
     }
 }

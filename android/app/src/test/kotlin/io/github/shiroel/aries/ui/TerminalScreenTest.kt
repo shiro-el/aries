@@ -5,7 +5,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.R
@@ -75,8 +77,7 @@ class TerminalScreenTest {
             )
         }
         open(core)
-        compose.onNodeWithText("work").performClick()
-        compose.onNodeWithText(str(R.string.agent_open_button)).performClick()
+        compose.onNodeWithTag("host-terminal:s1:tab1:h1:t1").performClick()
         compose.waitForIdle()
 
         val view = core.connection!!.views.single()
@@ -124,7 +125,7 @@ class TerminalScreenTest {
         compose.waitForIdle()
         val view = core.connection!!.views.single()
 
-        compose.onNodeWithText(str(R.string.back_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         compose.waitForIdle()
         assertTrue(view.detached)
         assertTrue("still connected to the Host", !core.connection!!.disconnected)
