@@ -8,6 +8,7 @@
 mod error;
 mod hc;
 mod store;
+mod structure;
 mod transport;
 
 use std::collections::HashMap;
@@ -20,6 +21,7 @@ use serde::{Deserialize, Serialize};
 
 pub use error::{CoreError, Incompatibility, VaultError};
 pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
+pub use structure::{HostStructure, PaneInfo, SpaceInfo, StructureProblem, TabInfo};
 
 use hc::HcClient;
 use store::{SavedHost, Store};
@@ -281,6 +283,47 @@ impl HostConnection {
         Ok(list.iter().map(terminal_info).collect())
     }
 
+    /// The Host's Spaces, Tabs and Panes as herdr-app arranges them, read
+    /// from its `herdr-app` document (never written). Falls back to
+    /// `herdr.space` / `herdr.tab` labels when the document is unusable.
+    pub async fn structure(&self) -> Result<HostStructure, CoreError> {
+        let client = self.client.clone();
+        on_runtime(async move { read_structure(&client).await }).await
+    }
+
+    /// Delivers the structure now and again whenever the desktop changes the
+    /// document or Terminals come, go or are relabelled. Ends (with
+    /// `on_closed`) when the connection does or `stop` is called.
+    pub async fn watch_structure(
+        &self,
+        listener: Arc<dyn StructureListener>,
+    ) -> Result<Arc<StructureWatch>, CoreError> {
+        let client = self.client.clone();
+        let task = on_runtime(async move {
+            // Subscribe before reading, so no change falls in between.
+            let (_, mut events) = client.subscribe_events(serde_json::json!({})).await?;
+            listener.on_structure(read_structure(&client).await?);
+            Ok(tokio::spawn(async move {
+                while let Some(msg) = events.recv().await {
+                    let mut changed = changes_structure(&msg);
+                    while let Ok(more) = events.try_recv() {
+                        changed |= changes_structure(&more);
+                    }
+                    if !changed {
+                        continue;
+                    }
+                    match read_structure(&client).await {
+                        Ok(s) => listener.on_structure(s),
+                        Err(_) => break,
+                    }
+                }
+                listener.on_closed();
+            }))
+        })
+        .await?;
+        Ok(Arc::new(StructureWatch { task }))
+    }
+
     pub async fn disconnect(&self) {
         let client = self.client.clone();
         let _ = on_runtime(async move {
@@ -291,7 +334,62 @@ impl HostConnection {
     }
 }
 
-fn terminal_info(v: &serde_json::Value) -> TerminalInfo {
+/// Receives a Host's structure from [`HostConnection::watch_structure`].
+#[uniffi::export(with_foreign)]
+pub trait StructureListener: Send + Sync {
+    fn on_structure(&self, structure: HostStructure);
+    /// No more updates: the connection ended or the watch was stopped.
+    fn on_closed(&self);
+}
+
+/// A running [`HostConnection::watch_structure`].
+#[derive(uniffi::Object)]
+pub struct StructureWatch {
+    task: tokio::task::JoinHandle<()>,
+}
+
+#[uniffi::export]
+impl StructureWatch {
+    pub fn stop(&self) {
+        self.task.abort();
+    }
+}
+
+impl Drop for StructureWatch {
+    fn drop(&mut self) {
+        self.task.abort();
+    }
+}
+
+async fn read_structure(client: &HcClient) -> Result<HostStructure, CoreError> {
+    let doc = client
+        .call(
+            "doc.get",
+            serde_json::json!({ "name": structure::DOCUMENT }),
+        )
+        .await?;
+    let list = client.call("terminal.list", serde_json::json!({})).await?;
+    let terminals = list["terminals"].as_array().cloned().unwrap_or_default();
+    Ok(structure::build(&doc, &terminals))
+}
+
+/// Whether an event-stream message can change what `read_structure` returns.
+fn changes_structure(msg: &serde_json::Value) -> bool {
+    let params = &msg["params"];
+    match msg["method"].as_str() {
+        Some("missed") => true,
+        Some("event") => match params["type"].as_str() {
+            Some("doc") => {
+                params["data"]["name"] == structure::DOCUMENT && params.get("machine").is_none()
+            }
+            Some("created" | "removed" | "restarted" | "finished" | "labels" | "title") => true,
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
+pub(crate) fn terminal_info(v: &serde_json::Value) -> TerminalInfo {
     let s = |k: &str| v[k].as_str().map(str::to_owned);
     TerminalInfo {
         address: s("address").unwrap_or_default(),
