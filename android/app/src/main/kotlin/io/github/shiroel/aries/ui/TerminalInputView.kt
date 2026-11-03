@@ -19,12 +19,20 @@ import io.github.shiroel.aries.core.TerminalKey
  * mode on [viewer] (observe -> ordinary viewer).
  */
 @SuppressLint("ViewConstructor")
-class TerminalInputView(context: Context, var viewer: TerminalViewer) : View(context) {
+class TerminalInputView(context: Context, viewer: TerminalViewer) : View(context) {
+    var viewer: TerminalViewer = viewer
+        set(value) {
+            if (field !== value) field.onCompositionInterrupted = null
+            field = value
+            value.onCompositionInterrupted = ::resetKeyboard
+        }
+
     init {
         isFocusable = true
         isFocusableInTouchMode = true
         setOnClickListener { showKeyboard() }
         setOnFocusChangeListener { _, focused -> if (focused) this.viewer.startTyping() }
+        viewer.onCompositionInterrupted = ::resetKeyboard
     }
 
     fun showKeyboard() {
@@ -32,16 +40,23 @@ class TerminalInputView(context: Context, var viewer: TerminalViewer) : View(con
         context.getSystemService(InputMethodManager::class.java)?.showSoftInput(this, 0)
     }
 
+    /** The key bar ended a composition: the keyboard starts afresh instead of extending it. */
+    private fun resetKeyboard() {
+        context.getSystemService(InputMethodManager::class.java)?.restartInput(this)
+    }
+
     override fun onCheckIsTextEditor(): Boolean = true
 
     override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection {
-        // Visible-password text: keyboards send each key right away, with no
-        // autocorrect or word composing. Ticket 18 (Korean IME) revisits it.
-        outAttrs.inputType = InputType.TYPE_CLASS_TEXT or
-            InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD or
-            InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        // Plain text, so keyboards keep their Korean layout (visible-password
+        // makes Gboard and Samsung Keyboard Latin-only). No suggestions, so
+        // Latin keys mostly arrive one by one; when a keyboard composes words
+        // anyway, TerminalViewer.compose still sends them key by key. No
+        // learning: passwords are typed here too.
+        outAttrs.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
         outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI or
             EditorInfo.IME_FLAG_NO_FULLSCREEN or
+            EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING or
             EditorInfo.IME_ACTION_NONE
         return TerminalInputConnection(this, viewer)
     }
@@ -53,36 +68,30 @@ class TerminalInputView(context: Context, var viewer: TerminalViewer) : View(con
 
 /**
  * What the keyboard types, turned into Terminal input on [viewer]: committed
- * text goes out as is, composing text waits in [TerminalViewer.composing]
- * until the keyboard finishes it, deletes become Backspace/Delete, and key
- * events become [TerminalKey]s.
+ * and composing text go through [TerminalViewer.commit] and
+ * [TerminalViewer.compose] (a Hangul syllable waits until complete), deletes
+ * outside a composition become Backspace/Delete, and key events become
+ * [TerminalKey]s. The editor stays empty: the Terminal is the text.
  */
 class TerminalInputConnection(view: View, private val viewer: TerminalViewer) : BaseInputConnection(view, true) {
     override fun commitText(text: CharSequence, newCursorPosition: Int): Boolean {
-        // The committed text replaces whatever was composing.
-        viewer.composing = ""
-        viewer.type(text.toString())
+        viewer.commit(text.toString())
         editable?.clear()
         return true
     }
 
     override fun setComposingText(text: CharSequence, newCursorPosition: Int): Boolean {
-        viewer.composing = text.toString()
+        viewer.compose(text.toString())
         return true
     }
 
     override fun finishComposingText(): Boolean {
-        val text = viewer.composing
-        viewer.composing = ""
-        if (text.isNotEmpty()) viewer.type(text)
+        viewer.finishComposing()
         return true
     }
 
     override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
-        if (viewer.composing.isNotEmpty()) {
-            viewer.composing = viewer.composing.dropLast(beforeLength)
-            return true
-        }
+        if (viewer.deleteComposing(beforeLength)) return true
         repeat(beforeLength) { viewer.press(TerminalKey.Backspace) }
         repeat(afterLength) { viewer.press(TerminalKey.Delete) }
         return true
