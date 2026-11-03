@@ -135,13 +135,7 @@ fn relay_error(mut resp: ureq::http::Response<ureq::Body>) -> SendError {
 pub fn send(message: &PushMessage) -> Result<(), SendError> {
     let pairing = Pairing::load()?.ok_or(SendError::NotPaired)?;
     let envelope = seal(message, &pairing.phone_key, &pairing.beacon)?;
-    let progress = matches!(
-        message,
-        PushMessage::Progress {
-            cancelled: false,
-            ..
-        }
-    );
+    let progress = matches!(message, PushMessage::Progress { .. });
     let progress_terminal = match message {
         PushMessage::Progress {
             terminal,
