@@ -6,6 +6,7 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.core.BlockedReason
+import io.github.shiroel.aries.core.CallUrgency
 import io.github.shiroel.aries.core.PushContent
 import io.github.shiroel.aries.core.PushNotice
 import android.content.Intent
@@ -53,6 +54,14 @@ class PushNotificationTest {
             PushTarget.from(intent)
         }.toSet()
         assertEquals(setOf(PushTarget("h1", "box/t3"), PushTarget("h1", "t3")), targets)
+    }
+
+    @Test
+    fun tappingACallNotificationOpensTheTerminalThatCalled() {
+        PushService.show(context, PushNotice("h1", "box", PushContent.Call("c1", "box/t2", true, "Review ready", "", CallUrgency.CHECK, emptyList(), 1uL)))
+
+        val n = shown().single()
+        assertEquals(PushTarget("h1", "box/t2"), PushTarget.from(shadowOf(n.contentIntent).savedIntent))
     }
 
     @Test

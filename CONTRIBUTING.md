@@ -32,6 +32,7 @@ cd android && ./gradlew :app:testDebugUnitTest      # Compose UI tests against a
 cd android && ./gradlew :app:assembleDebug          # debug APK (builds the core with cargo-ndk)
 cd android && ./gradlew :app:connectedDebugAndroidTest   # device tests (Android Keystore); needs a device/emulator
 scripts/measure-terminal-latency.sh 40              # key -> drawn echo on a device over SSH (docker); logcat AriesLatency
+scripts/test-korean-ime.sh                          # Korean typed on the real Gboard (한국어 두벌식 added by hand)
 cd relay && npm ci --legacy-peer-deps && npm run typecheck && npm test   # Relay HTTP API (Workers runtime, fake FCM)
 ```
 
@@ -134,6 +135,16 @@ baseline) and sends `PushMessage::Status` for what
 `aries_protocol::push_policy::PushPolicy` allows (default Blocked + Error,
 top-level only; `<state>/push-policy.json` overrides). The real Claude Code
 check: `ARIES_REAL_CLAUDE=1 cargo test -p aries-beacon --test status_push -- --ignored real_claude`.
+
+Call pushes: `aries-beacon call` records the Call first, prints it, then
+sends `PushMessage::Call` (ID, Terminal, title, body, urgency, Choices)
+when `PushPolicy::allows_call` agrees (confirmed caller, urgency above
+`record`, top-level unless `child_agents`). A push failure is a stderr line
+and exit 0; the Call stays in Call history. The body is cut to fit the
+envelope. Android shows each Call on the channel for its urgency
+(`calls_check`, `calls_urgent`, `calls_emergency`). Tests:
+`cargo test -p aries-beacon --test call_push` (FakeRelay
+`fail_pushes(status)` plays a failing Relay).
 
 The Relay is `relay/` (Cloudflare Worker + D1, TypeScript). It stores only
 pairing token hashes, device push tokens and rate limit counters, and never

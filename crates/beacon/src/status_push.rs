@@ -54,7 +54,7 @@ impl Sender {
     }
 }
 
-fn policy() -> PushPolicy {
+pub(crate) fn policy() -> PushPolicy {
     let path = crate::state_dir().join("push-policy.json");
     match std::fs::read(&path) {
         Ok(bytes) => serde_json::from_slice(&bytes).unwrap_or_else(|e| {

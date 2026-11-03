@@ -67,6 +67,27 @@ pub enum PushMessage {
         /// Unix seconds on the Host.
         at: u64,
     },
+    /// An Agent sent a Call the push policy notifies about
+    /// ([`crate::push_policy::PushPolicy::allows_call`]); sent by
+    /// `aries-beacon call` right after it recorded the Call.
+    Call {
+        /// The Call's ID in the Host's Call history ([`crate::calls::Call::id`]).
+        id: String,
+        /// Address of the calling Terminal (only confirmed Calls are pushed).
+        terminal: String,
+        /// No parent Terminal: not a subagent.
+        top_level: bool,
+        title: String,
+        /// May be cut short (ending in `…`) to fit the envelope; Call
+        /// history has it in full.
+        body: String,
+        urgency: crate::calls::Urgency,
+        /// The Choices, in order; an answer names one by its index. Cut
+        /// short only if they would not fit otherwise.
+        choices: Vec<String>,
+        /// When the Beacon recorded it, Unix milliseconds.
+        at_ms: u64,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]

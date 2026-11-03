@@ -13,7 +13,9 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use aries_protocol::calls::{CallsLine, LogEntry, Urgency, fold, validate};
+use aries_protocol::calls::{
+    Answer, AnswerState, CallsLine, LogEntry, ReplyLine, ReplyOutcome, Urgency, fold, validate,
+};
 
 pub use aries_protocol::calls::Call;
 
@@ -272,9 +274,11 @@ pub fn call_command(log: &Log, args: &[String]) -> i32 {
             return 1;
         }
     };
-    // Recorded first: whatever delivery does next (push, tickets 27/33),
-    // a failure there never loses the Call.
+    // Recorded first: whatever the push does next, a failure there never
+    // loses the Call.
     println!("{}", serde_json::to_string(&call).expect("call json"));
+    let _ = std::io::stdout().flush();
+    crate::call_push::deliver(&call);
     0
 }
 
@@ -373,6 +377,173 @@ fn parent_of(pid: u32) -> Option<u32> {
     // `pid (comm) state ppid ...`; comm may hold spaces and parentheses.
     let rest = &stat[stat.rfind(')')? + 1..];
     rest.split_whitespace().nth(1)?.parse().ok()
+}
+
+// --------------------------------------------------------------- `reply`
+
+/// How long `reply` waits for herdr-core to confirm the typing. herdr-core
+/// holds a send while a person types at the Host, so this is generous; past
+/// it the answer is recorded unconfirmed.
+const SEND_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// `aries-beacon reply CALL CHOICE`: types Choice `CHOICE` (0-based) of Call
+/// `CALL` into the Terminal that sent it, then Enter. Claims the Call in the
+/// log first, so it is typed at most once ever. Prints one [`ReplyLine`];
+/// exit 0 only when delivered, 2 on bad usage.
+pub fn reply_command(log: &Log, args: &[String]) -> i32 {
+    let (id, choice) = match args {
+        [id, choice] => match choice.parse::<u32>() {
+            Ok(n) => (id.as_str(), n),
+            Err(_) => return reply_usage(&format!("bad choice {choice:?}")),
+        },
+        _ => return reply_usage("expected CALL and CHOICE"),
+    };
+    let line = reply(log, id, choice);
+    println!("{}", line.to_json());
+    if line.outcome == ReplyOutcome::Delivered {
+        0
+    } else {
+        1
+    }
+}
+
+fn reply_usage(why: &str) -> i32 {
+    eprintln!(
+        "aries-beacon reply: {why}\nusage: aries-beacon reply CALL CHOICE  (CHOICE is 0-based)"
+    );
+    2
+}
+
+fn reply(log: &Log, id: &str, choice: u32) -> ReplyLine {
+    // The durable claim: under the log lock, only a Call without any
+    // answer gets one.
+    let claimed = log.locked(|entries, seq| {
+        let Some((_, call)) = fold(entries.iter().cloned())
+            .into_iter()
+            .find(|(_, c)| c.id == id)
+        else {
+            return (None, Err(ReplyLine::new(ReplyOutcome::NoCall, None, None)));
+        };
+        if let Some(answer) = call.answer {
+            return (
+                None,
+                Err(ReplyLine::new(ReplyOutcome::Answered, Some(answer), None)),
+            );
+        }
+        let Some(terminal) = call.terminal else {
+            return (
+                None,
+                Err(ReplyLine::new(ReplyOutcome::NotAnswerable, None, None)),
+            );
+        };
+        let Some(text) = call.choices.get(choice as usize) else {
+            return (
+                None,
+                Err(ReplyLine::new(ReplyOutcome::NoChoice, None, None)),
+            );
+        };
+        let answer = Answer {
+            choice,
+            text: text.clone(),
+            state: AnswerState::Claimed,
+            at_ms: now_ms(),
+            detail: None,
+        };
+        (
+            Some(LogEntry::Answer {
+                seq,
+                id: id.to_owned(),
+                answer: answer.clone(),
+            }),
+            Ok((terminal, answer)),
+        )
+    });
+    let (terminal, answer) = match claimed {
+        Ok(Ok(c)) => c,
+        Ok(Err(line)) => return line,
+        Err(e) => {
+            // Nothing claimed, nothing typed.
+            return ReplyLine::new(
+                ReplyOutcome::Failed,
+                None,
+                Some(format!("could not claim the Call: {e}")),
+            );
+        }
+    };
+
+    let (state, detail) = match deliver(&terminal, &answer.text) {
+        Sent::Yes => (AnswerState::Delivered, None),
+        Sent::No(why) => (AnswerState::Failed, Some(why)),
+        Sent::Maybe(why) => (AnswerState::Unconfirmed, Some(why)),
+    };
+    let done = Answer {
+        state,
+        detail: detail.clone(),
+        at_ms: now_ms(),
+        ..answer
+    };
+    let recorded = log.locked(|_, seq| {
+        (
+            Some(LogEntry::Answer {
+                seq,
+                id: id.to_owned(),
+                answer: done.clone(),
+            }),
+            (),
+        )
+    });
+    let outcome = match state {
+        AnswerState::Delivered => ReplyOutcome::Delivered,
+        AnswerState::Failed => ReplyOutcome::Failed,
+        _ => ReplyOutcome::Unconfirmed,
+    };
+    let detail = match recorded {
+        Ok(()) => detail,
+        // The claim stays; the outcome is still what happened.
+        Err(e) => Some(format!(
+            "{}could not record the result: {e}",
+            detail.map(|d| d + "; ").unwrap_or_default()
+        )),
+    };
+    ReplyLine::new(outcome, Some(done), detail)
+}
+
+enum Sent {
+    Yes,
+    /// Certainly not typed.
+    No(String),
+    /// May have been typed.
+    Maybe(String),
+}
+
+/// Checks that `terminal` is still live, then one herdr-core
+/// `terminal.send` (paste the text, then Enter); never retried. A refusal
+/// (an error reply) types nothing; a lost connection or no answer within
+/// [`SEND_TIMEOUT`] may have.
+fn deliver(terminal: &str, text: &str) -> Sent {
+    let mut link = match aries_beacon::core_link::CoreLink::connect() {
+        Ok(l) => l,
+        Err(e) => return Sent::No(format!("herdr-core: {e}")),
+    };
+    match link.call("terminal.get", serde_json::json!({ "terminal": terminal })) {
+        Ok(t) if t["state"] == "live" => {}
+        Ok(_) => return Sent::No(format!("Terminal {terminal} has ended")),
+        Err(e) if e.starts_with("rpc") => {
+            return Sent::No(format!("Terminal {terminal} is gone ({e})"));
+        }
+        Err(e) => return Sent::No(format!("herdr-core: {e}")),
+    }
+    let (tx, rx) = std::sync::mpsc::channel();
+    let params = serde_json::json!({ "terminal": terminal, "text": text });
+    std::thread::spawn(move || {
+        let _ = tx.send(link.call("terminal.send", params));
+    });
+    match rx.recv_timeout(SEND_TIMEOUT) {
+        Ok(Ok(_)) => Sent::Yes,
+        Ok(Err(e)) if e.starts_with("rpc") => Sent::No(format!("herdr-core refused it: {e}")),
+        Ok(Err(e)) => Sent::Maybe(e),
+        Err(_) => Sent::Maybe("herdr-core did not confirm in time".into()),
+    }
 }
 
 // --------------------------------------------------------------- `calls`
