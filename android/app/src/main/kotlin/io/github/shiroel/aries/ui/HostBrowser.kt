@@ -49,7 +49,7 @@ import io.github.shiroel.aries.core.TerminalInfo
  * and zoom live only here: nothing of it is sent to the Host, so browsing on
  * the phone never moves the desktop.
  */
-class HostBrowser(val host: Host) {
+class HostBrowser(val host: Host, val showBeaconFirst: Boolean = false) {
     var structure by mutableStateOf<HostStructure?>(null)
         private set
 
@@ -258,6 +258,10 @@ private fun SpaceList(
         item {
             Text(stringResource(R.string.terminals_title, browser.host.name), Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+        if (browser.showBeaconFirst) item {
+            Column(Modifier.padding(horizontal = 12.dp)) { hostSections() }
+            HorizontalDivider()
+        }
         if (s.spaces.isEmpty() && s.unplaced.isEmpty()) item { Text(stringResource(R.string.terminals_empty)) }
         items(s.spaces, key = { "space:" + it.id }) { space ->
             Row(Modifier.fillMaxWidth().clickable { browser.openSpace(space.id) }.heightIn(min = 48.dp).padding(horizontal = 12.dp, vertical = 8.dp),
@@ -286,7 +290,7 @@ private fun SpaceList(
                 ConsoleTerminalRow(t, browser.host.name, { onOpen(t) })
             }
         }
-        item {
+        if (!browser.showBeaconFirst) item {
             HorizontalDivider()
             Column(Modifier.padding(horizontal = 12.dp)) { hostSections() }
         }

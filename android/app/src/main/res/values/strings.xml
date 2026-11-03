@@ -433,4 +433,5 @@
     <string name="console_agent_accessibility">%1$s · %2$s</string>
     <string name="console_agent_age_unknown">—</string>
     <string name="console_agent_age_unavailable">Age unavailable</string>
+    <string name="call_inbox_install_beacon">%1$s: Install Beacon</string>
 </resources>

@@ -269,7 +269,7 @@ class HostsModel(
         hostsChanged()
     }
 
-    fun connect(host: Host) {
+    fun connect(host: Host, showBeaconFirst: Boolean = false) {
         val connecting = Screen.Connecting(host)
         screen = connecting
         scope.launch {
@@ -279,7 +279,7 @@ class HostsModel(
                     conn.disconnect()
                     return@launch
                 }
-                val browser = HostBrowser(host)
+                val browser = HostBrowser(host, showBeaconFirst)
                 val link = link(host, conn)
                 browser.link = link
                 browseLink = link
@@ -857,9 +857,9 @@ class HostsModel(
         return find(screen)?.let(::displayName)?.takeIf { it.isNotBlank() }
     }
 
-    fun openHost(host: Host) {
+    fun openHost(host: Host, showBeaconFirst: Boolean = false) {
         back()
-        connect(host)
+        connect(host, showBeaconFirst)
     }
 
     /** Uses whole Host/address identity and the existing saved-view/notification route. */

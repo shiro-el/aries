@@ -60,6 +60,11 @@ class CallsModel(
     var problems by mutableStateOf<Map<String, String>>(emptyMap())
         private set
 
+    /** The feed exposes reconnect failures as text, using the core error's exact message. */
+    val missingBeaconHosts: Map<String, Host>
+        get() = problems.filterValues { it == CoreException.BeaconNotInstalled().message }
+            .keys.mapNotNull { hosts[it] }.associateBy { it.id }
+
     /** Calls being answered, by [CallEntry.key]. */
     var replying by mutableStateOf<Set<String>>(emptySet())
         private set

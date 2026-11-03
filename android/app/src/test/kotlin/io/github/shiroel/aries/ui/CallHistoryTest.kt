@@ -5,6 +5,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onRoot
@@ -81,6 +82,39 @@ class CallHistoryTest {
     private fun openCalls() {
         compose.onNodeWithTag("console-inbox").performClick()
         compose.waitForIdle()
+    }
+
+    @Test
+    fun missingBeaconLinksToThatHostsExistingInstallFlow() {
+        val core = twoHosts().apply {
+            terminalsOf["h2"] = (1..40).map { agent.copy(address = "t$it", name = "Agent $it") }
+        }
+        val installs = mutableListOf<String>()
+        val api = object : AriesCoreInterface by core {
+            override suspend fun installBeacon(hostId: String, fetcher: io.github.shiroel.aries.core.BeaconFetcher): io.github.shiroel.aries.core.BeaconInstall {
+                installs += hostId
+                return core.installBeacon(hostId, fetcher)
+            }
+        }
+        show(api)
+        compose.onNodeWithText("home").performClick()
+        openCalls()
+        compose.runOnIdle {
+            core.callListeners.getValue("h1").onState(io.github.shiroel.aries.core.CallFeedState.Reconnecting("connection lost"))
+        }
+        compose.onNodeWithText(str(R.string.call_inbox_install_beacon, "home")).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.calls_feed_down, "h1", "connection lost")).assertExists()
+        compose.runOnIdle {
+            core.callListeners.getValue("h2").onState(io.github.shiroel.aries.core.CallFeedState.Reconnecting(
+                io.github.shiroel.aries.core.CoreException.BeaconNotInstalled().message.orEmpty(),
+            ))
+        }
+        compose.onNodeWithText(str(R.string.call_inbox_install_beacon, "server")).performClick()
+        compose.onNodeWithTag("call-inbox-panel").assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.terminals_title, "server")).assertExists()
+        compose.onNodeWithText(str(R.string.beacon_install_button)).assertIsDisplayed().performClick()
+        compose.onNodeWithText(str(R.string.beacon_version, "0.1.0")).assertExists()
+        assertEquals(listOf("h2"), installs)
     }
 
     @Test
