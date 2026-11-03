@@ -24,6 +24,29 @@ pub struct RemoteFilePage {
     pub lines: u64,
 }
 
+/// Raw bytes for downloads and image/PDF previews. `offset` is zero-based;
+/// `total_size` is sampled on each read, so callers must reject size changes
+/// between chunks. No UTF-8 conversion or base64 decoding is needed by the UI.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RemoteFileBytes {
+    pub data: Vec<u8>,
+    pub offset: u64,
+    pub total_size: u64,
+    pub eof: bool,
+}
+
+// 4 MiB raw + a small size header remains below machine.exec's 8 MiB
+// stdout budget even after base64 encoding. POSIX tools work on Linux/macOS.
+const MAX_BYTE_CHUNK: u32 = 4 * 1024 * 1024;
+const READ_BYTES: &str = r#"[ -f "$1" ] || exit 1
+size=$(wc -c < "$1") || exit 1
+printf '%s\n' "$size"
+block=65536
+skip=$(($2 / block))
+remainder=$(($2 % block))
+count=$(((remainder + $3 + block - 1) / block))
+dd if="$1" bs=$block skip=$skip count=$count 2>/dev/null | tail -c +$((remainder + 1)) | head -c "$3""#;
+
 // POSIX find/sh work on Linux and macOS. NULs preserve every UTF-8 filename,
 // including hidden names, newlines and shell metacharacters. pwd resolves `..`.
 const LIST: &str = r#"pwd -P || exit
@@ -39,6 +62,59 @@ fn machine(address: &str) -> Option<&str> {
 
 #[uniffi::export]
 impl HostConnection {
+    /// Reads at most 4 MiB from an absolute path returned by `list_files`.
+    /// Uses the Terminal's machine (including nested machine addresses), just
+    /// like `read_file_page`; paths are positional data, never shell source.
+    /// Empty files and a read exactly at EOF return empty data with `eof=true`.
+    /// Callers cancel by stopping between bounded reads; an in-flight Host
+    /// command may finish in the background (15-second command timeout).
+    /// This API does not accumulate a file: download/preview callers choose
+    /// their own total-size cap and check `total_size` before keeping bytes.
+    pub async fn read_file_bytes(
+        &self,
+        address: String,
+        path: String,
+        offset: u64,
+        length: u32,
+    ) -> Result<RemoteFileBytes, CoreError> {
+        if !path.starts_with('/')
+            || path.contains('\0')
+            || length == 0
+            || length > MAX_BYTE_CHUNK
+            || offset > i64::MAX as u64 - u64::from(MAX_BYTE_CHUNK)
+        {
+            return Err(protocol(
+                "absolute file path and byte length 1..=4 MiB required",
+            ));
+        }
+        let client = self.client.clone();
+        on_runtime(async move {
+            let out = client.call("machine.exec", json!({
+                "argv": ["sh", "-c", READ_BYTES, "files", path, offset.to_string(), length.to_string()],
+                "on": machine(&address), "timeout": 15,
+            })).await?;
+            if out["code"].as_i64() != Some(0)
+                || out["truncated"].as_bool() == Some(true)
+                || out["timed_out"].as_bool() == Some(true)
+            {
+                return Err(CoreError::Rpc {
+                    kind: "file_read_failed".into(),
+                    detail: "File is unavailable, timed out or exceeded the response budget".into(),
+                });
+            }
+            let bytes = STANDARD.decode(out["stdout"].as_str().ok_or_else(|| protocol("missing file bytes"))?)
+                .map_err(|_| protocol("invalid file bytes"))?;
+            let header = bytes.iter().position(|b| *b == b'\n').ok_or_else(|| protocol("missing file size"))?;
+            let total_size: u64 = std::str::from_utf8(&bytes[..header]).ok().and_then(|s| s.trim().parse().ok())
+                .ok_or_else(|| protocol("invalid file size"))?;
+            let data = bytes[header + 1..].to_vec();
+            if offset > total_size || data.len() as u64 != (total_size - offset).min(u64::from(length)) {
+                return Err(protocol("file changed or byte range could not be read"));
+            }
+            Ok(RemoteFileBytes { eof: offset + data.len() as u64 == total_size, data, offset, total_size })
+        }).await
+    }
+
     /// Starts at the Terminal's actual foreground folder, then its launch folder.
     /// `path` continues browsing on that same Terminal's machine.
     pub async fn list_files(
