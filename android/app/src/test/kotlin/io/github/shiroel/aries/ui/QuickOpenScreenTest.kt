@@ -71,7 +71,8 @@ class QuickOpenScreenTest {
         }
         start(core)
         compose.onNodeWithText("home").performClick()
-        compose.onNodeWithText("Aries").performClick()
+        compose.onNodeWithTag("host-layout-context").performClick()
+        compose.onNodeWithTag("host-context-tab:s1:tab1").performClick()
         compose.onNodeWithTag("quick-open-button").performClick()
         compose.onNodeWithTag("quick-open-query").performTextReplacement(">" + str(R.string.layout_rename_tab_button))
         compose.onNodeWithTag("quick-command:RENAME_TAB").performClick()
@@ -105,7 +106,15 @@ class QuickOpenScreenTest {
         result("fresh-agent").assertExists()
         core.push(emptyList())
         result("fresh-agent").assertDoesNotExist()
-        core.connection!!.push(HostStructure(listOf(SpaceInfo("s1", "renamed-space", "/repo", emptyList())), emptyList(), null))
+        compose.onNodeWithText(str(R.string.cancel_button)).performClick()
+        compose.onNodeWithText("fresh-agent").assertDoesNotExist()
+        // A later layout can still contain the old Terminal; it must not revive
+        // either the Host row or a selectable search result after live removal.
+        core.connection!!.push(HostStructure(listOf(SpaceInfo("s1", "renamed-space", "/repo", emptyList())), listOf(fresh), null))
+        compose.onNodeWithText("fresh-agent").assertDoesNotExist()
+        compose.onNodeWithTag("quick-open-button").performClick()
+        compose.onNodeWithTag("quick-open-query").performTextReplacement("fresh-agent")
+        result("fresh-agent").assertDoesNotExist()
         compose.onNodeWithTag("quick-open-query").performTextReplacement("renamed-space")
         result("renamed-space").assertExists()
     }
@@ -133,7 +142,8 @@ class QuickOpenScreenTest {
         }
         // Commands are reachable from the Agent header and retain the edit
         // dialog across unmounting/remounting Browse.
-        compose.onNodeWithTag("quick-open-button").performClick()
+        compose.onNodeWithTag("agent-actions").performClick()
+        compose.onNodeWithText(str(R.string.quick_open_title)).performClick()
         compose.onNodeWithTag("quick-open-query").performTextReplacement(">" + str(R.string.layout_kill_button))
         compose.onNodeWithTag("quick-command:END_TERMINAL").performClick()
         compose.onNodeWithText(str(R.string.layout_working_warning)).assertExists()
