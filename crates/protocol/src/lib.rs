@@ -6,4 +6,5 @@
 /// Version of the core <-> Beacon contract defined by this crate.
 pub const CONTRACT_VERSION: u32 = 1;
 
+pub mod agent_status;
 pub mod beacon;

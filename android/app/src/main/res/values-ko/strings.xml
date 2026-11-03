@@ -54,6 +54,30 @@
     <string name="terminals_empty">이 호스트에서 실행 중인 터미널이 없습니다.</string>
     <string name="terminal_subtitle">%1$s · %2$s</string>
 
+    <string name="agent_status_working">작업 중</string>
+    <string name="agent_status_blocked">막힘</string>
+    <string name="agent_status_blocked_permission">막힘: 권한</string>
+    <string name="agent_status_blocked_question">막힘: 질문</string>
+    <string name="agent_status_blocked_auth">막힘: 로그인</string>
+    <string name="agent_status_error">오류</string>
+    <string name="agent_status_done">완료</string>
+    <string name="agent_status_idle">대기</string>
+    <string name="agent_attention_label">확인 필요</string>
+
+    <string name="space_unnamed">이름 없는 스페이스</string>
+    <string name="space_summary">탭 %1$d개 · 페인 %2$d개</string>
+    <string name="space_no_tabs">이 스페이스에는 탭이 없습니다.</string>
+    <string name="tab_unnamed">이름 없는 탭</string>
+    <string name="tab_empty">이 탭에는 터미널이 없습니다.</string>
+    <string name="pane_terminal_gone">%1$s (종료됨)</string>
+    <string name="pane_zoom_button">확대</string>
+    <string name="pane_unzoom_button">모든 페인 보기</string>
+    <string name="unplaced_title">기타 터미널</string>
+    <string name="structure_no_document">이 호스트에 herdr-app이 저장한 레이아웃이 없습니다. 터미널을 스페이스·탭 label로 묶어 보여 줍니다.</string>
+    <string name="structure_unreadable">이 호스트의 herdr-app 레이아웃을 읽지 못했습니다(%1$s). 터미널을 스페이스·탭 label로 묶어 보여 줍니다.</string>
+    <string name="structure_unknown_format">이 호스트의 herdr-app 레이아웃은 Aries가 모르는 형식입니다. 터미널을 스페이스·탭 label로 묶어 보여 줍니다. Aries를 업데이트하세요.</string>
+    <string name="structure_connection_closed">호스트와의 연결이 끊어졌습니다. 보이는 내용이 최신이 아닐 수 있습니다.</string>
+
     <string name="host_key_trust_title">이 호스트를 신뢰할까요?</string>
     <string name="host_key_trust_body">%1$s에 처음 연결합니다. 호스트 키 지문이 다음과 같은지 확인하세요:\n\n%2$s\n\n호스트에서 실행: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</string>
     <string name="host_key_trust_button">신뢰하고 연결</string>
@@ -94,4 +118,26 @@
     <string name="beacon_unavailable_body">이 버전의 Aries에는 아직 %1$s/%2$s용 Beacon이 없습니다.</string>
     <string name="beacon_download_body">Beacon을 내려받지 못했습니다: %1$s</string>
     <string name="beacon_step_body">호스트에서 "%1$s" 단계가 실패했습니다: %2$s</string>
+
+    <string name="key_default_label">기본 키</string>
+    <string name="keys_title">다른 SSH 키</string>
+    <string name="key_new_label">새 키 이름</string>
+    <string name="key_new_button">키 하나 더 만들기</string>
+
+    <string name="host_jumps_button">jump host</string>
+    <string name="host_jumps_summary">경유: %1$s</string>
+    <string name="jumps_title">%1$s까지의 경로</string>
+    <string name="jumps_hint">Aries는 jump host에 순서대로 로그인한 뒤, 마지막 jump host를 거쳐 호스트에 접속합니다.</string>
+    <string name="jumps_empty">jump host가 없습니다. Aries가 호스트에 바로 접속합니다.</string>
+    <string name="jumps_hop_title">jump host %1$d</string>
+    <string name="jumps_add_button">jump host 추가</string>
+    <string name="jumps_remove_button">삭제</string>
+    <string name="jumps_key_label">키: %1$s</string>
+    <string name="jumps_host_key_label">호스트에 쓸 키: %1$s</string>
+    <string name="jumps_save_button">저장</string>
+    <string name="jump_key_trust_title">이 jump host를 신뢰할까요?</string>
+    <string name="jump_key_trust_body">%3$s로 가는 길의 jump host %1$d(%2$s)에 처음 연결합니다. 호스트 키 지문이 다음과 같은지 확인하세요:\n\n%4$s\n\njump host에서 실행: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</string>
+    <string name="jump_key_changed_title">jump host 키가 바뀌었습니다</string>
+    <string name="jump_key_changed_body">jump host %1$d(%2$s)가 이전과 다른 키를 보내서 Aries가 연결하지 않았습니다. 누군가 연결을 가로채고 있거나 jump host를 다시 설치했을 수 있습니다.\n\n신뢰한 키: %3$s\n현재 키: %4$s</string>
+    <string name="connect_jump_auth_rejected">jump host %1$d(%2$s)가 지정한 키를 받아들이지 않았습니다. 그 jump host의 ~/.ssh/authorized_keys에 해당 키의 공개 키를 추가하세요.</string>
 </resources>

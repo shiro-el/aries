@@ -9,10 +9,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -53,7 +51,6 @@ import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.Host
 import io.github.shiroel.aries.core.QrMatrix
-import io.github.shiroel.aries.core.TerminalInfo
 
 @Composable
 fun AriesApp(model: HostsModel) {
@@ -62,9 +59,15 @@ fun AriesApp(model: HostsModel) {
             when (val s = model.screen) {
                 Screen.Hosts -> HostListScreen(model)
                 is Screen.Connecting -> Connecting(s.host)
-                is Screen.Terminals -> {
+                is Screen.Browse -> {
+                    BackHandler {
+                        if (s.browser.openSpaceId != null) s.browser.closeSpace() else model.back()
+                    }
+                    BrowseScreen(s.browser, onBack = model::back) { BeaconSection(model.beacon) }
+                }
+                is Screen.JumpHosts -> {
                     BackHandler { model.back() }
-                    TerminalListScreen(s.host, s.terminals, onBack = model::back) { BeaconSection(model.beacon) }
+                    JumpHostsScreen(model, s.host, s.jumps, s.hostKeyId)
                 }
             }
         }
@@ -86,12 +89,15 @@ private fun HostListScreen(model: HostsModel) {
         }
         items(model.hosts, key = { it.id }) { host ->
             HostRow(host, onRemove = { model.askRemove(host) }) { model.connect(host) }
+            JumpSummary(model.jumps[host.id].orEmpty())
             if (host.endpoint is Endpoint.Ssh) {
+                TextButton(onClick = { model.editJumps(host) }) { Text(stringResource(R.string.host_jumps_button)) }
                 TextButton(onClick = { model.askPassword(host) }) {
                     Text(stringResource(R.string.host_install_key_button))
                 }
             }
         }
+        if (model.key != null) item { ExtraKeysSection(model) }
         item { HorizontalDivider() }
         item { AddHostForm(model) }
     }
@@ -171,32 +177,6 @@ private fun Connecting(host: Host) {
 }
 
 @Composable
-private fun TerminalListScreen(
-    host: Host,
-    terminals: List<TerminalInfo>,
-    onBack: () -> Unit,
-    hostSections: @Composable () -> Unit = {},
-) {
-    LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        item {
-            Row {
-                TextButton(onClick = onBack) { Text(stringResource(R.string.back_button)) }
-            }
-            Text(stringResource(R.string.terminals_title, host.name), style = MaterialTheme.typography.headlineSmall)
-            Spacer(Modifier.height(8.dp))
-        }
-        item { hostSections() }
-        if (terminals.isEmpty()) item { Text(stringResource(R.string.terminals_empty)) }
-        items(terminals, key = { it.address }) { t ->
-            Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                Text(t.name ?: t.title.ifBlank { t.argv.joinToString(" ") }, style = MaterialTheme.typography.titleMedium)
-                Text(stringResource(R.string.terminal_subtitle, t.address, t.state), style = MaterialTheme.typography.bodySmall)
-            }
-        }
-    }
-}
-
-@Composable
 private fun PromptDialog(prompt: Prompt, model: HostsModel) {
     when (prompt) {
         is Prompt.TrustHostKey -> AlertDialog(
@@ -206,6 +186,7 @@ private fun PromptDialog(prompt: Prompt, model: HostsModel) {
             confirmButton = { TextButton(onClick = { model.trust(prompt) }) { Text(stringResource(R.string.host_key_trust_button)) } },
             dismissButton = { TextButton(onClick = model::dismiss) { Text(stringResource(R.string.cancel_button)) } },
         )
+        is Prompt.TrustJumpHostKey -> TrustJumpHostKeyDialog(prompt, model)
         is Prompt.Password -> PasswordDialog(prompt, model)
         is Prompt.KeyQr -> AlertDialog(
             onDismissRequest = model::dismiss,

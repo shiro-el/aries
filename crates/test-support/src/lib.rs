@@ -7,6 +7,8 @@
 //!   pinned herdr-core installed, for the few tests that exercise SSH itself.
 //! - [`SystemdHost`]: a docker Linux Host with systemd and sshd, for the
 //!   Beacon install tests.
+//!   [`DockerNetwork`] + [`SshdHost::start_on`] chain several of them for
+//!   jump host tests.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
@@ -171,6 +173,69 @@ impl HcSession {
         let v: serde_json::Value = serde_json::from_str(out.trim()).expect("run json");
         v["address"].as_str().expect("address").to_owned()
     }
+
+    /// One plain-mode JSON-RPC call through `herdr-core connect` (for API-only
+    /// methods such as `doc.set`). Returns `result`; panics on an error reply.
+    pub fn rpc(&self, method: &str, params: serde_json::Value) -> serde_json::Value {
+        use std::io::{BufRead, BufReader, Write};
+        let mut child = self
+            .command()
+            .arg("connect")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("run herdr-core connect");
+        let mut stdin = child.stdin.take().expect("stdin");
+        let hello =
+            serde_json::json!({"jsonrpc":"2.0","id":0,"method":"hello","params":{"generation":1}});
+        let call = serde_json::json!({"jsonrpc":"2.0","id":1,"method":method,"params":params});
+        writeln!(stdin, "{hello}\n{call}").expect("write rpc");
+        let mut reply = None;
+        for line in BufReader::new(child.stdout.take().expect("stdout")).lines() {
+            let Ok(line) = line else { break };
+            let Ok(v) = serde_json::from_str::<serde_json::Value>(&line) else {
+                continue;
+            };
+            if v["id"] == 1 {
+                reply = Some(v);
+                break;
+            }
+        }
+        drop(stdin);
+        let _ = child.kill();
+        let _ = child.wait();
+        let reply = reply.unwrap_or_else(|| panic!("no reply to {method}"));
+        assert!(reply.get("error").is_none(), "{method} failed: {reply}");
+        reply["result"].clone()
+    }
+
+    /// Writes document `name` (any JSON) over whatever version is there.
+    pub fn set_doc(&self, name: &str, value: serde_json::Value) {
+        let version = self.rpc("doc.get", serde_json::json!({ "name": name }))["version"].clone();
+        self.rpc(
+            "doc.set",
+            serde_json::json!({ "name": name, "value": value, "version": version }),
+        );
+    }
+
+    /// Starts `argv` in a new background Terminal with `labels`; returns its address.
+    pub fn run_labeled(&self, name: &str, labels: &[(&str, &str)], argv: &[&str]) -> String {
+        let mut args: Vec<String> = ["run", "--bg", "--json", "--no-parent", "--name", name]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        for (k, v) in labels {
+            args.push("--label".into());
+            args.push(format!("{k}={v}"));
+        }
+        args.push("--".into());
+        args.extend(argv.iter().map(|s| s.to_string()));
+        let refs: Vec<&str> = args.iter().map(String::as_str).collect();
+        let out = self.hc(&refs);
+        let v: serde_json::Value = serde_json::from_str(out.trim()).expect("run json");
+        v["address"].as_str().expect("address").to_owned()
+    }
 }
 
 impl Drop for HcSession {
@@ -229,6 +294,24 @@ impl SshdHost {
 
     /// Builds the image if needed and starts a container.
     pub fn start() -> Self {
+        Self::launch(None)
+    }
+
+    /// Like [`SshdHost::start`], also attached to `network`, where other
+    /// containers reach it as [`SshdHost::network_name`]. Its host keys are
+    /// fresh, so every container on the network has its own fingerprint.
+    pub fn start_on(network: &DockerNetwork) -> Self {
+        let host = Self::launch(Some(network.name()));
+        host.rotate_host_keys();
+        host
+    }
+
+    /// The container's name, which resolves to it on a [`DockerNetwork`].
+    pub fn network_name(&self) -> &str {
+        &self.container
+    }
+
+    fn launch(network: Option<&str>) -> Self {
         let bin = herdr_core_bin();
         let fixture = repo_root().join("fixtures/sshd");
         let image = sshd_image();
@@ -237,7 +320,7 @@ impl SshdHost {
             std::env::var("ARIES_TEST_CONTAINER_PREFIX").unwrap_or_else(|_| "aries-test".into());
         let container = unique(&format!("{prefix}-sshd"));
         let mount = format!("{}:/usr/local/bin/herdr-core:ro", bin.display());
-        docker(&[
+        let mut args = vec![
             "run",
             "-d",
             "--rm",
@@ -247,8 +330,12 @@ impl SshdHost {
             "127.0.0.1::22",
             "-v",
             &mount,
-            &image,
-        ]);
+        ];
+        if let Some(network) = network {
+            args.extend(["--network", network]);
+        }
+        args.push(&image);
+        docker(&args);
         let mut host = Self { container, port: 0 };
         let mapped = docker(&["port", &host.container, "22/tcp"]);
         host.port = mapped
@@ -346,6 +433,36 @@ impl Drop for SshdHost {
     fn drop(&mut self) {
         let _ = Command::new("docker")
             .args(["rm", "-f", &self.container])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+}
+
+/// A user-defined docker network, so [`SshdHost`]s can reach each other by
+/// name (jump host tests). Drop it after the containers on it.
+pub struct DockerNetwork {
+    name: String,
+}
+
+impl DockerNetwork {
+    pub fn create() -> Self {
+        let prefix =
+            std::env::var("ARIES_TEST_CONTAINER_PREFIX").unwrap_or_else(|_| "aries-test".into());
+        let name = unique(&format!("{prefix}-net"));
+        docker(&["network", "create", &name]);
+        Self { name }
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+impl Drop for DockerNetwork {
+    fn drop(&mut self) {
+        let _ = Command::new("docker")
+            .args(["network", "rm", &self.name])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status();
@@ -538,4 +655,52 @@ pub fn beacon_bin() -> PathBuf {
     let path = repo_root().join("target/debug/aries-beacon");
     assert!(path.is_file(), "{} missing", path.display());
     path
+}
+/// Path of the fake Agent (`fixtures/agents/fake/fake-agent`, POSIX sh).
+pub fn fake_agent_path() -> PathBuf {
+    repo_root().join("fixtures/agents/fake/fake-agent")
+}
+
+/// A fake Agent running in a Terminal: it reports OSC 7501 status, writes
+/// transcript fixtures and records every input line, as its script says.
+pub struct FakeAgent {
+    /// Terminal address (`t3`).
+    pub address: String,
+    input_log: PathBuf,
+}
+
+impl FakeAgent {
+    /// The input lines the Agent has read so far, in order.
+    pub fn inputs(&self) -> Vec<String> {
+        std::fs::read_to_string(&self.input_log)
+            .unwrap_or_default()
+            .lines()
+            .map(str::to_owned)
+            .collect()
+    }
+}
+
+impl HcSession {
+    /// Starts the fake Agent in a new background Terminal running `script`
+    /// (steps are documented in the fake-agent file).
+    pub fn run_fake_agent(&self, name: &str, script: &str) -> FakeAgent {
+        let dir = self.dir.path().join("agents").join(name);
+        std::fs::create_dir_all(&dir).expect("agent dir");
+        let script_path = dir.join("script");
+        std::fs::write(&script_path, script).expect("write agent script");
+        let input_log = dir.join("input");
+        let log_env = format!("FAKE_AGENT_INPUT={}", input_log.display());
+        let agent = fake_agent_path();
+        let address = self.run_bg(
+            name,
+            &[
+                "env",
+                &log_env,
+                "/bin/sh",
+                &agent.to_string_lossy(),
+                &script_path.to_string_lossy(),
+            ],
+        );
+        FakeAgent { address, input_log }
+    }
 }

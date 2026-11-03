@@ -22,13 +22,25 @@ pub(crate) enum HostKeyCheck {
 }
 
 /// SSH exec channel to `herdr-core connect` with public-key auth and
-/// trust-on-first-use Host key checking.
+/// trust-on-first-use Host key checking, optionally through jump hosts.
 pub(crate) struct Ssh {
     pub address: String,
     pub port: u16,
     pub user: String,
     pub key: PrivateKey,
     /// Trusted `SHA256:...` fingerprint, `None` before the first connection.
+    pub trusted: Option<String>,
+    /// Jump hosts in order: the first is reached directly, each next one
+    /// (and finally the Host) through a `direct-tcpip` channel of the last.
+    pub jumps: Vec<SshHop>,
+}
+
+/// One jump host, with its own key and trusted fingerprint.
+pub(crate) struct SshHop {
+    pub address: String,
+    pub port: u16,
+    pub user: String,
+    pub key: PrivateKey,
     pub trusted: Option<String>,
 }
 
@@ -65,38 +77,177 @@ impl client::Handler for Checker {
     }
 }
 
-/// Opens an SSH session to `address:port` and checks the Host key against
-/// `trusted` (trust on first use). Authentication is up to the caller.
-pub(super) async fn handshake(
-    address: &str,
-    port: u16,
-    trusted: Option<String>,
-) -> Result<client::Handle<Checker>, CoreError> {
-    let config = Arc::new(client::Config {
+/// Why one hop (a jump host or the Host) failed.
+enum HopFailure {
+    Check(HostKeyCheck),
+    AuthRejected,
+    Unreachable(String),
+}
+
+/// Who the SSH session is with, so failures name the right hop.
+#[derive(Clone, Copy)]
+enum Role {
+    Jump(u32),
+    Host,
+}
+
+impl HopFailure {
+    fn into_error(self, role: Role, address: &str) -> CoreError {
+        let address = address.to_owned();
+        match (role, self) {
+            (Role::Host, HopFailure::Check(HostKeyCheck::Unknown { fingerprint })) => {
+                CoreError::HostKeyUnknown { fingerprint }
+            }
+            (Role::Host, HopFailure::Check(HostKeyCheck::Changed { expected, actual })) => {
+                CoreError::HostKeyChanged { expected, actual }
+            }
+            (Role::Host, HopFailure::AuthRejected) => CoreError::AuthRejected,
+            (Role::Host, HopFailure::Unreachable(detail)) => CoreError::Unreachable { detail },
+            (Role::Jump(hop), HopFailure::Check(HostKeyCheck::Unknown { fingerprint })) => {
+                CoreError::JumpHostKeyUnknown {
+                    hop,
+                    address,
+                    fingerprint,
+                }
+            }
+            (Role::Jump(hop), HopFailure::Check(HostKeyCheck::Changed { expected, actual })) => {
+                CoreError::JumpHostKeyChanged {
+                    hop,
+                    address,
+                    expected,
+                    actual,
+                }
+            }
+            (Role::Jump(hop), HopFailure::AuthRejected) => {
+                CoreError::JumpAuthRejected { hop, address }
+            }
+            (Role::Jump(hop), HopFailure::Unreachable(detail)) => CoreError::Unreachable {
+                detail: format!("jump host {} ({address}): {detail}", hop + 1),
+            },
+            (_, HopFailure::Check(HostKeyCheck::Trusted)) => CoreError::Unreachable {
+                detail: format!("{address}: connection refused after the key check"),
+            },
+        }
+    }
+}
+
+pub(super) type Session = client::Handle<Checker>;
+
+fn client_config() -> Arc<client::Config> {
+    Arc::new(client::Config {
         keepalive_interval: Some(Duration::from_secs(15)),
         keepalive_max: 4,
         ..Default::default()
-    });
+    })
+}
+
+/// Opens an SSH session to one hop, directly or through `via`, and checks
+/// its Host key against `trusted` (trust on first use). Not authenticated.
+async fn handshake_hop(
+    config: Arc<client::Config>,
+    via: Option<&Session>,
+    address: &str,
+    port: u16,
+    trusted: Option<String>,
+) -> Result<Session, HopFailure> {
     let outcome = Arc::new(Mutex::new(None));
     let checker = Checker {
         trusted,
         outcome: outcome.clone(),
     };
-    let connected = tokio::time::timeout(
-        CONNECT_TIMEOUT,
-        client::connect(config, (address, port), checker),
-    )
-    .await
-    .map_err(|_| CoreError::Unreachable {
-        detail: "timed out".into(),
-    })?;
-    connected.map_err(|e| match outcome.lock().expect("outcome lock").take() {
-        Some(HostKeyCheck::Unknown { fingerprint }) => CoreError::HostKeyUnknown { fingerprint },
-        Some(HostKeyCheck::Changed { expected, actual }) => {
-            CoreError::HostKeyChanged { expected, actual }
+    let unreachable = |e: russh::Error| HopFailure::Unreachable(e.to_string());
+    let connected = match via {
+        None => {
+            tokio::time::timeout(
+                CONNECT_TIMEOUT,
+                client::connect(config, (address, port), checker),
+            )
+            .await
         }
-        _ => unreachable_err(e),
+        Some(prev) => {
+            let channel = prev
+                .channel_open_direct_tcpip(address, u32::from(port), "127.0.0.1", 0)
+                .await
+                .map_err(unreachable)?;
+            tokio::time::timeout(
+                CONNECT_TIMEOUT,
+                client::connect_stream(config, channel.into_stream(), checker),
+            )
+            .await
+        }
+    }
+    .map_err(|_| HopFailure::Unreachable("timed out".into()))?;
+    connected.map_err(|e| match outcome.lock().expect("outcome lock").take() {
+        Some(check @ (HostKeyCheck::Unknown { .. } | HostKeyCheck::Changed { .. })) => {
+            HopFailure::Check(check)
+        }
+        _ => unreachable(e),
     })
+}
+
+/// Opens a session to one hop, like [`handshake_hop`], and signs in with `key`.
+async fn reach(
+    config: Arc<client::Config>,
+    via: Option<&Session>,
+    address: &str,
+    port: u16,
+    user: &str,
+    key: &PrivateKey,
+    trusted: Option<String>,
+) -> Result<Session, HopFailure> {
+    let mut session = handshake_hop(config, via, address, port, trusted).await?;
+    let auth = session
+        .authenticate_publickey(
+            user.to_owned(),
+            PrivateKeyWithHashAlg::new(Arc::new(key.clone()), None),
+        )
+        .await
+        .map_err(|e| HopFailure::Unreachable(e.to_string()))?;
+    if !auth.success() {
+        return Err(HopFailure::AuthRejected);
+    }
+    Ok(session)
+}
+
+/// Signs in to every jump host in order. The Host is reached through the
+/// last session; all of them must stay alive while it is used.
+async fn through_jumps(
+    config: &Arc<client::Config>,
+    jumps: &[SshHop],
+) -> Result<Vec<Session>, CoreError> {
+    let mut sessions: Vec<Session> = Vec::with_capacity(jumps.len() + 1);
+    for (i, hop) in jumps.iter().enumerate() {
+        let session = reach(
+            config.clone(),
+            sessions.last(),
+            &hop.address,
+            hop.port,
+            &hop.user,
+            &hop.key,
+            hop.trusted.clone(),
+        )
+        .await
+        .map_err(|f| f.into_error(Role::Jump(i as u32), &hop.address))?;
+        sessions.push(session);
+    }
+    Ok(sessions)
+}
+
+/// Opens an SSH session to the Host at `address:port` through `jumps` and
+/// checks its Host key against `trusted`. Authentication to the Host is up
+/// to the caller. Returns the jump sessions, which must outlive the Host's.
+pub(super) async fn handshake(
+    jumps: &[SshHop],
+    address: &str,
+    port: u16,
+    trusted: Option<String>,
+) -> Result<(Vec<Session>, Session), CoreError> {
+    let config = client_config();
+    let sessions = through_jumps(&config, jumps).await?;
+    let session = handshake_hop(config, sessions.last(), address, port, trusted)
+        .await
+        .map_err(|f| f.into_error(Role::Host, address))?;
+    Ok((sessions, session))
 }
 
 pub(super) fn unreachable_err(e: impl std::fmt::Display) -> CoreError {
@@ -120,26 +271,30 @@ impl ExecOutput {
 }
 
 impl Ssh {
-    /// Connects, checks the Host key and authenticates with the app's key.
-    async fn session(&self) -> Result<client::Handle<Checker>, CoreError> {
-        let mut session = handshake(&self.address, self.port, self.trusted.clone()).await?;
-        let auth = session
-            .authenticate_publickey(
-                self.user.clone(),
-                PrivateKeyWithHashAlg::new(Arc::new(self.key.clone()), None),
-            )
-            .await
-            .map_err(unreachable_err)?;
-        if !auth.success() {
-            return Err(CoreError::AuthRejected);
-        }
-        Ok(session)
+    /// Connects through the jump hosts, checks every Host key and signs in
+    /// with each hop's key. Returns the jump sessions, which carry the
+    /// Host's and must outlive it, and the Host session.
+    async fn session(&self) -> Result<(Vec<Session>, Session), CoreError> {
+        let config = client_config();
+        let jumps = through_jumps(&config, &self.jumps).await?;
+        let session = reach(
+            config,
+            jumps.last(),
+            &self.address,
+            self.port,
+            &self.user,
+            &self.key,
+            self.trusted.clone(),
+        )
+        .await
+        .map_err(|f| f.into_error(Role::Host, &self.address))?;
+        Ok((jumps, session))
     }
 
     /// Runs `command` on the Host (no PTY), feeds it `stdin` then EOF, and
     /// collects its output.
     pub async fn exec(&self, command: &str, stdin: &[u8]) -> Result<ExecOutput, CoreError> {
-        let session = self.session().await?;
+        let (_jumps, session) = self.session().await?;
         let mut channel = session
             .channel_open_session()
             .await
@@ -171,7 +326,7 @@ impl Ssh {
     }
 
     async fn open_inner(&self) -> Result<Stream, CoreError> {
-        let session = self.session().await?;
+        let (mut sessions, session) = self.session().await?;
         let channel = session
             .channel_open_session()
             .await
@@ -180,11 +335,13 @@ impl Ssh {
             .exec(true, REMOTE_COMMAND)
             .await
             .map_err(unreachable_err)?;
+        sessions.push(session);
         let (reader, writer) = tokio::io::split(channel.into_stream());
         Ok(Stream {
             reader: Box::new(reader),
             writer: Box::new(writer),
-            guard: Box::new(Mutex::new(session)),
+            // The jump sessions carry the Host's; keep them all alive.
+            guard: Box::new(Mutex::new(sessions)),
         })
     }
 }

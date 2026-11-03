@@ -56,6 +56,29 @@
     <string name="terminals_empty">No Terminals are running on this Host.</string>
     <string name="terminal_subtitle">%1$s · %2$s</string>
 
+    <string name="agent_status_working">Working</string>
+    <string name="agent_status_blocked">Blocked</string>
+    <string name="agent_status_blocked_permission">Blocked: permission</string>
+    <string name="agent_status_blocked_question">Blocked: question</string>
+    <string name="agent_status_blocked_auth">Blocked: sign-in</string>
+    <string name="agent_status_error">Error</string>
+    <string name="agent_status_done">Done</string>
+    <string name="agent_status_idle">Idle</string>
+    <string name="agent_attention_label">Needs you</string>
+    <string name="space_unnamed">Unnamed Space</string>
+    <string name="space_summary">Tabs: %1$d · Panes: %2$d</string>
+    <string name="space_no_tabs">This Space has no Tabs.</string>
+    <string name="tab_unnamed">Unnamed Tab</string>
+    <string name="tab_empty">This Tab has no Terminals.</string>
+    <string name="pane_terminal_gone">%1$s (ended)</string>
+    <string name="pane_zoom_button">Zoom</string>
+    <string name="pane_unzoom_button">Show all Panes</string>
+    <string name="unplaced_title">Other Terminals</string>
+    <string name="structure_no_document">herdr-app has not saved a layout on this Host. Terminals are grouped by their Space and Tab labels.</string>
+    <string name="structure_unreadable">The herdr-app layout on this Host could not be read (%1$s). Terminals are grouped by their Space and Tab labels.</string>
+    <string name="structure_unknown_format">The herdr-app layout on this Host is in a format Aries does not know. Terminals are grouped by their Space and Tab labels. Update Aries.</string>
+    <string name="structure_connection_closed">The connection to the Host closed. What you see may be out of date.</string>
+
     <string name="host_key_trust_title">Trust this Host?</string>
     <string name="host_key_trust_body">This is the first connection to %1$s. Check that its Host key fingerprint is:\n\n%2$s\n\nOn the Host, run: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</string>
     <string name="host_key_trust_button">Trust and connect</string>
@@ -96,4 +119,26 @@
     <string name="beacon_unavailable_body">This version of Aries has no Beacon for %1$s/%2$s yet.</string>
     <string name="beacon_download_body">Could not download the Beacon: %1$s</string>
     <string name="beacon_step_body">Step "%1$s" failed on the Host: %2$s</string>
+
+    <string name="key_default_label">Default key</string>
+    <string name="keys_title">Other SSH keys</string>
+    <string name="key_new_label">Label for a new key</string>
+    <string name="key_new_button">Create another key</string>
+
+    <string name="host_jumps_button">Jump hosts</string>
+    <string name="host_jumps_summary">via %1$s</string>
+    <string name="jumps_title">Route to %1$s</string>
+    <string name="jumps_hint">Aries signs in to each jump host in order, then to the Host through the last one.</string>
+    <string name="jumps_empty">No jump hosts: Aries connects to the Host directly.</string>
+    <string name="jumps_hop_title">Jump host %1$d</string>
+    <string name="jumps_add_button">Add jump host</string>
+    <string name="jumps_remove_button">Remove</string>
+    <string name="jumps_key_label">Key: %1$s</string>
+    <string name="jumps_host_key_label">Key for the Host: %1$s</string>
+    <string name="jumps_save_button">Save</string>
+    <string name="jump_key_trust_title">Trust this jump host?</string>
+    <string name="jump_key_trust_body">This is the first connection to jump host %1$d (%2$s) on the way to %3$s. Check that its Host key fingerprint is:\n\n%4$s\n\nOn the jump host, run: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</string>
+    <string name="jump_key_changed_title">Jump host key changed</string>
+    <string name="jump_key_changed_body">Jump host %1$d (%2$s) presented a different key than before, so Aries did not connect. Someone may be intercepting the connection, or the jump host was reinstalled.\n\nTrusted: %3$s\nNow: %4$s</string>
+    <string name="connect_jump_auth_rejected">Jump host %1$d (%2$s) did not accept the key chosen for it. Add that key\'s public key to ~/.ssh/authorized_keys on the jump host.</string>
 </resources>

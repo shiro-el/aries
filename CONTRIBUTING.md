@@ -26,7 +26,7 @@ scripts/fetch-herdr-core.sh                         # once: pinned herdr-core 0.
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace                              # unit + core API tests against real herdr-core
-cargo test -p aries-core -- --ignored              # SSH, password bootstrap and Beacon install tests (docker)
+cargo test -p aries-core -- --ignored              # SSH, jump host, password bootstrap + Beacon tests (docker)
 cd android && ./gradlew :app:testDebugUnitTest      # Compose UI tests against a fake core (Robolectric)
 cd android && ./gradlew :app:assembleDebug          # debug APK (builds the core with cargo-ndk)
 cd android && ./gradlew :app:connectedDebugAndroidTest   # device tests (Android Keystore); needs a device/emulator
@@ -104,10 +104,42 @@ managed skills) adds its own removal step there and tests it in
 checksums come from the Beacon release pipeline; tests swap it with
 `AriesCore::set_beacon_release`.
 
+## Releases
+
+Pushing a tag `vX.Y.Z` (or `vX.Y.Z-rc.N`, a prerelease) runs
+`.github/workflows/release.yml`: it builds the APK and AAB signed with the
+upload key, checks the signature and the Play policy rules
+(`scripts/check-play-policy.py`), publishes the APK, `SHA256SUMS` and the
+third-party notices on GitHub Releases, and uploads the AAB to Play internal
+testing when the repo variable `PLAY_UPLOAD_ENABLED` is `true` (service
+account in the secret `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`; release status from
+`PLAY_RELEASE_STATUS`, default `draft`). `scripts/release-version.sh` maps the
+tag to versionName/versionCode; every versionCode is above legacy Aries' 235.
+
+CI secrets: `ANDROID_UPLOAD_KEYSTORE_BASE64`, `ANDROID_UPLOAD_STORE_PASSWORD`,
+`ANDROID_UPLOAD_KEY_PASSWORD`, `ANDROID_UPLOAD_KEY_ALIAS`,
+`GOOGLE_SERVICES_JSON_BASE64`. A local signed build reads the key from
+`ARIES_UPLOAD_KEYSTORE`, `ARIES_UPLOAD_STORE_PASSWORD`, `ARIES_UPLOAD_KEY_ALIAS`,
+`ARIES_UPLOAD_KEY_PASSWORD`, or from a properties file
+(`storeFile`/`storePassword`/`keyAlias`/`keyPassword`) named by
+`ARIES_UPLOAD_KEYSTORE_PROPERTIES`; without one the release APK is unsigned:
+
+```sh
+scripts/build-release.sh v0.1.0-rc.1 dist/      # needs cargo-ndk and cargo-about
+```
+
+Release builds need `cargo install cargo-about --locked --features cli`.
+
 ## License
 
-Code is Apache-2.0 (`LICENSE`). The logo set is excluded from it and carries
-its own license file when added. Do not copy code from whip or aries-legacy
+Code is Apache-2.0 (`LICENSE`, `NOTICE`). The logo set in `assets/aries/` is
+excluded from it and carries its own license (`assets/aries/LICENSE`); so do
+icons generated from it. Third-party notices are generated for release builds:
+Rust crates by cargo-about (`licenses/cargo-about.toml`, shipped as
+`assets/licenses/rust-crates.txt`), Android dependencies by licensee (allowed
+licenses in `android/app/build.gradle.kts`, shipped as
+`assets/app/cash/licensee/artifacts.json`). A dependency under a license
+outside those lists fails the build. Do not copy code from whip or aries-legacy
 (AGPL). The herdr-core client is written from herdr-core's public protocol docs
 (Apache-2.0); Aries does not depend on aries-legacy's MIT `herdr-protocol`
 crate, because it also carries the legacy Herdr 1 protocol Aries does not
