@@ -17,6 +17,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -68,6 +69,7 @@ internal sealed interface ChatMarkdownBlock {
         val headingLevel: Int = 0,
         val depth: Int = 0,
         val quoted: Boolean = false,
+        val continuation: Boolean = false,
     ) : ChatMarkdownBlock
     data class Cells(val cells: List<MarkdownCell>, val scroll: ScrollState) : ChatMarkdownBlock
     data class CodeHeader(val code: MarkdownCode) : ChatMarkdownBlock
@@ -114,15 +116,17 @@ internal fun LazyListScope.chatMarkdownItems(id: String, document: ChatMarkdownD
         document?.blocks.orEmpty(),
         key = { index, _ -> "transcript:$id:markdown:$index" },
         contentType = { _, block -> block::class },
-    ) { _, block ->
-        ChatTextActions(document?.source.orEmpty(), interceptChildLongPress = true) { actions ->
-            ChatMarkdownBlockView(block, actions)
+    ) { index, block ->
+        CompositionLocalProvider(LocalChatSearchEntry provides id) {
+            ChatTextActions(document?.source.orEmpty(), interceptChildLongPress = true) { actions ->
+                ChatMarkdownBlockView(block, actions, "markdown:$index")
+            }
         }
     }
 }
 
 @Composable
-private fun ChatMarkdownBlockView(block: ChatMarkdownBlock, actions: Modifier) {
+private fun ChatMarkdownBlockView(block: ChatMarkdownBlock, actions: Modifier, searchKey: String) {
     when (block) {
         is ChatMarkdownBlock.Prose -> {
             val open = LocalOpenRemoteFile.current
@@ -137,8 +141,8 @@ private fun ChatMarkdownBlockView(block: ChatMarkdownBlock, actions: Modifier) {
                 else -> MaterialTheme.typography.bodyLarge
             }
             val quoteColor = MaterialTheme.colorScheme.outline
-            Text(
-                linked,
+            SearchableChatText(
+                linked, searchKey,
                 Modifier.fillMaxWidth().padding(start = 16.dp + 12.dp * block.depth.coerceAtMost(8), end = 16.dp, top = 4.dp, bottom = 4.dp)
                     .then(actions)
                     .then(if (block.quoted) Modifier.drawBehind {
@@ -149,12 +153,12 @@ private fun ChatMarkdownBlockView(block: ChatMarkdownBlock, actions: Modifier) {
             )
         }
         is ChatMarkdownBlock.Cells -> Row(Modifier.padding(horizontal = 16.dp).horizontalScroll(block.scroll)) {
-            block.cells.forEach { cell ->
+            block.cells.forEachIndexed { index, cell ->
                 val open = LocalOpenRemoteFile.current
                 val color = MaterialTheme.colorScheme.primary
                 val linked = remember(cell.text, open, color) { annotateChatFileLinks(cell.text, open, color) }
-                Text(
-                    linked,
+                SearchableChatText(
+                    linked, "$searchKey:cell:$index",
                     Modifier.width(160.dp)
                         .then(actions)
                         .background(if (cell.header) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface)
@@ -200,8 +204,8 @@ private fun ChatMarkdownBlockView(block: ChatMarkdownBlock, actions: Modifier) {
             }
             val width = with(LocalDensity.current) { (9.sp * block.code.columns.coerceAtLeast(1)).toDp() } + 24.dp
             Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp).background(palette.surfaceVariant).horizontalScroll(block.code.scroll)) {
-                Text(
-                    highlighted,
+                SearchableChatText(
+                    highlighted, searchKey,
                     Modifier.width(width).padding(horizontal = 12.dp).then(actions),
                     fontFamily = FontFamily.Monospace,
                     fontSize = 14.sp,
@@ -248,7 +252,7 @@ private fun parseChatMarkdown(source: String): ChatMarkdownDocument {
                         }
                         if (text[end - 1].isHighSurrogate()) end--
                     }
-                    blocks += ChatMarkdownBlock.Prose(text.subSequence(start, end), (node as? Heading)?.level ?: 0, depth, quoted)
+                    blocks += ChatMarkdownBlock.Prose(text.subSequence(start, end), (node as? Heading)?.level ?: 0, depth, quoted, continuation = start > 0)
                     start = end
                 }
             }
