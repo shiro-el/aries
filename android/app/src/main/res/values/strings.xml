@@ -5,6 +5,24 @@
   Add every new string to values-ko/strings.xml too (TranslationsTest checks it).
 -->
 <resources>
+    <!-- App lock (117) -->
+    <string name="app_lock_settings_title">App lock</string>
+    <string name="app_lock_enabled_label">Require authentication</string>
+    <string name="app_lock_settings_hint">Protect app content when returning from the background. Notification actions keep working as before.</string>
+    <string name="app_lock_delay_label">Lock after leaving the app</string>
+    <string name="app_lock_delay_immediate">Immediately</string>
+    <string name="app_lock_delay_one_minute">1 minute</string>
+    <string name="app_lock_delay_five_minutes">5 minutes</string>
+    <string name="app_lock_previews_label">Hide app previews</string>
+    <string name="app_lock_previews_hint">Hide Aries in Recents and block screenshots and screen sharing while app lock is enabled.</string>
+    <string name="app_lock_screen_title">Aries is locked</string>
+    <string name="app_lock_screen_body">Authenticate with biometrics or your device lock to continue.</string>
+    <string name="app_lock_unlock_button">Unlock Aries</string>
+    <string name="app_lock_authenticating">Authenticating…</string>
+    <string name="app_lock_cancelled">Authentication cancelled.</string>
+    <string name="app_lock_failed">Authentication failed. Try again.</string>
+    <string name="app_lock_unavailable">Set up a device PIN, pattern or password in Android settings, then try again.</string>
+
     <!-- Quick open and command palette -->
     <string name="quick_open_title">Quick open</string>
     <string name="quick_open_hint">Search names, or &gt; for commands</string>

@@ -36,6 +36,9 @@ class AriesApplication : Application(), HasCore, Configuration.Provider {
 
     private val companionScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    /** Only the policy is persisted; an unlocked app session lives for this process. */
+    val appLock by lazy { io.github.shiroel.aries.security.AppLock.from(this) }
+
     /** Seals the SSH key. [MainActivity] installs its biometric prompt while resumed. */
     val vault = KeystoreVault()
 
