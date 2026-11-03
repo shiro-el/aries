@@ -439,4 +439,11 @@
     <string name="host_edit_title">Host 편집</string>
     <string name="host_edit_save_button">저장</string>
     <string name="host_edit_invalid_body">중복되지 않는 Host 이름, 올바른 주소와 사용자, 1~65535 사이의 포트를 입력하세요.</string>
+    <string name="push_channel_done">완료</string>
+    <string name="push_channel_attention">막힘 및 오류</string>
+    <string name="push_host_summary">%1$s: 대기 %2$d</string>
+    <string name="quiet_hours_title">조용한 시간</string>
+    <string name="quiet_hours_hint">기기 현지 시각을 기준으로 완료·막힘·오류 알림을 무음으로 표시합니다. Call 알림 설정은 유지됩니다. 시작과 끝이 같으면 하루 종일 적용됩니다.</string>
+    <string name="quiet_hours_start">시작</string>
+    <string name="quiet_hours_end">끝</string>
 </resources>
