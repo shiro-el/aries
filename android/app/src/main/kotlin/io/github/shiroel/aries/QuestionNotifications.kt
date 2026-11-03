@@ -65,23 +65,27 @@ object QuestionNotifications {
     }
 
     fun post(context: Context, notice: QuestionNotice, view: QuestionView) {
-        val manager = context.getSystemService(NotificationManager::class.java)
-        val current = manager.activeNotifications.find { it.id == notice.hostId.hashCode() && it.tag == notice.terminal }
-        // A newer push or dismissal wins over an old answer's completion.
-        if (current == null || current.notification.extras.getString(QUESTION_ID) != notice.question.id) return
-        // Clear the recovered Notification's action array as well: an empty
-        // builder action list can otherwise retain the original buttons.
-        val previous = current.notification.clone().apply { actions = null }
-        val builder = Notification.Builder.recoverBuilder(context, previous)
-            .setOnlyAlertOnce(true)
-        val line = when (view) {
-            is QuestionView.Sending -> context.getString(R.string.call_notify_sending, notice.question.options[view.choice])
-            is QuestionView.Done -> view.line
+        // Use the same monitor as grouped posts/dismissals, so the identity
+        // check and replacement cannot race a newer push.
+        synchronized(NotificationGroups) {
+            val manager = context.getSystemService(NotificationManager::class.java)
+            val current = manager.activeNotifications.find { it.id == notice.hostId.hashCode() && it.tag == notice.terminal }
+            // A newer push or dismissal wins over an old answer's completion.
+            if (current == null || current.notification.extras.getString(QUESTION_ID) != notice.question.id) return
+            // Clear the recovered Notification's action array as well: an empty
+            // builder action list can otherwise retain the original buttons.
+            val previous = current.notification.clone().apply { actions = null }
+            val builder = Notification.Builder.recoverBuilder(context, previous)
+                .setOnlyAlertOnce(true)
+            val line = when (view) {
+                is QuestionView.Sending -> context.getString(R.string.call_notify_sending, notice.question.options[view.choice])
+                is QuestionView.Done -> view.line
+            }
+            builder.setContentText(line)
+                .setStyle(Notification.BigTextStyle().bigText(listOf(notice.question.text, line).joinToString("\n")))
+            if (view is QuestionView.Done && view.openApp) builder.addAction(openAction(context, notice.hostId, notice.terminal))
+            NotificationGroups.post(context, notice.hostId, notice.hostName, notice.terminal, builder.build())
         }
-        builder.setContentText(line)
-            .setStyle(Notification.BigTextStyle().bigText(listOf(notice.question.text, line).joinToString("\n")))
-        if (view is QuestionView.Done && view.openApp) builder.addAction(openAction(context, notice.hostId, notice.terminal))
-        NotificationGroups.post(context, notice.hostId, notice.hostName, notice.terminal, builder.build())
     }
 
     private const val QUESTION_ID = "aries.question.id"
