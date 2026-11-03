@@ -62,7 +62,7 @@ class PushSectionTest {
         }
     }
 
-    private fun installed() = BeaconState.Installed("0.1.0", 1u, true, "0.1.17", true, true, ">=0.1.0, <0.2.0", "linux")
+    private fun installed() = BeaconState.Installed("0.1.0", 1u, true, "0.1.17", true, true, ">=0.1.0, <0.2.0", "linux", emptyList())
 
     private fun connectTo(core: FakeCore, platform: PushPlatform = Platform()): HostsModel {
         core.addHost("box", Endpoint.Ssh("10.0.0.2", 22u, "me"))

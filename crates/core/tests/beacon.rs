@@ -213,10 +213,18 @@ async fn installs_the_call_human_skill_and_removal_keeps_the_users_version() {
     s.core
         .set_beacon_release(release(env!("CARGO_PKG_VERSION"), sha256sum(&bytes)));
     let fetcher = Fetcher::new(bytes);
-    s.core
+    let install = s
+        .core
         .install_beacon(s.id.clone(), fetcher.clone())
         .await
         .unwrap();
+    assert_eq!(install.skills.len(), 2);
+    assert!(
+        install
+            .skills
+            .iter()
+            .all(|r| r.outcome == aries_core::BeaconSkillOutcome::Installed)
+    );
     for dir in [CLAUDE_SKILL, AGENTS_SKILL] {
         assert!(
             s.host
@@ -231,10 +239,22 @@ async fn installs_the_call_human_skill_and_removal_keeps_the_users_version() {
         &s.host,
         &format!("echo mine > {CLAUDE_SKILL}/SKILL.md && echo notes > {AGENTS_SKILL}/NOTES.md"),
     );
-    s.core
+    let install = s
+        .core
         .install_beacon(s.id.clone(), fetcher.clone())
         .await
         .unwrap();
+    assert_eq!(
+        install.skills.iter().map(|r| r.outcome).collect::<Vec<_>>(),
+        [
+            aries_core::BeaconSkillOutcome::KeptModified,
+            aries_core::BeaconSkillOutcome::Unchanged,
+        ]
+    );
+    match s.core.beacon_status(s.id.clone()).await.unwrap() {
+        BeaconState::Installed { skills, .. } => assert_eq!(skills, Some(install.skills)),
+        other => panic!("{other:?}"),
+    }
     assert!(
         s.host
             .check(&format!("test \"$(cat {CLAUDE_SKILL}/SKILL.md)\" = mine"))
@@ -289,6 +309,7 @@ const FUTURE_BEACON: &str = r#"#!/bin/sh
 case "$1" in
   --version) echo "aries-beacon 9.0.0 (contract 1)" ;;
   status) echo '{"version":"9.0.0","contract":1,"running":true,"core_version":"0.1.17","linger":true}' ;;
+  skill) echo '{"roots":[]}' ;;
   serve) exec sleep 1000000 ;;
 esac
 "#;
@@ -314,8 +335,10 @@ async fn shows_a_beacon_outside_the_allowed_range_and_reports_linger() {
             version,
             supported,
             allowed,
+            skills,
             ..
         } => {
+            assert_eq!(skills, None);
             assert_eq!(version, "9.0.0");
             assert!(!supported);
             assert_eq!(allowed, ">=0.1.0, <0.2.0");
@@ -420,6 +443,7 @@ fn fake_beacon(version: &str) -> Vec<u8> {
 case "$1" in
   --version) echo "aries-beacon {version} (contract 1)" ;;
   status) echo '{{"version":"{version}","contract":1,"running":true,"core_version":"0.1.17","linger":false}}' ;;
+  skill) echo '{{"roots":[]}}' ;;
   serve) exec sleep 1000000 ;;
 esac
 "#
@@ -813,4 +837,46 @@ async fn manages_the_pi_extension_with_the_beacon() {
     assert!(s.host.check(&format!("test -f {PI_EXT}")));
     s.core.uninstall_beacon(s.id.clone()).await.unwrap();
     assert!(s.host.check("test ! -e /home/aries/.pi"));
+}
+
+#[tokio::test]
+#[ignore = "needs docker"]
+async fn install_and_status_report_both_foreign_call_human_skills() {
+    use aries_core::{BeaconSkillOutcome, BeaconSkillRoot};
+    let s = setup();
+    as_user(
+        &s.host,
+        &format!(
+            "mkdir -p {CLAUDE_SKILL} {AGENTS_SKILL} && echo foreign > {CLAUDE_SKILL}/SKILL.md && echo foreign > {AGENTS_SKILL}/SKILL.md"
+        ),
+    );
+    let bytes = std::fs::read(beacon_bin()).unwrap();
+    s.core
+        .set_beacon_release(release(env!("CARGO_PKG_VERSION"), sha256sum(&bytes)));
+    let fetcher = Fetcher::new(bytes);
+    let expected: Vec<_> = [CLAUDE_SKILL, AGENTS_SKILL]
+        .into_iter()
+        .map(|path| BeaconSkillRoot {
+            path: path.into(),
+            outcome: BeaconSkillOutcome::KeptForeign,
+        })
+        .collect();
+    // Reinstall/update must also expose preservation, rather than quiet success.
+    for _ in 0..2 {
+        let install = s
+            .core
+            .install_beacon(s.id.clone(), fetcher.clone())
+            .await
+            .unwrap();
+        assert_eq!(install.skills, expected);
+        match s.core.beacon_status(s.id.clone()).await.unwrap() {
+            BeaconState::Installed { skills, .. } => assert_eq!(skills, Some(expected.clone())),
+            other => panic!("{other:?}"),
+        }
+        for dir in [CLAUDE_SKILL, AGENTS_SKILL] {
+            assert!(s.host.check(&format!(
+                "test \"$(cat {dir}/SKILL.md)\" = foreign && test ! -e {dir}/.aries-beacon.json"
+            )));
+        }
+    }
 }

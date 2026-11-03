@@ -13,6 +13,8 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.BeaconFetcher
+import io.github.shiroel.aries.core.BeaconSkillOutcome
+import io.github.shiroel.aries.core.BeaconSkillRoot
 import io.github.shiroel.aries.core.BeaconState
 import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Endpoint
@@ -61,6 +63,52 @@ class BeaconSectionTest {
 
         compose.onNodeWithText(str(R.string.beacon_version, "0.1.0")).assertExists()
         compose.onNodeWithText(str(R.string.beacon_attached, "0.1.17")).assertExists()
+    }
+
+    @Test
+    fun showsBothForeignSkillPathsOnConnectAndAfterReinstall() {
+        val core = FakeCore().apply {
+            beaconSkills = listOf("/home/me/.claude/skills/call-human", "/home/me/.agents/skills/call-human").map {
+                BeaconSkillRoot(it, BeaconSkillOutcome.KEPT_FOREIGN)
+            }
+            beacon = installed("0.1.0")
+        }
+        connectTo(core)
+        fun assertConflicts() {
+            core.beaconSkills!!.forEach { skill ->
+                compose.onNodeWithText(skill.path).assertExists()
+            }
+            compose.onAllNodesWithText(
+                str(R.string.beacon_skill_foreign),
+            ).assertCountEquals(2)
+        }
+        assertConflicts()
+        click(R.string.beacon_reinstall_button)
+        assertConflicts()
+    }
+
+    @Test
+    fun showsModifiedAndSymlinkPreservationReasons() {
+        val core = FakeCore().apply {
+            beaconSkills = listOf(
+                BeaconSkillRoot("/home/me/.claude/skills/call-human", BeaconSkillOutcome.KEPT_MODIFIED),
+                BeaconSkillRoot("/home/me/.agents/skills/call-human", BeaconSkillOutcome.KEPT_SYMLINK),
+            )
+            beacon = installed("0.1.0")
+        }
+        connectTo(core)
+        compose.onNodeWithText(str(R.string.beacon_skill_modified)).assertExists()
+        compose.onNodeWithText(str(R.string.beacon_skill_symlink)).assertExists()
+    }
+
+    @Test
+    fun anOlderBeaconDoesNotImplyThatTheCallSkillIsReady() {
+        val core = FakeCore().apply {
+            beaconSkills = null
+            beacon = installed("0.1.0")
+        }
+        connectTo(core)
+        compose.onNodeWithText(str(R.string.beacon_skill_unknown)).assertExists()
     }
 
     @Test
