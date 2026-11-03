@@ -448,7 +448,11 @@ async fn a_slow_git_lookup_falls_back_within_budget_and_is_cached() {
     // Even partial output supplies the Host home, so cwd == HOME is still ~.
     assert_eq!(s.spaces[0].name, "~");
     assert_eq!(s.spaces[0].tabs[0].name, "1");
-    assert_eq!(conn.structure().await.unwrap(), s);
+    // Foreground process data can change between reads; this cache stores
+    // folder-derived names, not a frozen Terminal snapshot.
+    let cached = conn.structure().await.unwrap();
+    assert_eq!(cached.spaces[0].name, s.spaces[0].name);
+    assert_eq!(cached.spaces[0].tabs[0].name, s.spaces[0].tabs[0].name);
     assert_eq!(std::fs::read_to_string(calls).unwrap(), "x");
     conn.disconnect().await;
 }
