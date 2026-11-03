@@ -4,6 +4,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -104,23 +105,33 @@ class BrowseScreenTest {
     }
 
     @Test
-    fun hostTreeStartsExpandedAndHeadersToggleWithoutNavigating() {
-        val core = FakeCore().apply { structure = desktop }
+    fun hostPriorityListCrossesTabsAndPlainTerminalsFoldWithoutHidingAgents() {
+        val working = claude.copy(agentStatus = AgentStatus.Working)
+        val blocked = codex.copy(agentStatus = AgentStatus.Blocked(null, null))
+        val core = FakeCore().apply {
+            structure = desktop.copy(spaces = listOf(desktop.spaces.first().copy(tabs = listOf(
+                TabInfo("tab1", "agents", listOf(pane("p1", working))),
+                TabInfo("tab2", "review", listOf(pane("p2", blocked), pane("p3", shell))),
+            ))))
+            terminals = listOf(working, blocked, shell, stray)
+        }
         open(core)
-        compose.onNodeWithText("claude-main").assertExists()
-        compose.onNodeWithText("build-shell").assertExists()
-        compose.onNodeWithText("agents").performClick()
-        compose.onNodeWithText("claude-main").assertDoesNotExist()
-        compose.onNodeWithText("build-shell").assertExists()
-        compose.onNodeWithText("agents").performClick()
-        compose.onNodeWithText("claude-main").assertExists()
-        compose.onNodeWithText("aries").performClick()
-        compose.onNodeWithText("agents").assertDoesNotExist()
-        compose.onNodeWithText("stray-job").performScrollTo().assertExists()
-        compose.onNodeWithText("aries").performClick()
-        compose.onNodeWithText("claude-main").performClick()
+        val urgent = compose.onNodeWithText("codex-review").fetchSemanticsNode().boundsInRoot
+        val active = compose.onNodeWithText("claude-main").fetchSemanticsNode().boundsInRoot
+        assertTrue("Urgency must cross Tab boundaries", urgent.top < active.top)
+        // With matching urgency, Browse must use the core list's sequence just like Agents.
+        core.push(listOf(blocked.copy(agentStatus = AgentStatus.Working), working, shell, stray))
         compose.waitForIdle()
-        assertEquals("t1", core.connection!!.views.single().address)
+        assertTrue("Core sequence must break equal-urgency ties across Tabs",
+            compose.onNodeWithText("claude-main").fetchSemanticsNode().boundsInRoot.top <
+                compose.onNodeWithText("codex-review").fetchSemanticsNode().boundsInRoot.top)
+        compose.onNodeWithTag("host-plain-terminals").performClick()
+        compose.onNodeWithText("build-shell").assertDoesNotExist()
+        compose.onNodeWithText("codex-review").assertExists()
+        compose.onNodeWithTag("host-plain-terminals").performClick()
+        compose.onNodeWithText("stray-job").performScrollTo().performClick()
+        compose.waitForIdle()
+        assertEquals("t9", core.connection!!.views.single().address)
     }
 
     @Test
@@ -131,6 +142,7 @@ class BrowseScreenTest {
             )), emptyList(), null)
         }
         open(core)
+        compose.onNodeWithTag("host-layout-context").performClick()
         compose.onNodeWithText("  ").assertExists()
         compose.onNodeWithText("   ").assertExists()
     }
@@ -140,7 +152,7 @@ class BrowseScreenTest {
         val core = FakeCore().apply { structure = desktop }
         open(core)
 
-        compose.onNodeWithText(str(R.string.unplaced_title)).performScrollTo().assertExists()
+        compose.onNodeWithTag("host-plain-terminals").performScrollTo().assertExists()
         compose.onNodeWithText("stray-job").performScrollTo().assertExists()
     }
 
@@ -149,7 +161,6 @@ class BrowseScreenTest {
         val core = FakeCore().apply { structure = desktop }
         open(core)
 
-        compose.onNodeWithText("1").assertExists()
         compose.onNodeWithText(str(R.string.pane_terminal_gone, "t99")).assertExists()
     }
 
@@ -167,28 +178,29 @@ class BrowseScreenTest {
     fun followsDesktopChangesRightAway() {
         val core = FakeCore().apply { structure = desktop }
         open(core)
-        compose.onNodeWithText("aries").assertExists()
+        compose.onNodeWithTag("host-layout-context").performClick()
+        compose.onNodeWithTag("host-context-space:s1").assertTextEquals("aries")
 
         val renamed = desktop.copy(spaces = listOf(desktop.spaces[0].copy(name = "aries-renamed")))
         core.connection!!.push(renamed)
         compose.waitForIdle()
 
-        compose.onNodeWithText("aries-renamed").assertExists()
-        compose.onNodeWithText("~").assertDoesNotExist()
+        compose.onNodeWithTag("host-context-space:s1").assertTextEquals("aries-renamed")
+        compose.onNodeWithTag("host-context-space:s2").assertDoesNotExist()
     }
 
     @Test
-    fun foldedSpaceSurvivesLeavingAndReopeningTheHost() {
+    fun foldedTerminalsSurviveLeavingAndReopeningTheHost() {
         val core = FakeCore().apply { structure = desktop }
         open(core)
-        compose.onNodeWithText("aries").performClick()
+        compose.onNodeWithTag("host-plain-terminals").performClick()
         compose.onNodeWithText("claude-main").assertDoesNotExist()
         compose.openConsoleDrawer()
         compose.onNodeWithTag("drawer-hosts").performClick()
         compose.onNodeWithText("home").performClick()
         compose.waitForIdle()
         compose.onNodeWithText("claude-main").assertDoesNotExist()
-        compose.onNodeWithText("aries").performClick()
+        compose.onNodeWithTag("host-plain-terminals").performClick()
         compose.onNodeWithText("claude-main").assertExists()
     }
 
