@@ -15,6 +15,8 @@ import io.github.shiroel.aries.core.StructureWatch
 import io.github.shiroel.aries.core.KeyInstall
 import io.github.shiroel.aries.core.QrMatrix
 import io.github.shiroel.aries.core.TerminalInfo
+import io.github.shiroel.aries.core.TerminalWatch
+import kotlinx.coroutines.channels.Channel
 
 /** In-memory stand-in for the Rust core, for UI tests. */
 class FakeCore : AriesCoreInterface {
@@ -28,6 +30,13 @@ class FakeCore : AriesCoreInterface {
 
     /** When set, `connect` asks to trust this fingerprint for each jump host first. */
     var requireJumpTrust: String? = null
+    /** Later Terminal lists a live watch delivers, in order (see [push]). */
+    val updates = Channel<List<TerminalInfo>>(Channel.UNLIMITED)
+
+    /** Sends a changed Terminal list to the open watch. */
+    fun push(list: List<TerminalInfo>) {
+        updates.trySend(list)
+    }
     /** What `structure`/`watchStructure` deliver; default: [terminals], all unplaced. */
     var structure: HostStructure? = null
 
@@ -120,7 +129,7 @@ class FakeCore : AriesCoreInterface {
             }
         }
         requireTrust?.let { if (host.hostKey != it) throw CoreException.HostKeyUnknown(it) }
-        return FakeConnection(terminals, structure ?: HostStructure(emptyList(), terminals, null))
+        return FakeConnection(terminals, structure ?: HostStructure(emptyList(), terminals, null), updates)
             .also { connection = it }
     }
 
@@ -133,6 +142,7 @@ class FakeCore : AriesCoreInterface {
 class FakeConnection(
     private val list: List<TerminalInfo>,
     private var current: HostStructure,
+    private val updates: Channel<List<TerminalInfo>> = Channel(),
 ) : HostConnection(NoHandle) {
     /** Core API methods called on this connection, in order. */
     val calls = mutableListOf<String>()
@@ -146,6 +156,7 @@ class FakeConnection(
 
     override suspend fun terminals(): List<TerminalInfo> = list.also { calls += "terminals" }
 
+    override suspend fun watchTerminals(): TerminalWatch = FakeWatch(list, updates)
     override suspend fun structure(): HostStructure = current.also { calls += "structure" }
 
     override suspend fun watchStructure(listener: StructureListener): StructureWatch {
@@ -171,6 +182,26 @@ class FakeConnection(
     override suspend fun disconnect() {
         disconnected = true
     }
+
+    override fun close() {}
+}
+
+/** First the connection's list, then whatever the test pushes. */
+class FakeWatch(
+    private val first: List<TerminalInfo>,
+    private val updates: Channel<List<TerminalInfo>>,
+) : TerminalWatch(NoHandle) {
+    private var started = false
+
+    override suspend fun next(): List<TerminalInfo> {
+        if (!started) {
+            started = true
+            return first
+        }
+        return updates.receive()
+    }
+
+    override fun stop() {}
 
     override fun close() {}
 }

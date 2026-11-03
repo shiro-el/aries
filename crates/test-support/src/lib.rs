@@ -476,3 +476,52 @@ fn docker(args: &[&str]) -> String {
     assert_ok(&out, &format!("docker {}", args.join(" ")));
     String::from_utf8_lossy(&out.stdout).into_owned()
 }
+
+/// Path of the fake Agent (`fixtures/agents/fake/fake-agent`, POSIX sh).
+pub fn fake_agent_path() -> PathBuf {
+    repo_root().join("fixtures/agents/fake/fake-agent")
+}
+
+/// A fake Agent running in a Terminal: it reports OSC 7501 status, writes
+/// transcript fixtures and records every input line, as its script says.
+pub struct FakeAgent {
+    /// Terminal address (`t3`).
+    pub address: String,
+    input_log: PathBuf,
+}
+
+impl FakeAgent {
+    /// The input lines the Agent has read so far, in order.
+    pub fn inputs(&self) -> Vec<String> {
+        std::fs::read_to_string(&self.input_log)
+            .unwrap_or_default()
+            .lines()
+            .map(str::to_owned)
+            .collect()
+    }
+}
+
+impl HcSession {
+    /// Starts the fake Agent in a new background Terminal running `script`
+    /// (steps are documented in the fake-agent file).
+    pub fn run_fake_agent(&self, name: &str, script: &str) -> FakeAgent {
+        let dir = self.dir.path().join("agents").join(name);
+        std::fs::create_dir_all(&dir).expect("agent dir");
+        let script_path = dir.join("script");
+        std::fs::write(&script_path, script).expect("write agent script");
+        let input_log = dir.join("input");
+        let log_env = format!("FAKE_AGENT_INPUT={}", input_log.display());
+        let agent = fake_agent_path();
+        let address = self.run_bg(
+            name,
+            &[
+                "env",
+                &log_env,
+                "/bin/sh",
+                &agent.to_string_lossy(),
+                &script_path.to_string_lossy(),
+            ],
+        );
+        FakeAgent { address, input_log }
+    }
+}
