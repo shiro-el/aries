@@ -101,22 +101,32 @@ async fn model_and_effort_reach_each_agent_as_separate_arguments() {
     let core = core_in(data.path());
     let host = core.add_host("dev".into(), local_endpoint(&hc)).unwrap();
     let conn = connect(&core, &host.id).await;
-    for (preset, name, model, effort, expected) in [
+    for (preset, name, model, effort, extra, expected) in [
         (
             AgentPreset::ClaudeCode,
             "claude",
             "sonnet",
             "high",
-            vec!["claude", "--model", "sonnet", "--effort", "high"],
+            "--model=old --effort low --verbose",
+            vec![
+                "claude",
+                "--verbose",
+                "--model",
+                "sonnet",
+                "--effort",
+                "high",
+            ],
         ),
         (
             AgentPreset::Codex,
             "codex",
             "custom model;$(echo nope)",
             "xhigh",
+            "-mold -m old --model=older --search",
             vec![
                 "codex",
                 "--no-daemon",
+                "--search",
                 "-m",
                 "custom model;$(echo nope)",
                 "-c",
@@ -128,19 +138,28 @@ async fn model_and_effort_reach_each_agent_as_separate_arguments() {
             "opencode",
             "provider/model",
             "",
-            vec!["opencode", "--model", "provider/model"],
+            "--model=old -m old --agent build",
+            vec!["opencode", "--agent", "build", "--model", "provider/model"],
         ),
         (
             AgentPreset::Pi,
             "pi",
             "provider/model",
             "off",
-            vec!["pi", "--model", "provider/model", "--thinking", "off"],
+            "--model old --thinking=high --offline",
+            vec![
+                "pi",
+                "--offline",
+                "--model",
+                "provider/model",
+                "--thinking",
+                "off",
+            ],
         ),
     ] {
         let cwd = tmp.path().join(name);
         std::fs::create_dir_all(&cwd).unwrap();
-        let mut request = preset_request(preset, "", &cwd);
+        let mut request = preset_request(preset, extra, &cwd);
         request.model = Some(model.into());
         request.effort = Some(effort.into());
         conn.launch(request).await.unwrap();
