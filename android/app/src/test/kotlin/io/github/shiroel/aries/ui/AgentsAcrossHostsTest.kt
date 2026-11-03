@@ -125,13 +125,13 @@ class AgentsAcrossHostsTest {
         assertEquals(listOf("h2 t1 seen=3"), core.labelWrites)
         compose.onNodeWithText(str(R.string.agent_status_idle)).assertExists()
 
-        // Back to the list; opening an Agent that is not Done writes nothing.
+        // Viewing a Working Agent joins the shared seen rules even at turn zero.
         compose.onNodeWithText(str(R.string.back_button)).performClick()
         compose.waitForIdle()
         compose.onNodeWithText("claude").performClick()
         compose.waitForIdle()
         assertEquals("t1", core.connectionsOf.getValue("h1").views.single().address)
-        assertEquals(listOf("h2 t1 seen=3"), core.labelWrites)
+        assertEquals(listOf("h2 t1 seen=3", "h1 t1 seen=0"), core.labelWrites)
 
         // A disappearing Agent must not leave a stale detail screen on Back.
         core.push("h1", emptyList())
