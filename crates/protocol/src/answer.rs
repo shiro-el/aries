@@ -14,9 +14,11 @@
 //! A Call's Choice (`aries-beacon reply`) is answer *text* the Agent itself
 //! offered in its Call; the Beacon looks it up in the Call record by Call ID
 //! and types it into the Terminal, once (a durable claim). An [`Answer`]
-//! here is a set of option *indexes* into a question the Agent's own TUI is
-//! showing; nothing is typed as text, only keys that select options, and it
-//! is valid only while that question is on screen. The two never share
+//! here is a set of option *indexes* or free text per part of the Agent's
+//! own question. Text opens that Agent's Other row and types literal UTF-8;
+//! it is never terminal.send or bracketed paste. A queued Codex menu may be
+//! opened from its advertised binding, then must match the transcript.
+//! Only question-blocked Terminals can receive these actions. The two never share
 //! identifiers, records or commands.
 //!
 //! # Versions
@@ -37,18 +39,22 @@ pub struct Answer {
     /// For each question in order, the 0-based indexes of the picked
     /// options (one for a single-choice question).
     pub picks: Vec<Vec<usize>>,
+    /// Per-part free text instead of picks. Empty preserves the v1 picks path.
+    pub free_text: Vec<Option<String>>,
 }
 
 impl Answer {
     /// Command-line form: `<question> <picks of q1> <picks of q2> ...`,
-    /// each picks argument comma-separated (`0,2`).
+    /// each picks argument comma-separated (`0,2`), or `text:<literal UTF-8>`.
+    /// Old Beacon versions reject text arguments rather than typing them.
     pub fn args(&self) -> Vec<String> {
         std::iter::once(self.question.clone())
-            .chain(
-                self.picks
-                    .iter()
-                    .map(|p| p.iter().map(usize::to_string).collect::<Vec<_>>().join(",")),
-            )
+            .chain(self.picks.iter().enumerate().map(|(i, p)| {
+                match self.free_text.get(i).and_then(Option::as_ref) {
+                    Some(text) => format!("text:{text}"),
+                    None => p.iter().map(usize::to_string).collect::<Vec<_>>().join(","),
+                }
+            }))
             .collect()
     }
 
@@ -60,9 +66,19 @@ impl Answer {
         if picks.is_empty() {
             return Err("missing picks".into());
         }
+        let mut free_text: Vec<Option<String>> = picks
+            .iter()
+            .map(|arg| arg.strip_prefix("text:").map(str::to_owned))
+            .collect();
+        if free_text.iter().all(Option::is_none) {
+            free_text.clear();
+        }
         let picks = picks
             .iter()
             .map(|arg| {
+                if arg.starts_with("text:") {
+                    return Ok(Vec::new());
+                }
                 arg.split(',')
                     .map(|n| n.parse::<usize>().map_err(|_| format!("bad picks {arg:?}")))
                     .collect::<Result<Vec<_>, _>>()
@@ -71,6 +87,7 @@ impl Answer {
         Ok(Self {
             question: question.clone(),
             picks,
+            free_text,
         })
     }
 }

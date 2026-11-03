@@ -595,6 +595,7 @@ fn answers_the_open_question_with_its_number() {
     };
     let qid = q["id"].as_str().unwrap();
     let pick = |n: usize| Answer {
+        free_text: vec![],
         question: qid.into(),
         picks: vec![vec![n]],
     };
