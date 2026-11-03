@@ -471,6 +471,15 @@
     <string name="host_edit_title">Edit Host</string>
     <string name="host_edit_save_button">Save</string>
     <string name="host_edit_invalid_body">Use a unique Host name, a valid address and user, and a port from 1 to 65535.</string>
+
+    <string name="attachments_choose_agent">Choose an Agent for the shared content</string>
+    <string name="attachments_uploading">Uploading attachment…</string>
+    <string name="attachments_too_large">Attachment exceeds 8 MiB. Choose a smaller file or enable image resizing.</string>
+    <string name="attachments_failed">Could not attach: %1$s</string>
+    <string name="attachments_file_button">Attach files</string>
+    <string name="attachments_camera_button">Take a photo</string>
+    <string name="attachments_resize_label">Resize attachment images</string>
+    <string name="attachments_resize_hint">Convert images to JPEG with the longest side at most 2048 pixels.</string>
     <string name="layout_new_space_button">New Space</string>
     <string name="layout_app_unavailable">Open herdr-app on this Host to edit Spaces and Tabs.</string>
     <string name="layout_kill_button">End</string>

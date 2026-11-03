@@ -29,6 +29,7 @@ pub const REQUIRED_METHODS: &[&str] = &[
     "terminal.run",
     "terminal.attach",
     "terminal.send",
+    "terminal.put",
     "terminal.keys",
     "terminal.interrupt",
     "terminal.read",
