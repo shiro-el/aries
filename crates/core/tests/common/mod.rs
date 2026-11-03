@@ -48,6 +48,33 @@ pub fn local_endpoint(session: &HcSession) -> Endpoint {
     }
 }
 
+/// A Korean Host whose shell rejects locale-dependent machine commands.
+/// Keep the tools directory alive for the duration of the session.
+pub fn korean_host_with_c_locale_shell(extra: &[(&str, &str)]) -> (HcSession, tempfile::TempDir) {
+    use std::os::unix::fs::PermissionsExt;
+    let tools = tempfile::tempdir().unwrap();
+    let shell = tools.path().join("sh");
+    std::fs::write(
+        &shell,
+        "#!/bin/sh\n[ \"$LC_ALL\" = C ] && [ \"$LANG\" = C ] || { printf 'expected C locale' >&2; exit 9; }\nexec /bin/sh \"$@\"\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&shell, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let path = format!(
+        "{}:{}",
+        tools.path().display(),
+        std::env::var("PATH").unwrap()
+    );
+    let mut env = vec![
+        ("PATH", path.as_str()),
+        ("LANG", "ko_KR.UTF-8"),
+        ("LC_ALL", "ko_KR.UTF-8"),
+    ];
+    env.extend_from_slice(extra);
+    let hc = HcSession::start_with_env(&env);
+    (hc, tools)
+}
+
 /// A Local endpoint that runs a shell script instead of herdr-core.
 pub fn script_endpoint(script: &str) -> Endpoint {
     Endpoint::Local {
