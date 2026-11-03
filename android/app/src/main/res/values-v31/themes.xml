@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Aries: Android 12 SplashScreen with the Aries mark. -->
 <resources>
-    <style name="Theme.Aries" parent="@android:style/Theme.Material.NoActionBar">
+    <style name="Theme.Aries" parent="Theme.AppCompat.DayNight.NoActionBar">
         <item name="android:windowBackground">@color/brand_night</item>
         <item name="android:colorAccent">@color/brand_saffron</item>
         <item name="android:windowSplashScreenBackground">@color/brand_ink</item>

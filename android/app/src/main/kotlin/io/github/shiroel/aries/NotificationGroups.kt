@@ -43,6 +43,7 @@ object NotificationGroups {
     }
 
     private fun refresh(context: Context, manager: NotificationManager, hostId: String, hostName: String, excludedTag: String? = null) {
+        val context = AppLanguage.context(context)
         val children = manager.activeNotifications.filter {
             it.tag != excludedTag && it.notification.group == group(hostId) && it.notification.flags and Notification.FLAG_GROUP_SUMMARY == 0
         }

@@ -94,6 +94,7 @@ object CallNotifications {
     }
 
     fun build(context: Context, manager: NotificationManager, notice: CallNotice, view: CallView): Notification {
+        val context = AppLanguage.context(context)
         val call = notice.call
         val builder = PushService.callBuilder(context, manager, notice.hostId, notice.hostName, call)
             // A new state of the same Call must not ring again.

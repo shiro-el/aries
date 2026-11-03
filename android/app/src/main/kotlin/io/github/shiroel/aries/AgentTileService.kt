@@ -51,6 +51,7 @@ class AgentTileService : TileService() {
     }
 
     fun refreshTile(nowMs: Long = System.currentTimeMillis()) {
+        val context = AppLanguage.context(this)
         val tile = qsTile ?: return
         val count = AgentSurfaces.entries(core).count {
             it.terminal.agentStatus is AgentStatus.Blocked || it.terminal.agentStatus is AgentStatus.Error
@@ -59,13 +60,13 @@ class AgentTileService : TileService() {
         val hosts = core.hosts()
         val oldest = states.filter { state -> hosts.any { it.id == state.hostId } }.minOfOrNull { it.fetchedAtMs }
         val complete = hosts.isNotEmpty() && hosts.all { host -> states.any { it.hostId == host.id } }
-        val age = if (!complete || oldest == null) getString(R.string.surfaces_age_unknown)
-            else getString(R.string.surfaces_age_minutes, ((nowMs.coerceAtLeast(0).toULong().coerceAtLeast(oldest) - oldest) / 60_000uL).toLong())
-        tile.label = getString(R.string.qs_waiting_label, count)
+        val age = if (!complete || oldest == null) context.getString(R.string.surfaces_age_unknown)
+            else context.getString(R.string.surfaces_age_minutes, ((nowMs.coerceAtLeast(0).toULong().coerceAtLeast(oldest) - oldest) / 60_000uL).toLong())
+        tile.label = context.getString(R.string.qs_waiting_label, count)
         // API 28 has no subtitle: retain the age in its visible label.
         if (Build.VERSION.SDK_INT >= 29) tile.subtitle = age
-        else tile.label = getString(R.string.qs_label_with_age, tile.label, age)
-        tile.contentDescription = getString(R.string.qs_label_with_age, getString(R.string.qs_waiting_label, count), age)
+        else tile.label = context.getString(R.string.qs_label_with_age, tile.label, age)
+        tile.contentDescription = context.getString(R.string.qs_label_with_age, context.getString(R.string.qs_waiting_label, count), age)
         tile.state = if (count > 0) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
         tile.updateTile()
     }
