@@ -10,6 +10,7 @@
   "observability": { "enabled": true, "head_sampling_rate": 1 },
   "vars": {
     "PUSH_LIMIT_PER_MINUTE": "30",
+    "PUSH_DEVICE_LIMIT_PER_MINUTE": "30",
     "PAIR_LIMIT_PER_HOUR": "20"
   },
   "d1_databases": [
