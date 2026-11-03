@@ -316,4 +316,24 @@ class LastLocationTest {
             assertEquals("review this", model.pendingShare?.text)
         }
     }
+
+    @Test fun questionNotificationsKeepTheirExplicitChatTargetOnColdAndWarmEntry() {
+        val core = twoHosts().apply {
+            terminalsOf["h2"] = listOf(terminal.copy(address = "t1", agentStatus = AgentStatus.Working))
+        }
+        show(core)
+        openTerminal()
+
+        restart(PushTarget("h2", "t1", chat = true))
+
+        compose.runOnIdle {
+            assertEquals("h2", (model.screen as Screen.Chat).chat.host.id)
+            assertEquals(AgentView.TERMINAL, model.agentView)
+            model.start(PushTarget("h1", "box/t1"))
+        }
+        compose.waitForIdle()
+        compose.runOnIdle { model.start(PushTarget("h2", "t1", chat = true)) }
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals("h2", (model.screen as Screen.Chat).chat.host.id) }
+    }
 }
