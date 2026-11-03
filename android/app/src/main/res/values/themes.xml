@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Aries: app theme; the splash screen is in values-v31. -->
+<resources>
+    <style name="Theme.Aries" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/brand_night</item>
+        <item name="android:colorAccent">@color/brand_saffron</item>
+    </style>
+</resources>

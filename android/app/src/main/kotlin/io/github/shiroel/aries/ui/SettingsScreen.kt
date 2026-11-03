@@ -1,0 +1,189 @@
+package io.github.shiroel.aries.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import io.github.shiroel.aries.R
+import io.github.shiroel.aries.core.AttachMode
+
+data class AccentPreset(val label: Int, val hex: String)
+
+val AccentPresets = listOf(
+    AccentPreset(R.string.accent_saffron, "#F4B73A"),
+    AccentPreset(R.string.accent_ember, "#E8714A"),
+    AccentPreset(R.string.accent_jade, "#3FB68B"),
+    AccentPreset(R.string.accent_lagoon, "#3A9FD8"),
+    AccentPreset(R.string.accent_iris, "#8C7CF0"),
+    AccentPreset(R.string.accent_rose, "#E0668F"),
+)
+
+@Composable
+fun SettingsScreen(model: HostsModel, settings: ThemeSettings, onBack: () -> Unit) {
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onBack) { Text(stringResource(R.string.back_button)) }
+            Text(stringResource(R.string.settings_title), style = MaterialTheme.typography.titleMedium)
+        }
+        HorizontalDivider()
+        LazyColumn(Modifier.fillMaxSize()) {
+            item {
+                SettingsField(R.string.theme_title) {
+                    ConsoleSegments(
+                        ThemeMode.entries, settings.mode, settings::chooseMode,
+                        label = { stringResource(when (it) {
+                            ThemeMode.SYSTEM -> R.string.theme_system
+                            ThemeMode.LIGHT -> R.string.theme_light
+                            ThemeMode.DARK -> R.string.theme_dark
+                        }) },
+                    )
+                }
+            }
+            item { SettingsField(R.string.accent_title) { AccentControls(settings) } }
+            item { SettingsField(R.string.accent_custom) { HsvPicker(settings) } }
+            item { SettingsField { ChatCacheSettings(model.chatCache) } }
+            item(key = "attach-mode") {
+                SettingsField {
+                    OptionToggle(
+                        R.string.attach_input_label, R.string.attach_input_hint,
+                        model.attachMode == AttachMode.INPUT,
+                    ) { model.setDefaultAttachMode(if (it) AttachMode.INPUT else AttachMode.OBSERVE) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsField(title: Int? = null, content: @Composable () -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        title?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        content()
+    }
+    HorizontalDivider()
+}
+
+/** Square segments shared by appearance and cache retention; selected state is accessible. */
+@Composable
+fun <T> ConsoleSegments(options: List<T>, selected: T, onSelect: (T) -> Unit, label: @Composable (T) -> String) {
+    val c = MaterialTheme.colorScheme
+    Row(Modifier.fillMaxWidth().border(1.dp, c.outline).selectableGroup()) {
+        options.forEachIndexed { index, option ->
+            if (index > 0) Box(Modifier.width(1.dp).height(48.dp).background(c.outline))
+            val active = selected == option
+            Box(
+                Modifier.weight(1f).height(48.dp)
+                    .background(if (active) c.surfaceContainerHighest else c.surface)
+                    .selectable(selected = active, role = Role.RadioButton, onClick = { onSelect(option) }),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    label(option), color = if (active) c.primary else c.onSurface,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+                )
+                if (active) Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(3.dp).background(c.primary))
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccentControls(settings: ThemeSettings) {
+    val c = MaterialTheme.colorScheme
+    Row(Modifier.fillMaxWidth().border(1.dp, c.outline).selectableGroup()) {
+        AccentPresets.forEach { preset ->
+            val label = stringResource(preset.label)
+            val selected = settings.accentHex == preset.hex
+            Box(
+                Modifier.weight(1f).height(48.dp).background(Color(android.graphics.Color.parseColor(preset.hex)))
+                    .selectable(selected = selected, role = Role.RadioButton, onClick = { settings.setAccent(preset.hex) })
+                    .semantics { contentDescription = label },
+                contentAlignment = Alignment.Center,
+            ) {
+                if (selected) Box(Modifier.size(32.dp).border(3.dp, c.background))
+            }
+        }
+    }
+    // An invalid draft is kept in the field, while the last valid colour stays applied.
+    var hex by rememberSaveable(settings.accentHex) { mutableStateOf(settings.accentHex) }
+    var invalid by rememberSaveable(settings.accentHex) { mutableStateOf(false) }
+    OutlinedTextField(
+        value = hex,
+        onValueChange = { value ->
+            hex = value
+            invalid = !settings.setAccent(value)
+        },
+        modifier = Modifier.fillMaxWidth().testTag("accent-hex"),
+        label = { Text(stringResource(R.string.accent_hex)) },
+        trailingIcon = { Box(Modifier.size(24.dp).background(Color(android.graphics.Color.parseColor(settings.accentHex)))) },
+        singleLine = true,
+        isError = invalid,
+        supportingText = if (invalid) ({ Text(stringResource(R.string.accent_hex_invalid)) }) else null,
+        textStyle = MaterialTheme.typography.bodyMedium,
+    )
+}
+
+/** Prototype A's HSV controls, with rectangular hue strip and labelled accessibility actions. */
+@Composable
+private fun HsvPicker(settings: ThemeSettings) {
+    val hsv = remember(settings.accentHex) {
+        FloatArray(3).also { android.graphics.Color.colorToHSV(android.graphics.Color.parseColor(settings.accentHex), it) }
+    }
+    val hues = remember { (0..6).map { Color(android.graphics.Color.HSVToColor(floatArrayOf(it * 60f, 0.8f, 0.95f))) } }
+    Box(Modifier.fillMaxWidth().height(10.dp).background(Brush.horizontalGradient(hues)))
+    fun set(index: Int, value: Float) {
+        val next = hsv.copyOf().also { it[index] = value }
+        val rgb = android.graphics.Color.HSVToColor(next) and 0xFFFFFF
+        settings.setAccent("#%06X".format(java.util.Locale.ROOT, rgb))
+    }
+    LabeledSlider(R.string.accent_hue, hsv[0], 0f..360f) { set(0, it) }
+    LabeledSlider(R.string.accent_saturation, hsv[1], 0f..1f) { set(1, it) }
+    LabeledSlider(R.string.accent_brightness, hsv[2], 0.2f..1f) { set(2, it) }
+}
+
+@Composable
+private fun LabeledSlider(labelRes: Int, value: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float) -> Unit) {
+    val label = stringResource(labelRes)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(label, Modifier.width(84.dp), style = MaterialTheme.typography.bodySmall)
+        Slider(
+            value = value, onValueChange = onChange, valueRange = range,
+            modifier = Modifier.weight(1f).semantics { contentDescription = label },
+        )
+    }
+}

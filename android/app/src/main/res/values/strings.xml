@@ -377,4 +377,24 @@
     <string name="push_policy_child_agents_hint">Also notify for Agents started by another Agent, and for their Calls. When off, only top-level Agents notify and subagent Calls are only recorded in Call history.</string>
     <string name="push_policy_failed">Could not read or change the notification options on the Host: %1$s</string>
     <string name="push_policy_retry">Load the options again</string>
+
+    <!-- Console appearance settings -->
+    <string name="settings_title">Settings</string>
+    <string name="theme_title">Theme</string>
+    <string name="theme_system">System</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="accent_title">Accent colour</string>
+    <string name="accent_saffron">Saffron</string>
+    <string name="accent_ember">Ember</string>
+    <string name="accent_jade">Jade</string>
+    <string name="accent_lagoon">Lagoon</string>
+    <string name="accent_iris">Iris</string>
+    <string name="accent_rose">Rose</string>
+    <string name="accent_custom">Custom colour</string>
+    <string name="accent_hex">Hex</string>
+    <string name="accent_hex_invalid">Enter six hex digits, for example #F4B73A.</string>
+    <string name="accent_hue">Hue</string>
+    <string name="accent_saturation">Saturation</string>
+    <string name="accent_brightness">Brightness</string>
 </resources>

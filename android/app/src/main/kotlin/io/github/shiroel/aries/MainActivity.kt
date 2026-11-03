@@ -5,7 +5,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -27,7 +26,7 @@ class MainActivity : ComponentActivity() {
             val scope = rememberCoroutineScope()
             val model = remember { HostsModel(core, scope, keyWork = Dispatchers.IO, pushPlatform = push).also { this@MainActivity.model = it } }
             LaunchedEffect(model) { openPushTarget() }
-            MaterialTheme { AriesApp(model) }
+            AriesApp(model)
         }
         network = NetworkWatch(this) { model?.networkChanged() }.also { it.start() }
     }

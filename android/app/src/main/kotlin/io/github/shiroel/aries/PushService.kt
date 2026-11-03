@@ -4,6 +4,7 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import io.github.shiroel.aries.ui.ThemeSettings
 import android.util.Base64
 import android.util.Log
 import com.google.firebase.messaging.FirebaseMessagingService
@@ -108,7 +109,8 @@ class PushService : FirebaseMessagingService() {
                 is PushContent.Call -> return // shown by showCall
             }
             val builder = Notification.Builder(context, CHANNEL)
-                .setSmallIcon(android.R.drawable.stat_notify_chat)
+                .setSmallIcon(R.drawable.ic_stat_aries)
+                .setColor(ThemeSettings.from(context).accentArgb)
                 .setContentTitle(title)
                 .setContentText(body)
                 .setAutoCancel(true)
@@ -156,7 +158,8 @@ class PushService : FirebaseMessagingService() {
             val text = call.body.ifEmpty { choices ?: "" }
             val big = listOfNotNull(call.body.ifEmpty { null }, choices).joinToString("\n")
             val builder = Notification.Builder(context, callChannel(context, manager, call.urgency))
-                .setSmallIcon(android.R.drawable.stat_notify_chat)
+                .setSmallIcon(R.drawable.ic_stat_aries)
+                .setColor(ThemeSettings.from(context).accentArgb)
                 .setContentTitle(call.title)
                 .setContentText(text)
                 .setSubText(hostName)

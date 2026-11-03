@@ -20,7 +20,7 @@ import io.github.shiroel.aries.core.TerminalInfo
 @Composable
 fun AgentStatusLine(t: TerminalInfo) {
     val status = t.agentStatus ?: return
-    val color = if (t.needsAttention) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+    val color = statusColor(status)
     val label = agentStatusLabel(status)
     val message = when (status) {
         is AgentStatus.Blocked -> status.message

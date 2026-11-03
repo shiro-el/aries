@@ -54,6 +54,7 @@ data class Message(@StringRes val res: Int, val args: List<Any> = emptyList())
 
 sealed interface Screen {
     data object Hosts : Screen
+    data object Settings : Screen
     data class Connecting(val host: Host) : Screen
 
     /** Editing the jump hosts on the way to [host] and the key for each hop. */
@@ -795,6 +796,12 @@ class HostsModel(
 
     private fun hostsChanged() {
         if (callsActive || screen == Screen.Calls) calls.watch(hosts, everyHost = screen == Screen.Calls)
+    }
+
+    /** Temporary Hosts-header entry until the drawer is added. */
+    fun openSettings() {
+        back()
+        screen = Screen.Settings
     }
 
     /** Opens Call history for every Host (Hosts whose key needs a biometric unlock too). */

@@ -78,6 +78,7 @@ class ChatCacheTest {
     fun theRetentionPeriodIsTheUsersChoice() {
         val core = FakeCore()
         show(core)
+        compose.onNodeWithText(str(R.string.settings_title)).performClick()
         scrollTo(str(R.string.chat_cache_days, 7))
         compose.onNodeWithText(str(R.string.chat_cache_title)).assertExists()
 

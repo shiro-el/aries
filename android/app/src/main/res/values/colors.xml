@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Aries: brand colours (assets/aries). -->
+<resources>
+    <color name="brand_saffron">#F4B73A</color>
+    <color name="brand_ink">#2B2724</color>
+    <color name="brand_night">#121315</color>
+</resources>

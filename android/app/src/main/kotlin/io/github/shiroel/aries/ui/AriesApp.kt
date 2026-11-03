@@ -53,13 +53,23 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleStartEffect
 import io.github.shiroel.aries.R
-import io.github.shiroel.aries.core.AttachMode
 import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.Host
 import io.github.shiroel.aries.core.QrMatrix
 
 @Composable
-fun AriesApp(model: HostsModel) {
+fun AriesApp(model: HostsModel, settings: ThemeSettings = rememberThemeSettings()) {
+    AriesTheme(settings) { AriesContent(model, settings) }
+}
+
+@Composable
+private fun rememberThemeSettings(): ThemeSettings {
+    val context = LocalContext.current.applicationContext
+    return remember(context) { ThemeSettings.from(context) }
+}
+
+@Composable
+private fun AriesContent(model: HostsModel, settings: ThemeSettings) {
     // Calls are followed (for the banner) only while the app is in front.
     LifecycleStartEffect(model) {
         model.resumeCalls()
@@ -72,6 +82,10 @@ fun AriesApp(model: HostsModel) {
             }
             when (val s = model.screen) {
                 Screen.Hosts -> HostListScreen(model)
+                Screen.Settings -> {
+                    BackHandler { model.back() }
+                    SettingsScreen(model, settings, onBack = model::back)
+                }
                 is Screen.Connecting -> Connecting(s.host)
                 is Screen.Browse -> {
                     BackHandler {
@@ -149,8 +163,11 @@ private fun HostListScreen(model: HostsModel) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(stringResource(R.string.hosts_title), style = MaterialTheme.typography.headlineMedium)
-                if (model.hosts.isNotEmpty()) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = model::openSettings, modifier = Modifier.testTag("settings-open")) {
+                        Text(stringResource(R.string.settings_title))
+                    }
+                    if (model.hosts.isNotEmpty()) {
                         TextButton(onClick = model::openCalls) { Text(stringResource(R.string.calls_button)) }
                         Button(onClick = model::openAgents) { Text(stringResource(R.string.agents_button)) }
                     }
@@ -173,18 +190,14 @@ private fun HostListScreen(model: HostsModel) {
                 }
             }
         }
+        // Per-Host clearing stays here, so its result must remain visible on Hosts too.
+        model.chatCache.notice?.let { notice ->
+            item { Text(stringResource(notice.res, *notice.args.toTypedArray()), style = MaterialTheme.typography.bodySmall) }
+        }
         if (model.key != null) item { ExtraKeysSection(model) }
         item { HorizontalDivider() }
         item { AddHostForm(model) }
         item { HorizontalDivider() }
-        item { ChatCacheSettings(model.chatCache) }
-        item(key = "attach-mode") {
-            OptionToggle(
-                R.string.attach_input_label,
-                R.string.attach_input_hint,
-                model.attachMode == AttachMode.INPUT,
-            ) { model.setDefaultAttachMode(if (it) AttachMode.INPUT else AttachMode.OBSERVE) }
-        }
     }
 }
 
@@ -225,7 +238,7 @@ private fun BiometricToggle(required: Boolean, onChange: (Boolean) -> Unit) {
 }
 
 @Composable
-private fun OptionToggle(label: Int, hint: Int, on: Boolean, onChange: (Boolean) -> Unit) {
+internal fun OptionToggle(label: Int, hint: Int, on: Boolean, onChange: (Boolean) -> Unit) {
     Row(
         Modifier.fillMaxWidth().toggleable(value = on, role = Role.Switch, onValueChange = onChange),
         verticalAlignment = Alignment.CenterVertically,

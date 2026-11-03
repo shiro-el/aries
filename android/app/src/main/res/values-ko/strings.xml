@@ -367,4 +367,24 @@
     <string name="push_policy_child_agents_hint">다른 에이전트가 시작한 에이전트와 그 Call도 알립니다. 끄면 최상위 에이전트만 알리고, 하위 에이전트의 Call은 Call 기록에만 남습니다.</string>
     <string name="push_policy_failed">Host의 알림 옵션을 읽거나 바꾸지 못했습니다: %1$s</string>
     <string name="push_policy_retry">옵션 다시 불러오기</string>
+
+    <!-- Console appearance settings -->
+    <string name="settings_title">설정</string>
+    <string name="theme_title">테마</string>
+    <string name="theme_system">시스템</string>
+    <string name="theme_light">라이트</string>
+    <string name="theme_dark">다크</string>
+    <string name="accent_title">강조 색</string>
+    <string name="accent_saffron">사프란</string>
+    <string name="accent_ember">엠버</string>
+    <string name="accent_jade">제이드</string>
+    <string name="accent_lagoon">라군</string>
+    <string name="accent_iris">아이리스</string>
+    <string name="accent_rose">로즈</string>
+    <string name="accent_custom">직접 고르기</string>
+    <string name="accent_hex">Hex</string>
+    <string name="accent_hex_invalid">6자리 hex 색상을 입력하세요. 예: #F4B73A</string>
+    <string name="accent_hue">색상</string>
+    <string name="accent_saturation">채도</string>
+    <string name="accent_brightness">밝기</string>
 </resources>

@@ -2,8 +2,6 @@ package io.github.shiroel.aries.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -70,14 +68,8 @@ fun ChatCacheSettings(model: ChatCacheModel) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(stringResource(R.string.chat_cache_title), style = MaterialTheme.typography.titleMedium)
         Text(stringResource(R.string.chat_cache_hint), style = MaterialTheme.typography.bodySmall)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (days in CHAT_CACHE_DAYS) {
-                FilterChip(
-                    selected = model.retentionDays == days,
-                    onClick = { model.setRetention(days) },
-                    label = { Text(stringResource(R.string.chat_cache_days, days)) },
-                )
-            }
+        ConsoleSegments(CHAT_CACHE_DAYS, model.retentionDays, model::setRetention) {
+            stringResource(R.string.chat_cache_days, it)
         }
         model.notice?.let { Text(stringResource(it.res, *it.args.toTypedArray()), style = MaterialTheme.typography.bodySmall) }
     }

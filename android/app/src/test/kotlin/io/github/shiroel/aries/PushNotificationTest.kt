@@ -9,6 +9,7 @@ import io.github.shiroel.aries.core.BlockedReason
 import io.github.shiroel.aries.core.CallUrgency
 import io.github.shiroel.aries.core.PushContent
 import io.github.shiroel.aries.core.PushNotice
+import io.github.shiroel.aries.ui.ThemeSettings
 import android.content.Intent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -27,6 +28,19 @@ class PushNotificationTest {
         PushNotice("h1", "box", PushContent.Status(terminal, name, null, true, status, 1uL))
 
     private fun shown(): List<Notification> = manager.activeNotifications.map { it.notification }
+
+    @Test
+    fun statusAndCallNotificationsUseTheBrandMarkAndSavedAccentEvenWithoutAnActivity() {
+        ThemeSettings.from(context).setAccent("#3FB68B")
+        PushService.show(context, status("t3", "claude", AgentStatus.Done))
+        PushService.show(context, PushNotice("h1", "box", PushContent.Call("c1", "t3", true, "Review", "", CallUrgency.CHECK, emptyList(), 1uL)))
+
+        assertEquals(2, shown().size)
+        for (notification in shown()) {
+            assertEquals(R.drawable.ic_stat_aries, notification.smallIcon.resId)
+            assertEquals(android.graphics.Color.rgb(63, 182, 139), notification.color)
+        }
+    }
 
     @Test
     fun aBlockedAgentShowsItsReasonAndMessage() {

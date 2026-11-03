@@ -153,13 +153,14 @@ class TerminalTypingTest {
             val model = remember { HostsModel(core, scope) }
             MaterialTheme { AriesApp(model) }
         }
-        // The option on the Host list: observe by default, switch to input.
+        // Settings: observe by default, switch to input, then return to Hosts.
         assertEquals(AttachMode.OBSERVE, core.attachMode())
+        compose.onNodeWithText(str(R.string.settings_title)).performClick()
         compose.onNode(hasScrollToKeyAction()).performScrollToKey("attach-mode")
         compose.onNodeWithText(str(R.string.attach_input_label)).performClick()
         compose.waitForIdle()
         assertEquals(AttachMode.INPUT, core.attachMode())
-        compose.onNode(hasScrollToKeyAction()).performScrollToIndex(0)
+        compose.onNodeWithText(str(R.string.back_button)).performClick()
 
         core.terminals = listOf(agent)
         compose.onNodeWithText("other").performClick()
