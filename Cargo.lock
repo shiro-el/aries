@@ -83,6 +83,10 @@ name = "aries-beacon"
 version = "0.1.0"
 dependencies = [
  "aries-protocol",
+ "aries-test-support",
+ "serde",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -97,6 +101,7 @@ dependencies = [
  "russh",
  "serde",
  "serde_json",
+ "sha2",
  "tempfile",
  "thiserror",
  "tokio",

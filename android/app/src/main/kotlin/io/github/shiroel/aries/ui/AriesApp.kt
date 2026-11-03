@@ -68,6 +68,7 @@ fun AriesApp(model: HostsModel) {
                         onBack = model::back,
                         onNewTerminal = { model.newTerminal(s.browser) },
                         onLaunch = { model.launch(s.browser, it) },
+                        hostSections = { BeaconSection(model.beacon) },
                     )
                 }
                 is Screen.JumpHosts -> {

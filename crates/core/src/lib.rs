@@ -5,6 +5,7 @@
 //! client), `store` (what survives a relaunch). The Host model, terminal,
 //! chat, push, calls and beacon manager modules arrive with their tickets.
 
+mod beacon;
 mod error;
 mod hc;
 mod host_model;
@@ -22,6 +23,10 @@ use russh::keys::ssh_key::LineEnding;
 use russh::keys::{Algorithm, HashAlg, PrivateKey};
 use serde::{Deserialize, Serialize};
 
+pub use beacon::{
+    ALLOWED_BEACON, BeaconArtifact, BeaconFetcher, BeaconInstall, BeaconRelease, BeaconState,
+    FetchError, Linger, pinned_release,
+};
 pub use error::{CoreError, Incompatibility, VaultError};
 pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
 pub use host_model::{AgentStatus, BlockedReason, TerminalWatch};
@@ -172,6 +177,7 @@ pub struct AriesCore {
     store: Store,
     vault: Arc<dyn KeyVault>,
     hosts: Mutex<Vec<SavedHost>>,
+    beacon_release: Mutex<BeaconRelease>,
 }
 
 #[uniffi::export]
@@ -185,6 +191,7 @@ impl AriesCore {
             store,
             vault,
             hosts: Mutex::new(saved.hosts),
+            beacon_release: Mutex::new(pinned_release()),
         }))
     }
 
@@ -539,6 +546,68 @@ impl AriesCore {
         })?;
         *hosts = next;
         Ok(())
+    }
+}
+
+/// Beacon management (`beacon` module).
+#[uniffi::export]
+impl AriesCore {
+    /// The Beacon release this app installs.
+    pub fn beacon_release(&self) -> BeaconRelease {
+        self.beacon_release.lock().expect("release lock").clone()
+    }
+
+    /// Installs (or reinstalls) the Beacon on a Linux Host over SSH. The
+    /// phone downloads the binary with `fetcher`; it is installed only if it
+    /// matches the checksum pinned in the app.
+    pub async fn install_beacon(
+        &self,
+        host_id: String,
+        fetcher: Arc<dyn BeaconFetcher>,
+    ) -> Result<BeaconInstall, CoreError> {
+        let ssh = self.beacon_ssh(&host_id)?;
+        let release = self.beacon_release();
+        on_runtime(async move { beacon::install(&ssh, &release, fetcher).await }).await
+    }
+
+    /// What Beacon the Host has. Call it when connecting: a Beacon outside
+    /// [`ALLOWED_BEACON`] reports `supported: false`.
+    pub async fn beacon_status(&self, host_id: String) -> Result<BeaconState, CoreError> {
+        let ssh = self.beacon_ssh(&host_id)?;
+        on_runtime(async move { beacon::status(&ssh).await }).await
+    }
+
+    /// Stops and removes the Beacon service and binary. Call records stay.
+    pub async fn uninstall_beacon(&self, host_id: String) -> Result<(), CoreError> {
+        let ssh = self.beacon_ssh(&host_id)?;
+        on_runtime(async move { beacon::uninstall(&ssh).await }).await
+    }
+}
+
+impl AriesCore {
+    /// Replaces the pinned Beacon release. For tests and development
+    /// builds; not exposed to the app.
+    pub fn set_beacon_release(&self, release: BeaconRelease) {
+        *self.beacon_release.lock().expect("release lock") = release;
+    }
+
+    fn beacon_ssh(&self, host_id: &str) -> Result<Ssh, CoreError> {
+        let host = self.saved_host(host_id)?;
+        match host.endpoint {
+            Endpoint::Ssh {
+                address,
+                port,
+                user,
+            } => Ok(Ssh {
+                address,
+                port,
+                user,
+                key: self.private_key(host.key_id.as_deref())?,
+                trusted: host.host_key,
+                jumps: self.ssh_hops(host.jumps)?,
+            }),
+            Endpoint::Local { .. } => Err(CoreError::BeaconNeedsSsh),
+        }
     }
 }
 

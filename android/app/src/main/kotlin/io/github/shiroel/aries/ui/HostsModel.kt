@@ -4,8 +4,10 @@ import androidx.annotation.StringRes
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import io.github.shiroel.aries.HttpBeaconFetcher
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AriesCoreInterface
+import io.github.shiroel.aries.core.BeaconFetcher
 import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.Host
@@ -70,7 +72,14 @@ sealed interface Prompt {
 enum class AfterTrust { Connect, InstallKey }
 
 /** UI state over the core API. Compose reads the `by mutableStateOf` fields. */
-class HostsModel(private val core: AriesCoreInterface, private val scope: CoroutineScope) {
+class HostsModel(
+    private val core: AriesCoreInterface,
+    private val scope: CoroutineScope,
+    beaconFetcher: BeaconFetcher = HttpBeaconFetcher(),
+) {
+    /** The Beacon section of the connected Host. */
+    val beacon = BeaconModel(core, scope, beaconFetcher)
+
     var key by mutableStateOf<PublicKeyInfo?>(null)
         private set
     var hosts by mutableStateOf<List<Host>>(emptyList())
@@ -138,6 +147,7 @@ class HostsModel(private val core: AriesCoreInterface, private val scope: Corout
                 val browser = HostBrowser(host)
                 open = conn to null
                 screen = Screen.Browse(browser)
+                beacon.load(host)
                 try {
                     val watch = conn.watchStructure(object : StructureListener {
                         override fun onStructure(structure: HostStructure) {

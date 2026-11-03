@@ -1,10 +1,16 @@
 package io.github.shiroel.aries.ui
 
 import io.github.shiroel.aries.core.AriesCoreInterface
+import io.github.shiroel.aries.core.BeaconFetcher
+import io.github.shiroel.aries.core.BeaconInstall
+import io.github.shiroel.aries.core.BeaconRelease
+import io.github.shiroel.aries.core.BeaconState
 import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.Host
 import io.github.shiroel.aries.core.HostConnection
+import io.github.shiroel.aries.core.KeyInstall
+import io.github.shiroel.aries.core.Linger
 import io.github.shiroel.aries.core.JumpHost
 import io.github.shiroel.aries.core.KeyInfo
 import io.github.shiroel.aries.core.HostStructure
@@ -12,7 +18,6 @@ import io.github.shiroel.aries.core.NoHandle
 import io.github.shiroel.aries.core.PublicKeyInfo
 import io.github.shiroel.aries.core.StructureListener
 import io.github.shiroel.aries.core.StructureWatch
-import io.github.shiroel.aries.core.KeyInstall
 import io.github.shiroel.aries.core.LaunchRequest
 import io.github.shiroel.aries.core.PaneInfo
 import io.github.shiroel.aries.core.QrMatrix
@@ -133,6 +138,27 @@ class FakeCore : AriesCoreInterface {
         requireTrust?.let { if (host.hostKey != it) throw CoreException.HostKeyUnknown(it) }
         return FakeConnection(terminals, structure ?: HostStructure(emptyList(), terminals, null), updates)
             .also { connection = it }
+    }
+
+    /** What `beaconStatus` reports; `installBeacon` / `uninstallBeacon` change it. */
+    var beacon: BeaconState = BeaconState.NotInstalled
+
+    /** How `installBeacon` ends: its linger result, or this error. */
+    var beaconLinger: Linger = Linger.Enabled
+    var beaconFailWith: CoreException? = null
+
+    override fun beaconRelease(): BeaconRelease = BeaconRelease("0.1.0", emptyList())
+
+    override suspend fun installBeacon(hostId: String, fetcher: BeaconFetcher): BeaconInstall {
+        beaconFailWith?.let { throw it }
+        beacon = BeaconState.Installed("0.1.0", 1u, true, "0.1.17", beaconLinger == Linger.Enabled, true, ">=0.1.0, <0.2.0")
+        return BeaconInstall("0.1.0", beaconLinger)
+    }
+
+    override suspend fun beaconStatus(hostId: String): BeaconState = beacon
+
+    override suspend fun uninstallBeacon(hostId: String) {
+        beacon = BeaconState.NotInstalled
     }
 
     companion object {
