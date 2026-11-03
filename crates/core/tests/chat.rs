@@ -443,3 +443,70 @@ async fn follows_a_pi_agent_and_its_tree_branches_through_the_real_beacon() {
 fn path(p: &Path) -> String {
     p.to_string_lossy().into_owned()
 }
+
+#[tokio::test]
+async fn reconnecting_after_a_transcript_rewrite_replaces_the_cached_chat() {
+    let env = Env::new();
+    let hc = HcSession::start();
+    let config = env.dir.path().join("claude");
+    let projects = config.join("projects/-work-a");
+    std::fs::create_dir_all(&projects).unwrap();
+    let file = projects.join("S1.jsonl");
+    let transcript = |id: &str, text: &str| {
+        format!(
+            "{{\"type\":\"user\",\"uuid\":\"{id}\",\"message\":{{\"role\":\"user\",\"content\":\"{text}\"}}}}\n"
+        )
+    };
+    std::fs::write(&file, transcript("old", "old content")).unwrap();
+    let agent = hc.run_fake_agent(
+        "claude",
+        &format!("claude-session {} S1 /work/a\nwait\n", config.display()),
+    );
+    let mut vars: HashMap<_, _> = hc.env().into_iter().collect();
+    vars.insert(
+        "ARIES_BEACON".into(),
+        path(&aries_test_support::beacon_bin()),
+    );
+    vars.insert("CLAUDE_CONFIG_DIR".into(), path(&config));
+    vars.insert(
+        "PATH".into(),
+        format!("{}:/usr/bin:/bin", hc.bin().parent().unwrap().display()),
+    );
+    let host = env.host(vars);
+    let first = env
+        .core
+        .watch_chat(host.clone(), agent.address.clone(), None)
+        .unwrap();
+    let before = wait_for(&first, "old transcript", |s| {
+        s.status == ChatStatus::Live && !s.entries.is_empty()
+    })
+    .await;
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            if env
+                .core
+                .cached_chat(host.clone(), agent.address.clone())
+                .await
+                .unwrap()
+                .is_some_and(|s| texts(&s) == ["user: old content"])
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    first.stop();
+    std::fs::write(&file, transcript("new", "new content")).unwrap();
+    let resumed = env
+        .core
+        .watch_chat(host, agent.address, before.cursor)
+        .unwrap();
+    let after = wait_for(&resumed, "rewritten transcript", |s| {
+        s.status == ChatStatus::Live
+    })
+    .await;
+    resumed.stop();
+    assert_eq!(texts(&after), ["user: new content"]);
+}
