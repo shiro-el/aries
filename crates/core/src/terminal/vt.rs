@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use alacritty_terminal::event::{Event, EventListener};
-use alacritty_terminal::grid::Dimensions;
+use alacritty_terminal::grid::{Dimensions, Scroll};
 use alacritty_terminal::index::{Column, Line};
 use alacritty_terminal::term::cell::{Cell, Flags};
 use alacritty_terminal::term::{Config, Term, TermDamage, TermMode};
@@ -13,9 +13,11 @@ use alacritty_terminal::vte::ansi::{Color, NamedColor, Processor, Rgb};
 
 use super::{CellRun, CursorPos, ScreenFrame, ScreenLine};
 
-/// Scrollback kept in the VT. Ticket 16 shows it; the frames carry only the
-/// visible screen.
-const SCROLLBACK: usize = 1000;
+/// Scrollback kept in the VT when the attach asked for less. The frames
+/// carry only the viewport; [`Vt::scroll_to`] moves it into the scrollback.
+pub const SCROLLBACK: usize = 1000;
+/// Upper bound on the scrollback a view keeps, whatever the attach asked.
+pub const MAX_SCROLLBACK: usize = 10_000;
 
 struct Size {
     cols: usize,
@@ -61,10 +63,11 @@ pub(crate) struct Vt {
 }
 
 impl Vt {
-    pub fn new(cols: u16, rows: u16) -> Self {
+    /// `scrollback`: lines of history to keep (at least [`SCROLLBACK`]).
+    pub fn new(cols: u16, rows: u16, scrollback: usize) -> Self {
         let listener = Listener::default();
         let config = Config {
-            scrolling_history: SCROLLBACK,
+            scrolling_history: scrollback.clamp(SCROLLBACK, MAX_SCROLLBACK),
             ..Config::default()
         };
         let term = Term::new(config, &size(cols, rows), listener.clone());
@@ -99,6 +102,21 @@ impl Vt {
         self.full = true;
     }
 
+    /// Shows the screen `lines` lines back into the scrollback (0 = live);
+    /// stops at the oldest line. Returns where it stopped. While scrolled
+    /// back, new output keeps the view on the same lines.
+    pub fn scroll_to(&mut self, lines: u32) -> u32 {
+        let history = self.term.grid().history_size();
+        let target = (lines as usize).min(history);
+        let now = self.term.grid().display_offset();
+        if target != now {
+            self.term
+                .scroll_display(Scroll::Delta(target as i32 - now as i32));
+            self.full = true;
+        }
+        target as u32
+    }
+
     pub fn cols(&self) -> u16 {
         self.term.columns() as u16
     }
@@ -121,13 +139,18 @@ impl Vt {
             d.dedup();
             d
         };
-        let cursor = self.term.mode().contains(TermMode::SHOW_CURSOR).then(|| {
-            let p = self.term.grid().cursor.point;
-            CursorPos {
-                row: p.line.0.max(0) as u16,
+        let offset = self.term.grid().display_offset();
+        let cursor = self
+            .term
+            .mode()
+            .contains(TermMode::SHOW_CURSOR)
+            .then(|| self.term.grid().cursor.point)
+            // Scrolled back far enough, the cursor is below the viewport.
+            .filter(|p| p.line.0.max(0) as usize + offset < rows)
+            .map(|p| CursorPos {
+                row: (p.line.0.max(0) as usize + offset) as u16,
                 column: p.column.0 as u16,
-            }
-        });
+            });
         ScreenFrame {
             cols: self.cols(),
             rows: rows as u16,
@@ -135,6 +158,8 @@ impl Vt {
             lines: lines.into_iter().map(|r| self.line(r)).collect(),
             cursor,
             title: self.listener.title.lock().expect("title lock").clone(),
+            scrolled: offset as u32,
+            history: self.term.grid().history_size() as u32,
         }
     }
 
@@ -155,9 +180,10 @@ impl Vt {
             .collect()
     }
 
+    /// Viewport row `row` (scrolled back by the display offset).
     fn line(&self, row: usize) -> ScreenLine {
         let grid = self.term.grid();
-        let line = &grid[Line(row as i32)];
+        let line = &grid[Line(row as i32 - grid.display_offset() as i32)];
         let mut runs: Vec<CellRun> = Vec::new();
         for col in 0..self.term.columns() {
             let cell = &line[Column(col)];
@@ -223,6 +249,7 @@ impl Vt {
             underline: f.intersects(Flags::ALL_UNDERLINES),
             strikeout: f.contains(Flags::STRIKEOUT),
             inverse: f.contains(Flags::INVERSE),
+            link: cell.hyperlink().map(|h| h.uri().to_owned()),
         }
     }
 
@@ -258,6 +285,7 @@ fn same_style(a: &CellRun, b: &CellRun) -> bool {
         && a.underline == b.underline
         && a.strikeout == b.strikeout
         && a.inverse == b.inverse
+        && a.link == b.link
 }
 
 /// Whether blank cells of this style still draw something (a background,
@@ -321,7 +349,7 @@ mod tests {
 
     #[test]
     fn colours_runs_and_sends_only_the_rows_that_changed() {
-        let mut vt = Vt::new(20, 4);
+        let mut vt = Vt::new(20, 4, 0);
         vt.feed(b"plain \x1b[31mred\x1b[0m\r\nnext");
         let first = vt.take_frame();
         assert!(first.full, "the first frame is a whole screen");
@@ -344,7 +372,7 @@ mod tests {
 
     #[test]
     fn a_wide_character_takes_two_columns() {
-        let mut vt = Vt::new(10, 1);
+        let mut vt = Vt::new(10, 1, 0);
         vt.feed("a한b".as_bytes());
         let runs = vt.take_frame().lines.remove(0).runs;
         let parts: Vec<(&str, u16, u16, bool)> = runs
@@ -359,7 +387,7 @@ mod tests {
 
     #[test]
     fn a_resize_sends_the_whole_new_grid() {
-        let mut vt = Vt::new(10, 2);
+        let mut vt = Vt::new(10, 2, 0);
         vt.take_frame();
         vt.resize(30, 5);
         let f = vt.take_frame();
@@ -368,7 +396,7 @@ mod tests {
 
     #[test]
     fn an_unfinished_synchronized_update_shows_after_its_deadline() {
-        let mut vt = Vt::new(10, 1);
+        let mut vt = Vt::new(10, 1, 0);
         vt.feed(b"\x1b[?2026hhidden");
         assert_eq!(vt.text()[0], "");
         assert!(vt.sync_deadline().is_some());
@@ -378,7 +406,7 @@ mod tests {
 
     #[test]
     fn the_title_follows_osc_2() {
-        let mut vt = Vt::new(10, 1);
+        let mut vt = Vt::new(10, 1, 0);
         vt.feed(b"\x1b]2;build\x07");
         assert_eq!(vt.take_frame().title.as_deref(), Some("build"));
     }
@@ -399,7 +427,7 @@ mod tests {
                 .as_bytes(),
             );
         }
-        let mut vt = Vt::new(200, 50);
+        let mut vt = Vt::new(200, 50, 0);
         let rounds = 50;
         let t = std::time::Instant::now();
         for _ in 0..rounds {

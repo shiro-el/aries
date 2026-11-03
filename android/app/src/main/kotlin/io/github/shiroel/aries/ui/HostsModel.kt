@@ -20,6 +20,7 @@ import io.github.shiroel.aries.core.JumpHost
 import io.github.shiroel.aries.core.KeyInfo
 import io.github.shiroel.aries.core.KeyInstall
 import io.github.shiroel.aries.core.PublicKeyInfo
+import io.github.shiroel.aries.core.SavedLaunch
 import io.github.shiroel.aries.core.StructureListener
 import io.github.shiroel.aries.core.StructureWatch
 import io.github.shiroel.aries.core.QrMatrix
@@ -52,6 +53,9 @@ sealed interface Screen {
 
     /** Every Host's Agents in one list. */
     data class Agents(val board: AgentBoard) : Screen
+
+    /** An Agent's Chat; back returns to [returnTo] (its Host's Browse or the Agents list). */
+    data class Chat(val chat: ChatModel, val returnTo: Screen) : Screen
 }
 
 sealed interface Prompt {
@@ -212,6 +216,7 @@ class HostsModel(
                 val link = link(host, conn)
                 browser.link = link
                 browseLink = link
+                browser.savedLaunches = conn.savedLaunches()
                 open = conn to null
                 screen = Screen.Browse(browser)
                 beacon.load(host)
@@ -231,7 +236,49 @@ class HostsModel(
     fun newTerminal(browser: HostBrowser) {
         val conn = open?.first ?: return
         val structure = browser.structure ?: return
-        browser.launchForm = LaunchForm(structure, conn.recentCwds(), browser.openSpaceId, browser.tab?.id)
+        browser.launchForm =
+            LaunchForm(structure, conn.recentCwds(), browser.openSpaceId, browser.tab?.id, browser.savedLaunches)
+    }
+
+    /** Saves [form] under its name (new, or replacing the config it edits); the form stays open. */
+    fun saveLaunch(browser: HostBrowser, form: LaunchForm) {
+        val conn = open?.first ?: return
+        form.error = null
+        try {
+            form.stored(conn.saveLaunch(form.toSaved()))
+            browser.savedLaunches = form.saved.toList()
+        } catch (e: CoreException) {
+            form.error = launchProblem(e)
+        }
+    }
+
+    fun deleteSavedLaunch(browser: HostBrowser, form: LaunchForm, saved: SavedLaunch) {
+        val conn = open?.first ?: return
+        form.error = null
+        try {
+            conn.deleteSavedLaunch(saved.id)
+            form.removed(saved.id)
+            browser.savedLaunches = form.saved.toList()
+        } catch (e: CoreException) {
+            form.error = launchProblem(e)
+        }
+    }
+
+    /** One tap: starts [saved] as stored. If that fails, its form opens with the reason. */
+    fun runSaved(browser: HostBrowser, saved: SavedLaunch) {
+        val conn = open?.first ?: return
+        val structure = browser.structure ?: return
+        scope.launch {
+            try {
+                val terminal = conn.launch(saved.request)
+                browser.reveal(saved.request.spaceId, saved.request.tabId, terminal.address)
+            } catch (e: CoreException) {
+                val form = LaunchForm(structure, conn.recentCwds(), null, null, browser.savedLaunches)
+                form.edit(saved)
+                form.error = launchProblem(e)
+                browser.launchForm = form
+            }
+        }
     }
 
     /** Starts [form]'s command on the open Host, then shows the new Terminal; failures stay on the form. */
@@ -395,8 +442,9 @@ class HostsModel(
         viewing = scope.launch {
             try {
                 link.keep { conn, resumed ->
-                    val options = AttachOptions(observe = true, cols = 80u, rows = 24u, history = 0u, resumed = resumed)
+                    val options = AttachOptions(observe = true, cols = 80u, rows = 24u, history = SCROLLBACK_LINES, resumed = resumed)
                     val view = conn.attachTerminal(terminal.address, options)
+                    viewer.scroller = view::scrollTo
                     try {
                         while (true) {
                             when (val u = view.next()) {
@@ -408,6 +456,7 @@ class HostsModel(
                             }
                         }
                     } finally {
+                        viewer.scroller = null
                         withContext(NonCancellable) { view.detach() }
                         view.close()
                     }
@@ -494,7 +543,24 @@ class HostsModel(
         agentLinks.clear()
     }
 
+    /** Opens the Chat of the Agent in [terminal] on [host], from Browse or the Agents list. */
+    fun openChat(host: Host, terminal: TerminalInfo) {
+        val from = screen
+        if (from !is Screen.Browse && from !is Screen.Agents) return
+        val chat = ChatModel(core, host, terminal)
+        screen = Screen.Chat(chat, from)
+        chat.start(scope)
+    }
+
+    /** Leaves the Chat (the Agent keeps running) for where it was opened. */
+    fun closeChat() {
+        val s = screen as? Screen.Chat ?: return
+        s.chat.stop()
+        screen = s.returnTo
+    }
+
     fun back() {
+        (screen as? Screen.Chat)?.chat?.stop()
         viewing?.cancel()
         viewing = null
         if (screen is Screen.Agents) closeAgents()
@@ -567,3 +633,6 @@ fun problemFor(e: CoreException): Prompt.Problem {
         else -> Prompt.Problem(failed, Message(R.string.connect_other, listOf(e.message ?: "")))
     }
 }
+
+/** Scrollback asked for when attaching a Terminal (what the desktop app keeps is 2000). */
+const val SCROLLBACK_LINES = 2000u

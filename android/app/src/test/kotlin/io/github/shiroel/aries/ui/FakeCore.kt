@@ -2,11 +2,16 @@ package io.github.shiroel.aries.ui
 
 import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.core.AriesCoreInterface
+import io.github.shiroel.aries.core.BeaconCheck
 import io.github.shiroel.aries.core.AttachOptions
 import io.github.shiroel.aries.core.BeaconFetcher
 import io.github.shiroel.aries.core.BeaconInstall
 import io.github.shiroel.aries.core.BeaconRelease
+import io.github.shiroel.aries.core.BeaconSource
 import io.github.shiroel.aries.core.BeaconState
+import io.github.shiroel.aries.core.BeaconUpdate
+import io.github.shiroel.aries.core.ChatSnapshot
+import io.github.shiroel.aries.core.ChatWatch
 import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.Host
@@ -24,6 +29,7 @@ import io.github.shiroel.aries.core.StructureWatch
 import io.github.shiroel.aries.core.LaunchRequest
 import io.github.shiroel.aries.core.PaneInfo
 import io.github.shiroel.aries.core.QrMatrix
+import io.github.shiroel.aries.core.SavedLaunch
 import io.github.shiroel.aries.core.TerminalInfo
 import io.github.shiroel.aries.core.TerminalUpdate
 import io.github.shiroel.aries.core.TerminalView
@@ -196,9 +202,12 @@ class FakeCore : AriesCoreInterface {
             return FakeConnection(list, structure ?: HostStructure(emptyList(), list, null), updatesOf(hostId), hostId, this)
                 .also { connection = it; connectionsOf[hostId] = it }
         }
-        return FakeConnection(terminals, structure ?: HostStructure(emptyList(), terminals, null), updates)
+        return FakeConnection(terminals, structure ?: HostStructure(emptyList(), terminals, null), updates, saved = savedLaunches)
             .also { connection = it }
     }
+
+    /** Saved launch configs, kept across connections like the core keeps them per Host. */
+    val savedLaunches = mutableListOf<SavedLaunch>()
 
     /** What `beaconStatus` reports; `installBeacon` / `uninstallBeacon` change it. */
     var beacon: BeaconState = BeaconState.NotInstalled
@@ -206,19 +215,66 @@ class FakeCore : AriesCoreInterface {
     /** How `installBeacon` ends: its linger result, or this error. */
     var beaconLinger: Linger = Linger.Enabled
     var beaconFailWith: CoreException? = null
+    var beaconOs = "linux"
+    var autoUpdate = true
+    var installs = 0
 
     override fun beaconRelease(): BeaconRelease = BeaconRelease("0.1.0", emptyList())
 
     override suspend fun installBeacon(hostId: String, fetcher: BeaconFetcher): BeaconInstall {
         beaconFailWith?.let { throw it }
-        beacon = BeaconState.Installed("0.1.0", 1u, true, "0.1.17", beaconLinger == Linger.Enabled, true, ">=0.1.0, <0.2.0")
-        return BeaconInstall("0.1.0", beaconLinger)
+        installs++
+        beacon = installed("0.1.0", supported = true, linger = beaconLinger == Linger.Enabled)
+        return BeaconInstall("0.1.0", beaconLinger, BeaconSource.HOST_DOWNLOAD)
     }
 
     override suspend fun beaconStatus(hostId: String): BeaconState = beacon
 
+    /** Like the core: an unsupported Beacon is updated, or reported when auto update is off. */
+    override suspend fun checkBeacon(hostId: String, fetcher: BeaconFetcher): BeaconCheck {
+        val state = beacon
+        if (state !is BeaconState.Installed || state.supported) return BeaconCheck(state, BeaconUpdate.NotNeeded)
+        if (!autoUpdate) return BeaconCheck(state, BeaconUpdate.Needed)
+        val install = installBeacon(hostId, fetcher)
+        return BeaconCheck(beacon, BeaconUpdate.Updated(state.version, install))
+    }
+
+    override fun beaconAutoUpdate(): Boolean = autoUpdate
+
+    override fun setBeaconAutoUpdate(on: Boolean) {
+        autoUpdate = on
+    }
+
+    fun installed(version: String, supported: Boolean = true, linger: Boolean = true) =
+        BeaconState.Installed(version, 1u, true, "0.1.17", linger, supported, ">=0.1.0, <0.2.0", beaconOs)
+
     override suspend fun uninstallBeacon(hostId: String) {
         beacon = BeaconState.NotInstalled
+    }
+
+    /** Chat snapshots `watchChat` delivers, in order (see [pushChat]). */
+    val chat = Channel<ChatSnapshot>(Channel.UNLIMITED)
+
+    /** (host id, terminal) of each `watchChat` call. */
+    val chatsOpened = mutableListOf<Pair<String, String>>()
+    var chatStopped = false
+        private set
+
+    fun pushChat(snapshot: ChatSnapshot) {
+        chat.trySend(snapshot)
+    }
+
+    override fun watchChat(hostId: String, terminal: String, cursor: String?): ChatWatch {
+        chatsOpened += hostId to terminal
+        return object : ChatWatch(NoHandle) {
+            override suspend fun next(): ChatSnapshot = chat.receive()
+
+            override fun stop() {
+                chatStopped = true
+            }
+
+            override fun close() {}
+        }
     }
 
     companion object {
@@ -233,6 +289,7 @@ class FakeConnection(
     private val updates: Channel<List<TerminalInfo>> = Channel(),
     private val hostId: String = "",
     private val core: FakeCore? = null,
+    private val saved: MutableList<SavedLaunch> = core?.savedLaunches ?: mutableListOf(),
 ) : HostConnection(NoHandle) {
     override suspend fun markSeen(address: String, turn: ULong): TerminalInfo =
         core!!.label(hostId, address, "seen=$turn") {
@@ -291,12 +348,26 @@ class FakeConnection(
 
     override fun recentCwds(): List<String> = recentCwds
 
+    override fun savedLaunches(): List<SavedLaunch> = saved.toList()
+
+    override fun saveLaunch(launch: SavedLaunch): SavedLaunch {
+        val stored = launch.copy(id = launch.id.ifEmpty { "L${saved.size + 1}" }, name = launch.name.trim())
+        val i = saved.indexOfFirst { it.id == stored.id }
+        if (i >= 0) saved[i] = stored else saved += stored
+        return stored
+    }
+
+    override fun deleteSavedLaunch(id: String) {
+        saved.removeAll { it.id == id }
+    }
+
     /** Like herdr-core: a new live Terminal, shown in its labelled Tab (or unplaced). */
     override suspend fun launch(request: LaunchRequest): TerminalInfo {
         calls += "launch"
         launchFailWith?.let { throw it }
         launched += request
-        val t = TerminalInfo("t${100 + launched.size}", null, "", request.command.split(" "), request.cwd, "live")
+        val argv = listOfNotNull(request.preset?.name?.lowercase()) + request.command.split(" ").filter { it.isNotEmpty() }
+        val t = TerminalInfo("t${100 + launched.size}", null, "", argv, request.cwd, "live")
         val pane = PaneInfo(t.address, t.address, t)
         val placed = current.spaces.map { s ->
             if (s.id != request.spaceId) s
@@ -380,6 +451,11 @@ class FakeTerminalView(val address: String, val options: AttachOptions) : Termin
         detached = true
         updates.close()
     }
+
+    /** Every [scrollTo] the UI made, in order. */
+    val scrolls = mutableListOf<UInt>()
+
+    override fun scrollTo(lines: UInt): UInt = lines.also { scrolls += it }
 
     override fun close() {}
 }
