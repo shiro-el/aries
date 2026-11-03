@@ -1,6 +1,7 @@
 package io.github.shiroel.aries.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
@@ -38,24 +39,35 @@ internal fun LazyListScope.agentTreeItems(
             TreeSectionRow(agentGroupLabel(group), 0, folds.contains(groupKey), { folds.toggle(groupKey) })
         }
         if (!sections || !folds.contains(groupKey)) {
-            val hidden = entries.filter { folds.contains(it.key.foldKey) }.map { it.key }.toSet()
+            // Only parent rows own fold controls; ignore old nested folds from the two-line tree.
+            val hidden = agentTreeRows(group.entries).filter { it.depth == 0 && folds.contains(it.value.key.foldKey) }
+                .map { it.value.key }.toSet()
             items(agentTreeRows(group.entries, hidden), key = { "$tag:${it.value.key.hostId}\n${it.value.key.address}" }) { row ->
                 var menu by remember(row.value.key) { mutableStateOf(false) }
                 val entry = row.value
                 val descendants = agentDescendants(group.entries, entry.key)
-                TerminalBranch(row.guide, row.depth, leading = {
-                    AgentFoldButton(entry, descendants, folds.contains(entry.key.foldKey)) { folds.toggle(entry.key.foldKey) }
-                }) {
+                val compact = row.depth > 0
+                TerminalBranch(row.guide, row.depth) {
                     ConsoleTerminalRow(entry.terminal, entry.host.name, { onOpen(entry) },
-                        Modifier.testTag("$tag:${entry.host.id}:${entry.terminal.address}")
-                            .semantics { selected = current == entry.key },
+                        Modifier.testTag("$tag:${entry.host.id}:${entry.terminal.address}"),
                         spaceName = entry.space?.name,
-                        onLongClick = if (actions == null) null else { { menu = true } },
+                        tabName = entry.tabName,
+                        compact = compact,
+                        selected = current == entry.key,
+                        onLongClick = if (actions != null || compact && entry.terminal.agentStatus != null) ({ menu = true }) else null,
                         trailing = {
-                            Box(Modifier.width(40.dp).heightIn(min = 48.dp), contentAlignment = Alignment.TopCenter) {
+                            if (!compact) {
+                                AgentFoldButton(entry, descendants, folds.contains(entry.key.foldKey)) { folds.toggle(entry.key.foldKey) }
                                 if (entry.terminal.agentStatus != null) AgentPinButton(entry) { onPin(entry, it) }
-                                if (actions != null) DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                                    actions(entry) { menu = false }
+                            }
+                            Box {
+                                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                                    if (compact && entry.terminal.agentStatus != null) DropdownMenuItem(
+                                        text = { Text(stringResource(if (entry.terminal.pinned) R.string.agent_unpin_button_label else R.string.agent_pin_button_label,
+                                            displayName(entry.terminal), entry.host.name)) },
+                                        onClick = { menu = false; onPin(entry, !entry.terminal.pinned) },
+                                    )
+                                    actions?.invoke(this, entry) { menu = false }
                                 }
                             }
                         })
@@ -75,13 +87,6 @@ private fun agentGroupLabel(group: AgentGroup): String =
         else -> R.string.agent_status_idle
     }), group.count)
 
-internal fun priorityStatus(priority: Int): AgentStatus = when (priority) {
-    4 -> AgentStatus.Blocked(null, null)
-    3 -> AgentStatus.Done
-    2 -> AgentStatus.Working
-    else -> AgentStatus.Idle
-}
-
 @Composable
 internal fun TreeChevron(folded: Boolean, modifier: Modifier = Modifier) {
     val color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -99,18 +104,19 @@ internal fun AgentFoldButton(entry: AgentEntry, descendants: List<AgentEntry>, f
     if (descendants.isEmpty()) return
     val label = stringResource(if (folded) R.string.agents_expand_children else R.string.agents_collapse_children,
         displayName(entry.terminal), descendants.size)
-    IconButton(onClick = onFold, modifier = Modifier.width(32.dp).height(48.dp)
+    Row(Modifier.height(28.dp).clickable(role = Role.Button, onClick = onFold)
+        .padding(horizontal = 3.dp)
         .testTag("agent-fold:${entry.host.id}:${entry.terminal.address}")
-        .semantics { contentDescription = label }) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            TreeChevron(folded)
-            if (folded) {
-                val status = priorityStatus(descendants.maxOf { agentPriority(childAgentStatus(it.terminal.agentStatus)) })
-                val statusLabel = stringResource(agentStatusLabel(status))
-                Text(descendants.size.toString(), Modifier.testTag("agent-summary:${entry.host.id}:${entry.terminal.address}")
-                    .semantics { contentDescription = statusLabel },
-                    style = MaterialTheme.typography.labelSmall, color = statusColor(status))
-            }
+        .semantics { contentDescription = label },
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        TreeChevron(folded, Modifier.size(11.dp))
+        if (folded) {
+            val status = descendants.mapNotNull { childAgentStatus(it.terminal.agentStatus) }
+                .maxByOrNull(::agentPriority) ?: AgentStatus.Idle
+            val statusLabel = stringResource(agentStatusLabel(status))
+            Text(descendants.size.toString(), Modifier.testTag("agent-summary:${entry.host.id}:${entry.terminal.address}")
+                .semantics { contentDescription = statusLabel },
+                style = MaterialTheme.typography.labelSmall, color = statusColor(status))
         }
     }
 }

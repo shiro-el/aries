@@ -96,7 +96,8 @@ class LayoutEditTest {
         compose.waitForIdle()
         assertEquals(listOf(LayoutEdit.NewSpace("new space", "/new/repo")), core.connection!!.edits)
 
-        compose.onNodeWithText("repo").performClick()
+        compose.onNodeWithTag("host-layout-context").performClick()
+        compose.onNodeWithTag("host-context-space:s1").performClick()
         compose.onNodeWithText(str(R.string.layout_new_tab_button)).performClick()
         compose.onNodeWithTag("layout-name").performTextReplacement("tests")
         compose.onNodeWithText(str(R.string.layout_save_button)).performClick()
@@ -130,7 +131,8 @@ class LayoutEditTest {
             ))), emptyList(), null)
         }
         open(core)
-        compose.onNodeWithText("repo").performClick()
+        compose.onNodeWithTag("host-layout-context").performClick()
+        compose.onNodeWithTag("host-context-space:s1").performClick()
         compose.onNodeWithText(str(R.string.layout_actions_button)).performClick()
         compose.onNodeWithText(str(R.string.layout_close_space_button)).performClick()
         compose.onNodeWithText(str(R.string.layout_confirm_title, "repo")).assertExists()
@@ -157,7 +159,8 @@ class LayoutEditTest {
             structure = HostStructure(listOf(SpaceInfo("s1", "repo", null, listOf(TabInfo("only", "build", emptyList())))), emptyList(), null)
         }
         open(core)
-        compose.onNodeWithText("repo").performClick()
+        compose.onNodeWithTag("host-layout-context").performClick()
+        compose.onNodeWithTag("host-context-space:s1").performClick()
         compose.onNodeWithText(str(R.string.layout_actions_button)).performClick()
         compose.onNodeWithText(str(R.string.layout_close_tab_button)).performClick()
         compose.onNodeWithText(str(R.string.layout_confirm_title, "build")).assertExists()
@@ -174,7 +177,8 @@ class LayoutEditTest {
         }
         open(core)
         core.connection!!.editFailure = CoreException.Rpc("herdr_app_failed", "closed window")
-        compose.onNodeWithText("repo").performClick()
+        compose.onNodeWithTag("host-layout-context").performClick()
+        compose.onNodeWithTag("host-context-space:s1").performClick()
         compose.onNodeWithText(str(R.string.layout_actions_button)).performClick()
         compose.onNodeWithText(str(R.string.layout_close_tab_button)).performClick()
         compose.onNodeWithText(str(R.string.layout_confirm_button)).performClick()
