@@ -606,6 +606,10 @@ class FakeConnection(
     private val core: FakeCore? = null,
     private val saved: MutableList<SavedLaunch> = core?.savedLaunches ?: mutableListOf(),
 ) : HostConnection(NoHandle) {
+    var fileDirectory = io.github.shiroel.aries.core.RemoteDirectory("/repo", emptyList())
+    override suspend fun listFiles(address: String, path: String?) = fileDirectory
+    override suspend fun readFilePage(address: String, path: String, offset: ULong, limit: UInt) =
+        io.github.shiroel.aries.core.RemoteFilePage("", 1u, 0u, 0u)
     val edits = mutableListOf<io.github.shiroel.aries.core.LayoutEdit>()
     var editFailure: CoreException? = null
     override suspend fun editLayout(edit: io.github.shiroel.aries.core.LayoutEdit): String {

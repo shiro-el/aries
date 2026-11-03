@@ -56,7 +56,10 @@ internal fun AgentScreenHeader(
                 fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         },
-        actions = { onView?.let { AgentViewToggle(current, it) } },
+        actions = {
+            LocalRemoteFilesAction.current?.invoke()
+            onView?.let { AgentViewToggle(current, it) }
+        },
     )
     Row(
         Modifier.fillMaxWidth().testTag("agent-meta").padding(horizontal = 16.dp, vertical = 8.dp),

@@ -10,6 +10,7 @@ mod calls;
 mod chat;
 mod chat_cache;
 mod error;
+mod files;
 mod hc;
 mod host_edit;
 mod host_model;
@@ -47,6 +48,7 @@ pub use chat::{
     ChatToolStatus, ChatWatch,
 };
 pub use error::{AnswerProblem, CoreError, Incompatibility, VaultError};
+pub use files::{RemoteDirectory, RemoteFileEntry, RemoteFilePage};
 pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
 pub use host_model::{AgentStatus, BlockedReason, TerminalWatch};
 pub use last_known_state::{LastKnownState, LastKnownStateWatch};
