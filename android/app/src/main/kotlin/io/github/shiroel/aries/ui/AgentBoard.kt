@@ -31,6 +31,7 @@ data class AgentEntry(
     val sequence: Int = 0,
     val layoutOrder: Int? = null,
     val hostOrder: Int = 0,
+    val tabName: String? = null,
 ) {
     val key: AgentKey get() = AgentKey(host.id, terminal.address)
 }
@@ -112,7 +113,7 @@ fun AgentsScreen(
     val folds = rememberTreeFolds("agents")
     LazyColumn(Modifier.fillMaxSize()) {
         if (showHeader) item {
-            TextButton(onClick = onBack) { Text(stringResource(R.string.back_button)) }
+            TreeBackButton(onBack)
             Text(stringResource(R.string.agents_title), style = MaterialTheme.typography.headlineSmall)
         }
         if (board.hosts.isEmpty()) item { Text(stringResource(R.string.agents_no_hosts)) }
