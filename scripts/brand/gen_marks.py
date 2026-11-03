@@ -1,4 +1,4 @@
-"""Generate splash, notification and in-app marks from assets/aries/png.
+"""Generate the splash bitmap and the small vector marks.
 
 Ported from prototype/ui-revamp scripts/proto-ui/gen_icons.py. Requires Pillow.
 Usage: python3 scripts/brand/gen_marks.py assets/aries/png android/app/src/main/res
@@ -6,12 +6,11 @@ Launcher layers are generated separately by gen_adaptive.py from the unclipped S
 import os
 import sys
 from PIL import Image
+from pathlib import Path
+from gen_small_marks import generate
 
 png, res = sys.argv[1], sys.argv[2]
 DARK = (43, 39, 36)
-
-def near(c, ref, tol=40):
-    return all(abs(a - b) <= tol for a, b in zip(c[:3], ref))
 
 def save(im, sub, name):
     d = os.path.join(res, sub)
@@ -48,28 +47,7 @@ def adaptive(content, scale):
 splash = adaptive(ram, 0.5)
 save(splash, "drawable-nodpi", "splash_mark.png")
 
-# Notification small icon: white silhouette of the mark.
-mark = Image.open(os.path.join(png, "aries-mark-512.png")).convert("RGBA")
-mark = mark.crop(mark.getbbox())
-for dpi, size in [("mdpi", 24), ("hdpi", 36), ("xhdpi", 48), ("xxhdpi", 72), ("xxxhdpi", 96)]:
-    m = mark.copy()
-    m.thumbnail((int(size * 0.9), int(size * 0.9)), Image.LANCZOS)
-    canvas = Image.new("RGBA", (size, size), (255, 255, 255, 0))
-    sil = Image.new("RGBA", m.size, (255, 255, 255, 255))
-    sil.putalpha(m.getchannel("A"))
-    canvas.paste(sil, ((size - m.size[0]) // 2, (size - m.size[1]) // 2), sil)
-    save(canvas, "drawable-" + dpi, "ic_stat_aries.png")
-
-# Mark (small, for in-app headers) as-is and light-ink copy.
-ms = Image.open(os.path.join(png, "aries-mark-small-128.png")).convert("RGBA")
-ms = ms.crop(ms.getbbox())
-save(ms, "drawable-nodpi", "mark_ink.png")
-light_mark = ms.copy()
-light_pixels = light_mark.load()
-for y in range(light_mark.size[1]):
-    for x in range(light_mark.size[0]):
-        c = light_pixels[x, y]
-        if c[3] and near(c, DARK, 30):
-            light_pixels[x, y] = (243, 237, 230, c[3])
-save(light_mark, "drawable-nodpi", "mark_light.png")
+# Small surfaces must stay vectors rather than downscaled PNGs.
+generate(Path(__file__).resolve().parents[2] / "assets/aries/aries-mark-small.svg",
+         Path(res), Path(__file__).resolve().parents[2] / "android/wear/src/main/res")
 print("ok")

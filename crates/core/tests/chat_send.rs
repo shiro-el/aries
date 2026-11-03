@@ -13,7 +13,7 @@ use aries_core::{
     TerminalView,
 };
 use aries_test_support::{FakeAgent, HcSession};
-use common::{core_in, local_endpoint};
+use common::{core_in, local_endpoint, wait_state};
 
 #[derive(Default)]
 struct Held {
@@ -48,23 +48,6 @@ fn inputs_after(agent: &FakeAgent, want: usize) -> Vec<String> {
         if got.len() >= want || Instant::now() > deadline {
             return got;
         }
-        std::thread::sleep(Duration::from_millis(50));
-    }
-}
-
-/// Waits until the Agent's status (as `hc get` shows it) is `state`.
-fn wait_state(hc: &HcSession, address: &str, state: &str) {
-    let deadline = Instant::now() + Duration::from_secs(10);
-    loop {
-        let t: serde_json::Value =
-            serde_json::from_str(hc.hc(&["get", "--json", address]).trim()).unwrap();
-        if t["status"]["state"] == state {
-            return;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "{address} never became {state}: {t}"
-        );
         std::thread::sleep(Duration::from_millis(50));
     }
 }

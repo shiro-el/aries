@@ -14,6 +14,7 @@ mod chat_cache;
 mod error;
 mod files;
 mod git_changes;
+mod github;
 mod hc;
 mod herdr_install;
 mod host_edit;
@@ -58,6 +59,7 @@ pub use chat::{
 pub use error::{AnswerProblem, CoreError, Incompatibility, VaultError};
 pub use files::{RemoteDirectory, RemoteFileBytes, RemoteFileEntry, RemoteFilePage};
 pub use git_changes::*;
+pub use github::*;
 pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
 pub use herdr_install::*;
 pub use host_model::{AgentStatus, BlockedReason, TerminalWatch};

@@ -5,6 +5,86 @@
   Add every new string to values-ko/strings.xml too (TranslationsTest checks it).
 -->
 <resources>
+    <!-- GitHub Issues and PR conversations (113) -->
+    <string name="github_button">GitHub</string>
+    <string name="github_issues">Issues</string>
+    <string name="github_prs">Pull requests</string>
+    <string name="github_open">Open</string>
+    <string name="github_closed">Closed</string>
+    <string name="github_all">All</string>
+    <string name="github_merged">Merged</string>
+    <string name="github_search_hint">Search text in this repository</string>
+    <string name="github_search_button">Search</string>
+    <string name="github_previous">Previous</string>
+    <string name="github_next">Next</string>
+    <string name="github_page">Page %1$d</string>
+    <string name="github_refresh">Refresh</string>
+    <string name="github_loading">Loading GitHub…</string>
+    <string name="github_empty">No matching issues or pull requests.</string>
+    <string name="github_limited">GitHub search is incomplete or limited to 1,000 results. Narrow your search.</string>
+    <string name="github_item_title">#%1$d · %2$s</string>
+    <string name="github_author_date">%1$s · %2$s</string>
+    <string name="github_deleted_author">Deleted user</string>
+    <string name="github_no_body">No description.</string>
+    <string name="github_comments">Comments</string>
+    <string name="github_no_comments">No comments yet.</string>
+    <string name="github_comment_hint">Write a Markdown comment</string>
+    <string name="github_preview">Preview</string>
+    <string name="github_edit">Edit draft</string>
+    <string name="github_send">Post comment</string>
+    <string name="github_sent">Comment posted.</string>
+    <string name="github_close_issue">Close issue</string>
+    <string name="github_reopen_issue">Reopen issue</string>
+    <string name="github_state_updated">Issue updated.</string>
+    <string name="github_missing">Install GitHub CLI (gh) on this Host, then refresh.</string>
+    <string name="github_auth">Sign in on this Host with gh auth login, then refresh.</string>
+    <string name="github_failed">GitHub could not be loaded. Check this repository’s remote, access permissions, and the Host’s connection, then refresh.</string>
+    <string name="github_disconnected">Reconnect to this Host, then refresh.</string>
+    <string name="github_unknown">The request may have completed. Check GitHub before posting again. Your draft is kept.</string>
+    <string name="github_truncated">This GitHub conversation exceeds the Host’s response limit.</string>
+    <string name="github_draft_failed">The draft could not be saved on this phone. Keep this view open and try editing again.</string>
+    <string name="github_draft_limit">Comments can contain at most 64 KiB of text.</string>
+
+    <!-- App lock (117) -->
+    <string name="app_lock_settings_title">App lock</string>
+    <string name="app_lock_enabled_label">Require authentication</string>
+    <string name="app_lock_settings_hint">Protect app content when returning from the background. Notification actions keep working as before.</string>
+    <string name="app_lock_delay_label">Lock after leaving the app</string>
+    <string name="app_lock_delay_immediate">Immediately</string>
+    <string name="app_lock_delay_one_minute">1 minute</string>
+    <string name="app_lock_delay_five_minutes">5 minutes</string>
+    <string name="app_lock_previews_label">Hide app previews</string>
+    <string name="app_lock_previews_hint">Hide Aries in Recents and block screenshots and screen sharing while app lock is enabled.</string>
+    <string name="app_lock_screen_title">Aries is locked</string>
+    <string name="app_lock_screen_body">Authenticate with biometrics or your device lock to continue.</string>
+    <string name="app_lock_unlock_button">Unlock Aries</string>
+    <string name="app_lock_authenticating">Authenticating…</string>
+    <string name="app_lock_cancelled">Authentication cancelled.</string>
+    <string name="app_lock_failed">Authentication failed. Try again.</string>
+    <string name="app_lock_unavailable">Set up a device PIN, pattern or password in Android settings, then try again.</string>
+    <!-- Chat read aloud (105) -->
+    <string name="read_aloud_title">Read aloud</string>
+    <string name="read_aloud_button">Read</string>
+    <string name="read_aloud_stop">Stop reading</string>
+    <string name="read_aloud_loading">Starting system speech…</string>
+    <string name="read_aloud_unavailable">System speech is unavailable. Check the text-to-speech engine in Android settings.</string>
+    <string name="read_aloud_preparing">Preparing to read…</string>
+    <string name="read_aloud_playing">Reading aloud…</string>
+    <string name="read_aloud_empty">There is no text to read after skipping code blocks.</string>
+    <string name="read_aloud_failed">Could not read aloud. Check the speech engine and try again.</string>
+    <string name="read_aloud_language_unavailable">This language is unavailable. Install its voice in Android text-to-speech settings.</string>
+    <string name="read_aloud_speed">Speed · %1$.2f×</string>
+    <string name="read_aloud_speed_label">Reading speed</string>
+    <string name="read_aloud_voice">Voice · %1$s</string>
+    <string name="read_aloud_default_voice">System default</string>
+    <string name="read_aloud_voice_title">Choose a voice</string>
+    <string name="read_aloud_voice_label">%1$s · %2$s · %3$s</string>
+    <string name="read_aloud_voice_network">Network required</string>
+    <string name="read_aloud_voice_local">On device</string>
+    <string name="read_aloud_preview">Preview voice</string>
+    <string name="read_aloud_sample">Hello. Aries can read Agent responses aloud.</string>
+    <string name="read_aloud_hint">Tap Read on a Chat response to hear it with system speech. Code blocks are skipped. Playback stops when you leave the screen. Korean text uses a Korean voice when available. Network voices may send text to the speech provider.</string>
+
     <!-- Quick open and command palette -->
     <string name="quick_open_title">Quick open</string>
     <string name="quick_open_hint">Search names, or &gt; for commands</string>
@@ -307,6 +387,14 @@
     <string name="input_history_failed">Could not read or save input history.</string>
 
     <string name="chat_title">Chat: %1$s</string>
+    <!-- Chat search -->
+    <string name="chat_search_button">Search Chat</string>
+    <string name="chat_search_hint">Search cached Chat</string>
+    <string name="chat_search_count">%1$d of %2$d matches</string>
+    <string name="chat_search_previous">Previous</string>
+    <string name="chat_search_next">Next</string>
+    <string name="chat_search_close">Close search</string>
+
     <!-- Chat reading position -->
     <string name="chat_latest_button">Latest</string>
     <string name="chat_latest_count_button">Latest (%1$d)</string>
