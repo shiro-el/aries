@@ -88,9 +88,11 @@ pub(crate) fn pinned(terminal: &Value) -> bool {
     rule::is_pinned(&labels_of(terminal))
 }
 
-/// The `herdr.seen` turn of this Terminal.
-pub(crate) fn seen_turn(terminal: &Value) -> u64 {
-    rule::seen_turn(&labels_of(terminal))
+/// The shared seen turn, preserving absence so viewing turn zero can join it.
+pub(crate) fn seen_turn(terminal: &Value) -> Option<u64> {
+    terminal["labels"][rule::SEEN_LABEL]
+        .as_str()
+        .and_then(|value| value.trim().parse().ok())
 }
 
 /// What applying one notification asks of the caller.
