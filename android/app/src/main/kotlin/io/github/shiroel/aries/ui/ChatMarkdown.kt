@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -72,6 +73,7 @@ internal sealed interface ChatMarkdownBlock {
         val continuation: Boolean = false,
     ) : ChatMarkdownBlock
     data class Cells(val cells: List<MarkdownCell>, val scroll: ScrollState) : ChatMarkdownBlock
+    data class Diagram(val code: MarkdownCode, val fallback: List<ChatMarkdownBlock>) : ChatMarkdownBlock
     data class CodeHeader(val code: MarkdownCode) : ChatMarkdownBlock
     data class CodeLines(val code: MarkdownCode, val text: AnnotatedString) : ChatMarkdownBlock
     data object Rule : ChatMarkdownBlock
@@ -118,7 +120,9 @@ internal fun LazyListScope.chatMarkdownItems(id: String, document: ChatMarkdownD
         contentType = { _, block -> block::class },
     ) { index, block ->
         CompositionLocalProvider(LocalChatSearchEntry provides id) {
-            ChatTextActions(document?.source.orEmpty(), interceptChildLongPress = true) { actions ->
+            if (block is ChatMarkdownBlock.Diagram) {
+                ChatMarkdownBlockView(block, Modifier, "markdown:$index")
+            } else ChatTextActions(document?.source.orEmpty(), interceptChildLongPress = true) { actions ->
                 ChatMarkdownBlockView(block, actions, "markdown:$index")
             }
         }
@@ -128,6 +132,15 @@ internal fun LazyListScope.chatMarkdownItems(id: String, document: ChatMarkdownD
 @Composable
 private fun ChatMarkdownBlockView(block: ChatMarkdownBlock, actions: Modifier, searchKey: String) {
     when (block) {
+        is ChatMarkdownBlock.Diagram -> {
+            val search = LocalChatSearch.current.ranges[LocalChatSearchEntry.current to searchKey].orEmpty()
+            if (search.isNotEmpty()) Column {
+                ChatMarkdownBlockView(ChatMarkdownBlock.CodeHeader(block.code), actions, searchKey)
+                ChatMarkdownBlockView(ChatMarkdownBlock.CodeLines(block.code, AnnotatedString(block.code.source)), actions, searchKey)
+            } else MermaidDiagram(block.code.source, Modifier.padding(horizontal = 16.dp)) {
+                Column { block.fallback.forEach { ChatMarkdownBlockView(it, actions, searchKey) } }
+            }
+        }
         is ChatMarkdownBlock.Prose -> {
             val open = LocalOpenRemoteFile.current
             val color = MaterialTheme.colorScheme.primary
@@ -217,25 +230,33 @@ private fun ChatMarkdownBlockView(block: ChatMarkdownBlock, actions: Modifier, s
     }
 }
 
-private fun parseChatMarkdown(source: String): ChatMarkdownDocument {
+internal fun parseChatMarkdown(source: String, codeLanguage: String? = null): ChatMarkdownDocument {
     val blocks = mutableListOf<ChatMarkdownBlock>()
-    fun code(source: String, info: String) {
+    fun code(source: String, info: String, closed: Boolean = false) {
+        val chunks = mutableListOf<ChatMarkdownBlock>()
         val language = info.trim().takeWhile { !it.isWhitespace() }
         val group = MarkdownCode(source, language)
         val highlighted = highlightChatCode(source, language)
-        blocks += ChatMarkdownBlock.CodeHeader(group)
+        chunks += ChatMarkdownBlock.CodeHeader(group)
         var start = 0
         var lines = 0
         source.forEachIndexed { index, char ->
             if (char == '\n' && ++lines % 24 == 0) {
-                blocks += ChatMarkdownBlock.CodeLines(group, highlighted.subSequence(start, index))
+                chunks += ChatMarkdownBlock.CodeLines(group, highlighted.subSequence(start, index))
                 start = index + 1
             }
         }
         if (start < source.length) {
             val end = if (source.endsWith('\n')) source.length - 1 else source.length
-            blocks += ChatMarkdownBlock.CodeLines(group, highlighted.subSequence(start, end))
+            chunks += ChatMarkdownBlock.CodeLines(group, highlighted.subSequence(start, end))
         }
+        blocks += if (closed && source.length <= 65_536 && language.equals("mermaid", ignoreCase = true)) {
+            listOf(ChatMarkdownBlock.Diagram(group, chunks))
+        } else chunks
+    }
+    if (codeLanguage != null) {
+        code(source, codeLanguage, true)
+        return ChatMarkdownDocument(source, blocks)
     }
     fun visit(node: Node, depth: Int = 0, quoted: Boolean = false, prefix: String = "") {
         when (node) {
@@ -275,7 +296,7 @@ private fun parseChatMarkdown(source: String): ChatMarkdownDocument {
                 }
             }
             is ThematicBreak -> blocks += ChatMarkdownBlock.Rule
-            is FencedCodeBlock -> code(node.literal, node.info)
+            is FencedCodeBlock -> code(node.literal, node.info, node.closingFenceLength != null)
             is IndentedCodeBlock -> code(node.literal, "")
             is HtmlBlock -> blocks += ChatMarkdownBlock.Prose(AnnotatedString(node.literal), depth = depth, quoted = quoted)
             else -> node.children().forEach { visit(it, depth, quoted, prefix) }

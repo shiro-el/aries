@@ -59,7 +59,10 @@ fun RemoteFilesScreen(
     var gitError by remember(connection, address) { mutableStateOf<String?>(null) }
     var fullFile by remember(address, file) { mutableStateOf(false) }
     val changedFile = changes?.let { git -> git.files.find { gitFilePath(git.cwd, it.path) == file?.let { path -> java.nio.file.Paths.get(path).normalize().toString() } } }
+    var preview by remember(address, file) { mutableStateOf(initialLocation?.path != file) }
+    val markupFile = file?.substringAfterLast('.', "")?.lowercase(java.util.Locale.ROOT) in setOf("md", "mmd", "mermaid")
     val showingDiff = changedFile != null && !fullFile
+    val showingMarkup = markupFile && preview && !showingDiff
     val scope = rememberCoroutineScope()
     var subfolders by remember(address, directory?.path, retry) { mutableStateOf<Map<String, RemoteDirectory>>(emptyMap()) }
     var expanded by remember(address, directory?.path, retry) { mutableStateOf<Set<String>>(emptySet()) }
@@ -91,7 +94,7 @@ fun RemoteFilesScreen(
     }
     fun backToFolder() { file = null; offsets = listOf(1uL) }
     BackHandler(enabled = file != null, onBack = ::backToFolder)
-    LaunchedEffect(connection, address, folder, file, offsets, retry, changesLoaded, showingDiff) {
+    LaunchedEffect(connection, address, folder, file, offsets, retry, changesLoaded, showingDiff, showingMarkup) {
         if (!changesLoaded) return@LaunchedEffect
         loading = true
         failed = false
@@ -103,7 +106,7 @@ fun RemoteFilesScreen(
             checkNotNull(connection)
             if (file == null) {
                 directory = connection.listFiles(address, folder)
-            } else if (!showingDiff && remoteMediaKind(file!!) == null) {
+            } else if (!showingDiff && !showingMarkup && remoteMediaKind(file!!) == null) {
                 val requested = offsets.last()
                 val result = try {
                     connection.readFilePage(address, file!!, requested, 200u)
@@ -152,6 +155,10 @@ fun RemoteFilesScreen(
         if (changedFile != null) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(selected = !fullFile, onClick = { fullFile = false }, label = { Text(stringResource(R.string.files_diff_button)) })
             FilterChip(selected = fullFile, onClick = { fullFile = true }, label = { Text(stringResource(R.string.files_full_button)) })
+        }
+        if (markupFile && !showingDiff) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = preview, onClick = { preview = true }, label = { Text(stringResource(R.string.files_markup_preview)) })
+            FilterChip(selected = !preview, onClick = { preview = false }, label = { Text(stringResource(R.string.files_markup_source)) })
         }
         if (!showingDiff) file?.let { FileExportControls(connection, address, it) }
         if (file != null && !showingDiff && onSend != null) {
@@ -222,6 +229,9 @@ fun RemoteFilesScreen(
             missing -> Text(stringResource(R.string.files_missing, file.orEmpty()), color = MaterialTheme.colorScheme.error)
             failed -> Text(stringResource(R.string.files_failed), color = MaterialTheme.colorScheme.error)
             showingDiff -> GitFileDiff(connection, address, changes!!.cwd, changedFile, retry, onDiffSend)
+            showingMarkup -> key(connection, address, file, retry) {
+                RemoteMarkdownPreview(connection, address, file!!, Modifier.weight(1f))
+            }
             remoteMediaKind(file!!) != null -> key(connection, address, file, retry) {
                 RemoteFilePreview(connection, address, file!!, Modifier.weight(1f))
             }
