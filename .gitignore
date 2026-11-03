@@ -7,3 +7,5 @@ local.properties
 .kotlin/
 android/app/src/main/jniLibs/
 android/app/src/main/java/uniffi/
+android/app/google-services.json
+/dist/

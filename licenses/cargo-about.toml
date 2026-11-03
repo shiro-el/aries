@@ -1,0 +1,21 @@
+# cargo-about config for the notices of the Rust crates linked into the APK
+# (aries-core and its normal dependencies on the Android targets).
+# Used by the app's `thirdPartyNotices` Gradle task; see CONTRIBUTING.md `## License`.
+accepted = [
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "MIT",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Zlib",
+  "Unicode-3.0",
+  "Unicode-DFS-2016",
+  "CDLA-Permissive-2.0",
+  "MPL-2.0",
+]
+targets = ["aarch64-linux-android", "x86_64-linux-android"]
+ignore-build-dependencies = true
+ignore-dev-dependencies = true
+# ring's license file is not machine-readable; cargo-about ships a clarification.
+workarounds = ["ring"]
