@@ -196,6 +196,11 @@
     <string name="chat_question_send">Send answer</string>
     <string name="chat_question_sending">Sending…</string>
     <string name="chat_question_sent">Answer sent.</string>
+    <!-- Notification question answers -->
+    <string name="question_notify_open_app">Answer in app</string>
+    <string name="question_notify_sent">Sent “%1$s”</string>
+    <string name="question_notify_unknown">The answer may have been sent. Check the Chat before answering again.</string>
+
     <string name="chat_answer_answered">This question was already answered.</string>
     <string name="chat_answer_gone">The Agent is no longer asking this question.</string>
     <string name="chat_answer_invalid">That answer does not fit the question.</string>

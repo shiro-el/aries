@@ -192,6 +192,11 @@
     <string name="chat_question_send">답 보내기</string>
     <string name="chat_question_sending">보내는 중…</string>
     <string name="chat_question_sent">답을 보냈습니다.</string>
+    <!-- Notification question answers -->
+    <string name="question_notify_open_app">앱에서 답하기</string>
+    <string name="question_notify_sent">“%1$s” 전송 완료</string>
+    <string name="question_notify_unknown">답변이 전송되었을 수 있습니다. 다시 답하기 전에 Chat을 확인하세요.</string>
+
     <string name="chat_answer_answered">이미 답한 질문입니다.</string>
     <string name="chat_answer_gone">Agent가 더 이상 이 질문을 묻고 있지 않습니다.</string>
     <string name="chat_answer_invalid">질문에 맞지 않는 답입니다.</string>
