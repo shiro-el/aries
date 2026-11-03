@@ -103,14 +103,14 @@ class GithubPrScreenTest {
         compose.onNodeWithText("src/새 이름.rs").performClick()
         compose.onNodeWithText("+새 코드").assertExists()
         compose.runOnIdle { conn.githubPrFailure = CoreException.Closed() }
-        compose.onNodeWithText(str(R.string.github_refresh)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.github_refresh)).performClick()
         compose.onNodeWithText(str(R.string.github_disconnected)).assertExists()
         compose.onNodeWithText("+새 코드").assertDoesNotExist()
         compose.runOnIdle {
             conn.githubPrFailure = null
             conn.githubPrFiles = GithubPrFiles(emptyList(), false)
         }
-        compose.onNodeWithText(str(R.string.github_refresh)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.github_refresh)).performClick()
         compose.onNodeWithText(str(R.string.github_pr_no_files)).assertExists()
         compose.onNodeWithText(str(R.string.github_disconnected)).assertDoesNotExist()
     }
