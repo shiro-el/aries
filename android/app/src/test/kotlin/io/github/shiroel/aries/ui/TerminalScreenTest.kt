@@ -77,7 +77,7 @@ class TerminalScreenTest {
             )
         }
         open(core)
-        compose.onNodeWithTag("host-terminal:s1:tab1:h1:t1").performClick()
+        compose.onNodeWithText("claude").performClick()
         compose.waitForIdle()
 
         val view = core.connection!!.views.single()

@@ -530,6 +530,7 @@ private fun TerminalCanvas(viewer: TerminalViewer, look: TerminalLook, settings:
             SideEffect { if (viewer.phoneGrid != grid) viewer.phoneGrid = grid }
         }
         look.layout(baseCellW, baseCellH, widthPx, heightPx)
+        if (WindowInsets.ime.getBottom(density) > 0) look.revealCursor()
         LaunchedEffect(viewer.search, look.cellW, look.cellH, heightPx) { look.revealSearchMatch() }
         // Zoom and pan: the phone's view only, the grid stays the Terminal's.
         val fontPx = baseFontPx * look.zoom
