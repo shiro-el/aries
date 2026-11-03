@@ -39,6 +39,7 @@ internal fun AgentScreenHeader(
     onChanges: (() -> Unit)? = null,
     link: HostLink? = null,
     onTerminalUpdate: (TerminalInfo) -> Unit = {},
+    onSearch: (() -> Unit)? = null,
 ) {
     val colors = MaterialTheme.colorScheme
     val hostPrefix = hostName?.let { stringResource(R.string.console_agent_host_prefix, it) }
@@ -79,6 +80,7 @@ internal fun AgentScreenHeader(
         }
         Text(terminal.currentCwd ?: stringResource(R.string.console_agent_unknown_folder), Modifier.weight(1f),
             color = colors.onSurfaceVariant, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        onSearch?.let { ChatSearchButton(it) }
         onChanges?.let { TextButton(onClick = it) { Text(stringResource(R.string.git_changes_button)) } }
         AgentElapsedTime(terminal.statusMs, R.string.console_agent_missing_value, R.string.console_agent_unknown_age)
     }

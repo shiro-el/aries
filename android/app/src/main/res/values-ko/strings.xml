@@ -342,6 +342,14 @@
     <string name="input_history_failed">입력 이력을 읽거나 저장하지 못했습니다.</string>
 
     <string name="chat_title">Chat: %1$s</string>
+    <!-- Chat search -->
+    <string name="chat_search_button">Chat 검색</string>
+    <string name="chat_search_hint">저장된 Chat 검색</string>
+    <string name="chat_search_count">%2$d개 중 %1$d번째 일치</string>
+    <string name="chat_search_previous">이전</string>
+    <string name="chat_search_next">다음</string>
+    <string name="chat_search_close">검색 닫기</string>
+
     <!-- Chat reading position -->
     <string name="chat_latest_button">최신으로</string>
     <string name="chat_latest_count_button">최신으로 (%1$d)</string>

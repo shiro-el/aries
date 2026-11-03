@@ -347,6 +347,14 @@
     <string name="input_history_failed">Could not read or save input history.</string>
 
     <string name="chat_title">Chat: %1$s</string>
+    <!-- Chat search -->
+    <string name="chat_search_button">Search Chat</string>
+    <string name="chat_search_hint">Search cached Chat</string>
+    <string name="chat_search_count">%1$d of %2$d matches</string>
+    <string name="chat_search_previous">Previous</string>
+    <string name="chat_search_next">Next</string>
+    <string name="chat_search_close">Close search</string>
+
     <!-- Chat reading position -->
     <string name="chat_latest_button">Latest</string>
     <string name="chat_latest_count_button">Latest (%1$d)</string>

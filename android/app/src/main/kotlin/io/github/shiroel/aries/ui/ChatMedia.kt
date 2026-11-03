@@ -57,8 +57,8 @@ fun DiffView(diff: ChatDiff, expanded: Boolean) {
     val total = remember(diff) { diff.hunks.sumOf { it.lines.size } }
     val text = remember(diff, limit) { diffText(diff, limit, added, removed, header) }
     Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
-        Text(
-            text,
+        SearchableChatText(
+            text, "tool-diff",
             Modifier.horizontalScroll(rememberScrollState()),
             fontFamily = FontFamily.Monospace,
             style = MaterialTheme.typography.bodySmall,
@@ -81,7 +81,7 @@ fun DiffView(diff: ChatDiff, expanded: Boolean) {
     }
 }
 
-private fun diffText(diff: ChatDiff, limit: Int, added: Color, removed: Color, header: Color): AnnotatedString =
+internal fun diffText(diff: ChatDiff, limit: Int, added: Color, removed: Color, header: Color): AnnotatedString =
     buildAnnotatedString {
         var shown = 0
         var first = true
