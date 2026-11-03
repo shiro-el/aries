@@ -119,6 +119,12 @@
     <string name="chat_tool_expand_label">Show the full %1$s call</string>
     <string name="chat_agent_error">Agent error</string>
     <string name="chat_unsupported">This entry needs a newer version of Aries.</string>
+    <string name="chat_image">Image</string>
+    <string name="chat_image_loading">Loading image…</string>
+    <string name="chat_image_unreadable">This image cannot be shown.</string>
+    <string name="chat_image_too_large">Image too large to show (%1$s MB)</string>
+    <string name="chat_diff_more">%1$d more lines</string>
+    <string name="chat_diff_truncated">The diff is too large; the rest is not shown.</string>
     <string name="space_unnamed">Unnamed Space</string>
     <string name="space_summary">Tabs: %1$d · Panes: %2$d</string>
     <string name="space_no_tabs">This Space has no Tabs.</string>

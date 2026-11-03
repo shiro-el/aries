@@ -260,6 +260,9 @@ class FakeCore : AriesCoreInterface {
     var chatStopped = false
         private set
 
+    /** Bytes `ChatWatch.image` returns, by image id. */
+    val chatImages = mutableMapOf<String, ByteArray>()
+
     fun pushChat(snapshot: ChatSnapshot) {
         chat.trySend(snapshot)
     }
@@ -268,6 +271,8 @@ class FakeCore : AriesCoreInterface {
         chatsOpened += hostId to terminal
         return object : ChatWatch(NoHandle) {
             override suspend fun next(): ChatSnapshot = chat.receive()
+
+            override fun image(id: String): ByteArray? = chatImages[id]
 
             override fun stop() {
                 chatStopped = true
