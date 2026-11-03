@@ -256,13 +256,30 @@ pub(super) fn unreachable_err(e: impl std::fmt::Display) -> CoreError {
     }
 }
 
+/// What a command run with [`Ssh::exec`] produced.
+pub(crate) struct ExecOutput {
+    /// `None` when the Host did not report an exit status.
+    pub status: Option<u32>,
+    pub stdout: Vec<u8>,
+    pub stderr: Vec<u8>,
+}
+
+impl ExecOutput {
+    pub fn success(&self) -> bool {
+        self.status == Some(0)
+    }
+}
+
 impl Ssh {
-    async fn open_inner(&self) -> Result<Stream, CoreError> {
+    /// Connects through the jump hosts, checks every Host key and signs in
+    /// with each hop's key. Returns the jump sessions, which carry the
+    /// Host's and must outlive it, and the Host session.
+    async fn session(&self) -> Result<(Vec<Session>, Session), CoreError> {
         let config = client_config();
-        let mut sessions = through_jumps(&config, &self.jumps).await?;
+        let jumps = through_jumps(&config, &self.jumps).await?;
         let session = reach(
             config,
-            sessions.last(),
+            jumps.last(),
             &self.address,
             self.port,
             &self.user,
@@ -271,6 +288,45 @@ impl Ssh {
         )
         .await
         .map_err(|f| f.into_error(Role::Host, &self.address))?;
+        Ok((jumps, session))
+    }
+
+    /// Runs `command` on the Host (no PTY), feeds it `stdin` then EOF, and
+    /// collects its output.
+    pub async fn exec(&self, command: &str, stdin: &[u8]) -> Result<ExecOutput, CoreError> {
+        let (_jumps, session) = self.session().await?;
+        let mut channel = session
+            .channel_open_session()
+            .await
+            .map_err(unreachable_err)?;
+        channel.exec(true, command).await.map_err(unreachable_err)?;
+        if !stdin.is_empty() {
+            channel.data(stdin).await.map_err(unreachable_err)?;
+        }
+        channel.eof().await.map_err(unreachable_err)?;
+        let mut out = ExecOutput {
+            status: None,
+            stdout: Vec::new(),
+            stderr: Vec::new(),
+        };
+        while let Some(msg) = channel.wait().await {
+            match msg {
+                russh::ChannelMsg::Data { data } => out.stdout.extend_from_slice(&data),
+                russh::ChannelMsg::ExtendedData { data, ext: 1 } => {
+                    out.stderr.extend_from_slice(&data)
+                }
+                russh::ChannelMsg::ExitStatus { exit_status } => out.status = Some(exit_status),
+                _ => {}
+            }
+        }
+        let _ = session
+            .disconnect(russh::Disconnect::ByApplication, "", "")
+            .await;
+        Ok(out)
+    }
+
+    async fn open_inner(&self) -> Result<Stream, CoreError> {
+        let (mut sessions, session) = self.session().await?;
         let channel = session
             .channel_open_session()
             .await

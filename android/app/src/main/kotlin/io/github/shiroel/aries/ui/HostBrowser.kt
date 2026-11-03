@@ -65,6 +65,12 @@ class HostBrowser(val host: Host) {
         list.forEach { live[it.address] = it }
     }
 
+    /** The "new Terminal" form, while it is open. */
+    var launchForm by mutableStateOf<LaunchForm?>(null)
+
+    /** A just-launched Terminal to open once the structure lists it: (space, tab, address). */
+    private var pendingReveal: Triple<String, String, String>? = null
+
     val openSpace: SpaceInfo? get() = structure?.spaces?.find { it.id == openSpaceId }
 
     val tab: TabInfo?
@@ -82,6 +88,32 @@ class HostBrowser(val host: Host) {
         val panes = s.spaces.flatMap { sp -> sp.tabs.map { t -> "${sp.id}/${t.id}" to t.panes.map { it.id } } }.toMap()
         focusOfTab.entries.removeAll { (tab, pane) -> panes[tab]?.contains(pane) != true }
         zoomOfTab.entries.removeAll { (tab, pane) -> panes[tab]?.contains(pane) != true }
+        tryReveal()
+    }
+
+    /**
+     * Shows a Terminal just launched into [spaceId]/[tabId]: opens that Space
+     * and Tab and focuses its Pane as soon as the structure lists it. Without
+     * a Space it is unplaced, so the Space list (where those show) opens.
+     */
+    fun reveal(spaceId: String?, tabId: String?, address: String) {
+        if (spaceId == null || tabId == null) {
+            pendingReveal = null
+            openSpaceId = null
+            return
+        }
+        pendingReveal = Triple(spaceId, tabId, address)
+        openSpaceId = spaceId
+        tabOfSpace[spaceId] = tabId
+        tryReveal()
+    }
+
+    private fun tryReveal() {
+        val (spaceId, tabId, address) = pendingReveal ?: return
+        val tab = structure?.spaces?.find { it.id == spaceId }?.tabs?.find { it.id == tabId } ?: return
+        val pane = tab.panes.find { it.terminalAddress == address } ?: return
+        focusOfTab["$spaceId/$tabId"] = pane.id
+        pendingReveal = null
     }
 
     fun markClosed() {
@@ -117,20 +149,34 @@ class HostBrowser(val host: Host) {
 
 fun displayName(t: TerminalInfo): String = t.name ?: t.title.ifBlank { t.argv.joinToString(" ") }
 
+/** [hostSections] are per-Host panels (the Beacon) shown at the end of the Space list. */
 @Composable
-fun BrowseScreen(browser: HostBrowser, onBack: () -> Unit, onOpen: (TerminalInfo) -> Unit = {}) {
+fun BrowseScreen(
+    browser: HostBrowser,
+    onBack: () -> Unit,
+    onOpen: (TerminalInfo) -> Unit = {},
+    onNewTerminal: (() -> Unit)? = null,
+    onLaunch: (LaunchForm) -> Unit = {},
+    hostSections: @Composable () -> Unit = {},
+) {
     val space = browser.openSpace
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row {
             TextButton(onClick = if (space != null) browser::closeSpace else onBack) {
                 Text(stringResource(R.string.back_button))
             }
+            if (onNewTerminal != null && browser.structure != null && !browser.closed) {
+                TextButton(onClick = onNewTerminal) { Text(stringResource(R.string.launch_open_button)) }
+            }
+        }
+        browser.launchForm?.let { form ->
+            LaunchDialog(form, onLaunch = { onLaunch(form) }, onDismiss = { browser.launchForm = null })
         }
         if (browser.closed) Notice(stringResource(R.string.structure_connection_closed))
         browser.structure?.problem?.let { Notice(problemText(it)) }
         when {
             browser.structure == null -> Text(stringResource(R.string.connecting, browser.host.name))
-            space == null -> SpaceList(browser, browser.structure!!, onOpen)
+            space == null -> SpaceList(browser, browser.structure!!, hostSections, onOpen)
             else -> SpaceView(browser, space, onOpen)
         }
     }
@@ -154,7 +200,12 @@ private fun Notice(text: String) {
 }
 
 @Composable
-private fun SpaceList(browser: HostBrowser, s: HostStructure, onOpen: (TerminalInfo) -> Unit) {
+private fun SpaceList(
+    browser: HostBrowser,
+    s: HostStructure,
+    hostSections: @Composable () -> Unit,
+    onOpen: (TerminalInfo) -> Unit,
+) {
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
             Text(stringResource(R.string.terminals_title, browser.host.name), style = MaterialTheme.typography.headlineSmall)
@@ -177,6 +228,10 @@ private fun SpaceList(browser: HostBrowser, s: HostStructure, onOpen: (TerminalI
                 Text(stringResource(R.string.unplaced_title), style = MaterialTheme.typography.titleMedium)
             }
             items(s.unplaced, key = { "unplaced:" + it.address }) { TerminalRow(browser.current(it)) { onOpen(it) } }
+        }
+        item {
+            HorizontalDivider()
+            hostSections()
         }
     }
 }

@@ -22,6 +22,15 @@ pub enum CoreError {
     Storage { detail: String },
     #[error("key vault failed: {detail}")]
     Vault { detail: String },
+    /// The SSH key needs a biometric unlock and nobody unlocked it (for
+    /// example in the background, or the user cancelled the prompt). The key
+    /// was not used.
+    #[error("the SSH key needs a biometric unlock")]
+    KeyLocked,
+    /// A biometric-protected key cannot be made on this phone (no secure
+    /// lock screen or no enrolled biometric).
+    #[error("biometric unlock is not available: {detail}")]
+    BiometricUnavailable { detail: String },
     #[error("could not reach the Host: {detail}")]
     Unreachable { detail: String },
     /// First connection: the user must confirm `fingerprint` with
@@ -52,6 +61,25 @@ pub enum CoreError {
     Rpc { kind: String, detail: String },
     #[error("the connection to the Host closed")]
     Closed,
+    /// Installing or managing the Beacon needs an SSH Host.
+    #[error("the Beacon can only be managed on an SSH Host")]
+    BeaconNeedsSsh,
+    /// The Host's OS/CPU is not one the Beacon supports (yet).
+    #[error("the Beacon does not support {os}/{arch} Hosts")]
+    UnsupportedHost { os: String, arch: String },
+    /// The release pinned in this app has no binary for the Host.
+    #[error("this app has no Beacon for {os}/{arch}")]
+    BeaconUnavailable { os: String, arch: String },
+    #[error("downloading the Beacon failed: {detail}")]
+    BeaconDownload { detail: String },
+    /// The downloaded binary is not the one pinned in the app. Nothing was
+    /// installed.
+    #[error("the Beacon download has checksum {actual}, expected {expected}")]
+    BeaconChecksum { expected: String, actual: String },
+    /// A step on the Host (`upload`, `verify`, `service`, `status`, ...)
+    /// failed.
+    #[error("Beacon {step} failed on the Host: {detail}")]
+    BeaconStep { step: String, detail: String },
     #[error("no SSH key with id {id}")]
     UnknownKey { id: String },
     /// `hop` is an index into the Host's jump hosts.
@@ -82,6 +110,12 @@ pub enum CoreError {
 pub enum VaultError {
     #[error("{detail}")]
     Failed { detail: String },
+    /// The key needs user authentication that did not happen.
+    #[error("the key needs user authentication")]
+    Locked,
+    /// The requested protection cannot be set up on this device.
+    #[error("biometric unavailable: {detail}")]
+    BiometricUnavailable { detail: String },
 }
 
 impl From<uniffi::UnexpectedUniFFICallbackError> for VaultError {
@@ -92,8 +126,10 @@ impl From<uniffi::UnexpectedUniFFICallbackError> for VaultError {
 
 impl From<VaultError> for CoreError {
     fn from(e: VaultError) -> Self {
-        Self::Vault {
-            detail: e.to_string(),
+        match e {
+            VaultError::Failed { detail } => Self::Vault { detail },
+            VaultError::Locked => Self::KeyLocked,
+            VaultError::BiometricUnavailable { detail } => Self::BiometricUnavailable { detail },
         }
     }
 }

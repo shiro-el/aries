@@ -5,6 +5,8 @@
 //!   developer's own herdr-core session.
 //! - [`SshdHost`]: a docker container running a real OpenSSH sshd with the
 //!   pinned herdr-core installed, for the few tests that exercise SSH itself.
+//! - [`SystemdHost`]: a docker Linux Host with systemd and sshd, for the
+//!   Beacon install tests.
 //!   [`DockerNetwork`] + [`SshdHost::start_on`] chain several of them for
 //!   jump host tests.
 
@@ -477,6 +479,183 @@ fn docker(args: &[&str]) -> String {
     String::from_utf8_lossy(&out.stdout).into_owned()
 }
 
+/// Image tag built from `fixtures/sshd-systemd/Dockerfile`.
+pub const SYSTEMD_IMAGE: &str = "aries-test-sshd-systemd:1";
+
+/// A docker Linux Host with systemd as PID 1 and a real sshd: an SSH login
+/// gets a logind session and a systemd user manager, so `systemctl --user`
+/// works as on a real Host. `loginctl enable-linger` is denied to the user
+/// (no polkit), as on many servers; [`SystemdHost::enable_linger`] does it
+/// as root instead.
+///
+/// The container is not privileged: it gets its own cgroup namespace and
+/// `CAP_SYS_ADMIN` to remount its cgroup tree writable for systemd. Removed
+/// on drop. One user, [`SystemdHost::USER`], with the pinned herdr-core at
+/// `/usr/local/bin/herdr-core`.
+pub struct SystemdHost {
+    container: String,
+    port: u16,
+}
+
+impl SystemdHost {
+    pub const USER: &'static str = "aries";
+
+    /// Builds the image if needed and starts a container.
+    pub fn start() -> Self {
+        let bin = herdr_core_bin();
+        let fixture = repo_root().join("fixtures/sshd-systemd");
+        docker(&[
+            "build",
+            "-q",
+            "-t",
+            SYSTEMD_IMAGE,
+            &fixture.to_string_lossy(),
+        ]);
+        let prefix =
+            std::env::var("ARIES_TEST_CONTAINER_PREFIX").unwrap_or_else(|_| "aries-test".into());
+        let container = unique(&format!("{prefix}-systemd"));
+        let mount = format!("{}:/usr/local/bin/herdr-core:ro", bin.display());
+        docker(&[
+            "run",
+            "-d",
+            "--rm",
+            "-t",
+            "--name",
+            &container,
+            "--cgroupns=private",
+            "--cap-add",
+            "SYS_ADMIN",
+            "--security-opt",
+            "apparmor=unconfined",
+            "--security-opt",
+            "seccomp=unconfined",
+            "--tmpfs",
+            "/run",
+            "--tmpfs",
+            "/run/lock",
+            "-p",
+            "127.0.0.1::22",
+            "-v",
+            &mount,
+            "--entrypoint",
+            "/bin/sh",
+            SYSTEMD_IMAGE,
+            "-c",
+            "mount -o remount,rw /sys/fs/cgroup && exec /sbin/init",
+        ]);
+        let mut host = Self { container, port: 0 };
+        let mapped = docker(&["port", &host.container, "22/tcp"]);
+        host.port = mapped
+            .lines()
+            .next()
+            .and_then(|l| l.rsplit(':').next())
+            .and_then(|p| p.trim().parse().ok())
+            .expect("mapped port");
+        wait_for_sshd(host.port);
+        host
+    }
+
+    /// Host port on 127.0.0.1 that reaches the container's sshd.
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    /// Adds an OpenSSH public key line to the user's `authorized_keys`.
+    pub fn authorize(&self, public_key: &str) {
+        let u = Self::USER;
+        let script = format!(
+            "printf '%s\\n' \"$KEY\" >> /home/{u}/.ssh/authorized_keys && chown {u} /home/{u}/.ssh/authorized_keys"
+        );
+        docker(&[
+            "exec",
+            "-e",
+            &format!("KEY={public_key}"),
+            &self.container,
+            "sh",
+            "-c",
+            &script,
+        ]);
+    }
+
+    /// SHA256 fingerprint (`SHA256:...`) of the container's ed25519 host key.
+    pub fn host_key_fingerprint(&self) -> String {
+        let out = docker(&[
+            "exec",
+            &self.container,
+            "ssh-keygen",
+            "-l",
+            "-f",
+            "/etc/ssh/ssh_host_ed25519_key.pub",
+        ]);
+        out.split_whitespace()
+            .nth(1)
+            .expect("fingerprint")
+            .to_owned()
+    }
+
+    /// Lingers the user, as an admin running `sudo loginctl enable-linger`.
+    pub fn enable_linger(&self) {
+        self.root(&format!("loginctl enable-linger {}", Self::USER));
+    }
+
+    /// Runs `script` with `sh -c` as root; panics on failure, returns stdout.
+    pub fn root(&self, script: &str) -> String {
+        docker(&["exec", &self.container, "sh", "-c", script])
+    }
+
+    /// Runs `script` as root and reports whether it exited 0.
+    pub fn check(&self, script: &str) -> bool {
+        Command::new("docker")
+            .args(["exec", &self.container, "sh", "-c", script])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    }
+}
+
+impl Drop for SystemdHost {
+    fn drop(&mut self) {
+        let _ = Command::new("docker")
+            .args(["rm", "-f", &self.container])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+}
+
+fn wait_for_sshd(port: u16) {
+    let deadline = Instant::now() + Duration::from_secs(60);
+    loop {
+        if let Ok(mut s) = std::net::TcpStream::connect(("127.0.0.1", port)) {
+            use std::io::Read;
+            s.set_read_timeout(Some(Duration::from_secs(2))).ok();
+            let mut buf = [0u8; 4];
+            if s.read_exact(&mut buf).is_ok() && &buf == b"SSH-" {
+                return;
+            }
+        }
+        assert!(Instant::now() < deadline, "sshd did not come up");
+        std::thread::sleep(Duration::from_millis(200));
+    }
+}
+
+/// Builds the workspace's `aries-beacon` (debug) and returns its path, for
+/// tests that upload it to a Host.
+pub fn beacon_bin() -> PathBuf {
+    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
+    let out = Command::new(cargo)
+        .args(["build", "-q", "-p", "aries-beacon"])
+        .current_dir(repo_root())
+        .output()
+        .expect("run cargo build");
+    assert_ok(&out, "cargo build -p aries-beacon");
+    let path = repo_root().join("target/debug/aries-beacon");
+    assert!(path.is_file(), "{} missing", path.display());
+    path
+}
 /// Path of the fake Agent (`fixtures/agents/fake/fake-agent`, POSIX sh).
 pub fn fake_agent_path() -> PathBuf {
     repo_root().join("fixtures/agents/fake/fake-agent")

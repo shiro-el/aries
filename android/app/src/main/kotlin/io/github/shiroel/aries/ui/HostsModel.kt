@@ -4,9 +4,11 @@ import androidx.annotation.StringRes
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import io.github.shiroel.aries.HttpBeaconFetcher
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AriesCoreInterface
 import io.github.shiroel.aries.core.AttachOptions
+import io.github.shiroel.aries.core.BeaconFetcher
 import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.Host
@@ -22,6 +24,9 @@ import io.github.shiroel.aries.core.StructureWatch
 import io.github.shiroel.aries.core.QrMatrix
 import io.github.shiroel.aries.core.TerminalInfo
 import io.github.shiroel.aries.core.TerminalUpdate
+import io.github.shiroel.aries.core.KeyProtection
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -77,9 +82,25 @@ sealed interface Prompt {
 
 enum class AfterTrust { Connect, InstallKey }
 
-/** UI state over the core API. Compose reads the `by mutableStateOf` fields. */
-class HostsModel(private val core: AriesCoreInterface, private val scope: CoroutineScope) {
+/**
+ * UI state over the core API. Compose reads the `by mutableStateOf` fields.
+ *
+ * [keyWork] runs core calls that may open an SSH key. A biometric-protected
+ * key blocks its caller while the prompt is up, so the app passes
+ * `Dispatchers.IO`; tests keep the default and stay on the UI thread.
+ */
+class HostsModel(
+    private val core: AriesCoreInterface,
+    private val scope: CoroutineScope,
+    beaconFetcher: BeaconFetcher = HttpBeaconFetcher(),
+    private val keyWork: CoroutineContext = EmptyCoroutineContext,
+) {
+    /** The Beacon section of the connected Host. */
+    val beacon = BeaconModel(core, scope, beaconFetcher, keyWork)
+
     var key by mutableStateOf<PublicKeyInfo?>(null)
+        private set
+    var keyProtection by mutableStateOf<KeyProtection?>(null)
         private set
     var hosts by mutableStateOf<List<Host>>(emptyList())
         private set
@@ -100,6 +121,7 @@ class HostsModel(private val core: AriesCoreInterface, private val scope: Corout
     init {
         guard {
             key = core.publicKey()
+            keyProtection = core.keyProtection()
             hosts = core.hosts()
             refreshRoutes()
         }
@@ -107,12 +129,33 @@ class HostsModel(private val core: AriesCoreInterface, private val scope: Corout
 
     fun createKey() = guard {
         key = core.ensureKey()
+        keyProtection = core.keyProtection()
         keys = core.keys()
     }
 
-    fun createExtraKey(label: String) = guard {
-        core.createKey(label.trim())
-        keys = core.keys()
+    /** Re-seals every SSH key with or without a biometric requirement. */
+    fun requireBiometric(required: Boolean) {
+        val protection = if (required) KeyProtection.BIOMETRIC else KeyProtection.PLAIN
+        scope.launch {
+            try {
+                withContext(keyWork) { core.setKeyProtection(protection) }
+            } catch (e: CoreException) {
+                prompt = problemFor(e)
+            }
+            guard { keyProtection = core.keyProtection() }
+        }
+    }
+
+    /** Creates another key under the current policy, so it may ask for a biometric unlock. */
+    fun createExtraKey(label: String) {
+        scope.launch {
+            try {
+                withContext(keyWork) { core.createKey(label.trim()) }
+            } catch (e: CoreException) {
+                prompt = problemFor(e)
+            }
+            guard { keys = core.keys() }
+        }
     }
 
     fun editJumps(host: Host) = guard {
@@ -142,10 +185,11 @@ class HostsModel(private val core: AriesCoreInterface, private val scope: Corout
         screen = Screen.Connecting(host)
         scope.launch {
             try {
-                val conn = core.connect(host.id)
+                val conn = withContext(keyWork) { core.connect(host.id) }
                 val browser = HostBrowser(host)
                 open = conn to null
                 screen = Screen.Browse(browser)
+                beacon.load(host)
                 try {
                     val watch = conn.watchStructure(object : StructureListener {
                         override fun onStructure(structure: HostStructure) {
@@ -174,6 +218,32 @@ class HostsModel(private val core: AriesCoreInterface, private val scope: Corout
                     is CoreException.JumpHostKeyUnknown -> Prompt.TrustJumpHostKey(host, e.hop, e.address, e.fingerprint)
                     else -> problemFor(e)
                 }
+            }
+        }
+    }
+
+    /** Opens the "new Terminal" form on [browser], starting at the Space/Tab shown. */
+    fun newTerminal(browser: HostBrowser) {
+        val conn = open?.first ?: return
+        val structure = browser.structure ?: return
+        browser.launchForm = LaunchForm(structure, conn.recentCwds(), browser.openSpaceId, browser.tab?.id)
+    }
+
+    /** Starts [form]'s command on the open Host, then shows the new Terminal; failures stay on the form. */
+    fun launch(browser: HostBrowser, form: LaunchForm) {
+        val conn = open?.first ?: return
+        val request = form.request()
+        form.busy = true
+        form.error = null
+        scope.launch {
+            try {
+                val terminal = conn.launch(request)
+                if (browser.launchForm === form) browser.launchForm = null
+                browser.reveal(request.spaceId, request.tabId, terminal.address)
+            } catch (e: CoreException) {
+                form.error = launchProblem(e)
+            } finally {
+                form.busy = false
             }
         }
     }
@@ -375,6 +445,14 @@ fun problemFor(e: CoreException): Prompt.Problem {
         )
         is CoreException.AuthRejected -> Prompt.Problem(failed, Message(R.string.connect_auth_rejected))
         is CoreException.NoKey -> Prompt.Problem(failed, Message(R.string.connect_no_key))
+        is CoreException.KeyLocked -> Prompt.Problem(
+            Message(R.string.key_locked_title),
+            Message(R.string.key_locked_body),
+        )
+        is CoreException.BiometricUnavailable -> Prompt.Problem(
+            Message(R.string.key_biometric_unavailable_title),
+            Message(R.string.key_biometric_unavailable_body),
+        )
         is CoreException.Unreachable -> Prompt.Problem(failed, Message(R.string.connect_unreachable, listOf(e.detail)))
         is CoreException.Protocol -> Prompt.Problem(failed, Message(R.string.connect_protocol, listOf(e.detail)))
         else -> Prompt.Problem(failed, Message(R.string.connect_other, listOf(e.message ?: "")))
