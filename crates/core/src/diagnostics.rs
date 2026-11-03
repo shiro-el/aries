@@ -29,6 +29,7 @@ pub enum DiagnosticEvent {
     PushEnable,
     PushDisable,
     PushTest,
+    PushVerification,
     RelayRequest,
     PushReceive,
 }
@@ -52,6 +53,7 @@ pub enum DiagnosticError {
     BeaconChecksum,
     BeaconOperation,
     RelayRegistration,
+    RelayVerification,
     RelayRemoval,
     PushRejected,
     Http,
@@ -224,6 +226,7 @@ pub(crate) fn category(error: &CoreError) -> DiagnosticError {
         }
         C::PushFailed { step, .. } => match step {
             crate::PushStep::Register => D::RelayRegistration,
+            crate::PushStep::Verify => D::RelayVerification,
             crate::PushStep::Unpair => D::RelayRemoval,
             crate::PushStep::Pair | crate::PushStep::Test => D::BeaconOperation,
         },
