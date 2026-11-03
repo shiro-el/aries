@@ -345,7 +345,7 @@ class ChatScreenTest {
         assertEquals(listOf("h2" to "t1"), core.chatsOpened)
         compose.onNodeWithText(str(R.string.console_agent_host_prefix, "server") + "claude").assertExists()
 
-        compose.onNodeWithText(str(R.string.back_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         compose.waitForIdle()
         assertTrue(core.chatStopped)
         compose.onNodeWithText("claude").assertExists()
@@ -444,7 +444,7 @@ class ChatScreenTest {
     fun backLeavesTheChatAndStopsFollowing() {
         val core = FakeCore()
         openChat(core)
-        compose.onNodeWithText(str(R.string.back_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         compose.waitForIdle()
         assertTrue(core.chatStopped)
         compose.onNodeWithText("claude").assertExists()

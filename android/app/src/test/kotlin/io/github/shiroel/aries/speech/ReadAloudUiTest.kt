@@ -95,7 +95,7 @@ class ReadAloudUiTest {
         compose.runOnIdle { engine.finished(SpeechResult.FAILED) }
         compose.onNodeWithText(str(R.string.read_aloud_failed)).assertExists()
         compose.onNodeWithTag("read-aloud-preview").performClick()
-        compose.onNodeWithText(str(R.string.back_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         compose.runOnIdle { assertTrue(engine.closed) }
         settings()
         compose.onNodeWithText(str(R.string.read_aloud_voice, "English (en-US)")).assertExists()

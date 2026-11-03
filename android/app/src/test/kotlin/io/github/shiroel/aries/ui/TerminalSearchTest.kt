@@ -113,7 +113,7 @@ class TerminalSearchTest {
         results(view, 0u, 180u)
         compose.onNodeWithText(str(R.string.terminal_search_count, 1, 2)).assertExists()
         assertTrue(!view.detached)
-        compose.onNodeWithText(str(R.string.back_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         compose.waitForIdle()
         assertTrue(view.detached)
     }

@@ -220,7 +220,7 @@ class ChatSendTest {
         assertEquals(true, conn.views.single().options.observe)
 
         // Back from the Terminal is the Chat, still live.
-        compose.onNodeWithText(str(R.string.back_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         compose.waitForIdle()
         compose.onNodeWithText(str(R.string.console_agent_host_prefix, "home") + "claude").assertExists()
         compose.onNodeWithText("go on").assertExists()
@@ -242,7 +242,7 @@ class ChatSendTest {
         assertEquals(true, conn.views.single().detached)
 
         // Back is the Host, not the Terminal again.
-        compose.onNodeWithText(str(R.string.back_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         compose.waitForIdle()
         compose.onNodeWithText("claude").assertExists()
         compose.onNodeWithText(str(R.string.console_agent_host_prefix, "home") + "claude").assertDoesNotExist()
@@ -266,7 +266,7 @@ class ChatSendTest {
         assertEquals(emptyList<String>(), conn.calls.filter { it == "sendMessage" })
 
         // Approved at the Host: the Agent works again and the notice goes.
-        compose.onNodeWithText(str(R.string.back_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         compose.waitForIdle()
         core.push(listOf(claude.copy(agentStatus = AgentStatus.Working)))
         compose.waitForIdle()
