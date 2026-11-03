@@ -1701,6 +1701,7 @@ async fn read_structure(
     let terminals = list["terminals"].as_array().cloned().unwrap_or_default();
     let mut structure = structure::build(&doc, &terminals);
     names.lock().await.apply(client, &mut structure).await;
+    structure::apply_where_names(&mut structure, &terminals);
     Ok(structure)
 }
 

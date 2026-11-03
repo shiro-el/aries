@@ -1,9 +1,6 @@
 package io.github.shiroel.aries.ui
 
-import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,13 +13,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import io.github.shiroel.aries.R
-import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.core.Host
 import io.github.shiroel.aries.core.HostStructure
 import io.github.shiroel.aries.core.TerminalInfo
@@ -53,9 +45,8 @@ data class AgentKey(val hostId: String, val address: String)
 class AgentBoard(val hosts: List<Host>) {
     private val lists = mutableStateMapOf<String, List<TerminalInfo>>()
     private val structures = mutableStateMapOf<String, HostStructure>()
+    /** Compatibility with older callers; orderAgents ignores the retired Grouped value. */
     var view by mutableStateOf(AgentListView.Priority)
-    val foldedAgents = mutableStateMapOf<AgentKey, Boolean>()
-    val foldedGroups = mutableStateMapOf<String, Boolean>()
 
     /** Hosts that could not be reached, with why. */
     val unavailable = mutableStateMapOf<String, Message>()
@@ -118,19 +109,11 @@ fun AgentsScreen(
     onPin: (AgentEntry, Boolean) -> Unit,
     showHeader: Boolean = true,
 ) {
+    val folds = rememberTreeFolds("agents")
     LazyColumn(Modifier.fillMaxSize()) {
         if (showHeader) item {
             TextButton(onClick = onBack) { Text(stringResource(R.string.back_button)) }
             Text(stringResource(R.string.agents_title), style = MaterialTheme.typography.headlineSmall)
-        }
-        item {
-            Row {
-                AgentListView.entries.forEach { view ->
-                    TextButton(onClick = { board.view = view }, enabled = board.view != view) {
-                        Text(stringResource(if (view == AgentListView.Priority) R.string.agents_view_priority else R.string.agents_view_grouped))
-                    }
-                }
-            }
         }
         if (board.hosts.isEmpty()) item { Text(stringResource(R.string.agents_no_hosts)) }
         items(board.hosts.filter { it.id in board.unavailable }, key = { "down:" + it.id }) { host ->
@@ -156,92 +139,6 @@ fun AgentsScreen(
         }
         val agents = board.agents
         if (board.hosts.isNotEmpty() && agents.isEmpty()) item { Text(stringResource(R.string.agents_empty)) }
-        agentGroups(agents, board.view).forEach { group ->
-            val folded = board.foldedGroups[group.id] == true
-            item(key = "group:${group.id}") {
-                TextButton(onClick = { board.foldedGroups[group.id] = !folded }) {
-                    Text(agentGroupLabel(group))
-                    if (folded) AgentStatusMark(priorityStatus(group.priority))
-                }
-            }
-            if (!folded) {
-                val rows = agentTreeRows(group.entries, board.foldedAgents.filterValues { it }.keys)
-                items(rows, key = { "${it.value.key.hostId}\n${it.value.key.address}" }) { row ->
-                    val entry = row.value
-                    val descendants = agentDescendants(group.entries, entry.key)
-                    TerminalBranch(row.guide, row.depth) {
-                        AgentRow(entry, onOpen = { onOpen(entry) }, onPin = { onPin(entry, it) }, fold = {
-                            AgentFoldButton(entry, descendants, board.foldedAgents[entry.key] == true) {
-                                board.foldedAgents[entry.key] = board.foldedAgents[entry.key] != true
-                            }
-                        })
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun AgentRow(entry: AgentEntry, onOpen: () -> Unit, onPin: (Boolean) -> Unit, fold: @Composable () -> Unit) {
-    ConsoleTerminalRow(entry.terminal, entry.host.name, onOpen,
-        modifier = Modifier.testTag("agent-row:${entry.key.hostId}:${entry.key.address}"),
-        trailing = { fold(); if (entry.terminal.agentStatus != null) PinButton(entry, onPin) })
-}
-
-@Composable
-private fun agentGroupLabel(group: AgentGroup): String = when {
-    group.id == "pinned" -> stringResource(R.string.agents_pinned_group, group.count)
-    group.id.startsWith("priority:") -> stringResource(R.string.agents_priority_group,
-        stringResource(when (group.priority) {
-            4 -> R.string.agents_needs_you
-            3 -> R.string.agent_status_done
-            2 -> R.string.agent_status_working
-            else -> R.string.agent_status_idle
-        }), group.count)
-    else -> stringResource(R.string.agents_space_group, group.entries.first().host.name,
-        group.space?.name ?: stringResource(R.string.unplaced_title), group.count)
-}
-
-private fun priorityStatus(priority: Int): AgentStatus = when (priority) {
-    4 -> AgentStatus.Blocked(null, null)
-    3 -> AgentStatus.Done
-    2 -> AgentStatus.Working
-    else -> AgentStatus.Idle
-}
-
-@Composable
-internal fun AgentFoldButton(entry: AgentEntry, descendants: List<AgentEntry>, folded: Boolean, onFold: () -> Unit) {
-    if (descendants.isEmpty()) return
-    val label = stringResource(if (folded) R.string.agents_expand_children else R.string.agents_collapse_children,
-        displayName(entry.terminal), descendants.size)
-    TextButton(onClick = onFold, modifier = Modifier.testTag("agent-fold:${entry.host.id}:${entry.terminal.address}")
-        .semantics { contentDescription = label }) {
-        Text(stringResource(if (folded) R.string.agents_fold_closed else R.string.agents_fold_open))
-        if (folded) Row(Modifier.testTag("agent-summary:${entry.host.id}:${entry.terminal.address}")) {
-            Text(stringResource(R.string.agents_child_count, descendants.size))
-            AgentStatusMark(priorityStatus(descendants.maxOf { agentPriority(childAgentStatus(it.terminal.agentStatus)) }))
-        }
-    }
-}
-
-@Composable
-private fun PinButton(entry: AgentEntry, onPin: (Boolean) -> Unit) {
-    val name = displayName(entry.terminal)
-    val pinned = entry.terminal.pinned
-    val label = stringResource(
-        if (pinned) R.string.agent_unpin_button_label else R.string.agent_pin_button_label,
-        name,
-        entry.host.name,
-    )
-    TextButton(
-        onClick = { onPin(!pinned) },
-        shape = RectangleShape,
-        modifier = Modifier.semantics { contentDescription = label; selected = pinned },
-    ) {
-        Text(
-            stringResource(if (pinned) R.string.agent_unpin_button else R.string.agent_pin_button),
-            fontFamily = FontFamily.Monospace,
-        )
+        agentTreeItems(agents, folds, onOpen, onPin)
     }
 }

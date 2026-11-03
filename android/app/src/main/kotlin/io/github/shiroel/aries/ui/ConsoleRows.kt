@@ -1,7 +1,7 @@
 package io.github.shiroel.aries.ui
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -21,6 +21,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.testTag
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.core.TerminalInfo
@@ -43,13 +44,15 @@ internal fun ConsoleChoice(selected: Boolean, onClick: () -> Unit, modifier: Mod
         }) { label() }
 }
 
-/** Two-line Console row shared by Agents and Browse's Terminal leaves. */
+/** Two-line row: only the name and location flex; metadata keeps fixed columns. */
 @Composable
 internal fun ConsoleTerminalRow(
     terminal: TerminalInfo,
     host: String,
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
+    spaceName: String? = null,
+    onLongClick: (() -> Unit)? = null,
     trailing: @Composable RowScope.() -> Unit = {},
 ) {
     val status = terminal.agentStatus
@@ -57,41 +60,47 @@ internal fun ConsoleTerminalRow(
     val location = stringResource(R.string.terminal_subtitle, host, terminal.address)
     val spokenName = stringResource(R.string.console_agent_accessibility, displayName(terminal), location)
     val description = status?.let { stringResource(agentStatusLabel(it)) } ?: terminal.state
-    val sub = if (waiting) statusMessage(status)?.takeIf { it.isNotBlank() } ?: description
-        else stringResource(R.string.console_agent_location, host, terminal.currentCwd ?: terminal.address)
-    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Row(
-            Modifier.weight(1f).clickable(onClick = onOpen).semantics {
-                contentDescription = spokenName
-                stateDescription = description
-            }.heightIn(min = 48.dp).padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            if (status != null) AgentStatusMark(status) else TerminalMark()
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(displayName(terminal), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    terminal.currentProgram?.takeIf { it != displayName(terminal) }?.let { program ->
-                        Text(program, Modifier.weight(0.4f, fill = false), style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
+    val folder = stringResource(R.string.console_agent_location, host, terminal.currentCwd ?: terminal.address)
+    val sub = listOfNotNull(spaceName, if (waiting) statusMessage(status)?.takeIf { it.isNotBlank() } ?: description else folder)
+        .joinToString(" · ")
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val kindWidth = (48 * density.fontScale).dp
+    val ageWidth = (56 * density.fontScale).dp
+    val titleHeight = with(density) { MaterialTheme.typography.bodyMedium.lineHeight.toDp() }
+    val actionsLabel = stringResource(R.string.terminals_actions_label)
+    Column(modifier.fillMaxWidth().combinedClickable(onClick = onOpen, onLongClick = onLongClick, onLongClickLabel = actionsLabel).semantics {
+        contentDescription = spokenName
+        stateDescription = description
+    }) {
+        Row(verticalAlignment = Alignment.Top) {
+            Row(
+                Modifier.weight(1f).heightIn(min = 48.dp).padding(start = 8.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Box(Modifier.height(titleHeight), contentAlignment = Alignment.Center) {
+                    if (status != null) AgentStatusMark(status) else TerminalMark()
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(sub, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
+                Column(Modifier.weight(1f)) {
+                    Text(displayName(terminal), style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(sub, style = MaterialTheme.typography.bodySmall,
                         color = if (waiting) statusColor(AgentStatus.Blocked(null, null)) else MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (waiting) Text(terminal.currentCwd ?: terminal.address, Modifier.weight(1f),
+                }
+                Box(Modifier.width(kindWidth).height(titleHeight), contentAlignment = Alignment.CenterStart) {
+                    Text(terminal.currentProgram.orEmpty(), Modifier.testTag("terminal-kind:${terminal.address}"),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
+                Box(Modifier.width(ageWidth).height(titleHeight).testTag("terminal-age:${terminal.address}"), contentAlignment = Alignment.CenterEnd) {
+                    if (status != null) AgentElapsedTime(terminal.statusMs)
+                }
             }
-            if (status != null) AgentElapsedTime(terminal.statusMs)
+            trailing()
         }
-        trailing()
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     }
-    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 }
 
 /** A plain Terminal has a prompt, with no Agent-status accessibility label. */

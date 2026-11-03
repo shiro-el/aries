@@ -115,6 +115,42 @@ pub(crate) fn build(doc: &Value, terminals: &[Value]) -> HostStructure {
     structure
 }
 
+/// Desktop-computed names win over cwd guesses for automatic names. Keep ids
+/// for grouping and explicit document names for edits racing a `where` update.
+/// Split at the last separator: Space names may themselves contain " / ".
+pub(crate) fn apply_where_names(structure: &mut HostStructure, terminals: &[Value]) {
+    let places: HashMap<_, _> = terminals
+        .iter()
+        .filter_map(|t| {
+            let (space, tab) = t["labels"]["where"].as_str()?.rsplit_once(" / ")?;
+            if space.is_empty() || tab.is_empty() {
+                return None;
+            }
+            Some((t["address"].as_str()?, (space, tab)))
+        })
+        .collect();
+    for space in &mut structure.spaces {
+        let mut space_name = None;
+        for tab in &mut space.tabs {
+            if let Some(&(name, tab_name)) = tab
+                .panes
+                .iter()
+                .find_map(|p| places.get(p.terminal_address.as_str()))
+            {
+                space_name.get_or_insert(name);
+                if !tab.named {
+                    tab.name = tab_name.to_owned();
+                }
+            }
+        }
+        if !space.named
+            && let Some(name) = space_name
+        {
+            space.name = name.to_owned();
+        }
+    }
+}
+
 /// Follow only listed ancestors, bounded like herdr-app's `write_where`.
 /// Existing Panes win; labels do not give a child a synthetic Pane.
 fn place_sub_agents(structure: &mut HostStructure, terminals: &[Value]) {

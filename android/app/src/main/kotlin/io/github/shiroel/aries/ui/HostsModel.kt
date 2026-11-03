@@ -1198,6 +1198,27 @@ class HostsModel(
         } else if (openChat) chat(link, t, agents) else show(link, t, agents)
     }
 
+    /** Pin from any shared row, using the connection already owned by that surface. */
+    fun pin(entry: AgentEntry, pinned: Boolean) {
+        val link = agentLinks[entry.host.id] ?: browseLink?.takeIf { it.host.id == entry.host.id } ?: return
+        val conn = link.connection ?: return
+        scope.launch {
+            try {
+                val terminal = conn.setPinned(entry.terminal.address, pinned)
+                fun replace(route: Screen) {
+                    when (route) {
+                        is Screen.Agents -> route.board.replace(entry.host.id, terminal)
+                        is Screen.Browse -> if (route.browser.host.id == entry.host.id) route.browser.replaceTerminal(terminal)
+                        is Screen.Chat -> replace(route.returnTo)
+                        is Screen.Terminal -> replace(route.returnTo)
+                        else -> Unit
+                    }
+                }
+                replace(screen)
+            } catch (e: CoreException) { prompt = problemFor(e) }
+        }
+    }
+
     /** Pins or unpins an Agent for every client. */
     fun pin(board: AgentBoard, entry: AgentEntry, pinned: Boolean) =
         labelWrite(board, entry) { it.setPinned(entry.terminal.address, pinned) }
