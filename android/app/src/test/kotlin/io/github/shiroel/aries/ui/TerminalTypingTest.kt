@@ -70,7 +70,7 @@ class TerminalTypingTest {
     }
 
     private fun desktopFrame(view: FakeTerminalView) =
-        view.push(TerminalUpdate.Screen(ScreenFrame(200u, 120u, true, emptyList(), null, null)))
+        view.push(TerminalUpdate.Screen(ScreenFrame(200u, 120u, true, emptyList(), null, null, 0u, 0u)))
 
     @Test
     fun focusingTheInputReattachesForTypingAtThePhonesSize() {
@@ -93,7 +93,7 @@ class TerminalTypingTest {
         val rows = typing.options.rows.toInt()
         // Robolectric's glyph widths are not a phone's, so only the rows are a real phone size.
         assertTrue("the phone's grid, not the desktop's: ${cols}x$rows", cols != 200 && rows in 5..119)
-        typing.push(TerminalUpdate.Screen(ScreenFrame(cols.toUShort(), rows.toUShort(), true, emptyList(), null, null)))
+        typing.push(TerminalUpdate.Screen(ScreenFrame(cols.toUShort(), rows.toUShort(), true, emptyList(), null, null, 0u, 0u)))
         compose.waitForIdle()
         compose.onNodeWithText(str(R.string.terminal_typing, "t1", cols, rows)).assertExists()
     }

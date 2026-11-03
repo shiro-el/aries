@@ -72,9 +72,16 @@ fun AriesApp(model: HostsModel) {
                         s.browser,
                         onBack = model::back,
                         onOpen = model::openTerminal,
+                        onOpenChat = { model.openChat(s.browser.host, it) },
                         onNewTerminal = { model.newTerminal(s.browser) },
                         onLaunch = { model.launch(s.browser, it) },
-                        hostSections = { BeaconSection(model.beacon) },
+                        onSaveLaunch = { model.saveLaunch(s.browser, it) },
+                        onDeleteLaunch = { form, saved -> model.deleteSavedLaunch(s.browser, form, saved) },
+                        onRunSaved = { model.runSaved(s.browser, it) },
+                        hostSections = {
+                            BeaconSection(model.beacon)
+                            PushSection(model.push, beaconInstalled = model.beacon.installed)
+                        },
                     )
                 }
                 is Screen.Terminal -> {
@@ -95,7 +102,12 @@ fun AriesApp(model: HostsModel) {
                         onOpen = { model.openAgent(s.board, it) },
                         onPin = { entry, pinned -> model.pin(s.board, entry, pinned) },
                         onTerminal = { model.openTerminal(it.terminal) },
+                        onChat = { model.openChat(it.host, it.terminal) },
                     )
+                }
+                is Screen.Chat -> {
+                    BackHandler { model.closeChat() }
+                    ChatScreen(s.chat, onBack = model::closeChat)
                 }
             }
         }

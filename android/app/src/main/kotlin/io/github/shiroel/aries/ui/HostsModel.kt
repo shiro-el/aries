@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github.shiroel.aries.HttpBeaconFetcher
+import io.github.shiroel.aries.HttpRelayClient
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.core.AriesCoreInterface
@@ -17,11 +18,13 @@ import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.Host
 import io.github.shiroel.aries.core.HostConnection
 import io.github.shiroel.aries.core.HostStructure
+import io.github.shiroel.aries.core.HttpClient
 import io.github.shiroel.aries.core.Incompatibility
 import io.github.shiroel.aries.core.JumpHost
 import io.github.shiroel.aries.core.KeyInfo
 import io.github.shiroel.aries.core.KeyInstall
 import io.github.shiroel.aries.core.PublicKeyInfo
+import io.github.shiroel.aries.core.SavedLaunch
 import io.github.shiroel.aries.core.StructureListener
 import io.github.shiroel.aries.core.StructureWatch
 import io.github.shiroel.aries.core.QrMatrix
@@ -33,7 +36,9 @@ import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.dropWhile
@@ -61,6 +66,9 @@ sealed interface Screen {
 
     /** Every Host's Agents in one list. */
     data class Agents(val board: AgentBoard) : Screen
+
+    /** An Agent's Chat; back returns to [returnTo] (its Host's Browse or the Agents list). */
+    data class Chat(val chat: ChatModel, val returnTo: Screen) : Screen
 }
 
 sealed interface Prompt {
@@ -107,9 +115,24 @@ class HostsModel(
     private val scope: CoroutineScope,
     beaconFetcher: BeaconFetcher = HttpBeaconFetcher(),
     private val keyWork: CoroutineContext = EmptyCoroutineContext,
+    pushPlatform: PushPlatform = NoPush,
+    private val http: HttpClient = HttpRelayClient(),
 ) {
     /** The Beacon section of the connected Host. */
-    val beacon = BeaconModel(core, scope, beaconFetcher, keyWork)
+    val beacon = BeaconModel(core, scope, beaconFetcher, onRemoved = { onBeaconRemoved() }, keyWork = keyWork)
+
+    /** The push section of the connected Host. */
+    val push = PushModel(core, scope, pushPlatform, http)
+
+    private fun onBeaconRemoved() {
+        flushPushRevocations()
+        beacon.host?.let(push::load)
+    }
+
+    /** Sends the Relay revocations that Host or Beacon removal queued. */
+    fun flushPushRevocations() {
+        scope.launch { core.flushPushRevocations(http) }
+    }
 
     var key by mutableStateOf<PublicKeyInfo?>(null)
         private set
@@ -132,8 +155,26 @@ class HostsModel(
     var attachMode by mutableStateOf(AttachMode.OBSERVE)
         private set
 
-    /** The open Host's connection and structure watch, while [Screen.Browse] shows. */
+    /** The open Host's connection and structure watch, while [Screen.Browse] shows (the latest line after a reconnect). */
     private var open: Pair<HostConnection, StructureWatch?>? = null
+
+    /** The open Host's line, which reconnects on its own; see [HostLink]. */
+    private var browseLink: HostLink? = null
+
+    private fun link(host: Host, conn: HostConnection) = HostLink(
+        host, conn, scope,
+        connect = { withContext(keyWork) { core.connect(host.id) } },
+        onDown = { prompt = it },
+    )
+
+    /** Every line the screens use now: the open Host's and the Agent list's. */
+    private val links: List<HostLink> get() = listOfNotNull(browseLink) + agentLinks.values
+
+    /** The phone's network changed (Wi-Fi to LTE, airplane mode): replace every line and restore the screens. */
+    fun networkChanged() = links.forEach { it.networkChanged() }
+
+    /** The app is back in the foreground: reconnect any line that died meanwhile. */
+    fun foregrounded() = links.forEach { it.check() }
 
     init {
         guard {
@@ -143,6 +184,7 @@ class HostsModel(
             refreshRoutes()
             attachMode = core.attachMode()
         }
+        flushPushRevocations()
     }
 
     fun createKey() = guard {
@@ -205,30 +247,15 @@ class HostsModel(
             try {
                 val conn = withContext(keyWork) { core.connect(host.id) }
                 val browser = HostBrowser(host)
+                val link = link(host, conn)
+                browser.link = link
+                browseLink = link
+                browser.savedLaunches = conn.savedLaunches()
                 open = conn to null
                 screen = Screen.Browse(browser)
                 beacon.load(host)
-                try {
-                    val watch = conn.watchStructure(object : StructureListener {
-                        override fun onStructure(structure: HostStructure) {
-                            scope.launch { browser.update(structure) }
-                        }
-
-                        override fun onClosed() {
-                            scope.launch { browser.markClosed() }
-                        }
-                    })
-                    if (open?.first === conn) {
-                        open = conn to watch
-                        status = watchStatus(conn, browser)
-                    } else {
-                        watch.stop()
-                    }
-                } catch (e: CoreException) {
-                    if (open?.first === conn) open = null
-                    conn.disconnect()
-                    throw e
-                }
+                push.load(host)
+                status = watchBrowse(link, browser)
             } catch (e: CoreException) {
                 screen = Screen.Hosts
                 prompt = when (e) {
@@ -244,7 +271,49 @@ class HostsModel(
     fun newTerminal(browser: HostBrowser) {
         val conn = open?.first ?: return
         val structure = browser.structure ?: return
-        browser.launchForm = LaunchForm(structure, conn.recentCwds(), browser.openSpaceId, browser.tab?.id)
+        browser.launchForm =
+            LaunchForm(structure, conn.recentCwds(), browser.openSpaceId, browser.tab?.id, browser.savedLaunches)
+    }
+
+    /** Saves [form] under its name (new, or replacing the config it edits); the form stays open. */
+    fun saveLaunch(browser: HostBrowser, form: LaunchForm) {
+        val conn = open?.first ?: return
+        form.error = null
+        try {
+            form.stored(conn.saveLaunch(form.toSaved()))
+            browser.savedLaunches = form.saved.toList()
+        } catch (e: CoreException) {
+            form.error = launchProblem(e)
+        }
+    }
+
+    fun deleteSavedLaunch(browser: HostBrowser, form: LaunchForm, saved: SavedLaunch) {
+        val conn = open?.first ?: return
+        form.error = null
+        try {
+            conn.deleteSavedLaunch(saved.id)
+            form.removed(saved.id)
+            browser.savedLaunches = form.saved.toList()
+        } catch (e: CoreException) {
+            form.error = launchProblem(e)
+        }
+    }
+
+    /** One tap: starts [saved] as stored. If that fails, its form opens with the reason. */
+    fun runSaved(browser: HostBrowser, saved: SavedLaunch) {
+        val conn = open?.first ?: return
+        val structure = browser.structure ?: return
+        scope.launch {
+            try {
+                val terminal = conn.launch(saved.request)
+                browser.reveal(saved.request.spaceId, saved.request.tabId, terminal.address)
+            } catch (e: CoreException) {
+                val form = LaunchForm(structure, conn.recentCwds(), null, null, browser.savedLaunches)
+                form.edit(saved)
+                form.error = launchProblem(e)
+                browser.launchForm = form
+            }
+        }
     }
 
     /** Starts [form]'s command on the open Host, then shows the new Terminal; failures stay on the form. */
@@ -334,6 +403,7 @@ class HostsModel(
         guard {
             core.removeHost(prompt.host.id)
             hosts = core.hosts()
+            flushPushRevocations()
         }
     }
 
@@ -341,23 +411,36 @@ class HostsModel(
         prompt = null
     }
 
-    /** Live Agent status of the open Host's Terminals; cancelled on [back]. */
+    /** The open Host's structure and live Agent status, on each line [HostLink] brings; cancelled on [back]. */
     private var status: Job? = null
 
-    private fun watchStatus(conn: HostConnection, browser: HostBrowser): Job = scope.launch {
-        val watch = try {
-            conn.watchTerminals()
-        } catch (e: CoreException) {
-            browser.markClosed()
-            return@launch
-        }
+    private fun watchBrowse(link: HostLink, browser: HostBrowser): Job = scope.launch {
         try {
-            // Each change replaces the list, so Agent status stays live.
-            while (true) browser.updateTerminals(watch.next())
+            link.keep { conn, _ ->
+                val structure = conn.watchStructure(object : StructureListener {
+                    override fun onStructure(structure: HostStructure) {
+                        scope.launch { browser.update(structure) }
+                    }
+
+                    override fun onClosed() {
+                        scope.launch { link.lost(conn) }
+                    }
+                })
+                open = conn to structure
+                try {
+                    val watch = conn.watchTerminals()
+                    try {
+                        // Each change replaces the list, so Agent status stays live.
+                        while (true) browser.updateTerminals(watch.next())
+                    } finally {
+                        watch.stop()
+                    }
+                } finally {
+                    structure.stop()
+                }
+            }
         } catch (e: CoreException) {
             browser.markClosed()
-        } finally {
-            watch.stop()
         }
     }
 
@@ -374,94 +457,112 @@ class HostsModel(
     fun openTerminal(terminal: TerminalInfo) {
         when (val s = screen) {
             is Screen.Browse -> {
-                val conn = open?.first ?: return
-                observe(conn, s.browser.current(terminal), s)
+                val link = browseLink ?: return
+                observe(link, s.browser.current(terminal), s)
             }
             is Screen.Agents -> {
                 val key = s.board.openKey ?: return
                 if (key.address != terminal.address) return
-                val conn = agentConns[key.hostId] ?: return
-                observe(conn, s.board.find(key)?.terminal ?: terminal, s)
+                val link = agentLinks[key.hostId] ?: return
+                observe(link, s.board.find(key)?.terminal ?: terminal, s)
             }
             else -> return
         }
     }
 
-    private fun observe(conn: HostConnection, terminal: TerminalInfo, returnTo: Screen) {
+    /** Re-attaches with `resumed` on each new line, so the screen comes back after a network change. */
+    private fun observe(link: HostLink, terminal: TerminalInfo, returnTo: Screen) {
         val viewer = TerminalViewer(terminal)
+        viewer.link = link
         if (attachMode == AttachMode.INPUT) viewer.startTyping()
         screen = Screen.Terminal(viewer, returnTo)
         viewing = scope.launch {
-            if (!viewer.typing) {
-                // Watch until the input is focused, then let go of the observer.
-                val watching = launch {
-                    stream(conn, viewer, AttachOptions(observe = true, cols = 80u, rows = 24u, history = 0u)) {}
-                }
-                snapshotFlow { viewer.typing }.first { it }
-                watching.cancelAndJoin()
-            }
-            // An ordinary viewer at the phone's grid; from now on the phone sets the size.
-            val (cols, rows) = snapshotFlow { viewer.phoneGrid }.filterNotNull().first()
-            stream(conn, viewer, AttachOptions(observe = false, cols = cols.toUShort(), rows = rows.toUShort(), history = 0u)) { view ->
-                // A failed send means the stream is ending; next() reports it.
-                launch {
-                    try {
-                        snapshotFlow { viewer.phoneGrid }.filterNotNull().distinctUntilChanged().dropWhile { it == cols to rows }.collect { (c, r) ->
-                            view.resize(c.toUShort(), r.toUShort())
+            try {
+                link.keep { conn, resumed ->
+                    if (!viewer.typing) {
+                        // Watch until the input is focused, then let go of the observer.
+                        val options = AttachOptions(observe = true, cols = 80u, rows = 24u, history = SCROLLBACK_LINES, resumed = resumed)
+                        val exited = coroutineScope {
+                            val watching = async { draw(conn, viewer, options, null) }
+                            val focused = async { snapshotFlow { viewer.typing }.first { it } }
+                            val done = select { watching.onAwait { it }; focused.onAwait { false } }
+                            focused.cancel()
+                            watching.cancelAndJoin()
+                            done
                         }
-                    } catch (e: CoreException) {
+                        if (exited) return@keep
                     }
-                }
-                launch {
-                    try {
-                        // One at a time, so keys arrive in the order they were typed.
-                        for (input in viewer.inputs) {
-                            when (input) {
-                                is TerminalInput.Text -> view.sendText(input.text)
-                                is TerminalInput.Key -> view.sendKey(input.key, input.mods)
+                    // An ordinary viewer at the phone's grid; from now on the phone sets the size.
+                    val (cols, rows) = snapshotFlow { viewer.phoneGrid }.filterNotNull().first()
+                    val options = AttachOptions(
+                        observe = false, cols = cols.toUShort(), rows = rows.toUShort(), history = SCROLLBACK_LINES, resumed = resumed,
+                    )
+                    draw(conn, viewer, options) { view ->
+                        // A failed send means the line is going; next() reports it and the link re-attaches.
+                        launch {
+                            try {
+                                snapshotFlow { viewer.phoneGrid }.filterNotNull().distinctUntilChanged()
+                                    .dropWhile { it == cols to rows }
+                                    .collect { (c, r) -> view.resize(c.toUShort(), r.toUShort()) }
+                            } catch (e: CoreException) {
                             }
                         }
-                    } catch (e: CoreException) {
+                        launch {
+                            try {
+                                // One at a time, so keys arrive in the order they were typed. Keys typed
+                                // while the line is down wait here for the next attach.
+                                for (input in viewer.inputs) {
+                                    when (input) {
+                                        is TerminalInput.Text -> view.sendText(input.text)
+                                        is TerminalInput.Key -> view.sendKey(input.key, input.mods)
+                                    }
+                                }
+                            } catch (e: CoreException) {
+                            }
+                        }
                     }
                 }
+            } catch (e: CoreException) {
+                viewer.markClosed()
             }
         }
     }
 
     /**
-     * Attaches [viewer] with [options] and draws its updates until the
-     * stream ends or the caller is cancelled; [alongside] runs next to it
-     * (typing, resizing) and stops with it. Detaches on the way out.
+     * Attaches [viewer] with [options] and draws its updates; [alongside]
+     * runs next to it (typing, resizing) and stops with it. Returns true once
+     * the program exited; a dropped line throws [CoreException.Closed].
+     * Detaches on the way out, also when cancelled.
      */
-    private suspend fun stream(
+    private suspend fun draw(
         conn: HostConnection,
         viewer: TerminalViewer,
         options: AttachOptions,
-        alongside: CoroutineScope.(TerminalView) -> Unit,
-    ) {
-        val view = try {
-            conn.attachTerminal(viewer.terminal.address, options)
-        } catch (e: CoreException) {
-            viewer.markClosed()
-            return
-        }
+        alongside: (CoroutineScope.(TerminalView) -> Unit)?,
+    ): Boolean {
+        val view = conn.attachTerminal(viewer.terminal.address, options)
+        viewer.scroller = view::scrollTo
         try {
-            coroutineScope {
-                val side = launch { alongside(view) }
+            return coroutineScope {
+                val side = alongside?.let { f -> launch { f(view) } }
                 try {
-                    while (true) {
+                    var exited = false
+                    while (!exited) {
                         when (val u = view.next()) {
                             is TerminalUpdate.Screen -> viewer.apply(u.frame)
-                            is TerminalUpdate.Exited -> viewer.exited(u.exit)
+                            is TerminalUpdate.Exited -> {
+                                viewer.exited(u.exit)
+                                exited = true
+                            }
                         }
                     }
-                } catch (e: CoreException) {
-                    viewer.markClosed()
+                    true
                 } finally {
-                    side.cancel()
+                    side?.cancel()
                 }
             }
         } finally {
+            viewer.scroller = null
             withContext(NonCancellable) { view.detach() }
             view.close()
         }
@@ -480,8 +581,10 @@ class HostsModel(
         screen = s.returnTo
     }
 
-    /** Connections and watch jobs of [Screen.Agents], per Host id. */
-    private val agentConns = mutableMapOf<String, HostConnection>()
+    /** Lines and watch jobs of [Screen.Agents], per Host id. */
+    private val agentLinks = mutableMapOf<String, HostLink>()
+    private val agentConns: Map<String, HostConnection>
+        get() = agentLinks.mapNotNull { (id, link) -> link.connection?.let { id to it } }.toMap()
     private val agentJobs = mutableListOf<Job>()
 
     /** Connects to every Host and shows all their Agents in one list. */
@@ -496,13 +599,18 @@ class HostsModel(
                     board.fail(host.id, problemFor(e).body)
                     return@launch
                 }
-                agentConns[host.id] = conn
+                val link = link(host, conn)
+                agentLinks[host.id] = link
+                board.links[host.id] = link
                 try {
-                    val watch = conn.watchTerminals()
-                    try {
-                        while (true) board.update(host.id, watch.next())
-                    } finally {
-                        watch.stop()
+                    // A new line starts from its snapshot, so what changed while away shows.
+                    link.keep { c, _ ->
+                        val watch = c.watchTerminals()
+                        try {
+                            while (true) board.update(host.id, watch.next())
+                        } finally {
+                            watch.stop()
+                        }
                     }
                 } catch (e: CoreException) {
                     board.markClosed(host.id)
@@ -537,22 +645,39 @@ class HostsModel(
     private fun closeAgents() {
         agentJobs.forEach { it.cancel() }
         agentJobs.clear()
-        val conns = agentConns.values.toList()
-        agentConns.clear()
-        conns.forEach { scope.launch { it.disconnect() } }
+        agentLinks.values.forEach { it.close() }
+        agentLinks.clear()
+    }
+
+    /** Opens the Chat of the Agent in [terminal] on [host], from Browse or the Agents list. */
+    fun openChat(host: Host, terminal: TerminalInfo) {
+        val from = screen
+        if (from !is Screen.Browse && from !is Screen.Agents) return
+        val chat = ChatModel(core, host, terminal)
+        screen = Screen.Chat(chat, from)
+        chat.start(scope)
+    }
+
+    /** Leaves the Chat (the Agent keeps running) for where it was opened. */
+    fun closeChat() {
+        val s = screen as? Screen.Chat ?: return
+        s.chat.stop()
+        screen = s.returnTo
     }
 
     fun back() {
+        (screen as? Screen.Chat)?.chat?.stop()
         viewing?.cancel()
         viewing = null
         if (screen is Screen.Agents) closeAgents()
         screen = Screen.Hosts
         status?.cancel()
         status = null
-        val (conn, watch) = open ?: return
+        browseLink?.close()
+        browseLink = null
+        val (_, watch) = open ?: return
         open = null
         watch?.stop()
-        scope.launch { conn.disconnect() }
     }
 
     private inline fun guard(block: () -> Unit) {
@@ -614,3 +739,6 @@ fun problemFor(e: CoreException): Prompt.Problem {
         else -> Prompt.Problem(failed, Message(R.string.connect_other, listOf(e.message ?: "")))
     }
 }
+
+/** Scrollback asked for when attaching a Terminal (what the desktop app keeps is 2000). */
+const val SCROLLBACK_LINES = 2000u

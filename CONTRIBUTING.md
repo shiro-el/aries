@@ -27,9 +27,11 @@ cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace                              # unit + core API tests against real herdr-core
 cargo test -p aries-core -- --ignored              # SSH, jump host, password bootstrap + Beacon tests (docker)
+for t in scripts/tests/*.test.sh; do sh "$t"; done  # release script tests
 cd android && ./gradlew :app:testDebugUnitTest      # Compose UI tests against a fake core (Robolectric)
 cd android && ./gradlew :app:assembleDebug          # debug APK (builds the core with cargo-ndk)
 cd android && ./gradlew :app:connectedDebugAndroidTest   # device tests (Android Keystore); needs a device/emulator
+cd relay && npm ci --legacy-peer-deps && npm run typecheck && npm test   # Relay HTTP API (Workers runtime, fake FCM)
 ```
 
 `-Paries.abis=x86_64` limits the Android build to one ABI (faster on an emulator);
@@ -95,14 +97,57 @@ from then on, add the language to `shipped` in `TranslationsTest`.
 ## Beacon on a Host
 
 `crates/core/src/beacon.rs` installs it over SSH: binary
-`~/.local/bin/aries-beacon`, systemd user unit
-`~/.config/systemd/user/aries-beacon.service`, private state (Call records)
-in `~/.local/state/aries-beacon/`. Removal runs `UNINSTALL_STEPS` and keeps
+`~/.local/bin/aries-beacon`; on Linux a systemd user unit
+`~/.config/systemd/user/aries-beacon.service`, on macOS a LaunchAgent
+`~/Library/LaunchAgents/io.github.shiroel.aries.beacon.plist`; private state
+(Call records) in `~/.local/state/aries-beacon/`. The Host downloads the
+binary itself when it can (curl/wget) and the phone uploads it otherwise;
+either way it must match the pinned SHA-256. `check_beacon` (called on
+connect) updates an out-of-date Beacon unless automatic updates are off.
+Removal runs `UNINSTALL_STEPS` and keeps
 the state directory. A ticket that puts something else on the Host (pairing,
 managed skills) adds its own removal step there and tests it in
 `crates/core/tests/beacon.rs`. The pinned release (`pinned_release`) and its
-checksums come from the Beacon release pipeline; tests swap it with
-`AriesCore::set_beacon_release`.
+checksums come from the Beacon release pipeline (below); tests swap it with
+`AriesCore::set_beacon_release` and serve binaries from
+`aries_test_support::ReleaseServer` (an `nginx:alpine` container).
+
+## Push and the Relay
+
+Turning push on (`AriesCore::enable_push`, `crates/core/src/push.rs`)
+registers the phone on the Relay, runs `aries-beacon pair` over SSH (key
+exchange) and `aries-beacon push-test`. The envelope format is
+`aries_protocol::push` (version byte + HPKE auth mode + fixed 2048 bytes).
+The Beacon sends with `push::send(&PushMessage)` (`crates/beacon/src/push.rs`);
+a new notification kind is a new `PushMessage` variant plus its
+`PushContent` in the core. Turning push off, Host removal and Beacon removal
+delete the pairing on the Relay (removal queues it; the app sends the queue
+with `flush_push_revocations`).
+
+The Relay is `relay/` (Cloudflare Worker + D1, TypeScript). It stores only
+pairing token hashes, device push tokens and rate limit counters, and never
+stores or logs an envelope.
+
+```sh
+cd relay && npm ci --legacy-peer-deps && npm run typecheck && npm test   # Workers runtime, fake FCM
+```
+
+Core tests use `aries_test_support::FakeRelay` (records envelopes) and, for a
+docker Host, `SystemdHost::reverse_tunnel` so the Beacon in the container
+reaches it. Deploying (done by a human, never by tests):
+
+```sh
+cd relay
+node scripts/deploy-config.mjs      # needs ARIES_CF_D1_NAME, ARIES_CF_D1_ID, ARIES_FCM_SERVICE_ACCOUNT_EMAIL
+npx wrangler d1 migrations apply "$ARIES_CF_D1_NAME" --remote -c wrangler.deploy.jsonc
+npx wrangler secret put FCM_SERVICE_ACCOUNT_JSON -c wrangler.deploy.jsonc < service-account.json
+npx wrangler deploy -c wrangler.deploy.jsonc
+```
+
+Wrangler reads `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`. The app
+gets its Relay URL at build time from `ARIES_RELAY_URL` (repo variable in CI,
+or `-Paries.relayUrl`), and Firebase from `android/app/google-services.json`
+(never committed); without either the app says push is unavailable.
 
 ## Releases
 
@@ -129,6 +174,20 @@ scripts/build-release.sh v0.1.0-rc.1 dist/      # needs cargo-ndk and cargo-abou
 ```
 
 Release builds need `cargo install cargo-about --locked --features cli`.
+
+The release also builds the Beacon (linux and macOS, x86_64 and aarch64) and
+publishes it with `beacon-SHA256SUMS`. The app pins those exact binaries:
+`scripts/beacon-manifest.sh` writes `beacon-release.json`, and building the
+core with `ARIES_BEACON_MANIFEST=<absolute path>` embeds it
+(`crates/core/build.rs`). Without it a build pins no Beacon. The tag's
+`X.Y.Z` must equal the workspace version in `Cargo.toml`. Locally (Linux
+targets only):
+
+```sh
+scripts/build-beacon.sh dist/beacon             # static musl binaries
+ARIES_BEACON_PARTIAL=1 scripts/beacon-manifest.sh v0.1.0 dist/beacon
+ARIES_BEACON_MANIFEST=$PWD/dist/beacon/beacon-release.json scripts/build-release.sh v0.1.0 dist/
+```
 
 ## License
 

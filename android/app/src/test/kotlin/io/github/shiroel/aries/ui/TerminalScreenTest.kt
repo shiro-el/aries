@@ -132,11 +132,12 @@ class TerminalScreenTest {
     }
 
     @Test
-    fun saysSoWhenTheConnectionDrops() {
+    fun saysSoWhenTheConnectionDropsAndCannotComeBack() {
         val core = FakeCore().apply { terminals = listOf(build) }
         open(core)
         compose.onNodeWithText("build").performClick()
         compose.waitForIdle()
+        core.failWith = io.github.shiroel.aries.core.CoreException.AuthRejected()
         core.connection!!.views.single().end()
         compose.waitForIdle()
         compose.onNodeWithText(str(R.string.terminal_connection_closed)).assertExists()

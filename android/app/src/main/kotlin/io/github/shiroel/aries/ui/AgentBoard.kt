@@ -54,6 +54,9 @@ class AgentBoard(val hosts: List<Host>) {
     /** Hosts whose connection ended after their list arrived. */
     val closed = mutableStateMapOf<String, Boolean>()
 
+    /** Each reached Host's line, by Host id; its state shows while it reconnects. */
+    val links = mutableStateMapOf<String, HostLink>()
+
     /** The Agent whose detail is open, if any. */
     var openKey by mutableStateOf<AgentKey?>(null)
         private set
@@ -122,10 +125,11 @@ fun AgentsScreen(
     onOpen: (AgentEntry) -> Unit,
     onPin: (AgentEntry, Boolean) -> Unit,
     onTerminal: (AgentEntry) -> Unit = {},
+    onChat: (AgentEntry) -> Unit = {},
 ) {
     val key = board.openKey
     if (key != null) {
-        AgentDetail(board, key, onPin, onTerminal)
+        AgentDetail(board, key, onPin, onTerminal, onChat)
         return
     }
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -144,7 +148,11 @@ fun AgentsScreen(
                 board.unavailable[host.id]?.let { Text(stringResource(it.res, *it.args.toTypedArray()), style = MaterialTheme.typography.bodySmall) }
             }
         }
-        items(board.hosts.filter { board.closed[it.id] == true }, key = { "closed:" + it.id }) { host ->
+        items(board.hosts.filter { board.links[it.id]?.state == LinkState.Reconnecting }, key = { "again:" + it.id }) { host ->
+            Text(stringResource(R.string.agents_host_reconnecting, host.name), style = MaterialTheme.typography.bodySmall)
+        }
+        val down = { h: Host -> board.closed[h.id] == true || board.links[h.id]?.state is LinkState.Down }
+        items(board.hosts.filter(down), key = { "closed:" + it.id }) { host ->
             Text(
                 stringResource(R.string.agents_host_closed, host.name),
                 color = MaterialTheme.colorScheme.error,
@@ -203,6 +211,7 @@ private fun AgentDetail(
     key: AgentKey,
     onPin: (AgentEntry, Boolean) -> Unit,
     onTerminal: (AgentEntry) -> Unit,
+    onChat: (AgentEntry) -> Unit,
 ) {
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         TextButton(onClick = board::closeDetail) { Text(stringResource(R.string.back_button)) }
@@ -219,6 +228,10 @@ private fun AgentDetail(
         AgentStatusLine(t)
         PinButton(entry) { onPin(entry, it) }
         Button(onClick = { onTerminal(entry) }) { Text(stringResource(R.string.terminal_open_button)) }
+        val chatLabel = stringResource(R.string.chat_open_label, displayName(t))
+        Button(onClick = { onChat(entry) }, modifier = Modifier.semantics { contentDescription = chatLabel }) {
+            Text(stringResource(R.string.chat_open_button))
+        }
         Text(stringResource(R.string.agent_detail_host, entry.host.name), style = MaterialTheme.typography.bodySmall)
         Text(stringResource(R.string.agent_detail_address, t.address), style = MaterialTheme.typography.bodySmall)
         t.cwd?.let { Text(stringResource(R.string.agent_detail_folder, it), style = MaterialTheme.typography.bodySmall) }

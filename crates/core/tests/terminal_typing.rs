@@ -18,6 +18,7 @@ fn typing(cols: u16, rows: u16) -> AttachOptions {
         cols,
         rows,
         history: 0,
+        resumed: false,
     }
 }
 

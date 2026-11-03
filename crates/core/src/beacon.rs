@@ -1,16 +1,24 @@
-//! Beacon manager: installs, inspects and removes the Beacon on a Host.
+//! Beacon manager: installs, updates, inspects and removes the Beacon on a
+//! Host.
 //!
-//! Install (Linux): detect OS/CPU with `uname`, pick the matching artifact of
-//! the release pinned in the app, have the phone download it (the app's
-//! [`BeaconFetcher`]), verify it against the pinned SHA-256, upload it over
-//! SSH, check it again on the Host, register a systemd user service and try
-//! `loginctl enable-linger`. The Host needs no internet access.
+//! Install: detect OS/CPU with `uname`, pick the matching artifact of the
+//! release pinned in the app ([`pinned_release`], filled by the Beacon
+//! release pipeline). The Host downloads it itself (`curl`/`wget`) and
+//! checks it against the pinned SHA-256; a Host that cannot download gets it
+//! from the phone instead (the app's [`BeaconFetcher`], checked on the phone,
+//! uploaded over SSH and checked again on the Host). A download that arrives
+//! with the wrong checksum is refused, never installed. Then the binary's
+//! `--version` must be the pinned one, and it is registered as a service:
+//! a systemd user service plus `loginctl enable-linger` on Linux, a launchd
+//! LaunchAgent on macOS.
 //!
-//! On the Host: binary `~/.local/bin/aries-beacon`, unit
-//! `~/.config/systemd/user/aries-beacon.service`, private state (Call records)
-//! in `~/.local/state/aries-beacon/`, which removal keeps.
+//! On the Host: binary `~/.local/bin/aries-beacon`; Linux unit
+//! `~/.config/systemd/user/aries-beacon.service`, macOS agent
+//! `~/Library/LaunchAgents/io.github.shiroel.aries.beacon.plist`; private
+//! state (Call records) in `~/.local/state/aries-beacon/`, which removal
+//! keeps.
 
-use aries_protocol::beacon::{BeaconStatus, VersionRange};
+use aries_protocol::beacon::{BeaconStatus, VersionRange, parse_version};
 use sha2::{Digest, Sha256};
 
 use crate::error::CoreError;
@@ -18,6 +26,9 @@ use crate::transport::{ExecOutput, Ssh};
 
 /// Beacon releases this app works with.
 pub const ALLOWED_BEACON: VersionRange = VersionRange::new("0.1.0", "0.2.0");
+
+/// launchd label of the macOS LaunchAgent.
+pub(crate) const LAUNCHD_LABEL: &str = "io.github.shiroel.aries.beacon";
 
 /// Downloads a Beacon release artifact on the phone (HTTP on Android).
 #[uniffi::export(with_foreign)]
@@ -38,7 +49,7 @@ impl From<uniffi::UnexpectedUniFFICallbackError> for FetchError {
 }
 
 /// One downloadable Beacon binary.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, uniffi::Record)]
 pub struct BeaconArtifact {
     /// `linux` or `macos`.
     pub os: String,
@@ -50,20 +61,20 @@ pub struct BeaconArtifact {
 }
 
 /// A Beacon release as pinned in the app.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, uniffi::Record)]
 pub struct BeaconRelease {
     pub version: String,
     pub artifacts: Vec<BeaconArtifact>,
 }
 
-/// The release this app installs. Its artifacts and checksums are filled in
-/// by the Beacon release pipeline (ticket 26); until then the app has none
-/// and refuses with [`CoreError::BeaconUnavailable`].
+/// The `beacon-release.json` pinned at build time (see `build.rs`).
+const PINNED: &str = include_str!(concat!(env!("OUT_DIR"), "/beacon-release.json"));
+
+/// The release this app installs: the manifest `scripts/beacon-manifest.sh`
+/// wrote for this build's release (`ARIES_BEACON_MANIFEST`). Development
+/// builds have none and refuse with [`CoreError::BeaconUnavailable`].
 pub fn pinned_release() -> BeaconRelease {
-    BeaconRelease {
-        version: env!("CARGO_PKG_VERSION").into(),
-        artifacts: Vec::new(),
-    }
+    serde_json::from_str(PINNED).expect("build.rs checked the Beacon manifest")
 }
 
 /// Whether the Beacon's service survives logout and reboot.
@@ -76,12 +87,25 @@ pub enum Linger {
     Failed {
         reason: String,
     },
+    /// macOS: a LaunchAgent belongs to the user's login session. It starts
+    /// at login and stops at logout; after a reboot it waits for a login.
+    LoginSession,
+}
+
+/// How the binary reached the Host.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum BeaconSource {
+    /// The Host downloaded it from the release itself.
+    HostDownload,
+    /// The Host could not download; the phone did and uploaded it over SSH.
+    PhoneUpload,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct BeaconInstall {
     pub version: String,
     pub linger: Linger,
+    pub source: BeaconSource,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
@@ -94,12 +118,54 @@ pub enum BeaconState {
         running: bool,
         /// herdr-core version of the local core the service is attached to.
         core_version: Option<String>,
+        /// Linux: systemd keeps the service running without a login.
         linger: bool,
         /// Within [`ALLOWED_BEACON`] and the same contract as this app.
         supported: bool,
         /// The range this app accepts, for the message (`>=0.1.0, <0.2.0`).
         allowed: String,
+        /// The Host's OS: `linux` or `macos`.
+        os: String,
     },
+}
+
+/// What connecting found, and what it did about the Beacon's version.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct BeaconCheck {
+    /// The Beacon as it is now (after an update, the new one).
+    pub state: BeaconState,
+    pub update: BeaconUpdate,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum BeaconUpdate {
+    /// Not installed, or a version this app is happy with.
+    NotNeeded,
+    /// It was out of date and was replaced with the pinned release.
+    Updated {
+        from: String,
+        install: BeaconInstall,
+    },
+    /// It is out of date, and automatic updates are off: the app only says so.
+    Needed,
+}
+
+/// The installed Beacon must be replaced by `pinned`: outside the range
+/// this app accepts (or another contract), or older than the pinned
+/// release. A newer Beacon within the range is left alone.
+pub(crate) fn needs_update(state: &BeaconState, pinned: &str) -> bool {
+    match state {
+        BeaconState::NotInstalled => false,
+        BeaconState::Installed {
+            version, supported, ..
+        } => {
+            !supported
+                || matches!(
+                    (parse_version(version), parse_version(pinned)),
+                    (Some(v), Some(p)) if v < p
+                )
+        }
+    }
 }
 
 const UNIT: &str = "\
@@ -115,13 +181,63 @@ RestartSec=5
 WantedBy=default.target
 ";
 
+/// The LaunchAgent, as a shell heredoc body: `$HOME` expands on the Host
+/// (launchd does not expand `~`). `PATH` covers where herdr-core is usually
+/// installed, since launchd's default PATH is only the system directories.
+fn launch_agent() -> String {
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>{LAUNCHD_LABEL}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>$HOME/.local/bin/aries-beacon</string>
+    <string>serve</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>5</integer>
+  <key>StandardErrorPath</key>
+  <string>$HOME/.local/state/aries-beacon/beacon.log</string>
+</dict>
+</plist>
+"#
+    )
+}
+
 /// Removal, one step per resource. Tickets that put more on the Host
 /// (pairing 27, managed skill 34) add their own step here. The Beacon's
 /// state directory is not removed: it holds the Call records.
 pub(crate) const UNINSTALL_STEPS: &[(&str, &str)] = &[
+    // Ticket 27: revoke the push pairing on the Relay (best effort: the
+    // phone revokes it too) and drop it from the Host.
+    (
+        "pairing",
+        r#"b="$HOME/.local/bin/aries-beacon"
+if [ -x "$b" ]; then "$b" unpair >/dev/null 2>&1 || true; fi
+rm -f "${XDG_STATE_HOME:-$HOME/.local/state}/aries-beacon/pairing.json""#,
+    ),
     (
         "service",
-        r#"systemctl --user disable --now aries-beacon.service >/dev/null 2>&1 || true
+        r#"if [ "$(uname -s)" = Darwin ]; then
+  l=io.github.shiroel.aries.beacon; uid=$(id -u)
+  launchctl bootout "gui/$uid/$l" >/dev/null 2>&1 || true
+  launchctl bootout "user/$uid/$l" >/dev/null 2>&1 || true
+  rm -f "$HOME/Library/LaunchAgents/$l.plist"
+  exit 0
+fi
+systemctl --user disable --now aries-beacon.service >/dev/null 2>&1 || true
 u="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 rm -f "$u/aries-beacon.service"
 systemctl --user daemon-reload >/dev/null 2>&1 || true
@@ -137,9 +253,21 @@ systemctl --user reset-failed aries-beacon.service >/dev/null 2>&1 || true"#,
     ),
 ];
 
+/// Where the Beacon binary is installed on the Host (for `sh`).
+pub(crate) const BEACON_BIN: &str = "$HOME/.local/bin/aries-beacon";
+
 const DISCARD_UPLOAD: &str = r#"rm -f "$HOME/.local/bin/.aries-beacon.new""#;
 
-const STATUS: &str = r#"b="$HOME/.local/bin/aries-beacon"; if [ -x "$b" ]; then exec "$b" status; else echo not-installed; fi"#;
+/// SHA-256 of `$t` as `<hex>  <path>`: `sha256sum` (Linux) or `shasum`
+/// (macOS).
+const SUM: &str =
+    r#"if command -v sha256sum >/dev/null 2>&1; then sha256sum "$t"; else shasum -a 256 "$t"; fi"#;
+
+/// Prints the Host's kernel name, then the Beacon's status line.
+const STATUS: &str = r#"uname -s; b="$HOME/.local/bin/aries-beacon"; if [ -x "$b" ]; then exec "$b" status; else echo not-installed; fi"#;
+
+/// Printed by the download step when the Host cannot download.
+const NO_DOWNLOAD: &str = "aries-no-download";
 
 pub(crate) async fn install(
     ssh: &Ssh,
@@ -147,7 +275,7 @@ pub(crate) async fn install(
     fetcher: std::sync::Arc<dyn BeaconFetcher>,
 ) -> Result<BeaconInstall, CoreError> {
     let (os, arch) = detect(ssh).await?;
-    if os != "linux" {
+    if os != "linux" && os != "macos" {
         return Err(CoreError::UnsupportedHost { os, arch });
     }
     let artifact = release
@@ -159,37 +287,24 @@ pub(crate) async fn install(
             arch: arch.clone(),
         })?
         .clone();
-
-    let url = artifact.url.clone();
-    let bytes = tokio::task::spawn_blocking(move || fetcher.fetch(url))
-        .await
-        .map_err(|e| CoreError::BeaconDownload {
-            detail: e.to_string(),
-        })?
-        .map_err(|e| CoreError::BeaconDownload {
-            detail: e.to_string(),
-        })?;
-    let actual = sha256_hex(&bytes);
     let expected = artifact.sha256.to_ascii_lowercase();
-    if actual != expected {
-        return Err(CoreError::BeaconChecksum { expected, actual });
-    }
 
-    // Upload next to the final path, then check what landed on the Host.
-    let upload = r#"set -e; d="$HOME/.local/bin"; mkdir -p "$d"; t="$d/.aries-beacon.new"; rm -f "$t"; cat > "$t"; chmod 755 "$t"; sha256sum "$t""#;
-    let out = run(ssh, "upload", upload, &bytes).await?;
-    let landed = last_line(&out.stdout);
-    if landed.split_whitespace().next() != Some(expected.as_str()) {
-        let _ = ssh.exec(&sh_c(DISCARD_UPLOAD), &[]).await;
-        return Err(step_failed(
-            "upload",
-            "the uploaded file's checksum differs",
-        ));
-    }
+    let source = match host_download(ssh, &artifact.url).await? {
+        Some(landed) if landed == expected => BeaconSource::HostDownload,
+        Some(actual) => {
+            let _ = ssh.exec(&sh_c(DISCARD_UPLOAD), &[]).await;
+            return Err(CoreError::BeaconChecksum { expected, actual });
+        }
+        None => {
+            phone_upload(ssh, &artifact.url, &expected, fetcher).await?;
+            BeaconSource::PhoneUpload
+        }
+    };
+
     let out = run(
         ssh,
         "verify",
-        r#""$HOME/.local/bin/.aries-beacon.new" --version"#,
+        &sh_c(r#""$HOME/.local/bin/.aries-beacon.new" --version"#),
         &[],
     )
     .await?;
@@ -206,6 +321,86 @@ pub(crate) async fn install(
         ));
     }
 
+    let linger = if os == "macos" {
+        register_launch_agent(ssh).await?;
+        Linger::LoginSession
+    } else {
+        register_systemd(ssh).await?
+    };
+    Ok(BeaconInstall {
+        version: release.version.clone(),
+        linger,
+        source,
+    })
+}
+
+/// Has the Host fetch `url` next to the final path. `Some(sha256)` of what
+/// arrived, or `None` if the Host has no downloader or cannot reach `url`.
+async fn host_download(ssh: &Ssh, url: &str) -> Result<Option<String>, CoreError> {
+    let script = format!(
+        r#"d="$HOME/.local/bin"; mkdir -p "$d" || exit 1; t="$d/.aries-beacon.new"; rm -f "$t"
+if command -v curl >/dev/null 2>&1; then
+  curl -fsSL --connect-timeout 10 --max-time 300 -o "$t" "$1" 2>/dev/null
+elif command -v wget >/dev/null 2>&1; then
+  wget -q -T 30 -O "$t" "$1" 2>/dev/null
+else
+  false
+fi || {{ rm -f "$t"; echo {NO_DOWNLOAD}; exit 0; }}
+chmod 755 "$t" && {SUM}"#
+    );
+    let out = run(ssh, "download", &sh_c_args(&script, &[url]), &[]).await?;
+    let line = last_line(&out.stdout);
+    if line == NO_DOWNLOAD {
+        return Ok(None);
+    }
+    Ok(Some(
+        line.split_whitespace()
+            .next()
+            .unwrap_or_default()
+            .to_ascii_lowercase(),
+    ))
+}
+
+/// The phone downloads `url`, checks it, uploads it, and the Host checks
+/// what landed.
+async fn phone_upload(
+    ssh: &Ssh,
+    url: &str,
+    expected: &str,
+    fetcher: std::sync::Arc<dyn BeaconFetcher>,
+) -> Result<(), CoreError> {
+    let url = url.to_owned();
+    let bytes = tokio::task::spawn_blocking(move || fetcher.fetch(url))
+        .await
+        .map_err(|e| CoreError::BeaconDownload {
+            detail: e.to_string(),
+        })?
+        .map_err(|e| CoreError::BeaconDownload {
+            detail: e.to_string(),
+        })?;
+    let actual = sha256_hex(&bytes);
+    if actual != expected {
+        return Err(CoreError::BeaconChecksum {
+            expected: expected.to_owned(),
+            actual,
+        });
+    }
+    let upload = format!(
+        r#"set -e; d="$HOME/.local/bin"; mkdir -p "$d"; t="$d/.aries-beacon.new"; rm -f "$t"; cat > "$t"; chmod 755 "$t"; {SUM}"#
+    );
+    let out = run(ssh, "upload", &sh_c(&upload), &bytes).await?;
+    let landed = last_line(&out.stdout);
+    if landed.split_whitespace().next() != Some(expected) {
+        let _ = ssh.exec(&sh_c(DISCARD_UPLOAD), &[]).await;
+        return Err(step_failed(
+            "upload",
+            "the uploaded file's checksum differs",
+        ));
+    }
+    Ok(())
+}
+
+async fn register_systemd(ssh: &Ssh) -> Result<Linger, CoreError> {
     let service = format!(
         r#"set -e
 d="$HOME/.local/bin"
@@ -218,13 +413,13 @@ systemctl --user daemon-reload
 systemctl --user enable aries-beacon.service
 systemctl --user restart aries-beacon.service"#
     );
-    run(ssh, "service", &service, &[]).await?;
+    run(ssh, "service", &sh_c(&service), &[]).await?;
 
     let linger = r#"u=$(id -un)
 if [ -e "/var/lib/systemd/linger/$u" ]; then exit 0; fi
 loginctl enable-linger "$u" 2>&1"#;
     let out = ssh.exec(&sh_c(linger), &[]).await?;
-    let linger = if out.success() {
+    Ok(if out.success() {
         Linger::Enabled
     } else {
         let mut reason = String::from_utf8_lossy(&out.stdout).trim().to_owned();
@@ -232,20 +427,55 @@ loginctl enable-linger "$u" 2>&1"#;
             reason = format!("loginctl exited with {:?}", out.status);
         }
         Linger::Failed { reason }
-    };
-    Ok(BeaconInstall {
-        version: release.version.clone(),
-        linger,
     })
 }
 
+/// Writes the LaunchAgent and loads it. Over SSH the `gui/<uid>` domain
+/// exists only while the user is logged in at the Mac; otherwise the agent
+/// goes into the `user/<uid>` domain. A reload right after `bootout` can
+/// fail briefly, hence the retries.
+async fn register_launch_agent(ssh: &Ssh) -> Result<(), CoreError> {
+    let plist = launch_agent();
+    let script = format!(
+        r#"set -e
+d="$HOME/.local/bin"
+mv -f "$d/.aries-beacon.new" "$d/aries-beacon"
+mkdir -p "$HOME/Library/LaunchAgents" "$HOME/.local/state/aries-beacon"
+l={LAUNCHD_LABEL}
+p="$HOME/Library/LaunchAgents/$l.plist"
+cat > "$p" <<ARIES_PLIST
+{plist}ARIES_PLIST
+uid=$(id -u)
+launchctl bootout "gui/$uid/$l" >/dev/null 2>&1 || true
+launchctl bootout "user/$uid/$l" >/dev/null 2>&1 || true
+i=0
+while [ $i -lt 5 ]; do
+  for dom in "gui/$uid" "user/$uid"; do
+    if launchctl bootstrap "$dom" "$p" 2>/dev/null; then
+      launchctl kickstart -k "$dom/$l" >/dev/null 2>&1 || true
+      exit 0
+    fi
+  done
+  i=$((i + 1))
+  sleep 1
+done
+launchctl bootstrap "user/$uid" "$p""#
+    );
+    run(ssh, "service", &sh_c(&script), &[]).await?;
+    Ok(())
+}
+
 pub(crate) async fn status(ssh: &Ssh) -> Result<BeaconState, CoreError> {
-    let out = run(ssh, "status", STATUS, &[]).await?;
-    let line = last_line(&out.stdout);
+    let out = run(ssh, "status", &sh_c(STATUS), &[]).await?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    // The last two lines: a login shell may print a banner first.
+    let mut lines = text.lines().map(str::trim).filter(|l| !l.is_empty()).rev();
+    let line = lines.next().unwrap_or_default();
+    let (os, _) = normalize(lines.next().unwrap_or_default(), "");
     if line == "not-installed" {
         return Ok(BeaconState::NotInstalled);
     }
-    let s: BeaconStatus = serde_json::from_str(&line).map_err(|e| CoreError::Protocol {
+    let s: BeaconStatus = serde_json::from_str(line).map_err(|e| CoreError::Protocol {
         detail: format!("aries-beacon status: {e}: {line}"),
     })?;
     Ok(BeaconState::Installed {
@@ -257,12 +487,44 @@ pub(crate) async fn status(ssh: &Ssh) -> Result<BeaconState, CoreError> {
         running: s.running,
         core_version: s.core_version,
         linger: s.linger,
+        os,
+    })
+}
+
+/// Reads the Beacon and, if it is out of date, updates it when `auto` is
+/// on or reports that it needs one.
+pub(crate) async fn check(
+    ssh: &Ssh,
+    release: &BeaconRelease,
+    auto: bool,
+    fetcher: std::sync::Arc<dyn BeaconFetcher>,
+) -> Result<BeaconCheck, CoreError> {
+    let state = status(ssh).await?;
+    if !needs_update(&state, &release.version) {
+        return Ok(BeaconCheck {
+            state,
+            update: BeaconUpdate::NotNeeded,
+        });
+    }
+    if !auto {
+        return Ok(BeaconCheck {
+            state,
+            update: BeaconUpdate::Needed,
+        });
+    }
+    let BeaconState::Installed { version: from, .. } = state else {
+        unreachable!("needs_update is false when not installed")
+    };
+    let install = install(ssh, release, fetcher).await?;
+    Ok(BeaconCheck {
+        state: status(ssh).await?,
+        update: BeaconUpdate::Updated { from, install },
     })
 }
 
 pub(crate) async fn uninstall(ssh: &Ssh) -> Result<(), CoreError> {
     for (name, script) in UNINSTALL_STEPS {
-        run(ssh, name, script, &[]).await?;
+        run(ssh, name, &sh_c(script), &[]).await?;
     }
     Ok(())
 }
@@ -270,7 +532,7 @@ pub(crate) async fn uninstall(ssh: &Ssh) -> Result<(), CoreError> {
 /// `uname -s` / `uname -m`, normalised to `linux`/`macos` and
 /// `x86_64`/`aarch64`.
 async fn detect(ssh: &Ssh) -> Result<(String, String), CoreError> {
-    let out = run(ssh, "detect", "uname -s; uname -m", &[]).await?;
+    let out = run(ssh, "detect", &sh_c("uname -s; uname -m"), &[]).await?;
     let text = String::from_utf8_lossy(&out.stdout);
     // The last two lines: a login shell may print a banner first.
     let mut lines = text.lines().map(str::trim).filter(|l| !l.is_empty()).rev();
@@ -293,8 +555,10 @@ fn normalize(kernel: &str, machine: &str) -> (String, String) {
     (os.to_owned(), arch.to_owned())
 }
 
-async fn run(ssh: &Ssh, step: &str, script: &str, stdin: &[u8]) -> Result<ExecOutput, CoreError> {
-    let out = ssh.exec(&sh_c(script), stdin).await?;
+/// Runs `command` (already wrapped with [`sh_c`]) and fails the step on a
+/// non-zero exit.
+async fn run(ssh: &Ssh, step: &str, command: &str, stdin: &[u8]) -> Result<ExecOutput, CoreError> {
+    let out = ssh.exec(command, stdin).await?;
     if !out.success() {
         let detail = String::from_utf8_lossy(&out.stderr).trim().to_owned();
         return Err(step_failed(
@@ -319,9 +583,23 @@ fn last_line(out: &[u8]) -> String {
         .to_owned()
 }
 
+fn quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', r"'\''"))
+}
+
 /// Runs `script` under `sh` whatever the user's login shell is.
-fn sh_c(script: &str) -> String {
-    format!("sh -c '{}'", script.replace('\'', r"'\''"))
+pub(crate) fn sh_c(script: &str) -> String {
+    format!("sh -c {}", quote(script))
+}
+
+/// [`sh_c`] with positional arguments (`$1`, ...), each quoted.
+fn sh_c_args(script: &str, args: &[&str]) -> String {
+    let mut cmd = format!("{} aries", sh_c(script));
+    for a in args {
+        cmd.push(' ');
+        cmd.push_str(&quote(a));
+    }
+    cmd
 }
 
 fn step_failed(step: &str, detail: impl Into<String>) -> CoreError {
@@ -368,6 +646,86 @@ mod tests {
         assert_eq!(
             sha256_hex(b"abc"),
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
+
+    /// With `ARIES_BEACON_MANIFEST` set at build time (the release workflow
+    /// runs this), the app pins exactly that manifest; without it, nothing.
+    #[test]
+    fn pins_the_manifest_the_release_pipeline_built() {
+        let pinned = pinned_release();
+        assert_eq!(pinned.version, env!("CARGO_PKG_VERSION"));
+        match option_env!("ARIES_BEACON_MANIFEST").filter(|p| !p.is_empty()) {
+            Some(path) => {
+                let text = std::fs::read_to_string(path).unwrap();
+                let built: BeaconRelease = serde_json::from_str(&text).unwrap();
+                assert_eq!(pinned, built);
+                assert!(!pinned.artifacts.is_empty());
+                if std::env::var_os("ARIES_BEACON_EXPECT_ALL").is_some() {
+                    let mut targets: Vec<_> = pinned
+                        .artifacts
+                        .iter()
+                        .map(|a| format!("{}-{}", a.os, a.arch))
+                        .collect();
+                    targets.sort();
+                    assert_eq!(
+                        targets,
+                        [
+                            "linux-aarch64",
+                            "linux-x86_64",
+                            "macos-aarch64",
+                            "macos-x86_64"
+                        ]
+                    );
+                }
+            }
+            None => assert!(pinned.artifacts.is_empty()),
+        }
+    }
+
+    fn installed(version: &str, supported: bool) -> BeaconState {
+        BeaconState::Installed {
+            version: version.into(),
+            contract: 1,
+            running: true,
+            core_version: None,
+            linger: true,
+            supported,
+            allowed: ALLOWED_BEACON.to_string(),
+            os: "linux".into(),
+        }
+    }
+
+    #[test]
+    fn updates_unsupported_or_older_beacons_only() {
+        assert!(!needs_update(&BeaconState::NotInstalled, "0.1.2"));
+        assert!(!needs_update(&installed("0.1.2", true), "0.1.2"));
+        assert!(needs_update(&installed("0.1.1", true), "0.1.2"));
+        assert!(needs_update(&installed("0.0.9", false), "0.1.2"));
+        // Outside the range, even if newer: the app cannot talk to it.
+        assert!(needs_update(&installed("9.0.0", false), "0.1.2"));
+        // Newer but still accepted: leave it.
+        assert!(!needs_update(&installed("0.1.3", true), "0.1.2"));
+    }
+
+    #[test]
+    fn the_launch_agent_keeps_the_beacon_serving() {
+        let plist = launch_agent();
+        assert!(
+            plist.contains("<key>Label</key>\n  <string>io.github.shiroel.aries.beacon</string>")
+        );
+        assert!(plist.contains(
+            "<string>$HOME/.local/bin/aries-beacon</string>\n    <string>serve</string>"
+        ));
+        assert!(plist.contains("<key>KeepAlive</key>\n  <true/>"));
+        assert!(plist.contains("<key>RunAtLoad</key>\n  <true/>"));
+    }
+
+    #[test]
+    fn quotes_arguments_for_sh() {
+        assert_eq!(
+            sh_c_args("echo \"$1\"", &["it's"]),
+            r#"sh -c 'echo "$1"' aries 'it'\''s'"#
         );
     }
 }

@@ -42,6 +42,12 @@ pub struct AttachOptions {
     /// Scrollback lines the first paint should include.
     #[uniffi(default = 0)]
     pub history: u32,
+    /// Coming back after a dropped line (network change, app resumed): the
+    /// first paint is the whole screen as it is now, and an input viewer
+    /// takes the size only once it is active again, so re-attaching does not
+    /// resize the desktop.
+    #[uniffi(default = false)]
+    pub resumed: bool,
 }
 
 /// One row's cells of one style, left to right. Blank default cells between
@@ -65,6 +71,9 @@ pub struct CellRun {
     pub strikeout: bool,
     /// Swap fg and bg when drawing.
     pub inverse: bool,
+    /// OSC 8 hyperlink target of these cells.
+    #[uniffi(default = None)]
+    pub link: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -92,6 +101,13 @@ pub struct ScreenFrame {
     /// `None` while the program hides the cursor.
     pub cursor: Option<CursorPos>,
     pub title: Option<String>,
+    /// Lines the view is scrolled back into the scrollback; 0 is the live
+    /// screen. See [`TerminalView::scroll_to`].
+    #[uniffi(default = 0)]
+    pub scrolled: u32,
+    /// Scrollback lines above the live screen.
+    #[uniffi(default = 0)]
+    pub history: u32,
 }
 
 /// How the Terminal's program ended, from the stream's CLOSE.
@@ -173,6 +189,9 @@ impl TerminalView {
         if options.history > 0 {
             params["history"] = json!(options.history);
         }
+        if options.resumed {
+            params["resumed"] = json!(true);
+        }
         let reply = client.call("terminal.attach", params).await?;
         let channel = reply["channel"]
             .as_u64()
@@ -188,7 +207,11 @@ impl TerminalView {
                 .unwrap_or(asked)
         };
         let state = Arc::new(Mutex::new(State {
-            vt: Vt::new(dim("cols", options.cols), dim("rows", options.rows)),
+            vt: Vt::new(
+                dim("cols", options.cols),
+                dim("rows", options.rows),
+                options.history as usize,
+            ),
             dirty: false,
             exit: None,
             ended: false,
@@ -358,6 +381,19 @@ impl TerminalView {
     pub async fn resize(&self, cols: u16, rows: u16) -> Result<(), CoreError> {
         let inner = self.inner.clone();
         crate::on_runtime(async move { inner.resize(cols, rows).await }).await
+    }
+
+    /// Shows the screen `lines` lines back into the scrollback (0 = the
+    /// live screen), stopping at the oldest line; returns where it stopped.
+    /// The next frame is the whole new viewport. Only the phone's view
+    /// moves: nothing is sent to the Terminal.
+    pub fn scroll_to(&self, lines: u32) -> u32 {
+        let mut st = self.inner.state.lock().expect("state lock");
+        let at = st.vt.scroll_to(lines);
+        st.dirty = true;
+        drop(st);
+        self.inner.wake.notify_one();
+        at
     }
 
     /// Detaches from the Terminal (the program keeps running). Later `next`

@@ -31,7 +31,7 @@ pub(crate) struct Removal<'a> {
 pub(crate) type Step = fn(&Removal) -> Result<(), CoreError>;
 
 /// Cleanup steps, in order. Tickets append theirs (see the module doc).
-pub(crate) const STEPS: &[Step] = &[remove_local_state];
+pub(crate) const STEPS: &[Step] = &[queue_push_revocation, remove_local_state];
 
 /// Runs every step for `host`. The caller drops the Host record afterwards.
 pub(crate) fn run(host: &SavedHost, store: &Store) -> Result<(), CoreError> {
@@ -45,4 +45,11 @@ pub(crate) fn run(host: &SavedHost, store: &Store) -> Result<(), CoreError> {
 /// Deletes the Host's directory under the data dir (`hosts/<id>/`).
 fn remove_local_state(r: &Removal) -> Result<(), CoreError> {
     r.store.remove_host_dir(&r.host.id)
+}
+
+/// Ticket 27: queues the push pairing's revocation on the Relay (no network
+/// here; the app sends the queue with `flush_push_revocations` right after).
+/// Must run before [`remove_local_state`], which deletes the pairing file.
+fn queue_push_revocation(r: &Removal) -> Result<(), CoreError> {
+    crate::push::queue_revocation(r.store, &r.host.id)
 }

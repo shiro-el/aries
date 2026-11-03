@@ -6,10 +6,12 @@
 //! chat, push, calls and beacon manager modules arrive with their tickets.
 
 mod beacon;
+mod chat;
 mod error;
 mod hc;
 mod host_model;
 mod launch;
+mod push;
 mod removal;
 mod settings;
 mod store;
@@ -26,13 +28,18 @@ use russh::keys::{Algorithm, HashAlg, PrivateKey};
 use serde::{Deserialize, Serialize};
 
 pub use beacon::{
-    ALLOWED_BEACON, BeaconArtifact, BeaconFetcher, BeaconInstall, BeaconRelease, BeaconState,
-    FetchError, Linger, pinned_release,
+    ALLOWED_BEACON, BeaconArtifact, BeaconCheck, BeaconFetcher, BeaconInstall, BeaconRelease,
+    BeaconSource, BeaconState, BeaconUpdate, FetchError, Linger, pinned_release,
 };
+pub use chat::{ChatEntry, ChatEntryBody, ChatSnapshot, ChatStatus, ChatToolStatus, ChatWatch};
 pub use error::{CoreError, Incompatibility, VaultError};
 pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
 pub use host_model::{AgentStatus, BlockedReason, TerminalWatch};
-pub use launch::{LaunchRequest, RECENT_CWDS_KEPT};
+pub use launch::{AgentPreset, LaunchRequest, RECENT_CWDS_KEPT, SavedLaunch};
+pub use push::{
+    HttpClient, HttpRequest, HttpResponse, PushContent, PushDevice, PushDisable, PushNotice,
+    PushPairing, PushProgress, PushStep,
+};
 pub use settings::AttachMode;
 pub use structure::{HostStructure, PaneInfo, SpaceInfo, StructureProblem, TabInfo};
 pub use terminal::{
@@ -577,6 +584,7 @@ impl AriesCore {
         Ok(Arc::new(HostConnection {
             client: Arc::new(client),
             recent: launch::RecentCwds::in_host_dir(self.store.host_dir(&host.id)),
+            saved: launch::SavedLaunches::in_host_dir(self.store.host_dir(&host.id)),
         }))
     }
 }
@@ -705,11 +713,180 @@ impl AriesCore {
     /// Stops and removes the Beacon service and binary. Call records stay.
     pub async fn uninstall_beacon(&self, host_id: String) -> Result<(), CoreError> {
         let ssh = self.beacon_ssh(&host_id)?;
-        on_runtime(async move { beacon::uninstall(&ssh).await }).await
+        on_runtime(async move { beacon::uninstall(&ssh).await }).await?;
+        // The Beacon revoked its pairing; revoke it from the phone too, in
+        // case the Host could not reach the Relay.
+        push::queue_revocation(&self.store, &host_id)
+    }
+}
+
+/// Push (`push` module): pairing a Host with this phone through the Relay.
+#[uniffi::export]
+impl AriesCore {
+    /// Turns push on for a Host whose Beacon is installed: registers this
+    /// phone (`device`) on the Relay at `relay_url`, exchanges keys with the
+    /// Beacon over SSH and has it send a test notification. `progress`
+    /// hears each step as it starts; a failure names its step
+    /// ([`CoreError::PushFailed`]). Turning it on again replaces the pairing.
+    pub async fn enable_push(
+        &self,
+        host_id: String,
+        relay_url: String,
+        device: PushDevice,
+        http: Arc<dyn HttpClient>,
+        progress: Arc<dyn PushProgress>,
+    ) -> Result<PushPairing, CoreError> {
+        let e = push::Enable {
+            ssh: self.beacon_ssh(&host_id)?,
+            host_id,
+            relay_url,
+            device,
+            store: self.store.clone(),
+            vault: self.vault.clone(),
+            http,
+            progress,
+        };
+        on_runtime(push::enable(e)).await
+    }
+
+    /// The Host's push pairing, if push is on.
+    pub fn push_pairing(&self, host_id: String) -> Result<Option<PushPairing>, CoreError> {
+        self.saved_host(&host_id)?;
+        Ok(push::relay_url_of(&self.store, &host_id)?.map(|relay_url| PushPairing { relay_url }))
+    }
+
+    /// Has the paired Beacon send another test notification.
+    pub async fn send_test_push(&self, host_id: String) -> Result<(), CoreError> {
+        let ssh = self.beacon_ssh(&host_id)?;
+        on_runtime(async move { push::test(&ssh).await }).await
+    }
+
+    /// Turns push off: deletes the pairing on the Relay (from the phone),
+    /// then on the Host (best effort, see [`PushDisable::host_cleared`]).
+    /// If the Relay cannot be reached nothing changes and the error says so.
+    pub async fn disable_push(
+        &self,
+        host_id: String,
+        http: Arc<dyn HttpClient>,
+    ) -> Result<PushDisable, CoreError> {
+        self.saved_host(&host_id)?;
+        let ssh = self.beacon_ssh(&host_id).ok();
+        let (store, vault) = (self.store.clone(), self.vault.clone());
+        on_runtime(push::disable(host_id, ssh, store, vault, http)).await
+    }
+
+    /// Tells the Relay this phone's new push token (FCM rotates it), for
+    /// every paired Host.
+    pub async fn update_push_token(
+        &self,
+        device: PushDevice,
+        http: Arc<dyn HttpClient>,
+    ) -> Result<(), CoreError> {
+        let paired = self
+            .hosts()
+            .into_iter()
+            .filter_map(|h| {
+                push::pairing_of(&self.store, self.vault.as_ref(), &h.id)
+                    .ok()
+                    .flatten()
+            })
+            .collect();
+        on_runtime(push::update_token(paired, device, http)).await
+    }
+
+    /// Sends the Relay revocations queued by Host or Beacon removal. Call it
+    /// after those and at app start. Returns how many are still queued
+    /// (the Relay was unreachable).
+    pub async fn flush_push_revocations(&self, http: Arc<dyn HttpClient>) -> u32 {
+        let (store, vault) = (self.store.clone(), self.vault.clone());
+        runtime()
+            .spawn(push::flush(store, vault, http))
+            .await
+            .unwrap_or(0)
+    }
+
+    /// Opens a push envelope as it arrived (FCM data `e`, base64-decoded).
+    /// Works while the phone is locked. Rejects tampered envelopes, unknown
+    /// versions and envelopes from no paired Host.
+    pub fn open_push(&self, envelope: Vec<u8>) -> Result<PushNotice, CoreError> {
+        let paired = self.hosts().into_iter().filter_map(|h| {
+            push::pairing_of(&self.store, self.vault.as_ref(), &h.id)
+                .ok()
+                .flatten()
+                .map(|p| (h.id, h.name, p))
+        });
+        push::open(&envelope, paired)
+    }
+
+    /// Call when connecting: reads the Beacon and, if it is older than the
+    /// pinned release or outside [`ALLOWED_BEACON`], installs the pinned one
+    /// when [`AriesCore::beacon_auto_update`] is on, or only reports
+    /// [`BeaconUpdate::Needed`] when it is off.
+    pub async fn check_beacon(
+        &self,
+        host_id: String,
+        fetcher: Arc<dyn BeaconFetcher>,
+    ) -> Result<BeaconCheck, CoreError> {
+        let ssh = self.beacon_ssh(&host_id)?;
+        let release = self.beacon_release();
+        let auto = self.beacon_auto_update();
+        on_runtime(async move { beacon::check(&ssh, &release, auto, fetcher).await }).await
+    }
+
+    /// Whether connecting updates an out-of-date Beacon by itself (default on).
+    pub fn beacon_auto_update(&self) -> bool {
+        self.store.read_settings().beacon_auto_update
+    }
+
+    pub fn set_beacon_auto_update(&self, on: bool) -> Result<(), CoreError> {
+        let mut settings = self.store.read_settings();
+        settings.beacon_auto_update = on;
+        self.store.write_settings(&settings)
+    }
+}
+
+#[uniffi::export]
+impl AriesCore {
+    /// Follows the Chat of the Agent in `terminal` (address or name) through
+    /// the Host's Beacon. Pass the `cursor` of an earlier snapshot to resume
+    /// after it. Reconnects by itself; call `next` for each change.
+    pub fn watch_chat(
+        &self,
+        host_id: String,
+        terminal: String,
+        cursor: Option<String>,
+    ) -> Result<Arc<ChatWatch>, CoreError> {
+        let host = self.chat_host(&host_id)?;
+        Ok(Arc::new(ChatWatch::start(
+            host,
+            terminal,
+            cursor,
+            std::time::Duration::from_secs(1),
+        )))
     }
 }
 
 impl AriesCore {
+    /// [`AriesCore::watch_chat`] with a custom first retry delay (tests).
+    pub fn watch_chat_retrying(
+        &self,
+        host_id: String,
+        terminal: String,
+        cursor: Option<String>,
+        retry: std::time::Duration,
+    ) -> Result<Arc<ChatWatch>, CoreError> {
+        let host = self.chat_host(&host_id)?;
+        Ok(Arc::new(ChatWatch::start(host, terminal, cursor, retry)))
+    }
+
+    fn chat_host(&self, host_id: &str) -> Result<chat::ChatHost, CoreError> {
+        let host = self.saved_host(host_id)?;
+        Ok(match host.endpoint {
+            Endpoint::Local { env, .. } => chat::ChatHost::Local(env),
+            Endpoint::Ssh { .. } => chat::ChatHost::Ssh(Box::new(self.beacon_ssh(host_id)?)),
+        })
+    }
+
     /// Replaces the pinned Beacon release. For tests and development
     /// builds; not exposed to the app.
     pub fn set_beacon_release(&self, release: BeaconRelease) {
@@ -741,6 +918,7 @@ impl AriesCore {
 pub struct HostConnection {
     client: Arc<HcClient>,
     recent: launch::RecentCwds,
+    saved: launch::SavedLaunches,
 }
 
 #[uniffi::export]
@@ -879,6 +1057,24 @@ impl HostConnection {
     /// at most [`RECENT_CWDS_KEPT`]. Kept on the phone, per Host.
     pub fn recent_cwds(&self) -> Vec<String> {
         self.recent.list()
+    }
+
+    /// The launch configs saved for this Host, oldest first. Kept on the
+    /// phone, per Host; run one with [`HostConnection::launch`] on its
+    /// `request`.
+    pub fn saved_launches(&self) -> Vec<SavedLaunch> {
+        self.saved.list()
+    }
+
+    /// Saves `launch` under its (trimmed) name: a new one when its `id` is
+    /// empty, else replaces the one with that id. Returns it as stored.
+    pub fn save_launch(&self, launch: SavedLaunch) -> Result<SavedLaunch, CoreError> {
+        self.saved.save(launch)
+    }
+
+    /// Deletes the saved launch `id`; succeeds if it is already gone.
+    pub fn delete_saved_launch(&self, id: String) -> Result<(), CoreError> {
+        self.saved.delete(&id)
     }
 
     pub async fn disconnect(&self) {

@@ -83,6 +83,13 @@
     <string name="terminal_exited_signal">The program was stopped by signal %1$s.</string>
     <string name="terminal_exited_reason">The program ended (%1$s).</string>
     <string name="terminal_connection_closed">The connection to the Terminal closed. What you see may be out of date.</string>
+    <string name="reconnecting">Connection lost. Reconnecting…</string>
+    <string name="terminal_scrolled_back">%1$d lines back</string>
+    <string name="terminal_back_to_live">Back to live</string>
+    <string name="terminal_zoom_reset">Zoom %1$d%% · Reset</string>
+    <string name="terminal_copy">Copy</string>
+    <string name="terminal_open_link">Open link</string>
+    <string name="terminal_copy_link">Copy link</string>
 
     <string name="agents_button">All Agents</string>
     <string name="agents_title">Agents</string>
@@ -90,6 +97,7 @@
     <string name="agents_no_hosts">Add a Host first.</string>
     <string name="agents_host_unavailable">Could not reach %1$s</string>
     <string name="agents_host_closed">The connection to %1$s closed. Its Agents may be out of date.</string>
+    <string name="agents_host_reconnecting">Reconnecting to %1$s…</string>
     <string name="agent_pinned_label">Pinned</string>
     <string name="agent_pin_button">Pin</string>
     <string name="agent_unpin_button">Unpin</string>
@@ -110,6 +118,28 @@
     <string name="agent_status_done">Done</string>
     <string name="agent_status_idle">Idle</string>
     <string name="agent_attention_label">Needs you</string>
+    <string name="chat_open_button">Chat</string>
+    <string name="chat_open_label">Open the Chat of %1$s</string>
+    <string name="chat_title">Chat: %1$s</string>
+    <string name="chat_empty">No messages yet.</string>
+    <string name="chat_status_connecting">Connecting to the Beacon…</string>
+    <string name="chat_status_waiting">The Agent has not written anything yet.</string>
+    <string name="chat_status_no_agent">No supported Agent is running in this Terminal.</string>
+    <string name="chat_status_ended">The Agent exited. This is its last Chat.</string>
+    <string name="chat_status_reconnecting">Connection lost. Reconnecting…</string>
+    <string name="chat_status_no_terminal">This Terminal no longer exists.</string>
+    <string name="chat_status_no_beacon">The Chat needs the Beacon on this Host. Install it from the Host screen.</string>
+    <string name="chat_status_no_core">The Beacon cannot reach herdr-core on this Host. Retrying…</string>
+    <string name="chat_status_incompatible">The Beacon on this Host is newer than this app. Update Aries to read the Chat.</string>
+    <string name="chat_you">You</string>
+    <string name="chat_thinking">Thinking</string>
+    <string name="chat_tool_running">running</string>
+    <string name="chat_tool_failed">failed</string>
+    <string name="chat_tool_input">Input</string>
+    <string name="chat_tool_output">Result</string>
+    <string name="chat_tool_expand_label">Show the full %1$s call</string>
+    <string name="chat_agent_error">Agent error</string>
+    <string name="chat_unsupported">This entry needs a newer version of Aries.</string>
     <string name="space_unnamed">Unnamed Space</string>
     <string name="space_summary">Tabs: %1$d · Panes: %2$d</string>
     <string name="space_no_tabs">This Space has no Tabs.</string>
@@ -136,6 +166,17 @@
     <string name="launch_spawn_failed">The Host could not start it: %1$s. Check the program name and the folder.</string>
     <string name="launch_rpc_failed">herdr-core refused (%1$s): %2$s</string>
     <string name="launch_connection_closed">The connection to the Host closed. Go back and connect again.</string>
+    <string name="preset_custom">Custom command</string>
+    <string name="preset_claude_code" translatable="false">Claude Code</string>
+    <string name="preset_codex" translatable="false">Codex</string>
+    <string name="preset_opencode" translatable="false">OpenCode</string>
+    <string name="preset_pi" translatable="false">Pi</string>
+    <string name="launch_preset_args">Extra arguments (optional)</string>
+    <string name="launch_saved">Saved launches</string>
+    <string name="launch_saved_edit">Edit</string>
+    <string name="launch_saved_delete">Delete</string>
+    <string name="launch_save_name">Name to save as</string>
+    <string name="launch_save_button">Save</string>
 
     <string name="host_key_trust_title">Trust this Host?</string>
     <string name="host_key_trust_body">This is the first connection to %1$s. Check that its Host key fingerprint is:\n\n%2$s\n\nOn the Host, run: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</string>
@@ -177,6 +218,13 @@
     <string name="beacon_unavailable_body">This version of Aries has no Beacon for %1$s/%2$s yet.</string>
     <string name="beacon_download_body">Could not download the Beacon: %1$s</string>
     <string name="beacon_step_body">Step "%1$s" failed on the Host: %2$s</string>
+    <string name="beacon_updated">Updated the Beacon from %1$s to %2$s.</string>
+    <string name="beacon_update_needed">The Beacon needs an update (%1$s to %2$s). Automatic updates are off, so nothing was installed.</string>
+    <string name="beacon_update_button">Update Beacon</string>
+    <string name="beacon_auto_update">Update the Beacon automatically</string>
+    <string name="beacon_macos_login_title">Beacon runs only while you are logged in</string>
+    <string name="beacon_macos_login_body">The Beacon is installed as a macOS LaunchAgent. macOS ties LaunchAgents to your login session: the Beacon, and its notifications, stop when you log out of the Mac and start again at your next login, also after a restart.</string>
+    <string name="beacon_macos_login_limit">On macOS the Beacon runs only while you are logged in to the Mac.</string>
 
     <string name="key_default_label">Default key</string>
     <string name="keys_title">Other SSH keys</string>
@@ -199,4 +247,30 @@
     <string name="jump_key_changed_title">Jump host key changed</string>
     <string name="jump_key_changed_body">Jump host %1$d (%2$s) presented a different key than before, so Aries did not connect. Someone may be intercepting the connection, or the jump host was reinstalled.\n\nTrusted: %3$s\nNow: %4$s</string>
     <string name="connect_jump_auth_rejected">Jump host %1$d (%2$s) did not accept the key chosen for it. Add that key\'s public key to ~/.ssh/authorized_keys on the jump host.</string>
+    <string name="push_title">Push notifications</string>
+    <string name="push_needs_beacon">Install the Beacon to turn on push notifications for this Host.</string>
+    <string name="push_off_body">Get notifications from this Host on this phone, also while Aries is closed or the phone is locked. They are end-to-end encrypted: the Relay that delivers them cannot read them.</string>
+    <string name="push_force_stop_note">If you force-stop Aries in Android settings, notifications stop arriving until you open Aries again, and force-stopping also clears notifications already shown.</string>
+    <string name="push_enable_button">Turn on push</string>
+    <string name="push_disable_button">Turn off push</string>
+    <string name="push_test_button">Send a test notification</string>
+    <string name="push_retry_button">Try again</string>
+    <string name="push_step_register">Register this phone with the Relay</string>
+    <string name="push_step_pair">Exchange keys with the Beacon</string>
+    <string name="push_step_test">Send a test notification</string>
+    <string name="push_step_unpair">Remove the pairing from the Relay</string>
+    <string name="push_step_running" translatable="false">… %1$s</string>
+    <string name="push_step_done" translatable="false">✓ %1$s</string>
+    <string name="push_step_failed" translatable="false">✗ %1$s</string>
+    <string name="push_failed">Step \"%1$s\" failed: %2$s</string>
+    <string name="push_on_body">Push is on. Relay: %1$s</string>
+    <string name="push_test_sent">A test notification is on its way. If it does not arrive, check that notifications for Aries are allowed.</string>
+    <string name="push_no_relay">This build of Aries has no Relay configured, so push notifications are not available.</string>
+    <string name="push_unavailable">Push notifications are not available on this phone: %1$s</string>
+    <string name="push_permission_denied">Notifications are not allowed for Aries. Allow them in Android settings, then turn on push again.</string>
+    <string name="push_off_host_unreachable">Push is off and the Relay deleted this pairing. The Host could not be reached, so its copy of the pairing stays until the next pairing; it no longer works.</string>
+    <string name="push_channel_name">Host notifications</string>
+    <string name="push_test_title">Push works for %1$s</string>
+    <string name="push_test_body">This test notification came from the Beacon on %1$s, end-to-end encrypted.</string>
+    <string name="push_no_firebase">this build has no Firebase configuration</string>
 </resources>

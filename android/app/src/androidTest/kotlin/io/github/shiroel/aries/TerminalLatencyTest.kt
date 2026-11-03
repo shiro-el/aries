@@ -136,7 +136,7 @@ class TerminalLatencyTest {
         val coreMs = runBlocking(Dispatchers.IO) {
             val conn = core.connect(host.id)
             val echo = conn.launch(LaunchRequest("sh -c 'echo ready; exec cat >/dev/null'", null, null, null))
-            val view = conn.attachTerminal(echo.address, AttachOptions(observe = false, cols = 80u, rows = 24u, history = 0u))
+            val view = conn.attachTerminal(echo.address, AttachOptions(observe = false, cols = 80u, rows = 24u, history = 0u, resumed = false))
             val screen = mutableMapOf<Int, String>()
             suspend fun until(pred: () -> Boolean) {
                 while (!pred()) {
@@ -173,6 +173,7 @@ class TerminalLatencyTest {
         }
         dir.deleteRecursively()
 
+        Log.i("AriesLatency", "phone grid while typing: ${viewer.cols}x${viewer.rows}")
         report("key->drawn", ms)
         report("key->viewer (frame applied, before draw)", applied)
         report("key->core frame (no UI)", coreMs)

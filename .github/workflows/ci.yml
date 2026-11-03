@@ -18,6 +18,7 @@ jobs:
         run: |
           sh scripts/tests/release-version.test.sh
           sh scripts/tests/play-policy.test.sh
+          sh scripts/tests/beacon-manifest.test.sh
 
   rust:
     runs-on: ubuntu-latest
@@ -35,6 +36,21 @@ jobs:
         run: cargo test --workspace
       - name: SSH tests (docker sshd)
         run: cargo test -p aries-core -- --ignored
+
+  relay:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: relay
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --legacy-peer-deps
+      - run: npm run typecheck
+      - name: Relay HTTP API tests (Workers runtime, fake FCM)
+        run: npm test
 
   android:
     runs-on: ubuntu-latest

@@ -12,6 +12,8 @@
 #   wait                            read one input line (and record it)
 #   transcript SRC DST              append fixture SRC to DST (SRC relative to this
 #                                   script's fixtures/agents dir unless absolute)
+#   claude-session DIR ID CWD       act as a running Claude Code: write its session
+#                                   registry entry DIR/sessions/<pid>.json (sessionId ID)
 #   sleep SECONDS
 #   say TEXT...                     print TEXT on the screen
 #   appcursor                       ask for application cursor keys (DECCKM, CSI ?1h)
@@ -61,6 +63,14 @@ while IFS= read -r step <&3 || [ -n "$step" ]; do
         src=$1
         case $src in /*) ;; *) src=$fixtures/$src ;; esac
         cat "$src" >>"$2"
+        ;;
+    claude-session)
+        mkdir -p "$1/sessions"
+        # starttime: field 22 of /proc/<pid>/stat, counted after the ")".
+        start=$(sed 's/.*) //' /proc/$$/stat | cut -d' ' -f20)
+        printf '{"pid":%s,"sessionId":"%s","cwd":"%s","procStart":"%s","kind":"interactive"}\n' \
+            "$$" "$2" "$3" "$start" >"$1/sessions/$$.json.tmp"
+        mv "$1/sessions/$$.json.tmp" "$1/sessions/$$.json"
         ;;
     sleep) sleep "$1" ;;
     say) printf '%s\n' "$*" ;;

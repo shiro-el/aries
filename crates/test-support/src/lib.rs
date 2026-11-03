@@ -9,6 +9,10 @@
 //!   Beacon install tests.
 //!   [`DockerNetwork`] + [`SshdHost::start_on`] chain several of them for
 //!   jump host tests.
+//! - [`ReleaseServer`]: a local fake of GitHub Releases for Beacon downloads.
+
+mod release_server;
+pub use release_server::ReleaseServer;
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
@@ -85,11 +89,19 @@ pub struct HcSession {
     dir: tempfile::TempDir,
     name: String,
     bin: PathBuf,
+    extra_env: Vec<(String, String)>,
 }
 
 impl HcSession {
     /// Starts a fresh core in its own session and temp dirs.
     pub fn start() -> Self {
+        Self::start_with_env(&[])
+    }
+
+    /// Like [`HcSession::start`], with `extra` added to the core's own
+    /// environment (which every Terminal it starts inherits), for example a
+    /// `PATH` with fake agent programs.
+    pub fn start_with_env(extra: &[(&str, &str)]) -> Self {
         // Short base path: the socket path must stay under the 108-byte limit.
         let dir = tempfile::Builder::new()
             .prefix("aries-hc-")
@@ -107,6 +119,10 @@ impl HcSession {
             dir,
             name: unique("aries-test"),
             bin: herdr_core_bin(),
+            extra_env: extra
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
         };
         session.hc(&["server", "start"]);
         session
@@ -134,6 +150,9 @@ impl HcSession {
             ("XDG_DATA_HOME".into(), p("data")),
             ("XDG_CACHE_HOME".into(), p("cache")),
         ]
+        .into_iter()
+        .chain(self.extra_env.iter().cloned())
+        .collect()
     }
 
     /// The argv that speaks the client protocol on stdio for this session
@@ -479,8 +498,16 @@ fn docker(args: &[&str]) -> String {
     String::from_utf8_lossy(&out.stdout).into_owned()
 }
 
-/// Image tag built from `fixtures/sshd-systemd/Dockerfile`.
-pub const SYSTEMD_IMAGE: &str = "aries-test-sshd-systemd:1";
+/// Image built from `fixtures/sshd-systemd/Dockerfile`, tagged by a hash of
+/// the Dockerfile like [`sshd_image`].
+pub fn systemd_image() -> String {
+    use std::hash::{Hash, Hasher};
+    let dockerfile = std::fs::read(repo_root().join("fixtures/sshd-systemd/Dockerfile"))
+        .expect("read sshd-systemd Dockerfile");
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    dockerfile.hash(&mut h);
+    format!("aries-test-sshd-systemd:{:016x}", h.finish())
+}
 
 /// A docker Linux Host with systemd as PID 1 and a real sshd: an SSH login
 /// gets a logind session and a systemd user manager, so `systemctl --user`
@@ -504,13 +531,8 @@ impl SystemdHost {
     pub fn start() -> Self {
         let bin = herdr_core_bin();
         let fixture = repo_root().join("fixtures/sshd-systemd");
-        docker(&[
-            "build",
-            "-q",
-            "-t",
-            SYSTEMD_IMAGE,
-            &fixture.to_string_lossy(),
-        ]);
+        let image = systemd_image();
+        docker(&["build", "-q", "-t", &image, &fixture.to_string_lossy()]);
         let prefix =
             std::env::var("ARIES_TEST_CONTAINER_PREFIX").unwrap_or_else(|_| "aries-test".into());
         let container = unique(&format!("{prefix}-systemd"));
@@ -539,7 +561,7 @@ impl SystemdHost {
             &mount,
             "--entrypoint",
             "/bin/sh",
-            SYSTEMD_IMAGE,
+            &image,
             "-c",
             "mount -o remount,rw /sys/fs/cgroup && exec /sbin/init",
         ]);
@@ -705,6 +727,8 @@ impl HcSession {
     }
 }
 
+pub mod relay;
+pub use relay::{FakeRelay, RelayLog, ReverseTunnel, http_request};
 impl HcSession {
     /// Adds `remote` to this core as machine `name` (`hc machine add --via`),
     /// so its Terminals show up here as `name/tN`. The `--via` command is a
