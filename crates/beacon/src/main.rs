@@ -15,6 +15,9 @@
 //!   as JSON lines (`aries_protocol::chat`).
 //! - `answer <terminal> <question> <picks>...`: answers the question the
 //!   Terminal's Agent shows (`aries_protocol::answer`); one reply line.
+//! - `skill install` / `skill uninstall`: the managed `call-human` skill
+//!   for Agents ([`aries_beacon::skill`]); run by the phone over SSH when it
+//!   installs, updates or removes the Beacon. One `SkillReport` line.
 //! - `--version`: `aries-beacon <version> (contract <n>)`.
 
 mod calls;
@@ -49,9 +52,10 @@ fn main() {
         Some("unpair") => exit_on_error(push::unpair_command()),
         Some("chat") => chat(std::env::args().skip(2).collect()),
         Some("answer") => answer(std::env::args().skip(2).collect()),
+        Some("skill") => exit_on_error(skill(&rest_args())),
         _ => {
             eprintln!(
-                "usage: aries-beacon --version | status | serve | call ... | calls [--follow] | reply CALL CHOICE | pair | push-test | unpair | chat TERMINAL [--follow] [--cursor C] | answer TERMINAL QUESTION PICKS..."
+                "usage: aries-beacon --version | status | serve | call ... | calls [--follow] | reply CALL CHOICE | pair | push-test | unpair | chat TERMINAL [--follow] [--cursor C] | answer TERMINAL QUESTION PICKS... | skill install|uninstall"
             );
             std::process::exit(2);
         }
@@ -63,6 +67,32 @@ fn exit_on_error(result: Result<(), String>) {
         eprintln!("aries-beacon: {e}");
         std::process::exit(1);
     }
+}
+
+/// `skill install|uninstall`. `ARIES_BEACON_SKILL_SOURCE=<dir>` installs
+/// the files in that directory instead of the shipped skill (tests use it
+/// to play an older release).
+fn skill(args: &[String]) -> Result<(), String> {
+    use aries_beacon::skill;
+    let report = match args {
+        [a] if a == "install" => {
+            let files = match std::env::var_os("ARIES_BEACON_SKILL_SOURCE") {
+                Some(dir) => {
+                    skill::files_in(Path::new(&dir)).map_err(|e| format!("skill source: {e}"))?
+                }
+                None => skill::shipped(),
+            };
+            skill::install(&home(), &state_dir(), &files)
+        }
+        [a] if a == "uninstall" => skill::uninstall(&home(), &state_dir()),
+        _ => return Err("usage: aries-beacon skill install|uninstall".into()),
+    }
+    .map_err(|e| format!("skill: {e}"))?;
+    println!(
+        "{}",
+        serde_json::to_string(&report).expect("skill report json")
+    );
+    Ok(())
 }
 
 /// What `serve` records about itself, in [`service_file`].

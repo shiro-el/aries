@@ -102,6 +102,11 @@ impl Vt {
         self.full = true;
     }
 
+    /// The program asked for application cursor keys (`CSI ?1h`).
+    pub fn app_cursor(&self) -> bool {
+        self.term.mode().contains(TermMode::APP_CURSOR)
+    }
+
     /// Shows the screen `lines` lines back into the scrollback (0 = live);
     /// stops at the oldest line. Returns where it stopped. While scrolled
     /// back, new output keeps the view on the same lines.

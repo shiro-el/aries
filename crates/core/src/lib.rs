@@ -15,6 +15,7 @@ mod launch;
 mod push;
 mod removal;
 mod send;
+mod settings;
 mod store;
 mod structure;
 mod terminal;
@@ -49,10 +50,11 @@ pub use push::{
     PushPairing, PushProgress, PushStep,
 };
 pub use send::{HELD_AFTER, SendListener, SendOutcome};
+pub use settings::AttachMode;
 pub use structure::{HostStructure, PaneInfo, SpaceInfo, StructureProblem, TabInfo};
 pub use terminal::{
-    AttachOptions, CellRun, CursorPos, FRAME_INTERVAL, ScreenFrame, ScreenLine, TerminalExit,
-    TerminalUpdate, TerminalView, ViewStats,
+    AttachOptions, CellRun, CursorPos, FRAME_INTERVAL, KeyMods, ScreenFrame, ScreenLine,
+    TerminalExit, TerminalKey, TerminalUpdate, TerminalView, ViewStats,
 };
 
 use hc::HcClient;
