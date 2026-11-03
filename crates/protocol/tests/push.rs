@@ -19,7 +19,9 @@ fn pair() -> Pair {
 }
 
 fn test_message() -> PushMessage {
-    PushMessage::Test { sent_at: 1_700_000_000 }
+    PushMessage::Test {
+        sent_at: 1_700_000_000,
+    }
 }
 
 #[test]
@@ -43,7 +45,12 @@ fn starts_with_the_version_header() {
 #[test]
 fn every_envelope_has_the_same_size() {
     let p = pair();
-    let short = seal(&PushMessage::Test { sent_at: 1 }, &p.phone.public, &p.beacon).unwrap();
+    let short = seal(
+        &PushMessage::Test { sent_at: 1 },
+        &p.phone.public,
+        &p.beacon,
+    )
+    .unwrap();
     let long = seal(
         &PushMessage::Test { sent_at: u64::MAX },
         &p.phone.public,
@@ -131,15 +138,25 @@ fn keys_round_trip_through_their_text_form() {
     let k = KeyPair::generate();
     let text = k.public.to_text();
     assert_eq!(text.len(), 43, "unpadded base64url of 32 bytes");
-    assert_eq!(text.parse::<aries_protocol::push::PublicKey>().unwrap(), k.public);
+    assert_eq!(
+        text.parse::<aries_protocol::push::PublicKey>().unwrap(),
+        k.public
+    );
     let secret = k.secret_text();
     let back = KeyPair::from_secret_text(&secret).unwrap();
     assert_eq!(back.public, k.public);
-    assert!("not a key".parse::<aries_protocol::push::PublicKey>().is_err());
+    assert!(
+        "not a key"
+            .parse::<aries_protocol::push::PublicKey>()
+            .is_err()
+    );
 }
 
 #[test]
 fn message_json_is_tagged_by_kind() {
     let json = serde_json::to_value(test_message()).unwrap();
-    assert_eq!(json, serde_json::json!({"kind": "test", "sent_at": 1_700_000_000u64}));
+    assert_eq!(
+        json,
+        serde_json::json!({"kind": "test", "sent_at": 1_700_000_000u64})
+    );
 }

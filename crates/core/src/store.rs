@@ -40,6 +40,7 @@ pub(crate) struct SavedKey {
     pub public: String,
 }
 
+#[derive(Clone)]
 pub(crate) struct Store {
     dir: PathBuf,
 }
@@ -78,6 +79,11 @@ impl Store {
     pub fn write_identity(&self, sealed: &[u8], public: &str) -> Result<(), CoreError> {
         self.write_atomic("identity.pub", format!("{public}\n").as_bytes())?;
         self.write_atomic("identity.sealed", sealed)
+    }
+
+    /// The data dir itself, for app-wide files of other modules.
+    pub fn root(&self) -> &Path {
+        &self.dir
     }
 
     /// Where per-Host local state (caches, pairing, ...) lives. Not created

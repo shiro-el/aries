@@ -97,7 +97,9 @@ impl std::str::FromStr for PublicKey {
         let bytes = URL_SAFE_NO_PAD
             .decode(s.trim())
             .map_err(|_| EnvelopeError::Malformed)?;
-        Ok(Self(bytes.try_into().map_err(|_| EnvelopeError::Malformed)?))
+        Ok(Self(
+            bytes.try_into().map_err(|_| EnvelopeError::Malformed)?,
+        ))
     }
 }
 
@@ -207,11 +209,7 @@ pub fn seal(
 
 /// Opens an envelope on the phone `me`, accepting it only if the Beacon
 /// `from` sealed it.
-pub fn open(
-    envelope: &[u8],
-    me: &KeyPair,
-    from: &PublicKey,
-) -> Result<PushMessage, EnvelopeError> {
+pub fn open(envelope: &[u8], me: &KeyPair, from: &PublicKey) -> Result<PushMessage, EnvelopeError> {
     let (&version, rest) = envelope.split_first().ok_or(EnvelopeError::Malformed)?;
     if version != ENVELOPE_VERSION {
         return Err(EnvelopeError::UnsupportedVersion(version));
@@ -220,8 +218,8 @@ pub fn open(
         return Err(EnvelopeError::Malformed);
     }
     let (enc, ciphertext) = rest.split_at(32);
-    let enc = <Kem as hpke::Kem>::EncappedKey::from_bytes(enc)
-        .map_err(|_| EnvelopeError::Rejected)?;
+    let enc =
+        <Kem as hpke::Kem>::EncappedKey::from_bytes(enc).map_err(|_| EnvelopeError::Rejected)?;
     let mode = OpModeR::<Kem>::Auth(from.hpke());
     let padded = hpke::single_shot_open::<Aead, Kdf, Kem>(
         &mode,

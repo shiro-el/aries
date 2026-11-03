@@ -34,9 +34,7 @@ fn main() {
         Some("push-test") => exit_on_error(push::push_test_command()),
         Some("unpair") => exit_on_error(push::unpair_command()),
         _ => {
-            eprintln!(
-                "usage: aries-beacon --version | status | serve | pair | push-test | unpair"
-            );
+            eprintln!("usage: aries-beacon --version | status | serve | pair | push-test | unpair");
             std::process::exit(2);
         }
     }

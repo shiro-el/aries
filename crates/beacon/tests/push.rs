@@ -39,7 +39,9 @@ impl Host {
     }
 
     fn pairing_file(&self) -> std::path::PathBuf {
-        self.home.path().join(".local/state/aries-beacon/pairing.json")
+        self.home
+            .path()
+            .join(".local/state/aries-beacon/pairing.json")
     }
 }
 
@@ -95,7 +97,10 @@ fn keeps_the_pairing_private_to_the_user() {
     let token = register(&relay, "device-1");
     pair(&host, &relay, &token, &KeyPair::generate());
 
-    let mode = std::fs::metadata(host.pairing_file()).unwrap().permissions().mode();
+    let mode = std::fs::metadata(host.pairing_file())
+        .unwrap()
+        .permissions()
+        .mode();
     assert_eq!(mode & 0o777, 0o600);
 }
 
@@ -195,13 +200,19 @@ fn reports_a_relay_that_refuses_the_push() {
     let out = host.run("push-test", b"");
 
     assert!(!out.status.success());
-    assert!(String::from_utf8_lossy(&out.stderr).contains("401"), "{out:?}");
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("401"),
+        "{out:?}"
+    );
 }
 
 #[test]
 fn rejects_a_bad_pair_request() {
     let host = Host::new();
-    let out = host.run("pair", br#"{"relay_url":"http://x","token":"t","phone_key":"nope"}"#);
+    let out = host.run(
+        "pair",
+        br#"{"relay_url":"http://x","token":"t","phone_key":"nope"}"#,
+    );
     assert!(!out.status.success());
     assert!(!host.pairing_file().exists());
 }

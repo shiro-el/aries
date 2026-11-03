@@ -217,20 +217,75 @@ pub fn http_request(
     Ok((status, raw[split + 4..].to_vec()))
 }
 
-/// The docker bridge gateway (`172.17.0.1` usually): the address on this
-/// machine that containers on the default network reach.
-pub fn docker_gateway() -> String {
-    let out = std::process::Command::new("docker")
-        .args([
-            "network",
-            "inspect",
-            "bridge",
-            "-f",
-            "{{(index .IPAM.Config 0).Gateway}}",
-        ])
-        .output()
-        .expect("docker network inspect");
-    let ip = String::from_utf8_lossy(&out.stdout).trim().to_owned();
-    assert!(!ip.is_empty(), "no docker bridge gateway");
-    ip
+/// An `ssh -R` tunnel into a [`crate::SystemdHost`]: inside the container,
+/// `127.0.0.1:<remote_port>` reaches a port on this machine. Containers
+/// often cannot connect to the host directly (a host firewall drops it), so
+/// this is how a Beacon in the container reaches a [`FakeRelay`]. Closed on
+/// drop.
+pub struct ReverseTunnel {
+    child: std::process::Child,
+    pub remote_port: u16,
+    _dir: tempfile::TempDir,
+}
+
+impl Drop for ReverseTunnel {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+impl crate::SystemdHost {
+    /// Forwards `127.0.0.1:remote_port` in the container to `local`
+    /// (`127.0.0.1:<port>`) on this machine, over SSH as [`Self::USER`].
+    pub fn reverse_tunnel(&self, remote_port: u16, local: &str) -> ReverseTunnel {
+        use std::process::{Command, Stdio};
+        let dir = tempfile::tempdir().expect("tempdir");
+        let key = dir.path().join("id");
+        let out = Command::new("ssh-keygen")
+            .args(["-q", "-t", "ed25519", "-N", "", "-f"])
+            .arg(&key)
+            .output()
+            .expect("ssh-keygen");
+        assert!(out.status.success(), "ssh-keygen: {out:?}");
+        let public = std::fs::read_to_string(dir.path().join("id.pub")).unwrap();
+        self.authorize(public.trim());
+        let child = Command::new("ssh")
+            .arg("-N")
+            .arg("-i")
+            .arg(&key)
+            .args([
+                "-o",
+                "StrictHostKeyChecking=no",
+                "-o",
+                "UserKnownHostsFile=/dev/null",
+                "-o",
+                "ExitOnForwardFailure=yes",
+                "-o",
+                "LogLevel=ERROR",
+                "-p",
+                &self.port().to_string(),
+                "-R",
+                &format!("127.0.0.1:{remote_port}:{local}"),
+                &format!("{}@127.0.0.1", Self::USER),
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("ssh -R");
+        let tunnel = ReverseTunnel {
+            child,
+            remote_port,
+            _dir: dir,
+        };
+        // Listening sockets in /proc/net/tcp: local address in hex, state 0A.
+        let probe = format!("grep -qi ':{remote_port:04X} 00000000:0000 0A' /proc/net/tcp");
+        let deadline = Instant::now() + Duration::from_secs(20);
+        while !self.check(&probe) {
+            assert!(Instant::now() < deadline, "reverse tunnel did not come up");
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        tunnel
+    }
 }

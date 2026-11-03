@@ -92,6 +92,16 @@ pub enum CoreError {
         expected: String,
         actual: String,
     },
+    /// Turning push on or off failed at `step`.
+    #[error("push {step:?} failed: {detail}")]
+    PushFailed {
+        step: crate::PushStep,
+        detail: String,
+    },
+    /// A received push envelope was not opened: tampered with, an unknown
+    /// version, or not from a paired Host.
+    #[error("push rejected: {reason}")]
+    PushRejected { reason: String },
     /// Jump host `hop` did not accept the key chosen for it.
     #[error("jump host {hop} ({address}) did not accept its SSH key")]
     JumpAuthRejected { hop: u32, address: String },

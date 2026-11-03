@@ -706,4 +706,4 @@ impl HcSession {
 }
 
 pub mod relay;
-pub use relay::{FakeRelay, RelayLog, docker_gateway, http_request};
+pub use relay::{FakeRelay, RelayLog, ReverseTunnel, http_request};

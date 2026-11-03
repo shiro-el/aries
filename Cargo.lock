@@ -97,6 +97,7 @@ version = "0.1.0"
 dependencies = [
  "aries-protocol",
  "aries-test-support",
+ "base64 0.22.1",
  "qrcode",
  "rand",
  "rqrr",

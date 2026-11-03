@@ -119,6 +119,14 @@ WantedBy=default.target
 /// (pairing 27, managed skill 34) add their own step here. The Beacon's
 /// state directory is not removed: it holds the Call records.
 pub(crate) const UNINSTALL_STEPS: &[(&str, &str)] = &[
+    // Ticket 27: revoke the push pairing on the Relay (best effort: the
+    // phone revokes it too) and drop it from the Host.
+    (
+        "pairing",
+        r#"b="$HOME/.local/bin/aries-beacon"
+if [ -x "$b" ]; then "$b" unpair >/dev/null 2>&1 || true; fi
+rm -f "${XDG_STATE_HOME:-$HOME/.local/state}/aries-beacon/pairing.json""#,
+    ),
     (
         "service",
         r#"systemctl --user disable --now aries-beacon.service >/dev/null 2>&1 || true
@@ -136,6 +144,9 @@ systemctl --user reset-failed aries-beacon.service >/dev/null 2>&1 || true"#,
         r#"rm -f "${XDG_STATE_HOME:-$HOME/.local/state}/aries-beacon/service.json""#,
     ),
 ];
+
+/// Where the Beacon binary is installed on the Host (for `sh`).
+pub(crate) const BEACON_BIN: &str = "$HOME/.local/bin/aries-beacon";
 
 const DISCARD_UPLOAD: &str = r#"rm -f "$HOME/.local/bin/.aries-beacon.new""#;
 
@@ -320,7 +331,7 @@ fn last_line(out: &[u8]) -> String {
 }
 
 /// Runs `script` under `sh` whatever the user's login shell is.
-fn sh_c(script: &str) -> String {
+pub(crate) fn sh_c(script: &str) -> String {
     format!("sh -c '{}'", script.replace('\'', r"'\''"))
 }
 
