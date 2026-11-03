@@ -1,0 +1,193 @@
+package io.github.shiroel.aries.ui
+
+import android.content.ClipboardManager
+import android.widget.Magnifier
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.text.contextmenu.data.TextContextMenuItem
+import androidx.compose.foundation.text.contextmenu.data.TextContextMenuKeys
+import androidx.compose.foundation.text.contextmenu.data.TextContextMenuSession
+import androidx.compose.foundation.text.contextmenu.provider.LocalTextContextMenuToolbarProvider
+import androidx.compose.foundation.text.contextmenu.provider.TextContextMenuDataProvider
+import androidx.compose.foundation.text.contextmenu.provider.TextContextMenuProvider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.test.core.app.ApplicationProvider
+import io.github.shiroel.aries.R
+import io.github.shiroel.aries.core.AgentStatus
+import io.github.shiroel.aries.core.ChatEntry
+import io.github.shiroel.aries.core.ChatEntryBody
+import io.github.shiroel.aries.core.ChatSnapshot
+import io.github.shiroel.aries.core.ChatStatus
+import io.github.shiroel.aries.core.ChatToolStatus
+import io.github.shiroel.aries.core.Endpoint
+import io.github.shiroel.aries.core.TerminalInfo
+import kotlinx.coroutines.CompletableDeferred
+import org.junit.Assert.assertEquals
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+import org.robolectric.annotation.Implementation
+import org.robolectric.annotation.Implements
+
+/** Seam 3: long-press actions in a live Chat against the fake core. */
+@RunWith(RobolectricTestRunner::class)
+@Config(qualifiers = "h1200dp", shadows = [ShadowChatMagnifier::class])
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@OptIn(ExperimentalFoundationApi::class)
+class ChatCopySelectionTest {
+    @get:Rule val compose = createComposeRule()
+    private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+    private fun str(id: Int, vararg args: Any) = context.getString(id, *args)
+    private val core = FakeCore()
+    // Only replace the Android context-menu boundary; selection and copying
+    // still run through Compose's real SelectionContainer and clipboard.
+    private var textMenu: TextContextMenuDataProvider? = null
+    private val menuClosed = CompletableDeferred<Unit>()
+    private val toolbar = object : TextContextMenuProvider {
+        override suspend fun showTextContextMenu(dataProvider: TextContextMenuDataProvider) {
+            textMenu = dataProvider
+            try { menuClosed.await() } finally { textMenu = null }
+        }
+    }
+
+    private fun open() {
+        core.terminals = listOf(TerminalInfo("t1", "claude", "", listOf("claude"), "/repo", "live", AgentStatus.Working, false, 0uL))
+        core.addHost("home", Endpoint.Ssh("10.0.0.2", 22u, "me"))
+        compose.setContent {
+            val scope = rememberCoroutineScope()
+            val model = remember { HostsModel(core, scope) }
+            CompositionLocalProvider(LocalTextContextMenuToolbarProvider provides toolbar) {
+                MaterialTheme { AriesApp(model) }
+            }
+        }
+        compose.onNodeWithText("home").performClick()
+        compose.onNodeWithText("claude").performClick()
+        compose.onNodeWithText(str(R.string.agent_view_chat)).performClick()
+    }
+
+    private fun show(body: ChatEntryBody) {
+        core.pushChat(ChatSnapshot(listOf(ChatEntry("entry", null, body)), ChatStatus.LIVE, null))
+        compose.waitForIdle()
+    }
+
+    private fun clipboard(): String? = context.getSystemService(ClipboardManager::class.java)
+        .primaryClip?.getItemAt(0)?.text?.toString()
+
+    @Test
+    fun longPressCopiesTheWholePromptOrResponseWithoutLabels() {
+        open()
+        val prompt = "Fix this:\n  val 이름 = \"hello\"\n"
+        val response = "**Done**\n```kotlin\nprintln(\"안녕\")\n```"
+        for ((body, text) in listOf(
+            ChatEntryBody.User(prompt) to prompt,
+            ChatEntryBody.Agent(response) to response,
+            ChatEntryBody.Thinking(response) to response,
+            ChatEntryBody.AgentError(response) to response,
+        )) {
+            show(body)
+            compose.onNodeWithText(text).performTouchInput { longClick() }
+            compose.onNodeWithText(str(R.string.chat_select_text)).assertExists()
+            compose.onNodeWithText(str(R.string.chat_copy_all)).performClick()
+            compose.waitForIdle()
+            assertEquals(text, clipboard())
+            compose.onNodeWithText(str(R.string.chat_copy_all)).assertDoesNotExist()
+        }
+    }
+
+    @Test
+    fun toolsCopyTheFullResultWhileCollapsedAndEachBodyWhileExpanded() {
+        open()
+        val input = "{\n  \"command\": \"printf hello\"\n}"
+        val result = "hello\n  오류: 자세한 내용\n"
+        show(ChatEntryBody.Tool("Bash", "printf hello", input, ChatToolStatus.FAILED, result))
+        val tool = compose.onNodeWithContentDescription(str(R.string.chat_tool_expand_label, "Bash"))
+        tool.performTouchInput { longClick() }
+        compose.onNodeWithText(str(R.string.chat_copy_all)).performClick()
+        assertEquals(result, clipboard())
+        // Long press and dismissing the menu did not expand the tool.
+        compose.onNodeWithText(result).assertDoesNotExist()
+        tool.performClick()
+        for (text in listOf(input, result)) {
+            compose.onNodeWithText(text, useUnmergedTree = true).performTouchInput { longClick() }
+            compose.onNodeWithText(str(R.string.chat_copy_all)).performClick()
+            assertEquals(text, clipboard())
+        }
+        tool.performClick()
+        compose.onNodeWithText(result).assertDoesNotExist()
+    }
+
+    @Test
+    fun aCollapsedToolCopiesInputBeforeItsResultArrivesAndDoesNotTruncateLongResults() {
+        open()
+        val input = "{\"command\":\"cat log.txt\"}"
+        val result = "start\n" + "progress\n".repeat(500) + "끝\n"
+        for (output in listOf(null, result)) {
+            show(ChatEntryBody.Tool("Bash", "cat log.txt", input,
+                if (output == null) ChatToolStatus.RUNNING else ChatToolStatus.DONE, output))
+            compose.onNodeWithContentDescription(str(R.string.chat_tool_expand_label, "Bash"))
+                .performTouchInput { longClick() }
+            compose.onNodeWithText(str(R.string.chat_copy_all)).performClick()
+            assertEquals(output ?: input, clipboard())
+        }
+    }
+
+    @Test
+    fun selectTextCopiesJustAWordAndKeepsItsSourceWhileTheResponseStreams() {
+        open()
+        val text = "alpha beta gamma"
+        show(ChatEntryBody.Agent(text))
+        compose.onNodeWithText(text).performTouchInput { longClick() }
+        compose.onNodeWithText(str(R.string.chat_select_text)).performClick()
+        val selected = compose.onNode(hasText(text) and hasAnyAncestor(isDialog()), useUnmergedTree = true)
+        selected.assertExists()
+        // Selection uses a stable copy of the text, not the streaming preview.
+        show(ChatEntryBody.Agent("alpha beta gamma delta"))
+        selected.assertExists()
+        var layout: TextLayoutResult? = null
+        selected.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { action ->
+            val results = mutableListOf<TextLayoutResult>()
+            action(results)
+            layout = results.single()
+        }
+        selected.performTouchInput { longClick(layout!!.getBoundingBox(1).center) }
+        compose.waitUntil(5_000) { textMenu != null }
+        compose.runOnIdle {
+            val copy = textMenu!!.data().components.filterIsInstance<TextContextMenuItem>()
+                .single { it.key == TextContextMenuKeys.CopyKey }
+            copy.onClick(object : TextContextMenuSession {
+                override fun close() { menuClosed.complete(Unit) }
+            })
+        }
+        compose.waitForIdle()
+        assertEquals("alpha", clipboard())
+        compose.onNode(hasText(str(R.string.back_button)) and hasAnyAncestor(isDialog())).performClick()
+        compose.onNode(isDialog()).assertDoesNotExist()
+        compose.onNodeWithText("alpha beta gamma delta").assertExists()
+    }
+}
+
+/** Robolectric has no Surface for Android's selection magnifier to draw into. */
+@Implements(Magnifier::class)
+class ShadowChatMagnifier {
+    @Implementation fun show(x: Float, y: Float) = Unit
+    @Implementation fun show(x: Float, y: Float, magnifierX: Float, magnifierY: Float) = Unit
+    @Implementation fun update() = Unit
+    @Implementation fun dismiss() = Unit
+}
