@@ -107,6 +107,18 @@ pub struct PushDisable {
 pub enum PushContent {
     /// The test notification sent when push was turned on.
     Test { sent_at: u64 },
+    /// An Agent became Blocked, Error (or Done, if the user turned that on).
+    Status {
+        /// Terminal address on the Host (`t7`, `box/t7`).
+        terminal: String,
+        name: Option<String>,
+        title: Option<String>,
+        /// Not a subagent (its Terminal has no parent).
+        top_level: bool,
+        status: crate::AgentStatus,
+        /// Unix seconds on the Host.
+        at: u64,
+    },
 }
 
 /// An opened push, from a paired Host.
@@ -473,6 +485,21 @@ pub(crate) fn open(
             Ok(message) => {
                 let content = match message {
                     envelope::PushMessage::Test { sent_at } => PushContent::Test { sent_at },
+                    envelope::PushMessage::Status {
+                        terminal,
+                        name,
+                        title,
+                        top_level,
+                        status,
+                        at,
+                    } => PushContent::Status {
+                        terminal,
+                        name,
+                        title,
+                        top_level,
+                        status: status.into(),
+                        at,
+                    },
                 };
                 return Ok(PushNotice {
                     host_id,
