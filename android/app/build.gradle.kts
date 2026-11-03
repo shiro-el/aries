@@ -51,6 +51,7 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+        resValues = true
     }
 
     // The per-app language list (Android 13+) comes from the res/values-* dirs.
