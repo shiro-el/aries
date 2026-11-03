@@ -34,6 +34,13 @@ pub enum CoreError {
     HostKeyChanged { expected: String, actual: String },
     #[error("the Host did not accept the app's SSH key")]
     AuthRejected,
+    /// Password bootstrap: the Host refused the user name or password.
+    #[error("the Host did not accept the password")]
+    PasswordRejected,
+    /// Password bootstrap: logged in, but could not write
+    /// `~/.ssh/authorized_keys` (for example a permission problem).
+    #[error("could not install the key on the Host: {detail}")]
+    KeyInstallFailed { detail: String },
     #[error("the Host's herdr-core cannot be used: {reason:?}")]
     Incompatible { reason: Incompatibility },
     /// The bytes from the Host were not the herdr-core protocol (for example

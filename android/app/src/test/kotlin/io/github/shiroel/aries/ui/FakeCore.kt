@@ -9,9 +9,11 @@ import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.Host
 import io.github.shiroel.aries.core.HostConnection
+import io.github.shiroel.aries.core.KeyInstall
 import io.github.shiroel.aries.core.Linger
 import io.github.shiroel.aries.core.NoHandle
 import io.github.shiroel.aries.core.PublicKeyInfo
+import io.github.shiroel.aries.core.QrMatrix
 import io.github.shiroel.aries.core.TerminalInfo
 
 /** In-memory stand-in for the Rust core, for UI tests. */
@@ -24,6 +26,15 @@ class FakeCore : AriesCoreInterface {
 
     var terminals: List<TerminalInfo> = emptyList()
 
+    /** When set, `installKeyWithPassword` fails with it. */
+    var installFailWith: CoreException? = null
+
+    /** Passwords `installKeyWithPassword` was called with, per Host id. */
+    val passwordsTried = mutableListOf<Pair<String, String>>()
+
+    /** Host ids whose (fake) `authorized_keys` already holds the key. */
+    private val installed = mutableSetOf<String>()
+
     private var key: PublicKeyInfo? = null
     private val hosts = mutableListOf<Host>()
 
@@ -31,6 +42,18 @@ class FakeCore : AriesCoreInterface {
 
     override fun ensureKey(): PublicKeyInfo =
         key ?: PublicKeyInfo(PUBLIC_KEY, "SHA256:fake").also { key = it }
+
+    override fun publicKeyQr(): QrMatrix? =
+        key?.let { QrMatrix(2u, listOf(true, false, false, true)) }
+
+    override suspend fun installKeyWithPassword(hostId: String, password: String): KeyInstall {
+        val host = hosts.find { it.id == hostId } ?: throw CoreException.UnknownHost(hostId)
+        requireTrust?.let { if (host.hostKey != it) throw CoreException.HostKeyUnknown(it) }
+        passwordsTried += hostId to password
+        installFailWith?.let { throw it }
+        ensureKey()
+        return if (installed.add(hostId)) KeyInstall.ADDED else KeyInstall.ALREADY_PRESENT
+    }
 
     override fun hosts(): List<Host> = hosts.toList()
 
@@ -41,6 +64,10 @@ class FakeCore : AriesCoreInterface {
         val i = hosts.indexOfFirst { it.id == hostId }
         if (i < 0) throw CoreException.UnknownHost(hostId)
         hosts[i] = hosts[i].copy(hostKey = fingerprint)
+    }
+
+    override fun removeHost(hostId: String) {
+        if (!hosts.removeIf { it.id == hostId }) throw CoreException.UnknownHost(hostId)
     }
 
     override suspend fun connect(hostId: String): HostConnection {

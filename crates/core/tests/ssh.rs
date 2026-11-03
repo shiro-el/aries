@@ -46,7 +46,11 @@ async fn trusts_the_host_key_on_first_use_then_refuses_a_changed_one() {
     // Trust survives a relaunch.
     drop(core);
     let core = core_in(data.path());
-    core.connect(host.id.clone()).await.unwrap().disconnect().await;
+    core.connect(host.id.clone())
+        .await
+        .unwrap()
+        .disconnect()
+        .await;
 
     // The Host now presents another key: warn and refuse.
     sshd.rotate_host_keys();
@@ -94,4 +98,35 @@ async fn reports_a_key_the_host_does_not_accept() {
         core.connect(host.id).await,
         Err(CoreError::AuthRejected)
     ));
+}
+
+#[tokio::test]
+#[ignore = "needs docker"]
+async fn a_removed_host_added_again_asks_to_trust_its_key_again() {
+    let sshd = SshdHost::start();
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    sshd.authorize(&core.ensure_key().unwrap().openssh);
+    let host = core
+        .add_host("box".into(), endpoint(&sshd, SshdHost::USER))
+        .unwrap();
+    core.trust_host_key(host.id.clone(), sshd.host_key_fingerprint())
+        .unwrap();
+    core.connect(host.id.clone())
+        .await
+        .unwrap()
+        .disconnect()
+        .await;
+
+    core.remove_host(host.id).unwrap();
+    let again = core
+        .add_host("box".into(), endpoint(&sshd, SshdHost::USER))
+        .unwrap();
+
+    match core.connect(again.id).await {
+        Err(CoreError::HostKeyUnknown { fingerprint }) => {
+            assert_eq!(fingerprint, sshd.host_key_fingerprint())
+        }
+        other => panic!("expected HostKeyUnknown, got {:?}", other.err()),
+    }
 }

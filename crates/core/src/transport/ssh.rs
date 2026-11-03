@@ -32,7 +32,7 @@ pub(crate) struct Ssh {
     pub trusted: Option<String>,
 }
 
-struct Checker {
+pub(super) struct Checker {
     trusted: Option<String>,
     outcome: Arc<Mutex<Option<HostKeyCheck>>>,
 }
@@ -65,6 +65,46 @@ impl client::Handler for Checker {
     }
 }
 
+/// Opens an SSH session to `address:port` and checks the Host key against
+/// `trusted` (trust on first use). Authentication is up to the caller.
+pub(super) async fn handshake(
+    address: &str,
+    port: u16,
+    trusted: Option<String>,
+) -> Result<client::Handle<Checker>, CoreError> {
+    let config = Arc::new(client::Config {
+        keepalive_interval: Some(Duration::from_secs(15)),
+        keepalive_max: 4,
+        ..Default::default()
+    });
+    let outcome = Arc::new(Mutex::new(None));
+    let checker = Checker {
+        trusted,
+        outcome: outcome.clone(),
+    };
+    let connected = tokio::time::timeout(
+        CONNECT_TIMEOUT,
+        client::connect(config, (address, port), checker),
+    )
+    .await
+    .map_err(|_| CoreError::Unreachable {
+        detail: "timed out".into(),
+    })?;
+    connected.map_err(|e| match outcome.lock().expect("outcome lock").take() {
+        Some(HostKeyCheck::Unknown { fingerprint }) => CoreError::HostKeyUnknown { fingerprint },
+        Some(HostKeyCheck::Changed { expected, actual }) => {
+            CoreError::HostKeyChanged { expected, actual }
+        }
+        _ => unreachable_err(e),
+    })
+}
+
+pub(super) fn unreachable_err(e: impl std::fmt::Display) -> CoreError {
+    CoreError::Unreachable {
+        detail: e.to_string(),
+    }
+}
+
 /// What a command run with [`Ssh::exec`] produced.
 pub(crate) struct ExecOutput {
     /// `None` when the Host did not report an exit status.
@@ -80,19 +120,35 @@ impl ExecOutput {
 }
 
 impl Ssh {
+    /// Connects, checks the Host key and authenticates with the app's key.
+    async fn session(&self) -> Result<client::Handle<Checker>, CoreError> {
+        let mut session = handshake(&self.address, self.port, self.trusted.clone()).await?;
+        let auth = session
+            .authenticate_publickey(
+                self.user.clone(),
+                PrivateKeyWithHashAlg::new(Arc::new(self.key.clone()), None),
+            )
+            .await
+            .map_err(unreachable_err)?;
+        if !auth.success() {
+            return Err(CoreError::AuthRejected);
+        }
+        Ok(session)
+    }
+
     /// Runs `command` on the Host (no PTY), feeds it `stdin` then EOF, and
     /// collects its output.
     pub async fn exec(&self, command: &str, stdin: &[u8]) -> Result<ExecOutput, CoreError> {
         let session = self.session().await?;
-        let unreachable = |e: russh::Error| CoreError::Unreachable {
-            detail: e.to_string(),
-        };
-        let mut channel = session.channel_open_session().await.map_err(unreachable)?;
-        channel.exec(true, command).await.map_err(unreachable)?;
+        let mut channel = session
+            .channel_open_session()
+            .await
+            .map_err(unreachable_err)?;
+        channel.exec(true, command).await.map_err(unreachable_err)?;
         if !stdin.is_empty() {
-            channel.data(stdin).await.map_err(unreachable)?;
+            channel.data(stdin).await.map_err(unreachable_err)?;
         }
-        channel.eof().await.map_err(unreachable)?;
+        channel.eof().await.map_err(unreachable_err)?;
         let mut out = ExecOutput {
             status: None,
             stdout: Vec::new(),
@@ -119,71 +175,17 @@ impl Ssh {
         let channel = session
             .channel_open_session()
             .await
-            .map_err(|e| CoreError::Unreachable {
-                detail: e.to_string(),
-            })?;
+            .map_err(unreachable_err)?;
         channel
             .exec(true, REMOTE_COMMAND)
             .await
-            .map_err(|e| CoreError::Unreachable {
-                detail: e.to_string(),
-            })?;
+            .map_err(unreachable_err)?;
         let (reader, writer) = tokio::io::split(channel.into_stream());
         Ok(Stream {
             reader: Box::new(reader),
             writer: Box::new(writer),
             guard: Box::new(Mutex::new(session)),
         })
-    }
-
-    /// Connects, checks the Host key and authenticates with the app's key.
-    async fn session(&self) -> Result<client::Handle<Checker>, CoreError> {
-        let config = Arc::new(client::Config {
-            keepalive_interval: Some(Duration::from_secs(15)),
-            keepalive_max: 4,
-            ..Default::default()
-        });
-        let outcome = Arc::new(Mutex::new(None));
-        let checker = Checker {
-            trusted: self.trusted.clone(),
-            outcome: outcome.clone(),
-        };
-        let addr = (self.address.as_str(), self.port);
-        let connected =
-            tokio::time::timeout(CONNECT_TIMEOUT, client::connect(config, addr, checker))
-                .await
-                .map_err(|_| CoreError::Unreachable {
-                    detail: "timed out".into(),
-                })?;
-        let mut session = match connected {
-            Ok(s) => s,
-            Err(e) => {
-                return Err(match outcome.lock().expect("outcome lock").take() {
-                    Some(HostKeyCheck::Unknown { fingerprint }) => {
-                        CoreError::HostKeyUnknown { fingerprint }
-                    }
-                    Some(HostKeyCheck::Changed { expected, actual }) => {
-                        CoreError::HostKeyChanged { expected, actual }
-                    }
-                    _ => CoreError::Unreachable {
-                        detail: e.to_string(),
-                    },
-                });
-            }
-        };
-        let auth = session
-            .authenticate_publickey(
-                self.user.clone(),
-                PrivateKeyWithHashAlg::new(Arc::new(self.key.clone()), None),
-            )
-            .await
-            .map_err(|e| CoreError::Unreachable {
-                detail: e.to_string(),
-            })?;
-        if !auth.success() {
-            return Err(CoreError::AuthRejected);
-        }
-        Ok(session)
     }
 }
 

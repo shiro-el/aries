@@ -11,6 +11,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.CoreException
@@ -128,5 +129,97 @@ class HostListScreenTest {
         compose.waitForIdle()
 
         compose.onNodeWithText(str(R.string.incompatible_core_too_old, "0.1.16", "0.1.17")).assertExists()
+    }
+
+    private fun installWithPassword(password: String) {
+        compose.onNodeWithText(str(R.string.host_install_key_button)).performScrollTo().performClick()
+        compose.onNode(hasSetTextAction() and hasText(str(R.string.key_install_password))).performTextInput(password)
+        compose.onNodeWithText(str(R.string.key_install_button)).performClick()
+        compose.waitForIdle()
+    }
+
+    @Test
+    fun installsTheKeyWithAOneTimePassword() {
+        val core = FakeCore().apply { addHost("home", Endpoint.Ssh("10.0.0.2", 22u, "me")) }
+        show(core)
+
+        installWithPassword("hunter2")
+
+        assertEquals(listOf("h1" to "hunter2"), core.passwordsTried)
+        compose.onNodeWithText(str(R.string.key_install_added_body, "home")).assertExists()
+    }
+
+    @Test
+    fun saysWhenTheKeyWasAlreadyInstalled() {
+        val core = FakeCore().apply { addHost("home", Endpoint.Ssh("10.0.0.2", 22u, "me")) }
+        show(core)
+
+        installWithPassword("hunter2")
+        compose.onNodeWithText(str(R.string.ok_button)).performClick()
+        installWithPassword("hunter2")
+
+        compose.onNodeWithText(str(R.string.key_install_present_body, "home")).assertExists()
+    }
+
+    @Test
+    fun asksToTrustTheHostKeyBeforeSendingThePassword() {
+        val core = FakeCore().apply {
+            addHost("home", Endpoint.Ssh("10.0.0.2", 22u, "me"))
+            requireTrust = "SHA256:abc"
+        }
+        show(core)
+
+        installWithPassword("hunter2")
+        assertEquals(emptyList<Pair<String, String>>(), core.passwordsTried)
+        compose.onNodeWithText(str(R.string.host_key_trust_body, "home", "SHA256:abc")).assertExists()
+
+        compose.onNodeWithText(str(R.string.host_key_trust_button)).performClick()
+        compose.waitForIdle()
+
+        // Trusting asks for the password again: it was not kept.
+        compose.onNode(hasSetTextAction() and hasText(str(R.string.key_install_password))).performTextInput("hunter2")
+        compose.onNodeWithText(str(R.string.key_install_button)).performClick()
+        compose.waitForIdle()
+        assertEquals(listOf("h1" to "hunter2"), core.passwordsTried)
+        compose.onNodeWithText(str(R.string.key_install_added_body, "home")).assertExists()
+    }
+
+    @Test
+    fun explainsAWrongPassword() {
+        val core = FakeCore().apply {
+            addHost("home", Endpoint.Ssh("10.0.0.2", 22u, "me"))
+            installFailWith = CoreException.PasswordRejected()
+        }
+        show(core)
+
+        installWithPassword("wrong")
+
+        compose.onNodeWithText(str(R.string.key_install_failed_title)).assertExists()
+        compose.onNodeWithText(str(R.string.key_install_password_rejected)).assertExists()
+    }
+
+    @Test
+    fun explainsAPermissionProblemOnTheHost() {
+        val detail = "chmod: /home/me/.ssh: Operation not permitted"
+        val core = FakeCore().apply {
+            addHost("home", Endpoint.Ssh("10.0.0.2", 22u, "me"))
+            installFailWith = CoreException.KeyInstallFailed(detail)
+        }
+        show(core)
+
+        installWithPassword("hunter2")
+
+        compose.onNodeWithText(str(R.string.key_install_write_failed, detail)).assertExists()
+    }
+
+    @Test
+    fun showsThePublicKeyAsAQrCode() {
+        val core = FakeCore().apply { ensureKey() }
+        show(core)
+
+        compose.onNodeWithText(str(R.string.key_qr_button)).performScrollTo().performClick()
+
+        compose.onNodeWithText(str(R.string.key_qr_title)).assertExists()
+        compose.onNodeWithTag("key_qr").assertExists()
     }
 }
