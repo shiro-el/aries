@@ -17,12 +17,8 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.semantics.text
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -48,9 +44,15 @@ fun ConsoleTopBar(
         val navigationLabel = stringResource(if (onBack == null) R.string.console_open_drawer else R.string.back_button)
         Box(
             Modifier.size(44.dp).testTag(if (onBack == null) "console-menu" else "console-back")
-                .clickable(onClick = onBack ?: onMenu).semantics { contentDescription = navigationLabel },
+                .clickable(onClick = onBack ?: onMenu),
             contentAlignment = Alignment.Center,
-        ) { Text(stringResource(if (onBack == null) R.string.console_menu_glyph else R.string.console_back_glyph), Modifier.clearAndSetSemantics { text = AnnotatedString(navigationLabel) }, fontSize = 20.sp) }
+        ) {
+            Icon(
+                painterResource(if (onBack == null) R.drawable.ic_menu else R.drawable.ic_arrow_left),
+                contentDescription = navigationLabel,
+                modifier = Modifier.size(20.dp),
+            )
+        }
         if (showMark) ConsoleMark()
         titleContent()
         actions()

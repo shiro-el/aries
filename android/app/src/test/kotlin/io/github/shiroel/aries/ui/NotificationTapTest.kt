@@ -4,6 +4,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
@@ -73,7 +74,7 @@ class NotificationTapTest {
         assertTrue(model.screen is Screen.Terminal)
 
         // Back leaves the Terminal for the Agents list.
-        compose.onNodeWithText(str(R.string.back_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         compose.waitForIdle()
         assertTrue(view.detached)
         assertTrue(model.screen is Screen.Agents)
