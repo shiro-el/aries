@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Korean. Same keys and format arguments as values/strings.xml; TranslationsTest
+  fails if a key is missing here. See "UI strings" in CONTRIBUTING.md.
+  Glossary terms: Host = 호스트, Terminal = 터미널, Agent = 에이전트.
+-->
+<resources>
+    <string name="ok_button">확인</string>
+    <string name="cancel_button">취소</string>
+    <string name="back_button">뒤로</string>
+
+    <string name="hosts_title">호스트</string>
+    <string name="hosts_empty">아직 호스트가 없습니다. 아래에서 추가하세요.</string>
+
+    <string name="key_missing">Aries가 호스트에 로그인하려면 SSH 키가 필요합니다.</string>
+    <string name="key_create_button">SSH 키 만들기</string>
+    <string name="key_title">이 휴대폰의 SSH 키</string>
+    <string name="key_fingerprint">지문: %1$s</string>
+    <string name="key_copy_button">공개 키 복사</string>
+    <string name="key_copy_hint">각 호스트의 ~/.ssh/authorized_keys에 추가하세요.</string>
+    <string name="key_clip_label">Aries SSH 공개 키</string>
+
+    <string name="host_ssh_address">%1$s@%2$s:%3$d</string>
+    <string name="host_local_address">로컬 프로세스</string>
+    <string name="host_add_title">호스트 추가</string>
+    <string name="host_add_name">이름 (선택)</string>
+    <string name="host_add_address">주소</string>
+    <string name="host_add_port">포트</string>
+    <string name="host_add_user">사용자 이름</string>
+    <string name="host_add_button">호스트 추가</string>
+    <string name="host_remove_button">삭제</string>
+    <string name="host_remove_button_label">%1$s 삭제</string>
+    <string name="host_remove_title">%1$s을(를) 삭제할까요?</string>
+    <string name="host_remove_body">이 호스트의 주소, 신뢰한 호스트 키, 이 휴대폰에 저장된 모든 정보를 지웁니다. 호스트 자체는 바뀌지 않습니다.</string>
+    <string name="host_remove_confirm_button">호스트 삭제</string>
+
+    <string name="connecting">%1$s에 연결하는 중…</string>
+    <string name="terminals_title">%1$s의 터미널</string>
+    <string name="terminals_empty">이 호스트에서 실행 중인 터미널이 없습니다.</string>
+    <string name="terminal_subtitle">%1$s · %2$s</string>
+
+    <string name="host_key_trust_title">이 호스트를 신뢰할까요?</string>
+    <string name="host_key_trust_body">%1$s에 처음 연결합니다. 호스트 키 지문이 다음과 같은지 확인하세요:\n\n%2$s\n\n호스트에서 실행: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</string>
+    <string name="host_key_trust_button">신뢰하고 연결</string>
+    <string name="host_key_changed_title">호스트 키가 바뀌었습니다</string>
+    <string name="host_key_changed_body">호스트가 이전과 다른 키를 보내서 Aries가 연결하지 않았습니다. 누군가 연결을 가로채고 있거나 호스트를 다시 설치했을 수 있습니다.\n\n신뢰한 키: %1$s\n현재 키: %2$s</string>
+
+    <string name="incompatible_title">업데이트 필요</string>
+    <string name="incompatible_app_too_old">이 호스트는 더 새로운 herdr-core 프로토콜(세대 %1$d)을 사용합니다. Aries를 업데이트하세요.</string>
+    <string name="incompatible_core_too_old">이 호스트의 herdr-core는 %1$s입니다. Aries에는 %2$s 이상이 필요합니다. 호스트에서 `hc update`를 실행하세요.</string>
+    <string name="incompatible_missing_methods">이 호스트의 herdr-core에 %1$s이(가) 없습니다. 호스트에서 `hc update`를 실행하세요.</string>
+
+    <string name="connect_failed_title">연결할 수 없음</string>
+    <string name="connect_auth_rejected">호스트가 이 휴대폰의 SSH 키를 받아들이지 않았습니다. 호스트의 ~/.ssh/authorized_keys에 공개 키를 추가하세요.</string>
+    <string name="connect_no_key">먼저 SSH 키를 만드세요.</string>
+    <string name="connect_unreachable">호스트에 연결할 수 없습니다: %1$s</string>
+    <string name="connect_protocol">호스트가 herdr-core 프로토콜로 응답하지 않았습니다: %1$s</string>
+    <string name="connect_other">%1$s</string>
+
+    <string name="key_default_label">기본 키</string>
+    <string name="keys_title">다른 SSH 키</string>
+    <string name="key_new_label">새 키 이름</string>
+    <string name="key_new_button">키 하나 더 만들기</string>
+
+    <string name="host_jumps_button">jump host</string>
+    <string name="host_jumps_summary">경유: %1$s</string>
+    <string name="jumps_title">%1$s까지의 경로</string>
+    <string name="jumps_hint">Aries는 jump host에 순서대로 로그인한 뒤, 마지막 jump host를 거쳐 호스트에 접속합니다.</string>
+    <string name="jumps_empty">jump host가 없습니다. Aries가 호스트에 바로 접속합니다.</string>
+    <string name="jumps_hop_title">jump host %1$d</string>
+    <string name="jumps_add_button">jump host 추가</string>
+    <string name="jumps_remove_button">삭제</string>
+    <string name="jumps_key_label">키: %1$s</string>
+    <string name="jumps_host_key_label">호스트에 쓸 키: %1$s</string>
+    <string name="jumps_save_button">저장</string>
+    <string name="jump_key_trust_title">이 jump host를 신뢰할까요?</string>
+    <string name="jump_key_trust_body">%3$s로 가는 길의 jump host %1$d(%2$s)에 처음 연결합니다. 호스트 키 지문이 다음과 같은지 확인하세요:\n\n%4$s\n\njump host에서 실행: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</string>
+    <string name="jump_key_changed_title">jump host 키가 바뀌었습니다</string>
+    <string name="jump_key_changed_body">jump host %1$d(%2$s)가 이전과 다른 키를 보내서 Aries가 연결하지 않았습니다. 누군가 연결을 가로채고 있거나 jump host를 다시 설치했을 수 있습니다.\n\n신뢰한 키: %3$s\n현재 키: %4$s</string>
+    <string name="connect_jump_auth_rejected">jump host %1$d(%2$s)가 지정한 키를 받아들이지 않았습니다. 그 jump host의 ~/.ssh/authorized_keys에 해당 키의 공개 키를 추가하세요.</string>
+</resources>

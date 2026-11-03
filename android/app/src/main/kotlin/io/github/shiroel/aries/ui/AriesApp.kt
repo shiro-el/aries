@@ -29,9 +29,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -74,7 +77,7 @@ private fun HostListScreen(model: HostsModel) {
             item { Text(stringResource(R.string.hosts_empty)) }
         }
         items(model.hosts, key = { it.id }) { host ->
-            HostRow(host) { model.connect(host) }
+            HostRow(host, onRemove = { model.askRemove(host) }) { model.connect(host) }
             JumpSummary(model.jumps[host.id].orEmpty())
             if (host.endpoint is Endpoint.Ssh) {
                 TextButton(onClick = { model.editJumps(host) }) { Text(stringResource(R.string.host_jumps_button)) }
@@ -107,14 +110,20 @@ private fun KeySection(model: HostsModel) {
 }
 
 @Composable
-private fun HostRow(host: Host, onClick: () -> Unit) {
-    Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 8.dp)) {
-        Text(host.name, style = MaterialTheme.typography.titleMedium)
-        val where = when (val e = host.endpoint) {
-            is Endpoint.Ssh -> stringResource(R.string.host_ssh_address, e.user, e.address, e.port.toInt())
-            is Endpoint.Local -> stringResource(R.string.host_local_address)
+private fun HostRow(host: Host, onRemove: () -> Unit, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f).clickable(onClick = onClick).padding(vertical = 8.dp)) {
+            Text(host.name, style = MaterialTheme.typography.titleMedium)
+            val where = when (val e = host.endpoint) {
+                is Endpoint.Ssh -> stringResource(R.string.host_ssh_address, e.user, e.address, e.port.toInt())
+                is Endpoint.Local -> stringResource(R.string.host_local_address)
+            }
+            Text(where, style = MaterialTheme.typography.bodySmall)
         }
-        Text(where, style = MaterialTheme.typography.bodySmall)
+        val removeLabel = stringResource(R.string.host_remove_button_label, host.name)
+        TextButton(onClick = onRemove, modifier = Modifier.semantics { contentDescription = removeLabel }) {
+            Text(stringResource(R.string.host_remove_button))
+        }
     }
 }
 
@@ -183,6 +192,13 @@ private fun PromptDialog(prompt: Prompt, model: HostsModel) {
             dismissButton = { TextButton(onClick = model::dismiss) { Text(stringResource(R.string.cancel_button)) } },
         )
         is Prompt.TrustJumpHostKey -> TrustJumpHostKeyDialog(prompt, model)
+        is Prompt.ConfirmRemove -> AlertDialog(
+            onDismissRequest = model::dismiss,
+            title = { Text(stringResource(R.string.host_remove_title, prompt.host.name)) },
+            text = { Text(stringResource(R.string.host_remove_body)) },
+            confirmButton = { TextButton(onClick = { model.remove(prompt) }) { Text(stringResource(R.string.host_remove_confirm_button)) } },
+            dismissButton = { TextButton(onClick = model::dismiss) { Text(stringResource(R.string.cancel_button)) } },
+        )
         is Prompt.Problem -> AlertDialog(
             onDismissRequest = model::dismiss,
             title = { Text(text(prompt.title)) },

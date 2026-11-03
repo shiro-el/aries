@@ -35,6 +35,8 @@ sealed interface Prompt {
 
     /** First connection through jump host [hop] (0-based): confirm its Host key. */
     data class TrustJumpHostKey(val host: Host, val hop: UInt, val address: String, val fingerprint: String) : Prompt
+    /** Ask before removing [host] and everything stored for it. */
+    data class ConfirmRemove(val host: Host) : Prompt
 
     /** Something the user must read; [title] and [body] are resources. */
     data class Problem(val title: Message, val body: Message) : Prompt
@@ -135,6 +137,18 @@ class HostsModel(private val core: AriesCoreInterface, private val scope: Corout
             refreshRoutes()
         }
         hosts.find { it.id == prompt.host.id }?.let(::connect)
+    }
+
+    fun askRemove(host: Host) {
+        prompt = Prompt.ConfirmRemove(host)
+    }
+
+    fun remove(prompt: Prompt.ConfirmRemove) {
+        this.prompt = null
+        guard {
+            core.removeHost(prompt.host.id)
+            hosts = core.hosts()
+        }
     }
 
     fun dismiss() {

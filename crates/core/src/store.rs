@@ -2,7 +2,8 @@
 //! `hosts.json` (Hosts and their trusted Host key fingerprints),
 //! `identity.sealed` (the SSH private key, sealed by the [`KeyVault`]) and
 //! `identity.pub`; extra SSH keys in `keys.json` (id, label, public half) and
-//! `key-<id>.sealed`.
+//! `key-<id>.sealed`. Per-Host local state goes under `hosts/<id>/`
+//! ([`Store::host_dir`]), which Host removal deletes.
 
 use std::path::{Path, PathBuf};
 
@@ -77,6 +78,27 @@ impl Store {
     pub fn write_identity(&self, sealed: &[u8], public: &str) -> Result<(), CoreError> {
         self.write_atomic("identity.pub", format!("{public}\n").as_bytes())?;
         self.write_atomic("identity.sealed", sealed)
+    }
+
+    /// Where per-Host local state (caches, pairing, ...) lives. Not created
+    /// here; the owner creates it on first use.
+    pub fn host_dir(&self, host_id: &str) -> PathBuf {
+        self.dir.join("hosts").join(host_id)
+    }
+
+    /// Deletes [`Store::host_dir`]; succeeds if it never existed.
+    pub fn remove_host_dir(&self, host_id: &str) -> Result<(), CoreError> {
+        // Ids come from `new_id` (hex); refuse anything that could escape.
+        if host_id.is_empty() || !host_id.chars().all(|c| c.is_ascii_alphanumeric()) {
+            return Err(CoreError::UnknownHost {
+                id: host_id.to_owned(),
+            });
+        }
+        match std::fs::remove_dir_all(self.host_dir(host_id)) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(storage(e)),
+        }
     }
 
     pub fn read_keys(&self) -> Result<Vec<SavedKey>, CoreError> {
