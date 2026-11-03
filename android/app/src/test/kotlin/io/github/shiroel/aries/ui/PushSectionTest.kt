@@ -3,6 +3,7 @@ package io.github.shiroel.aries.ui
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -89,7 +90,10 @@ class PushSectionTest {
         compose.onNodeWithText(text).performScrollTo().assertExists()
     }
 
-    private fun step(format: Int, step: Int) = str(format, str(step))
+    private fun showsStep(step: Int, state: Int) {
+        compose.onNodeWithTag("host-actions:h1").performScrollToNode(hasText(str(step)))
+        compose.onNode(hasText(str(step)) and hasContentDescription(str(state))).assertExists()
+    }
 
     @Test
     fun asksForTheBeaconFirst() {
@@ -120,8 +124,8 @@ class PushSectionTest {
 
         click(R.string.push_enable_button)
 
-        shows(step(R.string.push_step_done, R.string.push_step_register))
-        shows(step(R.string.push_step_failed, R.string.push_step_pair))
+        showsStep(R.string.push_step_register, R.string.push_step_done_description)
+        showsStep(R.string.push_step_pair, R.string.push_step_failed_description)
         shows(str(R.string.push_failed, str(R.string.push_step_pair), "relay said no"))
         assertTrue(core.pushPaired.isEmpty())
 
@@ -342,6 +346,23 @@ class PushSectionTest {
         core.pushPolicyFailure = null
         click(R.string.push_policy_retry)
         option(R.string.push_policy_blocked).assertIsOn()
+    }
+
+    @Test
+    fun pendingAndFailedTokenVerificationRemainVisibleForAnExistingPairing() {
+        val core = FakeCore().apply {
+            beacon = installed()
+            pushPaired["h1"] = RELAY
+            pushVerifications["h1"] = io.github.shiroel.aries.core.PushVerificationState.PENDING
+        }
+        val model = connectTo(core)
+        shows(str(R.string.push_verification_pending))
+        compose.runOnIdle {
+            core.pushVerifications["h1"] = io.github.shiroel.aries.core.PushVerificationState.FAILED
+            model.push.refreshVerification()
+        }
+        shows(str(R.string.push_verification_failed))
+        shows(str(R.string.push_on_body, RELAY))
     }
 
     private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.onAllNodesWithTextLast(text: String) {

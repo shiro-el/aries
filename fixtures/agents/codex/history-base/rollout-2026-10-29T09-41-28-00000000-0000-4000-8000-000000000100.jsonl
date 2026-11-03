@@ -1,0 +1,36 @@
+{"timestamp":"2026-10-29T09:41:57.559Z","ordinal":0,"type":"session_meta","payload":{"id":"00000000-0000-4000-8000-000000000100","session_id":"00000000-0000-4000-8000-000000000100","timestamp":"2026-10-29T09:41:28.435Z","cwd":"/home/user/work","originator":"codex-tui","cli_version":"0.165.0","source":"vscode","history_mode":"paginated"}}
+{"timestamp":"2026-10-29T09:41:57.559Z","ordinal":1,"type":"event_msg","payload":{"type":"task_started"}}
+{"timestamp":"2026-10-29T09:41:57.855Z","ordinal":10,"type":"event_msg","payload":{"type":"thread_settings_applied"}}
+{"timestamp":"2026-10-29T09:41:57.867Z","ordinal":12,"type":"event_msg","payload":{"type":"item_completed","item":{"type":"UserMessage","id":"retained-UserMessage-1","content":[{"type":"text","text":"Retained prompt 1"}]}}}
+{"timestamp":"2026-10-29T09:42:00.739Z","ordinal":13,"type":"event_msg","payload":{"type":"item_completed","item":{"type":"AgentMessage","id":"retained-AgentMessage-1","content":[{"type":"text","text":"Retained reply 1"}]}}}
+{"timestamp":"2026-10-29T09:42:23.285Z","ordinal":35,"type":"event_msg","payload":{"type":"item_completed","item":{"type":"AgentMessage","id":"retained-AgentMessage-2","content":[{"type":"text","text":"Retained reply 2"}]}}}
+{"timestamp":"2026-10-29T09:42:23.322Z","ordinal":39,"type":"event_msg","payload":{"type":"task_complete"}}
+{"timestamp":"2026-10-29T09:43:14.812Z","ordinal":40,"type":"event_msg","payload":{"type":"thread_settings_applied"}}
+{"timestamp":"2026-10-29T09:43:14.823Z","ordinal":41,"type":"event_msg","payload":{"type":"task_started"}}
+{"timestamp":"2026-10-29T09:43:14.888Z","ordinal":44,"type":"event_msg","payload":{"type":"item_completed","item":{"type":"UserMessage","id":"retained-UserMessage-2","content":[{"type":"text","text":"Retained prompt 2"}]}}}
+{"timestamp":"2026-10-29T09:43:19.321Z","ordinal":45,"type":"event_msg","payload":{"type":"item_completed","item":{"type":"AgentMessage","id":"retained-AgentMessage-3","content":[{"type":"text","text":"Retained reply 3"}]}}}
+{"timestamp":"2026-10-29T09:43:41.835Z","ordinal":64,"type":"event_msg","payload":{"type":"item_completed","item":{"type":"AgentMessage","id":"retained-AgentMessage-4","content":[{"type":"text","text":"Retained reply 4"}]}}}
+{"timestamp":"2026-10-29T09:43:41.870Z","ordinal":68,"type":"event_msg","payload":{"type":"task_complete"}}
+{"timestamp":"2026-10-29T09:43:47.069Z","ordinal":69,"type":"event_msg","payload":{"type":"thread_settings_applied"}}
+{"timestamp":"2026-10-29T09:43:47.072Z","ordinal":70,"type":"event_msg","payload":{"type":"task_started"}}
+{"timestamp":"2026-10-29T09:43:47.112Z","ordinal":73,"type":"event_msg","payload":{"type":"item_completed","item":{"type":"UserMessage","id":"retained-UserMessage-3","content":[{"type":"text","text":"Retained prompt 3"}]}}}
+{"timestamp":"2026-10-29T09:43:52.877Z","ordinal":74,"type":"event_msg","payload":{"type":"item_completed","item":{"type":"AgentMessage","id":"retained-AgentMessage-5","content":[{"type":"text","text":"Retained reply 5"}]}}}
+{"timestamp":"2026-10-29T09:45:06.964Z","ordinal":144,"type":"event_msg","payload":{"type":"item_completed","item":{"type":"AgentMessage","id":"retained-AgentMessage-6","content":[{"type":"text","text":"Retained reply 6"}]}}}
+{"timestamp":"2026-10-29T09:47:41.237Z","ordinal":248,"type":"event_msg","payload":{"type":"item_completed","item":{"type":"AgentMessage","id":"retained-AgentMessage-7","content":[{"type":"text","text":"Retained reply 7"}]}}}
+{"timestamp":"2026-10-29T09:50:19.060Z","ordinal":320,"type":"event_msg","payload":{"type":"item_completed","item":{"type":"AgentMessage","id":"retained-AgentMessage-8","content":[{"type":"text","text":"Retained reply 8"}]}}}
+{"timestamp":"2026-10-29T09:53:09.017Z","ordinal":382,"type":"event_msg","payload":{"type":"item_completed","item":{"type":"AgentMessage","id":"retained-AgentMessage-9","content":[{"type":"text","text":"Retained reply 9"}]}}}
+{"timestamp":"2026-10-29T09:55:18.311Z","ordinal":456,"type":"event_msg","payload":{"type":"item_completed","item":{"type":"UserMessage","id":"retained-UserMessage-4","content":[{"type":"text","text":"Retained prompt 4"}]}}}
+{"timestamp":"2026-10-29T09:55:31.848Z","ordinal":457,"type":"event_msg","payload":{"type":"item_completed","item":{"type":"AgentMessage","id":"retained-AgentMessage-10","content":[{"type":"text","text":"Retained reply 10"}]}}}
+{"timestamp":"2026-10-29T09:57:22.676Z","ordinal":519,"type":"event_msg","payload":{"type":"item_completed","item":{"type":"AgentMessage","id":"retained-AgentMessage-11","content":[{"type":"text","text":"Retained reply 11"}]}}}
+{"timestamp":"2026-10-29T09:57:46.213Z","ordinal":537,"type":"event_msg","payload":{"type":"item_completed","item":{"type":"AgentMessage","id":"retained-AgentMessage-12","content":[{"type":"text","text":"Retained reply 12"}]}}}
+{"timestamp":"2026-10-29T09:57:46.257Z","ordinal":541,"type":"event_msg","payload":{"type":"task_complete"}}
+{"timestamp":"2026-10-29T10:00:39.424Z","ordinal":542,"type":"event_msg","payload":{"type":"thread_settings_applied"}}
+{"timestamp":"2026-10-29T10:00:39.427Z","ordinal":543,"type":"event_msg","payload":{"type":"task_started"}}
+{"timestamp":"2026-10-29T10:00:39.451Z","ordinal":546,"type":"event_msg","payload":{"type":"item_completed","item":{"type":"UserMessage","id":"discarded-UserMessage-1","content":[{"type":"text","text":"Discarded prompt 1"}]}}}
+{"timestamp":"2026-10-29T10:00:45.315Z","ordinal":547,"type":"event_msg","payload":{"type":"item_completed","item":{"type":"AgentMessage","id":"discarded-AgentMessage-1","content":[{"type":"text","text":"Discarded reply 1"}]}}}
+{"timestamp":"2026-10-29T10:01:37.064Z","ordinal":576,"type":"event_msg","payload":{"type":"thread_settings_applied"}}
+{"timestamp":"2026-10-29T10:01:37.067Z","ordinal":577,"type":"event_msg","payload":{"type":"task_started"}}
+{"timestamp":"2026-10-29T10:01:37.100Z","ordinal":580,"type":"event_msg","payload":{"type":"item_completed","item":{"type":"UserMessage","id":"discarded-UserMessage-2","content":[{"type":"text","text":"Discarded prompt 2"}]}}}
+{"timestamp":"2026-10-29T10:01:42.899Z","ordinal":581,"type":"event_msg","payload":{"type":"item_completed","item":{"type":"AgentMessage","id":"discarded-AgentMessage-2","content":[{"type":"text","text":"Discarded reply 2"}]}}}
+{"timestamp":"2026-10-29T10:02:37.945Z","ordinal":616,"type":"event_msg","payload":{"type":"item_completed","item":{"type":"AgentMessage","id":"discarded-AgentMessage-3","content":[{"type":"text","text":"Discarded reply 3"}]}}}
+{"timestamp":"2026-10-29T10:02:37.986Z","ordinal":620,"type":"event_msg","payload":{"type":"task_complete"}}

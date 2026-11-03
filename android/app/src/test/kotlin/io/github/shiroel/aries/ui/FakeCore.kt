@@ -1,5 +1,8 @@
 package io.github.shiroel.aries.ui
 
+import io.github.shiroel.aries.core.HerdrInstallListener
+import io.github.shiroel.aries.core.HerdrInstallStep
+import io.github.shiroel.aries.core.HerdrCoreState
 import io.github.shiroel.aries.core.LastKnownState
 import io.github.shiroel.aries.core.LastKnownStateWatch
 import io.github.shiroel.aries.core.AgentStatus
@@ -37,6 +40,7 @@ import io.github.shiroel.aries.core.PushNotice
 import io.github.shiroel.aries.core.PushPairing
 import io.github.shiroel.aries.core.PushPolicy
 import io.github.shiroel.aries.core.PushProgress
+import io.github.shiroel.aries.core.PushVerificationState
 import io.github.shiroel.aries.core.PushStep
 import io.github.shiroel.aries.core.Linger
 import io.github.shiroel.aries.core.JumpHost
@@ -225,6 +229,23 @@ class FakeCore : AriesCoreInterface {
 
     override fun hosts(): List<Host> = hosts.toList()
 
+    var pairingDetails: io.github.shiroel.aries.core.HostPairingDetails? = null
+    var pairingScanError: CoreException? = null
+    var pairingError: CoreException? = null
+    val pairingRequests = mutableListOf<String>()
+    override fun inspectPairingQr(qr: String): io.github.shiroel.aries.core.HostPairingDetails {
+        pairingScanError?.let { throw it }
+        return pairingDetails ?: throw CoreException.InvalidPairingQr()
+    }
+    override suspend fun pairHostQr(name: String, qr: String): Host {
+        pairingRequests += name
+        pairingError?.let { throw it }
+        val details = inspectPairingQr(qr)
+        val host = addHost(name, Endpoint.Ssh(details.address, details.port, details.user))
+        trustHostKey(host.id, details.hostKey)
+        return hosts().first { it.id == host.id }
+    }
+
     override fun addHost(name: String, endpoint: Endpoint): Host =
         Host("h${hosts.size + 1}", name, endpoint, null).also { hosts += it }
 
@@ -359,6 +380,25 @@ class FakeCore : AriesCoreInterface {
         return (savedLaunchesOf[hostId] ?: savedLaunches).toList()
     }
 
+    var herdrState: HerdrCoreState = HerdrCoreState.Installed("0.1.17", false)
+    var herdrInstalls = 0
+    var herdrFailWith: CoreException? = null
+    var herdrGate: CompletableDeferred<Unit>? = null
+    override suspend fun herdrCoreStatus(hostId: String): HerdrCoreState {
+        signsIn("herdrCoreStatus")
+        return herdrState
+    }
+    override suspend fun installHerdrCore(hostId: String, fetcher: BeaconFetcher, listener: HerdrInstallListener): HerdrCoreState {
+        signsIn("installHerdrCore")
+        herdrInstalls++
+        listener.progress(HerdrInstallStep.DOWNLOAD, "")
+        herdrGate?.await()
+        herdrFailWith?.let { throw it }
+        listener.progress(HerdrInstallStep.INSTALL, "hc 0.1.17")
+        herdrState = HerdrCoreState.Installed("0.1.17", false)
+        return herdrState
+    }
+
     /** What `beaconStatus` reports; `installBeacon` / `uninstallBeacon` change it. */
     var beacon: BeaconState = BeaconState.NotInstalled
 
@@ -431,7 +471,7 @@ class FakeCore : AriesCoreInterface {
     ): PushPairing {
         signsIn("enablePush")
         pushRelays += relayUrl
-        for (step in listOf(PushStep.REGISTER, PushStep.PAIR, PushStep.TEST)) {
+        for (step in listOf(PushStep.REGISTER, PushStep.VERIFY, PushStep.PAIR, PushStep.TEST)) {
             progress.onStep(step)
             if (step == pushFailAt) {
                 if (step == PushStep.TEST) pushPaired[hostId] = relayUrl
@@ -473,6 +513,17 @@ class FakeCore : AriesCoreInterface {
         pushPolicyFailure?.let { throw it }
         pushPolicies[hostId] = policy
         return policy
+    }
+
+    val pushVerifications = mutableMapOf<String, PushVerificationState>()
+    override fun pushVerificationState(hostId: String): PushVerificationState? = pushVerifications[hostId]
+    val pushConfirmations = mutableListOf<Pair<String, String>>()
+    var pushConfirmationFailure = false
+    var pushConfirmationKnown = true
+    override suspend fun confirmPushToken(verificationId: String, challenge: String, http: HttpClient): Boolean {
+        if (pushConfirmationFailure) throw CoreException.PushFailed(PushStep.VERIFY, "offline")
+        pushConfirmations += verificationId to challenge
+        return pushConfirmationKnown
     }
 
     override suspend fun updatePushToken(device: PushDevice, http: HttpClient) {}
