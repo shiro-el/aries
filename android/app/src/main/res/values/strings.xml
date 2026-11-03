@@ -97,6 +97,19 @@
     <string name="agents_child_count">%1$d</string>
     <string name="agents_fold_closed" translatable="false">▸</string>
     <string name="agents_fold_open" translatable="false">▾</string>
+    <!-- Home widgets (78). -->
+    <string name="widget_waiting_title">Aries · Needs you</string>
+    <string name="widget_agents_title">Aries · Agents</string>
+    <string name="widget_waiting_description">Agents needing you across all Hosts</string>
+    <string name="widget_agents_description">Top three Agents across all Hosts</string>
+    <string name="widget_waiting_count">%1$d need you</string>
+    <string name="widget_waiting_unknown">— need you</string>
+    <string name="widget_age_minutes">%1$dm ago</string>
+    <string name="widget_no_saved_state">Awaiting Host state</string>
+    <string name="widget_refresh_button">Refresh</string>
+    <string name="widget_agents_empty">No saved Agents</string>
+    <string name="widget_agent_detail">%1$s · %2$s · %3$s</string>
+
     <string name="app_name" translatable="false">Aries</string>
 
     <string name="ok_button">OK</string>
