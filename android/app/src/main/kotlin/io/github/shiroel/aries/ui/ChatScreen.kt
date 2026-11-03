@@ -521,13 +521,13 @@ private fun ChatEntryView(
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary,
                 )
-                if (b.text.isNotEmpty()) Text(b.text)
+                if (b.text.isNotEmpty()) ChatFileText(b.text)
                 b.images.forEach { ChatImageView(it, image) }
             }
         }
         is ChatEntryBody.Agent -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(agentName, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(b.text)
+            ChatFileText(b.text)
         }
         is ChatEntryBody.Thinking -> Column {
             Text(

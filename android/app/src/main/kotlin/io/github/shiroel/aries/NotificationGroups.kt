@@ -38,7 +38,7 @@ object NotificationGroups {
     @Synchronized
     fun post(context: Context, hostId: String, hostName: String, tag: String, notification: Notification) {
         val manager = context.getSystemService(NotificationManager::class.java)
-        manager.notify(tag, hostId.hashCode(), notification)
+        manager.notify(tag, hostId.hashCode(), WearNotificationBridge.prepare(context, notification))
         refresh(context, manager, hostId, hostName)
     }
 
