@@ -27,7 +27,7 @@ import kotlinx.coroutines.launch
  * envelope is opened by the core with a key that needs no unlock.
  */
 class PushService : FirebaseMessagingService() {
-    private val core get() = (application as AriesApplication).core
+    private val core get() = (application as HasCore).core
 
     override fun onMessageReceived(message: RemoteMessage) {
         val data = message.data
@@ -44,6 +44,7 @@ class PushService : FirebaseMessagingService() {
             Log.w(TAG, "push rejected: ${e.message}")
             return
         }
+        LastKnownStates.requestRefresh(this, notice.hostId)
         show(this, notice) { hostId ->
             try {
                 core.canAnswerInBackground(hostId)

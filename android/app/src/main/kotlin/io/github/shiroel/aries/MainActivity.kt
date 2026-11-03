@@ -25,7 +25,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val scope = rememberCoroutineScope()
             val model = remember { HostsModel(core, scope, keyWork = Dispatchers.IO, pushPlatform = push).also { this@MainActivity.model = it } }
-            LaunchedEffect(model) { openPushTarget() }
+            LaunchedEffect(model) { resumeModel() }
             AriesApp(model)
         }
         network = NetworkWatch(this) { model?.networkChanged() }.also { it.start() }
@@ -38,6 +38,7 @@ class MainActivity : ComponentActivity() {
     /** A tapped notification's Agent, until the model exists and the activity is in front. */
     private var pushTarget: PushTarget? = null
     private var resumed = false
+    private var needsForegroundRefresh = true
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
@@ -58,10 +59,14 @@ class MainActivity : ComponentActivity() {
         m.openPushedAgent(target.hostId, target.terminal)
     }
 
-    override fun onStart() {
-        super.onStart()
-        // Back from the background: lines may have died while the phone slept.
-        model?.foregrounded()
+    private fun resumeModel() {
+        if (!resumed) return
+        val m = model ?: return
+        if (needsForegroundRefresh) {
+            needsForegroundRefresh = false
+            m.foregrounded()
+        }
+        openPushTarget()
     }
 
     override fun onDestroy() {
@@ -73,7 +78,8 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         app.vault.authorizer = BiometricUnlock(this)
         resumed = true
-        openPushTarget()
+        needsForegroundRefresh = true
+        resumeModel()
     }
 
     override fun onPause() {
