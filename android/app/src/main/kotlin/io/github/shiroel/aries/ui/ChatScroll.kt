@@ -94,6 +94,8 @@ internal fun rememberChatScrollState(
             if (!ready) return@collect
             val changed = previousEntries != rows || previousCalls != calls || previousItemKeys != keys
             val latest = request != latestRequest
+            val alignBottom = calls.isEmpty() &&
+                (rows.lastOrNull()?.body is ChatEntryBody.Agent || rows.lastOrNull()?.body is ChatEntryBody.User)
             if (changed || latest) {
                 val previous = previousEntries
                 if (previous != null) {
@@ -112,16 +114,17 @@ internal fun rememberChatScrollState(
                     )
                     state.following = !state.list.canScrollForward
                 }
-                if (state.following || latest) {
-                    state.following = true
-                    state.list.scrollToLatest(keys.lastIndex)
+                if (latest || (state.following && (previous != null || saved == null))) {
+                    state.list.scrollToLatest(keys.lastIndex, alignBottom)
+                    state.following = !state.list.canScrollForward
                 }
                 previousEntries = rows
                 previousCalls = calls
                 previousItemKeys = keys
                 request = latestRequest
             } else if (state.following && state.list.canScrollForward) {
-                state.list.scrollToLatest(keys.lastIndex)
+                state.list.scrollToLatest(keys.lastIndex, alignBottom)
+                state.following = !state.list.canScrollForward
             }
             lastViewport = viewport()
             if (state.following) pending = emptySet()
@@ -204,8 +207,11 @@ private fun addedTail(previous: List<String>, current: List<String>): List<Strin
     return if (lastKnown < 0) emptyList() else current.drop(lastKnown + 1).filterNot { it in known }
 }
 
-private suspend fun LazyListState.scrollToLatest(lastIndex: Int) {
+private suspend fun LazyListState.scrollToLatest(lastIndex: Int, alignBottom: Boolean) {
     scrollToItem(lastIndex)
+    // Keep a tall question/Call's heading and first Choices reachable, as in
+    // the existing Chat. Text responses instead follow their newest lines.
+    if (!alignBottom) return
     // scrollToItem aligns the top of an oversized final row. Align its bottom
     // too, so a long streaming response really stays at its newest text.
     val layout = layoutInfo
