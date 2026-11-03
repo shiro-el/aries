@@ -156,10 +156,13 @@ class LastLocationTest {
         core.failWith = CoreException.KeyLocked()
 
         restart()
+        compose.runOnIdle { model.foregrounded() }
+        compose.waitForIdle()
 
         compose.runOnIdle {
             assertEquals(Screen.Hosts, model.screen)
             assertNull(model.prompt)
+            assertTrue("the first foreground refresh must not unlock the same Host again", core.snapshotsRequested.isEmpty())
             assertTrue("restoration uses the key-work context", core.offKeyWork.isEmpty())
         }
     }
@@ -280,5 +283,19 @@ class LastLocationTest {
             model.start()
             assertEquals("h2", (model.screen as Screen.Terminal).viewer.link!!.host.id)
         }
+    }
+
+    @Test fun aGoneTerminalOpenedFromANotificationKeepsItsLastKnownSpace() {
+        val core = core()
+        show(core)
+        compose.runOnIdle { model.openPushedAgent("h1", "box/t1") }
+        compose.waitForIdle()
+        val space = core.structure!!.spaces.single()
+        core.structure = HostStructure(listOf(space.copy(tabs = space.tabs.take(1))), emptyList(), null)
+        core.terminals = emptyList()
+
+        restart()
+
+        compose.runOnIdle { assertEquals("s1", (model.screen as Screen.Browse).browser.openSpaceId) }
     }
 }

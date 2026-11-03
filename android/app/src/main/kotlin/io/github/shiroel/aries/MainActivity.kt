@@ -77,11 +77,11 @@ class MainActivity : ComponentActivity() {
     private fun resumeModel() {
         if (!resumed) return
         val m = model ?: return
+        openPushTarget()
         if (needsForegroundRefresh) {
             needsForegroundRefresh = false
             m.foregrounded()
         }
-        openPushTarget()
     }
 
     override fun onDestroy() {

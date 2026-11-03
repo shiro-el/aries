@@ -212,9 +212,12 @@ class HostsModel(
     fun foregrounded() {
         links.forEach { it.check() }
         liveChat?.retryNow()
+        val startupHost = startupHostId
+        startupHostId = null
         // Live connections publish their lists in the core. Other Hosts
         // get a short pull while the foreground biometric prompt is available.
-        hosts.filter { host -> links.none { it.host.id == host.id && it.connection != null } }
+        // Startup already opens its target, including a biometric prompt if needed.
+        hosts.filter { host -> host.id != startupHost && links.none { it.host.id == host.id && it.connection != null } }
             .forEach { refreshLastKnownState(it.id) }
     }
 
@@ -237,6 +240,7 @@ class HostsModel(
         get() = (screen as? Screen.Chat ?: (screen as? Screen.Terminal)?.returnTo as? Screen.Chat)?.chat
 
     private var started = false
+    private var startupHostId: String? = null
     private var restoring by mutableStateOf(false)
 
     /** Called after the activity resumes and installs its biometric authorizer. */
@@ -247,6 +251,7 @@ class HostsModel(
         }
         started = true
         val saved = locationStore?.load()
+        startupHostId = target?.hostId ?: saved?.hostId
         if (target != null) {
             openPushedAgent(target.hostId, target.terminal)
         } else {
@@ -275,9 +280,17 @@ class HostsModel(
         else -> null
     }
 
+    private fun structureOf(origin: Screen, hostId: String): HostStructure? = when (origin) {
+        is Screen.Browse -> origin.browser.takeIf { it.host.id == hostId }?.structure
+        is Screen.Agents -> origin.board.structureOf(hostId)
+        is Screen.Chat -> structureOf(origin.returnTo, hostId)
+        is Screen.Terminal -> structureOf(origin.returnTo, hostId)
+        else -> null
+    }
+
     private fun terminalLocation(hostId: String, address: String, view: AgentView, origin: Screen): LastLocation {
         val browser = browserOf(origin)?.takeIf { it.host.id == hostId }
-        val space = browser?.structure?.spaces?.find { space ->
+        val space = structureOf(origin, hostId)?.spaces?.find { space ->
             space.tabs.any { tab -> tab.panes.any { pane ->
                 pane.terminalAddress == address || pane.subAgents.any { it.address == address }
             } }
