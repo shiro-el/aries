@@ -28,6 +28,7 @@ import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "h1200dp")
+@org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
 class RemoteFilesTest {
     @get:Rule val compose = createComposeRule()
     private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
@@ -195,11 +196,11 @@ class RemoteFilesTest {
             return results.single()
         }
         assertEquals(1, layout().lineCount)
-        compose.onNodeWithText("Wrap lines").performClick()
+        compose.onNodeWithText("Wrap lines").performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.waitForIdle()
         compose.waitUntil(5000) { layout().lineCount > 1 }
         org.junit.Assert.assertTrue(layout().layoutInput.text.spanStyles.isNotEmpty())
-        compose.onNodeWithText("Wrap lines").performClick()
+        compose.onNodeWithText("Wrap lines").performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.waitForIdle()
         compose.waitUntil(5000) { layout().lineCount == 1 }
     }

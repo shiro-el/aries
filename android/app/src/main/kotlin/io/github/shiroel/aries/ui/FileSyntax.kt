@@ -17,7 +17,7 @@ internal fun highlightFileCode(text: String, path: String, colors: ColorScheme):
         extension == "json" -> "(?!)"
         else -> "//[^\\n]*|/\\*[\\s\\S]*?(?:\\*/|$)"
     }
-    val tokens = Regex("(?<comment>$comment)|(?<string>\"(?:\\\\.|[^\"\\\\])*\"|'(?:\\\\.|[^'\\\\\\n])*')|(?<number>\\b[0-9]+(?:\\.[0-9]+)?\\b)|(?<word>[A-Za-z_][A-Za-z_0-9]*)")
+    val tokens = Regex("(?<comment>$comment)|(?<string>\"(?:\\\\.|[^\"\\\\]++)*\"|'(?:\\\\.|[^'\\\\\\n]++)*')|(?<number>\\b[0-9]+(?:\\.[0-9]+)?\\b)|(?<word>[A-Za-z_][A-Za-z_0-9]*)")
     return buildAnnotatedString {
         append(text)
         // Bound styling work even when a single Host line approaches the response budget.
