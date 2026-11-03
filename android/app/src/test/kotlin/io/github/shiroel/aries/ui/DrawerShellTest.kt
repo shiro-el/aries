@@ -72,7 +72,7 @@ class DrawerShellTest {
         core.push("h1", listOf(agent("home-agent", AgentStatus.Error("also waiting"))))
         compose.onNodeWithText(context.getString(R.string.console_agents_waiting, 2)).assertExists()
         compose.onNodeWithTag("drawer-agent:h2:t1").performClick()
-        compose.onNodeWithText("work-agent").assertExists()
+        compose.onNodeWithText(context.getString(R.string.console_agent_host_prefix, "work") + "work-agent").assertExists()
         compose.onNodeWithText(context.getString(R.string.back_button)).performClick()
         compose.onNodeWithText(context.getString(R.string.agent_detail_host, "work")).assertExists()
         compose.onNodeWithText(context.getString(R.string.back_button)).performClick()

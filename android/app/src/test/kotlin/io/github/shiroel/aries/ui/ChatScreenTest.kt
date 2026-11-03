@@ -75,7 +75,7 @@ class ChatScreenTest {
         val core = FakeCore()
         openChat(core)
         assertEquals(listOf("h1" to "t1"), core.chatsOpened)
-        compose.onNodeWithText(str(R.string.chat_title, "claude")).assertExists()
+        compose.onNodeWithText(str(R.string.console_agent_host_prefix, "home") + "claude").assertExists()
         compose.onNodeWithText(str(R.string.chat_status_connecting)).assertExists()
 
         core.pushChat(
@@ -261,7 +261,7 @@ class ChatScreenTest {
         compose.onNodeWithText(str(R.string.agent_view_chat)).performClick()
         compose.waitForIdle()
         assertEquals(listOf("h2" to "t1"), core.chatsOpened)
-        compose.onNodeWithText(str(R.string.chat_title, "claude")).assertExists()
+        compose.onNodeWithText(str(R.string.console_agent_host_prefix, "server") + "claude").assertExists()
 
         compose.onNodeWithText(str(R.string.back_button)).performClick()
         compose.waitForIdle()
@@ -288,6 +288,7 @@ class ChatScreenTest {
         compose.waitForIdle()
         compose.onNodeWithText("Which color do you prefer?").assertExists()
         compose.onNodeWithText("Choose Blue").assertExists()
+        compose.onNodeWithText("2").assertExists()
 
         compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue")).performClick()
         compose.waitForIdle()
@@ -361,7 +362,7 @@ class ChatScreenTest {
         compose.waitForIdle()
         assertTrue(core.chatStopped)
         compose.onNodeWithText("claude").assertExists()
-        compose.onNodeWithText(str(R.string.chat_title, "claude")).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.console_agent_host_prefix, "home") + "claude").assertDoesNotExist()
     }
 
     private companion object {

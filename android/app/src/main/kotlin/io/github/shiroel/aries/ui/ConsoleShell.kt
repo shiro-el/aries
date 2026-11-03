@@ -38,7 +38,11 @@ fun ConsoleTopBar(
     onMenu: () -> Unit,
     onBack: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
-    inbox: @Composable RowScope.() -> Unit = { Spacer(Modifier.width(44.dp).testTag("console-inbox-slot")) },
+    inbox: @Composable RowScope.() -> Unit = { ConsoleInboxAction() },
+    showMark: Boolean = true,
+    titleContent: @Composable RowScope.() -> Unit = {
+        Text(title, Modifier.weight(1f), fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    },
 ) {
     Row(Modifier.fillMaxWidth().height(44.dp).testTag("console-top-bar"), verticalAlignment = Alignment.CenterVertically) {
         val navigationLabel = stringResource(if (onBack == null) R.string.console_open_drawer else R.string.back_button)
@@ -47,8 +51,8 @@ fun ConsoleTopBar(
                 .clickable(onClick = onBack ?: onMenu).semantics { contentDescription = navigationLabel },
             contentAlignment = Alignment.Center,
         ) { Text(stringResource(if (onBack == null) R.string.console_menu_glyph else R.string.console_back_glyph), Modifier.clearAndSetSemantics { text = AnnotatedString(navigationLabel) }, fontSize = 20.sp) }
-        ConsoleMark()
-        Text(title, Modifier.weight(1f), fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (showMark) ConsoleMark()
+        titleContent()
         actions()
         inbox()
     }
@@ -71,7 +75,8 @@ internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit) {
     val scope = rememberCoroutineScope()
     val screen = model.screen
     val drawerWidth = (LocalConfiguration.current.screenWidthDp.dp * .86f).coerceAtMost(320.dp)
-    LaunchedEffect(screen) { drawer.close() }
+    LaunchedEffect(screen) { drawer.close(); model.closeCallInbox() }
+    LaunchedEffect(model.callInboxOpen) { if (model.callInboxOpen) drawer.close() }
     val navigate: (() -> Unit) -> Unit = { action ->
         scope.launch { drawer.close(); action() }
     }
@@ -89,17 +94,34 @@ internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit) {
             }
         },
     ) {
-        Column(Modifier.fillMaxSize()) {
-            // Terminal/Chat keep their current header until ticket 05 adopts ConsoleTopBar.
-            if (screen !is Screen.Terminal && screen !is Screen.Chat) {
-                ConsoleTopBar(consoleTitle(screen), onMenu = { scope.launch { drawer.open() } }, onBack = consoleBack(model))
+        CompositionLocalProvider(LocalCallInbox provides CallInboxAction(model.calls, model.callInboxOpen) {
+            scope.launch {
+                drawer.close()
+                if (model.callInboxOpen) model.closeCallInbox() else model.openCallInbox()
             }
-            Box(Modifier.weight(1f)) { content() }
+        }) {
+            Column(Modifier.fillMaxSize()) {
+                // Agent screens supply their own ConsoleTopBar in ticket 05.
+                val agentHeader = screen is Screen.Terminal || screen is Screen.Chat
+                if (!agentHeader) {
+                    ConsoleTopBar(consoleTitle(screen), onMenu = {
+                        model.closeCallInbox()
+                        scope.launch { drawer.open() }
+                    }, onBack = consoleBack(model))
+                }
+                Box(Modifier.weight(1f)) {
+                    content()
+                    if (model.callInboxOpen && drawer.isClosed && drawer.targetValue == DrawerValue.Closed) {
+                        CallInboxOverlay(model, Modifier.padding(top = if (agentHeader) 45.dp else 0.dp))
+                    }
+                }
+            }
         }
     }
     // One owner avoids screen handlers registered later taking precedence over overlays.
-    BackHandler(drawer.isOpen || screen != Screen.Hosts) {
+    BackHandler(drawer.isOpen || model.callInboxOpen || screen != Screen.Hosts) {
         if (drawer.isOpen) scope.launch { drawer.close() }
+        else if (model.callInboxOpen) model.closeCallInbox()
         else consoleBack(model)?.invoke() ?: model.back()
     }
 }
@@ -108,7 +130,6 @@ internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit) {
 private fun consoleTitle(screen: Screen): String = when (screen) {
     Screen.Hosts -> stringResource(R.string.hosts_title)
     Screen.Settings -> stringResource(R.string.settings_title)
-    Screen.Calls -> stringResource(R.string.calls_title)
     is Screen.Connecting -> screen.host.name
     is Screen.Browse -> screen.browser.host.name
     is Screen.JumpHosts -> stringResource(R.string.jumps_title, screen.host.name)

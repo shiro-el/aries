@@ -4,6 +4,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.assertIsNotDisplayed
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -11,6 +15,9 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.R
+import io.github.shiroel.aries.core.AriesCoreInterface
+import io.github.shiroel.aries.core.HostConnection
+import kotlinx.coroutines.CompletableDeferred
 import io.github.shiroel.aries.core.CallAnswer
 import io.github.shiroel.aries.core.CallAnswerState
 import io.github.shiroel.aries.core.CallInfo
@@ -26,8 +33,9 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** Seam 3: Call history, the new-Call banner and opening a Call's Terminal, against a fake core. */
+/** Seam 3: inbox navigation, history and caller Chat, against the core API boundary. */
 @RunWith(RobolectricTestRunner::class)
+@Config(qualifiers = "h1200dp")
 class CallHistoryTest {
     @get:Rule val compose = createComposeRule()
 
@@ -57,23 +65,47 @@ class CallHistoryTest {
         ensureKey()
     }
 
-    private fun show(core: FakeCore) {
+    private lateinit var model: HostsModel
+    private lateinit var back: androidx.activity.OnBackPressedDispatcher
+
+    private fun show(core: AriesCoreInterface) {
         compose.setContent {
+            back = androidx.activity.compose.LocalOnBackPressedDispatcherOwner.current!!.onBackPressedDispatcher
             val scope = rememberCoroutineScope()
-            val model = remember { HostsModel(core, scope) }
+            model = remember { HostsModel(core, scope) }
             MaterialTheme { AriesApp(model) }
         }
         compose.waitForIdle()
     }
 
     private fun openCalls() {
-        compose.onNode(androidx.compose.ui.test.hasScrollToNodeAction()).performScrollToNode(androidx.compose.ui.test.hasText(str(R.string.calls_button)))
-        compose.onNodeWithText(str(R.string.calls_button)).performClick()
+        compose.onNodeWithTag("console-inbox").performClick()
         compose.waitForIdle()
     }
 
     @Test
-    @Config(qualifiers = "w411dp-h2000dp") // every row on screen at once
+    fun inboxCountsAnswerableCallsAndOpensOverTheCurrentHost() {
+        val core = twoHosts().apply {
+            callsOf["h1"] = listOf(
+                call("h1", "c1", "Question", 1_000uL, choices = listOf("Yes", "No")),
+                call("h1", "c2", "Record", 2_000uL, terminal = null, choices = listOf("Yes")),
+            )
+        }
+        show(core)
+        compose.onNodeWithText("home").performClick()
+        compose.onNodeWithTag("console-inbox-count", useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("console-inbox-count", useUnmergedTree = true).assertTextEquals("1")
+        openCalls()
+        compose.onNodeWithTag("call-inbox-panel").assertExists()
+        compose.onNodeWithText(str(R.string.terminals_title, "home")).assertExists()
+        compose.onNodeWithTag("call-c1").assertExists()
+        compose.onNodeWithTag("console-inbox").performClick()
+        compose.onNodeWithTag("call-inbox-panel").assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.terminals_title, "home")).assertExists()
+    }
+
+    @Test
+    @Config(qualifiers = "h2000dp") // every row on screen at once
     fun historyShowsEveryHostsCallsNewestFirstWithWhatTheyAsk() {
         val core = twoHosts().apply {
             callsOf["h1"] = listOf(
@@ -88,7 +120,7 @@ class CallHistoryTest {
         show(core)
         openCalls()
 
-        compose.onNodeWithText(str(R.string.calls_title)).assertExists()
+        compose.onNodeWithTag("call-inbox-panel").assertExists()
         compose.onNodeWithText("Review ready").assertExists()
         compose.onNodeWithText("body of Review ready").assertExists()
         compose.onNodeWithText(str(R.string.call_choices, "Merge · Wait")).assertExists()
@@ -96,7 +128,7 @@ class CallHistoryTest {
         compose.onNodeWithText(str(R.string.call_from_helper)).assertExists()
         compose.onNodeWithText(str(R.string.call_unconfirmed)).assertExists()
         // No Terminal to open for a Call whose caller was not confirmed.
-        compose.onNodeWithContentDescription(str(R.string.call_open_terminal_label, "t3", "Review ready")).assertExists()
+        compose.onNodeWithContentDescription(str(R.string.call_open_chat_label, "t3", "Review ready")).assertExists()
         // Newest first, across Hosts.
         val top = { tag: String -> compose.onNodeWithTag(tag).fetchSemanticsNode().positionInRoot.y }
         assertTrue(top("call-c3") < top("call-c2"))
@@ -104,33 +136,40 @@ class CallHistoryTest {
     }
 
     @Test
-    fun aNewCallWhileTheAppIsOpenShowsABannerThatOpensHistory() {
+    fun aNewCallUpdatesTheInboxWithoutCoveringTheScreenWithABanner() {
         val core = twoHosts()
         show(core)
-        compose.onNodeWithTag("call_banner").assertDoesNotExist()
-
-        core.sendCall(call("h2", "c1", "Deploy failed", 5_000uL, urgency = CallUrgency.URGENT))
+        compose.onNodeWithTag("console-inbox-count", useUnmergedTree = true).assertDoesNotExist()
+        core.sendCall(call("h2", "c1", "Deploy failed", 5_000uL, choices = listOf("Retry")))
         compose.waitForIdle()
-        compose.onNodeWithTag("call_banner").assertExists()
-        compose.onNodeWithText(str(R.string.call_banner_from, "server", str(R.string.call_urgency_urgent))).assertExists()
+        compose.onNodeWithTag("call_banner").assertDoesNotExist()
+        compose.onNodeWithTag("console-inbox-count", useUnmergedTree = true).assertTextEquals("1")
+        compose.onNodeWithText("Deploy failed").assertDoesNotExist()
+        openCalls()
         compose.onNodeWithText("Deploy failed").assertExists()
-
-        compose.onNodeWithText(str(R.string.call_banner_view)).performClick()
-        compose.waitForIdle()
-        compose.onNodeWithTag("call_banner").assertDoesNotExist()
-        compose.onNodeWithText(str(R.string.calls_title)).assertExists()
-        compose.onNodeWithTag("call-c1").assertExists()
+        compose.onNodeWithTag("call-inbox-scrim").performClick()
+        compose.onNodeWithTag("call-inbox-panel").assertDoesNotExist()
     }
 
     @Test
-    fun aBannerCanBeDismissed() {
+    fun drawerAndInboxAreExclusiveAndBackDismissesThePanelBeforeLeavingTheHost() {
         val core = twoHosts()
         show(core)
-        core.sendCall(call("h1", "c1", "Look", 5_000uL))
-        compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.call_banner_dismiss)).performClick()
-        compose.waitForIdle()
-        compose.onNodeWithTag("call_banner").assertDoesNotExist()
+        compose.onNodeWithText("home").performClick()
+        openCalls()
+        compose.runOnIdle { back.onBackPressed() }
+        compose.onNodeWithTag("call-inbox-panel").assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.terminals_title, "home")).assertExists()
+        openCalls()
+        compose.openConsoleDrawer()
+        compose.onNodeWithTag("call-inbox-panel").assertDoesNotExist()
+        compose.onNodeWithTag("settings-open").performClick()
+        openCalls()
+        compose.onNodeWithTag("console-drawer").assertIsNotDisplayed()
+        compose.onNodeWithTag("call-inbox-panel").assertExists()
+        compose.onNodeWithText(str(R.string.back_button)).performClick()
+        compose.onNodeWithTag("call-inbox-panel").assertDoesNotExist()
+        compose.onNodeWithText("me@10.0.0.2:22").assertExists()
     }
 
     @Test
@@ -148,7 +187,7 @@ class CallHistoryTest {
     }
 
     @Test
-    fun theBannerWatchNeverAsksForABiometricUnlockButHistoryDoes() {
+    fun theForegroundWatchNeverAsksForABiometricUnlockButTheInboxDoes() {
         val core = twoHosts().apply { setKeyProtection(KeyProtection.BIOMETRIC) }
         show(core)
         assertEquals(emptyList<String>(), core.callWatchesStarted)
@@ -158,24 +197,86 @@ class CallHistoryTest {
     }
 
     @Test
-    fun opensTheTerminalThatSentACallAndComesBackToHistory() {
+    fun opensTheCallingAgentInChatAndBackReturnsToTheUnderlyingHost() {
         val core = twoHosts().apply {
             terminalsOf["h1"] = listOf(agent)
             callsOf["h1"] = listOf(call("h1", "c1", "Review ready", 1_000uL))
         }
         show(core)
+        compose.onNodeWithText("home").performClick()
         openCalls()
-        compose.onNodeWithContentDescription(str(R.string.call_open_terminal_label, "t3", "Review ready")).performClick()
+        compose.onNodeWithContentDescription(str(R.string.call_open_chat_label, "t3", "Review ready")).performClick()
         compose.waitForIdle()
-
-        val view = core.connectionsOf.getValue("h1").views.single()
-        assertEquals("t3", view.address)
-        assertTrue(view.options.observe)
-
+        assertEquals(listOf("h1" to "t3"), core.chatsOpened)
+        compose.onNodeWithTag("call-inbox-panel").assertDoesNotExist()
         compose.onNodeWithText(str(R.string.back_button)).performClick()
         compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.calls_title)).assertExists()
+        compose.onNodeWithText(str(R.string.terminals_title, "home")).assertExists()
+        assertTrue(core.chatStopped)
+        openCalls()
+        compose.onNodeWithTag("call-c1").assertExists()
+    }
+
+    @Test
+    fun waitingCallsComeBeforeNewerHistoryAndLongHistoryScrollsWithinThePanel() {
+        val core = twoHosts().apply {
+            callsOf["h1"] = listOf(call("h1", "question", "Waiting question", 1uL, choices = listOf("Yes"))) +
+                (2..20).map { call("h1", "past-$it", "Record $it", it.toULong(), terminal = null) }
+        }
+        show(core)
+        openCalls()
+        val panel = compose.onNodeWithTag("call-inbox-panel").fetchSemanticsNode().boundsInRoot
+        val bar = compose.onNodeWithTag("console-top-bar").fetchSemanticsNode().boundsInRoot
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        assertTrue(panel.top >= bar.bottom)
+        assertTrue(panel.height <= root.height * .7f)
+        val top = { tag: String -> compose.onNodeWithTag(tag).fetchSemanticsNode().positionInRoot.y }
+        assertTrue(top("call-question") < top("call-past-20"))
+        compose.onNodeWithTag("call-inbox-list").performScrollToNode(hasTestTag("call-past-2"))
+        compose.onNodeWithText("Record 2").assertExists()
+    }
+
+    @Test
+    fun openingACallerFromATerminalReleasesTheOldViewAndKeepsItsHostReturnTarget() {
+        val core = twoHosts().apply {
+            terminalsOf["h1"] = listOf(agent)
+            callsOf["h1"] = listOf(call("h1", "c1", "Review ready", 1_000uL))
+        }
+        show(core)
+        compose.onNodeWithText("home").performClick()
+        compose.onNodeWithText("claude").performClick()
+        val view = core.connectionsOf.getValue("h1").views.single()
+        // Agent headers adopt the shared inbox slot in ticket 05.
+        compose.runOnIdle { model.openCallInbox() }
+        compose.onNodeWithContentDescription(str(R.string.call_open_chat_label, "t3", "Review ready")).performClick()
+        compose.waitForIdle()
         assertTrue(view.detached)
+        compose.onNodeWithText(str(R.string.back_button)).performClick()
+        compose.onNodeWithText(str(R.string.terminals_title, "home")).assertExists()
+    }
+
+    @Test
+    fun closingAndReopeningTheInboxDiscardsALateChatConnection() {
+        val core = twoHosts().apply {
+            terminalsOf["h1"] = listOf(agent)
+            callsOf["h1"] = listOf(call("h1", "c1", "Review ready", 1_000uL))
+        }
+        val ready = CompletableDeferred<Unit>()
+        val delayed = object : AriesCoreInterface by core {
+            override suspend fun connect(hostId: String): HostConnection {
+                ready.await()
+                return core.connect(hostId)
+            }
+        }
+        show(delayed)
+        openCalls()
+        compose.onNodeWithContentDescription(str(R.string.call_open_chat_label, "t3", "Review ready")).performClick()
+        compose.onNodeWithTag("console-inbox").performClick()
+        openCalls()
+        compose.runOnIdle { ready.complete(Unit) }
+        compose.onNodeWithTag("call-inbox-panel").assertExists()
+        assertEquals(emptyList<Pair<String, String>>(), core.chatsOpened)
+        assertTrue(core.connectionsOf.getValue("h1").disconnected)
     }
 
     @Test
@@ -186,7 +287,7 @@ class CallHistoryTest {
         }
         show(core)
         openCalls()
-        compose.onNodeWithContentDescription(str(R.string.call_open_terminal_label, "t3", "Review ready")).performClick()
+        compose.onNodeWithContentDescription(str(R.string.call_open_chat_label, "t3", "Review ready")).performClick()
         compose.waitForIdle()
         compose.onNodeWithText(str(R.string.call_terminal_gone_title)).assertExists()
         compose.onNodeWithText(str(R.string.call_terminal_gone_body, "t3", "home")).assertExists()

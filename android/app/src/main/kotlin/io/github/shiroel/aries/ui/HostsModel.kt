@@ -69,9 +69,7 @@ sealed interface Screen {
     /** Every Host's Agents in one list. */
     data class Agents(val board: AgentBoard) : Screen
 
-    /** Every Host's Call history ([HostsModel.calls]). */
-    data object Calls : Screen
-    /** An Agent's Chat; back returns to [returnTo] (its Host's Browse, the Agents list or Call history). */
+    /** An Agent's Chat; back returns to [returnTo] (its Host's Browse or the Agents list). */
     data class Chat(val chat: ChatModel, val returnTo: Screen) : Screen
 }
 
@@ -138,7 +136,7 @@ class HostsModel(
         scope.launch { core.flushPushRevocations(http) }
     }
 
-    /** Every Host's Calls and the new-Call banner; see [resumeCalls]. */
+    /** Every Host's Calls for the inbox; see [resumeCalls]. */
     val calls = CallsModel(core, scope, keyWork)
     /** Chat cache retention and per-Host clearing (ticket 44). */
     val chatCache = ChatCacheModel(core, scope, keyWork)
@@ -472,6 +470,7 @@ class HostsModel(
                             val list = watch.next()
                             browser.updateTerminals(list)
                             chatOn(browser.host.id)?.update(list)
+                            terminalOn(browser.host.id)?.update(list)
                         }
                     } finally {
                         watch.stop()
@@ -675,6 +674,10 @@ class HostsModel(
         val s = screen as? Screen.Terminal ?: return
         viewing?.cancel()
         viewing = null
+        if (s.viewer.link === callLink && s.returnTo !is Screen.Chat) {
+            callLink?.close()
+            callLink = null
+        }
         screen = s.returnTo
     }
 
@@ -731,6 +734,7 @@ class HostsModel(
                                 val list = watch.next()
                                 board.update(host.id, list)
                                 chatOn(host.id)?.update(list)
+                                terminalOn(host.id)?.update(list)
                                 focusing?.let { key ->
                                     focusing = null
                                     if (screen === agents) focusOn(agents, link, host, key, list)
@@ -790,12 +794,29 @@ class HostsModel(
         agentLinks.clear()
     }
 
-    /** The app is in front: follow Calls (banner) until [pauseCalls]. */
+    /** The app is in front: follow eligible Calls until [pauseCalls]. */
     private var callsActive = false
+
+    var callInboxOpen by mutableStateOf(false)
+        private set
+
+    fun openCallInbox() {
+        callInboxOpen = true
+        calls.dismissBanner()
+        calls.watch(hosts, everyHost = true)
+    }
+
+    fun closeCallInbox() {
+        if (!callInboxOpen) return
+        callInboxOpen = false
+        callOpenRequest++
+        calls.stopAll()
+        if (callsActive) calls.watch(hosts, everyHost = false)
+    }
 
     fun resumeCalls() {
         callsActive = true
-        calls.watch(hosts, everyHost = screen == Screen.Calls)
+        calls.watch(hosts, everyHost = callInboxOpen)
     }
 
     fun pauseCalls() {
@@ -804,7 +825,7 @@ class HostsModel(
     }
 
     private fun hostsChanged() {
-        if (callsActive || screen == Screen.Calls) calls.watch(hosts, everyHost = screen == Screen.Calls)
+        if (callsActive || callInboxOpen) calls.watch(hosts, everyHost = callInboxOpen)
     }
 
     /** Available live Agent data, including the screen beneath an open Terminal/Chat. */
@@ -842,30 +863,30 @@ class HostsModel(
         screen = Screen.Settings
     }
 
-    /** Opens Call history for every Host (Hosts whose key needs a biometric unlock too). */
-    fun openCalls() {
-        back()
-        calls.dismissBanner()
-        screen = Screen.Calls
-        calls.watch(hosts, everyHost = true)
-    }
-
-    /** The line a Call's Terminal is shown over, until Call history is left. */
+    /** The connection owned by a Chat opened from the inbox. */
     private var callLink: HostLink? = null
+    private var callOpenRequest = 0
 
-    /** Opens the Terminal (an Agent in the saved view) that sent [entry]'s Call; back returns to Call history. */
-    fun openCallTerminal(entry: CallEntry) {
+    /** Opens the caller in Chat without changing the saved Agent view. */
+    fun openCallChat(entry: CallEntry) {
         val address = entry.call.terminal ?: return
-        if (screen != Screen.Calls) return
+        if (!callInboxOpen) return
+        val origin = screen
+        if (origin is Screen.Chat && origin.chat.host.id == entry.host.id && origin.chat.terminal.address == address) {
+            closeCallInbox()
+            return
+        }
+        val request = ++callOpenRequest
+        fun current() = callInboxOpen && screen === origin && request == callOpenRequest
         scope.launch {
+            var pending: HostLink? = null
             try {
-                val link = callLink?.takeIf { it.host.id == entry.host.id }
-                    ?: link(entry.host, withContext(keyWork) { core.connect(entry.host.id) }).also { fresh ->
-                        callLink?.close()
-                        callLink = fresh
-                    }
+                val link = link(entry.host, withContext(keyWork) { core.connect(entry.host.id) })
+                pending = link
+                if (!current()) return@launch
                 val terminal = link.keep { conn, _ -> conn.terminals() }
                     .find { it.address == address && it.state == "live" }
+                if (!current()) return@launch
                 if (terminal == null) {
                     prompt = Prompt.Problem(
                         Message(R.string.call_terminal_gone_title),
@@ -873,12 +894,23 @@ class HostsModel(
                     )
                     return@launch
                 }
-                if (screen == Screen.Calls) show(link, terminal, Screen.Calls)
+                // A new caller replaces the current Agent, retaining its Browse/list destination.
+                while (screen is Screen.Terminal || screen is Screen.Chat) {
+                    if (screen is Screen.Terminal) closeTerminal() else closeChat()
+                }
+                val returnTo = screen
+                callLink?.close()
+                callLink = link
+                pending = null
+                closeCallInbox()
+                chat(link, terminal, returnTo)
             } catch (e: CoreException) {
-                prompt = when (e) {
+                if (current()) prompt = when (e) {
                     is CoreException.HostKeyUnknown -> Prompt.TrustHostKey(entry.host, e.fingerprint)
                     else -> problemFor(e)
                 }
+            } finally {
+                pending?.close()
             }
         }
     }
@@ -887,11 +919,18 @@ class HostsModel(
     fun closeChat() {
         val s = screen as? Screen.Chat ?: return
         s.chat.stop()
+        if (s.chat.link === callLink) {
+            callLink?.close()
+            callLink = null
+        }
         screen = s.returnTo
     }
 
     /** The Chat that is open (or under the Terminal opened from it) on [hostId]. */
     private fun chatOn(hostId: String): ChatModel? = liveChat?.takeIf { it.host.id == hostId }
+
+    private fun terminalOn(hostId: String): TerminalViewer? =
+        (screen as? Screen.Terminal)?.viewer?.takeIf { it.link?.host?.id == hostId }
 
     fun back() {
         (screen as? Screen.Chat)?.chat?.stop()
@@ -900,11 +939,7 @@ class HostsModel(
         viewing = null
         callLink?.close()
         callLink = null
-        if (screen == Screen.Calls && callsActive) {
-            // Leaving Call history: keep only the watches a banner may use.
-            calls.stopAll()
-            calls.watch(hosts, everyHost = false)
-        }
+        closeCallInbox()
         // Also under a Terminal or Chat opened from the Agents list.
         closeAgents()
         screen = Screen.Hosts

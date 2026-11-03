@@ -85,9 +85,6 @@ private fun AriesContent(model: HostsModel, settings: ThemeSettings) {
         Box(Modifier.padding(padding).fillMaxSize()) {
             ConsoleShell(model) {
                 Column(Modifier.fillMaxSize()) {
-                    model.calls.banner?.let { entry ->
-                        CallBanner(entry, onView = model::openCalls, onDismiss = model.calls::dismissBanner)
-                    }
                     when (val s = model.screen) {
                         Screen.Hosts -> HostListScreen(model)
                         Screen.Settings -> {
@@ -131,15 +128,13 @@ private fun AriesContent(model: HostsModel, settings: ThemeSettings) {
                                 onTerminal = { model.openTerminal(it.terminal) },
                             )
                         }
-                        Screen.Calls -> {
-                            CallsScreen(model.calls, onBack = model::back, onTerminal = model::openCallTerminal, showHeader = false)
-                        }
                         is Screen.Chat -> {
                             ChatScreen(
                                 s.chat,
                                 onBack = model::closeChat,
                                 onOpenTerminal = { model.openTerminal(s.chat.terminal) },
                                 onView = model::switchView,
+                                calls = model.calls,
                             )
                         }
                     }
@@ -190,10 +185,6 @@ private fun HostListScreen(model: HostsModel) {
             if (adding) Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { AddHostForm(model) }
         }
         if (model.key != null) item { Column(Modifier.padding(12.dp)) { ExtraKeysSection(model) } }
-        // Keep the existing Calls route until ticket 04 replaces it with the inbox.
-        if (model.hosts.isNotEmpty()) item {
-            TextButton(onClick = model::openCalls) { Text(stringResource(R.string.calls_button)) }
-        }
     }
 }
 

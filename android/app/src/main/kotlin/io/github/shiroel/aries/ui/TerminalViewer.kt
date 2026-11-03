@@ -2,6 +2,7 @@ package io.github.shiroel.aries.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.ui.semantics.Role
@@ -22,7 +23,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -67,7 +67,15 @@ import io.github.shiroel.aries.core.TerminalInfo
  * One open Terminal's screen as the core's frames built it. The grid is
  * the Terminal's own size (observe mode): the desktop decides it.
  */
-class TerminalViewer(val terminal: TerminalInfo) {
+class TerminalViewer(terminal: TerminalInfo) {
+    var terminal by mutableStateOf(terminal)
+        private set
+
+    /** Reuse the Host's existing Terminal watch to keep header metadata current. */
+    fun update(terminals: List<TerminalInfo>) {
+        terminals.find { it.address == terminal.address }?.let { terminal = it }
+    }
+
     var cols by mutableIntStateOf(0)
         private set
     var rows by mutableIntStateOf(0)
@@ -318,23 +326,14 @@ fun TerminalScreen(viewer: TerminalViewer, onBack: () -> Unit, onView: ((AgentVi
     // The keyboard pushes the input and key bar up and shrinks the screen
     // (the Scaffold already keeps clear of the navigation bar).
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onBack) { Text(stringResource(R.string.back_button)) }
-            Column(Modifier.weight(1f)) {
-                Text(viewer.title?.ifBlank { null } ?: displayName(viewer.terminal), style = MaterialTheme.typography.titleMedium)
-                Text(
-                    stringResource(
-                        if (viewer.typing) R.string.terminal_typing else R.string.terminal_observing,
-                        viewer.terminal.address,
-                        viewer.cols,
-                        viewer.rows,
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-            // Only an Agent has a Chat to switch to.
-            onView?.let { AgentViewToggle(AgentView.TERMINAL, it) }
-        }
+        AgentScreenHeader(viewer.terminal, viewer.link?.host?.name, onBack, AgentView.TERMINAL, onView,
+            title = viewer.terminal.name?.takeIf { it.isNotBlank() } ?: viewer.title?.takeIf { it.isNotBlank() } ?: displayName(viewer.terminal))
+        Text(
+            stringResource(if (viewer.typing) R.string.terminal_typing else R.string.terminal_observing,
+                viewer.terminal.address, viewer.cols, viewer.rows),
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         viewer.exit?.let { Banner(exitText(it)) }
         val line = viewer.link?.state
         if (viewer.exit == null && line == LinkState.Reconnecting) Banner(stringResource(R.string.reconnecting))
@@ -353,7 +352,8 @@ fun TerminalScreen(viewer: TerminalViewer, onBack: () -> Unit, onView: ((AgentVi
 @Composable
 private fun TerminalInput(viewer: TerminalViewer) {
     Box(
-        Modifier.fillMaxWidth().height(40.dp).background(MaterialTheme.colorScheme.surfaceVariant),
+        Modifier.fillMaxWidth().height(48.dp).background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant),
         contentAlignment = Alignment.CenterStart,
     ) {
         AndroidView(
@@ -370,7 +370,7 @@ private fun TerminalInput(viewer: TerminalViewer) {
             },
             Modifier.padding(horizontal = 12.dp),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
         )
     }
 }
@@ -399,6 +399,7 @@ private fun RowScope.BarKey(label: Int, held: Boolean = false, onClick: () -> Un
     Box(
         Modifier.weight(1f).height(40.dp).padding(2.dp)
             .background(if (held) colors.primary else colors.surface)
+            .border(1.dp, colors.outlineVariant)
             .clickable(role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -432,7 +433,7 @@ private fun Banner(text: String) {
 }
 
 /** Base text size; smaller when the Terminal is too wide for the screen. */
-private val MaxFont = 13.sp
+private val MaxFont = 14.sp
 
 @Composable
 private fun TerminalCanvas(viewer: TerminalViewer, look: TerminalLook, modifier: Modifier) {
