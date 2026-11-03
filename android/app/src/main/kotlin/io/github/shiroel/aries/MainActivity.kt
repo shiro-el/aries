@@ -10,6 +10,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import io.github.shiroel.aries.ui.AriesApp
 import io.github.shiroel.aries.ui.HostsModel
+import io.github.shiroel.aries.ui.LastLocationStore
 import kotlinx.coroutines.Dispatchers
 
 class MainActivity : ComponentActivity() {
@@ -27,7 +28,12 @@ class MainActivity : ComponentActivity() {
         val push = AndroidPushPlatform(this)
         setContent {
             val scope = rememberCoroutineScope()
-            val model = remember { HostsModel(core, scope, keyWork = Dispatchers.IO, pushPlatform = push).also { this@MainActivity.model = it } }
+            val model = remember {
+                HostsModel(
+                    core, scope, keyWork = Dispatchers.IO, pushPlatform = push,
+                    locationStore = LastLocationStore.from(this),
+                ).also { this@MainActivity.model = it }
+            }
             LaunchedEffect(model) { openPushTarget() }
             AriesApp(model)
         }
@@ -53,13 +59,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** Opens the Agent once both are ready; the biometric prompt needs a resumed activity. */
+    /** Starts navigation once ready; both restoration and notification entry can need biometrics. */
     private fun openPushTarget() {
         val m = model ?: return
         if (!resumed) return
-        val target = pushTarget ?: return
+        val target = pushTarget
         pushTarget = null
-        m.openPushedAgent(target.hostId, target.terminal)
+        m.start(target)
     }
 
     override fun onStart() {
