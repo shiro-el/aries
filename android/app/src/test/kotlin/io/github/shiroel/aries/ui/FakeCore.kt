@@ -11,6 +11,8 @@ import io.github.shiroel.aries.core.PublicKeyInfo
 import io.github.shiroel.aries.core.StructureListener
 import io.github.shiroel.aries.core.StructureWatch
 import io.github.shiroel.aries.core.KeyInstall
+import io.github.shiroel.aries.core.LaunchRequest
+import io.github.shiroel.aries.core.PaneInfo
 import io.github.shiroel.aries.core.QrMatrix
 import io.github.shiroel.aries.core.TerminalInfo
 
@@ -118,6 +120,32 @@ class FakeConnection(
 
             override fun close() {}
         }
+    }
+
+    /** What `launch` was asked to start, in order. */
+    val launched = mutableListOf<LaunchRequest>()
+
+    /** When set, `launch` fails with it. */
+    var launchFailWith: CoreException? = null
+
+    var recentCwds: List<String> = emptyList()
+
+    override fun recentCwds(): List<String> = recentCwds
+
+    /** Like herdr-core: a new live Terminal, shown in its labelled Tab (or unplaced). */
+    override suspend fun launch(request: LaunchRequest): TerminalInfo {
+        calls += "launch"
+        launchFailWith?.let { throw it }
+        launched += request
+        val t = TerminalInfo("t${100 + launched.size}", null, "", request.command.split(" "), request.cwd, "live")
+        val pane = PaneInfo(t.address, t.address, t)
+        val placed = current.spaces.map { s ->
+            if (s.id != request.spaceId) s
+            else s.copy(tabs = s.tabs.map { tab -> if (tab.id == request.tabId) tab.copy(panes = tab.panes + pane) else tab })
+        }
+        val inTab = placed != current.spaces
+        push(current.copy(spaces = placed, unplaced = if (inTab) current.unplaced else current.unplaced + t))
+        return t
     }
 
     /** The desktop changed the structure. */

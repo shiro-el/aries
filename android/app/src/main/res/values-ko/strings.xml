@@ -67,6 +67,19 @@
     <string name="structure_unreadable">이 호스트의 herdr-app 레이아웃을 읽지 못했습니다(%1$s). 터미널을 스페이스·탭 label로 묶어 보여 줍니다.</string>
     <string name="structure_unknown_format">이 호스트의 herdr-app 레이아웃은 Aries가 모르는 형식입니다. 터미널을 스페이스·탭 label로 묶어 보여 줍니다. Aries를 업데이트하세요.</string>
     <string name="structure_connection_closed">호스트와의 연결이 끊어졌습니다. 보이는 내용이 최신이 아닐 수 있습니다.</string>
+    <string name="launch_open_button">새 터미널</string>
+    <string name="launch_title">터미널 실행</string>
+    <string name="launch_command">명령</string>
+    <string name="launch_cwd">작업 폴더</string>
+    <string name="launch_cwd_default">기본 폴더</string>
+    <string name="launch_cwd_space_folder">스페이스 폴더: %1$s</string>
+    <string name="launch_space">스페이스</string>
+    <string name="launch_space_none">스페이스 없음</string>
+    <string name="launch_tab">탭</string>
+    <string name="launch_button">실행</string>
+    <string name="launch_spawn_failed">호스트에서 실행하지 못했습니다: %1$s. 프로그램 이름과 폴더를 확인하세요.</string>
+    <string name="launch_rpc_failed">herdr-core가 거부했습니다(%1$s): %2$s</string>
+    <string name="launch_connection_closed">호스트 연결이 끊겼습니다. 뒤로 가서 다시 연결하세요.</string>
 
     <string name="host_key_trust_title">이 호스트를 신뢰할까요?</string>
     <string name="host_key_trust_body">%1$s에 처음 연결합니다. 호스트 키 지문이 다음과 같은지 확인하세요:\n\n%2$s\n\n호스트에서 실행: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</string>

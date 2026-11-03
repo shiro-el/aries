@@ -63,7 +63,12 @@ fun AriesApp(model: HostsModel) {
                     BackHandler {
                         if (s.browser.openSpaceId != null) s.browser.closeSpace() else model.back()
                     }
-                    BrowseScreen(s.browser, onBack = model::back)
+                    BrowseScreen(
+                        s.browser,
+                        onBack = model::back,
+                        onNewTerminal = { model.newTerminal(s.browser) },
+                        onLaunch = { model.launch(s.browser, it) },
+                    )
                 }
             }
         }

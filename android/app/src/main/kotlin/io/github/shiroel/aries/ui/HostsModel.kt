@@ -116,6 +116,32 @@ class HostsModel(private val core: AriesCoreInterface, private val scope: Corout
         }
     }
 
+    /** Opens the "new Terminal" form on [browser], starting at the Space/Tab shown. */
+    fun newTerminal(browser: HostBrowser) {
+        val conn = open?.first ?: return
+        val structure = browser.structure ?: return
+        browser.launchForm = LaunchForm(structure, conn.recentCwds(), browser.openSpaceId, browser.tab?.id)
+    }
+
+    /** Starts [form]'s command on the open Host, then shows the new Terminal; failures stay on the form. */
+    fun launch(browser: HostBrowser, form: LaunchForm) {
+        val conn = open?.first ?: return
+        val request = form.request()
+        form.busy = true
+        form.error = null
+        scope.launch {
+            try {
+                val terminal = conn.launch(request)
+                if (browser.launchForm === form) browser.launchForm = null
+                browser.reveal(request.spaceId, request.tabId, terminal.address)
+            } catch (e: CoreException) {
+                form.error = launchProblem(e)
+            } finally {
+                form.busy = false
+            }
+        }
+    }
+
     fun trust(prompt: Prompt.TrustHostKey) {
         this.prompt = null
         guard {
