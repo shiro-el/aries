@@ -89,6 +89,7 @@ class ChatToolMediaTest {
         compose.waitUntil(5_000) { compose.onAllNodesWithContentDescription("Image viewer").fetchSemanticsNodes().isNotEmpty() }
         assertEquals(listOf("box/t7" to "/recorded/screens/shot with spaces.png"), synchronized(reads) { reads.toList() })
         compose.onNodeWithText("Back").performClick()
+        compose.onNodeWithContentDescription(compose.activity.getString(R.string.files_actions_label)).performClick()
         compose.onNodeWithText("Close files").performClick()
         core.pushChat(ChatSnapshot(listOf(ChatEntry("missing", null, ChatEntryBody.Tool(
             "view_image", "/tmp/missing.pdf", "{}", ChatToolStatus.DONE, null,
@@ -110,6 +111,7 @@ class ChatToolMediaTest {
         compose.onNodeWithText("/tmp/deleted.svg").performFirstLinkClick()
         compose.waitUntil(5_000) { compose.onAllNodesWithContentDescription("Image viewer").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Back").performClick()
+        compose.onNodeWithContentDescription(compose.activity.getString(R.string.files_actions_label)).performClick()
         compose.onNodeWithText("Close files").performClick()
         compose.onNodeWithContentDescription(compose.activity.getString(R.string.chat_tool_expand_label, "Read"))
             .performTouchInput { click(topLeft + androidx.compose.ui.geometry.Offset(4f, 4f)) }

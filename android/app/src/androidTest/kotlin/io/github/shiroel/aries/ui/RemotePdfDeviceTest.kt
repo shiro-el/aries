@@ -53,19 +53,19 @@ class RemotePdfDeviceTest {
         } }
         waitForPage(1)
         assertEquals(listOf(0uL, 19uL), synchronized(offsets) { offsets.toList() })
-        compose.onNodeWithText(str(R.string.files_previous_button)).assertIsNotEnabled()
+        compose.onNodeWithContentDescription(str(R.string.files_previous_button)).assertIsNotEnabled()
         assertPageColor(1, red = true)
         compose.onNodeWithTag("pdf-page:1").performTouchInput { doubleClick(center) }
         assertTrue(compose.onNodeWithTag("pdf-page:1").fetchSemanticsNode().config[SemanticsProperties.StateDescription].contains("300"))
-        compose.onNodeWithText(str(R.string.files_next_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.files_next_button)).performClick()
         waitForPage(2)
         assertTrue(compose.onNodeWithTag("pdf-page:2").fetchSemanticsNode().config[SemanticsProperties.StateDescription].contains("100"))
         assertPageColor(2, red = false)
-        compose.onNodeWithText(str(R.string.files_next_button)).assertIsNotEnabled()
-        compose.onNodeWithText(str(R.string.files_previous_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.files_next_button)).assertIsNotEnabled()
+        compose.onNodeWithContentDescription(str(R.string.files_previous_button)).performClick()
         waitForPage(1)
         assertPageColor(1, red = true)
-        compose.onNodeWithText(str(R.string.files_back_folder_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.files_back_folder_button)).performClick()
         compose.onNodeWithTag("pdf-page:1").assertDoesNotExist()
     }
 

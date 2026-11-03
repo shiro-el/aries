@@ -73,8 +73,8 @@ class ImageViewerTest {
         }
         compose.onNodeWithContentDescription(context.getString(R.string.chat_image)).performClick()
         compose.onNode(isDialog()).assertExists()
-        compose.onNodeWithText("Save image").assertIsDisplayed()
-        compose.onNodeWithText("Share image").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Save image").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Share image").assertIsDisplayed()
         compose.onNodeWithText(context.getString(R.string.back_button)).performClick()
         compose.onNode(isDialog()).assertDoesNotExist()
         compose.onNodeWithContentDescription(context.getString(R.string.chat_image)).assertIsDisplayed()
@@ -136,7 +136,7 @@ class ImageViewerTest {
             compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("Image viewer"))
                 .fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithText("Share image").performClick()
+        compose.onNodeWithContentDescription("Share image").performClick()
         compose.waitUntil(5_000) { compose.waitForIdle(); shadowOf(compose.activity).peekNextStartedActivity() != null }
         val chooser = shadowOf(compose.activity).nextStartedActivity
         assertEquals(Intent.ACTION_CHOOSER, chooser.action)
@@ -162,7 +162,7 @@ class ImageViewerTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
         val provider = imageDocuments()
-        compose.onNodeWithText("Save image").performClick()
+        compose.onNodeWithContentDescription("Save image").performClick()
         val request = shadowOf(compose.activity).nextStartedActivityForResult
         assertEquals(Intent.ACTION_CREATE_DOCUMENT, request.intent.action)
         assertEquals("image/png", request.intent.type)
@@ -177,19 +177,19 @@ class ImageViewerTest {
 
     @Test fun cancellingTheSavePickerLeavesTheViewerUsable() {
         openViewer()
-        compose.onNodeWithText("Save image").performClick()
+        compose.onNodeWithContentDescription("Save image").performClick()
         val request = shadowOf(compose.activity).nextStartedActivityForResult
-        compose.onNodeWithText("Share image").assertIsNotEnabled()
+        compose.onNodeWithContentDescription("Share image").assertIsNotEnabled()
         compose.runOnIdle { shadowOf(compose.activity).receiveResult(request.intent, Activity.RESULT_CANCELED, Intent()) }
-        compose.onNodeWithText("Save image").assertIsEnabled()
-        compose.onNodeWithText("Share image").assertIsEnabled()
+        compose.onNodeWithContentDescription("Save image").assertIsEnabled()
+        compose.onNodeWithContentDescription("Share image").assertIsEnabled()
         compose.onNodeWithText("Image saved").assertDoesNotExist()
     }
 
     @Test fun aFailedSaveRemovesThePartialDocumentAndAllowsRetry() {
         openViewer()
         val provider = imageDocuments(failWrites = true)
-        compose.onNodeWithText("Save image").performClick()
+        compose.onNodeWithContentDescription("Save image").performClick()
         val request = shadowOf(compose.activity).nextStartedActivityForResult
         compose.runOnIdle {
             shadowOf(compose.activity).receiveResult(request.intent, Activity.RESULT_OK,
@@ -201,7 +201,7 @@ class ImageViewerTest {
         assertTrue(provider.deleted)
         compose.onNodeWithText("Could not save or share this image. Try again.").assertIsDisplayed()
         assertFalse(provider.output.exists())
-        compose.onNodeWithText("Save image").assertIsEnabled()
+        compose.onNodeWithContentDescription("Save image").assertIsEnabled()
     }
 
     @Test fun unreadableImagesKeepTheCloseActionAndDisableExports() {
@@ -209,8 +209,8 @@ class ImageViewerTest {
         compose.waitUntil(5_000) {
             compose.onAllNodesWithText(context.getString(R.string.chat_image_unreadable)).fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithText("Save image").assertIsNotEnabled()
-        compose.onNodeWithText("Share image").assertIsNotEnabled()
+        compose.onNodeWithContentDescription("Save image").assertIsNotEnabled()
+        compose.onNodeWithContentDescription("Share image").assertIsNotEnabled()
         compose.onNodeWithText(context.getString(R.string.back_button)).assertIsEnabled()
     }
 

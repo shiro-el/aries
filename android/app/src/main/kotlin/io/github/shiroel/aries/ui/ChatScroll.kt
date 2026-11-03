@@ -15,7 +15,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalContext
 import io.github.shiroel.aries.core.ChatEntry
-import io.github.shiroel.aries.core.ChatEntryBody
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -65,7 +64,7 @@ internal fun rememberChatScrollState(
             val keys = buildList {
                 rows.forEach { entry ->
                     add("transcript:${entry.id}")
-                    if (entry.body is ChatEntryBody.User || entry.body is ChatEntryBody.Agent) {
+                    if (entry.body.markdownSource() != null) {
                         // Mirror chatMarkdownItems: a header, lazy blocks, then a footer.
                         documents[entry.id]?.blocks?.indices?.forEach { add("transcript:${entry.id}:markdown:$it") }
                         add("transcript:${entry.id}:footer")
@@ -85,19 +84,14 @@ internal fun rememberChatScrollState(
             if (!followEnabled) state.following = false
             lastViewport = currentViewport
             val ready = rows.all { entry ->
-                val text = when (val body = entry.body) {
-                    is ChatEntryBody.User -> body.text
-                    is ChatEntryBody.Agent -> body.text
-                    else -> null
-                }
+                val text = entry.body.markdownSource()
                 text == null || documents[entry.id]?.source == text
             }
             // Never replace a saved block anchor with an incomplete parse.
             if (!ready) return@collect
             val changed = previousEntries != rows || previousCalls != calls || previousItemKeys != keys
             val latest = request != latestRequest
-            val alignBottom = calls.isEmpty() &&
-                (rows.lastOrNull()?.body is ChatEntryBody.Agent || rows.lastOrNull()?.body is ChatEntryBody.User)
+            val alignBottom = calls.isEmpty() && rows.lastOrNull()?.body?.markdownSource() != null
             if (changed || latest) {
                 val previous = previousEntries
                 if (previous != null) {

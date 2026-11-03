@@ -1,7 +1,6 @@
 package io.github.shiroel.aries.ui
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -10,10 +9,10 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.contentDescription
@@ -133,33 +132,20 @@ fun RemoteFilesScreen(
         }
     }
     Column(Modifier.fillMaxSize().safeDrawingPadding().padding(12.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(stringResource(R.string.files_title), style = MaterialTheme.typography.titleMedium)
-            TextButton(onClick = onClose) { Text(stringResource(R.string.files_close_button)) }
+        val header: @Composable ((() -> Unit)?, (() -> Unit)?, Boolean) -> Unit = { save, share, exportEnabled ->
+            FilesHeader(
+                path = file ?: directory?.path.orEmpty(), isFile = file != null,
+                onBack = { if (file != null) backToFolder() else onClose() }, onClose = onClose,
+                onFolder = { path -> folder = path; backToFolder() },
+                onRefresh = { retry++ }, refreshing = loading || !changesLoaded,
+                diffAvailable = changedFile != null && !mediaFile, fullFile = fullFile, onFullFile = { fullFile = !fullFile },
+                wrap = wrap, onWrap = if (file != null && !showingDiff && page != null) ({ wrap = !wrap }) else null,
+                onSend = if (file != null && !showingDiff && onSend != null) ({ onSend(quotedFileReference(file!!)) }) else null,
+                onSave = save, onShare = share, exportEnabled = exportEnabled,
+            )
         }
-        Text(file ?: directory?.path.orEmpty(), fontFamily = FontFamily.Monospace)
-        Row {
-            if (file != null) {
-                TextButton(onClick = ::backToFolder) {
-                    Text(stringResource(R.string.files_back_folder_button))
-                }
-            } else {
-                TextButton(enabled = !loading && directory?.path != null && directory?.path != "/", onClick = {
-                    folder = directory!!.path.substringBeforeLast('/').ifEmpty { "/" }
-                }) { Text(stringResource(R.string.files_up_button)) }
-            }
-            TextButton(onClick = { retry++ }, enabled = !loading) { Text(stringResource(R.string.files_refresh_button)) }
-        }
-        if (changedFile != null && !mediaFile) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = !fullFile, onClick = { fullFile = false }, label = { Text(stringResource(R.string.files_diff_button)) })
-            FilterChip(selected = fullFile, onClick = { fullFile = true }, label = { Text(stringResource(R.string.files_full_button)) })
-        }
-        if (!showingDiff) file?.let { FileExportControls(connection, address, it) }
-        if (file != null && !showingDiff && onSend != null) {
-            TextButton(onClick = { onSend(quotedFileReference(file!!)) }) {
-                Text(stringResource(R.string.files_send_file_button))
-            }
-        }
+        if (file != null && !showingDiff) FileExportControls(connection, address, file!!, actions = header)
+        else header(null, null, false)
         when {
             !changesLoaded || loading -> Text(stringResource(R.string.files_loading))
             file == null -> {
@@ -205,11 +191,10 @@ fun RemoteFilesScreen(
                         }.then(if (entry.directory) Modifier.semantics { stateDescription = folderState } else Modifier)
                             .padding(start = (entry.depth * 16).dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                             if (entry.directory) {
-                                val color = MaterialTheme.colorScheme.onSurfaceVariant
-                                Canvas(Modifier.padding(end = 6.dp).size(12.dp)) {
-                                    drawLine(color, Offset(0f, size.height / 2), Offset(size.width, size.height / 2), 1.dp.toPx())
-                                    if (!isExpanded) drawLine(color, Offset(size.width / 2, 0f), Offset(size.width / 2, size.height), 1.dp.toPx())
-                                }
+                                Icon(painterResource(if (isExpanded) R.drawable.ic_chevron_down else R.drawable.ic_chevron_right),
+                                    contentDescription = null, modifier = Modifier.size(16.dp))
+                                Icon(painterResource(if (isExpanded) R.drawable.ic_folder_open else R.drawable.ic_folder),
+                                    contentDescription = null, modifier = Modifier.padding(end = 8.dp).size(20.dp))
                             }
                             Text(if (entry.directory) "${entry.name}/" else entry.name, fontFamily = FontFamily.Monospace)
                         }
@@ -231,20 +216,14 @@ fun RemoteFilesScreen(
                 unavailableLine?.let { Text(stringResource(R.string.files_line_unavailable, it.toLong())) }
                 if (content.lines == 0uL) Text(stringResource(R.string.files_empty_file))
                 else Text(stringResource(R.string.files_range, content.first.toLong(), content.last.toLong(), content.lines.toLong()))
-                TextButton(onClick = { wrap = !wrap }) {
-                    Checkbox(checked = wrap, onCheckedChange = null)
-                    Text(stringResource(R.string.files_wrap_lines))
-                }
-                Row {
-                    TextButton(enabled = offsets.size > 1 || content.first > 1uL, onClick = {
-                        offsets = if (offsets.size > 1) offsets.dropLast(1)
-                            else listOf(if (content.first > 200uL) content.first - 200uL else 1uL)
-                    }) {
-                        Text(stringResource(R.string.files_previous_button))
-                    }
-                    TextButton(enabled = content.last < content.lines, onClick = { offsets = offsets + (content.last + 1uL) }) {
-                        Text(stringResource(R.string.files_next_button))
-                    }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    ActionIcon(R.drawable.ic_chevron_left, R.string.files_previous_button,
+                        enabled = offsets.size > 1 || content.first > 1uL, onClick = {
+                            offsets = if (offsets.size > 1) offsets.dropLast(1)
+                                else listOf(if (content.first > 200uL) content.first - 200uL else 1uL)
+                        })
+                    ActionIcon(R.drawable.ic_chevron_right, R.string.files_next_button,
+                        enabled = content.last < content.lines, onClick = { offsets = offsets + (content.last + 1uL) })
                 }
                 // Drop only the split's synthetic trailing line; blank lines in the file remain.
                 val lines = remember(content) {
@@ -324,7 +303,7 @@ internal fun RemoteFilesAccess(model: HostsModel, content: @Composable () -> Uni
         Surface(Modifier.fillMaxSize()) {
             if (noFolder) Column(Modifier.padding(16.dp)) {
                 Text(stringResource(R.string.files_no_folder))
-                TextButton(onClick = { open = false }) { Text(stringResource(R.string.files_close_button)) }
+                ActionIcon(R.drawable.ic_x, R.string.files_close_button, onClick = { open = false })
             } else RemoteFilesScreen(link.connection, terminal.address, { open = false },
                 initialLocation = location,
                 onSend = if (terminal.agentStatus == null) null else { reference -> sendReference(reference, false) },
