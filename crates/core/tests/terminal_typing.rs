@@ -275,6 +275,77 @@ async fn key_bar_keys_reach_the_agent_as_terminal_sequences() {
 }
 
 #[tokio::test]
+async fn extra_key_bar_keys_use_xterm_sequences_in_both_cursor_modes() {
+    let hc = HcSession::start();
+    let agent = hc.run_fake_agent(
+        "extra-keys",
+        "run stty raw -echo\nsay ready\nkeys 48\nappcursor\nsay app-mode\nkeys 14\n",
+    );
+    let s = connect(&hc).await;
+    let view = s
+        .conn
+        .attach_terminal(agent.address.clone(), typing(60, 15))
+        .await
+        .unwrap();
+    let mut screen = Screen::default();
+    until(&view, &mut screen, "ready", |s| s.contains("ready")).await;
+
+    for key in [
+        TerminalKey::Home,
+        TerminalKey::End,
+        TerminalKey::PageUp,
+        TerminalKey::PageDown,
+    ] {
+        view.send_key(key, NONE).await.unwrap();
+    }
+    let alt = KeyMods { alt: true, ..NONE };
+    view.send_key(TerminalKey::Char { text: "x".into() }, alt)
+        .await
+        .unwrap();
+    view.send_key(
+        TerminalKey::Char {
+            text: "😀".into()
+        },
+        alt,
+    )
+    .await
+    .unwrap();
+    view.send_key(
+        TerminalKey::Char { text: "c".into() },
+        KeyMods { ctrl: true, ..alt },
+    )
+    .await
+    .unwrap();
+    for key in [
+        TerminalKey::Home,
+        TerminalKey::End,
+        TerminalKey::PageUp,
+        TerminalKey::PageDown,
+    ] {
+        view.send_key(key, alt).await.unwrap();
+    }
+    view.send_key(TerminalKey::Enter, NONE).await.unwrap();
+    assert_eq!(
+        inputs(&agent, 1)[0],
+        "keys 1b 5b 48 1b 5b 46 1b 5b 35 7e 1b 5b 36 7e 1b 78 1b f0 9f 98 80 1b 03 1b 5b 31 3b 33 48 1b 5b 31 3b 33 46 1b 5b 35 3b 33 7e 1b 5b 36 3b 33 7e 0d"
+    );
+
+    until(&view, &mut screen, "app-mode", |s| s.contains("app-mode")).await;
+    for key in [
+        TerminalKey::Home,
+        TerminalKey::End,
+        TerminalKey::PageUp,
+        TerminalKey::PageDown,
+    ] {
+        view.send_key(key, NONE).await.unwrap();
+    }
+    assert_eq!(
+        inputs(&agent, 2)[1],
+        "keys 1b 4f 48 1b 4f 46 1b 5b 35 7e 1b 5b 36 7e"
+    );
+}
+
+#[tokio::test]
 async fn ctrl_c_interrupts_the_program() {
     let hc = HcSession::start();
     let address = hc.run_bg(

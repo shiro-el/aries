@@ -188,6 +188,11 @@
     <string name="key_esc">Esc</string>
     <string name="key_tab">Tab</string>
     <string name="key_ctrl">Ctrl</string>
+    <string name="key_alt">Alt</string>
+    <string name="key_home">Home</string>
+    <string name="key_end">End</string>
+    <string name="key_page_up">PgUp</string>
+    <string name="key_page_down">PgDn</string>
     <string name="key_up">↑</string>
     <string name="key_down">↓</string>
     <string name="key_left">←</string>
