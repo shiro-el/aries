@@ -215,6 +215,7 @@ private fun ConsoleHostRow(model: HostsModel, host: Host) {
     if (menu) Column(Modifier.testTag("host-actions:${host.id}").padding(start = 15.dp, end = 12.dp)) {
         JumpSummary(model.jumps[host.id].orEmpty())
         if (host.endpoint is Endpoint.Ssh) {
+            HostEditSection(model, host)
             TextButton(onClick = { model.editJumps(host) }) { Text(stringResource(R.string.host_jumps_button)) }
             TextButton(onClick = { model.askPassword(host) }) { Text(stringResource(R.string.host_install_key_button)) }
         }
@@ -295,7 +296,7 @@ private fun AddHostForm(model: HostsModel) {
     )
     OutlinedTextField(user, { user = it }, label = { Text(stringResource(R.string.host_add_user)) }, singleLine = true)
     ConsoleButton(
-        enabled = address.isNotBlank() && user.isNotBlank() && portNumber != null,
+        enabled = validHostInput(model.hosts, null, name, address, portNumber, user),
         onClick = {
             model.addHost(name, address, portNumber ?: 22, user)
             name = ""; address = ""; port = "22"; user = ""

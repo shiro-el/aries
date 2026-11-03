@@ -165,6 +165,17 @@ class FakeCore : AriesCoreInterface {
     override fun addHost(name: String, endpoint: Endpoint): Host =
         Host("h${hosts.size + 1}", name, endpoint, null).also { hosts += it }
 
+    var editFailure: CoreException? = null
+
+    override suspend fun editHost(hostId: String, name: String, endpoint: Endpoint): Host {
+        editFailure?.let { throw it }
+        val index = hosts.indexOfFirst { it.id == hostId }
+        if (index < 0) throw CoreException.UnknownHost(hostId)
+        val previous = hosts[index]
+        return previous.copy(name = name, endpoint = endpoint,
+            hostKey = previous.hostKey.takeIf { previous.endpoint == endpoint }).also { hosts[index] = it }
+    }
+
     override fun trustHostKey(hostId: String, fingerprint: String) {
         val i = hosts.indexOfFirst { it.id == hostId }
         if (i < 0) throw CoreException.UnknownHost(hostId)

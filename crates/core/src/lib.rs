@@ -11,6 +11,7 @@ mod chat;
 mod chat_cache;
 mod error;
 mod hc;
+mod host_edit;
 mod host_model;
 mod launch;
 mod push;
@@ -225,6 +226,7 @@ pub struct AriesCore {
     store: Store,
     vault: Arc<dyn KeyVault>,
     hosts: Mutex<Vec<SavedHost>>,
+    sessions: host_edit::HostSessions,
     beacon_release: Mutex<BeaconRelease>,
     chat_cache: chat_cache::ChatCache,
 }
@@ -246,6 +248,7 @@ impl AriesCore {
             vault,
             chat_cache,
             hosts: Mutex::new(saved.hosts),
+            sessions: Default::default(),
             beacon_release: Mutex::new(pinned_release()),
         }))
     }
@@ -381,13 +384,20 @@ impl AriesCore {
     pub fn add_host(&self, name: String, endpoint: Endpoint) -> Result<Host, CoreError> {
         let saved = SavedHost {
             id: new_id(),
-            name,
+            name: name.trim().to_owned(),
             endpoint,
             host_key: None,
             jumps: Vec::new(),
             key_id: None,
         };
-        self.update_hosts(|hosts| hosts.push(saved.clone()))?;
+        let mut hosts = self.hosts.lock().expect("hosts lock");
+        host_edit::validate(&hosts, None, &saved.name, &saved.endpoint)?;
+        let mut next = hosts.clone();
+        next.push(saved.clone());
+        self.store.save(&store::Saved {
+            hosts: next.clone(),
+        })?;
+        *hosts = next;
         Ok(to_host(&saved))
     }
 
@@ -581,6 +591,7 @@ impl AriesCore {
 
     /// Connects to a Host and checks its herdr-core is compatible.
     pub async fn connect(&self, host_id: String) -> Result<Arc<HostConnection>, CoreError> {
+        let revision = self.session_revision(&host_id);
         let host = self.saved_host(&host_id)?;
         let transport: Box<dyn Transport> = match host.endpoint {
             Endpoint::Local { argv, env } => Box::new(LocalProcess { argv, env }),
@@ -599,8 +610,17 @@ impl AriesCore {
         };
         let client =
             on_runtime(async move { HcClient::handshake(transport.open().await?).await }).await?;
+        let client = Arc::new(client);
+        if !self.register_client(&host_id, revision, &client) {
+            on_runtime(async move {
+                client.close().await;
+                Ok(())
+            })
+            .await?;
+            return Err(CoreError::Closed);
+        }
         Ok(Arc::new(HostConnection {
-            client: Arc::new(client),
+            client,
             names: Default::default(),
             recent: launch::RecentCwds::in_host_dir(self.store.host_dir(&host.id)),
             saved: launch::SavedLaunches::in_host_dir(self.store.host_dir(&host.id)),
@@ -1005,8 +1025,13 @@ impl AriesCore {
         host_id: String,
         listener: Arc<dyn CallListener>,
     ) -> Result<Arc<CallWatch>, CoreError> {
+        let revision = self.session_revision(&host_id);
         let runner = self.chat_host(&host_id)?;
-        Ok(Arc::new(calls::watch(runner, host_id, listener)))
+        self.register_calls(
+            &host_id,
+            revision,
+            Arc::new(calls::watch(runner, host_id.clone(), listener)),
+        )
     }
 
     /// Answers Call `call_id` with its Choice `choice` (0-based): the
@@ -1058,18 +1083,17 @@ impl AriesCore {
         cursor: Option<String>,
         retry: std::time::Duration,
     ) -> Result<Arc<ChatWatch>, CoreError> {
+        let revision = self.session_revision(&host_id);
         let host = self.chat_host(&host_id)?;
         let cache = chat::CacheSlot {
             cache: self.chat_cache.clone(),
-            host: host_id,
+            host: host_id.clone(),
         };
-        Ok(Arc::new(ChatWatch::start(
-            host,
-            terminal,
-            cursor,
-            Some(cache),
-            retry,
-        )))
+        self.register_chat(
+            &host_id,
+            revision,
+            Arc::new(ChatWatch::start(host, terminal, cursor, Some(cache), retry)),
+        )
     }
 
     /// Moves the Chat cache's clock forward (tests of the retention period).

@@ -421,4 +421,8 @@
     <string name="console_agent_accessibility">%1$s · %2$s</string>
     <string name="console_agent_age_unknown">—</string>
     <string name="console_agent_age_unavailable">경과 시간 알 수 없음</string>
+    <string name="host_edit_button">이름과 주소 편집</string>
+    <string name="host_edit_title">Host 편집</string>
+    <string name="host_edit_save_button">저장</string>
+    <string name="host_edit_invalid_body">중복되지 않는 Host 이름, 올바른 주소와 사용자, 1~65535 사이의 포트를 입력하세요.</string>
 </resources>

@@ -42,6 +42,8 @@ pub enum CoreError {
     },
     #[error("no SSH key has been created yet")]
     NoKey,
+    #[error("invalid Host: {detail}")]
+    InvalidHost { detail: String },
     #[error("no Host with id {id}")]
     UnknownHost { id: String },
     #[error("app storage failed: {detail}")]
