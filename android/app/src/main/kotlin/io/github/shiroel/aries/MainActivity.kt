@@ -10,6 +10,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import io.github.shiroel.aries.ui.AriesApp
 import io.github.shiroel.aries.ui.HostsModel
+import io.github.shiroel.aries.ui.LastLocationStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import androidx.lifecycle.lifecycleScope
@@ -33,8 +34,13 @@ class MainActivity : ComponentActivity() {
         val push = AndroidPushPlatform(this)
         setContent {
             val scope = rememberCoroutineScope()
-            val model = remember { HostsModel(core, scope, keyWork = Dispatchers.IO, pushPlatform = push,
-                onSavedLaunchesChanged = ::refreshLaunchShortcuts).also { this@MainActivity.model = it } }
+            val model = remember {
+                HostsModel(
+                    core, scope, keyWork = Dispatchers.IO, pushPlatform = push,
+                    locationStore = LastLocationStore.from(this),
+                    onSavedLaunchesChanged = ::refreshLaunchShortcuts,
+                ).also { this@MainActivity.model = it }
+            }
             LaunchedEffect(model) { resumeModel() }
             AriesApp(model)
         }
@@ -97,16 +103,18 @@ class MainActivity : ComponentActivity() {
         savedLaunchTarget?.let {
             savedLaunchTarget = null
             m.openSavedLaunch(it.hostId, it.launchId)
+            m.start()
             return
         }
         if (tileRequested) {
             tileRequested = false
             m.openTile()
+            m.start()
             return
         }
-        val target = pushTarget ?: return
+        val target = pushTarget
         pushTarget = null
-        m.openPushedAgent(target.hostId, target.terminal, openChat = target.chat)
+        m.start(target)
     }
 
     override fun onStart() {
@@ -117,13 +125,14 @@ class MainActivity : ComponentActivity() {
     private fun resumeModel() {
         if (!resumed) return
         val m = model ?: return
+        val explicitSurface = savedLaunchTarget != null || tileRequested
+        openShare()
+        openEntryTarget()
         if (needsForegroundRefresh) {
             needsForegroundRefresh = false
             // A launch connects only its selected Host; do not open other biometric keys first.
-            if (savedLaunchTarget == null && !tileRequested) m.foregrounded()
+            if (!explicitSurface) m.foregrounded()
         }
-        openEntryTarget()
-        openShare()
     }
 
     override fun onDestroy() {

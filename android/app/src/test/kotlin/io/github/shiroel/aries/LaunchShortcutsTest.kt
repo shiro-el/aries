@@ -78,4 +78,17 @@ class LaunchShortcutsTest {
         assertTrue(model.prompt is Prompt.Problem)
         assertEquals(1, launched.launched.size)
     }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test fun anUnavailableShortcutDoesNotRestoreAnUnrelatedLastLocation() = runTest {
+        val host = core.addHost("home", Endpoint.Ssh("home", 22u, "me"))
+        val store = LastLocationStore.from(context)
+        store.save(LastLocation(hostId = host.id))
+        val model = HostsModel(core, backgroundScope, locationStore = store)
+        model.openSavedLaunch("removed", "1")
+        model.start()
+        runCurrent()
+        assertTrue(model.screen is Screen.Hosts)
+        assertNull(core.connection)
+    }
 }

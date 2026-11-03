@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github.shiroel.aries.HttpBeaconFetcher
 import io.github.shiroel.aries.HttpRelayClient
+import io.github.shiroel.aries.PushTarget
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.core.AgentView
@@ -120,6 +121,7 @@ class HostsModel(
     private val pushPlatform: PushPlatform = NoPush,
     private val http: HttpClient = HttpRelayClient(),
     private val onSavedLaunchesChanged: () -> Unit = {},
+    private val locationStore: LastLocationStore? = null,
 ) {
     /** Current Host's settings models; a previous Host's pending work keeps its own state. */
     var beacon by mutableStateOf(BeaconModel(core, scope, beaconFetcher, keyWork = keyWork))
@@ -211,9 +213,12 @@ class HostsModel(
     fun foregrounded() {
         links.forEach { it.check() }
         liveChat?.retryNow()
+        val startupHost = startupHostId
+        startupHostId = null
         // Live connections publish their lists in the core. Other Hosts
         // get a short pull while the foreground biometric prompt is available.
-        hosts.filter { host -> links.none { it.host.id == host.id && it.connection != null } }
+        // Startup already opens its target, including a biometric prompt if needed.
+        hosts.filter { host -> host.id != startupHost && links.none { it.host.id == host.id && it.connection != null } }
             .forEach { refreshLastKnownState(it.id) }
     }
 
@@ -234,6 +239,72 @@ class HostsModel(
     /** The Chat that is open, or still running under the Terminal opened from it. */
     private val liveChat: ChatModel?
         get() = (screen as? Screen.Chat ?: (screen as? Screen.Terminal)?.returnTo as? Screen.Chat)?.chat
+
+    private var started = false
+    private var explicitSurfaceEntry = false
+    private var startupHostId: String? = null
+    private var restoring by mutableStateOf(false)
+
+    /** Called after the activity resumes and installs its biometric authorizer. */
+    fun start(target: PushTarget? = null) {
+        if (started) {
+            target?.let { openPushedAgent(it.hostId, it.terminal, openChat = it.chat) }
+            return
+        }
+        started = true
+        val saved = locationStore?.load()
+        if (target != null) {
+            startupHostId = target.hostId
+            openPushedAgent(target.hostId, target.terminal, openChat = target.chat)
+        } else if (!explicitSurfaceEntry && screen == Screen.Hosts) {
+            hosts.find { it.id == saved?.hostId }?.let {
+                startupHostId = it.id
+                connect(it, saved)
+            }
+        }
+        if (locationStore != null) scope.launch {
+            snapshotFlow { if (restoring) null else lastLocation() }
+                .filterNotNull().collect { locationStore.save(it) }
+        }
+    }
+
+    private fun lastLocation(): LastLocation? = when (val s = screen) {
+        Screen.Hosts -> LastLocation()
+        is Screen.Browse -> LastLocation(s.browser.host.id, s.browser.openSpaceId, s.browser.tab?.id)
+        is Screen.Terminal -> s.viewer.link?.host?.let { host ->
+            terminalLocation(host.id, s.viewer.terminal.address, AgentView.TERMINAL, s.returnTo)
+        }
+        is Screen.Chat -> terminalLocation(s.chat.host.id, s.chat.terminal.address, AgentView.CHAT, s.returnTo)
+        else -> null
+    }
+
+    private fun browserOf(origin: Screen): HostBrowser? = when (origin) {
+        is Screen.Browse -> origin.browser
+        is Screen.Chat -> browserOf(origin.returnTo)
+        is Screen.Terminal -> browserOf(origin.returnTo)
+        else -> null
+    }
+
+    private fun structureOf(origin: Screen, hostId: String): HostStructure? = when (origin) {
+        is Screen.Browse -> origin.browser.takeIf { it.host.id == hostId }?.structure
+        is Screen.Agents -> origin.board.structureOf(hostId)
+        is Screen.Chat -> structureOf(origin.returnTo, hostId)
+        is Screen.Terminal -> structureOf(origin.returnTo, hostId)
+        else -> null
+    }
+
+    private fun terminalLocation(hostId: String, address: String, view: AgentView, origin: Screen): LastLocation {
+        val browser = browserOf(origin)?.takeIf { it.host.id == hostId }
+        val space = structureOf(origin, hostId)?.spaces?.find { space ->
+            space.tabs.any { tab -> tab.panes.any { pane ->
+                pane.terminalAddress == address || pane.subAgents.any { it.address == address }
+            } }
+        }
+        val tab = space?.tabs?.find { tab -> tab.panes.any { pane ->
+            pane.terminalAddress == address || pane.subAgents.any { it.address == address }
+        } }
+        return LastLocation(hostId, space?.id ?: browser?.openSpaceId, tab?.id ?: browser?.tab?.id, address, view)
+    }
 
     init {
         guard {
@@ -321,7 +392,10 @@ class HostsModel(
         }
     }
 
-    fun connect(host: Host, savedLaunchId: String? = null) {
+    fun connect(host: Host) = connect(host, null)
+
+    private fun connect(host: Host, restore: LastLocation?, savedLaunchId: String? = null) {
+        restoring = restore != null
         missingKeyHostId = null
         val connecting = Screen.Connecting(host)
         screen = connecting
@@ -340,10 +414,13 @@ class HostsModel(
                 open = conn to null
                 screen = Screen.Browse(browser)
                 loadHostSettings(host)
-                status = watchBrowse(link, browser, savedLaunchId)
+                status = watchBrowse(link, browser, restore, savedLaunchId)
             } catch (e: CoreException) {
                 if (screen !== connecting) return@launch
+                restoring = false
                 screen = Screen.Hosts
+                // The system unlock prompt already handled cancellation during startup.
+                if (restore != null && e is CoreException.KeyLocked) return@launch
                 if (e is CoreException.NoKey && key == null) {
                     missingKeyHostId = host.id
                     return@launch
@@ -510,8 +587,36 @@ class HostsModel(
     /** The open Host's structure and live Agent status, on each line [HostLink] brings; cancelled on [back]. */
     private var status: Job? = null
 
-    private fun watchBrowse(link: HostLink, browser: HostBrowser, savedLaunchId: String? = null): Job = scope.launch {
+    private fun watchBrowse(link: HostLink, browser: HostBrowser, restore: LastLocation? = null, savedLaunchId: String? = null): Job = scope.launch {
         var pendingLaunch = savedLaunchId
+        var pending = restore
+        var terminals: List<TerminalInfo>? = null
+        fun restoreIfReady() {
+            val saved = pending ?: return
+            val structure = browser.structure ?: return
+            val list = terminals ?: return
+            if (browseLink !== link) return
+            val terminal = list.find { it.address == saved.terminal && it.state == "live" }
+            val space = structure.spaces.find { space ->
+                terminal != null && space.tabs.any { tab -> tab.panes.any { pane ->
+                    pane.terminalAddress == terminal.address || pane.subAgents.any { it.address == terminal.address }
+                } }
+            } ?: structure.spaces.find { it.id == saved.spaceId }
+            space?.let {
+                browser.openSpace(it.id)
+                val tab = it.tabs.find { tab -> terminal != null && tab.panes.any { pane ->
+                    pane.terminalAddress == terminal.address || pane.subAgents.any { it.address == terminal.address }
+                } } ?: it.tabs.find { it.id == saved.tabId }
+                tab?.let(browser::selectTab)
+            }
+            pending = null
+            restoring = false
+            if (terminal != null) {
+                val origin = Screen.Browse(browser)
+                if (saved.view == AgentView.CHAT && terminal.agentStatus != null) chat(link, terminal, origin)
+                else observe(link, terminal, origin)
+            }
+        }
         try {
             link.keep { conn, _ ->
                 val structure = conn.watchStructure(object : StructureListener {
@@ -524,6 +629,7 @@ class HostsModel(
                                 val saved = browser.savedLaunches.find { it.id == id }
                                 if (saved != null) runSaved(browser, saved) else savedLaunchMissing()
                             }
+                            restoreIfReady()
                         }
                     }
 
@@ -539,6 +645,8 @@ class HostsModel(
                         while (true) {
                             val list = watch.next()
                             browser.updateTerminals(list)
+                            terminals = list
+                            restoreIfReady()
                             chatOn(browser.host.id)?.update(list)
                             terminalOn(browser.host.id)?.update(list)
                         }
@@ -773,15 +881,17 @@ class HostsModel(
 
     /** Resolve QS taps from the latest persisted pull, including the whole machine address. */
     fun openTile() {
+        explicitSurfaceEntry = true
         val target = io.github.shiroel.aries.AgentSurfaces.attention(core)
         if (target == null) openAgents() else openPushedAgent(target.hostId, target.terminal)
     }
 
     /** Connect through the existing biometric/trust path before resolving and executing a preset. */
     fun openSavedLaunch(hostId: String, launchId: String) {
+        explicitSurfaceEntry = true
         back()
         val host = hosts.find { it.id == hostId }
-        if (host == null) savedLaunchMissing() else connect(host, launchId)
+        if (host == null) savedLaunchMissing() else connect(host, restore = null, savedLaunchId = launchId)
     }
 
     private fun savedLaunchMissing() {
@@ -1092,6 +1202,7 @@ class HostsModel(
         (screen as? Screen.Terminal)?.viewer?.takeIf { it.link?.host?.id == hostId }
 
     fun back() {
+        restoring = false
         pendingShare = null
         (screen as? Screen.Chat)?.chat?.stop()
         ((screen as? Screen.Terminal)?.returnTo as? Screen.Chat)?.chat?.stop()
