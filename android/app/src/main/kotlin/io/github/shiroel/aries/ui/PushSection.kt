@@ -29,7 +29,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.material3.Switch
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -188,7 +187,6 @@ private fun RelayField(model: PushModel) {
 /** A [Message] whose arguments may themselves be messages (a step's name). */
 @Composable
 private fun resolve(m: Message): String {
-    val context = LocalContext.current
-    val args = m.args.map { if (it is Message) context.getString(it.res, *it.args.toTypedArray()) else it }
+    val args = m.args.map { if (it is Message) resolve(it) else it }
     return stringResource(m.res, *args.toTypedArray())
 }
