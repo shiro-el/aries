@@ -83,7 +83,7 @@ private fun AriesContent(model: HostsModel, settings: ThemeSettings) {
     Scaffold { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
             ConsoleShell(model) {
-                Column(Modifier.fillMaxSize()) {
+                RemoteFilesAccess(model) {
                     when (val s = model.screen) {
                         Screen.Hosts -> HostListScreen(model)
                         Screen.Settings -> {
