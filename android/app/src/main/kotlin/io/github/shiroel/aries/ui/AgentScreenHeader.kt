@@ -8,7 +8,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -39,7 +39,10 @@ internal fun AgentScreenHeader(
     onChanges: (() -> Unit)? = null,
     link: HostLink? = null,
     onTerminalUpdate: (TerminalInfo) -> Unit = {},
+    onSearch: (() -> Unit)? = null,
 ) {
+    var showGithub by remember(terminal.address) { mutableStateOf(false) }
+    if (showGithub) GithubDialog(link, terminal) { showGithub = false }
     val colors = MaterialTheme.colorScheme
     val hostPrefix = hostName?.let { stringResource(R.string.console_agent_host_prefix, it) }
     ConsoleTopBar(
@@ -79,7 +82,9 @@ internal fun AgentScreenHeader(
         }
         Text(terminal.currentCwd ?: stringResource(R.string.console_agent_unknown_folder), Modifier.weight(1f),
             color = colors.onSurfaceVariant, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        onSearch?.let { ChatSearchButton(it) }
         onChanges?.let { TextButton(onClick = it) { Text(stringResource(R.string.git_changes_button)) } }
+        TextButton(onClick = { showGithub = true }, enabled = link?.connection != null) { Text(stringResource(R.string.github_button)) }
         AgentElapsedTime(terminal.statusMs, R.string.console_agent_missing_value, R.string.console_agent_unknown_age)
     }
     WatchAgentToggle(terminal, link, onTerminalUpdate)

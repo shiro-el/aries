@@ -11,9 +11,11 @@ mod beacon;
 mod calls;
 mod chat;
 mod chat_cache;
+mod diagnostics;
 mod error;
 mod files;
 mod git_changes;
+mod github;
 mod hc;
 mod host_edit;
 mod host_model;
@@ -54,9 +56,13 @@ pub use chat::{
     ChatEntry, ChatEntryBody, ChatQuestionOption, ChatQuestionPart, ChatResponseCompletion,
     ChatResponseMetadata, ChatSnapshot, ChatStatus, ChatToolDetails, ChatToolStatus, ChatWatch,
 };
+pub use diagnostics::{
+    DIAGNOSTICS_KEPT, DiagnosticEntry, DiagnosticError, DiagnosticEvent, DiagnosticSource,
+};
 pub use error::{AnswerProblem, CoreError, Incompatibility, VaultError};
 pub use files::{RemoteDirectory, RemoteFileBytes, RemoteFileEntry, RemoteFilePage};
 pub use git_changes::*;
+pub use github::*;
 pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
 pub use host_model::{AgentStatus, BlockedReason, TerminalWatch};
 pub use last_known_state::{LastKnownState, LastKnownStateWatch};
@@ -271,6 +277,7 @@ pub struct AriesCore {
     beacon_release: Mutex<BeaconRelease>,
     chat_cache: chat_cache::ChatCache,
     push_replay: push_replay::Ledger,
+    diagnostics: diagnostics::Log,
 }
 
 #[uniffi::export]
@@ -292,6 +299,7 @@ impl AriesCore {
             changes: tokio::sync::watch::channel(0).0,
         };
         Ok(Arc::new(Self {
+            diagnostics: diagnostics::Log::new(store.clone()),
             store,
             last_known,
             vault,
@@ -734,7 +742,7 @@ impl AriesCore {
             .ok_or_else(|| CoreError::UnknownHost {
                 id: host_id.clone(),
             })?;
-        removal::run(&host, &self.store)?;
+        removal::run(&host, &self.store, &self.diagnostics)?;
         let next: Vec<_> = hosts.iter().filter(|h| h.id != host_id).cloned().collect();
         self.store.save(&store::Saved {
             hosts: next.clone(),
@@ -746,43 +754,55 @@ impl AriesCore {
 
     /// Connects to a Host and checks its herdr-core is compatible.
     pub async fn connect(&self, host_id: String) -> Result<Arc<HostConnection>, CoreError> {
-        let revision = self.session_revision(&host_id);
-        let host = self.saved_host(&host_id)?;
-        let transport: Box<dyn Transport> = match host.endpoint {
-            Endpoint::Local { argv, env } => Box::new(LocalProcess { argv, env }),
-            Endpoint::Ssh {
-                address,
-                port,
-                user,
-            } => Box::new(Ssh {
-                address,
-                port,
-                user,
-                key: self.private_key(host.key_id.as_deref())?,
-                trusted: host.host_key,
-                jumps: self.ssh_hops(host.jumps)?,
-            }),
-        };
-        let client =
-            on_runtime(async move { HcClient::handshake(transport.open().await?).await }).await?;
-        let client = Arc::new(client);
-        if !self.register_client(&host_id, revision, &client) {
-            on_runtime(async move {
-                client.close().await;
-                Ok(())
-            })
-            .await?;
-            return Err(CoreError::Closed);
+        let result = async {
+            let revision = self.session_revision(&host_id);
+            let host = self.saved_host(&host_id)?;
+            let transport: Box<dyn Transport> = match host.endpoint {
+                Endpoint::Local { argv, env } => Box::new(LocalProcess { argv, env }),
+                Endpoint::Ssh {
+                    address,
+                    port,
+                    user,
+                } => Box::new(Ssh {
+                    address,
+                    port,
+                    user,
+                    key: self.private_key(host.key_id.as_deref())?,
+                    trusted: host.host_key,
+                    jumps: self.ssh_hops(host.jumps)?,
+                }),
+            };
+            let client =
+                on_runtime(async move { HcClient::handshake(transport.open().await?).await })
+                    .await?;
+            let client = Arc::new(client);
+            if !self.register_client(&host_id, revision, &client) {
+                on_runtime(async move {
+                    client.close().await;
+                    Ok(())
+                })
+                .await?;
+                return Err(CoreError::Closed);
+            }
+            Ok(Arc::new(HostConnection {
+                last_known: self.last_known.clone(),
+                host_id: host_id.clone(),
+                client,
+                names: Default::default(),
+                catalogs: Default::default(),
+                recent: launch::RecentCwds::in_host_dir(self.store.host_dir(&host.id)),
+                saved: launch::SavedLaunches::in_host_dir(self.store.host_dir(&host.id)),
+            }))
         }
-        Ok(Arc::new(HostConnection {
-            last_known: self.last_known.clone(),
-            host_id,
-            client,
-            names: Default::default(),
-            catalogs: Default::default(),
-            recent: launch::RecentCwds::in_host_dir(self.store.host_dir(&host.id)),
-            saved: launch::SavedLaunches::in_host_dir(self.store.host_dir(&host.id)),
-        }))
+        .await;
+        // Ignore unregistered caller-supplied IDs; they may contain arbitrary text.
+        let known_id = self.saved_host(&host_id).ok().map(|host| host.id);
+        self.diagnostics.outcome(
+            known_id.as_deref(),
+            DiagnosticSource::Ssh,
+            DiagnosticEvent::Connect,
+            result,
+        )
     }
 }
 
@@ -895,25 +915,55 @@ impl AriesCore {
         host_id: String,
         fetcher: Arc<dyn BeaconFetcher>,
     ) -> Result<BeaconInstall, CoreError> {
-        let ssh = self.beacon_ssh(&host_id)?;
-        let release = self.beacon_release();
-        on_runtime(async move { beacon::install(&ssh, &release, fetcher).await }).await
+        let known_id = self.saved_host(&host_id).ok().map(|host| host.id);
+        let result = async {
+            let ssh = self.beacon_ssh(&host_id)?;
+            let release = self.beacon_release();
+            on_runtime(async move { beacon::install(&ssh, &release, fetcher).await }).await
+        }
+        .await;
+        self.diagnostics.outcome(
+            known_id.as_deref(),
+            DiagnosticSource::Beacon,
+            DiagnosticEvent::BeaconInstall,
+            result,
+        )
     }
 
     /// What Beacon the Host has. Call it when connecting: a Beacon outside
     /// [`ALLOWED_BEACON`] reports `supported: false`.
     pub async fn beacon_status(&self, host_id: String) -> Result<BeaconState, CoreError> {
-        let ssh = self.beacon_ssh(&host_id)?;
-        on_runtime(async move { beacon::status(&ssh).await }).await
+        let known_id = self.saved_host(&host_id).ok().map(|host| host.id);
+        let result = async {
+            let ssh = self.beacon_ssh(&host_id)?;
+            on_runtime(async move { beacon::status(&ssh).await }).await
+        }
+        .await;
+        self.diagnostics.outcome(
+            known_id.as_deref(),
+            DiagnosticSource::Beacon,
+            DiagnosticEvent::BeaconStatus,
+            result,
+        )
     }
 
     /// Stops and removes the Beacon service and binary. Call records stay.
     pub async fn uninstall_beacon(&self, host_id: String) -> Result<(), CoreError> {
-        let ssh = self.beacon_ssh(&host_id)?;
-        on_runtime(async move { beacon::uninstall(&ssh).await }).await?;
-        // The Beacon revoked its pairing; revoke it from the phone too, in
-        // case the Host could not reach the Relay.
-        push::queue_revocation(&self.store, &host_id)
+        let known_id = self.saved_host(&host_id).ok().map(|host| host.id);
+        let result = async {
+            let ssh = self.beacon_ssh(&host_id)?;
+            on_runtime(async move { beacon::uninstall(&ssh).await }).await?;
+            // The Beacon revoked its pairing; revoke it from the phone too, in
+            // case the Host could not reach the Relay.
+            push::queue_revocation(&self.store, &host_id)
+        }
+        .await;
+        self.diagnostics.outcome(
+            known_id.as_deref(),
+            DiagnosticSource::Beacon,
+            DiagnosticEvent::BeaconRemove,
+            result,
+        )
     }
 }
 
@@ -940,17 +990,27 @@ impl AriesCore {
         http: Arc<dyn HttpClient>,
         progress: Arc<dyn PushProgress>,
     ) -> Result<PushPairing, CoreError> {
-        let e = push::Enable {
-            ssh: self.beacon_ssh(&host_id)?,
-            host_id,
-            relay_url,
-            device,
-            store: self.store.clone(),
-            vault: self.vault.clone(),
-            http,
-            progress,
-        };
-        on_runtime(push::enable(e)).await
+        let known_id = self.saved_host(&host_id).ok().map(|host| host.id);
+        let result = async {
+            let e = push::Enable {
+                ssh: self.beacon_ssh(&host_id)?,
+                host_id: host_id.clone(),
+                relay_url,
+                device,
+                store: self.store.clone(),
+                vault: self.vault.clone(),
+                http: self.diagnostics.http(http, Some(host_id.clone())),
+                progress,
+            };
+            on_runtime(push::enable(e)).await
+        }
+        .await;
+        self.diagnostics.outcome(
+            known_id.as_deref(),
+            DiagnosticSource::Beacon,
+            DiagnosticEvent::PushEnable,
+            result,
+        )
     }
 
     /// The Host's push pairing, if push is on.
@@ -961,13 +1021,23 @@ impl AriesCore {
 
     /// Has the paired Beacon send another test notification.
     pub async fn send_test_push(&self, host_id: String) -> Result<(), CoreError> {
-        let ssh = self.beacon_ssh(&host_id)?;
-        let (store, vault) = (self.store.clone(), self.vault.clone());
-        on_runtime(async move {
-            push::complete_pending(&store, vault.as_ref(), &host_id, &ssh).await?;
-            push::test(&ssh).await
-        })
-        .await
+        let known_id = self.saved_host(&host_id).ok().map(|host| host.id);
+        let result = async {
+            let ssh = self.beacon_ssh(&host_id)?;
+            let (store, vault) = (self.store.clone(), self.vault.clone());
+            on_runtime(async move {
+                push::complete_pending(&store, vault.as_ref(), &host_id, &ssh).await?;
+                push::test(&ssh).await
+            })
+            .await
+        }
+        .await;
+        self.diagnostics.outcome(
+            known_id.as_deref(),
+            DiagnosticSource::Beacon,
+            DiagnosticEvent::PushTest,
+            result,
+        )
     }
 
     /// Which Agent statuses (and subagent Calls) the Host's Beacon pushes.
@@ -997,10 +1067,21 @@ impl AriesCore {
         host_id: String,
         http: Arc<dyn HttpClient>,
     ) -> Result<PushDisable, CoreError> {
-        self.saved_host(&host_id)?;
-        let ssh = self.beacon_ssh(&host_id).ok();
-        let (store, vault) = (self.store.clone(), self.vault.clone());
-        on_runtime(push::disable(host_id, ssh, store, vault, http)).await
+        let known_id = self.saved_host(&host_id).ok().map(|host| host.id);
+        let result = async {
+            self.saved_host(&host_id)?;
+            let ssh = self.beacon_ssh(&host_id).ok();
+            let (store, vault) = (self.store.clone(), self.vault.clone());
+            let http = self.diagnostics.http(http, Some(host_id.clone()));
+            on_runtime(push::disable(host_id, ssh, store, vault, http)).await
+        }
+        .await;
+        self.diagnostics.outcome(
+            known_id.as_deref(),
+            DiagnosticSource::Beacon,
+            DiagnosticEvent::PushDisable,
+            result,
+        )
     }
 
     /// Tells the Relay this phone's new push token (FCM rotates it), for
@@ -1010,14 +1091,20 @@ impl AriesCore {
         device: PushDevice,
         http: Arc<dyn HttpClient>,
     ) -> Result<(), CoreError> {
-        let paired = self
-            .hosts()
-            .into_iter()
-            .flat_map(|h| {
-                push::pairings_of(&self.store, self.vault.as_ref(), &h.id).unwrap_or_default()
-            })
-            .collect();
-        on_runtime(push::update_token(paired, device, http)).await
+        let mut first_error = None;
+        for host in self.hosts() {
+            let paired =
+                push::pairings_of(&self.store, self.vault.as_ref(), &host.id).unwrap_or_default();
+            if paired.is_empty() {
+                continue;
+            }
+            let client = self.diagnostics.http(http.clone(), Some(host.id));
+            if let Err(error) = on_runtime(push::update_token(paired, device.clone(), client)).await
+            {
+                first_error.get_or_insert(error);
+            }
+        }
+        first_error.map_or(Ok(()), Err)
     }
 
     /// Sends the Relay revocations queued by Host or Beacon removal. Call it
@@ -1025,6 +1112,7 @@ impl AriesCore {
     /// (the Relay was unreachable).
     pub async fn flush_push_revocations(&self, http: Arc<dyn HttpClient>) -> u32 {
         let (store, vault) = (self.store.clone(), self.vault.clone());
+        let http = self.diagnostics.http(http, None);
         runtime()
             .spawn(push::flush(store, vault, http))
             .await
@@ -1037,15 +1125,26 @@ impl AriesCore {
     /// and timestamps older than 24 hours or over 5 minutes in the future.
     /// Remembers at most 4,096 envelope IDs per Host, oldest received evicted first.
     pub fn open_push(&self, envelope: Vec<u8>) -> Result<PushNotice, CoreError> {
-        let paired = self.hosts().into_iter().flat_map(|h| {
-            push::pairings_of(&self.store, self.vault.as_ref(), &h.id)
-                .unwrap_or_default()
-                .into_iter()
-                .map(move |p| (h.id.clone(), h.name.clone(), p))
-        });
-        let notice = push::open(&envelope, paired)?;
-        self.push_replay.record(&self.store, &notice, &envelope)?;
-        Ok(notice)
+        let result = (|| {
+            let paired = self.hosts().into_iter().flat_map(|h| {
+                push::pairings_of(&self.store, self.vault.as_ref(), &h.id)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(move |p| (h.id.clone(), h.name.clone(), p))
+            });
+            let notice = push::open(&envelope, paired)?;
+            self.push_replay.record(&self.store, &notice, &envelope)?;
+            Ok(notice)
+        })();
+        let host_id = result.as_ref().ok().map(|notice| notice.host_id.as_str());
+        self.diagnostics.record(
+            host_id,
+            DiagnosticSource::Push,
+            DiagnosticEvent::PushReceive,
+            result.as_ref().err().map(diagnostics::category),
+            None,
+        );
+        result
     }
 
     /// Call when connecting: reads the Beacon and, if it is older than the
@@ -1057,10 +1156,20 @@ impl AriesCore {
         host_id: String,
         fetcher: Arc<dyn BeaconFetcher>,
     ) -> Result<BeaconCheck, CoreError> {
-        let ssh = self.beacon_ssh(&host_id)?;
-        let release = self.beacon_release();
-        let auto = self.beacon_auto_update();
-        on_runtime(async move { beacon::check(&ssh, &release, auto, fetcher).await }).await
+        let known_id = self.saved_host(&host_id).ok().map(|host| host.id);
+        let result = async {
+            let ssh = self.beacon_ssh(&host_id)?;
+            let release = self.beacon_release();
+            let auto = self.beacon_auto_update();
+            on_runtime(async move { beacon::check(&ssh, &release, auto, fetcher).await }).await
+        }
+        .await;
+        self.diagnostics.outcome(
+            known_id.as_deref(),
+            DiagnosticSource::Beacon,
+            DiagnosticEvent::BeaconCheck,
+            result,
+        )
     }
 
     /// Whether connecting updates an out-of-date Beacon by itself (default on).
