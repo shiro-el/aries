@@ -48,12 +48,15 @@ pub(crate) struct SavedKey {
 pub(crate) struct Settings {
     /// Connecting updates an out-of-date Beacon (ticket 26).
     pub beacon_auto_update: bool,
+    /// Days a cached Chat is kept after its last update (ticket 44).
+    pub chat_cache_days: u32,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Self {
             beacon_auto_update: true,
+            chat_cache_days: crate::chat_cache::DEFAULT_RETENTION_DAYS,
         }
     }
 }
@@ -105,6 +108,10 @@ impl Store {
     pub fn write_identity(&self, id: &Identity) -> Result<(), CoreError> {
         self.write_atomic("identity.pub", format!("{}\n", id.public).as_bytes())?;
         self.write_atomic("identity.sealed", &encode_sealed(id.protection, &id.sealed))
+    }
+
+    pub fn dir(&self) -> &Path {
+        &self.dir
     }
 
     /// Where per-Host local state (caches, pairing, ...) lives. Not created

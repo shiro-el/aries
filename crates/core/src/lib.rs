@@ -7,6 +7,7 @@
 
 mod beacon;
 mod chat;
+mod chat_cache;
 mod error;
 mod hc;
 mod host_model;
@@ -208,6 +209,7 @@ pub struct AriesCore {
     vault: Arc<dyn KeyVault>,
     hosts: Mutex<Vec<SavedHost>>,
     beacon_release: Mutex<BeaconRelease>,
+    chat_cache: chat_cache::ChatCache,
 }
 
 #[uniffi::export]
@@ -217,9 +219,15 @@ impl AriesCore {
     pub fn new(data_dir: String, vault: Arc<dyn KeyVault>) -> Result<Arc<Self>, CoreError> {
         let store = Store::open(&PathBuf::from(data_dir))?;
         let saved = store.load()?;
+        let chat_cache = chat_cache::ChatCache::new(
+            store.dir(),
+            vault.clone(),
+            store.read_settings().chat_cache_days,
+        );
         Ok(Arc::new(Self {
             store,
             vault,
+            chat_cache,
             hosts: Mutex::new(saved.hosts),
             beacon_release: Mutex::new(pinned_release()),
         }))
@@ -747,13 +755,61 @@ impl AriesCore {
         terminal: String,
         cursor: Option<String>,
     ) -> Result<Arc<ChatWatch>, CoreError> {
-        let host = self.chat_host(&host_id)?;
-        Ok(Arc::new(ChatWatch::start(
-            host,
-            terminal,
-            cursor,
-            std::time::Duration::from_secs(1),
-        )))
+        self.watch_chat_retrying(host_id, terminal, cursor, std::time::Duration::from_secs(1))
+    }
+
+    /// The cached Chat of `terminal`, without reaching the Host. `None`
+    /// when nothing is cached (or it expired).
+    pub async fn cached_chat(
+        &self,
+        host_id: String,
+        terminal: String,
+    ) -> Result<Option<ChatSnapshot>, CoreError> {
+        self.saved_host(&host_id)?;
+        let cache = self.chat_cache.clone();
+        on_runtime(async move {
+            let cached = tokio::task::spawn_blocking(move || cache.load(&host_id, &terminal))
+                .await
+                .map_err(|e| CoreError::Protocol {
+                    detail: format!("cache task failed: {e}"),
+                })??;
+            Ok(cached.map(|c| {
+                let mut s = chat::ChatModel::cached(c).snapshot();
+                s.status = ChatStatus::Reconnecting;
+                s
+            }))
+        })
+        .await
+    }
+
+    /// Deletes every cached Chat of the Host.
+    pub async fn clear_chat_cache(&self, host_id: String) -> Result<(), CoreError> {
+        self.saved_host(&host_id)?;
+        let cache = self.chat_cache.clone();
+        on_runtime(async move {
+            tokio::task::spawn_blocking(move || cache.clear(&host_id))
+                .await
+                .map_err(|e| CoreError::Protocol {
+                    detail: format!("cache task failed: {e}"),
+                })?
+        })
+        .await
+    }
+
+    /// Days a cached Chat is kept after its last update (default 30).
+    pub fn chat_cache_retention_days(&self) -> u32 {
+        self.chat_cache.retention_days()
+    }
+
+    /// Sets the retention period (at least one day); older Chats are
+    /// deleted on the next cache use.
+    pub fn set_chat_cache_retention_days(&self, days: u32) -> Result<(), CoreError> {
+        let days = days.max(1);
+        let mut settings = self.store.read_settings();
+        settings.chat_cache_days = days;
+        self.store.write_settings(&settings)?;
+        self.chat_cache.set_retention_days(days);
+        Ok(())
     }
 }
 
@@ -767,7 +823,22 @@ impl AriesCore {
         retry: std::time::Duration,
     ) -> Result<Arc<ChatWatch>, CoreError> {
         let host = self.chat_host(&host_id)?;
-        Ok(Arc::new(ChatWatch::start(host, terminal, cursor, retry)))
+        let cache = chat::CacheSlot {
+            cache: self.chat_cache.clone(),
+            host: host_id,
+        };
+        Ok(Arc::new(ChatWatch::start(
+            host,
+            terminal,
+            cursor,
+            Some(cache),
+            retry,
+        )))
+    }
+
+    /// Moves the Chat cache's clock forward (tests of the retention period).
+    pub fn shift_clock(&self, by: std::time::Duration) {
+        self.chat_cache.shift_clock(by);
     }
 
     fn chat_host(&self, host_id: &str) -> Result<chat::ChatHost, CoreError> {

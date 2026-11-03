@@ -16,7 +16,9 @@ use aries_protocol::chat::{
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::{Mutex, watch};
 use tokio::task::JoinHandle;
+use tokio::time::Instant;
 
+use crate::chat_cache::{CachedChat, ChatCache, SAVE_EVERY};
 use crate::error::CoreError;
 use crate::transport::{Ssh, Stream};
 
@@ -107,6 +109,8 @@ pub struct ChatSnapshot {
 #[derive(Debug, Clone)]
 pub(crate) struct ChatModel {
     entries: Vec<ChatEntry>,
+    /// The Beacon's items behind `entries`, same order (what the cache keeps).
+    items: Vec<ChatItem>,
     index: HashMap<String, usize>,
     pub status: ChatStatus,
     pub cursor: Option<String>,
@@ -116,9 +120,41 @@ impl ChatModel {
     pub fn new(cursor: Option<String>) -> Self {
         Self {
             entries: Vec::new(),
+            items: Vec::new(),
             index: HashMap::new(),
             status: ChatStatus::Connecting,
             cursor,
+        }
+    }
+
+    /// A model holding a cached Chat.
+    pub fn cached(chat: CachedChat) -> Self {
+        let mut model = Self::new(chat.cursor);
+        for item in chat.items {
+            model.upsert(item);
+        }
+        model
+    }
+
+    pub fn to_cache(&self) -> CachedChat {
+        CachedChat {
+            items: self.items.clone(),
+            cursor: self.cursor.clone(),
+        }
+    }
+
+    fn upsert(&mut self, item: ChatItem) {
+        let entry = entry(item.clone());
+        match self.index.get(&entry.id) {
+            Some(&i) => {
+                self.entries[i] = entry;
+                self.items[i] = item;
+            }
+            None => {
+                self.index.insert(entry.id.clone(), self.entries.len());
+                self.entries.push(entry);
+                self.items.push(item);
+            }
         }
     }
 
@@ -144,21 +180,14 @@ impl ChatModel {
         match line.event {
             ChatEvent::Reset { .. } => {
                 self.entries.clear();
+                self.items.clear();
                 self.index.clear();
             }
-            ChatEvent::Item { item } => {
-                let entry = entry(item);
-                match self.index.get(&entry.id) {
-                    Some(&i) => self.entries[i] = entry,
-                    None => {
-                        self.index.insert(entry.id.clone(), self.entries.len());
-                        self.entries.push(entry);
-                    }
-                }
-            }
+            ChatEvent::Item { item } => self.upsert(item),
             ChatEvent::Remove { id } => {
                 if self.index.remove(&id).is_some() {
                     self.entries.retain(|e| e.id != id);
+                    self.items.retain(|e| e.id != id);
                     self.index = (self.entries.iter().enumerate())
                         .map(|(i, e)| (e.id.clone(), i))
                         .collect();
@@ -316,11 +345,25 @@ impl ChatWatch {
         host: ChatHost,
         terminal: String,
         cursor: Option<String>,
+        cache: Option<CacheSlot>,
         retry: Duration,
     ) -> Self {
         let model = ChatModel::new(cursor);
         let (tx, rx) = watch::channel(Some(model.snapshot()));
-        let task = crate::runtime().spawn(follow(host, terminal, model, tx, retry));
+        let task = crate::runtime().spawn(async move {
+            let mut model = model;
+            if let Some(slot) = &cache
+                && let Some(cached) = slot.load(&terminal).await
+                // An explicit cursor wins unless it is the cached one.
+                && (model.cursor.is_none() || model.cursor == cached.cursor)
+            {
+                model = ChatModel::cached(cached);
+                if tx.send(Some(model.snapshot())).is_err() {
+                    return;
+                }
+            }
+            follow(host, terminal, model, cache, tx, retry).await
+        });
         Self {
             rx: Arc::new(Mutex::new(rx)),
             task,
@@ -328,13 +371,72 @@ impl ChatWatch {
     }
 }
 
+/// Where a watch keeps its Chat between runs.
+pub(crate) struct CacheSlot {
+    pub cache: ChatCache,
+    pub host: String,
+}
+
+impl CacheSlot {
+    async fn load(&self, terminal: &str) -> Option<CachedChat> {
+        let (cache, host, terminal) = (self.cache.clone(), self.host.clone(), terminal.to_owned());
+        tokio::task::spawn_blocking(move || cache.load(&host, &terminal))
+            .await
+            .ok()?
+            .ok()?
+    }
+
+    /// Best effort: a Chat that cannot be cached still shows.
+    async fn save(&self, terminal: &str, model: &ChatModel) {
+        let (cache, host, terminal) = (self.cache.clone(), self.host.clone(), terminal.to_owned());
+        let chat = model.to_cache();
+        let _ = tokio::task::spawn_blocking(move || cache.save(&host, &terminal, &chat)).await;
+    }
+}
+
+/// Writes the model to the cache at most every [`SAVE_EVERY`], and when
+/// asked to flush.
+struct Saver<'a> {
+    slot: Option<&'a CacheSlot>,
+    dirty: bool,
+    next: Instant,
+}
+
+impl Saver<'_> {
+    /// When the pending write is due, if one is pending.
+    fn due(&self) -> Option<Instant> {
+        (self.dirty && self.slot.is_some()).then_some(self.next)
+    }
+
+    async fn changed(&mut self, terminal: &str, model: &ChatModel) {
+        self.dirty = true;
+        if Instant::now() >= self.next {
+            self.flush(terminal, model).await;
+        }
+    }
+
+    async fn flush(&mut self, terminal: &str, model: &ChatModel) {
+        if let (true, Some(slot)) = (self.dirty, self.slot) {
+            slot.save(terminal, model).await;
+            self.next = Instant::now() + SAVE_EVERY;
+        }
+        self.dirty = false;
+    }
+}
+
 async fn follow(
     host: ChatHost,
     terminal: String,
     mut model: ChatModel,
+    cache: Option<CacheSlot>,
     tx: watch::Sender<Option<ChatSnapshot>>,
     retry: Duration,
 ) {
+    let mut saver = Saver {
+        slot: cache.as_ref(),
+        dirty: false,
+        next: Instant::now(),
+    };
     let mut backoff = retry;
     loop {
         let command = command(&terminal, model.cursor.as_deref());
@@ -347,23 +449,38 @@ async fn follow(
                 guard,
             } = stream;
             let mut lines = BufReader::new(reader).lines();
+            let mut heard = Instant::now();
             loop {
-                let next = tokio::time::timeout(SILENCE, lines.next_line()).await;
-                let Ok(Ok(Some(text))) = next else { break };
+                let silent = heard + SILENCE;
+                let wake = saver.due().map_or(silent, |d| d.min(silent));
+                let text = match tokio::time::timeout_at(wake, lines.next_line()).await {
+                    Ok(Ok(Some(text))) => text,
+                    Ok(_) => break,
+                    Err(_) if Instant::now() >= silent => break,
+                    Err(_) => {
+                        saver.flush(&terminal, &model).await;
+                        continue;
+                    }
+                };
+                heard = Instant::now();
                 model.apply_text(&text);
                 backoff = retry;
                 // Publish once the burst is read, not for every line.
                 let burst_read = lines.get_ref().buffer().is_empty();
-                if (burst_read || model.status.is_final())
-                    && tx.send(Some(model.snapshot())).is_err()
-                {
-                    return;
+                if burst_read || model.status.is_final() {
+                    saver.changed(&terminal, &model).await;
+                    if tx.send(Some(model.snapshot())).is_err() {
+                        saver.flush(&terminal, &model).await;
+                        return;
+                    }
                 }
                 if model.status.is_final() {
+                    saver.flush(&terminal, &model).await;
                     return;
                 }
             }
             drop((writer, guard));
+            saver.flush(&terminal, &model).await;
         }
         if model.status.is_final() {
             return;
