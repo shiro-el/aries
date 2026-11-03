@@ -1,7 +1,7 @@
 //! A plain-mode JSON-RPC connection to the user's local herdr-core
 //! (`herdr-core connect`), for request/response calls.
 
-use std::io::{BufRead, BufReader, Lines, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 
 use serde_json::{Value, json};
@@ -11,7 +11,8 @@ use crate::chat::{TerminalFacts, TerminalInput, TerminalLookup};
 pub struct CoreLink {
     child: Child,
     stdin: ChildStdin,
-    lines: Lines<BufReader<ChildStdout>>,
+    reader: BufReader<ChildStdout>,
+    framed: bool,
     next_id: u64,
     /// herdr-core version from `hello`.
     pub version: String,
@@ -19,6 +20,10 @@ pub struct CoreLink {
 
 impl CoreLink {
     pub fn connect() -> Result<Self, String> {
+        Self::connect_mode(false)
+    }
+
+    fn connect_mode(framed: bool) -> Result<Self, String> {
         let bin = crate::herdr_core().ok_or("herdr-core not found on PATH or in ~/.local/bin")?;
         let mut child = Command::new(&bin)
             .arg("connect")
@@ -32,11 +37,13 @@ impl CoreLink {
         let mut link = Self {
             child,
             stdin,
-            lines: BufReader::new(stdout).lines(),
+            reader: BufReader::new(stdout),
+            framed: false,
             next_id: 0,
             version: String::new(),
         };
-        let hello = link.call("hello", json!({"generation": 1}))?;
+        let hello = link.call("hello", json!({"generation": 1, "framed": framed}))?;
+        link.framed = framed;
         link.version = hello["version"].as_str().unwrap_or_default().to_owned();
         Ok(link)
     }
@@ -47,13 +54,41 @@ impl CoreLink {
         let id = self.next_id;
         self.next_id += 1;
         let req = json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params});
-        writeln!(self.stdin, "{req}").map_err(|e| format!("send {method}: {e}"))?;
+        if self.framed {
+            self.frame(0, 0, req.to_string().as_bytes())?;
+        } else {
+            writeln!(self.stdin, "{req}").map_err(|e| format!("send {method}: {e}"))?;
+        }
         loop {
-            let line = self
-                .lines
-                .next()
-                .ok_or_else(|| format!("herdr-core closed before answering {method}"))?
-                .map_err(|e| format!("read {method}: {e}"))?;
+            let line = if self.framed {
+                let mut header = [0; 9];
+                self.reader
+                    .read_exact(&mut header)
+                    .map_err(|e| e.to_string())?;
+                let len = u32::from_le_bytes(header[5..9].try_into().unwrap()) as usize;
+                if len > 16 * 1024 * 1024 {
+                    return Err("oversized frame".into());
+                }
+                let mut payload = vec![0; len];
+                self.reader
+                    .read_exact(&mut payload)
+                    .map_err(|e| e.to_string())?;
+                if header[..4] != [0; 4] || header[4] != 0 {
+                    continue;
+                }
+                String::from_utf8(payload).map_err(|e| e.to_string())?
+            } else {
+                let mut line = String::new();
+                if self
+                    .reader
+                    .read_line(&mut line)
+                    .map_err(|e| e.to_string())?
+                    == 0
+                {
+                    return Err(format!("herdr-core closed before answering {method}"));
+                }
+                line
+            };
             let Ok(v) = serde_json::from_str::<Value>(&line) else {
                 continue; // login noise
             };
@@ -65,6 +100,15 @@ impl CoreLink {
             }
             return Ok(v["result"].clone());
         }
+    }
+    fn frame(&mut self, channel: u32, kind: u8, bytes: &[u8]) -> Result<(), String> {
+        self.stdin
+            .write_all(&channel.to_le_bytes())
+            .and_then(|()| self.stdin.write_all(&[kind]))
+            .and_then(|()| self.stdin.write_all(&(bytes.len() as u32).to_le_bytes()))
+            .and_then(|()| self.stdin.write_all(bytes))
+            .and_then(|()| self.stdin.flush())
+            .map_err(|e| e.to_string())
     }
 }
 
@@ -119,6 +163,36 @@ impl TerminalLookup for CoreLookup {
 }
 
 impl TerminalInput for CoreLookup {
+    fn screen(&mut self, terminal: &str) -> Result<String, String> {
+        if self.link.is_none() {
+            self.link = Some(CoreLink::connect()?);
+        }
+        let result = self
+            .link
+            .as_mut()
+            .unwrap()
+            .call("terminal.read", json!({"terminal": terminal, "lines": 0}))?;
+        Ok(result["text"].as_str().unwrap_or_default().to_owned())
+    }
+
+    /// Literal UTF-8 DATA on an attach stream: no paste wrapper or submit.
+    /// The channel-0 round trip drains the write before the next action.
+    fn text(&mut self, terminal: &str, text: &str) -> Result<(), String> {
+        let mut link = CoreLink::connect_mode(true)?;
+        let facts = link.call("terminal.get", json!({"terminal": terminal}))?;
+        let attached = link.call("terminal.attach", json!({"terminal": terminal, "cols": facts["cols"].as_u64().unwrap_or(80), "rows": facts["rows"].as_u64().unwrap_or(24)}))?;
+        let channel = attached["channel"]
+            .as_u64()
+            .ok_or("missing attach channel")? as u32;
+        link.frame(channel, 0, text.as_bytes())?;
+        link.call("terminal.get", json!({"terminal": terminal}))?;
+        link.frame(channel, 2, &[])?;
+        // Let the Agent's editor drain its typing/paste-burst buffer before
+        // a following Enter. This is a delay, never a resend.
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        Ok(())
+    }
+
     /// Not retried: a press that may have landed must not land twice.
     fn keys(&mut self, terminal: &str, keys: &[String]) -> Result<(), String> {
         if self.link.is_none() {

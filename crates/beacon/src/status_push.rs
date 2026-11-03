@@ -206,7 +206,8 @@ fn details(c: &Change, lookup: &mut CoreLookup, agents: &[Box<dyn Agent>]) -> De
         return out;
     };
     if asking {
-        if let Some((id, q)) = chat::answer::open_question(&items)
+        if chat::answer::pending_questions(&items).count() == 1
+            && let Some((id, q)) = chat::answer::current_question(agent.name(), &items)
             && let [q] = q.questions.as_slice()
             && !q.multi
             && (1..=3).contains(&q.options.len())
