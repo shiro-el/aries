@@ -276,11 +276,30 @@ class HostsModel(
     }
 
     fun addHost(name: String, address: String, port: Int, user: String) = guard {
-        val label = name.ifBlank { address }
+        val label = name.trim().ifBlank { address.trim() }
         core.addHost(label, Endpoint.Ssh(address.trim(), port.toUShort(), user.trim()))
         hosts = core.hosts()
         refreshRoutes()
         hostsChanged()
+    }
+
+    /** Saves in place; the core closes old lines only when the endpoint changed. */
+    suspend fun saveHost(host: Host, name: String, address: String, port: Int, user: String): Boolean {
+        return try {
+            val previous = hosts.firstOrNull { it.id == host.id } ?: host
+            val endpoint = Endpoint.Ssh(address.trim(), port.toUShort(), user.trim())
+            withContext(keyWork) {
+                core.editHost(host.id, name.trim().ifBlank { address.trim() }, endpoint)
+            }
+            hosts = core.hosts()
+            refreshRoutes()
+            if (previous.endpoint != endpoint) calls.stopAll()
+            hostsChanged()
+            true
+        } catch (e: CoreException) {
+            prompt = problemFor(e)
+            false
+        }
     }
 
     fun connect(host: Host) {
@@ -1058,6 +1077,9 @@ fun problemFor(e: CoreException): Prompt.Problem {
         is CoreException.KeyInstallFailed -> Prompt.Problem(
             Message(R.string.key_install_failed_title),
             Message(R.string.key_install_write_failed, listOf(e.detail)),
+        )
+        is CoreException.InvalidHost -> Prompt.Problem(
+            Message(R.string.host_edit_title), Message(R.string.host_edit_invalid_body),
         )
         is CoreException.AuthRejected -> Prompt.Problem(failed, Message(R.string.connect_auth_rejected))
         is CoreException.NoKey -> Prompt.Problem(failed, Message(R.string.connect_no_key))

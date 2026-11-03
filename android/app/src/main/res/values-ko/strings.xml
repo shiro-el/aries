@@ -434,4 +434,8 @@
     <string name="beacon_skill_symlink">심볼릭 링크라 그대로 두었습니다. Aries Call 연결을 확인할 수 없습니다.</string>
     <string name="beacon_skill_absent">이 경로에 Aries call-human 스킬이 설치되어 있지 않습니다.</string>
     <string name="beacon_skill_ready">Aries call-human 스킬이 설치되어 있습니다.</string>
+    <string name="host_edit_button">이름과 주소 편집</string>
+    <string name="host_edit_title">Host 편집</string>
+    <string name="host_edit_save_button">저장</string>
+    <string name="host_edit_invalid_body">중복되지 않는 Host 이름, 올바른 주소와 사용자, 1~65535 사이의 포트를 입력하세요.</string>
 </resources>

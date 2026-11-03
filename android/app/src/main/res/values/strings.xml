@@ -444,4 +444,8 @@
     <string name="beacon_skill_symlink">The symlink was kept. The Aries Call connection cannot be verified.</string>
     <string name="beacon_skill_absent">The Aries call-human skill is not installed at this path.</string>
     <string name="beacon_skill_ready">The Aries call-human skill is installed.</string>
+    <string name="host_edit_button">Edit name and address</string>
+    <string name="host_edit_title">Edit Host</string>
+    <string name="host_edit_save_button">Save</string>
+    <string name="host_edit_invalid_body">Use a unique Host name, a valid address and user, and a port from 1 to 65535.</string>
 </resources>

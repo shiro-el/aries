@@ -87,7 +87,10 @@ private fun AriesContent(model: HostsModel, settings: ThemeSettings) {
                     when (val s = model.screen) {
                         Screen.Hosts -> HostListScreen(model)
                         Screen.Settings -> {
-                            SettingsScreen(model, settings, onBack = model::back, showHeader = false)
+                            SettingsScreen(
+                                model, settings, onBack = model::back, showHeader = false,
+                                hostEditor = { host -> if (host.endpoint is Endpoint.Ssh) HostEditSection(model, host) },
+                            )
                         }
                         is Screen.Connecting -> Connecting(s.host)
                         is Screen.Browse -> {
@@ -273,7 +276,7 @@ private fun AddHostForm(model: HostsModel) {
     )
     OutlinedTextField(user, { user = it }, label = { Text(stringResource(R.string.host_add_user)) }, singleLine = true)
     ConsoleButton(
-        enabled = address.isNotBlank() && user.isNotBlank() && portNumber != null,
+        enabled = validHostInput(model.hosts, null, name, address, portNumber, user),
         onClick = {
             model.addHost(name, address, portNumber ?: 22, user)
             name = ""; address = ""; port = "22"; user = ""

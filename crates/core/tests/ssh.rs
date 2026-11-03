@@ -130,3 +130,41 @@ async fn a_removed_host_added_again_asks_to_trust_its_key_again() {
         other => panic!("expected HostKeyUnknown, got {:?}", other.err()),
     }
 }
+
+#[tokio::test]
+#[ignore = "needs docker"]
+async fn editing_address_disconnects_old_host_and_rechecks_key_at_new_host() {
+    let old = SshdHost::start();
+    let new = SshdHost::start();
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    let public = core.ensure_key().unwrap().openssh;
+    old.authorize(&public);
+    new.authorize(&public);
+    let host = core
+        .add_host("box".into(), endpoint(&old, SshdHost::USER))
+        .unwrap();
+    core.trust_host_key(host.id.clone(), old.host_key_fingerprint())
+        .unwrap();
+    let connection = core.connect(host.id.clone()).await.unwrap();
+    core.edit_host(
+        host.id.clone(),
+        "new box".into(),
+        endpoint(&new, SshdHost::USER),
+    )
+    .await
+    .unwrap();
+    assert!(matches!(
+        connection.terminals().await,
+        Err(CoreError::Closed)
+    ));
+    let fingerprint = match core.connect(host.id.clone()).await {
+        Err(CoreError::HostKeyUnknown { fingerprint }) => fingerprint,
+        other => panic!("new address needs explicit trust, got {:?}", other.err()),
+    };
+    assert_eq!(fingerprint, new.host_key_fingerprint());
+    core.trust_host_key(host.id.clone(), fingerprint).unwrap();
+    let connected = core.connect(host.id).await.unwrap();
+    connected.terminals().await.unwrap();
+    connected.disconnect().await;
+}

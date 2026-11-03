@@ -251,6 +251,12 @@ impl HcClient {
         let _ = self.writer.lock().await.shutdown().await;
         self.reader.abort();
         fail_all(&self.pending);
+        // Aborting the reader skips its normal stream cleanup. Wake every
+        // Terminal/structure watch as well as pending RPC callers.
+        let mut channels = self.channels.lock().expect("channels lock");
+        channels.closed = true;
+        channels.open.clear();
+        channels.early.clear();
     }
 }
 
