@@ -96,7 +96,7 @@ class PushNotificationTest {
         PushService.show(context, status("t1", "one", AgentStatus.Done))
         PushService.show(context, status("t2", "two", AgentStatus.Error(null)))
         PushService.show(context, status("t1", "one", AgentStatus.Blocked(null, null)))
-        PushService.show(context, PushNotice("h2", "other", PushContent.Status("t1", null, null, true, AgentStatus.Done, 1uL)))
+        PushService.show(context, PushNotice("h2", "other", PushContent.Status("t1", null, null, true, AgentStatus.Done, 1uL, null, null, null)))
         val all = manager.activeNotifications.map { it.notification }
         val summaries = all.filter { it.flags and Notification.FLAG_GROUP_SUMMARY != 0 }
         assertEquals(2, summaries.size)
