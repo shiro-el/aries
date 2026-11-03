@@ -49,7 +49,12 @@ impl Screen {
     }
 }
 
-async fn until(view: &TerminalView, screen: &mut Screen, what: &str, pred: impl Fn(&Screen) -> bool) {
+async fn until(
+    view: &TerminalView,
+    screen: &mut Screen,
+    what: &str,
+    pred: impl Fn(&Screen) -> bool,
+) {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
     while !pred(screen) {
         let left = deadline.saturating_duration_since(tokio::time::Instant::now());
@@ -106,11 +111,18 @@ async fn attaching_with_history_lets_you_scroll_back_to_the_first_line() {
     let conn = core.connect(host.id).await.unwrap();
 
     // Without history the first paint is only the screen.
-    let bare = conn.attach_terminal(address.clone(), observe(0)).await.unwrap();
+    let bare = conn
+        .attach_terminal(address.clone(), observe(0))
+        .await
+        .unwrap();
     let mut screen = Screen::default();
     until(&bare, &mut screen, "the first paint", |s| s.contains("END")).await;
     // (herdr-core's paint may push a blank line or so into the scrollback.)
-    assert!(screen.history < 10, "no scrollback was asked for: {}", screen.history);
+    assert!(
+        screen.history < 10,
+        "no scrollback was asked for: {}",
+        screen.history
+    );
     bare.detach().await;
 
     let view = conn
@@ -119,7 +131,11 @@ async fn attaching_with_history_lets_you_scroll_back_to_the_first_line() {
         .unwrap();
     let mut screen = Screen::default();
     until(&view, &mut screen, "the first paint", |s| s.contains("END")).await;
-    assert!(screen.history >= 250, "scrollback came with the paint: {}", screen.history);
+    assert!(
+        screen.history >= 250,
+        "scrollback came with the paint: {}",
+        screen.history
+    );
     assert_eq!(screen.scrolled, 0, "starts at the live bottom");
 
     // Asking for more than there is stops at the oldest line.
@@ -167,11 +183,17 @@ async fn a_scrolled_back_view_stays_on_what_you_read_while_output_arrives() {
     .await;
 
     hc.hc(&["send", &address, "go"]);
-    until(&view, &mut screen, "the view to account for new lines", |s| {
-        s.history > at
-    })
+    until(
+        &view,
+        &mut screen,
+        "the view to account for new lines",
+        |s| s.history > at,
+    )
     .await;
-    assert!(shows_the_first_line(&screen), "the view did not jump to the new output");
+    assert!(
+        shows_the_first_line(&screen),
+        "the view did not jump to the new output"
+    );
     assert_eq!(screen.scrolled, screen.history, "still at the oldest line");
 
     view.scroll_to(0);
@@ -197,13 +219,26 @@ async fn hyperlinks_carry_their_target() {
     let core = core_in(data.path());
     let host = core.add_host("dev".into(), local_endpoint(&hc)).unwrap();
     let conn = core.connect(host.id).await.unwrap();
-    let view = conn.attach_terminal(address.clone(), observe(0)).await.unwrap();
+    let view = conn
+        .attach_terminal(address.clone(), observe(0))
+        .await
+        .unwrap();
     let mut screen = Screen::default();
-    until(&view, &mut screen, "the first paint", |s| s.contains("ready")).await;
+    until(&view, &mut screen, "the first paint", |s| {
+        s.contains("ready")
+    })
+    .await;
     hc.hc(&["send", &address, "go"]);
-    until(&view, &mut screen, "the link", |s| s.contains("see the run now")).await;
+    until(&view, &mut screen, "the link", |s| {
+        s.contains("see the run now")
+    })
+    .await;
 
-    let row = screen.rows.iter().position(|r| r.contains("see the run")).unwrap();
+    let row = screen
+        .rows
+        .iter()
+        .position(|r| r.contains("see the run"))
+        .unwrap();
     let links: Vec<(&str, Option<&str>)> = screen.runs[row]
         .iter()
         .map(|r| (r.text.as_str(), r.link.as_deref()))
