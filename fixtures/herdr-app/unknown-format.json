@@ -1,0 +1,6 @@
+{
+  "format": 2,
+  "workspaces": [
+    { "key": "s-aries", "title": "aries", "views": [] }
+  ]
+}

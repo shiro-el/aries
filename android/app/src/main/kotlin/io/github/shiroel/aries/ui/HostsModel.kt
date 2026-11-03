@@ -9,9 +9,14 @@ import io.github.shiroel.aries.core.AriesCoreInterface
 import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.Host
+import io.github.shiroel.aries.core.HostConnection
+import io.github.shiroel.aries.core.HostStructure
 import io.github.shiroel.aries.core.Incompatibility
+import io.github.shiroel.aries.core.KeyInstall
 import io.github.shiroel.aries.core.PublicKeyInfo
-import io.github.shiroel.aries.core.TerminalInfo
+import io.github.shiroel.aries.core.StructureListener
+import io.github.shiroel.aries.core.StructureWatch
+import io.github.shiroel.aries.core.QrMatrix
 import io.github.shiroel.aries.core.KeyProtection
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
@@ -25,12 +30,23 @@ data class Message(@StringRes val res: Int, val args: List<Any> = emptyList())
 sealed interface Screen {
     data object Hosts : Screen
     data class Connecting(val host: Host) : Screen
-    data class Terminals(val host: Host, val terminals: List<TerminalInfo>) : Screen
+    /** An open Host: its Spaces, Tabs and Panes. */
+    data class Browse(val browser: HostBrowser) : Screen
 }
 
 sealed interface Prompt {
-    /** First connection: ask the user to confirm the Host key. */
-    data class TrustHostKey(val host: Host, val fingerprint: String) : Prompt
+    /** First connection: ask the user to confirm the Host key, then do [then]. */
+    data class TrustHostKey(
+        val host: Host,
+        val fingerprint: String,
+        val then: AfterTrust = AfterTrust.Connect,
+    ) : Prompt
+
+    /** Ask for the Host password once, to install the app's public key. */
+    data class Password(val host: Host) : Prompt
+
+    /** The public key as a QR code, for scanning on another device. */
+    data class KeyQr(val key: PublicKeyInfo, val qr: QrMatrix) : Prompt
 
     /** Ask before removing [host] and everything stored for it. */
     data class ConfirmRemove(val host: Host) : Prompt
@@ -38,6 +54,8 @@ sealed interface Prompt {
     /** Something the user must read; [title] and [body] are resources. */
     data class Problem(val title: Message, val body: Message) : Prompt
 }
+
+enum class AfterTrust { Connect, InstallKey }
 
 /**
  * UI state over the core API. Compose reads the `by mutableStateOf` fields.
@@ -61,6 +79,9 @@ class HostsModel(
         private set
     var prompt by mutableStateOf<Prompt?>(null)
         private set
+
+    /** The open Host's connection and structure watch, while [Screen.Browse] shows. */
+    private var open: Pair<HostConnection, StructureWatch?>? = null
 
     init {
         guard {
@@ -99,10 +120,24 @@ class HostsModel(
         scope.launch {
             try {
                 val conn = withContext(keyWork) { core.connect(host.id) }
+                val browser = HostBrowser(host)
+                open = conn to null
+                screen = Screen.Browse(browser)
                 try {
-                    screen = Screen.Terminals(host, conn.terminals())
-                } finally {
+                    val watch = conn.watchStructure(object : StructureListener {
+                        override fun onStructure(structure: HostStructure) {
+                            scope.launch { browser.update(structure) }
+                        }
+
+                        override fun onClosed() {
+                            scope.launch { browser.markClosed() }
+                        }
+                    })
+                    if (open?.first === conn) open = conn to watch else watch.stop()
+                } catch (e: CoreException) {
+                    if (open?.first === conn) open = null
                     conn.disconnect()
+                    throw e
                 }
             } catch (e: CoreException) {
                 screen = Screen.Hosts
@@ -120,7 +155,41 @@ class HostsModel(
             core.trustHostKey(prompt.host.id, prompt.fingerprint)
             hosts = core.hosts()
         }
-        hosts.find { it.id == prompt.host.id }?.let(::connect)
+        val host = hosts.find { it.id == prompt.host.id } ?: return
+        when (prompt.then) {
+            AfterTrust.Connect -> connect(host)
+            // The password was not kept, so ask for it again.
+            AfterTrust.InstallKey -> askPassword(host)
+        }
+    }
+
+    fun showKeyQr() = guard {
+        val k = key ?: return@guard
+        core.publicKeyQr()?.let { prompt = Prompt.KeyQr(k, it) }
+    }
+
+    fun askPassword(host: Host) {
+        prompt = Prompt.Password(host)
+    }
+
+    /** Installs the public key on [host] with a one-time password login. The password is not kept. */
+    fun installKey(host: Host, password: String) {
+        prompt = null
+        scope.launch {
+            prompt = try {
+                val body = when (core.installKeyWithPassword(host.id, password)) {
+                    KeyInstall.ADDED -> R.string.key_install_added_body
+                    KeyInstall.ALREADY_PRESENT -> R.string.key_install_present_body
+                }
+                key = core.publicKey()
+                Prompt.Problem(Message(R.string.key_install_done_title), Message(body, listOf(host.name)))
+            } catch (e: CoreException) {
+                when (e) {
+                    is CoreException.HostKeyUnknown -> Prompt.TrustHostKey(host, e.fingerprint, AfterTrust.InstallKey)
+                    else -> problemFor(e)
+                }
+            }
+        }
     }
 
     fun askRemove(host: Host) {
@@ -141,6 +210,10 @@ class HostsModel(
 
     fun back() {
         screen = Screen.Hosts
+        val (conn, watch) = open ?: return
+        open = null
+        watch?.stop()
+        scope.launch { conn.disconnect() }
     }
 
     private inline fun guard(block: () -> Unit) {
@@ -173,6 +246,14 @@ fun problemFor(e: CoreException): Prompt.Problem {
                 Message(R.string.incompatible_missing_methods, listOf(r.methods.joinToString(", "))),
             )
         }
+        is CoreException.PasswordRejected -> Prompt.Problem(
+            Message(R.string.key_install_failed_title),
+            Message(R.string.key_install_password_rejected),
+        )
+        is CoreException.KeyInstallFailed -> Prompt.Problem(
+            Message(R.string.key_install_failed_title),
+            Message(R.string.key_install_write_failed, listOf(e.detail)),
+        )
         is CoreException.AuthRejected -> Prompt.Problem(failed, Message(R.string.connect_auth_rejected))
         is CoreException.NoKey -> Prompt.Problem(failed, Message(R.string.connect_no_key))
         is CoreException.KeyLocked -> Prompt.Problem(

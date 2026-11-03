@@ -10,6 +10,15 @@ env:
   NDK_VERSION: 27.1.12297006
 
 jobs:
+  scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Release script tests
+        run: |
+          sh scripts/tests/release-version.test.sh
+          sh scripts/tests/play-policy.test.sh
+
   rust:
     runs-on: ubuntu-latest
     steps:
@@ -25,7 +34,7 @@ jobs:
       - name: Unit and core API tests (real herdr-core, isolated session)
         run: cargo test --workspace
       - name: SSH tests (docker sshd)
-        run: cargo test -p aries-core --test ssh -- --ignored
+        run: cargo test -p aries-core -- --ignored
 
   android:
     runs-on: ubuntu-latest
