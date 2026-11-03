@@ -40,6 +40,9 @@ sealed interface Prompt {
     /** The public key as a QR code, for scanning on another device. */
     data class KeyQr(val key: PublicKeyInfo, val qr: QrMatrix) : Prompt
 
+    /** Ask before removing [host] and everything stored for it. */
+    data class ConfirmRemove(val host: Host) : Prompt
+
     /** Something the user must read; [title] and [body] are resources. */
     data class Problem(val title: Message, val body: Message) : Prompt
 }
@@ -132,6 +135,18 @@ class HostsModel(private val core: AriesCoreInterface, private val scope: Corout
                     else -> problemFor(e)
                 }
             }
+        }
+    }
+
+    fun askRemove(host: Host) {
+        prompt = Prompt.ConfirmRemove(host)
+    }
+
+    fun remove(prompt: Prompt.ConfirmRemove) {
+        this.prompt = null
+        guard {
+            core.removeHost(prompt.host.id)
+            hosts = core.hosts()
         }
     }
 

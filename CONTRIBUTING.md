@@ -52,6 +52,15 @@ Tests go at the seams in `.scratch/aries-mvp/spec.md`:
 3. **Android UI <-> core API**: `android/app/src/test/` Compose tests against a
    fake implementation of the generated `AriesCoreInterface`.
 
+## Host removal
+
+`AriesCore::remove_host` runs the cleanup steps in `crates/core/src/removal.rs`,
+then drops the Host record (connection settings and trusted Host key). A ticket
+that creates something for one Host (pairing, Chat cache, ...) adds its own
+idempotent step to `removal::STEPS` and tests the removal at the core API seam.
+Per-Host files belong under `Store::host_dir` (`hosts/<id>/`), which the
+existing step already deletes. Details are in the module doc.
+
 ## UI strings
 
 Every user-visible string is an Android string resource
@@ -67,6 +76,21 @@ follow one rule:
   `_body`, `_button`, `_hint`, `_label`.
 - Format arguments are positional (`%1$s`, `%2$d`) so translations can reorder
   them; iOS maps them to `%1$@` / `%2$d`.
+
+English (`values/`) is the fallback for any device language Aries lacks.
+Korean (`values-ko/`) ships and must stay complete: **a new string needs its
+Korean translation in the same change.** Brand names and pure format strings
+can be `translatable="false"` instead. `TranslationsTest` (part of
+`:app:testDebugUnitTest`) fails when a translation lacks a key or has different
+format arguments, when an argument is not positional, or when Kotlin passes a
+string literal to UI text (`Text("…")`, `label = "…"`; mark a deliberate one
+with `// i18n-ok`).
+
+To add a language, add only `android/app/src/main/res/values-<lang>/strings.xml`
+(e.g. `values-ja`, `values-pt-rBR`) with every translatable key, and run
+`:app:testDebugUnitTest`. No code changes: the per-app language list (Android
+13+) is generated from the `values-*` directories. To make the test require it
+from then on, add the language to `shipped` in `TranslationsTest`.
 
 ## License
 
