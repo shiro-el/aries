@@ -105,6 +105,48 @@ pub struct PushDisable {
     pub host_cleared: bool,
 }
 
+/// Which Agent statuses the Host's Beacon pushes (the Host keeps it, in
+/// `aries-beacon policy`). The defaults: Blocked and Error on, Done off,
+/// top-level Agents only. `child_agents` also covers Calls from
+/// subagents, which are otherwise only recorded in Call history.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Record)]
+pub struct PushPolicy {
+    pub blocked: bool,
+    pub error: bool,
+    /// A finished turn the user has not seen yet (`turn` past `herdr.seen`).
+    pub done: bool,
+    /// Subagents too (Terminals with a parent), for statuses and Calls.
+    pub child_agents: bool,
+}
+
+impl Default for PushPolicy {
+    fn default() -> Self {
+        aries_protocol::push_policy::PushPolicy::default().into()
+    }
+}
+
+impl From<aries_protocol::push_policy::PushPolicy> for PushPolicy {
+    fn from(p: aries_protocol::push_policy::PushPolicy) -> Self {
+        Self {
+            blocked: p.blocked,
+            error: p.error,
+            done: p.done,
+            child_agents: p.child_agents,
+        }
+    }
+}
+
+impl From<PushPolicy> for aries_protocol::push_policy::PushPolicy {
+    fn from(p: PushPolicy) -> Self {
+        Self {
+            blocked: p.blocked,
+            error: p.error,
+            done: p.done,
+            child_agents: p.child_agents,
+        }
+    }
+}
+
 /// What an opened push says.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum PushContent {
@@ -533,6 +575,35 @@ pub(crate) async fn test(ssh: &Ssh) -> Result<(), CoreError> {
         .await
         .map(|_| ())
         .map_err(|d| failed(PushStep::Test, d))
+}
+
+fn policy_failed(detail: impl Into<String>) -> CoreError {
+    CoreError::BeaconStep {
+        step: "policy".into(),
+        detail: detail.into(),
+    }
+}
+
+fn parse_policy(line: &str) -> Result<PushPolicy, CoreError> {
+    serde_json::from_str::<aries_protocol::push_policy::PushPolicy>(line)
+        .map(Into::into)
+        .map_err(|e| policy_failed(format!("aries-beacon policy: {e}: {line}")))
+}
+
+/// The policy the Host's Beacon follows (`aries-beacon policy`).
+pub(crate) async fn policy(ssh: &Ssh) -> Result<PushPolicy, CoreError> {
+    let line = beacon(ssh, "policy", &[]).await.map_err(policy_failed)?;
+    parse_policy(&line)
+}
+
+/// Saves `policy` on the Host (`aries-beacon policy set`); what it saved.
+pub(crate) async fn set_policy(ssh: &Ssh, policy: PushPolicy) -> Result<PushPolicy, CoreError> {
+    let wire: aries_protocol::push_policy::PushPolicy = policy.into();
+    let json = serde_json::to_vec(&wire).expect("policy json");
+    let line = beacon(ssh, "policy set", &json)
+        .await
+        .map_err(policy_failed)?;
+    parse_policy(&line)
 }
 
 pub(crate) async fn disable(

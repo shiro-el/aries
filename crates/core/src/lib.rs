@@ -47,7 +47,7 @@ pub use host_model::{AgentStatus, BlockedReason, TerminalWatch};
 pub use launch::{AgentPreset, LaunchRequest, RECENT_CWDS_KEPT, SavedLaunch};
 pub use push::{
     HttpClient, HttpRequest, HttpResponse, PushContent, PushDevice, PushDisable, PushNotice,
-    PushPairing, PushProgress, PushStep,
+    PushPairing, PushPolicy, PushProgress, PushStep,
 };
 pub use send::{HELD_AFTER, SendListener, SendOutcome};
 pub use settings::AttachMode;
@@ -783,6 +783,25 @@ impl AriesCore {
     pub async fn send_test_push(&self, host_id: String) -> Result<(), CoreError> {
         let ssh = self.beacon_ssh(&host_id)?;
         on_runtime(async move { push::test(&ssh).await }).await
+    }
+
+    /// Which Agent statuses (and subagent Calls) the Host's Beacon pushes.
+    /// The policy lives on the Host, so this asks it over SSH; it applies
+    /// whether or not push is on.
+    pub async fn push_policy(&self, host_id: String) -> Result<PushPolicy, CoreError> {
+        let ssh = self.beacon_ssh(&host_id)?;
+        on_runtime(async move { push::policy(&ssh).await }).await
+    }
+
+    /// Changes the Host's push policy over SSH; returns what the Beacon
+    /// saved. It takes effect for the next status change or Call.
+    pub async fn set_push_policy(
+        &self,
+        host_id: String,
+        policy: PushPolicy,
+    ) -> Result<PushPolicy, CoreError> {
+        let ssh = self.beacon_ssh(&host_id)?;
+        on_runtime(async move { push::set_policy(&ssh, policy).await }).await
     }
 
     /// Turns push off: deletes the pairing on the Relay (from the phone),
