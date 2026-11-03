@@ -89,7 +89,7 @@ async fn shows_the_documents_spaces_tabs_and_panes_without_writing_it() {
             format!("    pane p-alpha={alpha}"),
             format!("    pane p-beta={beta}"),
             format!("    pane f-gamma={gamma}"),
-            "  tab tab-empty \"\"".into(),
+            "  tab tab-empty \"2\"".into(),
             "space s-notes \"notes\" None".into(),
             "  tab tab-gone \"old\"".into(),
             "    pane p-gone=t999!".into(),
@@ -136,16 +136,28 @@ async fn assert_label_fallback(hc: &HcSession, problem: StructureProblem) {
     let (_data, conn) = connect(hc).await;
     let s = conn.structure().await.unwrap();
     assert_eq!(s.problem, Some(problem));
+    let cwd = s.spaces[0].tabs[0].panes[0]
+        .terminal
+        .as_ref()
+        .unwrap()
+        .cwd
+        .as_ref()
+        .unwrap();
+    let folder = std::path::Path::new(cwd)
+        .file_name()
+        .unwrap()
+        .to_str()
+        .unwrap();
     assert_eq!(
         outline(&s),
         vec![
-            "space s1 \"\" None".to_string(),
-            "  tab tab-x \"\"".into(),
+            format!("space s1 {folder:?} None"),
+            "  tab tab-x \"1\"".into(),
             format!("    pane {a}={a}"),
-            "  tab tab-y \"\"".into(),
+            "  tab tab-y \"2\"".into(),
             format!("    pane {b}={b}"),
-            "space s2 \"\" None".into(),
-            "  tab tab-x \"\"".into(),
+            format!("space s2 {folder:?} None"),
+            "  tab tab-x \"1\"".into(),
             format!("    pane {c}={c}"),
         ]
     );
@@ -275,5 +287,286 @@ async fn desktop_changes_to_the_structure_show_up_right_away() {
     watch.stop();
     // Watching never writes the document (one write by the test since `version`).
     assert_eq!(doc_version(&hc), json!(version.as_u64().unwrap() + 1));
+    conn.disconnect().await;
+}
+
+fn git(cwd: &std::path::Path, args: &[&str]) {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(cwd)
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "git failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+fn terminal_at(hc: &HcSession, cwd: &std::path::Path, space: &str, tab: &str) -> String {
+    hc.rpc(
+        "terminal.run",
+        json!({
+            "argv": ["sleep", "300"], "cwd": cwd.to_str().unwrap(),
+            "labels": {"herdr.space": space, "herdr.tab": tab}
+        }),
+    )["address"]
+        .as_str()
+        .unwrap()
+        .to_owned()
+}
+
+#[tokio::test]
+async fn unnamed_spaces_use_the_first_panes_checkout_and_tabs_use_their_position() {
+    let home = tempfile::tempdir().unwrap();
+    let hc = HcSession::start_with_env(&[("HOME", home.path().to_str().unwrap())]);
+    let repo = home.path().join("repo");
+    std::fs::create_dir(&repo).unwrap();
+    git(&repo, &["init", "-q"]);
+    git(
+        &repo,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "--allow-empty",
+            "-qm",
+            "initial",
+        ],
+    );
+    let checkout = home.path().join("worktree '$(false)");
+    git(
+        &repo,
+        &["worktree", "add", "-qb", "work", checkout.to_str().unwrap()],
+    );
+    let nested = checkout.join("src/deep");
+    std::fs::create_dir_all(&nested).unwrap();
+    // Start the second pane first: layout order, not terminal.list order, wins.
+    let second = terminal_at(&hc, &repo, "unused", "unused");
+    let first = terminal_at(&hc, &nested, "unused", "unused");
+    let doc = fixture("unnamed.json", &[("first", &first), ("second", &second)]);
+    let doc = serde_json::from_str(
+        &serde_json::to_string(&doc)
+            .unwrap()
+            .replace("$home", home.path().to_str().unwrap()),
+    )
+    .unwrap();
+    let mut doc: Value = doc;
+    doc["spaces"][4]["folder"] = json!(repo.join("fallback").to_str().unwrap());
+    std::fs::create_dir(repo.join("fallback")).unwrap();
+    hc.set_doc("herdr-app", doc);
+    let version = doc_version(&hc);
+    let (_data, conn) = connect(&hc).await;
+    let s = conn.structure().await.unwrap();
+    assert_eq!(
+        s.spaces.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(),
+        ["worktree '$(false)", "~", "/", "~", "fallback", "  "]
+    );
+    assert_eq!(
+        s.spaces[0]
+            .tabs
+            .iter()
+            .map(|t| t.name.as_str())
+            .collect::<Vec<_>>(),
+        ["1", "2", " custom "]
+    );
+    assert_eq!(s.spaces[5].tabs[0].name, "  ");
+    assert!(s.spaces[..5].iter().all(|s| !s.named));
+    assert!(s.spaces[5].named && s.spaces[5].tabs[0].named);
+    assert!(!s.spaces[0].tabs[0].named && !s.spaces[0].tabs[1].named);
+    assert!(s.spaces[0].tabs[2].named);
+    assert_eq!(doc_version(&hc), version);
+    conn.disconnect().await;
+}
+
+#[tokio::test]
+async fn label_fallback_names_use_checkout_or_terminal_folder_and_tab_order() {
+    let home = tempfile::tempdir().unwrap();
+    let hc = HcSession::start_with_env(&[("HOME", home.path().to_str().unwrap())]);
+    let repo = home.path().join("checkout");
+    let nested = repo.join("nested");
+    std::fs::create_dir_all(&nested).unwrap();
+    git(&repo, &["init", "-q"]);
+    terminal_at(&hc, &nested, "s1", "z-tab");
+    terminal_at(&hc, &nested, "s1", "a-tab");
+    terminal_at(&hc, home.path(), "s2", "only");
+    let outside = home.path().join("outside");
+    std::fs::create_dir(&outside).unwrap();
+    terminal_at(&hc, &outside, "s3", "only");
+    let (_data, conn) = connect(&hc).await;
+    let s = conn.structure().await.unwrap();
+    assert_eq!(s.problem, Some(StructureProblem::NoDocument));
+    assert_eq!(
+        s.spaces.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(),
+        ["checkout", "~", "outside"]
+    );
+    assert_eq!(
+        s.spaces[0]
+            .tabs
+            .iter()
+            .map(|t| (t.id.as_str(), t.name.as_str()))
+            .collect::<Vec<_>>(),
+        [("a-tab", "1"), ("z-tab", "2")]
+    );
+    conn.disconnect().await;
+}
+
+#[tokio::test]
+async fn a_slow_git_lookup_falls_back_within_budget_and_is_cached() {
+    use std::os::unix::fs::PermissionsExt;
+    let home = tempfile::tempdir().unwrap();
+    let tools = home.path().join("bin");
+    std::fs::create_dir(&tools).unwrap();
+    std::os::unix::fs::symlink("/bin/sh", tools.join("sh")).unwrap();
+    let calls = home.path().join("calls");
+    let git = tools.join("git");
+    std::fs::write(
+        &git,
+        "#!/bin/sh\nprintf x >> \"$ARIES_GIT_CALLS\"\nexec /bin/sleep 30\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&git, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let hc = HcSession::start_with_env(&[
+        ("HOME", home.path().to_str().unwrap()),
+        ("PATH", tools.to_str().unwrap()),
+        ("ARIES_GIT_CALLS", calls.to_str().unwrap()),
+    ]);
+    hc.rpc(
+        "terminal.run",
+        json!({
+            "argv": ["/bin/sleep", "300"], "cwd": home.path().to_str().unwrap(),
+            "labels": {"herdr.space": "s", "herdr.tab": "tab"}
+        }),
+    );
+    let (_data, conn) = connect(&hc).await;
+    let start = std::time::Instant::now();
+    let s = conn.structure().await.unwrap();
+    assert!(start.elapsed() < Duration::from_secs(5));
+    // Even partial output supplies the Host home, so cwd == HOME is still ~.
+    assert_eq!(s.spaces[0].name, "~");
+    assert_eq!(s.spaces[0].tabs[0].name, "1");
+    assert_eq!(conn.structure().await.unwrap(), s);
+    assert_eq!(std::fs::read_to_string(calls).unwrap(), "x");
+    conn.disconnect().await;
+}
+
+#[tokio::test]
+#[ignore = "needs docker"]
+async fn names_use_the_ssh_hosts_home_and_worktree_rather_than_the_phones_paths() {
+    use aries_core::{Endpoint, LaunchRequest};
+    use aries_test_support::SshdHost;
+    let sshd = SshdHost::start();
+    let setup = std::process::Command::new("docker").args([
+        "exec", "-u", SshdHost::USER, sshd.network_name(), "sh", "-c",
+        "mkdir -p /home/aries/project && cd /home/aries/project && git init -q && git -c user.name=Test -c user.email=test@example.invalid commit --allow-empty -qm initial && git worktree add -qb work /home/aries/checkout && mkdir /home/aries/checkout/nested",
+    ]).output().unwrap();
+    assert!(
+        setup.status.success(),
+        "{}",
+        String::from_utf8_lossy(&setup.stderr)
+    );
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    sshd.authorize(&core.ensure_key().unwrap().openssh);
+    let host = core
+        .add_host(
+            "ssh".into(),
+            Endpoint::Ssh {
+                address: "127.0.0.1".into(),
+                port: sshd.port(),
+                user: SshdHost::USER.into(),
+            },
+        )
+        .unwrap();
+    core.trust_host_key(host.id.clone(), sshd.host_key_fingerprint())
+        .unwrap();
+    let conn = core.connect(host.id).await.unwrap();
+    for (space, cwd) in [("s1", "/home/aries/checkout/nested"), ("s2", "/home/aries")] {
+        conn.launch(LaunchRequest {
+            command: "sleep 300".into(),
+            cwd: Some(cwd.into()),
+            space_id: Some(space.into()),
+            tab_id: Some("tab".into()),
+            preset: None,
+        })
+        .await
+        .unwrap();
+    }
+    let structure = conn.structure().await.unwrap();
+    assert_eq!(
+        structure
+            .spaces
+            .iter()
+            .map(|s| s.name.as_str())
+            .collect::<Vec<_>>(),
+        ["checkout", "~"]
+    );
+    assert!(
+        structure
+            .spaces
+            .iter()
+            .all(|s| !s.named && !s.tabs[0].named && s.tabs[0].name == "1")
+    );
+    conn.disconnect().await;
+}
+
+#[tokio::test]
+async fn sub_agents_follow_their_parent_into_its_pane_and_watch_updates() {
+    let hc = HcSession::start();
+    let parent = hc.run_bg("parent", &["sleep", "300"]);
+    hc.set_doc("herdr-app", fixture("normal.json", &[("alpha", &parent)]));
+    let (_data, conn) = connect(&hc).await;
+    let rec = Arc::new(Recorder::default());
+    let watch = conn.watch_structure(rec.clone()).await.unwrap();
+    rec.wait_for("parent without children", |s| {
+        !s.spaces.is_empty() && s.spaces[0].tabs[0].panes[0].sub_agents.is_empty()
+    })
+    .await;
+    let child: Value = serde_json::from_str(&hc.hc(&[
+        "run",
+        "--bg",
+        "--json",
+        "--no-notify",
+        "--parent",
+        &parent,
+        "--name",
+        "child",
+        "--",
+        "sleep",
+        "300",
+    ]))
+    .unwrap();
+    let address = child["address"].as_str().unwrap();
+    let s = conn.structure().await.unwrap();
+    let pane = &s.spaces[0].tabs[0].panes[0];
+    rec.wait_for("child under parent", |s| {
+        !s.spaces[0].tabs[0].panes[0].sub_agents.is_empty()
+    })
+    .await;
+    assert_eq!(pane.sub_agents.len(), 1);
+    assert_eq!(pane.sub_agents[0].address, address);
+    assert_eq!(pane.sub_agents[0].parent.as_deref(), Some(parent.as_str()));
+    assert!(!s.unplaced.iter().any(|t| t.address == address));
+    assert_eq!(
+        conn.terminals()
+            .await
+            .unwrap()
+            .iter()
+            .find(|t| t.address == address)
+            .unwrap()
+            .parent
+            .as_deref(),
+        Some(parent.as_str())
+    );
+    hc.hc(&["kill", address]);
+    hc.hc(&["rm", address]);
+    rec.wait_for("child removed", |s| {
+        s.spaces[0].tabs[0].panes[0].sub_agents.is_empty()
+    })
+    .await;
+    watch.stop();
     conn.disconnect().await;
 }

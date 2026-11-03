@@ -103,8 +103,7 @@ private fun CallRow(
                 }
             }
         }
-        note?.let { n ->
-            val text = replyNoteText(n)
+        note?.let { replyNoteText(it) }?.let { text ->
             Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         }
         when {

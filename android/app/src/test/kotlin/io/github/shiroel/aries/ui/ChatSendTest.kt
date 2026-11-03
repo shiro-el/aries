@@ -3,6 +3,19 @@ package io.github.shiroel.aries.ui
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.layout.FirstBaseline
+import androidx.compose.ui.layout.LastBaseline
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -26,6 +39,7 @@ import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.SendOutcome
 import io.github.shiroel.aries.core.TerminalInfo
 import kotlinx.coroutines.CompletableDeferred
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -65,6 +79,67 @@ class ChatSendTest {
         compose.onNodeWithText(str(R.string.chat_input_label)).performTextInput(text)
         compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
         compose.waitForIdle()
+    }
+
+    @Test
+    fun enterAddsANewlineAndOnlyTheSendActionSubmits() {
+        val conn = openChat(FakeCore())
+        val input = compose.onNodeWithContentDescription(str(R.string.chat_input_label))
+        input.performClick().performTextInput("첫 줄")
+        input.performKeyInput { pressKey(Key.Enter) }
+        input.performTextInput("second line\n\n마지막 줄")
+        val message = "첫 줄\nsecond line\n\n마지막 줄"
+        input.assertTextEquals(message)
+        assertTrue(conn.typed.isEmpty())
+
+        compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
+        compose.waitForIdle()
+        assertEquals(listOf("t1" to message), conn.typed)
+        input.assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
+    }
+
+    @Test
+    fun inputAndSendShareOneLineHeightAndSendStaysAtTheBottom() {
+        val core = FakeCore()
+        openChat(core)
+        core.pushChat(ChatSnapshot(listOf(ChatEntry("a1", null, ChatEntryBody.Agent("Latest reply"))), ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        val input = compose.onNodeWithContentDescription(str(R.string.chat_input_label))
+        val send = compose.onNodeWithText(str(R.string.chat_send_button))
+        input.performTextInput("line 1")
+        val one = input.fetchSemanticsNode().boundsInRoot
+        val button = send.fetchSemanticsNode().boundsInRoot
+        assertEquals(one.height, button.height, 0.5f)
+        assertEquals(one.top, button.top, 0.5f)
+        assertEquals(one.bottom, button.bottom, 0.5f)
+        fun baseline(last: Boolean = false): Float {
+            val coords = input.fetchSemanticsNode().layoutInfo.coordinates
+            return coords.positionInRoot().y + coords[if (last) LastBaseline else FirstBaseline]
+        }
+        fun sendBaseline(): Float {
+            val coords = send.fetchSemanticsNode().layoutInfo.coordinates
+            return coords.positionInRoot().y + coords[FirstBaseline]
+        }
+        assertEquals(baseline(), sendBaseline(), 0.5f)
+
+        input.performTextReplacement((1..6).joinToString("\n") { "line $it" })
+        val six = input.fetchSemanticsNode().boundsInRoot
+        val bottomButton = send.fetchSemanticsNode().boundsInRoot
+        assertTrue(six.height > one.height)
+        assertEquals(button.height, bottomButton.height, 0.5f)
+        assertEquals(six.bottom, bottomButton.bottom, 0.5f)
+        assertEquals(baseline(last = true), sendBaseline(), 0.5f)
+
+        input.performTextReplacement((1..20).joinToString("\n") { "line $it" })
+        assertEquals(six.height, input.fetchSemanticsNode().boundsInRoot.height, 0.5f)
+        input.assertIsDisplayed()
+        send.assertIsDisplayed()
+        compose.onNodeWithText("Latest reply").assertIsDisplayed()
+        // The capped input keeps the entire draft.
+        assertEquals(
+            AnnotatedString((1..20).joinToString("\n") { "line $it" }),
+            input.fetchSemanticsNode().config[SemanticsProperties.EditableText],
+        )
     }
 
     @Test

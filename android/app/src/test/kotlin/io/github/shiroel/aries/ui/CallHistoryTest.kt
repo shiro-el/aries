@@ -84,6 +84,18 @@ class CallHistoryTest {
     }
 
     @Test
+    fun helperChoicesStayInHistoryWithoutAnInboxCountOrHumanAnswerButtons() {
+        val core = twoHosts().apply {
+            callsOf["h1"] = listOf(call("h1", "child", "Helper report", 1uL, topLevel = false, choices = listOf("Continue")))
+        }
+        show(core)
+        compose.onNodeWithTag("console-inbox-count", useUnmergedTree = true).assertDoesNotExist()
+        openCalls()
+        compose.onNodeWithText("Helper report").assertExists()
+        compose.onNodeWithContentDescription(str(R.string.call_answer_choice_label, "Helper report", "Continue")).assertDoesNotExist()
+    }
+
+    @Test
     fun inboxUsesTheBrowsedAgentsNameAndTracksLiveNamesWithAddressFallback() {
         val core = twoHosts().apply {
             terminalsOf["h1"] = listOf(agent.copy(name = "Review agent", agentStatus = io.github.shiroel.aries.core.AgentStatus.Working))

@@ -78,7 +78,7 @@ internal fun ConsoleChatChoice(
 internal fun ConsoleChatCall(entry: CallEntry, calls: CallsModel) {
     val call = entry.call
     ConsoleChatCallSurface {
-        Text(stringResource(R.string.console_chat_call_label, call.id), color = statusColor(AgentStatus.Blocked(null, null)),
+        Text(stringResource(R.string.console_chat_call_label), color = statusColor(AgentStatus.Blocked(null, null)),
             style = MaterialTheme.typography.labelLarge)
         Text(call.title)
         if (call.body.isNotEmpty()) Text(call.body)
@@ -96,8 +96,7 @@ internal fun ConsoleChatCall(entry: CallEntry, calls: CallsModel) {
                     onClick = { calls.reply(entry, index) })
             }
         }
-        calls.replyNotes[entry.key]?.let { note ->
-            val text = replyNoteText(note)
+        calls.replyNotes[entry.key]?.let { replyNoteText(it) }?.let { text ->
             Text(text, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
     }

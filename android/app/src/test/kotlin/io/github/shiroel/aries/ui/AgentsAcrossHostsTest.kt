@@ -61,8 +61,11 @@ class AgentsAcrossHostsTest {
         terminalsOf["h2"] = listOf(agent("t1", "pi", AgentStatus.Done, turn = 3uL))
     }
 
+    private lateinit var back: androidx.activity.OnBackPressedDispatcher
+
     private fun openAgents(core: FakeCore) {
         compose.setContent {
+            back = androidx.activity.compose.LocalOnBackPressedDispatcherOwner.current!!.onBackPressedDispatcher
             val scope = rememberCoroutineScope()
             val model = remember { HostsModel(core, scope) }
             MaterialTheme { AriesApp(model) }
@@ -111,15 +114,14 @@ class AgentsAcrossHostsTest {
     }
 
     @Test
-    fun openingADoneAgentShowsItsDetailAndConfirmsTheDoneForEveryClient() {
+    fun openingADoneAgentDirectlyConfirmsTheDoneForEveryClient() {
         val core = twoHosts()
         openAgents(core)
 
         compose.onNodeWithText("pi").performClick()
         compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.agent_detail_host, "server")).assertExists()
-        compose.onNodeWithText(str(R.string.agent_detail_address, "t1")).assertExists()
-        compose.onNodeWithText(str(R.string.agent_detail_folder, "/repo/pi")).assertExists()
+        assertEquals("t1", core.connectionsOf.getValue("h2").views.single().address)
+        compose.onNodeWithText(str(R.string.agent_open_button)).assertDoesNotExist()
         assertEquals(listOf("h2 t1 seen=3"), core.labelWrites)
         compose.onNodeWithText(str(R.string.agent_status_idle)).assertExists()
 
@@ -128,14 +130,33 @@ class AgentsAcrossHostsTest {
         compose.waitForIdle()
         compose.onNodeWithText("claude").performClick()
         compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.agent_detail_address, "t1")).assertExists()
-        compose.onNodeWithText(str(R.string.agent_detail_host, "home")).assertExists()
+        assertEquals("t1", core.connectionsOf.getValue("h1").views.single().address)
         assertEquals(listOf("h2 t1 seen=3"), core.labelWrites)
 
-        // The Agent goes away while its detail is open.
+        // A disappearing Agent must not leave a stale detail screen on Back.
         core.push("h1", emptyList())
         compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.agent_detail_gone)).assertExists()
+        compose.onNodeWithText(str(R.string.back_button)).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("claude").assertDoesNotExist()
+        compose.onNodeWithText("pi").assertExists()
+    }
+
+    @Test
+    fun systemBackReturnsDirectlyToTheConnectedAgentsList() {
+        val core = twoHosts()
+        openAgents(core)
+        compose.onNodeWithText("codex").performClick()
+        compose.waitForIdle()
+        val connection = core.connectionsOf.getValue("h1")
+        assertEquals("box/t1", connection.views.single().address)
+
+        compose.runOnIdle { back.onBackPressed() }
+        compose.waitForIdle()
+        compose.onNodeWithText("codex").assertExists()
+        compose.onNodeWithText("pi").assertExists()
+        assertTrue(connection.views.single().detached)
+        assertTrue(!connection.disconnected)
     }
 
     @Test
@@ -149,13 +170,11 @@ class AgentsAcrossHostsTest {
     }
 
     @Test
-    fun opensAnAgentsTerminalFromItsDetailAndBackReturnsToTheDetail() {
+    fun opensAnAgentsTerminalDirectlyAndBackReturnsToTheList() {
         val core = twoHosts()
         openAgents(core)
 
         compose.onNodeWithText("pi").performClick()
-        compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.agent_open_button)).performClick()
         compose.waitForIdle()
 
         // Attached on the Agent's own Host (server), not home: both have a t1.
@@ -179,6 +198,8 @@ class AgentsAcrossHostsTest {
         compose.waitForIdle()
         assertTrue(view.detached)
         assertTrue("the Agents list stays connected", !core.connectionsOf.getValue("h2").disconnected)
-        compose.onNodeWithText(str(R.string.agent_detail_host, "server")).assertExists()
+        compose.onNodeWithText("pi").assertExists()
+        compose.onNodeWithText("claude").assertExists()
+        compose.onNodeWithText(str(R.string.agent_open_button)).assertDoesNotExist()
     }
 }

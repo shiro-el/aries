@@ -6,6 +6,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.hasText
@@ -99,7 +100,7 @@ class ChatCacheTest {
         show(core)
 
         compose.openHostActions("h1")
-        compose.onNodeWithContentDescription(str(R.string.chat_cache_clear_label, "home")).performClick()
+        compose.onNodeWithContentDescription(str(R.string.chat_cache_clear_label, "home")).performScrollTo().performClick()
         compose.waitForIdle()
 
         assertEquals(setOf(work.id to "t1"), core.cachedChats.keys)

@@ -69,7 +69,7 @@ pub(crate) fn status_of(terminal: &Value) -> (Option<AgentStatus>, bool) {
     let turn = terminal["turn"].as_u64().unwrap_or(0);
     match rule::agent_status(record.as_ref(), turn, &labels) {
         Some(s) => {
-            let attention = s.needs_attention();
+            let attention = terminal["parent"].as_str().is_none() && s.needs_attention();
             (Some(s.into()), attention)
         }
         None => (None, false),

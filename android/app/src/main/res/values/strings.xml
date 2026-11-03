@@ -176,10 +176,8 @@
     <string name="chat_blocked_question">The Agent asks you a question in the Terminal.</string>
     <string name="chat_blocked_auth">The Agent needs you to sign in, in the Terminal.</string>
     <string name="chat_blocked_other">The Agent waits for you in the Terminal.</string>
-    <string name="space_unnamed">Unnamed Space</string>
     <string name="space_summary">Tabs: %1$d · Panes: %2$d</string>
     <string name="space_no_tabs">This Space has no Tabs.</string>
-    <string name="tab_unnamed">Unnamed Tab</string>
     <string name="tab_empty">This Tab has no Terminals.</string>
     <string name="pane_terminal_gone">%1$s (ended)</string>
     <string name="pane_zoom_button">Zoom</string>
@@ -401,7 +399,7 @@
     <string name="console_menu_glyph">☰</string>
     <string name="console_back_glyph">←</string>
     <string name="console_agents_waiting">%1$d waiting</string>
-    <string name="console_all_hosts">All Hosts, add Host</string>
+    <string name="console_all_hosts">Hosts</string>
     <!-- i18n-ok: decorative tree guides, shared across languages. -->
     <string name="console_tree_last">└─</string>
     <string name="console_tree_branch">├─</string>
@@ -424,7 +422,7 @@
     <string name="call_open_chat_label">Open %1$s in Chat for Call: %2$s</string>
     <string name="call_inbox_close">Close Calls</string>
     <string name="console_chat_choice_number">%1$d</string>
-    <string name="console_chat_call_label">Call %1$s</string>
+    <string name="console_chat_call_label">Call</string>
     <string name="console_agent_host_prefix">%1$s /\u0020</string>
     <string name="console_agent_unknown_folder">Folder unavailable</string>
     <string name="console_agent_unknown_age">Age unavailable</string>
@@ -433,4 +431,8 @@
     <string name="console_agent_accessibility">%1$s · %2$s</string>
     <string name="console_agent_age_unknown">—</string>
     <string name="console_agent_age_unavailable">Age unavailable</string>
+    <string name="settings_keys_open">Phone SSH keys</string>
+    <string name="settings_hosts_title">Host settings</string>
+    <string name="settings_agent_view">Default Agent view</string>
+    <string name="settings_beacon_missing">Beacon not installed · Host settings</string>
 </resources>

@@ -26,7 +26,11 @@ internal fun CallReplyOutcome.labelResource(): Int = when (this) {
 }
 
 @Composable
-internal fun replyNoteText(note: ReplyNote): String = when (note) {
+internal fun replyNoteText(note: ReplyNote): String? = when (note) {
     is ReplyNote.NotSent -> stringResource(R.string.call_reply_not_sent, note.detail)
-    is ReplyNote.Outcome -> stringResource(note.outcome.labelResource())
+    is ReplyNote.Outcome -> when (note.outcome) {
+        // The recorded answer already supplies the result and its detail.
+        CallReplyOutcome.FAILED, CallReplyOutcome.UNCONFIRMED -> null
+        else -> stringResource(note.outcome.labelResource())
+    }
 }
