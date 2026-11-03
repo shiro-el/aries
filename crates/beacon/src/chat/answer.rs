@@ -401,7 +401,7 @@ pub fn pending_questions(
 ) -> impl DoubleEndedIterator<Item = (&str, &ChatQuestion)> {
     let start = items
         .iter()
-        .rposition(|item| matches!(item.body, ChatBody::User { .. }))
+        .rposition(|item| matches!(item.body, ChatBody::User { queued: false, .. }))
         .map_or(0, |i| i + 1);
     items[start..].iter().filter_map(|item| match &item.body {
         ChatBody::Tool {

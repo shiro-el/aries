@@ -70,7 +70,7 @@ impl Chat {
 
 fn short(item: &ChatItem) -> String {
     match &item.body {
-        ChatBody::User { text, images } => format!("user {text:?} images={}", images.len()),
+        ChatBody::User { text, images, .. } => format!("user {text:?} images={}", images.len()),
         ChatBody::Agent { text, .. } => format!("agent {:?}", text.trim()),
         ChatBody::Thinking { text } => format!("thinking {:?}", text.as_deref().map(str::trim)),
         ChatBody::Tool {
@@ -222,7 +222,7 @@ fn images_from_tools_and_from_the_user_carry_their_bytes() {
     assert!(images[0].data.is_some() && images[0].bytes > 0);
 
     let chat = Chat::feed(&fixture("session-preset-user-image.jsonl"));
-    let ChatBody::User { text, images } = &chat.items[0].body else {
+    let ChatBody::User { text, images, .. } = &chat.items[0].body else {
         panic!("{:?}", chat.items[0])
     };
     assert_eq!(images.len(), 1, "{text}");

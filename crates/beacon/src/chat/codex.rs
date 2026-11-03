@@ -503,6 +503,7 @@ impl CodexInterpreter {
                     return Vec::new();
                 }
                 ChatBody::User {
+                    queued: false,
                     text: text.trim().to_owned(),
                     images,
                 }
