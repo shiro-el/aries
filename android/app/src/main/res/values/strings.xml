@@ -259,5 +259,7 @@
     <string name="push_channel_name">Host notifications</string>
     <string name="push_test_title">Push works for %1$s</string>
     <string name="push_test_body">This test notification came from the Beacon on %1$s, end-to-end encrypted.</string>
+    <string name="push_status_title">%1$s on %2$s</string>
+    <string name="push_status_body" translatable="false">%1$s: %2$s</string>
     <string name="push_no_firebase">this build has no Firebase configuration</string>
 </resources>

@@ -8,10 +8,12 @@ import android.util.Base64
 import android.util.Log
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.PushContent
 import io.github.shiroel.aries.core.PushDevice
 import io.github.shiroel.aries.core.PushNotice
+import io.github.shiroel.aries.ui.agentStatusLabel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -63,9 +65,21 @@ class PushService : FirebaseMessagingService() {
             manager.createNotificationChannel(
                 NotificationChannel(CHANNEL, context.getString(R.string.push_channel_name), NotificationManager.IMPORTANCE_HIGH),
             )
-            val (title, body) = when (notice.content) {
+            val content = notice.content
+            val (title, body) = when (content) {
                 is PushContent.Test -> context.getString(R.string.push_test_title, notice.hostName) to
                     context.getString(R.string.push_test_body, notice.hostName)
+                is PushContent.Status -> {
+                    val agent = content.name ?: content.title ?: content.terminal
+                    val label = context.getString(agentStatusLabel(content.status))
+                    val message = when (val s = content.status) {
+                        is AgentStatus.Blocked -> s.message
+                        is AgentStatus.Error -> s.message
+                        else -> null
+                    }
+                    context.getString(R.string.push_status_title, agent, notice.hostName) to
+                        (message?.let { context.getString(R.string.push_status_body, label, it) } ?: label)
+                }
             }
             val notification = Notification.Builder(context, CHANNEL)
                 .setSmallIcon(android.R.drawable.stat_notify_chat)
@@ -73,7 +87,12 @@ class PushService : FirebaseMessagingService() {
                 .setContentText(body)
                 .setAutoCancel(true)
                 .build()
-            manager.notify(notice.hostId.hashCode(), notification)
+            // One notification per Agent: its newer status replaces the older.
+            val tag = when (content) {
+                is PushContent.Test -> null
+                is PushContent.Status -> content.terminal
+            }
+            manager.notify(tag, notice.hostId.hashCode(), notification)
         }
     }
 }

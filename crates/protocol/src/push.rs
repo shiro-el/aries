@@ -49,6 +49,24 @@ pub enum PushMessage {
         /// Unix seconds on the Host.
         sent_at: u64,
     },
+    /// An Agent's status changed to one the push policy notifies about
+    /// ([`crate::push_policy`]); sent by the Beacon's `serve`.
+    Status {
+        /// Terminal address on the Host (`t7`, `box/t7`).
+        terminal: String,
+        /// The Terminal's name, when it has one.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
+        /// The Terminal's title, when not empty.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        title: Option<String>,
+        /// No parent Terminal: not a subagent.
+        top_level: bool,
+        /// The new status ([`crate::agent_status::agent_status`]).
+        status: crate::agent_status::AgentStatus,
+        /// Unix seconds on the Host.
+        at: u64,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
