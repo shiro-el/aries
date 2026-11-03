@@ -52,7 +52,6 @@ class HerdrInstallSectionTest {
         val core = FakeCore().apply { herdrState = HerdrCoreState.Missing }
         show(core)
         click(R.string.herdr_install_button)
-        compose.onNodeWithText(str(R.string.herdr_install_consent_body)).assertExists()
         assertEquals(0, core.herdrInstalls)
         click(R.string.cancel_button)
         assertEquals(0, core.herdrInstalls)
@@ -87,7 +86,6 @@ class HerdrInstallSectionTest {
         click(R.string.herdr_install_button)
         click(R.string.herdr_install_confirm)
         compose.onNodeWithText(str(R.string.herdr_install_checksum, "aa", "bb")).assertExists()
-        compose.onNodeWithText(str(R.string.herdr_install_recovery)).assertExists()
         assertEquals(HerdrCoreState.Missing, core.herdrState)
         compose.runOnIdle { core.herdrFailWith = null }
         click(R.string.herdr_install_button)

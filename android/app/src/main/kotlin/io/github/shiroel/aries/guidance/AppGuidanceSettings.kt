@@ -38,7 +38,7 @@ fun AppGuidanceSettings(state: AppGuidanceState) {
             modifier = Modifier.fillMaxWidth().testTag("app-update-url"),
             singleLine = true,
             isError = !valid,
-            supportingText = { Text(stringResource(if (valid) R.string.app_update_url_hint else R.string.app_update_url_invalid)) },
+            supportingText = if (!valid) ({ Text(stringResource(R.string.app_update_url_invalid)) }) else null,
         )
         TextButton(onClick = { state.setUpdateUrl(url) }, enabled = valid,
             modifier = Modifier.testTag("app-update-save")) {

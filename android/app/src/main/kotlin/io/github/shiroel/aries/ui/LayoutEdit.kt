@@ -99,10 +99,16 @@ class LayoutEditor(private val browser: HostBrowser, private val scope: Coroutin
         }
     }
 
+    fun requireAvailable(): Boolean {
+        if (available) return true
+        error = Message(R.string.layout_app_unavailable)
+        return false
+    }
+
     fun saveName() {
         val form = naming ?: return
         val conn = browser.link?.connection ?: return
-        if (busy || !available) return
+        if (busy || !requireAvailable()) return
         busy = true
         error = null
         scope.launch {
@@ -132,7 +138,7 @@ class LayoutEditor(private val browser: HostBrowser, private val scope: Coroutin
         val impact = impact(target) ?: return
         if (impact.working && !held) return
         val conn = browser.link?.connection ?: return
-        if (busy || (target !is LayoutEndTarget.Terminal && !available)) return
+        if (busy || (target !is LayoutEndTarget.Terminal && !requireAvailable())) return
         busy = true
         error = null
         scope.launch {
@@ -162,20 +168,20 @@ internal fun LayoutEditControls(browser: HostBrowser, editor: LayoutEditor) {
             delay(10_000)
         }
     }
-    val enabled = connection != null && editor.available && !editor.busy
+    val enabled = connection != null && !editor.busy
     val space = browser.openSpace
     val tab = browser.tab
     var menu by remember { mutableStateOf(false) }
     Row(Modifier.horizontalScroll(rememberScrollState())) {
-        TextButton(onClick = { editor.naming = LayoutNameForm(LayoutNameKind.NEW_SPACE) }, enabled = enabled) {
+        TextButton(onClick = { if (editor.requireAvailable()) editor.naming = LayoutNameForm(LayoutNameKind.NEW_SPACE) }, enabled = enabled) {
             Text(stringResource(R.string.layout_new_space_button))
         }
         if (space != null) {
-            TextButton(onClick = { editor.naming = LayoutNameForm(LayoutNameKind.NEW_TAB, space.id, folder = space.folder.orEmpty()) }, enabled = enabled) {
+            TextButton(onClick = { if (editor.requireAvailable()) editor.naming = LayoutNameForm(LayoutNameKind.NEW_TAB, space.id, folder = space.folder.orEmpty()) }, enabled = enabled) {
                 Text(stringResource(R.string.layout_new_tab_button))
             }
             Box {
-                TextButton(onClick = { menu = true }, enabled = enabled) { Text(stringResource(R.string.layout_actions_button)) }
+                TextButton(onClick = { if (editor.requireAvailable()) menu = true }, enabled = enabled) { Text(stringResource(R.string.layout_actions_button)) }
                 DropdownMenu(expanded = menu && enabled, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(text = { Text(stringResource(R.string.layout_rename_space_button)) }, onClick = {
                         menu = false
@@ -197,7 +203,6 @@ internal fun LayoutEditControls(browser: HostBrowser, editor: LayoutEditor) {
             }
         }
     }
-    if (!editor.available) Text(stringResource(R.string.layout_app_unavailable), style = MaterialTheme.typography.bodySmall)
     editor.error?.let { Text(stringResource(it.res, *it.args.toTypedArray()), color = MaterialTheme.colorScheme.error) }
     editor.naming?.let { form ->
         AlertDialog(

@@ -41,7 +41,7 @@ class DictationUiTest {
         compose.onNodeWithText(label(R.string.dictation_start_button)).assertDoesNotExist()
     }
 
-    @Test fun disclosureThenPermissionThenRecordingAndTranscriptOnly() {
+    @Test fun permissionThenRecordingAndTranscriptOnly() {
         val store = DictationStore(context, vault).apply { saveKey("fake-key") }
         val recorder = Recorder()
         var permission: ((Boolean) -> Unit)? = null
@@ -53,9 +53,6 @@ class DictationUiTest {
                 requestPermission = { permission = it }) }
         }
         compose.onNodeWithText(label(R.string.dictation_start_button)).performClick()
-        compose.onNodeWithText(label(R.string.dictation_disclosure)).assertIsDisplayed()
-        assertFalse(recorder.started)
-        compose.onNodeWithText(label(R.string.dictation_record_button)).performClick()
         assertNotNull(permission)
         assertFalse(recorder.started)
         compose.runOnIdle { permission!!(true) }
@@ -76,7 +73,6 @@ class DictationUiTest {
                 Transcriber { _, _, _, _ -> error("must not upload") }, requestPermission = { it(false) }) }
         }
         compose.onNodeWithText(label(R.string.dictation_start_button)).performClick()
-        compose.onNodeWithText(label(R.string.dictation_record_button)).performClick()
         compose.onNodeWithText(label(R.string.dictation_permission_denied)).assertExists()
         assertFalse(recorder.started)
         store.clearKey()
@@ -170,7 +166,6 @@ class DictationUiTest {
         }
         try {
             compose.onNodeWithText(label(R.string.dictation_start_button)).performClick()
-            compose.onNodeWithText(label(R.string.dictation_record_button)).performClick()
             compose.onNodeWithText(label(R.string.dictation_stop_button)).performClick()
             assertTrue(entered.await(5, java.util.concurrent.TimeUnit.SECONDS))
             compose.onNodeWithText(label(R.string.cancel_button)).performClick()
@@ -193,7 +188,6 @@ class DictationUiTest {
                 requestPermission = { it(true) }) }
         }
         compose.onNodeWithText(label(R.string.dictation_start_button)).performClick()
-        compose.onNodeWithText(label(R.string.dictation_record_button)).performClick()
         compose.onNodeWithText(label(R.string.dictation_stop_button)).performClick()
         compose.waitUntil(5_000) { uploads == 1 }
         compose.waitForIdle()

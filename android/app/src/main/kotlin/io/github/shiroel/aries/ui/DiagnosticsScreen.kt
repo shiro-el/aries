@@ -81,7 +81,6 @@ fun DiagnosticsScreen(history: DiagnosticsModel, hosts: List<Host>) {
 
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         Text(title, Modifier.padding(top = 16.dp), style = MaterialTheme.typography.titleMedium)
-        Text(stringResource(R.string.diagnostics_retention), style = MaterialTheme.typography.bodySmall)
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             (listOf(null) + DiagnosticSource.entries).forEach { option ->
                 FilterChip(selected = source == option, onClick = { source = option; notice = 0 },

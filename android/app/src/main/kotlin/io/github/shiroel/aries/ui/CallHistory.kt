@@ -116,10 +116,6 @@ private fun CallRow(
         note?.let { replyNoteText(it) }?.let { text ->
             Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         }
-        when {
-            call.terminal == null -> Text(stringResource(R.string.call_unconfirmed), style = MaterialTheme.typography.bodySmall)
-            !call.topLevel -> Text(stringResource(R.string.call_from_helper), style = MaterialTheme.typography.bodySmall)
-        }
         call.terminal?.let { address ->
             val label = stringResource(R.string.call_open_chat_label, address, call.title)
             TextButton(onClick = onChat, modifier = Modifier.semantics { contentDescription = label }) {

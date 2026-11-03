@@ -36,6 +36,7 @@ class GithubScreenTest {
         compose.onNodeWithText("home").performClick()
         compose.onNodeWithText("claude").performClick()
         compose.runOnIdle { configure(core.connection!!) }
+        compose.onNodeWithTag("agent-actions").performClick()
         compose.onNodeWithText(str(R.string.github_button)).performClick()
         return core.connection!!
     }
@@ -66,6 +67,7 @@ class GithubScreenTest {
         compose.onNodeWithText(str(R.string.github_edit)).performClick()
         compose.onNodeWithTag("github-back").performClick()
         compose.onNodeWithTag("github-back").performClick()
+        compose.onNodeWithTag("agent-actions").performClick()
         compose.onNodeWithText(str(R.string.github_button)).performClick()
         compose.onNodeWithText("#42 · Issue title").performClick()
         compose.onNodeWithTag("github-comment").assertTextContains("**draft markdown**")

@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -32,12 +31,6 @@ fun LaunchOptions(form: LaunchForm, preset: AgentPreset) {
         modifier = Modifier.fillMaxWidth().testTag("launch_model"),
         label = { Text(stringResource(R.string.launch_model_label)) },
         placeholder = { Text(stringResource(R.string.launch_agent_default)) },
-        supportingText = {
-            Text(stringResource(
-                if (preset == AgentPreset.OPEN_CODE || preset == AgentPreset.PI)
-                    R.string.launch_model_provider_hint else R.string.launch_model_hint,
-            ))
-        },
         trailingIcon = {
             Box {
                 TextButton(onClick = {
@@ -62,7 +55,6 @@ fun LaunchOptions(form: LaunchForm, preset: AgentPreset) {
         singleLine = true,
     )
     if (preset == AgentPreset.OPEN_CODE) {
-        Text(stringResource(R.string.launch_effort_unavailable), style = MaterialTheme.typography.bodySmall)
         return
     }
     val efforts = when (preset) {
@@ -88,7 +80,6 @@ fun LaunchOptions(form: LaunchForm, preset: AgentPreset) {
             }
         }
     }
-    Text(stringResource(R.string.launch_effort_hint), style = MaterialTheme.typography.bodySmall)
 }
 
 @Composable

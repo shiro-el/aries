@@ -94,7 +94,6 @@ fun KeyImportDialog(model: HostsModel, onDismiss: () -> Unit) {
         title = { Text(stringResource(R.string.key_import_title)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(stringResource(R.string.key_import_hint))
                 if (needsLabel) OutlinedTextField(
                     label, { label = it }, enabled = !busy, singleLine = true,
                     label = { Text(stringResource(R.string.key_new_label)) },

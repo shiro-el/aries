@@ -31,14 +31,13 @@ class DeviceAppUnlock(private val activity: ComponentActivity) : AppAuthenticato
             // Android 9 has no combined BiometricPrompt + device credential API.
             val intent = keyguard.createConfirmDeviceCredentialIntent(
                 activity.getString(R.string.app_lock_screen_title),
-                activity.getString(R.string.app_lock_screen_body),
+                null,
             )
             if (intent == null) complete(UnlockResult.UNAVAILABLE) else credential.launch(intent)
             return
         }
         val builder = BiometricPrompt.Builder(activity)
             .setTitle(activity.getString(R.string.app_lock_screen_title))
-            .setSubtitle(activity.getString(R.string.app_lock_screen_body))
         if (Build.VERSION.SDK_INT >= 30) {
             builder.setAllowedAuthenticators(Authenticators.BIOMETRIC_WEAK or Authenticators.DEVICE_CREDENTIAL)
         } else {

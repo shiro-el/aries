@@ -29,9 +29,9 @@ fun ReadAloudButton(state: ReadAloudState, id: String, source: String) {
 
 /** Stays outside the lazy transcript so Stop remains reachable while scrolling. */
 @Composable
-fun ReadAloudPlayback(state: ReadAloudState, showSpeed: Boolean = true) {
+fun ReadAloudPlayback(state: ReadAloudState, showSpeed: Boolean = true, showInactiveNotice: Boolean = true) {
     val active = state.activeId != null
-    if (active || state.notice != null) Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+    if (active || (showInactiveNotice && state.notice != null)) Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
         val status = if (active) {
             if (state.speaking) R.string.read_aloud_playing else R.string.read_aloud_preparing
         } else state.notice
@@ -57,7 +57,6 @@ private fun ReadAloudSpeed(state: ReadAloudState) {
 fun ReadAloudSettings(state: ReadAloudState) {
     var picker by remember { mutableStateOf(false) }
     Text(stringResource(R.string.read_aloud_title), style = MaterialTheme.typography.titleSmall)
-    Text(stringResource(R.string.read_aloud_hint), style = MaterialTheme.typography.bodySmall)
     ReadAloudSpeed(state)
     val selected = state.voices.find { it.id == state.voice }
     TextButton(onClick = { picker = true }, enabled = state.ready, modifier = Modifier.testTag("read-aloud-voice")) {

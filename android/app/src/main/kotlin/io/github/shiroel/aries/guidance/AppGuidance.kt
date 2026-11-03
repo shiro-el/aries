@@ -102,11 +102,6 @@ fun AppGuidance(
                         1 -> R.string.onboarding_beacon_title
                         else -> R.string.onboarding_notifications_title
                     }))
-                    Text(stringResource(when (step) {
-                        0 -> R.string.onboarding_host_body
-                        1 -> R.string.onboarding_beacon_body
-                        else -> R.string.onboarding_notifications_body
-                    }))
                     if (step == 2) {
                         TextButton(onClick = {
                             scope.launch {

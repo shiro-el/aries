@@ -49,9 +49,8 @@ internal fun TerminalDisplaySection(settings: TerminalDisplaySettings) {
         steps = 23,
         modifier = Modifier.fillMaxWidth().testTag("terminal-font-size"),
     )
-    Text(stringResource(R.string.terminal_display_size_hint), style = MaterialTheme.typography.bodySmall)
     OptionToggle(
-        R.string.terminal_display_contrast_label, R.string.terminal_display_contrast_hint,
+        R.string.terminal_display_contrast_label,
         settings.minimumContrast, settings::chooseMinimumContrast,
     )
     var showLicense by remember { mutableStateOf(false) }
