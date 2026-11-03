@@ -161,6 +161,8 @@ async fn endpoint_edit_closes_all_old_connections_and_next_connect_uses_new_endp
                 space_id: None,
                 tab_id: None,
                 preset: None,
+                model: None,
+                effort: None,
             },
         })
         .unwrap();

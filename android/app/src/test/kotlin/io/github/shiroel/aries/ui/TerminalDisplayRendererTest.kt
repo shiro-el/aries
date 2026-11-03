@@ -18,6 +18,8 @@ import io.github.shiroel.aries.core.ScreenFrame
 import io.github.shiroel.aries.core.ScreenLine
 import io.github.shiroel.aries.core.TerminalInfo
 import io.github.shiroel.aries.core.TerminalUpdate
+import io.github.shiroel.aries.core.TerminalSearch
+import io.github.shiroel.aries.core.TerminalSearchHighlight
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -51,6 +53,29 @@ class TerminalDisplayRendererTest {
     }
 
     private fun screen() = compose.onNodeWithTag("terminal-screen").captureToImage()
+
+    @Test
+    fun searchHighlightsRepaintOnPartialFramesAndRevealMatchesBelowThePhoneViewport() {
+        val (_, core) = open()
+        val view = core.connection!!.views.single()
+        view.push(TerminalUpdate.Screen(ScreenFrame(8u, 200u, true, emptyList(), null, null)))
+        val before = screen().toPixelMap()
+        view.push(TerminalUpdate.Screen(ScreenFrame(8u, 200u, false, emptyList(), null, null,
+            search = TerminalSearch(2u, 1u, listOf(
+                TerminalSearchHighlight(190u, 0u, 2u, false),
+                TerminalSearchHighlight(191u, 2u, 3u, true),
+            )),
+        )))
+        val after = screen().toPixelMap()
+        assertTrue("search pans the selected result into view", (0 until after.height).any { y ->
+            (0 until after.width).any { x -> after[x, y].red > 0.5f && after[x, y].red > after[x, y].blue * 2 }
+        })
+        view.push(TerminalUpdate.Screen(ScreenFrame(8u, 200u, false, emptyList(), null, null)))
+        val cleared = screen().toPixelMap()
+        assertTrue("clearing search removes highlights without a whole-screen repaint", (0 until before.height).all { y ->
+            (0 until before.width).all { x -> cleared[x, y] == before[x, y] }
+        })
+    }
 
     @Test
     fun changingFontSizeResizesTheTypingGridAndChangingFontRedrawsTheText() {
