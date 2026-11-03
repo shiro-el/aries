@@ -17,6 +17,8 @@
 #                                   them as one line "keys <hex> <hex> ..."
 #   claude-session DIR ID CWD       act as a running Claude Code: write its session
 #                                   registry entry DIR/sessions/<pid>.json (sessionId ID)
+#   run CMD...                      run CMD with sh -c in the Agent's own process tree
+#                                   (e.g. aries-beacon call, so the caller is confirmed)
 #   sleep SECONDS
 #   say TEXT...                     print TEXT on the screen
 #   exit CODE
@@ -86,6 +88,7 @@ while IFS= read -r step <&3 || [ -n "$step" ]; do
             "$$" "$2" "$3" "$start" >"$1/sessions/$$.json.tmp"
         mv "$1/sessions/$$.json.tmp" "$1/sessions/$$.json"
         ;;
+    run) sh -c "$*" ;;
     sleep) sleep "$1" ;;
     say) printf '%s\n' "$*" ;;
     exit) exit "$1" ;;
