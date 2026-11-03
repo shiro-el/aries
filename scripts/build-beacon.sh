@@ -4,9 +4,10 @@
 #   scripts/build-beacon.sh dist/beacon                  # this OS's two targets
 #   scripts/build-beacon.sh dist/beacon linux-x86_64     # just one
 #
-# Linux binaries are static (musl, linked with the toolchain's rust-lld) so
-# they run on any distribution; macOS binaries need a macOS machine (the
-# linker ad-hoc signs them, which Apple silicon requires). Then run
+# Linux binaries are static (musl, including ring and bundled SQLite).
+# Use scripts/beacon-build.Dockerfile for the C cross toolchains; see CONTRIBUTING.
+# macOS targets are CI-only on Linux: they require Apple's SDK and linker
+# on a macOS machine (including ad-hoc signing for Apple silicon). Then run
 # scripts/beacon-manifest.sh to pin them.
 set -eu
 
@@ -31,12 +32,36 @@ for target in "$@"; do
     macos-aarch64) triple=aarch64-apple-darwin ;;
     *) echo "build-beacon: unknown target $target" >&2; exit 1 ;;
   esac
-  rustup target add "$triple" >/dev/null 2>&1 || true
+  case $target in
+    macos-*)
+      if [ "$(uname -s)" != Darwin ]; then
+        echo 'build-beacon: macOS targets require Apple SDK/linker; use macOS CI' >&2
+        exit 1
+      fi ;;
+    linux-*)
+      case $target in
+        linux-x86_64)
+          export CC_x86_64_unknown_linux_musl=${CC_x86_64_unknown_linux_musl:-x86_64-linux-musl-gcc}
+          cc=$CC_x86_64_unknown_linux_musl ;;
+        linux-aarch64)
+          export CC_aarch64_unknown_linux_musl=${CC_aarch64_unknown_linux_musl:-aarch64-linux-musl-gcc}
+          cc=$CC_aarch64_unknown_linux_musl ;;
+      esac
+      if ! command -v "$cc" >/dev/null 2>&1; then
+        echo "build-beacon: missing musl C compiler $cc; use scripts/beacon-build.Dockerfile (CONTRIBUTING.md)" >&2
+        exit 1
+      fi ;;
+  esac
+  rustup target add "$triple"
   (cd "$root" &&
     CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=rust-lld \
     CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=rust-lld \
     cargo build --locked --release -p aries-beacon --target "$triple")
-  cp "$root/target/$triple/release/aries-beacon" "$out/aries-beacon-$target"
+  # Honour Cargo's output directory when a container keeps build state outside
+  # the mounted source tree. Relative paths are relative to the workspace.
+  target_dir=${CARGO_TARGET_DIR:-$root/target}
+  case $target_dir in /*) ;; *) target_dir=$root/$target_dir ;; esac
+  cp "$target_dir/$triple/release/aries-beacon" "$out/aries-beacon-$target"
   # Smoke-run the binary this machine can execute.
   case "$(uname -s)-$(uname -m)" in
     Linux-x86_64) native=linux-x86_64 ;; Linux-aarch64) native=linux-aarch64 ;;

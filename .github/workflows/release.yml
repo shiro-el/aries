@@ -43,8 +43,27 @@ jobs:
         with:
           ref: ${{ env.TAG }}
       - uses: dtolnay/rust-toolchain@stable
+        if: runner.os == 'macOS'
       - name: Build the Beacon
+        if: runner.os == 'macOS'
         run: sh scripts/build-beacon.sh dist/beacon ${{ matrix.targets }}
+      - name: Build Linux Beacon with musl C toolchains
+        if: runner.os == 'Linux'
+        run: |
+          docker build --platform linux/amd64 -t aries-beacon-build -f scripts/beacon-build.Dockerfile .
+          mkdir -p dist/beacon target/beacon-build
+          docker run --rm --name aries-beacon-build --platform linux/amd64 \
+            --user "$(id -u):$(id -g)" \
+            -e CARGO_HOME=/build/cargo-home -e CARGO_TARGET_DIR=/build/target \
+            -v "$PWD:/work:ro" -v "$PWD/target/beacon-build:/build" \
+            -v "$PWD/dist/beacon:/out" aries-beacon-build \
+            sh scripts/build-beacon.sh /out ${{ matrix.targets }}
+      - name: Run the static Beacon without glibc
+        if: runner.os == 'Linux'
+        run: |
+          docker run --rm --name aries-beacon-smoke \
+            -v "$PWD/dist/beacon:/beacon:ro" alpine:3.22 \
+            /beacon/aries-beacon-linux-x86_64 --version
       - uses: actions/upload-artifact@v4
         with:
           name: beacon-${{ matrix.runner }}

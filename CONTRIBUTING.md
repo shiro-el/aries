@@ -208,13 +208,37 @@ publishes it with `beacon-SHA256SUMS`. The app pins those exact binaries:
 core with `ARIES_BEACON_MANIFEST=<absolute path>` embeds it
 (`crates/core/build.rs`). Without it a build pins no Beacon. The tag's
 `X.Y.Z` must equal the workspace version in `Cargo.toml`. Locally (Linux
-targets only):
+targets only, Docker on an x86_64 host; no host cross toolchains required):
 
 ```sh
-scripts/build-beacon.sh dist/beacon             # static musl binaries
+docker build --platform linux/amd64 -t aries-beacon-build -f scripts/beacon-build.Dockerfile .
+mkdir -p dist/beacon target/beacon-build
+docker run --rm --name aries-beacon-build --platform linux/amd64 \
+  --user "$(id -u):$(id -g)" \
+  -e CARGO_HOME=/build/cargo-home -e CARGO_TARGET_DIR=/build/target \
+  -v "$PWD:/work:ro" -v "$PWD/target/beacon-build:/build" \
+  -v "$PWD/dist/beacon:/out" aries-beacon-build \
+  sh scripts/build-beacon.sh /out linux-x86_64 linux-aarch64
+docker run --rm --name aries-beacon-smoke \
+  -v "$PWD/dist/beacon:/beacon:ro" alpine:3.22 \
+  /beacon/aries-beacon-linux-x86_64 --version
 ARIES_BEACON_PARTIAL=1 scripts/beacon-manifest.sh v0.1.0 dist/beacon
 ARIES_BEACON_MANIFEST=$PWD/dist/beacon/beacon-release.json scripts/build-release.sh v0.1.0 dist/
 ```
+
+The Dockerfile installs musl C headers and compilers for both architectures:
+`ring` and bundled SQLite need these in addition to Rust's musl targets and
+`rust-lld`. Linux aarch64 is cross-compiled without QEMU. Build state is kept
+in `target/beacon-build`; the source mount is read-only and outputs belong to
+the invoking user. Release CI runs these same commands and the Alpine smoke
+check. To build just one target, pass only its name after `/out`.
+
+macOS targets are CI-only from Linux: Apple's SDK and linker (including
+ad-hoc signing required on Apple silicon) are unavailable in this Linux
+container. On a macOS machine, or the release workflow's macOS runner, run
+`sh scripts/build-beacon.sh dist/beacon macos-x86_64 macos-aarch64` with Xcode
+Command Line Tools and Rust installed. Both targets compile bundled SQLite;
+the runner's native artifact is also smoke-tested with `--version`.
 
 ## License
 
