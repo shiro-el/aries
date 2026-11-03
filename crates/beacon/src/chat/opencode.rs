@@ -108,6 +108,30 @@ impl Agent for OpenCode {
         }
     }
 
+    fn answer_input(
+        &self,
+        question: &ChatQuestion,
+        picks: &[Vec<usize>],
+        text: &[Option<String>],
+    ) -> Result<Vec<super::answer::AnswerInput>, KeysError> {
+        use super::answer::AnswerInput::{Keys, Text};
+        if !text.iter().any(Option::is_some) {
+            return self
+                .answer_keys(question, picks)
+                .map(|keys| vec![Keys(keys)]);
+        }
+        match (question.questions.as_slice(), text) {
+            ([q], [Some(value)]) if !q.multi && q.options.len() < 9 => Ok(vec![
+                Keys(vec![(q.options.len() + 1).to_string()]),
+                Text(value.clone()),
+                Keys(vec!["enter".into()]),
+            ]),
+            _ => Err(KeysError::Unsupported(
+                "OpenCode free text requires one single-choice question".into(),
+            )),
+        }
+    }
+
     /// The question dock: a number picks that option and submits it. Only a
     /// single single-choice question is known to work that way.
     fn answer_keys(

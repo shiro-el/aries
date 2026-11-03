@@ -6,7 +6,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -103,6 +103,49 @@ class ChatModel(
     /** Where each answer the user sent stands, by entry id. */
     var answers by mutableStateOf<Map<String, AnswerState>>(emptyMap())
         private set
+
+    /** Draft text replaces option picks for that part; never auto-sent. */
+    var questionText by mutableStateOf<Map<String, List<String>>>(emptyMap())
+        private set
+
+    enum class QuestionMode { Live, Queued, History, ReadOnly }
+
+    /**
+     * Transcript Running means unresolved, not necessarily a live menu.
+     * Only a caught-up Chat and question-blocked Terminal expose live keys.
+     * Codex requests queue FIFO within the current user turn; Claude's newest
+     * tool supersedes interrupted older ones. The Beacon rechecks before input.
+     * With no live question, only the latest unresolved history may send a
+     * normal message, through terminal.send's Blocked gate.
+     */
+    fun questionMode(id: String): QuestionMode {
+        val snap = snapshot ?: return QuestionMode.ReadOnly
+        if (snap.status != ChatStatus.LIVE) return QuestionMode.ReadOnly
+        val entries = snap.entries
+        val pending = entries.drop(entries.indexOfLast { it.body is ChatEntryBody.User } + 1)
+            .filter { (it.body as? ChatEntryBody.Question)?.status == ChatToolStatus.RUNNING }
+        val blocked = terminal.agentStatus as? AgentStatus.Blocked
+        if (blocked?.reason == BlockedReason.QUESTION) {
+            val codex = pending.firstOrNull()?.body.let { (it as? ChatEntryBody.Question)?.name == "request_user_input" }
+            val current = if (codex) pending.firstOrNull() else pending.lastOrNull()
+            if (current?.id == id) return QuestionMode.Live
+            return if (codex && pending.any { it.id == id }) QuestionMode.Queued else QuestionMode.ReadOnly
+        }
+        if (blocked != null || terminal.state != "live") return QuestionMode.ReadOnly
+        val latestIndex = entries.indexOfLast { it.body is ChatEntryBody.Question }
+        if (latestIndex < entries.indexOfLast { it.body is ChatEntryBody.User }) return QuestionMode.ReadOnly
+        val latest = entries.getOrNull(latestIndex)
+        return if (latest?.id == id && (latest.body as ChatEntryBody.Question).status == ChatToolStatus.RUNNING)
+            QuestionMode.History else QuestionMode.ReadOnly
+    }
+
+    fun writeAnswer(id: String, question: ChatEntryBody.Question, part: Int, text: String) {
+        if (answers[id] == AnswerState.Sending || answers[id] == AnswerState.Sent) return
+        val current = questionText[id] ?: List(question.questions.size) { "" }
+        questionText = questionText + (id to current.mapIndexed { i, value -> if (i == part) text else value })
+        val selected = picks[id] ?: List(question.questions.size) { emptySet() }
+        picks = picks + (id to selected.mapIndexed { i, value -> if (i == part) emptySet() else value })
+    }
 
     /** What the user is typing into the input. */
     var input by mutableStateOf(TextFieldValue(""))
@@ -252,8 +295,13 @@ class ChatModel(
      * own TUI; otherwise the pick is toggled until [send].
      */
     fun pick(id: String, question: ChatEntryBody.Question, part: Int, option: Int) {
+        if (answers[id] == AnswerState.Sending || answers[id] == AnswerState.Sent) return
+        val mode = questionMode(id)
+        if (mode != QuestionMode.Live && mode != QuestionMode.History) return
+        val text = questionText[id] ?: List(question.questions.size) { "" }
+        questionText = questionText + (id to text.mapIndexed { i, value -> if (i == part) "" else value })
         if (question.questions.size == 1 && !question.questions[0].multi) {
-            answer(id, listOf(listOf(option)))
+            answer(id, question, listOf(listOf(option)))
             return
         }
         val current = picks[id] ?: List(question.questions.size) { emptySet() }
@@ -269,23 +317,44 @@ class ChatModel(
 
     /** Every part of question [id] has a pick. */
     fun complete(id: String, question: ChatEntryBody.Question): Boolean {
-        val p = picks[id] ?: return false
-        return p.size == question.questions.size && p.all { it.isNotEmpty() }
+        return question.questions.indices.all { part ->
+            picks[id]?.getOrNull(part)?.isNotEmpty() == true || questionText[id]?.getOrNull(part)?.isNotBlank() == true
+        }
     }
 
     fun send(id: String, question: ChatEntryBody.Question) {
         if (!complete(id, question)) return
-        answer(id, picks.getValue(id).map { it.sorted() })
+        answer(id, question, question.questions.indices.map { picks[id]?.getOrNull(it).orEmpty().sorted() })
     }
 
-    private fun answer(id: String, chosen: List<List<Int>>) {
+    private fun answer(id: String, question: ChatEntryBody.Question, chosen: List<List<Int>>) {
         val scope = scope ?: return
-        if (answers[id] == AnswerState.Sending) return
+        if (answers[id] == AnswerState.Sending || answers[id] == AnswerState.Sent) return
+        val mode = questionMode(id)
+        if (mode != QuestionMode.Live && mode != QuestionMode.History) return
+        val texts = question.questions.indices.map { questionText[id]?.getOrNull(it)?.takeIf(String::isNotBlank) }
         answers = answers + (id to AnswerState.Sending)
         scope.launch {
             val state = try {
                 withContext(keyWork) {
-                    core.answerQuestion(host.id, terminal.address, id, chosen.map { p -> p.map { it.toUInt() } })
+                    if (mode == QuestionMode.History) {
+                        val connection = link?.connection ?: throw CoreException.Closed()
+                        val parts = question.questions.mapIndexed { i, part ->
+                            texts[i] ?: chosen[i].joinToString(", ") { part.options[it].label }
+                        }
+                        val text = if (parts.size == 1) parts[0] else parts.mapIndexed { i, part -> "${question.questions[i].text}: $part" }.joinToString("\n")
+                        when (val outcome = connection.sendMessage(terminal.address, text, HeldListener())) {
+                            SendOutcome.Sent -> {}
+                            is SendOutcome.Blocked -> {
+                                terminal = terminal.copy(agentStatus = AgentStatus.Blocked(outcome.reason, outcome.message))
+                                throw CoreException.AnswerRefused(AnswerProblem.GONE, "")
+                            }
+                        }
+                    } else if (texts.any { it != null }) {
+                        core.answerQuestionWithText(host.id, terminal.address, id, chosen.map { p -> p.map { it.toUInt() } }, texts)
+                    } else {
+                        core.answerQuestion(host.id, terminal.address, id, chosen.map { p -> p.map { it.toUInt() } })
+                    }
                 }
                 AnswerState.Sent
             } catch (e: CoreException) {
@@ -348,6 +417,7 @@ fun ChatScreen(
     }
     val snapshot = chat.snapshot
     val entries = snapshot?.entries.orEmpty()
+    val markdown by rememberChatMarkdown(entries)
     val agentCalls = calls?.let { model ->
         model.calls.filter {
             it.host.id == chat.host.id && it.call.terminal == chat.terminal.address &&
@@ -356,8 +426,11 @@ fun ChatScreen(
     }.orEmpty()
     val list = rememberLazyListState()
     // Follow the conversation: keep the newest entry in view.
-    LaunchedEffect(entries.size, agentCalls.size) {
-        val count = entries.size + agentCalls.size
+    val transcriptItems = entries.sumOf {
+        if (it.body is ChatEntryBody.User || it.body is ChatEntryBody.Agent) 2 + (markdown[it.id]?.blocks?.size ?: 0) else 1
+    }
+    LaunchedEffect(entries.size, transcriptItems, agentCalls.size) {
+        val count = transcriptItems + agentCalls.size
         if (count > 0) list.scrollToItem(count - 1)
     }
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))) {
@@ -368,15 +441,34 @@ fun ChatScreen(
             Text(stringResource(R.string.chat_empty))
         }
         LazyColumn(Modifier.weight(1f), state = list) {
-            items(entries, key = { "transcript:${it.id}" }) { entry ->
+            entries.forEach { entry ->
                 val body = entry.body
-                if (body is ChatEntryBody.Question) {
-                    QuestionView(chat, entry.id, body)
-                } else {
-                    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-                        ChatEntryView(entry, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image) { chat.toggle(entry.id) }
+                val source = when (body) {
+                    is ChatEntryBody.User -> body.text
+                    is ChatEntryBody.Agent -> body.text
+                    else -> null
+                }
+                item(key = "transcript:${entry.id}") {
+                    if (body is ChatEntryBody.Question) {
+                        QuestionView(chat, entry.id, body)
+                    } else {
+                        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                            ChatEntryView(entry, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image) { chat.toggle(entry.id) }
+                        }
+                        if (source == null) HorizontalDivider()
                     }
-                    HorizontalDivider()
+                }
+                if (source != null) {
+                    // Keep the last complete document visible until the background parse swaps it.
+                    chatMarkdownItems(entry.id, markdown[entry.id])
+                    item(key = "transcript:${entry.id}:footer") {
+                        if (body is ChatEntryBody.User && body.images.isNotEmpty()) {
+                            Column(Modifier.padding(horizontal = 16.dp)) {
+                                body.images.forEach { ChatImageView(it, chat::image) }
+                            }
+                        }
+                        HorizontalDivider(Modifier.padding(top = 8.dp))
+                    }
                 }
             }
             items(agentCalls, key = { "call:${it.key}" }) { entry ->
@@ -527,13 +619,10 @@ private fun ChatEntryView(
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary,
                 )
-                if (b.text.isNotEmpty()) ChatFileText(b.text)
-                b.images.forEach { ChatImageView(it, image) }
             }
         }
         is ChatEntryBody.Agent -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(agentName, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            ChatFileText(b.text)
         }
         is ChatEntryBody.Thinking -> Column {
             Text(
@@ -543,7 +632,9 @@ private fun ChatEntryView(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             b.text?.let {
-                Text(it, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                ChatTextActions(it) { modifier ->
+                    Text(it, modifier, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
         is ChatEntryBody.Tool -> ToolView(b, expanded, image, onToggle)
@@ -555,7 +646,7 @@ private fun ChatEntryView(
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onErrorContainer,
             )
-            Text(b.detail, color = MaterialTheme.colorScheme.onErrorContainer)
+            ChatTextActions(b.detail) { Text(b.detail, it, color = MaterialTheme.colorScheme.onErrorContainer) }
         }
         // Rendered by QuestionView, which needs the model.
         is ChatEntryBody.Question -> {}
@@ -576,48 +667,54 @@ private fun ToolView(
 ) {
     val label = stringResource(R.string.chat_tool_expand_label, tool.name)
     val failed = tool.status == ChatToolStatus.FAILED
-    Column(
-        Modifier.fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .clickable(onClick = onToggle)
-            .semantics { contentDescription = label }
-            .padding(8.dp),
-    ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(tool.name, style = MaterialTheme.typography.labelLarge)
-            Text(
-                tool.title,
-                Modifier.weight(1f, fill = false),
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 1,
-                fontFamily = FontFamily.Monospace,
-            )
-            when (tool.status) {
-                ChatToolStatus.RUNNING -> Text(
-                    stringResource(R.string.chat_tool_running),
-                    style = MaterialTheme.typography.labelSmall,
-                )
-                ChatToolStatus.FAILED -> Text(
-                    stringResource(R.string.chat_tool_failed),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-                ChatToolStatus.DONE -> {}
-            }
-        }
-        tool.diff?.let { DiffView(it, expanded) }
-        tool.images.forEach { ChatImageView(it, image) }
-        if (expanded) {
-            Text(stringResource(R.string.chat_tool_input), style = MaterialTheme.typography.labelMedium)
-            Text(tool.input, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
-            tool.output?.let {
-                Text(stringResource(R.string.chat_tool_output), style = MaterialTheme.typography.labelMedium)
+    ChatTextActions(tool.output?.takeIf { it.isNotEmpty() } ?: tool.input, onClick = onToggle) { actions ->
+        Column(
+            Modifier.fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .then(actions)
+                .semantics { contentDescription = label }
+                .padding(8.dp),
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(tool.name, style = MaterialTheme.typography.labelLarge)
                 Text(
-                    it,
-                    fontFamily = FontFamily.Monospace,
+                    tool.title,
+                    Modifier.weight(1f, fill = false),
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    fontFamily = FontFamily.Monospace,
                 )
+                when (tool.status) {
+                    ChatToolStatus.RUNNING -> Text(
+                        stringResource(R.string.chat_tool_running),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                    ChatToolStatus.FAILED -> Text(
+                        stringResource(R.string.chat_tool_failed),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    ChatToolStatus.DONE -> {}
+                }
+            }
+            tool.diff?.let { DiffView(it, expanded) }
+            tool.images.forEach { ChatImageView(it, image) }
+            if (expanded) {
+                Text(stringResource(R.string.chat_tool_input), style = MaterialTheme.typography.labelMedium)
+                ChatTextActions(tool.input, onClick = onToggle) {
+                    Text(tool.input, it, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+                }
+                tool.output?.let {
+                    Text(stringResource(R.string.chat_tool_output), style = MaterialTheme.typography.labelMedium)
+                    ChatTextActions(it, onClick = onToggle) { modifier ->
+                        Text(
+                            it, modifier,
+                            fontFamily = FontFamily.Monospace,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                }
             }
         }
     }
@@ -625,16 +722,20 @@ private fun ToolView(
 
 @Composable
 private fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question) {
-    val open = q.status == ChatToolStatus.RUNNING
+    val mode = chat.questionMode(id)
+    val open = mode == ChatModel.QuestionMode.Live || mode == ChatModel.QuestionMode.History
     val state = chat.answers[id]
     val lone = q.questions.size == 1 && !q.questions[0].multi
     val chosen = chat.picks[id]
+    val enabled = state != AnswerState.Sending && state != AnswerState.Sent
     ConsoleChatCallSurface {
         Text(
             stringResource(R.string.chat_question_label),
             style = MaterialTheme.typography.labelMedium,
             color = statusColor(AgentStatus.Blocked(null, null)),
         )
+        if (mode == ChatModel.QuestionMode.Queued) Text(stringResource(R.string.chat_question_queued))
+        if (mode == ChatModel.QuestionMode.History) Text(stringResource(R.string.chat_question_history), style = MaterialTheme.typography.bodySmall)
         q.questions.forEachIndexed { part, question ->
             question.header?.let { Text(it, style = MaterialTheme.typography.labelSmall) }
             Text(question.text)
@@ -645,19 +746,29 @@ private fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question)
                 question.options.forEachIndexed { i, option ->
                     val label = stringResource(R.string.chat_question_option_label, option.label)
                     val selected = chosen?.getOrNull(part)?.contains(i) == true
-                    val enabled = state != AnswerState.Sending && state != AnswerState.Sent
                     ConsoleChatChoice(i + 1, option.label, option.description, label,
                         enabled = enabled, selected = selected, onClick = { chat.pick(id, q, part, i) })
                 }
+                val inputLabel = stringResource(R.string.chat_question_text_label, question.text)
+                OutlinedTextField(
+                    value = chat.questionText[id]?.getOrNull(part).orEmpty(),
+                    onValueChange = { chat.writeAnswer(id, q, part, it) },
+                    label = { Text(stringResource(R.string.chat_question_text_hint)) },
+                    modifier = Modifier.fillMaxWidth().semantics { contentDescription = inputLabel },
+                    enabled = enabled,
+                    singleLine = true,
+                    shape = RectangleShape,
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                )
             }
         }
-        if (open && !lone && state != AnswerState.Sent) {
+        if (open && (!lone || chat.questionText[id]?.any { it.isNotBlank() } == true)) {
             ConsoleButton(
                 onClick = { chat.send(id, q) },
-                enabled = state != AnswerState.Sending,
+                enabled = enabled && chat.complete(id, q),
             ) { Text(stringResource(R.string.chat_question_send)) }
         }
-        if (open) {
+        if (open || state is AnswerState.Failed) {
             when (state) {
                 AnswerState.Sending -> Text(stringResource(R.string.chat_question_sending), style = MaterialTheme.typography.bodySmall)
                 AnswerState.Sent -> Text(stringResource(R.string.chat_question_sent), style = MaterialTheme.typography.bodySmall)
@@ -668,8 +779,7 @@ private fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question)
                 )
                 null -> {}
             }
-        } else {
-            q.output?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         }
+        if (!open) q.output?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
     }
 }

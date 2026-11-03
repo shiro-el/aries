@@ -952,7 +952,7 @@ async fn the_push_policy_is_kept_on_the_host_and_turns_on_done() {
         .unwrap()
         .to_owned();
 
-    let pushes = s.relay.wait_pushes(2, Duration::from_secs(20));
+    s.relay.wait_pushes(2, Duration::from_secs(20));
     tokio::time::sleep(Duration::from_millis(500)).await;
     let all: Vec<_> = s
         .relay
@@ -962,14 +962,13 @@ async fn the_push_policy_is_kept_on_the_host_and_turns_on_done() {
         .map(|(_, e)| s.core.open_push(e.clone()).unwrap().content)
         .collect();
     assert_eq!(all.len(), 2, "{all:?}");
-    let notice = s.core.open_push(pushes[1].1.clone()).unwrap();
     assert!(
         matches!(
-            &notice.content,
+            &all[1],
             PushContent::Status { terminal, status: AgentStatus::Done, .. } if *terminal == address
         ),
         "{:?}",
-        notice.content
+        all[1]
     );
 }
 
