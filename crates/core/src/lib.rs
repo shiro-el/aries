@@ -1337,7 +1337,7 @@ impl HostConnection {
             let now = client
                 .call("terminal.get", serde_json::json!({ "terminal": address }))
                 .await?;
-            if host_model::seen_turn(&now) >= turn {
+            if host_model::seen_turn(&now).is_some_and(|seen| seen >= turn) {
                 return Ok(terminal_info(&now));
             }
             let labels =
