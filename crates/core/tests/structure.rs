@@ -385,7 +385,8 @@ async fn unnamed_spaces_use_the_first_panes_checkout_and_tabs_use_their_position
 #[tokio::test]
 async fn label_fallback_names_use_checkout_or_terminal_folder_and_tab_order() {
     let home = tempfile::tempdir().unwrap();
-    let hc = HcSession::start_with_env(&[("HOME", home.path().to_str().unwrap())]);
+    let (hc, _tools) =
+        common::korean_host_with_c_locale_shell(&[("HOME", home.path().to_str().unwrap())]);
     let repo = home.path().join("checkout");
     let nested = repo.join("nested");
     std::fs::create_dir_all(&nested).unwrap();

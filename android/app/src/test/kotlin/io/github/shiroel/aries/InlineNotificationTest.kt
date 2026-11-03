@@ -166,11 +166,11 @@ class InlineNotificationTest {
     }
 
     @Test
-    fun remoteInputIsReadByTheReceiverAndSentOnceThroughWorkManager() = runBlocking {
+    fun watchRemoteInputIsReadByThePhoneReceiverAndSentOnceThroughWorkManager() = runBlocking {
         WorkManagerTestInitHelper.initializeTestWorkManager(context)
         online()
         PushService.show(context, status())
-        val action = shown().actions.single { !it.remoteInputs.isNullOrEmpty() }
+        val action = Notification.WearableExtender(shown()).actions.single { !it.remoteInputs.isNullOrEmpty() }
         val fill = Intent()
         RemoteInput.addResultsToIntent(action.remoteInputs, fill, Bundle().apply {
             putCharSequence(InlineNotifications.REPLY_TEXT, "from the notification")
@@ -183,6 +183,7 @@ class InlineNotificationTest {
             }
         }
         assertEquals(listOf(Triple("h1", "t1", "from the notification")), core.backgroundMessages)
+        assertTrue(Notification.WearableExtender(shown()).actions.isEmpty())
     }
 
     @Test
