@@ -46,16 +46,18 @@ class FileExportTest {
         compose.waitUntil(5_000) { compose.waitForIdle(); condition() }
     }
 
+    // An opaque archive keeps this transfer test independent of platform PDF
+    // rendering, which is exercised on-device by RemotePdfDeviceTest.
     @Test fun sharesExactBinaryBytesThroughAReadOnlyContentUri() {
         val bytes = byteArrayOf(0, -1, -128, 13, 10, 42)
-        val conn = object : ExportConnection("한글 'report.pdf") {
+        val conn = object : ExportConnection("한글 'report.zip") {
             override suspend fun readFileBytes(address: String, path: String, offset: ULong, length: UInt): RemoteFileBytes {
                 assertEquals("box/t7", address)
-                assertEquals("/repo/한글 'report.pdf", path)
+                assertEquals("/repo/한글 'report.zip", path)
                 return RemoteFileBytes(bytes, 0u, 6u, true)
             }
         }
-        openFile(conn, "한글 'report.pdf")
+        openFile(conn, "한글 'report.zip")
         compose.onNodeWithText(str(R.string.files_share_button)).performClick()
         compose.waitUntil(5_000) { shadowOf(compose.activity).peekNextStartedActivity() != null }
         val chooser = shadowOf(compose.activity).nextStartedActivity
@@ -63,7 +65,7 @@ class FileExportTest {
         @Suppress("DEPRECATION")
         val send = chooser.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
         assertEquals(Intent.ACTION_SEND, send.action)
-        assertEquals("application/pdf", send.type)
+        assertEquals("application/zip", send.type)
         assertEquals(Intent.FLAG_GRANT_READ_URI_PERMISSION, send.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION)
         assertEquals(0, send.flags and Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
         @Suppress("DEPRECATION")

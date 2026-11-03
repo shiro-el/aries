@@ -17,6 +17,7 @@ mod git_changes;
 mod hc;
 mod host_edit;
 mod host_model;
+mod input_history;
 mod last_known_state;
 mod launch;
 mod layout_edit;
@@ -70,7 +71,8 @@ pub use settings::{AgentView, AttachMode};
 pub use structure::{HostStructure, PaneInfo, SpaceInfo, StructureProblem, TabInfo};
 pub use terminal::{
     AttachOptions, CellRun, CursorPos, FRAME_INTERVAL, KeyMods, ScreenFrame, ScreenLine,
-    TerminalExit, TerminalKey, TerminalUpdate, TerminalView, ViewStats,
+    TerminalExit, TerminalKey, TerminalSearch, TerminalSearchHighlight, TerminalUpdate,
+    TerminalView, ViewStats,
 };
 pub use worktrees::{WorktreeInfo, WorktreeOpen};
 
@@ -462,6 +464,43 @@ impl AriesCore {
     pub fn saved_launches(&self, host_id: String) -> Result<Vec<SavedLaunch>, CoreError> {
         let host = self.saved_host(&host_id)?;
         Ok(launch::SavedLaunches::in_host_dir(self.store.host_dir(&host.id)).list())
+    }
+
+    /// Composer inputs on this phone, newest first. Never contacts the Host.
+    pub fn input_history(
+        &self,
+        host_id: String,
+        terminal: String,
+    ) -> Result<Vec<String>, CoreError> {
+        let hosts = self.hosts.lock().expect("hosts lock");
+        if !hosts.iter().any(|host| host.id == host_id) {
+            return Err(CoreError::UnknownHost { id: host_id });
+        }
+        input_history::InputHistory::new(self.store.host_dir(&host_id)).list(&terminal)
+    }
+
+    /// Records one composer submission verbatim. Call after sending succeeds.
+    pub fn remember_input(
+        &self,
+        host_id: String,
+        terminal: String,
+        text: String,
+    ) -> Result<(), CoreError> {
+        // Serializes read/modify/write with other inputs, clears and Host removal.
+        let hosts = self.hosts.lock().expect("hosts lock");
+        if !hosts.iter().any(|host| host.id == host_id) {
+            return Err(CoreError::UnknownHost { id: host_id });
+        }
+        input_history::InputHistory::new(self.store.host_dir(&host_id)).remember(terminal, text)
+    }
+
+    /// Deletes only this Terminal's phone-local composer history.
+    pub fn clear_input_history(&self, host_id: String, terminal: String) -> Result<(), CoreError> {
+        let hosts = self.hosts.lock().expect("hosts lock");
+        if !hosts.iter().any(|host| host.id == host_id) {
+            return Err(CoreError::UnknownHost { id: host_id });
+        }
+        input_history::InputHistory::new(self.store.host_dir(&host_id)).clear(&terminal)
     }
 
     /// Trusts `fingerprint` as `host_id`'s Host key, after the user compared
