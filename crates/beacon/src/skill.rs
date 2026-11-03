@@ -82,6 +82,39 @@ pub fn uninstall(home: &Path, state: &Path) -> io::Result<SkillReport> {
     locked(home, state, uninstall_one)
 }
 
+/// Inspects each path without creating state, taking an install lock, or
+/// repairing files. An untouched managed copy is reported as `Unchanged`.
+pub fn status(home: &Path) -> io::Result<SkillReport> {
+    let roots = roots(home)
+        .into_iter()
+        .map(|root| {
+            let dir = root.join(NAME);
+            let outcome = inspect_one(&dir).map_err(|e| with_path(e, &dir))?;
+            Ok(SkillRoot {
+                path: dir.display().to_string(),
+                outcome,
+            })
+        })
+        .collect::<io::Result<Vec<_>>>()?;
+    Ok(SkillReport { roots })
+}
+
+fn inspect_one(dir: &Path) -> io::Result<SkillOutcome> {
+    let marker = match look(dir)? {
+        Found::Nothing => return Ok(SkillOutcome::Absent),
+        Found::Symlink => return Ok(SkillOutcome::KeptSymlink),
+        Found::Foreign => return Ok(SkillOutcome::KeptForeign),
+        Found::Managed(marker) => marker,
+    };
+    for (name, recorded) in &marker.files {
+        if !matches!(read_regular_or_link(&dir.join(name))?, OnDisk::Text(text) if &text == recorded)
+        {
+            return Ok(SkillOutcome::KeptModified);
+        }
+    }
+    Ok(SkillOutcome::Unchanged)
+}
+
 fn locked(
     home: &Path,
     state: &Path,

@@ -32,7 +32,8 @@ use serde::{Deserialize, Serialize};
 
 pub use beacon::{
     ALLOWED_BEACON, BeaconArtifact, BeaconCheck, BeaconFetcher, BeaconInstall, BeaconRelease,
-    BeaconSource, BeaconState, BeaconUpdate, FetchError, Linger, pinned_release,
+    BeaconSkillOutcome, BeaconSkillRoot, BeaconSource, BeaconState, BeaconUpdate, FetchError,
+    Linger, pinned_release,
 };
 pub use calls::{
     CallAnswer, CallAnswerState, CallFeedState, CallInfo, CallListener, CallReply,

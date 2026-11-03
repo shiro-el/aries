@@ -435,4 +435,13 @@
     <string name="settings_hosts_title">Host settings</string>
     <string name="settings_agent_view">Default Agent view</string>
     <string name="settings_beacon_missing">Beacon not installed · Host settings</string>
+
+    <!-- Beacon call-human skill diagnostics. -->
+    <string name="beacon_skill_title">Call-human skill</string>
+    <string name="beacon_skill_unknown">This Beacon did not report call-human skill status. The Aries Call connection cannot be verified.</string>
+    <string name="beacon_skill_foreign">Another tool’s skill was kept. Agents using this path cannot send Calls to Aries.</string>
+    <string name="beacon_skill_modified">Your modified skill was kept. The Aries Call connection cannot be verified.</string>
+    <string name="beacon_skill_symlink">The symlink was kept. The Aries Call connection cannot be verified.</string>
+    <string name="beacon_skill_absent">The Aries call-human skill is not installed at this path.</string>
+    <string name="beacon_skill_ready">The Aries call-human skill is installed.</string>
 </resources>
