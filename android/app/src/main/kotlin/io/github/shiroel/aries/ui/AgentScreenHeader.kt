@@ -73,7 +73,11 @@ internal fun AgentScreenHeader(
                 Text(stringResource(agentStatusLabel(status)), color = statusColor(status), fontSize = 12.sp, maxLines = 1)
             }
         }
-        Text(terminal.cwd ?: stringResource(R.string.console_agent_unknown_folder), Modifier.weight(1f),
+        terminal.currentProgram?.let { program ->
+            Text(program, color = colors.onSurfaceVariant, fontSize = 12.sp,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(0.4f, fill = false))
+        }
+        Text(terminal.currentCwd ?: stringResource(R.string.console_agent_unknown_folder), Modifier.weight(1f),
             color = colors.onSurfaceVariant, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         onChanges?.let { TextButton(onClick = it) { Text(stringResource(R.string.git_changes_button)) } }
         AgentElapsedTime(terminal.statusMs, R.string.console_agent_missing_value, R.string.console_agent_unknown_age)
