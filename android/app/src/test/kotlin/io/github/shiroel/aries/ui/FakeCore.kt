@@ -654,8 +654,11 @@ class FakeConnection(
     }
     var fileDirectory = io.github.shiroel.aries.core.RemoteDirectory("/repo", emptyList())
     override suspend fun listFiles(address: String, path: String?) = fileDirectory
-    override suspend fun readFilePage(address: String, path: String, offset: ULong, limit: UInt) =
+    var fileReader: (String, String, ULong, UInt) -> io.github.shiroel.aries.core.RemoteFilePage = { _, _, _, _ ->
         io.github.shiroel.aries.core.RemoteFilePage("", 1u, 0u, 0u)
+    }
+    override suspend fun readFilePage(address: String, path: String, offset: ULong, limit: UInt) =
+        fileReader(address, path, offset, limit)
     var gitFiles = io.github.shiroel.aries.core.GitChanges("/repo", emptyList(), false, false)
     var gitPatch = io.github.shiroel.aries.core.GitDiff(emptyList(), false, false)
     override suspend fun gitChanges(address: String) = gitFiles

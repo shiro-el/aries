@@ -5,6 +5,26 @@
   Glossary terms: Host = 호스트, Terminal = 터미널, Agent = 에이전트.
 -->
 <resources>
+    <!-- 퀵오픈과 명령 팔레트 -->
+    <string name="quick_open_title">퀵오픈</string>
+    <string name="quick_open_hint">이름 검색, 명령은 &gt; 입력</string>
+    <string name="quick_open_empty">검색 결과가 없습니다.</string>
+    <string name="quick_open_host">Host</string>
+    <string name="quick_open_space">Space</string>
+    <string name="quick_open_tab">Tab</string>
+    <string name="quick_open_agent">Agent</string>
+    <string name="quick_open_result_context">%1$s · %2$s</string>
+    <string name="quick_open_live">실시간</string>
+    <string name="quick_open_unknown">아직 Last-known state가 없습니다</string>
+    <string name="quick_open_age">마지막 확인 · %1$d분 전</string>
+    <string name="quick_open_gone">이 Host에서 %1$s을(를) 더 이상 찾을 수 없습니다.</string>
+    <string name="quick_open_run_agent">Agent 실행</string>
+    <string name="quick_open_choose_host">먼저 Host를 열어 주세요.</string>
+    <string name="quick_open_choose_space">먼저 Space를 열어 주세요.</string>
+    <string name="quick_open_choose_tab">먼저 Tab을 열어 주세요.</string>
+    <string name="quick_open_choose_terminal">먼저 Terminal을 선택해 주세요.</string>
+    <string name="quick_open_busy">작업을 실행하고 있습니다.</string>
+
     <!-- Onboarding and app updates (93) -->
     <string name="app_update_settings_title">앱 업데이트 및 안내</string>
     <string name="app_update_installed">설치된 버전: %1$s (%2$d)</string>
@@ -42,6 +62,19 @@
     <string name="onboarding_skip_button">안내 건너뛰기</string>
 
 
+    <!-- Host file downloads and sharing (112) -->
+    <string name="files_save_button">폰에 저장</string>
+    <string name="files_share_button">공유</string>
+    <string name="files_share_title">Host 파일 공유</string>
+    <string name="files_export_limit">파일 하나를 최대 64 MiB까지 저장하거나 공유할 수 있습니다.</string>
+    <string name="files_export_starting">다운로드 시작 중…</string>
+    <string name="files_export_progress">%2$d바이트 중 %1$d바이트 다운로드</string>
+    <string name="files_export_saving">선택한 폴더에 저장 중…</string>
+    <string name="files_saved">선택한 폴더에 저장했습니다.</string>
+    <string name="files_share_ready">파일을 공유할 준비가 되었습니다.</string>
+    <string name="files_export_cancelled">전송을 취소했습니다.</string>
+    <string name="files_export_too_large">이 파일은 저장·공유 상한인 64 MiB를 초과합니다.</string>
+    <string name="files_export_failed">파일을 전송하지 못했습니다. 연결, 파일과 폴더의 접근 권한, 여유 공간을 확인한 뒤 다시 시도하세요.</string>
     <!-- Remote file browser (90) -->
     <string name="files_open_button">파일</string>
     <string name="files_title">Host 파일</string>
@@ -60,6 +93,11 @@
     <string name="files_range">전체 %3$d행 중 %1$d–%2$d행</string>
     <string name="files_previous_button">이전 페이지</string>
     <string name="files_next_button">다음 페이지</string>
+    <!-- File code view and Chat links (110) -->
+    <string name="files_wrap_lines">자동 줄바꿈</string>
+    <string name="files_missing">파일을 찾을 수 없습니다: %1$s</string>
+    <string name="files_line_unavailable">이 파일에 %1$d줄이 더 이상 없습니다. 처음부터 표시합니다.</string>
+    <string name="files_no_folder">이 Terminal의 현재 폴더가 없습니다. 파일의 절대 경로를 사용하세요.</string>
     <!-- Git changes (ticket 89) -->
     <string name="git_changes_button">변경</string>
     <string name="git_changes_title">Git 변경 · 읽기 전용</string>

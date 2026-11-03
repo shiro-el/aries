@@ -51,7 +51,7 @@ pub use chat::{
     ChatToolStatus, ChatWatch,
 };
 pub use error::{AnswerProblem, CoreError, Incompatibility, VaultError};
-pub use files::{RemoteDirectory, RemoteFileEntry, RemoteFilePage};
+pub use files::{RemoteDirectory, RemoteFileBytes, RemoteFileEntry, RemoteFilePage};
 pub use git_changes::*;
 pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
 pub use host_model::{AgentStatus, BlockedReason, TerminalWatch};
@@ -1392,7 +1392,10 @@ impl HostConnection {
     pub async fn structure(&self) -> Result<HostStructure, CoreError> {
         let client = self.client.clone();
         let names = self.names.clone();
-        on_runtime(async move { read_structure(&client, &names).await }).await
+        let structure = on_runtime(async move { read_structure(&client, &names).await }).await?;
+        self.last_known
+            .save_structure(&self.host_id, structure.clone())?;
+        Ok(structure)
     }
 
     /// Delivers the structure now and again whenever the desktop changes the
@@ -1404,10 +1407,14 @@ impl HostConnection {
     ) -> Result<Arc<StructureWatch>, CoreError> {
         let client = self.client.clone();
         let names = self.names.clone();
+        let states = self.last_known.clone();
+        let host_id = self.host_id.clone();
         let task = on_runtime(async move {
             // Subscribe before reading, so no change falls in between.
             let (_, mut events) = client.subscribe_events(serde_json::json!({})).await?;
-            listener.on_structure(read_structure(&client, &names).await?);
+            let structure = read_structure(&client, &names).await?;
+            states.save_structure(&host_id, structure.clone())?;
+            listener.on_structure(structure);
             Ok(tokio::spawn(async move {
                 while let Some(msg) = events.recv().await {
                     let mut changed = changes_structure(&msg);
@@ -1418,7 +1425,12 @@ impl HostConnection {
                         continue;
                     }
                     match read_structure(&client, &names).await {
-                        Ok(s) => listener.on_structure(s),
+                        Ok(s) => {
+                            if states.save_structure(&host_id, s.clone()).is_err() {
+                                break;
+                            }
+                            listener.on_structure(s);
+                        }
                         Err(_) => break,
                     }
                 }

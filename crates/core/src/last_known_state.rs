@@ -7,7 +7,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    AriesCore, CoreError, TerminalInfo,
+    AriesCore, CoreError, HostStructure, TerminalInfo,
     store::{SavedHost, Store},
 };
 
@@ -20,6 +20,13 @@ pub struct LastKnownState {
     pub agents: Vec<TerminalInfo>,
     /// Unix epoch milliseconds when this list was fetched (not status change time).
     pub fetched_at_ms: u64,
+    /// Last successful structure read, retained across Agent-only updates.
+    #[serde(default)]
+    #[uniffi(default = None)]
+    pub structure: Option<HostStructure>,
+    #[serde(default)]
+    #[uniffi(default = None)]
+    pub structure_fetched_at_ms: Option<u64>,
 }
 
 #[derive(Clone)]
@@ -66,7 +73,10 @@ impl States {
         if !hosts.iter().any(|h| h.id == host_id) {
             return Err(CoreError::UnknownHost { id: host_id.into() });
         }
+        let previous = self.read(host_id)?;
         let state = LastKnownState {
+            structure: previous.as_ref().and_then(|s| s.structure.clone()),
+            structure_fetched_at_ms: previous.and_then(|s| s.structure_fetched_at_ms),
             host_id: host_id.into(),
             agents: terminals
                 .into_iter()
@@ -84,6 +94,34 @@ impl States {
         std::fs::rename(tmp, dir.join("last-known-state.json")).map_err(storage)?;
         self.changed();
         Ok(state)
+    }
+
+    /// Serialized with Agent updates and Host removal by the same Host lock.
+    pub fn save_structure(&self, host_id: &str, structure: HostStructure) -> Result<(), CoreError> {
+        let hosts = self.hosts.lock().expect("hosts lock");
+        if !hosts.iter().any(|h| h.id == host_id) {
+            return Err(CoreError::UnknownHost { id: host_id.into() });
+        }
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        let mut state = self.read(host_id)?.unwrap_or(LastKnownState {
+            host_id: host_id.into(),
+            agents: vec![],
+            fetched_at_ms: now,
+            structure: None,
+            structure_fetched_at_ms: None,
+        });
+        state.structure = Some(structure);
+        state.structure_fetched_at_ms = Some(now);
+        let dir = self.store.host_dir(host_id);
+        std::fs::create_dir_all(&dir).map_err(storage)?;
+        let tmp = dir.join(".last-known-state.tmp");
+        std::fs::write(&tmp, serde_json::to_vec(&state).map_err(storage)?).map_err(storage)?;
+        std::fs::rename(tmp, dir.join("last-known-state.json")).map_err(storage)?;
+        self.changed();
+        Ok(())
     }
 }
 
@@ -115,7 +153,7 @@ impl AriesCore {
         })
     }
 
-    /// A short connection, hello and `terminal.list`, then disconnect.
+    /// A short connection to read Terminals and the layout, then disconnect.
     /// Background callers must check `can_answer_in_background` first;
     /// foreground callers may use a biometric key while the app is open.
     pub async fn snapshot(self: Arc<Self>, host_id: String) -> Result<LastKnownState, CoreError> {
@@ -123,6 +161,10 @@ impl AriesCore {
             tokio::time::timeout(Duration::from_secs(30), async {
                 let connection = self.connect(host_id.clone()).await?;
                 let list = connection.terminals().await;
+                // Layout failure must not discard a successful Agent pull.
+                if list.is_ok() {
+                    let _ = connection.structure().await;
+                }
                 connection.disconnect().await;
                 list?;
                 self.last_known_state(host_id)?.ok_or(CoreError::Closed)

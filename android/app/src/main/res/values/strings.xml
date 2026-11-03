@@ -5,6 +5,26 @@
   Add every new string to values-ko/strings.xml too (TranslationsTest checks it).
 -->
 <resources>
+    <!-- Quick open and command palette -->
+    <string name="quick_open_title">Quick open</string>
+    <string name="quick_open_hint">Search names, or &gt; for commands</string>
+    <string name="quick_open_empty">No matches.</string>
+    <string name="quick_open_host">Host</string>
+    <string name="quick_open_space">Space</string>
+    <string name="quick_open_tab">Tab</string>
+    <string name="quick_open_agent">Agent</string>
+    <string name="quick_open_result_context">%1$s · %2$s</string>
+    <string name="quick_open_live">Live</string>
+    <string name="quick_open_unknown">No Last-known state yet</string>
+    <string name="quick_open_age">Last known · %1$d min ago</string>
+    <string name="quick_open_gone">%1$s is no longer available on this Host.</string>
+    <string name="quick_open_run_agent">Run Agent</string>
+    <string name="quick_open_choose_host">Open a Host first.</string>
+    <string name="quick_open_choose_space">Open a Space first.</string>
+    <string name="quick_open_choose_tab">Open a Tab first.</string>
+    <string name="quick_open_choose_terminal">Focus a Terminal first.</string>
+    <string name="quick_open_busy">An action is in progress.</string>
+
     <!-- Onboarding and app updates (93) -->
     <string name="app_update_settings_title">App updates and guide</string>
     <string name="app_update_installed">Installed: %1$s (%2$d)</string>
@@ -42,6 +62,19 @@
     <string name="onboarding_skip_button">Skip guide</string>
 
 
+    <!-- Host file downloads and sharing (112) -->
+    <string name="files_save_button">Save to phone</string>
+    <string name="files_share_button">Share</string>
+    <string name="files_share_title">Share Host file</string>
+    <string name="files_export_limit">Save or share one file, up to 64 MiB.</string>
+    <string name="files_export_starting">Starting download…</string>
+    <string name="files_export_progress">Downloaded %1$d of %2$d bytes</string>
+    <string name="files_export_saving">Saving to the selected folder…</string>
+    <string name="files_saved">Saved to the selected folder.</string>
+    <string name="files_share_ready">File ready to share.</string>
+    <string name="files_export_cancelled">Transfer cancelled.</string>
+    <string name="files_export_too_large">This file exceeds the 64 MiB save and share limit.</string>
+    <string name="files_export_failed">Could not transfer this file. Check the connection, file and folder permissions, and free space, then retry.</string>
     <!-- Remote file browser (90) -->
     <string name="files_open_button">Files</string>
     <string name="files_title">Host files</string>
@@ -60,6 +93,11 @@
     <string name="files_range">Lines %1$d–%2$d of %3$d</string>
     <string name="files_previous_button">Previous page</string>
     <string name="files_next_button">Next page</string>
+    <!-- File code view and Chat links (110) -->
+    <string name="files_wrap_lines">Wrap lines</string>
+    <string name="files_missing">File not found: %1$s</string>
+    <string name="files_line_unavailable">Line %1$d is no longer in this file. Showing the start.</string>
+    <string name="files_no_folder">This Terminal has no current folder. Use an absolute file path.</string>
     <!-- Git changes (ticket 89) -->
     <string name="git_changes_button">Changes</string>
     <string name="git_changes_title">Git changes · read only</string>
