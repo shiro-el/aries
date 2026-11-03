@@ -1,6 +1,8 @@
 package io.github.shiroel.aries.ui
 
 import android.content.Context
+import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.material3.LinearProgressIndicator
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -412,6 +414,14 @@ fun ChatScreen(
     val snapshot = chat.snapshot
     val entries = snapshot?.entries.orEmpty()
     val markdown by rememberChatMarkdown(entries)
+    var searchOpen by remember(chat) { mutableStateOf(false) }
+    var query by remember(chat) { mutableStateOf("") }
+    var selected by remember(chat) { mutableStateOf<ChatSearchMatch?>(null) }
+    val matches by rememberChatSearch(entries, markdown, query)
+    val selectedIndex = selectedChatSearchIndex(matches, selected)
+    val active = matches.getOrNull(selectedIndex)
+    fun closeSearch() { searchOpen = false; query = ""; selected = null }
+    BackHandler(enabled = searchOpen, onBack = ::closeSearch)
     val agentCalls = calls?.let { model ->
         model.calls.filter {
             it.host.id == chat.host.id && it.call.terminal == chat.terminal.address &&
@@ -424,75 +434,95 @@ fun ChatScreen(
         if (it.body is ChatEntryBody.User || it.body is ChatEntryBody.Agent) 2 + (markdown[it.id]?.blocks?.size ?: 0) else 1
     }
     LaunchedEffect(entries.size, transcriptItems, agentCalls.size) {
+        if (searchOpen) return@LaunchedEffect
         val count = transcriptItems + agentCalls.size
         if (count > 0) list.scrollToItem(count - 1)
     }
-    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))) {
-        AgentScreenHeader(chat.terminal, chat.host.name, onBack, AgentView.CHAT, onView,
-            onChanges = { showGit = true }, link = chat.link, onTerminalUpdate = { chat.update(listOf(it)) })
-        statusText(snapshot?.status ?: ChatStatus.CONNECTING)?.let { ChatNotice(it) }
-        if (snapshot != null && entries.isEmpty() && snapshot.status == ChatStatus.LIVE) {
-            Text(stringResource(R.string.chat_empty))
+    LaunchedEffect(active) {
+        if (active != null) {
+            val body = entries.find { it.id == active.field.entryId }?.body
+            if (body is ChatEntryBody.Tool && active.field.entryId !in chat.expanded) chat.toggle(active.field.entryId)
+            list.scrollToItem(active.field.itemIndex)
         }
-        LazyColumn(Modifier.weight(1f), state = list) {
-            entries.forEach { entry ->
-                val body = entry.body
-                val source = when (body) {
-                    is ChatEntryBody.User -> body.text
-                    is ChatEntryBody.Agent -> body.text
-                    else -> null
-                }
-                item(key = "transcript:${entry.id}") {
-                    if (body is ChatEntryBody.Question) {
-                        QuestionView(chat, entry.id, body)
-                    } else {
-                        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-                            ChatEntryView(entry, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image) { chat.toggle(entry.id) }
-                        }
-                        if (source == null) HorizontalDivider()
+    }
+    val searchRanges = remember(matches) { matches.flatMap { it.ranges }.groupBy { it.field.entryId to it.field.key } }
+    val searchDecoration = remember(searchRanges, active) { ChatSearchDecoration(searchRanges, active) }
+    CompositionLocalProvider(LocalChatSearch provides searchDecoration) {
+        Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))) {
+            AgentScreenHeader(chat.terminal, chat.host.name, onBack, AgentView.CHAT, onView,
+                onChanges = { showGit = true }, link = chat.link, onTerminalUpdate = { chat.update(listOf(it)) })
+            ChatSearchBar(searchOpen, query, selectedIndex + 1, matches.size,
+                onOpen = { searchOpen = true },
+                onQuery = { query = it; selected = null },
+                onMove = { selected = navigateChatSearch(matches, active, it) },
+                onClose = ::closeSearch,
+            )
+            statusText(snapshot?.status ?: ChatStatus.CONNECTING)?.let { ChatNotice(it) }
+            if (snapshot != null && entries.isEmpty() && snapshot.status == ChatStatus.LIVE) {
+                Text(stringResource(R.string.chat_empty))
+            }
+            LazyColumn(Modifier.weight(1f), state = list) {
+                entries.forEach { entry ->
+                    val body = entry.body
+                    val source = when (body) {
+                        is ChatEntryBody.User -> body.text
+                        is ChatEntryBody.Agent -> body.text
+                        else -> null
                     }
-                }
-                if (source != null) {
-                    // Keep the last complete document visible until the background parse swaps it.
-                    chatMarkdownItems(entry.id, markdown[entry.id])
-                    item(key = "transcript:${entry.id}:footer") {
-                        if (body is ChatEntryBody.User && body.images.isNotEmpty()) {
-                            Column(Modifier.padding(horizontal = 16.dp)) {
-                                body.images.forEach { ChatImageView(it, chat::image) }
+                    item(key = "transcript:${entry.id}") {
+                        CompositionLocalProvider(LocalChatSearchEntry provides entry.id) {
+                            if (body is ChatEntryBody.Question) {
+                                QuestionView(chat, entry.id, body)
+                            } else {
+                                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                                    ChatEntryView(entry, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image) { chat.toggle(entry.id) }
+                                }
+                                if (source == null) HorizontalDivider()
                             }
                         }
-                        HorizontalDivider(Modifier.padding(top = 8.dp))
+                    }
+                    if (source != null) {
+                        // Keep the last complete document visible until the background parse swaps it.
+                        chatMarkdownItems(entry.id, markdown[entry.id])
+                        item(key = "transcript:${entry.id}:footer") {
+                            if (body is ChatEntryBody.User && body.images.isNotEmpty()) {
+                                Column(Modifier.padding(horizontal = 16.dp)) {
+                                    body.images.forEach { ChatImageView(it, chat::image) }
+                                }
+                            }
+                            HorizontalDivider(Modifier.padding(top = 8.dp))
+                        }
                     }
                 }
+                items(agentCalls, key = { "call:${it.key}" }) { entry ->
+                    if (calls != null) ConsoleChatCall(entry, calls)
+                }
             }
-            items(agentCalls, key = { "call:${it.key}" }) { entry ->
-                if (calls != null) ConsoleChatCall(entry, calls)
+            (chat.terminal.agentStatus as? AgentStatus.Blocked)?.let {
+                // A question the Chat shows open is answered with its own buttons;
+                // the Terminal notice is for what the Chat cannot answer.
+                val answerable = it.reason == BlockedReason.QUESTION && entries.any { e ->
+                    (e.body as? ChatEntryBody.Question)?.status == ChatToolStatus.RUNNING
+                }
+                if (!answerable || chat.refused) BlockedNotice(it, refused = chat.refused, onOpenTerminal)
             }
-        }
-        (chat.terminal.agentStatus as? AgentStatus.Blocked)?.let {
-            // A question the Chat shows open is answered with its own buttons;
-            // the Terminal notice is for what the Chat cannot answer.
-            val answerable = it.reason == BlockedReason.QUESTION && entries.any { e ->
-                (e.body as? ChatEntryBody.Question)?.status == ChatToolStatus.RUNNING
+            when (chat.sending) {
+                ChatModel.Sending.Sending -> ChatNotice(stringResource(R.string.chat_sending))
+                ChatModel.Sending.Held -> ChatNotice(stringResource(R.string.chat_send_held))
+                null -> {}
             }
-            if (!answerable || chat.refused) BlockedNotice(it, refused = chat.refused, onOpenTerminal)
-        }
-        when (chat.sending) {
-            ChatModel.Sending.Sending -> ChatNotice(stringResource(R.string.chat_sending))
-            ChatModel.Sending.Held -> ChatNotice(stringResource(R.string.chat_send_held))
-            null -> {}
-        }
-        chat.sendError?.let {
-            Text(stringResource(R.string.chat_send_failed, it), color = MaterialTheme.colorScheme.error)
-        }
-        if (chat.uploading) {
-            LinearProgressIndicator(Modifier.fillMaxWidth())
-            ChatNotice(stringResource(R.string.attachments_uploading))
-        }
-        chat.attachmentError?.let { Text(stringResource(it.res, *it.args.toTypedArray()), color = MaterialTheme.colorScheme.error) }
-        if (chat.link != null) {
-            AttachmentControls(chat)
-            MessageInput(chat)
+            chat.sendError?.let {
+                Text(stringResource(R.string.chat_send_failed, it), color = MaterialTheme.colorScheme.error)
+            }
+            if (chat.uploading) {
+                LinearProgressIndicator(Modifier.fillMaxWidth())
+                ChatNotice(stringResource(R.string.attachments_uploading))
+            }
+            chat.attachmentError?.let { Text(stringResource(it.res, *it.args.toTypedArray()), color = MaterialTheme.colorScheme.error) }
+            if (chat.link != null) {
+                AttachmentControls(chat)
+                MessageInput(chat)
+            }
         }
     }
 }
@@ -627,7 +657,7 @@ private fun ChatEntryView(
             )
             b.text?.let {
                 ChatTextActions(it) { modifier ->
-                    Text(it, modifier, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    SearchableChatText(it, "thinking", modifier, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -640,7 +670,7 @@ private fun ChatEntryView(
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onErrorContainer,
             )
-            ChatTextActions(b.detail) { Text(b.detail, it, color = MaterialTheme.colorScheme.onErrorContainer) }
+            ChatTextActions(b.detail) { SearchableChatText(b.detail, "error", it, color = MaterialTheme.colorScheme.onErrorContainer) }
         }
         // Rendered by QuestionView, which needs the model.
         is ChatEntryBody.Question -> {}
@@ -670,9 +700,9 @@ private fun ToolView(
                 .padding(8.dp),
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(tool.name, style = MaterialTheme.typography.labelLarge)
-                Text(
-                    tool.title,
+                SearchableChatText(tool.name, "tool-name", style = MaterialTheme.typography.labelLarge)
+                SearchableChatText(
+                    tool.title, "tool-title",
                     Modifier.weight(1f, fill = false),
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
@@ -696,13 +726,13 @@ private fun ToolView(
             if (expanded) {
                 Text(stringResource(R.string.chat_tool_input), style = MaterialTheme.typography.labelMedium)
                 ChatTextActions(tool.input, onClick = onToggle) {
-                    Text(tool.input, it, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+                    SearchableChatText(tool.input, "tool-input", it, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
                 }
                 tool.output?.let {
                     Text(stringResource(R.string.chat_tool_output), style = MaterialTheme.typography.labelMedium)
                     ChatTextActions(it, onClick = onToggle) { modifier ->
-                        Text(
-                            it, modifier,
+                        SearchableChatText(
+                            it, "tool-output", modifier,
                             fontFamily = FontFamily.Monospace,
                             style = MaterialTheme.typography.bodySmall,
                             color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
@@ -731,8 +761,8 @@ private fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question)
         if (mode == ChatModel.QuestionMode.Queued) Text(stringResource(R.string.chat_question_queued))
         if (mode == ChatModel.QuestionMode.History) Text(stringResource(R.string.chat_question_history), style = MaterialTheme.typography.bodySmall)
         q.questions.forEachIndexed { part, question ->
-            question.header?.let { Text(it, style = MaterialTheme.typography.labelSmall) }
-            Text(question.text)
+            question.header?.let { SearchableChatText(it, "question:$part:header", style = MaterialTheme.typography.labelSmall) }
+            SearchableChatText(question.text, "question:$part")
             if (open && question.multi) {
                 Text(stringResource(R.string.chat_question_multi_hint), style = MaterialTheme.typography.bodySmall)
             }
@@ -774,6 +804,6 @@ private fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question)
                 null -> {}
             }
         }
-        if (!open) q.output?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        q.output?.let { SearchableChatText(it, "question-output", style = MaterialTheme.typography.bodySmall) }
     }
 }
