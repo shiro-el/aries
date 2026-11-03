@@ -56,6 +56,23 @@
     <string name="terminals_empty">No Terminals are running on this Host.</string>
     <string name="terminal_subtitle">%1$s · %2$s</string>
 
+    <string name="agents_button">All Agents</string>
+    <string name="agents_title">Agents</string>
+    <string name="agents_empty">No Agents are running on your Hosts.</string>
+    <string name="agents_no_hosts">Add a Host first.</string>
+    <string name="agents_host_unavailable">Could not reach %1$s</string>
+    <string name="agents_host_closed">The connection to %1$s closed. Its Agents may be out of date.</string>
+    <string name="agent_pinned_label">Pinned</string>
+    <string name="agent_pin_button">Pin</string>
+    <string name="agent_unpin_button">Unpin</string>
+    <string name="agent_pin_button_label">Pin %1$s on %2$s</string>
+    <string name="agent_unpin_button_label">Unpin %1$s on %2$s</string>
+    <string name="agent_detail_host">Host: %1$s</string>
+    <string name="agent_detail_address">Address: %1$s</string>
+    <string name="agent_detail_folder">Folder: %1$s</string>
+    <string name="agent_detail_command">Command: %1$s</string>
+    <string name="agent_detail_gone">This Agent is no longer running.</string>
+
     <string name="agent_status_working">Working</string>
     <string name="agent_status_blocked">Blocked</string>
     <string name="agent_status_blocked_permission">Blocked: permission</string>

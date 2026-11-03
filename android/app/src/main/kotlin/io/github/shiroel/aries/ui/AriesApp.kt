@@ -65,6 +65,17 @@ fun AriesApp(model: HostsModel) {
                     }
                     BrowseScreen(s.browser, onBack = model::back)
                 }
+                is Screen.Agents -> {
+                    BackHandler {
+                        if (s.board.openKey != null) s.board.closeDetail() else model.back()
+                    }
+                    AgentsScreen(
+                        s.board,
+                        onBack = model::back,
+                        onOpen = { model.openAgent(s.board, it) },
+                        onPin = { entry, pinned -> model.pin(s.board, entry, pinned) },
+                    )
+                }
             }
         }
         model.prompt?.let { PromptDialog(it, model) }
@@ -78,6 +89,9 @@ private fun HostListScreen(model: HostsModel) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item { Text(stringResource(R.string.hosts_title), style = MaterialTheme.typography.headlineMedium) }
+        if (model.hosts.isNotEmpty()) {
+            item { Button(onClick = model::openAgents) { Text(stringResource(R.string.agents_button)) } }
+        }
         item { KeySection(model) }
         item { HorizontalDivider() }
         if (model.hosts.isEmpty()) {
@@ -251,4 +265,4 @@ private fun QrCode(qr: QrMatrix, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun text(m: Message): String = stringResource(m.res, *m.args.toTypedArray())
+internal fun text(m: Message): String = stringResource(m.res, *m.args.toTypedArray())

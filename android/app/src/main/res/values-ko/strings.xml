@@ -54,6 +54,23 @@
     <string name="terminals_empty">이 호스트에서 실행 중인 터미널이 없습니다.</string>
     <string name="terminal_subtitle">%1$s · %2$s</string>
 
+    <string name="agents_button">모든 에이전트</string>
+    <string name="agents_title">에이전트</string>
+    <string name="agents_empty">호스트에서 실행 중인 에이전트가 없습니다.</string>
+    <string name="agents_no_hosts">먼저 호스트를 추가하세요.</string>
+    <string name="agents_host_unavailable">%1$s에 연결할 수 없습니다</string>
+    <string name="agents_host_closed">%1$s와의 연결이 끊어졌습니다. 에이전트 정보가 최신이 아닐 수 있습니다.</string>
+    <string name="agent_pinned_label">고정됨</string>
+    <string name="agent_pin_button">고정</string>
+    <string name="agent_unpin_button">고정 해제</string>
+    <string name="agent_pin_button_label">%2$s의 %1$s 고정</string>
+    <string name="agent_unpin_button_label">%2$s의 %1$s 고정 해제</string>
+    <string name="agent_detail_host">호스트: %1$s</string>
+    <string name="agent_detail_address">주소: %1$s</string>
+    <string name="agent_detail_folder">폴더: %1$s</string>
+    <string name="agent_detail_command">명령: %1$s</string>
+    <string name="agent_detail_gone">이 에이전트는 더 이상 실행 중이 아닙니다.</string>
+
     <string name="agent_status_working">작업 중</string>
     <string name="agent_status_blocked">막힘</string>
     <string name="agent_status_blocked_permission">막힘: 권한</string>
