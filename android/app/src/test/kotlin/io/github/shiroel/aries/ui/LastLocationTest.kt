@@ -1,6 +1,7 @@
 package io.github.shiroel.aries.ui
 
 import android.content.Context
+import android.content.Intent
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -38,6 +39,7 @@ class LastLocationTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val generation = mutableStateOf(0)
     private val pushTarget = mutableStateOf<PushTarget?>(null)
+    private var incomingShare: Intent? = null
     private lateinit var model: HostsModel
     private val terminal = TerminalInfo("box/t1", "shell", "", listOf("sh"), "/repo", "live", null)
 
@@ -58,7 +60,10 @@ class LastLocationTest {
                 model = remember {
                     HostsModel(core, scope, keyWork = inKeyWork.asContextElement(true), locationStore = LastLocationStore.from(context))
                 }
-                LaunchedEffect(model) { model.start(pushTarget.value) }
+                LaunchedEffect(model) {
+                    incomingShare?.let(model::receiveShare)
+                    model.start(pushTarget.value)
+                }
                 AriesApp(model)
             }
         }
@@ -297,5 +302,18 @@ class LastLocationTest {
         restart()
 
         compose.runOnIdle { assertEquals("s1", (model.screen as Screen.Browse).browser.openSpaceId) }
+    }
+
+    @Test fun anIncomingShareKeepsItsAgentPickerInsteadOfRestoringAnOldTerminal() {
+        show(core())
+        openTerminal()
+        incomingShare = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "review this")
+
+        restart()
+
+        compose.runOnIdle {
+            assertTrue(model.screen is Screen.Agents)
+            assertEquals("review this", model.pendingShare?.text)
+        }
     }
 }

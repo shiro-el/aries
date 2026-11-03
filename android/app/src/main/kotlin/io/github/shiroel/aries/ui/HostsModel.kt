@@ -251,11 +251,14 @@ class HostsModel(
         }
         started = true
         val saved = locationStore?.load()
-        startupHostId = target?.hostId ?: saved?.hostId
         if (target != null) {
+            startupHostId = target.hostId
             openPushedAgent(target.hostId, target.terminal)
-        } else {
-            hosts.find { it.id == saved?.hostId }?.let { connect(it, saved) }
+        } else if (screen == Screen.Hosts) {
+            hosts.find { it.id == saved?.hostId }?.let {
+                startupHostId = it.id
+                connect(it, saved)
+            }
         }
         if (locationStore != null) scope.launch {
             snapshotFlow { if (restoring) null else lastLocation() }

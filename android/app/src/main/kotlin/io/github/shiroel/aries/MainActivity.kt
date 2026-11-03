@@ -89,12 +89,12 @@ class MainActivity : ComponentActivity() {
     private fun resumeModel() {
         if (!resumed) return
         val m = model ?: return
+        openShare()
         openPushTarget()
         if (needsForegroundRefresh) {
             needsForegroundRefresh = false
             m.foregrounded()
         }
-        openShare()
     }
 
     override fun onDestroy() {
