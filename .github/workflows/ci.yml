@@ -25,7 +25,7 @@ jobs:
       - name: Unit and core API tests (real herdr-core, isolated session)
         run: cargo test --workspace
       - name: SSH tests (docker sshd)
-        run: cargo test -p aries-core --test ssh -- --ignored
+        run: cargo test -p aries-core -- --ignored
 
   android:
     runs-on: ubuntu-latest

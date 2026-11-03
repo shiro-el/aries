@@ -3,6 +3,7 @@
 //! [`Transport`] is the swap point: SSH for real Hosts, a local child process
 //! for tests and development, and later a relay-based transport.
 
+mod bootstrap;
 mod local;
 mod ssh;
 
@@ -13,6 +14,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::error::CoreError;
 
+pub(crate) use bootstrap::PasswordLogin;
 pub(crate) use local::LocalProcess;
 pub(crate) use ssh::Ssh;
 

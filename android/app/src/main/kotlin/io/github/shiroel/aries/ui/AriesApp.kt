@@ -3,6 +3,8 @@ package io.github.shiroel.aries.ui
 import android.content.ClipData
 import android.content.ClipboardManager
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -10,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
@@ -25,20 +28,29 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.Host
+import io.github.shiroel.aries.core.QrMatrix
 
 @Composable
 fun AriesApp(model: HostsModel) {
@@ -73,6 +85,11 @@ private fun HostListScreen(model: HostsModel) {
         }
         items(model.hosts, key = { it.id }) { host ->
             HostRow(host, onRemove = { model.askRemove(host) }) { model.connect(host) }
+            if (host.endpoint is Endpoint.Ssh) {
+                TextButton(onClick = { model.askPassword(host) }) {
+                    Text(stringResource(R.string.host_install_key_button))
+                }
+            }
         }
         item { HorizontalDivider() }
         item { AddHostForm(model) }
@@ -96,6 +113,7 @@ private fun KeySection(model: HostsModel) {
         context.getSystemService(ClipboardManager::class.java)
             ?.setPrimaryClip(ClipData.newPlainText(clipLabel, key.openssh))
     }) { Text(stringResource(R.string.key_copy_button)) }
+    Button(onClick = model::showKeyQr) { Text(stringResource(R.string.key_qr_button)) }
     Text(stringResource(R.string.key_copy_hint), style = MaterialTheme.typography.bodySmall)
 }
 
@@ -161,6 +179,19 @@ private fun PromptDialog(prompt: Prompt, model: HostsModel) {
             confirmButton = { TextButton(onClick = { model.trust(prompt) }) { Text(stringResource(R.string.host_key_trust_button)) } },
             dismissButton = { TextButton(onClick = model::dismiss) { Text(stringResource(R.string.cancel_button)) } },
         )
+        is Prompt.Password -> PasswordDialog(prompt, model)
+        is Prompt.KeyQr -> AlertDialog(
+            onDismissRequest = model::dismiss,
+            title = { Text(stringResource(R.string.key_qr_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val description = stringResource(R.string.key_qr_description)
+                    QrCode(prompt.qr, Modifier.testTag("key_qr").semantics { contentDescription = description })
+                    Text(stringResource(R.string.key_fingerprint, prompt.key.fingerprint), style = MaterialTheme.typography.bodySmall)
+                }
+            },
+            confirmButton = { TextButton(onClick = model::dismiss) { Text(stringResource(R.string.ok_button)) } },
+        )
         is Prompt.ConfirmRemove -> AlertDialog(
             onDismissRequest = model::dismiss,
             title = { Text(stringResource(R.string.host_remove_title, prompt.host.name)) },
@@ -174,6 +205,48 @@ private fun PromptDialog(prompt: Prompt, model: HostsModel) {
             text = { Text(text(prompt.body)) },
             confirmButton = { TextButton(onClick = model::dismiss) { Text(stringResource(R.string.ok_button)) } },
         )
+    }
+}
+
+@Composable
+private fun PasswordDialog(prompt: Prompt.Password, model: HostsModel) {
+    // Plain `remember`, not `rememberSaveable`: the password must not land in saved state.
+    var password by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = model::dismiss,
+        title = { Text(stringResource(R.string.key_install_title, prompt.host.name)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.key_install_body, prompt.host.name))
+                OutlinedTextField(
+                    password, { password = it },
+                    label = { Text(stringResource(R.string.key_install_password)) },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = password.isNotEmpty(), onClick = { model.installKey(prompt.host, password) }) {
+                Text(stringResource(R.string.key_install_button))
+            }
+        },
+        dismissButton = { TextButton(onClick = model::dismiss) { Text(stringResource(R.string.cancel_button)) } },
+    )
+}
+
+/** Draws [qr] dark on white with the 4-module quiet zone scanners need. */
+@Composable
+private fun QrCode(qr: QrMatrix, modifier: Modifier = Modifier) {
+    val size = qr.size.toInt()
+    Canvas(modifier.size(240.dp).background(Color.White)) {
+        val cell = this.size.minDimension / (size + 8)
+        for (y in 0 until size) for (x in 0 until size) {
+            if (qr.modules[y * size + x]) {
+                drawRect(Color.Black, Offset((x + 4) * cell, (y + 4) * cell), Size(cell, cell))
+            }
+        }
     }
 }
 
