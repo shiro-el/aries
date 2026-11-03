@@ -987,6 +987,7 @@
     <string name="terminal_enter_button">Enter</string>
     <string name="push_channel_done">Done</string>
     <string name="push_channel_attention">Blocked and Error</string>
+    <string name="push_channel_foreground">While using Aries</string>
     <string name="push_host_summary">%1$s: %2$d waiting</string>
     <string name="quiet_hours_title">Quiet hours</string>
     <string name="quiet_hours_start">Start</string>
