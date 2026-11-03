@@ -18,7 +18,7 @@
 //!   Terminal's Agent shows (`aries_protocol::answer`); one reply line.
 //! - `policy [set]`: prints or (from stdin) changes the push policy
 //!   ([`policy`]); run by the phone over SSH.
-//! - `skill install` / `skill uninstall`: the managed `call-human` skill
+//! - `skill install` / `skill uninstall`: the managed `aries-call-human` skill
 //!   for Agents ([`aries_beacon::skill`]); run by the phone over SSH when it
 //!   installs, updates or removes the Beacon. One `SkillReport` line.
 //! - `pi-extension install|remove`: the managed Pi status extension

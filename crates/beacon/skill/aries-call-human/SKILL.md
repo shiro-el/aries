@@ -1,6 +1,6 @@
 ---
-name: call-human
-description: Call the human through Aries when you need a decision, have a result ready for review, or must report a time-sensitive problem. Sends a Call to the human's phone. Subagents report to the agent that started them instead.
+name: aries-call-human
+description: Send a Call to the human's phone through Aries when you need a decision, have a result ready for review, or must report a time-sensitive problem. Subagents report to the agent that started them instead.
 ---
 
 # Call the human

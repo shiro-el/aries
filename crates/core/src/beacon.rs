@@ -108,7 +108,7 @@ pub enum BeaconSource {
     PhoneUpload,
 }
 
-/// A call-human path and the result of installing or inspecting it.
+/// An aries-call-human path and the result of installing or inspecting it.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct BeaconSkillRoot {
     pub path: String,
@@ -158,6 +158,8 @@ pub enum BeaconState {
     },
 }
 
+// Legacy cleanup is reported by the Beacon separately; only current-name
+// roots determine whether Agents can use the Aries skill.
 fn skill_roots(report: SkillReport) -> Vec<BeaconSkillRoot> {
     report
         .roots
@@ -299,7 +301,7 @@ exit 0"#,
 if [ -x "$b" ]; then "$b" unpair >/dev/null 2>&1 || true; fi
 rm -f "${XDG_STATE_HOME:-$HOME/.local/state}/aries-beacon/pairing.json""#,
     ),
-    // Ticket 34: the managed `call-human` skill, unless the user changed it
+    // Ticket 34: the managed `aries-call-human` skill, unless the user changed it
     // (the Beacon decides). Best effort, like the pairing: a Beacon from
     // before the skill existed has no `skill` command.
     (
@@ -441,7 +443,7 @@ pub(crate) async fn install(
     } else {
         register_systemd(ssh).await?
     };
-    // Ticket 34: the new binary installs or updates its `call-human` skill
+    // Ticket 34: the new binary installs or updates its `aries-call-human` skill
     // (it leaves the user's own version alone).
     let skill_output = run(
         ssh,
@@ -889,7 +891,7 @@ mod tests {
             .iter()
             .map(|(outcome, _)| {
                 serde_json::json!({
-                    "path": "/home/u/.agents/skills/call-human", "outcome": outcome,
+                    "path": "/home/u/.agents/skills/aries-call-human", "outcome": outcome,
                 })
             })
             .collect();
@@ -900,7 +902,7 @@ mod tests {
         let parsed = parse_skill_report(stdout.as_bytes()).unwrap();
         assert_eq!(parsed.len(), outcomes.len());
         for (root, (_, expected)) in parsed.iter().zip(outcomes) {
-            assert_eq!(root.path, "/home/u/.agents/skills/call-human");
+            assert_eq!(root.path, "/home/u/.agents/skills/aries-call-human");
             assert_eq!(root.outcome, expected);
         }
     }

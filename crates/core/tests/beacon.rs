@@ -197,8 +197,8 @@ async fn installs_the_beacon_as_a_user_service_and_removes_it_keeping_calls() {
     assert!(s.host.check(&format!("test -f {CALLS}")));
 }
 
-const CLAUDE_SKILL: &str = "/home/aries/.claude/skills/call-human";
-const AGENTS_SKILL: &str = "/home/aries/.agents/skills/call-human";
+const CLAUDE_SKILL: &str = "/home/aries/.claude/skills/aries-call-human";
+const AGENTS_SKILL: &str = "/home/aries/.agents/skills/aries-call-human";
 
 /// Runs `script` as the Host user (files it makes belong to them).
 fn as_user(host: &SystemdHost, script: &str) {
@@ -879,4 +879,61 @@ async fn install_and_status_report_both_foreign_call_human_skills() {
             )));
         }
     }
+}
+
+#[tokio::test]
+#[ignore = "needs docker"]
+async fn migrates_old_aries_skill_while_foreign_call_human_is_not_a_conflict() {
+    use aries_core::BeaconSkillOutcome;
+    let s = setup();
+    let old_claude = "/home/aries/.claude/skills/call-human";
+    let old_agents = "/home/aries/.agents/skills/call-human";
+    // Construct the exact old marker format, inside this disposable Host.
+    user_sh(
+        &s.host,
+        &format!(
+            "mkdir -p {old_claude} {old_agents} && printf old > {old_claude}/SKILL.md && printf '%s' '{{\"version\":\"0.1.0\",\"files\":{{\"SKILL.md\":\"old\"}}}}' > {old_claude}/.aries-beacon.json && printf foreign > {old_agents}/SKILL.md"
+        ),
+    );
+    let bytes = std::fs::read(beacon_bin()).unwrap();
+    s.core
+        .set_beacon_release(release(env!("CARGO_PKG_VERSION"), sha256sum(&bytes)));
+    let fetcher = Fetcher::new(bytes);
+    let install = s
+        .core
+        .install_beacon(s.id.clone(), fetcher.clone())
+        .await
+        .unwrap();
+    assert_eq!(install.skills.len(), 2);
+    assert!(
+        install
+            .skills
+            .iter()
+            .all(|r| r.outcome == BeaconSkillOutcome::Installed)
+    );
+    assert!(
+        install
+            .skills
+            .iter()
+            .all(|r| r.path.ends_with("/aries-call-human"))
+    );
+    assert!(s.host.check(&format!("test ! -e {old_claude} && test \"$(cat {old_agents}/SKILL.md)\" = foreign && test ! -e {old_agents}/.aries-beacon.json")));
+    match s.core.beacon_status(s.id.clone()).await.unwrap() {
+        BeaconState::Installed {
+            skills: Some(skills),
+            ..
+        } => {
+            assert_eq!(skills.len(), 2);
+            assert!(
+                skills
+                    .iter()
+                    .all(|r| r.outcome == BeaconSkillOutcome::Unchanged)
+            );
+        }
+        other => panic!("{other:?}"),
+    }
+    // A remaining legacy copy must also go during full Beacon removal.
+    user_sh(&s.host, &format!("cp -a {CLAUDE_SKILL} {old_claude}"));
+    s.core.uninstall_beacon(s.id.clone()).await.unwrap();
+    assert!(s.host.check(&format!("test ! -e {CLAUDE_SKILL} && test ! -e {AGENTS_SKILL} && test ! -e {old_claude} && test \"$(cat {old_agents}/SKILL.md)\" = foreign")));
 }
