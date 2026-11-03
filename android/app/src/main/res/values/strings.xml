@@ -280,6 +280,13 @@
     <string name="agent_open_button">Open</string>
     <string name="agent_view_terminal">term</string>
     <string name="agent_view_chat">chat</string>
+    <!-- Terminal and Chat input history (108) -->
+    <string name="input_history_title">Input history</string>
+    <string name="input_history_hint">Recent inputs on this phone. Select one to edit before sending.</string>
+    <string name="input_history_empty">No input history yet.</string>
+    <string name="input_history_clear_button">Clear history</string>
+    <string name="input_history_failed">Could not read or save input history.</string>
+
     <string name="chat_title">Chat: %1$s</string>
     <string name="chat_empty">No messages yet.</string>
     <string name="chat_status_connecting">Connecting to the Beacon…</string>

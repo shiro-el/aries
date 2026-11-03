@@ -275,6 +275,13 @@
     <string name="agent_open_button">열기</string>
     <string name="agent_view_terminal">term</string>
     <string name="agent_view_chat">chat</string>
+    <!-- Terminal and Chat input history (108) -->
+    <string name="input_history_title">입력 이력</string>
+    <string name="input_history_hint">이 폰에서 보낸 최근 입력입니다. 선택한 뒤 편집하고 보내세요.</string>
+    <string name="input_history_empty">입력 이력이 없습니다.</string>
+    <string name="input_history_clear_button">이력 지우기</string>
+    <string name="input_history_failed">입력 이력을 읽거나 저장하지 못했습니다.</string>
+
     <string name="chat_title">Chat: %1$s</string>
     <string name="chat_empty">아직 메시지가 없습니다.</string>
     <string name="chat_status_connecting">Beacon에 연결하는 중…</string>

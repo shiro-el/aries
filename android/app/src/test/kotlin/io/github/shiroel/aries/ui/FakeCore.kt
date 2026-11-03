@@ -65,6 +65,14 @@ val inKeyWork = ThreadLocal<Boolean>()
 
 /** In-memory stand-in for the Rust core, for UI tests. */
 class FakeCore : AriesCoreInterface {
+    private val inputs = mutableMapOf<Pair<String, String>, List<String>>()
+    override fun inputHistory(hostId: String, terminal: String): List<String> = inputs[hostId to terminal].orEmpty()
+    override fun rememberInput(hostId: String, terminal: String, text: String) {
+        inputs[hostId to terminal] = (listOf(text) + inputHistory(hostId, terminal)).take(50)
+    }
+    override fun clearInputHistory(hostId: String, terminal: String) {
+        inputs.remove(hostId to terminal)
+    }
     /**
      * Calls that open the SSH key outside [inKeyWork]. On a phone a
      * biometric key cannot be opened on the main thread, so each is a crash.
