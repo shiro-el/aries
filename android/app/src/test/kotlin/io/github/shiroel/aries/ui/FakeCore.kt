@@ -546,6 +546,10 @@ class FakeConnection(
     private val core: FakeCore? = null,
     private val saved: MutableList<SavedLaunch> = core?.savedLaunches ?: mutableListOf(),
 ) : HostConnection(NoHandle) {
+    var gitFiles = io.github.shiroel.aries.core.GitChanges("/repo", emptyList(), false, false)
+    var gitPatch = io.github.shiroel.aries.core.GitDiff(emptyList(), false, false)
+    override suspend fun gitChanges(address: String) = gitFiles
+    override suspend fun gitDiff(address: String, cwd: String, path: String, kind: io.github.shiroel.aries.core.GitDiffKind) = gitPatch
     val edits = mutableListOf<io.github.shiroel.aries.core.LayoutEdit>()
     var editFailure: CoreException? = null
     override suspend fun editLayout(edit: io.github.shiroel.aries.core.LayoutEdit): String {

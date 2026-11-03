@@ -10,6 +10,7 @@ mod calls;
 mod chat;
 mod chat_cache;
 mod error;
+mod git_changes;
 mod hc;
 mod host_edit;
 mod host_model;
@@ -46,6 +47,7 @@ pub use chat::{
     ChatToolStatus, ChatWatch,
 };
 pub use error::{AnswerProblem, CoreError, Incompatibility, VaultError};
+pub use git_changes::*;
 pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
 pub use host_model::{AgentStatus, BlockedReason, TerminalWatch};
 pub use launch::{AgentPreset, LaunchRequest, RECENT_CWDS_KEPT, SavedLaunch};

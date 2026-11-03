@@ -28,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -287,6 +288,10 @@ fun ChatScreen(
     onView: (AgentView) -> Unit = {},
     calls: CallsModel? = null,
 ) {
+    var showGit by remember(chat) { mutableStateOf(false) }
+    if (showGit) GitChangesDialog(chat.link, chat.terminal, { showGit = false }) { text ->
+        chat.draft = if (chat.draft.isBlank()) text else chat.draft + "\n\n" + text
+    }
     val snapshot = chat.snapshot
     val entries = snapshot?.entries.orEmpty()
     val agentCalls = calls?.let { model ->
@@ -302,7 +307,7 @@ fun ChatScreen(
         if (count > 0) list.scrollToItem(count - 1)
     }
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))) {
-        AgentScreenHeader(chat.terminal, chat.host.name, onBack, AgentView.CHAT, onView)
+        AgentScreenHeader(chat.terminal, chat.host.name, onBack, AgentView.CHAT, onView, onChanges = { showGit = true })
         statusText(snapshot?.status ?: ChatStatus.CONNECTING)?.let { ChatNotice(it) }
         if (snapshot != null && entries.isEmpty() && snapshot.status == ChatStatus.LIVE) {
             Text(stringResource(R.string.chat_empty))
