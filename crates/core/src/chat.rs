@@ -432,7 +432,7 @@ fn tool_status(status: ToolStatus) -> ChatToolStatus {
 /// How to run a command on the Host for the Chat.
 pub(crate) enum ChatHost {
     Ssh {
-        first: std::sync::Mutex<Option<Ssh>>,
+        first: std::sync::Mutex<Option<Box<Ssh>>>,
         reopen: Arc<dyn Fn() -> Result<Ssh, CoreError> + Send + Sync>,
     },
     /// Runs `sh -c` locally with these variables (Local endpoints).
@@ -456,7 +456,7 @@ impl ChatHost {
             unreachable!()
         };
         if let Some(ssh) = first.lock().expect("first SSH lock").take() {
-            return Ok(ssh);
+            return Ok(*ssh);
         }
         let reopen = reopen.clone();
         // The vault may wait for foreground biometric authorization.

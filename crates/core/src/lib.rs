@@ -1089,7 +1089,7 @@ impl AriesCore {
                 let vault = self.vault.clone();
                 let host_id = host_id.to_owned();
                 chat::ChatHost::Ssh {
-                    first: Mutex::new(Some(first)),
+                    first: Mutex::new(Some(Box::new(first))),
                     reopen: Arc::new(move || {
                         let host = store
                             .load()?

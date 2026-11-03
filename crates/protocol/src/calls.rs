@@ -149,6 +149,9 @@ impl LogEntry {
 /// One line printed by `aries-beacon calls`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+// Each line carries one complete Call; boxing adds an allocation to every
+// history update without reducing the payload kept by either consumer.
+#[allow(clippy::large_enum_variant)]
 pub enum CallsLine {
     /// A Call as it is now; `seq` is the log entry of its last change.
     /// Replaces any earlier line with the same `call.id`.
