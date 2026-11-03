@@ -680,6 +680,15 @@ class FakeConnection(
     }
     override suspend fun readFilePage(address: String, path: String, offset: ULong, limit: UInt) =
         fileReader(address, path, offset, limit)
+    var catalog = io.github.shiroel.aries.core.AgentCatalog(emptyList(), emptyList())
+    var catalogFailure: CoreException? = null
+    val catalogRequests = mutableListOf<Boolean>()
+    override suspend fun agentCatalog(address: String, preset: io.github.shiroel.aries.core.AgentPreset, refresh: Boolean) = chatCatalog(address, refresh)
+    override suspend fun chatCatalog(address: String, refresh: Boolean): io.github.shiroel.aries.core.AgentCatalog {
+        catalogRequests += refresh
+        catalogFailure?.let { throw it }
+        return catalog
+    }
     var gitFiles = io.github.shiroel.aries.core.GitChanges("/repo", emptyList(), false, false)
     var gitPatch = io.github.shiroel.aries.core.GitDiff(emptyList(), false, false)
     override suspend fun gitChanges(address: String) = gitFiles

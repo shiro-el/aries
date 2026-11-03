@@ -5,6 +5,7 @@
 //! client), `store` (what survives a relaunch). The Host model, terminal,
 //! chat, push, calls and beacon manager modules arrive with their tickets.
 
+mod agent_catalog;
 mod background;
 mod beacon;
 mod calls;
@@ -39,6 +40,7 @@ use russh::keys::ssh_key::LineEnding;
 use russh::keys::{Algorithm, HashAlg, PrivateKey};
 use serde::{Deserialize, Serialize};
 
+pub use agent_catalog::*;
 pub use beacon::{
     ALLOWED_BEACON, BeaconArtifact, BeaconCheck, BeaconFetcher, BeaconInstall, BeaconRelease,
     BeaconSkillOutcome, BeaconSkillRoot, BeaconSource, BeaconState, BeaconUpdate, FetchError,
@@ -776,6 +778,7 @@ impl AriesCore {
             host_id,
             client,
             names: Default::default(),
+            catalogs: Default::default(),
             recent: launch::RecentCwds::in_host_dir(self.store.host_dir(&host.id)),
             saved: launch::SavedLaunches::in_host_dir(self.store.host_dir(&host.id)),
         }))
@@ -1437,6 +1440,7 @@ pub struct HostConnection {
     host_id: String,
     client: Arc<HcClient>,
     names: Arc<tokio::sync::Mutex<structure::Names>>,
+    catalogs: tokio::sync::Mutex<agent_catalog::CatalogCache>,
     recent: launch::RecentCwds,
     saved: launch::SavedLaunches,
 }
