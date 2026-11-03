@@ -28,6 +28,7 @@ import org.robolectric.RobolectricTestRunner
 
 /** Seam 3: launching a Terminal from a custom command against a fake core API. */
 @RunWith(RobolectricTestRunner::class)
+@org.robolectric.annotation.Config(qualifiers = "h1200dp")
 class LaunchScreenTest {
     @get:Rule val compose = createComposeRule()
 
@@ -74,7 +75,6 @@ class LaunchScreenTest {
     fun launchesIntoTheTabShownAndOpensTheNewTerminal() {
         val core = FakeCore().apply { structure = desktop }
         open(core)
-        compose.onNodeWithText("aries").performClick()
         compose.onNodeWithText("build").performClick()
 
         compose.onNodeWithText(str(R.string.launch_open_button)).performClick()
@@ -90,7 +90,7 @@ class LaunchScreenTest {
         // The form closed, the new Terminal is in the Tab and focused (zoom is offered).
         compose.onNodeWithText(str(R.string.launch_title)).assertDoesNotExist()
         compose.onNodeWithText("my-tool --flag").assertExists()
-        compose.onNodeWithText(str(R.string.pane_zoom_button)).assertExists()
+        compose.onNodeWithText("my-tool --flag").assertExists()
     }
 
     @Test

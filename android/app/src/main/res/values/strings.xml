@@ -210,6 +210,8 @@
     <string name="agents_elapsed_hours">%1$dh</string>
     <string name="agents_elapsed_days">%1$dd</string>
     <string name="agents_elapsed_label">Status changed %1$s ago</string>
+    <string name="tree_expanded">Expanded</string>
+    <string name="tree_collapsed">Collapsed</string>
     <string name="agents_view_priority">Priority</string>
     <string name="agents_view_grouped">Grouped by space</string>
     <string name="agents_needs_you">Needs you</string>
@@ -303,6 +305,7 @@
     <string name="host_remove_confirm_button">Remove Host</string>
 
     <string name="connecting">Connecting to %1$s…</string>
+    <string name="terminals_actions_label">Terminal actions</string>
     <string name="terminals_title">Terminals on %1$s</string>
     <string name="terminals_empty">No Terminals are running on this Host.</string>
     <string name="terminal_subtitle">%1$s · %2$s</string>

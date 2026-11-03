@@ -8,6 +8,8 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.longClick
 import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.*
@@ -83,6 +85,7 @@ class WorktreeScreenTest {
 
     @Test fun unplacedTerminalsCanOpenWorktreesWithoutChoosingADesktopSpace() {
         val conn = open(unplaced = true)
+        compose.onNodeWithText("build").performTouchInput { longClick() }
         conn.worktrees = listOf(WorktreeInfo("/linked", "abc123", null, true, false, null, null))
         compose.onNodeWithText(str(R.string.worktrees_button)).performClick()
         compose.onNodeWithTag("worktree:/linked").performClick()

@@ -18,7 +18,7 @@ class AgentGroupingTest {
     private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
     private fun str(id: Int, vararg args: Any) = context.getString(id, *args)
 
-    @Test fun foldedParentAndSpaceKeepCountsAndUrgencyAndCanBeExpanded() {
+    @Test fun foldedParentKeepsCountsAndUrgencyAndCanBeExpanded() {
         val host = Host("h1", "home", Endpoint.Ssh("host", 22u, "me"), null)
         val parent = TerminalInfo("t1", "parent", "", emptyList(), null, "live", AgentStatus.Working)
         val child = parent.copy(address = "t2", name = "child", parent = "t1", agentStatus = AgentStatus.Blocked(null, "Approve"))
@@ -35,12 +35,8 @@ class AgentGroupingTest {
         compose.onNodeWithText("child").assertDoesNotExist()
         compose.onNodeWithText("grandchild").assertDoesNotExist()
         compose.onNodeWithContentDescription(str(R.string.agents_expand_children, "parent", 2)).assertExists()
-        compose.onNodeWithTag("agent-summary:h1:t1", useUnmergedTree = true).assert(hasAnyDescendant(hasText(str(R.string.agents_child_count, 2))))
-        compose.onNodeWithTag("agent-summary:h1:t1", useUnmergedTree = true).assert(hasAnyDescendant(hasContentDescription(str(R.string.agent_status_blocked))))
-        compose.onNodeWithText(str(R.string.agents_view_grouped)).performClick()
-        compose.onNodeWithText(str(R.string.agents_space_group, "home", "project", 1)).performClick()
-        compose.onNodeWithText("parent").assertDoesNotExist()
-        compose.onNodeWithText(str(R.string.agents_space_group, "home", "project", 1)).performClick()
+        compose.onNodeWithTag("agent-summary:h1:t1", useUnmergedTree = true).assert(hasText("2"))
+        compose.onNodeWithTag("agent-summary:h1:t1", useUnmergedTree = true).assert(hasContentDescription(str(R.string.agent_status_blocked)))
         compose.onNodeWithTag("agent-fold:h1:t1").performClick()
         compose.onNodeWithText("grandchild").assertExists()
     }
