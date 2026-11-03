@@ -3,6 +3,9 @@ package io.github.shiroel.aries.ui
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -59,6 +62,17 @@ class ChatSearchUiTest {
             .any { it.item == if (active) "active" else "match" })
     }
 
+    private fun assertMatchVisible(text: String, needle: String) {
+        val match = compose.onNodeWithText(text, substring = true, useUnmergedTree = true)
+        val layouts = mutableListOf<TextLayoutResult>()
+        match.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        val layout = layouts.single()
+        val glyph = layout.getBoundingBox(layout.layoutInput.text.text.indexOf(needle))
+        val y = match.fetchSemanticsNode().layoutInfo.coordinates.positionInRoot().y + glyph.center.y
+        val viewport = compose.onNodeWithTag("chat-transcript").fetchSemanticsNode().boundsInRoot
+        assertTrue("the selected glyph is inside the transcript viewport: $y in $viewport", y >= viewport.top && y <= viewport.bottom)
+    }
+
     @Test
     fun searchesOfflineMessagesAndHiddenToolResultsAndFullDiffWithoutStealingTheDraft() {
         val core = FakeCore()
@@ -83,6 +97,7 @@ class ChatSearchUiTest {
         compose.onNodeWithText(str(R.string.chat_search_next)).performClick()
         compose.onNodeWithText(str(R.string.chat_search_count, 3, 3)).assertExists()
         assertHighlight("+last needle", "needle", true)
+        assertMatchVisible("+last needle", "needle")
         compose.onNodeWithText(str(R.string.chat_search_next)).performClick()
         compose.onNodeWithText(str(R.string.chat_search_count, 1, 3)).assertExists()
         compose.onNodeWithText(str(R.string.chat_search_previous)).performClick()
@@ -102,6 +117,7 @@ class ChatSearchUiTest {
         search("needle across", 1)
         compose.onNodeWithText(str(R.string.chat_search_count, 1, 1)).assertExists()
         assertHighlight(first, "needle", true)
+        assertMatchVisible(first, "needle")
         assertHighlight(" across tail", " across", true)
     }
 
