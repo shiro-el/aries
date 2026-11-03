@@ -18,22 +18,6 @@ import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.*
 import kotlinx.coroutines.CancellationException
 
-/** Use the actual program, never the user-editable Terminal name or title. */
-private fun catalogPreset(terminal: TerminalInfo): AgentPreset? {
-    fun identify(argv: List<String>): AgentPreset? = argv.firstOrNull()?.substringAfterLast('/')?.let {
-        when (it) {
-            "claude" -> AgentPreset.CLAUDE_CODE
-            "codex" -> AgentPreset.CODEX
-            "opencode" -> AgentPreset.OPEN_CODE
-            "pi" -> AgentPreset.PI
-            else -> null
-        }
-    }
-    return identify(terminal.foreground?.argv.orEmpty()) ?: identify(terminal.argv)
-        // The Claude launch preset unsets inherited CLAUDE* variables in sh first.
-        ?: if (terminal.argv.take(2) == listOf("sh", "-c") && terminal.argv.getOrNull(3) == "claude") AgentPreset.CLAUDE_CODE else null
-}
-
 /** Replace the current selection and keep a word boundary on both sides. */
 private fun insertSkill(input: TextFieldValue, token: String): TextFieldValue {
     val start = input.selection.min
@@ -49,25 +33,21 @@ private fun insertSkill(input: TextFieldValue, token: String): TextFieldValue {
 
 @Composable
 internal fun ChatCatalogControls(chat: ChatModel) {
-    val preset = catalogPreset(chat.terminal)
-    if (preset == null) {
-        AttachmentControls(chat)
-        return
-    }
     val connection = chat.link?.connection
-    val cwd = chat.terminal.foreground?.cwd ?: chat.terminal.cwd
-    var catalog by remember(chat, preset, cwd, connection) { mutableStateOf<AgentCatalog?>(null) }
+    val process = chat.terminal.foreground
+    val cwd = process?.cwd ?: chat.terminal.cwd
+    var catalog by remember(chat, process, chat.terminal.argv, cwd, connection) { mutableStateOf<AgentCatalog?>(null) }
     var loading by remember(chat) { mutableStateOf(false) }
     var failed by remember(chat) { mutableStateOf(false) }
     var revision by remember(chat) { mutableIntStateOf(0) }
     var showSkills by remember(chat) { mutableStateOf(false) }
     var query by remember(chat) { mutableStateOf("") }
     val enabled = chat.sending == null
-    LaunchedEffect(chat, preset, cwd, connection, revision) {
+    LaunchedEffect(chat, process, chat.terminal.argv, cwd, connection, revision) {
         loading = true
         failed = false
         try {
-            catalog = (connection ?: throw CoreException.Closed()).agentCatalog(chat.terminal.address, preset, revision > 0)
+            catalog = (connection ?: throw CoreException.Closed()).chatCatalog(chat.terminal.address, revision > 0)
         } catch (e: CancellationException) {
             throw e
         } catch (e: CoreException) {

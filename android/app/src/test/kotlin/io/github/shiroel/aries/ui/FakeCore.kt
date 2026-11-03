@@ -675,7 +675,8 @@ class FakeConnection(
     var catalog = io.github.shiroel.aries.core.AgentCatalog(emptyList(), emptyList())
     var catalogFailure: CoreException? = null
     val catalogRequests = mutableListOf<Boolean>()
-    override suspend fun agentCatalog(address: String, preset: io.github.shiroel.aries.core.AgentPreset, refresh: Boolean): io.github.shiroel.aries.core.AgentCatalog {
+    override suspend fun agentCatalog(address: String, preset: io.github.shiroel.aries.core.AgentPreset, refresh: Boolean) = chatCatalog(address, refresh)
+    override suspend fun chatCatalog(address: String, refresh: Boolean): io.github.shiroel.aries.core.AgentCatalog {
         catalogRequests += refresh
         catalogFailure?.let { throw it }
         return catalog

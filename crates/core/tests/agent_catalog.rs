@@ -157,3 +157,34 @@ async fn forwarded_catalogs_use_the_terminal_machine_and_agent_skill_syntax() {
     assert!(opencode.skills.iter().any(|e| e.name == "shared"));
     conn.disconnect().await;
 }
+
+#[tokio::test]
+async fn chat_catalog_uses_reported_agent_type_for_agents_started_inside_a_shell() {
+    let home = tempfile::tempdir().unwrap();
+    put(
+        home.path(),
+        ".claude/commands/review.md",
+        "---\ndescription: Review work\n---\nbody",
+    );
+    let hc = HcSession::start_with_env(&[("HOME", home.path().to_str().unwrap())]);
+    let launched = hc.rpc("terminal.run", serde_json::json!({
+        "argv":["/bin/sh","-c","printf '\\033]7501;state=idle:app=claude-code\\033\\\\'; exec sleep 300"],
+        "cwd":home.path(), "no_parent":true
+    }));
+    let address = launched["address"].as_str().unwrap().to_owned();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while hc.rpc("terminal.get", serde_json::json!({"terminal":address}))["status"]["app"].as_str()
+        != Some("claude-code")
+    {
+        assert!(std::time::Instant::now() < deadline);
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    let host = core.add_host("test".into(), local_endpoint(&hc)).unwrap();
+    let conn = core.connect(host.id).await.unwrap();
+    let catalog = conn.chat_catalog(address, false).await.unwrap();
+    assert!(catalog.commands.iter().any(|e| e.token == "/review"));
+    assert!(catalog.commands.iter().any(|e| e.token == "/cost"));
+    conn.disconnect().await;
+}

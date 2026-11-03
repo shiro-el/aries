@@ -218,6 +218,50 @@ fn catalog(bytes: &[u8], preset: AgentPreset) -> Result<AgentCatalog, CoreError>
 
 #[uniffi::export]
 impl HostConnection {
+    /// Uses the Agent's own OSC status first, so a shell/Node launcher does not
+    /// hide its catalog. Process argv is a fallback; editable titles are ignored.
+    pub async fn chat_catalog(
+        &self,
+        address: String,
+        refresh: bool,
+    ) -> Result<AgentCatalog, CoreError> {
+        let terminal = self.catalog_terminal(address.clone()).await?;
+        let identify = |name: &str| match name.rsplit('/').next().unwrap_or("") {
+            "claude-code" | "claude" => Some(AgentPreset::ClaudeCode),
+            "codex" => Some(AgentPreset::Codex),
+            "opencode" => Some(AgentPreset::OpenCode),
+            "pi" => Some(AgentPreset::Pi),
+            _ => None,
+        };
+        let preset = terminal["status"]["app"]
+            .as_str()
+            .and_then(identify)
+            .or_else(|| {
+                terminal["foreground"]["argv"][0]
+                    .as_str()
+                    .and_then(identify)
+            })
+            .or_else(|| terminal["foreground"]["name"].as_str().and_then(identify))
+            .or_else(|| terminal["argv"][0].as_str().and_then(identify))
+            .or_else(|| {
+                let shell = terminal["argv"][0]
+                    .as_str()
+                    .unwrap_or("")
+                    .rsplit('/')
+                    .next();
+                (shell == Some("sh") && terminal["argv"][1].as_str() == Some("-c"))
+                    .then(|| terminal["argv"][3].as_str().and_then(identify))
+                    .flatten()
+            });
+        match preset {
+            Some(preset) => {
+                self.collect_catalog(address, preset, refresh, terminal)
+                    .await
+            }
+            None => Ok(AgentCatalog::default()),
+        }
+    }
+
     /// Five-minute connection-local cache, partitioned by Agent, machine and live cwd.
     /// Refresh failure leaves the previous catalog available to callers already holding it.
     pub async fn agent_catalog(
@@ -226,14 +270,30 @@ impl HostConnection {
         preset: AgentPreset,
         refresh: bool,
     ) -> Result<AgentCatalog, CoreError> {
+        let terminal = self.catalog_terminal(address.clone()).await?;
+        self.collect_catalog(address, preset, refresh, terminal)
+            .await
+    }
+}
+
+impl HostConnection {
+    async fn catalog_terminal(&self, address: String) -> Result<serde_json::Value, CoreError> {
         let client = self.client.clone();
-        let terminal_address = address.clone();
-        let terminal = on_runtime(async move {
+        on_runtime(async move {
             client
-                .call("terminal.get", json!({"terminal":terminal_address}))
+                .call("terminal.get", json!({"terminal":address}))
                 .await
         })
-        .await?;
+        .await
+    }
+
+    async fn collect_catalog(
+        &self,
+        address: String,
+        preset: AgentPreset,
+        refresh: bool,
+        terminal: serde_json::Value,
+    ) -> Result<AgentCatalog, CoreError> {
         let cwd = terminal["foreground"]["cwd"]
             .as_str()
             .filter(|s| !s.is_empty())
