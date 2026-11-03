@@ -6,7 +6,6 @@ import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.core.AriesCoreInterface
 import io.github.shiroel.aries.core.Host
 import io.github.shiroel.aries.core.LastKnownState
-import io.github.shiroel.aries.ui.AgentKey
 import io.github.shiroel.aries.ui.agentFamily
 import io.github.shiroel.aries.ui.displayName
 import io.github.shiroel.aries.ui.isWaiting
@@ -41,14 +40,9 @@ object WatchPhone {
         val byHost = states.associateBy { it.hostId }
         val known = hosts.mapNotNull { byHost[it.id] }
         val entries = hosts.flatMap { host -> agentFamily(host, byHost[host.id]?.agents.orEmpty()) }
-        val keys = entries.map { it.key }.toSet()
-        // Fold each family to its parent, while retaining the shared effective family priority.
-        val roots = orderAgents(entries).filter { entry ->
-            entry.terminal.parent?.let { AgentKey(entry.host.id, it) !in keys } ?: true
-        }
         return WatchSummary(
             waiting = entries.count { it.terminal.parent == null && isWaiting(it.terminal.agentStatus) },
-            agents = roots.take(3).map { entry ->
+            agents = orderAgents(entries).take(3).map { entry ->
                 val terminal = entry.terminal
                 WatchAgent(entry.host.id, terminal.address, displayName(terminal).take(256), when (terminal.agentStatus) {
                     is AgentStatus.Blocked -> "blocked"
