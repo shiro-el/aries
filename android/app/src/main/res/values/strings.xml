@@ -170,7 +170,6 @@
     <string name="files_back_folder_button">Back to folder</string>
     <string name="files_send_file_button">Send file to Agent</string>
     <string name="files_send_line_label">Send line %1$d to Agent</string>
-    <string name="files_line_hint">Tap a line to add it to the Chat draft.</string>
     <string name="files_not_text">Cannot preview this file: binary or non-UTF-8 text.</string>
     <string name="files_loading">Loading files…</string>
     <string name="files_failed">Could not load this folder or file. Check the connection, path and permissions, then retry.</string>
@@ -191,8 +190,6 @@
     <string name="files_line_unavailable">Line %1$d is no longer in this file. Showing the start.</string>
     <string name="files_no_folder">This Terminal has no current folder. Use an absolute file path.</string>
     <!-- Git changes (ticket 89) -->
-    <string name="git_changes_button">Changes</string>
-    <string name="git_changes_title">Git changes · read only</string>
     <string name="git_loading">Reading changes…</string>
     <string name="git_not_repository">This folder is not a Git repository.</string>
     <string name="git_clean">No changes.</string>
@@ -205,9 +202,7 @@
     <string name="git_empty_diff">No text diff for this file.</string>
     <string name="git_send_file">Send file to Agent</string>
     <string name="git_send_selection">Send selection to Agent</string>
-    <string name="git_select_hint">Tap a line, then another to select a range. The reference is added to your Chat draft.</string>
     <string name="git_error">Could not read Git changes: %1$s</string>
-    <string name="git_retry_button">Refresh</string>
     <string name="git_line_label">Old %1$s · new %2$s: %3$s</string>
 
 
@@ -423,9 +418,6 @@
 
     <string name="chat_empty">No messages yet.</string>
     <string name="chat_status_connecting">Connecting to the Beacon…</string>
-    <string name="chat_status_waiting">The Agent has not written anything yet.</string>
-    <string name="chat_status_no_agent">No supported Agent is running in this Terminal.</string>
-    <string name="chat_status_ended">The Agent exited. This is its last Chat.</string>
     <string name="chat_status_reconnecting">Connection lost. Reconnecting…</string>
     <string name="chat_status_no_terminal">This Terminal no longer exists.</string>
     <string name="chat_status_no_beacon">The Chat needs the Beacon on this Host. Install it from the Host screen.</string>
