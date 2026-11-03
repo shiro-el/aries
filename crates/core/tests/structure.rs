@@ -496,6 +496,8 @@ async fn names_use_the_ssh_hosts_home_and_worktree_rather_than_the_phones_paths(
             space_id: Some(space.into()),
             tab_id: Some("tab".into()),
             preset: None,
+            model: None,
+            effort: None,
         })
         .await
         .unwrap();

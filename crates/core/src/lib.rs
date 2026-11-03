@@ -5,6 +5,7 @@
 //! client), `store` (what survives a relaunch). The Host model, terminal,
 //! chat, push, calls and beacon manager modules arrive with their tickets.
 
+mod agent_catalog;
 mod background;
 mod beacon;
 mod calls;
@@ -17,6 +18,7 @@ mod github;
 mod hc;
 mod host_edit;
 mod host_model;
+mod input_history;
 mod last_known_state;
 mod launch;
 mod layout_edit;
@@ -39,6 +41,7 @@ use russh::keys::ssh_key::LineEnding;
 use russh::keys::{Algorithm, HashAlg, PrivateKey};
 use serde::{Deserialize, Serialize};
 
+pub use agent_catalog::*;
 pub use beacon::{
     ALLOWED_BEACON, BeaconArtifact, BeaconCheck, BeaconFetcher, BeaconInstall, BeaconRelease,
     BeaconSkillOutcome, BeaconSkillRoot, BeaconSource, BeaconState, BeaconUpdate, FetchError,
@@ -49,8 +52,8 @@ pub use calls::{
     CallReplyOutcome, CallUrgency, CallWatch,
 };
 pub use chat::{
-    ChatEntry, ChatEntryBody, ChatQuestionOption, ChatQuestionPart, ChatSnapshot, ChatStatus,
-    ChatToolStatus, ChatWatch,
+    ChatEntry, ChatEntryBody, ChatQuestionOption, ChatQuestionPart, ChatResponseCompletion,
+    ChatResponseMetadata, ChatSnapshot, ChatStatus, ChatToolDetails, ChatToolStatus, ChatWatch,
 };
 pub use error::{AnswerProblem, CoreError, Incompatibility, VaultError};
 pub use files::{RemoteDirectory, RemoteFileBytes, RemoteFileEntry, RemoteFilePage};
@@ -70,7 +73,8 @@ pub use settings::{AgentView, AttachMode};
 pub use structure::{HostStructure, PaneInfo, SpaceInfo, StructureProblem, TabInfo};
 pub use terminal::{
     AttachOptions, CellRun, CursorPos, FRAME_INTERVAL, KeyMods, ScreenFrame, ScreenLine,
-    TerminalExit, TerminalKey, TerminalUpdate, TerminalView, ViewStats,
+    TerminalExit, TerminalKey, TerminalSearch, TerminalSearchHighlight, TerminalUpdate,
+    TerminalView, ViewStats,
 };
 pub use worktrees::{WorktreeInfo, WorktreeOpen};
 
@@ -464,6 +468,43 @@ impl AriesCore {
         Ok(launch::SavedLaunches::in_host_dir(self.store.host_dir(&host.id)).list())
     }
 
+    /// Composer inputs on this phone, newest first. Never contacts the Host.
+    pub fn input_history(
+        &self,
+        host_id: String,
+        terminal: String,
+    ) -> Result<Vec<String>, CoreError> {
+        let hosts = self.hosts.lock().expect("hosts lock");
+        if !hosts.iter().any(|host| host.id == host_id) {
+            return Err(CoreError::UnknownHost { id: host_id });
+        }
+        input_history::InputHistory::new(self.store.host_dir(&host_id)).list(&terminal)
+    }
+
+    /// Records one composer submission verbatim. Call after sending succeeds.
+    pub fn remember_input(
+        &self,
+        host_id: String,
+        terminal: String,
+        text: String,
+    ) -> Result<(), CoreError> {
+        // Serializes read/modify/write with other inputs, clears and Host removal.
+        let hosts = self.hosts.lock().expect("hosts lock");
+        if !hosts.iter().any(|host| host.id == host_id) {
+            return Err(CoreError::UnknownHost { id: host_id });
+        }
+        input_history::InputHistory::new(self.store.host_dir(&host_id)).remember(terminal, text)
+    }
+
+    /// Deletes only this Terminal's phone-local composer history.
+    pub fn clear_input_history(&self, host_id: String, terminal: String) -> Result<(), CoreError> {
+        let hosts = self.hosts.lock().expect("hosts lock");
+        if !hosts.iter().any(|host| host.id == host_id) {
+            return Err(CoreError::UnknownHost { id: host_id });
+        }
+        input_history::InputHistory::new(self.store.host_dir(&host_id)).clear(&terminal)
+    }
+
     /// Trusts `fingerprint` as `host_id`'s Host key, after the user compared
     /// it with the one `connect` reported in [`CoreError::HostKeyUnknown`].
     pub fn trust_host_key(&self, host_id: String, fingerprint: String) -> Result<(), CoreError> {
@@ -740,6 +781,7 @@ impl AriesCore {
             host_id,
             client,
             names: Default::default(),
+            catalogs: Default::default(),
             recent: launch::RecentCwds::in_host_dir(self.store.host_dir(&host.id)),
             saved: launch::SavedLaunches::in_host_dir(self.store.host_dir(&host.id)),
         }))
@@ -1401,6 +1443,7 @@ pub struct HostConnection {
     host_id: String,
     client: Arc<HcClient>,
     names: Arc<tokio::sync::Mutex<structure::Names>>,
+    catalogs: tokio::sync::Mutex<agent_catalog::CatalogCache>,
     recent: launch::RecentCwds,
     saved: launch::SavedLaunches,
 }

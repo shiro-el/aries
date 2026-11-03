@@ -65,6 +65,14 @@ val inKeyWork = ThreadLocal<Boolean>()
 
 /** In-memory stand-in for the Rust core, for UI tests. */
 class FakeCore : AriesCoreInterface {
+    private val inputs = mutableMapOf<Pair<String, String>, List<String>>()
+    override fun inputHistory(hostId: String, terminal: String): List<String> = inputs[hostId to terminal].orEmpty()
+    override fun rememberInput(hostId: String, terminal: String, text: String) {
+        inputs[hostId to terminal] = (listOf(text) + inputHistory(hostId, terminal)).take(50)
+    }
+    override fun clearInputHistory(hostId: String, terminal: String) {
+        inputs.remove(hostId to terminal)
+    }
     /**
      * Calls that open the SSH key outside [inKeyWork]. On a phone a
      * biometric key cannot be opened on the main thread, so each is a crash.
@@ -713,6 +721,15 @@ class FakeConnection(
     }
     override suspend fun readFilePage(address: String, path: String, offset: ULong, limit: UInt) =
         fileReader(address, path, offset, limit)
+    var catalog = io.github.shiroel.aries.core.AgentCatalog(emptyList(), emptyList())
+    var catalogFailure: CoreException? = null
+    val catalogRequests = mutableListOf<Boolean>()
+    override suspend fun agentCatalog(address: String, preset: io.github.shiroel.aries.core.AgentPreset, refresh: Boolean) = chatCatalog(address, refresh)
+    override suspend fun chatCatalog(address: String, refresh: Boolean): io.github.shiroel.aries.core.AgentCatalog {
+        catalogRequests += refresh
+        catalogFailure?.let { throw it }
+        return catalog
+    }
     var gitFiles = io.github.shiroel.aries.core.GitChanges("/repo", emptyList(), false, false)
     var gitPatch = io.github.shiroel.aries.core.GitDiff(emptyList(), false, false)
     override suspend fun gitChanges(address: String) = gitFiles
@@ -964,6 +981,14 @@ class FakeTerminalView(val address: String, val options: AttachOptions) : Termin
     val scrolls = mutableListOf<UInt>()
 
     override fun scrollTo(lines: UInt): UInt = lines.also { scrolls += it }
+
+    val searches = mutableListOf<Triple<String, Boolean, Boolean>>()
+    val searchMoves = mutableListOf<Boolean>()
+    override fun search(query: String, caseSensitive: Boolean, regex: Boolean) {
+        if (regex && query == "[") throw CoreException.Protocol("invalid terminal search pattern")
+        searches += Triple(query, caseSensitive, regex)
+    }
+    override fun searchNext(backwards: Boolean) { searchMoves += backwards }
 
     override fun close() {}
 }

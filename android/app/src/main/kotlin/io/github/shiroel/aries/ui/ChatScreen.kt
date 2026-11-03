@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.foundation.text.BasicTextField
@@ -31,13 +30,13 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.stringResource
@@ -45,6 +44,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -86,6 +87,7 @@ class ChatModel(
     /** Runs the calls that sign in to the Host (see [HostsModel]). */
     private val keyWork: CoroutineContext = EmptyCoroutineContext,
 ) {
+    val inputHistory = InputHistoryModel(core, host.id, terminal.address)
     /** The Agent's Terminal, its Agent status kept live by [update]. */
     var terminal by mutableStateOf(terminal)
         private set
@@ -146,7 +148,11 @@ class ChatModel(
     }
 
     /** What the user is typing into the input. */
-    var draft by mutableStateOf("")
+    var input by mutableStateOf(TextFieldValue(""))
+    // Keep the String seam for attachments, dictation and existing callers.
+    var draft: String
+        get() = input.text
+        set(value) { input = TextFieldValue(value, TextRange(value.length)) }
     var sending by mutableStateOf<Sending?>(null)
         private set
     /** The Blocked Agent refused the last message; cleared once it is no longer Blocked. */
@@ -233,7 +239,10 @@ class ChatModel(
         scope.launch {
             try {
                 when (val outcome = conn.sendMessage(terminal.address, text, HeldListener())) {
-                    SendOutcome.Sent -> if (draft == text) draft = ""
+                    SendOutcome.Sent -> {
+                        inputHistory.remember(text)
+                        if (draft == text) draft = ""
+                    }
                     is SendOutcome.Blocked -> {
                         refused = true
                         terminal = terminal.copy(
@@ -418,15 +427,7 @@ fun ChatScreen(
                 (it.answerable || it.key in model.replying || it.key in model.replyNotes)
         }.sortedBy { it.call.atMs }
     }.orEmpty()
-    val list = rememberLazyListState()
-    // Follow the conversation: keep the newest entry in view.
-    val transcriptItems = entries.sumOf {
-        if (it.body is ChatEntryBody.User || it.body is ChatEntryBody.Agent) 2 + (markdown[it.id]?.blocks?.size ?: 0) else 1
-    }
-    LaunchedEffect(entries.size, transcriptItems, agentCalls.size) {
-        val count = transcriptItems + agentCalls.size
-        if (count > 0) list.scrollToItem(count - 1)
-    }
+    val scroll = rememberChatScrollState(chat, entries, agentCalls.map { "call:${it.key}" }, markdown)
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))) {
         AgentScreenHeader(chat.terminal, chat.host.name, onBack, AgentView.CHAT, onView,
             onChanges = { showGit = true }, link = chat.link, onTerminalUpdate = { chat.update(listOf(it)) })
@@ -434,39 +435,56 @@ fun ChatScreen(
         if (snapshot != null && entries.isEmpty() && snapshot.status == ChatStatus.LIVE) {
             Text(stringResource(R.string.chat_empty))
         }
-        LazyColumn(Modifier.weight(1f), state = list) {
-            entries.forEach { entry ->
-                val body = entry.body
-                val source = when (body) {
-                    is ChatEntryBody.User -> body.text
-                    is ChatEntryBody.Agent -> body.text
-                    else -> null
-                }
-                item(key = "transcript:${entry.id}") {
-                    if (body is ChatEntryBody.Question) {
-                        QuestionView(chat, entry.id, body)
-                    } else {
-                        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-                            ChatEntryView(entry, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image) { chat.toggle(entry.id) }
-                        }
-                        if (source == null) HorizontalDivider()
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            LazyColumn(Modifier.fillMaxSize().testTag("chat-transcript"), state = scroll.list) {
+                entries.forEach { entry ->
+                    val body = entry.body
+                    val source = when (body) {
+                        is ChatEntryBody.User -> body.text
+                        is ChatEntryBody.Agent -> body.text
+                        else -> null
                     }
-                }
-                if (source != null) {
-                    // Keep the last complete document visible until the background parse swaps it.
-                    chatMarkdownItems(entry.id, markdown[entry.id])
-                    item(key = "transcript:${entry.id}:footer") {
-                        if (body is ChatEntryBody.User && body.images.isNotEmpty()) {
-                            Column(Modifier.padding(horizontal = 16.dp)) {
-                                body.images.forEach { ChatImageView(it, chat::image) }
+                    item(key = "transcript:${entry.id}") {
+                        if (body is ChatEntryBody.Question) {
+                            QuestionView(chat, entry.id, body)
+                        } else {
+                            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                                ChatEntryView(entry, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image) { chat.toggle(entry.id) }
                             }
+                            if (source == null) HorizontalDivider()
                         }
-                        HorizontalDivider(Modifier.padding(top = 8.dp))
                     }
+                    if (source != null) {
+                        // Keep the last complete document visible until the background parse swaps it.
+                        chatMarkdownItems(entry.id, markdown[entry.id])
+                        item(key = "transcript:${entry.id}:footer") {
+                            if (body is ChatEntryBody.User && body.images.isNotEmpty()) {
+                                Column(Modifier.padding(horizontal = 16.dp)) {
+                                    body.images.forEach { ChatImageView(it, chat::image) }
+                                }
+                            }
+                            if (body is ChatEntryBody.Agent) body.metadata?.let { metadata ->
+                                Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                                    ChatResponseMetadataView(metadata)
+                                }
+                            }
+                            HorizontalDivider(Modifier.padding(top = 8.dp))
+                        }
+                    }
+                }
+                items(agentCalls, key = { "call:${it.key}" }) { entry ->
+                    if (calls != null) ConsoleChatCall(entry, calls)
                 }
             }
-            items(agentCalls, key = { "call:${it.key}" }) { entry ->
-                if (calls != null) ConsoleChatCall(entry, calls)
+            if (!scroll.following && (entries.isNotEmpty() || agentCalls.isNotEmpty())) {
+                TextButton(
+                    onClick = scroll::latest,
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp)
+                        .background(MaterialTheme.colorScheme.surface),
+                ) {
+                    Text(if (scroll.unreadCount == 0) stringResource(R.string.chat_latest_button)
+                        else stringResource(R.string.chat_latest_count_button, scroll.unreadCount))
+                }
             }
         }
         (chat.terminal.agentStatus as? AgentStatus.Blocked)?.let {
@@ -491,7 +509,7 @@ fun ChatScreen(
         }
         chat.attachmentError?.let { Text(stringResource(it.res, *it.args.toTypedArray()), color = MaterialTheme.colorScheme.error) }
         if (chat.link != null) {
-            AttachmentControls(chat)
+            ChatCatalogControls(chat)
             MessageInput(chat)
         }
     }
@@ -514,8 +532,8 @@ private fun MessageInput(chat: ChatModel) {
     )
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
         BasicTextField(
-            value = chat.draft,
-            onValueChange = { chat.draft = it },
+            value = chat.input,
+            onValueChange = { chat.input = it },
             modifier = Modifier.weight(1f)
                 .heightIn(min = 48.dp)
                 .semantics { contentDescription = inputLabel },
@@ -665,11 +683,15 @@ private fun ToolView(
         Column(
             Modifier.fillMaxWidth()
                 .background(MaterialTheme.colorScheme.surfaceVariant)
-                .then(actions)
-                .semantics { contentDescription = label }
                 .padding(8.dp),
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                    .then(actions)
+                    .semantics { contentDescription = label },
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(tool.name, style = MaterialTheme.typography.labelLarge)
                 Text(
                     tool.title,
@@ -694,10 +716,8 @@ private fun ToolView(
             tool.diff?.let { DiffView(it, expanded) }
             tool.images.forEach { ChatImageView(it, image) }
             if (expanded) {
-                Text(stringResource(R.string.chat_tool_input), style = MaterialTheme.typography.labelMedium)
-                ChatTextActions(tool.input, onClick = onToggle) {
-                    Text(tool.input, it, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
-                }
+                tool.details?.let { ChatToolDetailsView(it) }
+                if (tool.input.isNotBlank()) ChatRawInput(tool.input)
                 tool.output?.let {
                     Text(stringResource(R.string.chat_tool_output), style = MaterialTheme.typography.labelMedium)
                     ChatTextActions(it, onClick = onToggle) { modifier ->

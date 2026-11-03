@@ -133,6 +133,12 @@
     <string name="files_range">전체 %3$d행 중 %1$d–%2$d행</string>
     <string name="files_previous_button">이전 페이지</string>
     <string name="files_next_button">다음 페이지</string>
+    <!-- Remote image and PDF preview (111) -->
+    <string name="files_pdf_title">PDF 페이지</string>
+    <string name="files_pdf_page">%2$d쪽 중 %1$d쪽</string>
+    <string name="files_preview_open">미리보기 열기</string>
+    <string name="files_preview_too_large">이 파일은 미리보기 한도인 %1$d MiB를 초과합니다.</string>
+    <string name="files_preview_failed">파일을 미리 볼 수 없습니다. 파일과 연결을 확인한 뒤 새로고침하여 다시 시도하세요.</string>
     <!-- File code view and Chat links (110) -->
     <string name="files_wrap_lines">자동 줄바꿈</string>
     <string name="files_missing">파일을 찾을 수 없습니다: %1$s</string>
@@ -286,6 +292,18 @@
     <string name="terminal_open_link">링크 열기</string>
     <string name="terminal_copy_link">링크 복사</string>
 
+    <!-- Terminal output search -->
+    <string name="terminal_search_button">출력 검색</string>
+    <string name="terminal_search_hint">출력에서 찾기</string>
+    <string name="terminal_search_case">대소문자 구분</string>
+    <string name="terminal_search_regex">정규식</string>
+    <string name="terminal_search_previous">이전 일치</string>
+    <string name="terminal_search_next">다음 일치</string>
+    <string name="terminal_search_close">검색 닫기</string>
+    <string name="terminal_search_count">%2$d개 중 %1$d</string>
+    <string name="terminal_search_no_matches">일치하는 내용 없음</string>
+    <string name="terminal_search_invalid">잘못된 검색 패턴이거나 검색어가 너무 깁니다</string>
+
     <string name="agents_button">모든 에이전트</string>
     <string name="agents_title">에이전트</string>
     <string name="agents_empty">호스트에서 실행 중인 에이전트가 없습니다.</string>
@@ -316,7 +334,18 @@
     <string name="agent_open_button">열기</string>
     <string name="agent_view_terminal">term</string>
     <string name="agent_view_chat">chat</string>
+    <!-- Terminal and Chat input history (108) -->
+    <string name="input_history_title">입력 이력</string>
+    <string name="input_history_hint">이 폰에서 보낸 최근 입력입니다. 선택한 뒤 편집하고 보내세요.</string>
+    <string name="input_history_empty">입력 이력이 없습니다.</string>
+    <string name="input_history_clear_button">이력 지우기</string>
+    <string name="input_history_failed">입력 이력을 읽거나 저장하지 못했습니다.</string>
+
     <string name="chat_title">Chat: %1$s</string>
+    <!-- Chat reading position -->
+    <string name="chat_latest_button">최신으로</string>
+    <string name="chat_latest_count_button">최신으로 (%1$d)</string>
+
     <string name="chat_empty">아직 메시지가 없습니다.</string>
     <string name="chat_status_connecting">Beacon에 연결하는 중…</string>
     <string name="chat_status_waiting">Agent가 아직 아무것도 기록하지 않았습니다.</string>
@@ -340,6 +369,27 @@
     <string name="chat_thinking">생각함</string>
     <string name="chat_tool_running">실행 중</string>
     <string name="chat_tool_failed">실패</string>
+    <!-- Chat tool details and response metadata -->
+    <string name="chat_details_expanded">펼침</string>
+    <string name="chat_details_collapsed">접힘</string>
+    <string name="chat_tool_raw_input">원본 입력</string>
+    <string name="chat_tool_command">명령: %1$s</string>
+    <string name="chat_tool_cwd">작업 폴더: %1$s</string>
+    <string name="chat_tool_exit_code">종료 코드: %1$s</string>
+    <string name="chat_tool_duration">소요 시간: %1$s ms</string>
+    <string name="chat_tool_path">경로: %1$s</string>
+    <string name="chat_tool_pattern">패턴: %1$s</string>
+    <string name="chat_tool_result_count">결과 수: %1$s</string>
+    <string name="chat_response_model">모델 %1$s</string>
+    <string name="chat_response_input_tokens">입력 %1$s</string>
+    <string name="chat_response_output_tokens">출력 %1$s</string>
+    <string name="chat_response_cache_read_tokens">캐시 읽기 %1$s</string>
+    <string name="chat_response_cache_write_tokens">캐시 쓰기 %1$s</string>
+    <string name="chat_response_duration">%1$s ms</string>
+    <string name="chat_response_complete">완료</string>
+    <string name="chat_response_interrupted">중단</string>
+    <string name="chat_response_error">오류</string>
+
     <string name="chat_tool_input">입력</string>
     <string name="chat_tool_output">결과</string>
     <string name="chat_tool_expand_label">%1$s 호출 전체 보기</string>
@@ -392,6 +442,16 @@
     <string name="chat_answer_unsupported">이 Agent의 질문은 Chat에서 답할 수 없습니다. Terminal에서 답하세요.</string>
     <string name="chat_answer_no_core">Beacon이 이 Host의 herdr-core에 연결하지 못합니다.</string>
     <string name="chat_answer_failed">답을 보내지 못했습니다: %1$s</string>
+    <!-- Chat Agent command and skill catalog -->
+    <string name="chat_commands_title">Agent 명령</string>
+    <string name="chat_skills_button">Skill</string>
+    <string name="chat_skills_title">설치된 Skill</string>
+    <string name="chat_skills_search">Skill 검색</string>
+    <string name="chat_catalog_refresh">목록 새로고침</string>
+    <string name="chat_catalog_empty">검색 결과가 없습니다</string>
+    <string name="chat_catalog_failed">Host 목록을 읽지 못했습니다. 새로고침으로 다시 시도하세요.</string>
+    <string name="chat_catalog_builtin">내장 명령</string>
+
     <string name="chat_input_label">Agent에게 보낼 메시지</string>
     <string name="chat_send_button">보내기</string>
     <string name="chat_sending">보내는 중…</string>
@@ -453,6 +513,24 @@
     <string name="launch_connection_closed">호스트 연결이 끊겼습니다. 뒤로 가서 다시 연결하세요.</string>
     <string name="preset_custom">직접 입력한 명령</string>
     <string name="launch_preset_args">추가 인자(선택)</string>
+    <!-- Launch model and reasoning effort (103). -->
+    <string name="launch_model_label">모델 ID 또는 별칭</string>
+    <string name="launch_model_choose">선택</string>
+    <string name="launch_agent_default">Agent 기본값</string>
+    <string name="launch_model_hint">이 Host에서 사용 가능한 모델을 입력하세요. 비워 두면 Agent 기본값을 사용합니다.</string>
+    <string name="launch_model_provider_hint">이 Host의 provider/model을 입력하세요. 비워 두면 Agent 기본값을 사용합니다.</string>
+    <string name="launch_effort_label">추론 강도</string>
+    <string name="launch_effort_hint">사용 가능한 강도는 이 Host의 모델과 Agent 버전에 따라 다릅니다.</string>
+    <string name="launch_effort_unavailable">OpenCode의 대화형 실행은 추론 강도 선택을 지원하지 않습니다. OpenCode의 모델 설정을 사용하세요.</string>
+    <string name="launch_effort_off">끄기</string>
+    <string name="launch_effort_minimal">최소</string>
+    <string name="launch_effort_low">낮음</string>
+    <string name="launch_effort_medium">중간</string>
+    <string name="launch_effort_high">높음</string>
+    <string name="launch_effort_xhigh">매우 높음</string>
+    <string name="launch_effort_max">최대</string>
+    <string name="launch_effort_ultra">울트라</string>
+
     <string name="launch_saved">저장한 실행 설정</string>
     <string name="launch_saved_edit">수정</string>
     <string name="launch_saved_delete">삭제</string>

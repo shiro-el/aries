@@ -133,6 +133,12 @@
     <string name="files_range">Lines %1$d–%2$d of %3$d</string>
     <string name="files_previous_button">Previous page</string>
     <string name="files_next_button">Next page</string>
+    <!-- Remote image and PDF preview (111) -->
+    <string name="files_pdf_title">PDF page</string>
+    <string name="files_pdf_page">Page %1$d of %2$d</string>
+    <string name="files_preview_open">Open preview</string>
+    <string name="files_preview_too_large">This file exceeds the %1$d MiB preview limit.</string>
+    <string name="files_preview_failed">Could not preview this file. Check the file and connection, then refresh to retry.</string>
     <!-- File code view and Chat links (110) -->
     <string name="files_wrap_lines">Wrap lines</string>
     <string name="files_missing">File not found: %1$s</string>
@@ -291,6 +297,18 @@
     <string name="terminal_open_link">Open link</string>
     <string name="terminal_copy_link">Copy link</string>
 
+    <!-- Terminal output search -->
+    <string name="terminal_search_button">Search output</string>
+    <string name="terminal_search_hint">Find in output</string>
+    <string name="terminal_search_case">Match case</string>
+    <string name="terminal_search_regex">Regex</string>
+    <string name="terminal_search_previous">Previous match</string>
+    <string name="terminal_search_next">Next match</string>
+    <string name="terminal_search_close">Close search</string>
+    <string name="terminal_search_count">%1$d of %2$d</string>
+    <string name="terminal_search_no_matches">No matches</string>
+    <string name="terminal_search_invalid">Invalid search pattern or query too long</string>
+
     <string name="agents_button">All Agents</string>
     <string name="agents_title">Agents</string>
     <string name="agents_empty">No Agents are running on your Hosts.</string>
@@ -321,7 +339,18 @@
     <string name="agent_open_button">Open</string>
     <string name="agent_view_terminal">term</string>
     <string name="agent_view_chat">chat</string>
+    <!-- Terminal and Chat input history (108) -->
+    <string name="input_history_title">Input history</string>
+    <string name="input_history_hint">Recent inputs on this phone. Select one to edit before sending.</string>
+    <string name="input_history_empty">No input history yet.</string>
+    <string name="input_history_clear_button">Clear history</string>
+    <string name="input_history_failed">Could not read or save input history.</string>
+
     <string name="chat_title">Chat: %1$s</string>
+    <!-- Chat reading position -->
+    <string name="chat_latest_button">Latest</string>
+    <string name="chat_latest_count_button">Latest (%1$d)</string>
+
     <string name="chat_empty">No messages yet.</string>
     <string name="chat_status_connecting">Connecting to the Beacon…</string>
     <string name="chat_status_waiting">The Agent has not written anything yet.</string>
@@ -345,6 +374,27 @@
     <string name="chat_thinking">Thinking</string>
     <string name="chat_tool_running">running</string>
     <string name="chat_tool_failed">failed</string>
+    <!-- Chat tool details and response metadata -->
+    <string name="chat_details_expanded">Expanded</string>
+    <string name="chat_details_collapsed">Collapsed</string>
+    <string name="chat_tool_raw_input">Raw input</string>
+    <string name="chat_tool_command">Command: %1$s</string>
+    <string name="chat_tool_cwd">Working directory: %1$s</string>
+    <string name="chat_tool_exit_code">Exit code: %1$s</string>
+    <string name="chat_tool_duration">Duration: %1$s ms</string>
+    <string name="chat_tool_path">Path: %1$s</string>
+    <string name="chat_tool_pattern">Pattern: %1$s</string>
+    <string name="chat_tool_result_count">Results: %1$s</string>
+    <string name="chat_response_model">Model %1$s</string>
+    <string name="chat_response_input_tokens">In %1$s</string>
+    <string name="chat_response_output_tokens">Out %1$s</string>
+    <string name="chat_response_cache_read_tokens">Cache read %1$s</string>
+    <string name="chat_response_cache_write_tokens">Cache write %1$s</string>
+    <string name="chat_response_duration">%1$s ms</string>
+    <string name="chat_response_complete">Complete</string>
+    <string name="chat_response_interrupted">Interrupted</string>
+    <string name="chat_response_error">Error</string>
+
     <string name="chat_tool_input">Input</string>
     <string name="chat_tool_output">Result</string>
     <string name="chat_tool_expand_label">Show the full %1$s call</string>
@@ -397,6 +447,16 @@
     <string name="chat_answer_unsupported">This Agent\'s questions cannot be answered from the Chat. Answer in the Terminal.</string>
     <string name="chat_answer_no_core">The Beacon cannot reach herdr-core on this Host.</string>
     <string name="chat_answer_failed">The answer could not be sent: %1$s</string>
+    <!-- Chat Agent command and skill catalog -->
+    <string name="chat_commands_title">Agent commands</string>
+    <string name="chat_skills_button">Skills</string>
+    <string name="chat_skills_title">Installed skills</string>
+    <string name="chat_skills_search">Search skills</string>
+    <string name="chat_catalog_refresh">Refresh catalog</string>
+    <string name="chat_catalog_empty">No matches</string>
+    <string name="chat_catalog_failed">Could not read the Host catalog. Refresh to retry.</string>
+    <string name="chat_catalog_builtin">Built-in command</string>
+
     <string name="chat_input_label">Message to the Agent</string>
     <string name="chat_send_button">Send</string>
     <string name="chat_sending">Sending…</string>
@@ -461,6 +521,24 @@
     <string name="preset_opencode" translatable="false">OpenCode</string>
     <string name="preset_pi" translatable="false">Pi</string>
     <string name="launch_preset_args">Extra arguments (optional)</string>
+    <!-- Launch model and reasoning effort (103). -->
+    <string name="launch_model_label">Model ID or alias</string>
+    <string name="launch_model_choose">Choose</string>
+    <string name="launch_agent_default">Agent default</string>
+    <string name="launch_model_hint">Use a model available on this Host. Leave blank for the Agent default.</string>
+    <string name="launch_model_provider_hint">Enter provider/model from this Host, or leave blank for the Agent default.</string>
+    <string name="launch_effort_label">Reasoning effort</string>
+    <string name="launch_effort_hint">Available levels depend on the model and Agent version on this Host.</string>
+    <string name="launch_effort_unavailable">OpenCode’s interactive launcher does not support choosing effort. Use its model settings.</string>
+    <string name="launch_effort_off">Off</string>
+    <string name="launch_effort_minimal">Minimal</string>
+    <string name="launch_effort_low">Low</string>
+    <string name="launch_effort_medium">Medium</string>
+    <string name="launch_effort_high">High</string>
+    <string name="launch_effort_xhigh">Extra high</string>
+    <string name="launch_effort_max">Maximum</string>
+    <string name="launch_effort_ultra">Ultra</string>
+
     <string name="launch_saved">Saved launches</string>
     <string name="launch_saved_edit">Edit</string>
     <string name="launch_saved_delete">Delete</string>

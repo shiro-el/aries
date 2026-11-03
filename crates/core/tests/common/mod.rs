@@ -48,6 +48,26 @@ pub fn local_endpoint(session: &HcSession) -> Endpoint {
     }
 }
 
+/// Waits until the Agent's status (as `hc get` shows it) is `state`.
+/// Creating a background Terminal does not wait for its first status report.
+pub fn wait_state(hc: &HcSession, address: &str, state: &str) {
+    use std::time::{Duration, Instant};
+
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let t: serde_json::Value =
+            serde_json::from_str(hc.hc(&["get", "--json", address]).trim()).unwrap();
+        if t["status"]["state"] == state {
+            return;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "{address} never became {state}: {t}"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
 /// A Korean Host whose shell rejects locale-dependent machine commands.
 /// Keep the tools directory alive for the duration of the session.
 pub fn korean_host_with_c_locale_shell(extra: &[(&str, &str)]) -> (HcSession, tempfile::TempDir) {

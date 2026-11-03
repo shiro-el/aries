@@ -247,7 +247,7 @@ fn an_opencode_terminal_reports_pairs_shows_its_chat_and_takes_an_answer() {
     }
     let after = follow.until("the reply", |l| {
         matches!(&l.event, ChatEvent::Item { item }
-            if matches!(&item.body, ChatBody::Agent { text } if text == "Green it is."))
+            if matches!(&item.body, ChatBody::Agent { text, .. } if text == "Green it is."))
     });
     assert!(after.iter().any(|l| tool_status(&qid, ToolStatus::Done)(l)));
     assert_eq!(

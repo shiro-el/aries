@@ -116,6 +116,8 @@ pub struct ChatItem {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
+// Keep the optional, flat records shared with the phone API.
+#[allow(clippy::large_enum_variant)]
 pub enum ChatBody {
     /// What the user typed (or a slash command such as `/clear`), with the
     /// images they attached.
@@ -129,7 +131,15 @@ pub enum ChatBody {
         images: Vec<ChatImage>,
     },
     /// The Agent's reply text (Markdown).
-    Agent { text: String },
+    Agent {
+        text: String,
+        #[serde(
+            default,
+            deserialize_with = "lenient",
+            skip_serializing_if = "Option::is_none"
+        )]
+        metadata: Option<ResponseMetadata>,
+    },
     /// The Agent thought. `text` is `None` when the Agent does not record
     /// the content (Claude Code's adaptive thinking).
     Thinking {
@@ -138,6 +148,13 @@ pub enum ChatBody {
     },
     /// A tool call, collapsed by default.
     Tool {
+        /// Agent-neutral fields for the expanded tool. Missing data stays absent.
+        #[serde(
+            default,
+            deserialize_with = "lenient",
+            skip_serializing_if = "Option::is_none"
+        )]
+        details: Option<ToolDetails>,
         /// Tool name as the Agent calls it (`Write`, `Bash`, `exec`, ...).
         name: String,
         /// One line for the collapsed row (`hello.txt`, `ls -la`).
@@ -178,6 +195,53 @@ pub enum ChatBody {
     /// An item kind this reader does not know.
     #[serde(other)]
     Unsupported,
+}
+
+/// Recorded response outcome; unknown outcomes stay absent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ResponseCompletion {
+    Complete,
+    Interrupted,
+    Error,
+}
+
+/// Optional transcript fields; never fill absent measurements with zero.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ResponseMetadata {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_tokens: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_tokens: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_read_tokens: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_write_tokens: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completion: Option<ResponseCompletion>,
+}
+
+/// Optional transcript fields; never fill absent measurements with zero.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ToolDetails {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cwd: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exit_code: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pattern: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub result_count: Option<u64>,
 }
 
 /// Reads an optional extra (diff, images) without letting a shape this
