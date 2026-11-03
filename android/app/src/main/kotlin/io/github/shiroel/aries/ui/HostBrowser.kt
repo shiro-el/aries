@@ -20,6 +20,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.drawBehind
@@ -50,6 +52,7 @@ import io.github.shiroel.aries.core.TerminalInfo
  * the phone never moves the desktop.
  */
 class HostBrowser(val host: Host) {
+    var layoutEditor: LayoutEditor? = null
     var structure by mutableStateOf<HostStructure?>(null)
         private set
 
@@ -191,6 +194,8 @@ fun BrowseScreen(
     showHeader: Boolean = true,
 ) {
     val space = browser.openSpace
+    val scope = rememberCoroutineScope()
+    val editor = remember(browser) { LayoutEditor(browser, scope).also { browser.layoutEditor = it } }
     Column(Modifier.fillMaxSize()) {
         Row {
             if (showHeader) TextButton(onClick = if (space != null) browser::closeSpace else onBack) {
@@ -200,6 +205,7 @@ fun BrowseScreen(
                 TextButton(onClick = onNewTerminal) { Text(stringResource(R.string.launch_open_button)) }
             }
         }
+        LayoutEditControls(browser, editor)
         if (onNewTerminal != null && browser.structure != null && !browser.closed && browser.savedLaunches.isNotEmpty()) {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(browser.savedLaunches, key = { "saved:" + it.id }) { s ->
@@ -284,7 +290,9 @@ private fun SpaceList(
             items(terminalTree(s.unplaced.map(browser::current)) { it }, key = { "unplaced:" + it.value.address }) { row ->
                 val t = row.value
                 TerminalBranch(row.guide, row.depth) {
-                    ConsoleTerminalRow(t, browser.host.name, { onOpen(t) })
+                    ConsoleTerminalRow(t, browser.host.name, { onOpen(t) }, trailing = {
+                        browser.layoutEditor?.let { EndTerminalButton(it, t) }
+                    })
                 }
             }
         }
@@ -358,6 +366,7 @@ private fun PaneRow(
                     ConsoleTerminalRow(t, browser.host.name, onClick, trailing = {
                         val open = if (t.agentStatus != null) R.string.agent_open_button else R.string.terminal_open_button
                         TextButton(onClick = { onOpen(t) }) { Text(stringResource(open), style = MaterialTheme.typography.bodySmall) }
+                        browser.layoutEditor?.let { EndTerminalButton(it, t) }
                     })
                 }
             }
@@ -366,7 +375,9 @@ private fun PaneRow(
         if (root != null) {
             terminalTree(listOf(root) + pane.subAgents.map(browser::current)) { it }.drop(1).forEach { row ->
                 TerminalBranch(row.guide, row.depth + 1) {
-                    ConsoleTerminalRow(row.value, browser.host.name, { onOpen(row.value) })
+                    ConsoleTerminalRow(row.value, browser.host.name, { onOpen(row.value) }, trailing = {
+                        browser.layoutEditor?.let { EndTerminalButton(it, row.value) }
+                    })
                 }
             }
         }

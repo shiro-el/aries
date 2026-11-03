@@ -131,6 +131,7 @@ fun SettingsScreen(
                 }
             }
             item { SettingsField { ChatCacheSettings(model.chatCache) } }
+            item(key = "quiet-hours") { SettingsField { QuietHoursSection() } }
             item {
                 SettingsField(R.string.settings_agent_view) {
                     AgentViewToggle(model.agentView, model::setDefaultAgentView)
@@ -144,6 +145,7 @@ fun SettingsScreen(
                     ) { model.setDefaultAttachMode(if (it) AttachMode.INPUT else AttachMode.OBSERVE) }
                 }
             }
+            item { SettingsField { io.github.shiroel.aries.dictation.DictationSettings() } }
         }
     }
 }

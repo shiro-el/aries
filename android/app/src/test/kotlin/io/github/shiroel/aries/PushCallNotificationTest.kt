@@ -22,7 +22,7 @@ class PushCallNotificationTest {
     private fun call(id: String, urgency: CallUrgency, body: String = "Tests pass.", choices: List<String> = listOf("Merge", "Wait")) =
         PushNotice("h1", "box", PushContent.Call(id, "t3", true, "Review ready", body, urgency, choices, 1uL))
 
-    private fun shown(): List<Notification> = manager.activeNotifications.map { it.notification }
+    private fun shown(): List<Notification> = manager.activeNotifications.map { it.notification }.filter { it.flags and Notification.FLAG_GROUP_SUMMARY == 0 }
 
     private fun text(n: Notification, key: String) = n.extras.getCharSequence(key).toString()
 

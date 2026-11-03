@@ -6,6 +6,9 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+
     <application
         android:name=".AriesApplication"
         android:allowBackup="false"
@@ -40,6 +43,9 @@
         <!-- A Call notification's Choice button (ticket 36); only SystemUI sends it. -->
         <receiver
             android:name=".ChoiceReceiver"
+            android:exported="false" />
+        <receiver
+            android:name=".NotificationDismissReceiver"
             android:exported="false" />
         <service
             android:name=".PushService"

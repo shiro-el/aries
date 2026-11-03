@@ -124,6 +124,7 @@ class FakeCore : AriesCoreInterface {
 
     /** What `structure`/`watchStructure` deliver; default: [terminals], all unplaced. */
     var structure: HostStructure? = null
+    var herdrAppAvailable = true
 
     /** The last connection `connect` returned. */
     var connection: FakeConnection? = null
@@ -266,10 +267,10 @@ class FakeCore : AriesCoreInterface {
         failFor[hostId]?.let { throw it }
         terminalsOf[hostId]?.let { list ->
             return FakeConnection(list, structure ?: HostStructure(emptyList(), list, null), updatesOf(hostId), hostId, this)
-                .also { connection = it; connectionsOf[hostId] = it }
+                .also { it.herdrAvailable = herdrAppAvailable; connection = it; connectionsOf[hostId] = it }
         }
         return FakeConnection(terminals, structure ?: HostStructure(emptyList(), terminals, null), updates, saved = savedLaunches)
-            .also { connection = it }
+            .also { it.herdrAvailable = herdrAppAvailable; connection = it }
     }
 
     /** Saved launch configs, kept across connections like the core keeps them per Host. */
@@ -545,6 +546,20 @@ class FakeConnection(
     private val core: FakeCore? = null,
     private val saved: MutableList<SavedLaunch> = core?.savedLaunches ?: mutableListOf(),
 ) : HostConnection(NoHandle) {
+    val edits = mutableListOf<io.github.shiroel.aries.core.LayoutEdit>()
+    var editFailure: CoreException? = null
+    override suspend fun editLayout(edit: io.github.shiroel.aries.core.LayoutEdit): String {
+        edits += edit
+        editFailure?.let { throw it }
+        return "{}"
+    }
+    var herdrAvailable = true
+    override suspend fun herdrAppAvailable(): Boolean = herdrAvailable
+    val killed = mutableListOf<String>()
+    override suspend fun killTerminal(address: String): TerminalInfo {
+        killed += address
+        return TerminalInfo(address, null, "", emptyList(), null, "finished")
+    }
     override suspend fun markSeen(address: String, turn: ULong): TerminalInfo =
         core!!.label(hostId, address, "seen=$turn") {
             if (it.agentStatus == AgentStatus.Done && turn >= it.turn) it.copy(agentStatus = AgentStatus.Idle) else it
@@ -748,6 +763,11 @@ class FakeTerminalView(val address: String, val options: AttachOptions) : Termin
     override suspend fun sendText(text: String) {
         check(!options.observe) { "an observer cannot type" }
         sent += "text:$text"
+    }
+
+    override suspend fun pasteText(text: String) {
+        check(!options.observe) { "an observer cannot paste" }
+        sent += "paste:$text"
     }
 
     override suspend fun sendKey(key: TerminalKey, mods: KeyMods) {

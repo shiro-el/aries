@@ -22,6 +22,7 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) {
             pushTarget = PushTarget.from(intent)
             shareIntent = intent
+            NotificationGroups.opened(this, intent)
         }
         val core = app.core
         val push = AndroidPushPlatform(this)
@@ -57,6 +58,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        NotificationGroups.opened(this, intent)
         shareIntent = intent
         openShare()
         // Warm start: the app was running when the notification was tapped.
