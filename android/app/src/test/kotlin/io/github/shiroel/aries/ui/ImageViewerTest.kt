@@ -33,6 +33,7 @@ import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.ChatImage
 import java.io.ByteArrayOutputStream
 import org.junit.Rule
+import org.junit.Before
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertArrayEquals
@@ -51,6 +52,13 @@ import org.robolectric.shadows.ShadowContentResolver
 class ImageViewerTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val context = ApplicationProvider.getApplicationContext<Context>()
+
+    @Before fun initializeTheManifestFileProvider() {
+        // Robolectric loads providers lazily. Attach this test's provider before
+        // FileProvider resolves paths, so its static path cache uses this app's
+        // cache directory rather than a previous test's temporary directory.
+        compose.activity.contentResolver.acquireContentProviderClient("${compose.activity.packageName}.attachments")!!.close()
+    }
 
     @Test fun tappingAChatImageOpensTheViewerAndCloseReturnsToChat() {
         val bytes = png()
