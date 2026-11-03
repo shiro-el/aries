@@ -12,11 +12,14 @@ import io.github.shiroel.aries.weardata.WatchAgent
 import io.github.shiroel.aries.weardata.WatchSummary
 
 object WatchTile {
-    fun age(context: Context, summary: WatchSummary, now: Long): String =
-        if (summary.fetchedAtMs == 0L) context.getString(R.string.wear_not_synced)
-        else context.getString(R.string.wear_age_minutes, ((now - summary.fetchedAtMs).coerceAtLeast(0) / 60_000))
+    fun age(context: Context, summary: WatchSummary, now: Long): String {
+        val localized = summary.localizedContext(context)
+        return if (summary.fetchedAtMs == 0L) localized.getString(R.string.wear_not_synced)
+        else localized.getString(R.string.wear_age_minutes, ((now - summary.fetchedAtMs).coerceAtLeast(0) / 60_000))
+    }
 
     fun render(context: Context, summary: WatchSummary, now: Long): TileBuilders.Tile {
+        val context = summary.localizedContext(context)
         val column = Column.Builder().setWidth(expand())
             .setHorizontalAlignment(HORIZONTAL_ALIGN_CENTER)
             .addContent(text(context.getString(R.string.wear_waiting_count, summary.waiting), 18f))

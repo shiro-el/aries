@@ -64,6 +64,7 @@ object HomeWidgets {
         expanded: Boolean,
         nowMillis: Long = System.currentTimeMillis(),
     ): RemoteViews {
+        val context = AppLanguage.context(context)
         val byHost = states.associateBy { it.hostId }
         val known = hosts.mapNotNull { byHost[it.id] }
         val count = known.sumOf { state -> state.agents.count { it.needsAttention } }
@@ -77,6 +78,7 @@ object HomeWidgets {
         }
         val agents = orderAgents(hosts.flatMap { host -> agentFamily(host, byHost[host.id]?.agents.orEmpty()) })
         return RemoteViews(context.packageName, if (expanded) R.layout.widget_agents else R.layout.widget_waiting).apply {
+            setContentDescription(R.id.widget_refresh, context.getString(R.string.widget_refresh_button))
             setTextViewText(R.id.widget_count, if (hosts.isNotEmpty() && known.isEmpty()) {
                 context.getString(R.string.widget_waiting_unknown)
             } else context.getString(R.string.widget_waiting_count, count))
@@ -92,6 +94,7 @@ object HomeWidgets {
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             ))
             if (expanded) {
+                setTextViewText(R.id.widget_empty, context.getString(R.string.widget_agents_empty))
                 removeAllViews(R.id.widget_agents)
                 setViewVisibility(R.id.widget_empty, if (agents.isEmpty()) View.VISIBLE else View.GONE)
                 agents.take(3).forEach { entry ->

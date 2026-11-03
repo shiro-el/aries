@@ -24,6 +24,17 @@ class WaitingComplicationTest {
         assertEquals("7 waiting · 5 min ago", data.contentDescription!!.getTextAt(context.resources, Instant.EPOCH).toString())
     }
 
+    @Test fun complicationFollowsPersistedPhoneLanguageInsteadOfWatchLanguage() {
+        val englishWatch = context.createConfigurationContext(android.content.res.Configuration(context.resources.configuration).apply {
+            setLocale(java.util.Locale.ENGLISH)
+        })
+        val summary = WatchSummary(7, emptyList(), 60_000, languageTag = "ko")
+        val store = WatchStateStore(context)
+        assertTrue(store.accept("phone", summary.toRequest().data))
+        val data = WaitingComplication.render(englishWatch, WatchStateStore(context).summary(), 360_000)
+        assertEquals("대기 7 · 5분 전", data.contentDescription!!.getTextAt(context.resources, Instant.EPOCH).toString())
+    }
+
     @Test fun complicationDoesNotPresentUnsyncedAsZero() {
         val data = WaitingComplication.render(context, WatchSummary.EMPTY, 360_000)
         assertEquals("--", data.text.getTextAt(context.resources, Instant.EPOCH).toString())
