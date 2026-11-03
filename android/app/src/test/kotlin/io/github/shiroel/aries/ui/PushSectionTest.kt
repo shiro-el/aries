@@ -52,14 +52,14 @@ class PushSectionTest {
         }
     }
 
-    private fun installed() = BeaconState.Installed("0.1.0", 1u, true, "0.1.17", true, true, ">=0.1.0, <0.2.0")
+    private fun installed() = BeaconState.Installed("0.1.0", 1u, true, "0.1.17", true, true, ">=0.1.0, <0.2.0", "linux")
 
     private fun connectTo(core: FakeCore, platform: PushPlatform = Platform()): HostsModel {
         core.addHost("box", Endpoint.Ssh("10.0.0.2", 22u, "me"))
         lateinit var model: HostsModel
         compose.setContent {
             val scope = rememberCoroutineScope()
-            model = remember { HostsModel(core, scope, noDownload, platform, noHttp) }
+            model = remember { HostsModel(core, scope, noDownload, pushPlatform = platform, http = noHttp) }
             MaterialTheme { AriesApp(model) }
         }
         compose.onNodeWithText("box").performClick()

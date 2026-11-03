@@ -27,6 +27,7 @@ cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace                              # unit + core API tests against real herdr-core
 cargo test -p aries-core -- --ignored              # SSH, jump host, password bootstrap + Beacon tests (docker)
+for t in scripts/tests/*.test.sh; do sh "$t"; done  # release script tests
 cd android && ./gradlew :app:testDebugUnitTest      # Compose UI tests against a fake core (Robolectric)
 cd android && ./gradlew :app:assembleDebug          # debug APK (builds the core with cargo-ndk)
 cd android && ./gradlew :app:connectedDebugAndroidTest   # device tests (Android Keystore); needs a device/emulator
@@ -96,14 +97,20 @@ from then on, add the language to `shipped` in `TranslationsTest`.
 ## Beacon on a Host
 
 `crates/core/src/beacon.rs` installs it over SSH: binary
-`~/.local/bin/aries-beacon`, systemd user unit
-`~/.config/systemd/user/aries-beacon.service`, private state (Call records)
-in `~/.local/state/aries-beacon/`. Removal runs `UNINSTALL_STEPS` and keeps
+`~/.local/bin/aries-beacon`; on Linux a systemd user unit
+`~/.config/systemd/user/aries-beacon.service`, on macOS a LaunchAgent
+`~/Library/LaunchAgents/io.github.shiroel.aries.beacon.plist`; private state
+(Call records) in `~/.local/state/aries-beacon/`. The Host downloads the
+binary itself when it can (curl/wget) and the phone uploads it otherwise;
+either way it must match the pinned SHA-256. `check_beacon` (called on
+connect) updates an out-of-date Beacon unless automatic updates are off.
+Removal runs `UNINSTALL_STEPS` and keeps
 the state directory. A ticket that puts something else on the Host (pairing,
 managed skills) adds its own removal step there and tests it in
 `crates/core/tests/beacon.rs`. The pinned release (`pinned_release`) and its
-checksums come from the Beacon release pipeline; tests swap it with
-`AriesCore::set_beacon_release`.
+checksums come from the Beacon release pipeline (below); tests swap it with
+`AriesCore::set_beacon_release` and serve binaries from
+`aries_test_support::ReleaseServer` (an `nginx:alpine` container).
 
 ## Push and the Relay
 
@@ -167,6 +174,20 @@ scripts/build-release.sh v0.1.0-rc.1 dist/      # needs cargo-ndk and cargo-abou
 ```
 
 Release builds need `cargo install cargo-about --locked --features cli`.
+
+The release also builds the Beacon (linux and macOS, x86_64 and aarch64) and
+publishes it with `beacon-SHA256SUMS`. The app pins those exact binaries:
+`scripts/beacon-manifest.sh` writes `beacon-release.json`, and building the
+core with `ARIES_BEACON_MANIFEST=<absolute path>` embeds it
+(`crates/core/build.rs`). Without it a build pins no Beacon. The tag's
+`X.Y.Z` must equal the workspace version in `Cargo.toml`. Locally (Linux
+targets only):
+
+```sh
+scripts/build-beacon.sh dist/beacon             # static musl binaries
+ARIES_BEACON_PARTIAL=1 scripts/beacon-manifest.sh v0.1.0 dist/beacon
+ARIES_BEACON_MANIFEST=$PWD/dist/beacon/beacon-release.json scripts/build-release.sh v0.1.0 dist/
+```
 
 ## License
 

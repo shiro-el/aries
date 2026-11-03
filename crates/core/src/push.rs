@@ -13,9 +13,11 @@
 //!    posts it to the Relay, which forwards it to the phone.
 //!
 //! Stored per Host in `hosts/<id>/push.json`: Relay URL, the Beacon's public
-//! key and, sealed by the [`KeyVault`], the phone's secret key and the
-//! pairing token. The vault key must work while the phone is locked (push
-//! is opened in the background): see `docs/research/background-choice-reply.md`.
+//! key and, sealed by the [`KeyVault`] under [`KeyProtection::Plain`]
+//! whatever the SSH key policy is, the phone's secret key and the pairing
+//! token. Push is opened in the background on a locked phone, which only a
+//! key without user-authentication binding allows (see
+//! `docs/research/background-choice-reply.md`).
 //!
 //! Unpairing deletes the Relay's data from the phone (`DELETE
 //! /v1/pairing`) and from the Host (`aries-beacon unpair`). Host removal and
@@ -33,11 +35,11 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use serde::{Deserialize, Serialize};
 
-use crate::KeyVault;
 use crate::beacon::{BEACON_BIN, FetchError, sh_c};
 use crate::error::{CoreError, storage};
 use crate::store::Store;
 use crate::transport::Ssh;
+use crate::{KeyProtection, KeyVault};
 
 /// The app's HTTP client (the Relay is reached from the phone).
 #[uniffi::export(with_foreign)]
@@ -151,13 +153,13 @@ fn read_stored(store: &Store, host_id: &str) -> Result<Option<Stored>, CoreError
 
 fn open_secrets(vault: &dyn KeyVault, sealed: &str) -> Result<Secrets, CoreError> {
     let bytes = STANDARD.decode(sealed).map_err(storage)?;
-    let plain = vault.open(bytes)?;
+    let plain = vault.open(bytes, KeyProtection::Plain)?;
     serde_json::from_slice(&plain).map_err(storage)
 }
 
 fn seal_secrets(vault: &dyn KeyVault, secrets: &Secrets) -> Result<String, CoreError> {
     let plain = serde_json::to_vec(secrets).map_err(storage)?;
-    Ok(STANDARD.encode(vault.seal(plain)?))
+    Ok(STANDARD.encode(vault.seal(plain, KeyProtection::Plain)?))
 }
 
 pub(crate) fn pairing_of(

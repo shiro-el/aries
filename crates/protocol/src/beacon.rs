@@ -46,6 +46,11 @@ impl std::fmt::Display for VersionRange {
     }
 }
 
+/// A plain `MAJOR.MINOR.PATCH` as comparable numbers.
+pub fn parse_version(version: &str) -> Option<[u64; 3]> {
+    parse(version)
+}
+
 fn parse(version: &str) -> Option<[u64; 3]> {
     let mut parts = version.trim().split('.').map(|p| p.parse::<u64>().ok());
     let v = [parts.next()??, parts.next()??, parts.next()??];

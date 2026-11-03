@@ -1,8 +1,10 @@
 name: Release
 
-# A tag vX.Y.Z (or vX.Y.Z-rc.N) builds the APK and AAB signed with the upload
-# key, publishes them on GitHub Releases, and uploads the AAB to Play internal
-# testing once the PLAY_UPLOAD_ENABLED variable is "true" (ticket 09).
+# A tag vX.Y.Z (or vX.Y.Z-rc.N) builds the Beacon for linux/macOS
+# x86_64/aarch64 and the APK and AAB (which pin those Beacon binaries) signed
+# with the upload key, publishes them on GitHub Releases, and uploads the AAB
+# to Play internal testing once the PLAY_UPLOAD_ENABLED variable is "true"
+# (ticket 09).
 # workflow_dispatch builds and checks an existing tag without publishing.
 
 on:
@@ -25,7 +27,31 @@ env:
   TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
+  # The Beacon for linux/macOS x86_64/aarch64. The app built below pins
+  # exactly these binaries and their SHA-256s (ticket 26).
+  beacon:
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            targets: linux-x86_64 linux-aarch64
+          - runner: macos-latest
+            targets: macos-x86_64 macos-aarch64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build the Beacon
+        run: sh scripts/build-beacon.sh dist/beacon ${{ matrix.targets }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: beacon-${{ matrix.runner }}
+          path: dist/beacon/
+
   build:
+    needs: beacon
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -52,6 +78,19 @@ jobs:
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
           cargo install cargo-ndk --locked
           cargo install cargo-about --locked --features cli --version "$CARGO_ABOUT_VERSION"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: beacon-*
+          merge-multiple: true
+          path: dist/beacon
+      - name: Pin the Beacon release
+        run: |
+          chmod 755 dist/beacon/aries-beacon-*
+          scripts/beacon-manifest.sh "$TAG" dist/beacon
+          echo "ARIES_BEACON_MANIFEST=$PWD/dist/beacon/beacon-release.json" >> "$GITHUB_ENV"
+          dist/beacon/aries-beacon-linux-x86_64 --version
+      - name: The core pins all four Beacon binaries
+        run: ARIES_BEACON_EXPECT_ALL=1 cargo test -p aries-core --lib pins_the_manifest_the_release_pipeline_built
       - uses: gradle/actions/setup-gradle@v4
       - name: Secrets (upload key, google-services.json)
         env:
@@ -98,7 +137,10 @@ jobs:
           [ "$PRERELEASE" = true ] && flags="--prerelease"
           gh release create "$TAG" --verify-tag --title "Aries $NAME" --generate-notes $flags \
             "dist/aries-$NAME.apk" dist/SHA256SUMS \
-            dist/third-party-notices-rust.txt dist/third-party-notices-android.json
+            dist/third-party-notices-rust.txt dist/third-party-notices-android.json \
+            dist/beacon/aries-beacon-linux-x86_64 dist/beacon/aries-beacon-linux-aarch64 \
+            dist/beacon/aries-beacon-macos-x86_64 dist/beacon/aries-beacon-macos-aarch64 \
+            dist/beacon/beacon-SHA256SUMS
       - name: Remove the upload key
         if: always()
         run: rm -f "$RUNNER_TEMP/aries-upload.p12" android/app/google-services.json

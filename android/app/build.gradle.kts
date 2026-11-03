@@ -222,6 +222,8 @@ val uniffiBindings = tasks.register<UniffiBindings>("uniffiBindings") {
 
 val cargoNdk = tasks.register<CargoNdk>("cargoNdk") {
     sources.from(rustSources)
+    // The pinned Beacon release (crates/core/build.rs); set by the release workflow.
+    System.getenv("ARIES_BEACON_MANIFEST")?.takeIf { it.isNotEmpty() }?.let { sources.from(it) }
     workspace.set(repoRoot)
     abis.set(rustAbis())
     profile.set(findProperty("aries.rustProfile") as String? ?: "release")

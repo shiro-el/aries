@@ -16,6 +16,26 @@ use serde::{Deserialize, Serialize};
 /// Shared label holding the last `turn` a user has seen.
 pub const SEEN_LABEL: &str = "herdr.seen";
 
+/// Shared label marking an Agent the user pinned (`herdr.pinned=1`).
+pub const PINNED_LABEL: &str = "herdr.pinned";
+
+/// The turn the user has seen, from `herdr.seen` (0 when unset or unreadable).
+pub fn seen_turn(labels: &HashMap<String, String>) -> u64 {
+    labels
+        .get(SEEN_LABEL)
+        .and_then(|s| s.trim().parse::<u64>().ok())
+        .unwrap_or(0)
+}
+
+/// Whether `herdr.pinned` marks the Terminal pinned. Clients write `1` and
+/// remove the label to unpin; an empty, `0` or `false` value counts as unpinned.
+pub fn is_pinned(labels: &HashMap<String, String>) -> bool {
+    labels
+        .get(PINNED_LABEL)
+        .map(|v| v.trim())
+        .is_some_and(|v| !v.is_empty() && v != "0" && !v.eq_ignore_ascii_case("false"))
+}
+
 /// One OSC 7501 record as herdr-core reports it (`msg` already decoded).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StatusRecord {
@@ -89,11 +109,7 @@ pub fn agent_status(
         },
         "error" => AgentStatus::Error { message },
         _ => {
-            let seen = labels
-                .get(SEEN_LABEL)
-                .and_then(|s| s.trim().parse::<u64>().ok())
-                .unwrap_or(0);
-            if turn > seen {
+            if turn > seen_turn(labels) {
                 AgentStatus::Done
             } else {
                 AgentStatus::Idle

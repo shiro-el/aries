@@ -7,7 +7,9 @@ import androidx.compose.runtime.setValue
 import io.github.shiroel.aries.HttpBeaconFetcher
 import io.github.shiroel.aries.HttpRelayClient
 import io.github.shiroel.aries.R
+import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.core.AriesCoreInterface
+import io.github.shiroel.aries.core.AttachOptions
 import io.github.shiroel.aries.core.BeaconFetcher
 import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Endpoint
@@ -20,12 +22,20 @@ import io.github.shiroel.aries.core.JumpHost
 import io.github.shiroel.aries.core.KeyInfo
 import io.github.shiroel.aries.core.KeyInstall
 import io.github.shiroel.aries.core.PublicKeyInfo
+import io.github.shiroel.aries.core.SavedLaunch
 import io.github.shiroel.aries.core.StructureListener
 import io.github.shiroel.aries.core.StructureWatch
 import io.github.shiroel.aries.core.QrMatrix
+import io.github.shiroel.aries.core.TerminalInfo
+import io.github.shiroel.aries.core.TerminalUpdate
+import io.github.shiroel.aries.core.KeyProtection
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** A message for the user: a string resource and its format arguments. */
 data class Message(@StringRes val res: Int, val args: List<Any> = emptyList())
@@ -39,6 +49,15 @@ sealed interface Screen {
 
     /** An open Host: its Spaces, Tabs and Panes. */
     data class Browse(val browser: HostBrowser) : Screen
+
+    /** One Terminal, observed; back returns to [returnTo] (its Host's Browse or the Agents list). */
+    data class Terminal(val viewer: TerminalViewer, val returnTo: Screen) : Screen
+
+    /** Every Host's Agents in one list. */
+    data class Agents(val board: AgentBoard) : Screen
+
+    /** An Agent's Chat; back returns to [returnTo] (its Host's Browse or the Agents list). */
+    data class Chat(val chat: ChatModel, val returnTo: Screen) : Screen
 }
 
 sealed interface Prompt {
@@ -73,16 +92,23 @@ sealed interface Prompt {
 
 enum class AfterTrust { Connect, InstallKey }
 
-/** UI state over the core API. Compose reads the `by mutableStateOf` fields. */
+/**
+ * UI state over the core API. Compose reads the `by mutableStateOf` fields.
+ *
+ * [keyWork] runs core calls that may open an SSH key. A biometric-protected
+ * key blocks its caller while the prompt is up, so the app passes
+ * `Dispatchers.IO`; tests keep the default and stay on the UI thread.
+ */
 class HostsModel(
     private val core: AriesCoreInterface,
     private val scope: CoroutineScope,
     beaconFetcher: BeaconFetcher = HttpBeaconFetcher(),
+    private val keyWork: CoroutineContext = EmptyCoroutineContext,
     pushPlatform: PushPlatform = NoPush,
     private val http: HttpClient = HttpRelayClient(),
 ) {
     /** The Beacon section of the connected Host. */
-    val beacon = BeaconModel(core, scope, beaconFetcher, onRemoved = { onBeaconRemoved() })
+    val beacon = BeaconModel(core, scope, beaconFetcher, onRemoved = { onBeaconRemoved() }, keyWork = keyWork)
 
     /** The push section of the connected Host. */
     val push = PushModel(core, scope, pushPlatform, http)
@@ -98,6 +124,8 @@ class HostsModel(
     }
 
     var key by mutableStateOf<PublicKeyInfo?>(null)
+        private set
+    var keyProtection by mutableStateOf<KeyProtection?>(null)
         private set
     var hosts by mutableStateOf<List<Host>>(emptyList())
         private set
@@ -118,6 +146,7 @@ class HostsModel(
     init {
         guard {
             key = core.publicKey()
+            keyProtection = core.keyProtection()
             hosts = core.hosts()
             refreshRoutes()
         }
@@ -126,12 +155,33 @@ class HostsModel(
 
     fun createKey() = guard {
         key = core.ensureKey()
+        keyProtection = core.keyProtection()
         keys = core.keys()
     }
 
-    fun createExtraKey(label: String) = guard {
-        core.createKey(label.trim())
-        keys = core.keys()
+    /** Re-seals every SSH key with or without a biometric requirement. */
+    fun requireBiometric(required: Boolean) {
+        val protection = if (required) KeyProtection.BIOMETRIC else KeyProtection.PLAIN
+        scope.launch {
+            try {
+                withContext(keyWork) { core.setKeyProtection(protection) }
+            } catch (e: CoreException) {
+                prompt = problemFor(e)
+            }
+            guard { keyProtection = core.keyProtection() }
+        }
+    }
+
+    /** Creates another key under the current policy, so it may ask for a biometric unlock. */
+    fun createExtraKey(label: String) {
+        scope.launch {
+            try {
+                withContext(keyWork) { core.createKey(label.trim()) }
+            } catch (e: CoreException) {
+                prompt = problemFor(e)
+            }
+            guard { keys = core.keys() }
+        }
     }
 
     fun editJumps(host: Host) = guard {
@@ -161,8 +211,9 @@ class HostsModel(
         screen = Screen.Connecting(host)
         scope.launch {
             try {
-                val conn = core.connect(host.id)
+                val conn = withContext(keyWork) { core.connect(host.id) }
                 val browser = HostBrowser(host)
+                browser.savedLaunches = conn.savedLaunches()
                 open = conn to null
                 screen = Screen.Browse(browser)
                 beacon.load(host)
@@ -195,6 +246,74 @@ class HostsModel(
                     is CoreException.JumpHostKeyUnknown -> Prompt.TrustJumpHostKey(host, e.hop, e.address, e.fingerprint)
                     else -> problemFor(e)
                 }
+            }
+        }
+    }
+
+    /** Opens the "new Terminal" form on [browser], starting at the Space/Tab shown. */
+    fun newTerminal(browser: HostBrowser) {
+        val conn = open?.first ?: return
+        val structure = browser.structure ?: return
+        browser.launchForm =
+            LaunchForm(structure, conn.recentCwds(), browser.openSpaceId, browser.tab?.id, browser.savedLaunches)
+    }
+
+    /** Saves [form] under its name (new, or replacing the config it edits); the form stays open. */
+    fun saveLaunch(browser: HostBrowser, form: LaunchForm) {
+        val conn = open?.first ?: return
+        form.error = null
+        try {
+            form.stored(conn.saveLaunch(form.toSaved()))
+            browser.savedLaunches = form.saved.toList()
+        } catch (e: CoreException) {
+            form.error = launchProblem(e)
+        }
+    }
+
+    fun deleteSavedLaunch(browser: HostBrowser, form: LaunchForm, saved: SavedLaunch) {
+        val conn = open?.first ?: return
+        form.error = null
+        try {
+            conn.deleteSavedLaunch(saved.id)
+            form.removed(saved.id)
+            browser.savedLaunches = form.saved.toList()
+        } catch (e: CoreException) {
+            form.error = launchProblem(e)
+        }
+    }
+
+    /** One tap: starts [saved] as stored. If that fails, its form opens with the reason. */
+    fun runSaved(browser: HostBrowser, saved: SavedLaunch) {
+        val conn = open?.first ?: return
+        val structure = browser.structure ?: return
+        scope.launch {
+            try {
+                val terminal = conn.launch(saved.request)
+                browser.reveal(saved.request.spaceId, saved.request.tabId, terminal.address)
+            } catch (e: CoreException) {
+                val form = LaunchForm(structure, conn.recentCwds(), null, null, browser.savedLaunches)
+                form.edit(saved)
+                form.error = launchProblem(e)
+                browser.launchForm = form
+            }
+        }
+    }
+
+    /** Starts [form]'s command on the open Host, then shows the new Terminal; failures stay on the form. */
+    fun launch(browser: HostBrowser, form: LaunchForm) {
+        val conn = open?.first ?: return
+        val request = form.request()
+        form.busy = true
+        form.error = null
+        scope.launch {
+            try {
+                val terminal = conn.launch(request)
+                if (browser.launchForm === form) browser.launchForm = null
+                browser.reveal(request.spaceId, request.tabId, terminal.address)
+            } catch (e: CoreException) {
+                form.error = launchProblem(e)
+            } finally {
+                form.busy = false
             }
         }
     }
@@ -295,7 +414,149 @@ class HostsModel(
         }
     }
 
+    /** The open Terminal's stream; cancelled when it closes. */
+    private var viewing: Job? = null
+
+    /**
+     * Opens [terminal] in observe mode: the desktop keeps its size and the
+     * screen follows the Terminal's grid. Entry point for every list that
+     * shows Terminals or Agents: from Browse it is a Terminal of the open
+     * Host; from [Screen.Agents] it is the Terminal of the Agent whose detail
+     * is open. Leaving it ([closeTerminal]) returns to where it was opened.
+     */
+    fun openTerminal(terminal: TerminalInfo) {
+        when (val s = screen) {
+            is Screen.Browse -> {
+                val conn = open?.first ?: return
+                observe(conn, s.browser.current(terminal), s)
+            }
+            is Screen.Agents -> {
+                val key = s.board.openKey ?: return
+                if (key.address != terminal.address) return
+                val conn = agentConns[key.hostId] ?: return
+                observe(conn, s.board.find(key)?.terminal ?: terminal, s)
+            }
+            else -> return
+        }
+    }
+
+    private fun observe(conn: HostConnection, terminal: TerminalInfo, returnTo: Screen) {
+        val viewer = TerminalViewer(terminal)
+        screen = Screen.Terminal(viewer, returnTo)
+        viewing = scope.launch {
+            val view = try {
+                conn.attachTerminal(terminal.address, AttachOptions(observe = true, cols = 80u, rows = 24u, history = 0u))
+            } catch (e: CoreException) {
+                viewer.markClosed()
+                return@launch
+            }
+            try {
+                while (true) {
+                    when (val u = view.next()) {
+                        is TerminalUpdate.Screen -> viewer.apply(u.frame)
+                        is TerminalUpdate.Exited -> viewer.exited(u.exit)
+                    }
+                }
+            } catch (e: CoreException) {
+                viewer.markClosed()
+            } finally {
+                withContext(NonCancellable) { view.detach() }
+                view.close()
+            }
+        }
+    }
+
+    /** Leaves the open Terminal (it keeps running) and shows where it was opened from. */
+    fun closeTerminal() {
+        val s = screen as? Screen.Terminal ?: return
+        viewing?.cancel()
+        viewing = null
+        screen = s.returnTo
+    }
+
+    /** Connections and watch jobs of [Screen.Agents], per Host id. */
+    private val agentConns = mutableMapOf<String, HostConnection>()
+    private val agentJobs = mutableListOf<Job>()
+
+    /** Connects to every Host and shows all their Agents in one list. */
+    fun openAgents() {
+        val board = AgentBoard(hosts)
+        screen = Screen.Agents(board)
+        hosts.forEach { host ->
+            agentJobs += scope.launch {
+                val conn = try {
+                    core.connect(host.id)
+                } catch (e: CoreException) {
+                    board.fail(host.id, problemFor(e).body)
+                    return@launch
+                }
+                agentConns[host.id] = conn
+                try {
+                    val watch = conn.watchTerminals()
+                    try {
+                        while (true) board.update(host.id, watch.next())
+                    } finally {
+                        watch.stop()
+                    }
+                } catch (e: CoreException) {
+                    board.markClosed(host.id)
+                }
+            }
+        }
+    }
+
+    /** Opens an Agent's detail; a Done Agent counts as seen there, for every client. */
+    fun openAgent(board: AgentBoard, entry: AgentEntry) {
+        board.open(entry.key)
+        val t = entry.terminal
+        if (t.agentStatus != AgentStatus.Done) return
+        labelWrite(board, entry) { it.markSeen(t.address, t.turn) }
+    }
+
+    /** Pins or unpins an Agent for every client. */
+    fun pin(board: AgentBoard, entry: AgentEntry, pinned: Boolean) =
+        labelWrite(board, entry) { it.setPinned(entry.terminal.address, pinned) }
+
+    private fun labelWrite(board: AgentBoard, entry: AgentEntry, write: suspend (HostConnection) -> TerminalInfo) {
+        val conn = agentConns[entry.host.id] ?: return
+        scope.launch {
+            try {
+                board.replace(entry.host.id, write(conn))
+            } catch (e: CoreException) {
+                prompt = problemFor(e)
+            }
+        }
+    }
+
+    private fun closeAgents() {
+        agentJobs.forEach { it.cancel() }
+        agentJobs.clear()
+        val conns = agentConns.values.toList()
+        agentConns.clear()
+        conns.forEach { scope.launch { it.disconnect() } }
+    }
+
+    /** Opens the Chat of the Agent in [terminal] on [host], from Browse or the Agents list. */
+    fun openChat(host: Host, terminal: TerminalInfo) {
+        val from = screen
+        if (from !is Screen.Browse && from !is Screen.Agents) return
+        val chat = ChatModel(core, host, terminal)
+        screen = Screen.Chat(chat, from)
+        chat.start(scope)
+    }
+
+    /** Leaves the Chat (the Agent keeps running) for where it was opened. */
+    fun closeChat() {
+        val s = screen as? Screen.Chat ?: return
+        s.chat.stop()
+        screen = s.returnTo
+    }
+
     fun back() {
+        (screen as? Screen.Chat)?.chat?.stop()
+        viewing?.cancel()
+        viewing = null
+        if (screen is Screen.Agents) closeAgents()
         screen = Screen.Hosts
         status?.cancel()
         status = null
@@ -351,6 +612,14 @@ fun problemFor(e: CoreException): Prompt.Problem {
         )
         is CoreException.AuthRejected -> Prompt.Problem(failed, Message(R.string.connect_auth_rejected))
         is CoreException.NoKey -> Prompt.Problem(failed, Message(R.string.connect_no_key))
+        is CoreException.KeyLocked -> Prompt.Problem(
+            Message(R.string.key_locked_title),
+            Message(R.string.key_locked_body),
+        )
+        is CoreException.BiometricUnavailable -> Prompt.Problem(
+            Message(R.string.key_biometric_unavailable_title),
+            Message(R.string.key_biometric_unavailable_body),
+        )
         is CoreException.Unreachable -> Prompt.Problem(failed, Message(R.string.connect_unreachable, listOf(e.detail)))
         is CoreException.Protocol -> Prompt.Problem(failed, Message(R.string.connect_protocol, listOf(e.detail)))
         else -> Prompt.Problem(failed, Message(R.string.connect_other, listOf(e.message ?: "")))

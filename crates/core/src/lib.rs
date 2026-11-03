@@ -6,13 +6,16 @@
 //! chat, push, calls and beacon manager modules arrive with their tickets.
 
 mod beacon;
+mod chat;
 mod error;
 mod hc;
 mod host_model;
+mod launch;
 mod push;
 mod removal;
 mod store;
 mod structure;
+mod terminal;
 mod transport;
 
 use std::collections::HashMap;
@@ -24,17 +27,23 @@ use russh::keys::{Algorithm, HashAlg, PrivateKey};
 use serde::{Deserialize, Serialize};
 
 pub use beacon::{
-    ALLOWED_BEACON, BeaconArtifact, BeaconFetcher, BeaconInstall, BeaconRelease, BeaconState,
-    FetchError, Linger, pinned_release,
+    ALLOWED_BEACON, BeaconArtifact, BeaconCheck, BeaconFetcher, BeaconInstall, BeaconRelease,
+    BeaconSource, BeaconState, BeaconUpdate, FetchError, Linger, pinned_release,
 };
+pub use chat::{ChatEntry, ChatEntryBody, ChatSnapshot, ChatStatus, ChatToolStatus, ChatWatch};
 pub use error::{CoreError, Incompatibility, VaultError};
 pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
 pub use host_model::{AgentStatus, BlockedReason, TerminalWatch};
+pub use launch::{AgentPreset, LaunchRequest, RECENT_CWDS_KEPT, SavedLaunch};
 pub use push::{
     HttpClient, HttpRequest, HttpResponse, PushContent, PushDevice, PushDisable, PushNotice,
     PushPairing, PushProgress, PushStep,
 };
 pub use structure::{HostStructure, PaneInfo, SpaceInfo, StructureProblem, TabInfo};
+pub use terminal::{
+    AttachOptions, CellRun, CursorPos, FRAME_INTERVAL, ScreenFrame, ScreenLine, TerminalExit,
+    TerminalUpdate, TerminalView, ViewStats,
+};
 
 use hc::HcClient;
 use store::{SavedHost, SavedKey, Store};
@@ -46,11 +55,26 @@ pub const DEFAULT_KEY_ID: &str = "default";
 uniffi::setup_scaffolding!();
 
 /// Seals secrets at rest. On Android this is an AES-GCM key held by the
-/// Android Keystore; tests use a stand-in.
+/// Android Keystore, one Keystore key per [`KeyProtection`]; tests use a
+/// stand-in. Bytes sealed under one protection open only under the same one.
 #[uniffi::export(with_foreign)]
 pub trait KeyVault: Send + Sync {
-    fn seal(&self, plaintext: Vec<u8>) -> Result<Vec<u8>, VaultError>;
-    fn open(&self, sealed: Vec<u8>) -> Result<Vec<u8>, VaultError>;
+    fn seal(&self, plaintext: Vec<u8>, protection: KeyProtection) -> Result<Vec<u8>, VaultError>;
+    /// A [`KeyProtection::Biometric`] open fails with [`VaultError::Locked`]
+    /// unless the user authenticates for this use; it never falls back.
+    fn open(&self, sealed: Vec<u8>, protection: KeyProtection) -> Result<Vec<u8>, VaultError>;
+}
+
+/// The user's choice of how the app's SSH key is unlocked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum KeyProtection {
+    /// Sealed by a Keystore key with no user-authentication binding, so it
+    /// also works on a locked phone: Choice buttons can answer from the
+    /// notification.
+    Plain,
+    /// Every use needs a strong biometric. Unusable in the background, so
+    /// notifications show "Open app" instead of Choice buttons.
+    Biometric,
 }
 
 /// The app's SSH public key, ready to paste into `authorized_keys`.
@@ -148,6 +172,14 @@ pub struct TerminalInfo {
     /// herdr-core's `turn` counter (what `herdr.seen` is compared with).
     #[uniffi(default = 0)]
     pub turn: u64,
+    /// Pinned by the user on any client (shared `herdr.pinned` label).
+    #[uniffi(default = false)]
+    pub pinned: bool,
+    /// For a Terminal on a machine the Host added with `hc machine add`, that
+    /// machine's name (`box` in `box/t7`). For display only: always use the
+    /// whole [`address`](Self::address) to reach the Terminal.
+    #[uniffi(default = None)]
+    pub machine: Option<String>,
 }
 
 fn runtime() -> &'static tokio::runtime::Runtime {
@@ -200,10 +232,10 @@ impl AriesCore {
 
     /// The app's SSH public key, if one was created.
     pub fn public_key(&self) -> Result<Option<PublicKeyInfo>, CoreError> {
-        let Some((_, public)) = self.store.read_identity()? else {
+        let Some(id) = self.store.read_identity()? else {
             return Ok(None);
         };
-        Ok(Some(public_key_info(&public)?))
+        Ok(Some(public_key_info(&id.public)?))
     }
 
     /// The app's public key line as a QR code, if a key was created.
@@ -235,9 +267,94 @@ impl AriesCore {
             return Ok(info);
         }
         let (private, public) = generate_key("aries")?;
-        let sealed = self.vault.seal(private.as_bytes().to_vec())?;
-        self.store.write_identity(&sealed, &public)?;
+        let sealed = self
+            .vault
+            .seal(private.as_bytes().to_vec(), KeyProtection::Plain)?;
+        self.store.write_identity(&store::Identity {
+            protection: KeyProtection::Plain,
+            sealed,
+            public: public.clone(),
+        })?;
         public_key_info(&public)
+    }
+
+    /// How the app's SSH keys are unlocked, or `None` before the default key
+    /// exists. The policy is app-wide: it covers every key in [`AriesCore::keys`].
+    pub fn key_protection(&self) -> Result<Option<KeyProtection>, CoreError> {
+        Ok(self.store.read_identity()?.map(|id| id.protection))
+    }
+
+    /// Re-seals every SSH key (the default one and those from `create_key`)
+    /// under `protection`; the public keys and every Host's `authorized_keys`
+    /// stay valid. Entering or leaving [`KeyProtection::Biometric`] asks the
+    /// user to authenticate, so call it from the foreground and off the main
+    /// thread. On failure every key keeps the old protection.
+    pub fn set_key_protection(&self, protection: KeyProtection) -> Result<(), CoreError> {
+        let id = self.store.read_identity()?.ok_or(CoreError::NoKey)?;
+        // Re-seal everything in memory first, so a vault failure writes nothing.
+        let mut extras = Vec::new();
+        for k in self.store.read_keys()? {
+            let (old, sealed) = self.store.read_key_sealed(&k.id)?;
+            if old != protection {
+                let private = self.vault.open(sealed.clone(), old)?;
+                let resealed = self.vault.seal(private, protection)?;
+                extras.push((k.id, old, sealed, resealed));
+            }
+        }
+        let identity = if id.protection == protection {
+            None
+        } else {
+            let private = self.vault.open(id.sealed.clone(), id.protection)?;
+            Some(self.vault.seal(private, protection)?)
+        };
+        // The default key, which `key_protection` reports, goes last; if any
+        // write fails, put back the keys already written.
+        let mut written = Vec::new();
+        let result = (|| {
+            for (key_id, _, _, resealed) in &extras {
+                self.store.write_key_sealed(key_id, protection, resealed)?;
+                written.push(key_id.clone());
+            }
+            if let Some(sealed) = identity {
+                self.store.write_identity(&store::Identity {
+                    protection,
+                    sealed,
+                    public: id.public.clone(),
+                })?;
+            }
+            Ok(())
+        })();
+        if result.is_err() {
+            for (key_id, old, sealed, _) in &extras {
+                if written.contains(key_id) {
+                    let _ = self.store.write_key_sealed(key_id, *old, sealed);
+                }
+            }
+        }
+        result
+    }
+
+    /// Whether a Choice for this Host can be answered from a notification
+    /// without opening the app: signing in to the Host must not need a
+    /// biometric unlock. When `false`, show "Open app" instead of Choices.
+    ///
+    /// For an SSH Host that means the Host's key and every jump host's key
+    /// exist and are [`KeyProtection::Plain`].
+    pub fn can_answer_in_background(&self, host_id: String) -> Result<bool, CoreError> {
+        let host = self.saved_host(&host_id)?;
+        if let Endpoint::Local { .. } = host.endpoint {
+            return Ok(true);
+        }
+        let key_ids = std::iter::once(host.key_id.as_deref())
+            .chain(host.jumps.iter().map(|j| j.key_id.as_deref()));
+        for key_id in key_ids {
+            match self.sealed_key(key_id) {
+                Ok((KeyProtection::Plain, _)) => {}
+                Ok(_) | Err(CoreError::NoKey | CoreError::UnknownKey { .. }) => return Ok(false),
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(true)
     }
 
     /// Registers a Host. Connecting is a separate step.
@@ -281,16 +398,18 @@ impl AriesCore {
     }
 
     /// Creates another ed25519 SSH key, for jump hosts or Hosts that need an
-    /// account of their own.
+    /// account of their own. It is sealed under the current
+    /// [`AriesCore::key_protection`] (`Plain` before the default key exists).
     pub fn create_key(&self, label: String) -> Result<KeyInfo, CoreError> {
+        let protection = self.key_protection()?.unwrap_or(KeyProtection::Plain);
         let (private, public) = generate_key(&label)?;
-        let sealed = self.vault.seal(private.into_bytes())?;
+        let sealed = self.vault.seal(private.into_bytes(), protection)?;
         let saved = SavedKey {
             id: new_id(),
             label,
             public,
         };
-        self.store.add_key(&saved, &sealed)?;
+        self.store.add_key(&saved, protection, &sealed)?;
         key_info(&saved)
     }
 
@@ -462,6 +581,8 @@ impl AriesCore {
             on_runtime(async move { HcClient::handshake(transport.open().await?).await }).await?;
         Ok(Arc::new(HostConnection {
             client: Arc::new(client),
+            recent: launch::RecentCwds::in_host_dir(self.store.host_dir(&host.id)),
+            saved: launch::SavedLaunches::in_host_dir(self.store.host_dir(&host.id)),
         }))
     }
 }
@@ -486,20 +607,28 @@ impl AriesCore {
     /// The private half of `key_id` (`None` or [`DEFAULT_KEY_ID`]: the
     /// default key).
     fn private_key(&self, key_id: Option<&str>) -> Result<PrivateKey, CoreError> {
-        let sealed = match key_id {
-            None | Some(DEFAULT_KEY_ID) => self.store.read_identity()?.ok_or(CoreError::NoKey)?.0,
-            Some(id) => {
-                self.check_key_id(Some(id))?;
-                self.store.read_key_sealed(id)?
-            }
-        };
-        let pem = self.vault.open(sealed)?;
+        let (protection, sealed) = self.sealed_key(key_id)?;
+        let pem = self.vault.open(sealed, protection)?;
         let pem = String::from_utf8(pem).map_err(|e| CoreError::Vault {
             detail: e.to_string(),
         })?;
         PrivateKey::from_openssh(&pem).map_err(|e| CoreError::Vault {
             detail: e.to_string(),
         })
+    }
+
+    /// The sealed private half of `key_id` and the protection it is under.
+    fn sealed_key(&self, key_id: Option<&str>) -> Result<(KeyProtection, Vec<u8>), CoreError> {
+        match key_id {
+            None | Some(DEFAULT_KEY_ID) => {
+                let id = self.store.read_identity()?.ok_or(CoreError::NoKey)?;
+                Ok((id.protection, id.sealed))
+            }
+            Some(id) => {
+                self.check_key_id(Some(id))?;
+                self.store.read_key_sealed(id)
+            }
+        }
     }
 
     fn check_key_id(&self, key_id: Option<&str>) -> Result<(), CoreError> {
@@ -686,9 +815,76 @@ impl AriesCore {
         });
         push::open(&envelope, paired)
     }
+
+    /// Call when connecting: reads the Beacon and, if it is older than the
+    /// pinned release or outside [`ALLOWED_BEACON`], installs the pinned one
+    /// when [`AriesCore::beacon_auto_update`] is on, or only reports
+    /// [`BeaconUpdate::Needed`] when it is off.
+    pub async fn check_beacon(
+        &self,
+        host_id: String,
+        fetcher: Arc<dyn BeaconFetcher>,
+    ) -> Result<BeaconCheck, CoreError> {
+        let ssh = self.beacon_ssh(&host_id)?;
+        let release = self.beacon_release();
+        let auto = self.beacon_auto_update();
+        on_runtime(async move { beacon::check(&ssh, &release, auto, fetcher).await }).await
+    }
+
+    /// Whether connecting updates an out-of-date Beacon by itself (default on).
+    pub fn beacon_auto_update(&self) -> bool {
+        self.store.read_settings().beacon_auto_update
+    }
+
+    pub fn set_beacon_auto_update(&self, on: bool) -> Result<(), CoreError> {
+        let mut settings = self.store.read_settings();
+        settings.beacon_auto_update = on;
+        self.store.write_settings(&settings)
+    }
+}
+
+#[uniffi::export]
+impl AriesCore {
+    /// Follows the Chat of the Agent in `terminal` (address or name) through
+    /// the Host's Beacon. Pass the `cursor` of an earlier snapshot to resume
+    /// after it. Reconnects by itself; call `next` for each change.
+    pub fn watch_chat(
+        &self,
+        host_id: String,
+        terminal: String,
+        cursor: Option<String>,
+    ) -> Result<Arc<ChatWatch>, CoreError> {
+        let host = self.chat_host(&host_id)?;
+        Ok(Arc::new(ChatWatch::start(
+            host,
+            terminal,
+            cursor,
+            std::time::Duration::from_secs(1),
+        )))
+    }
 }
 
 impl AriesCore {
+    /// [`AriesCore::watch_chat`] with a custom first retry delay (tests).
+    pub fn watch_chat_retrying(
+        &self,
+        host_id: String,
+        terminal: String,
+        cursor: Option<String>,
+        retry: std::time::Duration,
+    ) -> Result<Arc<ChatWatch>, CoreError> {
+        let host = self.chat_host(&host_id)?;
+        Ok(Arc::new(ChatWatch::start(host, terminal, cursor, retry)))
+    }
+
+    fn chat_host(&self, host_id: &str) -> Result<chat::ChatHost, CoreError> {
+        let host = self.saved_host(host_id)?;
+        Ok(match host.endpoint {
+            Endpoint::Local { env, .. } => chat::ChatHost::Local(env),
+            Endpoint::Ssh { .. } => chat::ChatHost::Ssh(Box::new(self.beacon_ssh(host_id)?)),
+        })
+    }
+
     /// Replaces the pinned Beacon release. For tests and development
     /// builds; not exposed to the app.
     pub fn set_beacon_release(&self, release: BeaconRelease) {
@@ -719,6 +915,8 @@ impl AriesCore {
 #[derive(uniffi::Object)]
 pub struct HostConnection {
     client: Arc<HcClient>,
+    recent: launch::RecentCwds,
+    saved: launch::SavedLaunches,
 }
 
 #[uniffi::export]
@@ -736,6 +934,23 @@ impl HostConnection {
                 .await?;
         let list = result["terminals"].as_array().cloned().unwrap_or_default();
         Ok(list.iter().map(terminal_info).collect())
+    }
+
+    /// Attaches to the Terminal at `address` (`t7`, `machine/t7`) and
+    /// streams its screen. With `observe` the desktop keeps its size and the
+    /// view follows the Terminal's grid when the desktop resizes it.
+    pub async fn attach_terminal(
+        &self,
+        address: String,
+        options: AttachOptions,
+    ) -> Result<Arc<TerminalView>, CoreError> {
+        let client = self.client.clone();
+        on_runtime(async move {
+            TerminalView::attach(client, address, options)
+                .await
+                .map(Arc::new)
+        })
+        .await
     }
 
     /// Watches the Host's Terminals and their Agent status live.
@@ -785,6 +1000,81 @@ impl HostConnection {
         Ok(Arc::new(StructureWatch { task }))
     }
 
+    /// Marks the Agent at `address` seen up to `turn` (the turn whose Done the
+    /// user confirmed) in the shared `herdr.seen` label, so every client,
+    /// desktop included, shows it Idle. Never moves `herdr.seen` backwards.
+    /// `address` is used whole (`t7` or `machine/t7`). Returns the Terminal
+    /// as it is after the change.
+    pub async fn mark_seen(&self, address: String, turn: u64) -> Result<TerminalInfo, CoreError> {
+        let client = self.client.clone();
+        on_runtime(async move {
+            let now = client
+                .call("terminal.get", serde_json::json!({ "terminal": address }))
+                .await?;
+            if host_model::seen_turn(&now) >= turn {
+                return Ok(terminal_info(&now));
+            }
+            let labels =
+                serde_json::json!({ aries_protocol::agent_status::SEEN_LABEL: turn.to_string() });
+            set_labels(&client, &address, labels).await
+        })
+        .await
+    }
+
+    /// Pins or unpins the Agent at `address` for every client through the
+    /// shared `herdr.pinned` label. Returns the Terminal after the change.
+    pub async fn set_pinned(
+        &self,
+        address: String,
+        pinned: bool,
+    ) -> Result<TerminalInfo, CoreError> {
+        let client = self.client.clone();
+        // An empty value removes the label.
+        let value = if pinned { "1" } else { "" };
+        let labels = serde_json::json!({ aries_protocol::agent_status::PINNED_LABEL: value });
+        on_runtime(async move { set_labels(&client, &address, labels).await }).await
+    }
+
+    /// Starts a new Terminal running `request.command` (see `launch.rs`),
+    /// placed in the requested Space/Tab by label; the document is never
+    /// written. herdr-core's refusal (`spawn_failed` for a missing program or
+    /// cwd, ...) comes back as [`CoreError::Rpc`] with its `kind`. On success
+    /// the cwd joins [`HostConnection::recent_cwds`].
+    pub async fn launch(&self, request: LaunchRequest) -> Result<TerminalInfo, CoreError> {
+        let client = self.client.clone();
+        let params = launch::run_params(&request);
+        let result = on_runtime(async move { client.call("terminal.run", params).await }).await?;
+        if let Some(cwd) = launch::cwd_to_remember(&request) {
+            // The Terminal runs either way; a full disk only loses the hint.
+            let _ = self.recent.remember(cwd);
+        }
+        Ok(terminal_info(&result))
+    }
+
+    /// Working directories recently launched in on this Host, newest first,
+    /// at most [`RECENT_CWDS_KEPT`]. Kept on the phone, per Host.
+    pub fn recent_cwds(&self) -> Vec<String> {
+        self.recent.list()
+    }
+
+    /// The launch configs saved for this Host, oldest first. Kept on the
+    /// phone, per Host; run one with [`HostConnection::launch`] on its
+    /// `request`.
+    pub fn saved_launches(&self) -> Vec<SavedLaunch> {
+        self.saved.list()
+    }
+
+    /// Saves `launch` under its (trimmed) name: a new one when its `id` is
+    /// empty, else replaces the one with that id. Returns it as stored.
+    pub fn save_launch(&self, launch: SavedLaunch) -> Result<SavedLaunch, CoreError> {
+        self.saved.save(launch)
+    }
+
+    /// Deletes the saved launch `id`; succeeds if it is already gone.
+    pub fn delete_saved_launch(&self, id: String) -> Result<(), CoreError> {
+        self.saved.delete(&id)
+    }
+
     pub async fn disconnect(&self) {
         let client = self.client.clone();
         let _ = on_runtime(async move {
@@ -822,6 +1112,20 @@ impl Drop for StructureWatch {
     }
 }
 
+async fn set_labels(
+    client: &HcClient,
+    address: &str,
+    labels: serde_json::Value,
+) -> Result<TerminalInfo, CoreError> {
+    let t = client
+        .call(
+            "terminal.label",
+            serde_json::json!({ "terminal": address, "labels": labels }),
+        )
+        .await?;
+    Ok(terminal_info(&t))
+}
+
 async fn read_structure(client: &HcClient) -> Result<HostStructure, CoreError> {
     let doc = client
         .call(
@@ -853,8 +1157,11 @@ fn changes_structure(msg: &serde_json::Value) -> bool {
 pub(crate) fn terminal_info(v: &serde_json::Value) -> TerminalInfo {
     let s = |k: &str| v[k].as_str().map(str::to_owned);
     let (agent_status, needs_attention) = host_model::status_of(v);
+    let address = s("address").unwrap_or_default();
     TerminalInfo {
-        address: s("address").unwrap_or_default(),
+        machine: address.rsplit_once('/').map(|(m, _)| m.to_owned()),
+        pinned: host_model::pinned(v),
+        address,
         name: s("name"),
         title: s("title").unwrap_or_default(),
         argv: v["argv"]
