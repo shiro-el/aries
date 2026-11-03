@@ -125,4 +125,15 @@ class KeyImportTest {
         compose.onNodeWithText(str(R.string.key_biometric_label)).assertExists()
     }
 
+    @Test fun oversizedPasteDoesNotLeaveAStalePrivateKeyReadyToImport() {
+        val core = show()
+        compose.onNodeWithTag("key-import-label").performTextInput("oversized")
+        compose.onNodeWithTag("key-import-private").performTextInput("previous private key")
+        compose.onNodeWithTag("key-import-save").assertIsEnabled()
+        compose.onNodeWithTag("key-import-private").performTextReplacement("x".repeat(64 * 1024 + 1))
+        compose.onNodeWithTag("key-import-save").assertIsNotEnabled()
+        compose.onNodeWithText(str(R.string.key_import_too_large)).assertExists()
+        assertTrue(core.importedKeys.isEmpty())
+    }
+
 }

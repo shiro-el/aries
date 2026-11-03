@@ -454,6 +454,7 @@
     <string name="key_import_busy">Importing…</string>
     <string name="key_import_invalid">Could not import the key. Check the private key format and passphrase, then try again.</string>
     <string name="key_import_file_error">Could not read the key file. Choose a readable text file no larger than 64 KiB.</string>
+    <string name="key_import_too_large">The private key must be no larger than 64 KiB.</string>
 
     <string name="keys_title">Other SSH keys</string>
     <string name="key_new_label">Label for a new key</string>

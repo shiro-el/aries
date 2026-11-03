@@ -104,7 +104,15 @@ fun KeyImportDialog(model: HostsModel, onDismiss: () -> Unit) {
                     Text(stringResource(R.string.key_import_file_button))
                 }
                 OutlinedTextField(
-                    privateKey, { if (it.toByteArray(Charsets.UTF_8).size <= MAX_PRIVATE_KEY_BYTES) privateKey = it },
+                    privateKey, {
+                        if (it.toByteArray(Charsets.UTF_8).size <= MAX_PRIVATE_KEY_BYTES) {
+                            privateKey = it
+                        } else {
+                            // A rejected paste must not leave an older masked key ready to import.
+                            privateKey = ""
+                            problem = Message(R.string.key_import_too_large)
+                        }
+                    },
                     enabled = !busy, minLines = 3, maxLines = 5,
                     label = { Text(stringResource(R.string.key_import_private_label)) },
                     keyboardOptions = passwordKeyboard, visualTransformation = PasswordVisualTransformation(),
