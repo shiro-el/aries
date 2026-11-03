@@ -192,7 +192,7 @@ fn texts(s: &ChatSnapshot) -> Vec<String> {
         .iter()
         .map(|e| match &e.body {
             ChatEntryBody::User { text, .. } => format!("user: {text}"),
-            ChatEntryBody::Agent { text } => format!("agent: {text}"),
+            ChatEntryBody::Agent { text, .. } => format!("agent: {text}"),
             ChatEntryBody::Tool { name, status, .. } => format!("tool {name} {status:?}"),
             other => format!("{other:?}"),
         })
