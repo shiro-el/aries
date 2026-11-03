@@ -1,10 +1,12 @@
 import java.io.File
+import java.util.Properties
 import javax.inject.Inject
 import org.gradle.process.ExecOperations
 
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.licensee)
 }
 
 val repoRoot: File = rootProject.projectDir.parentFile
@@ -17,15 +19,30 @@ android {
         applicationId = "io.github.shiroel.aries"
         minSdk = 28
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        // Release builds pass both from the tag (scripts/release-version.sh).
+        versionCode = (findProperty("aries.versionCode") as String?)?.toInt() ?: 1
+        versionName = findProperty("aries.versionName") as String? ?: "0.1.0-dev"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += rustAbis() }
+    }
+
+    signingConfigs {
+        uploadKey()?.let { key ->
+            create("upload") {
+                storeFile = key.storeFile
+                storePassword = key.storePassword
+                keyAlias = key.keyAlias
+                keyPassword = key.keyPassword
+                if (key.storeFile.extension.lowercase() in setOf("p12", "pfx")) storeType = "pkcs12"
+            }
+        }
     }
 
     buildTypes {
         // Debug builds install next to a release (or legacy) Aries on the same device.
         debug { applicationIdSuffix = ".dev" }
+        // Without an upload key the release APK is left unsigned.
+        release { signingConfigs.findByName("upload")?.let { signingConfig = it } }
     }
 
     buildFeatures { compose = true }
@@ -45,6 +62,15 @@ android {
 
 kotlin { jvmToolchain(21) }
 
+// Third-party notices. Android dependencies: the build fails on a license
+// outside this list, and the report ships in the APK as
+// assets/app/cash/licensee/artifacts.json. Rust crates: `thirdPartyNotices`.
+// Add a permissive license here when a new dependency needs it.
+licensee {
+    allow("Apache-2.0")
+    bundleAndroidAsset.set(true)
+}
+
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
@@ -63,6 +89,29 @@ dependencies {
 
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.ext.junit)
+}
+
+// ---- Upload key --------------------------------------------------------------
+// The release signing key (the upload key; Play re-signs with the app key, and
+// GitHub Releases APKs ship signed with it). CI sets the ARIES_UPLOAD_* env
+// vars from the ANDROID_UPLOAD_* secrets; locally ARIES_UPLOAD_KEYSTORE_PROPERTIES
+// can point at a properties file with storeFile/storePassword/keyAlias/keyPassword.
+
+class UploadKey(val storeFile: File, val storePassword: String, val keyAlias: String, val keyPassword: String)
+
+fun uploadKey(): UploadKey? {
+    val env = System.getenv()
+    env["ARIES_UPLOAD_KEYSTORE"]?.takeIf { it.isNotBlank() }?.let { path ->
+        fun need(name: String) = env[name]?.takeIf { it.isNotEmpty() } ?: error("$name is not set")
+        return UploadKey(
+            file(path), need("ARIES_UPLOAD_STORE_PASSWORD"),
+            need("ARIES_UPLOAD_KEY_ALIAS"), need("ARIES_UPLOAD_KEY_PASSWORD"),
+        )
+    }
+    val propsPath = env["ARIES_UPLOAD_KEYSTORE_PROPERTIES"]?.takeIf { it.isNotBlank() } ?: return null
+    val props = Properties().apply { file(propsPath).inputStream().use { load(it) } }
+    fun need(name: String) = props.getProperty(name) ?: error("$propsPath has no $name")
+    return UploadKey(file(need("storeFile")), need("storePassword"), need("keyAlias"), need("keyPassword"))
 }
 
 // ---- Rust core -------------------------------------------------------------
@@ -135,9 +184,40 @@ val cargoNdk = tasks.register<CargoNdk>("cargoNdk") {
     outputDir.set(layout.buildDirectory.dir("rustJniLibs"))
 }
 
+/** Notices of the Rust crates in libaries_core.so (cargo-about), as assets/licenses/rust-crates.txt. */
+abstract class RustNotices : DefaultTask() {
+    @get:InputFiles abstract val sources: ConfigurableFileCollection
+    @get:Internal abstract val workspace: DirectoryProperty
+    @get:OutputDirectory abstract val outputDir: DirectoryProperty
+    @get:Inject abstract val exec: ExecOperations
+
+    @TaskAction
+    fun generate() {
+        val out = outputDir.get().asFile.resolve("licenses").apply { deleteRecursively(); mkdirs() }
+        exec.exec {
+            workingDir = workspace.get().asFile
+            commandLine(
+                "cargo", "about", "generate", "--locked", "--fail",
+                "-m", "crates/core/Cargo.toml", "-c", "licenses/cargo-about.toml",
+                "-o", out.resolve("rust-crates.txt").absolutePath, "licenses/cargo-about.hbs",
+            )
+        }
+    }
+}
+
+val thirdPartyNotices = tasks.register<RustNotices>("thirdPartyNotices") {
+    sources.from(rustSources, repoRoot.resolve("licenses"))
+    workspace.set(repoRoot)
+    outputDir.set(layout.buildDirectory.dir("generated/notices"))
+}
+
 androidComponents {
     onVariants { variant ->
         variant.sources.java?.addGeneratedSourceDirectory(uniffiBindings, UniffiBindings::outputDir)
         variant.sources.jniLibs?.addGeneratedSourceDirectory(cargoNdk, CargoNdk::outputDir)
+        // Release only, so debug builds don't need cargo-about installed.
+        if (variant.buildType == "release") {
+            variant.sources.assets?.addGeneratedSourceDirectory(thirdPartyNotices, RustNotices::outputDir)
+        }
     }
 }
