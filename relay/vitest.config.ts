@@ -12,6 +12,7 @@ export default defineConfig(async () => {
         miniflare: { bindings: { TEST_MIGRATIONS: migrations } },
       }),
     ],
-    test: { setupFiles: ["./test/apply-migrations.ts"] },
+    // Crypto and real D1 transactions can exceed 5s on shared build hosts.
+    test: { setupFiles: ["./test/apply-migrations.ts"], testTimeout: 30_000 },
   };
 });
