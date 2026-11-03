@@ -5,6 +5,46 @@
   Add every new string to values-ko/strings.xml too (TranslationsTest checks it).
 -->
 <resources>
+    <!-- GitHub Issues and PR conversations (113) -->
+    <string name="github_button">GitHub</string>
+    <string name="github_issues">Issues</string>
+    <string name="github_prs">Pull requests</string>
+    <string name="github_open">Open</string>
+    <string name="github_closed">Closed</string>
+    <string name="github_all">All</string>
+    <string name="github_merged">Merged</string>
+    <string name="github_search_hint">Search text in this repository</string>
+    <string name="github_search_button">Search</string>
+    <string name="github_previous">Previous</string>
+    <string name="github_next">Next</string>
+    <string name="github_page">Page %1$d</string>
+    <string name="github_refresh">Refresh</string>
+    <string name="github_loading">Loading GitHub…</string>
+    <string name="github_empty">No matching issues or pull requests.</string>
+    <string name="github_limited">GitHub search is incomplete or limited to 1,000 results. Narrow your search.</string>
+    <string name="github_item_title">#%1$d · %2$s</string>
+    <string name="github_author_date">%1$s · %2$s</string>
+    <string name="github_deleted_author">Deleted user</string>
+    <string name="github_no_body">No description.</string>
+    <string name="github_comments">Comments</string>
+    <string name="github_no_comments">No comments yet.</string>
+    <string name="github_comment_hint">Write a Markdown comment</string>
+    <string name="github_preview">Preview</string>
+    <string name="github_edit">Edit draft</string>
+    <string name="github_send">Post comment</string>
+    <string name="github_sent">Comment posted.</string>
+    <string name="github_close_issue">Close issue</string>
+    <string name="github_reopen_issue">Reopen issue</string>
+    <string name="github_state_updated">Issue updated.</string>
+    <string name="github_missing">Install GitHub CLI (gh) on this Host, then refresh.</string>
+    <string name="github_auth">Sign in on this Host with gh auth login, then refresh.</string>
+    <string name="github_failed">GitHub could not be loaded. Check this repository’s remote, access permissions, and the Host’s connection, then refresh.</string>
+    <string name="github_disconnected">Reconnect to this Host, then refresh.</string>
+    <string name="github_unknown">The request may have completed. Check GitHub before posting again. Your draft is kept.</string>
+    <string name="github_truncated">This GitHub conversation exceeds the Host’s response limit.</string>
+    <string name="github_draft_failed">The draft could not be saved on this phone. Keep this view open and try editing again.</string>
+    <string name="github_draft_limit">Comments can contain at most 64 KiB of text.</string>
+
     <!-- App lock (117) -->
     <string name="app_lock_settings_title">App lock</string>
     <string name="app_lock_enabled_label">Require authentication</string>
