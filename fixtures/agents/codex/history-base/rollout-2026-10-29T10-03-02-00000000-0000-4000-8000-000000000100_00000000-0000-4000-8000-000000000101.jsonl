@@ -1,0 +1,9 @@
+{"timestamp":"2026-10-29T10:03:02.931Z","ordinal":543,"type":"session_meta","payload":{"id":"00000000-0000-4000-8000-000000000100","session_id":"00000000-0000-4000-8000-000000000100","timestamp":"2026-10-29T10:03:02.929Z","cwd":"/home/user/work","originator":"codex-tui","cli_version":"0.165.0","source":"vscode","history_mode":"paginated","history_base":{"thread_id":"00000000-0000-4000-8000-000000000100","end_ordinal_exclusive":543,"end_byte_offset":5068}}}
+{"timestamp":"2026-10-29T10:03:02.976Z","ordinal":544,"type":"event_msg","payload":{"type":"thread_settings_applied"}}
+{"timestamp":"2026-10-29T10:04:57.637Z","ordinal":545,"type":"event_msg","payload":{"type":"thread_settings_applied"}}
+{"timestamp":"2026-10-29T10:04:57.640Z","ordinal":546,"type":"event_msg","payload":{"type":"task_started"}}
+{"timestamp":"2026-10-29T10:04:58.462Z","ordinal":549,"type":"event_msg","payload":{"type":"item_completed","item":{"type":"UserMessage","id":"replacement-UserMessage-1","content":[{"type":"text","text":"Replacement prompt 1"}]}}}
+{"timestamp":"2026-10-29T10:05:18.836Z","ordinal":552,"type":"event_msg","payload":{"type":"item_completed","item":{"type":"AgentMessage","id":"replacement-AgentMessage-1","content":[{"type":"text","text":"Replacement reply 1"}]}}}
+{"timestamp":"2026-10-29T10:07:16.336Z","ordinal":605,"type":"event_msg","payload":{"type":"item_completed","item":{"type":"AgentMessage","id":"replacement-AgentMessage-2","content":[{"type":"text","text":"Replacement reply 2"}]}}}
+{"timestamp":"2026-10-29T10:08:56.190Z","ordinal":637,"type":"event_msg","payload":{"type":"item_completed","item":{"type":"AgentMessage","id":"replacement-AgentMessage-3","content":[{"type":"text","text":"Replacement reply 3"}]}}}
+{"timestamp":"2026-10-29T10:08:56.207Z","ordinal":641,"type":"event_msg","payload":{"type":"task_complete"}}

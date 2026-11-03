@@ -313,14 +313,14 @@ impl SshdHost {
 
     /// Builds the image if needed and starts a container.
     pub fn start() -> Self {
-        Self::launch(None)
+        Self::launch(None, true)
     }
 
     /// Like [`SshdHost::start`], also attached to `network`, where other
     /// containers reach it as [`SshdHost::network_name`]. Its host keys are
     /// fresh, so every container on the network has its own fingerprint.
     pub fn start_on(network: &DockerNetwork) -> Self {
-        let host = Self::launch(Some(network.name()));
+        let host = Self::launch(Some(network.name()), true);
         host.rotate_host_keys();
         host
     }
@@ -330,7 +330,12 @@ impl SshdHost {
         &self.container
     }
 
-    fn launch(network: Option<&str>) -> Self {
+    /// An SSH Host without herdr-core, for testing first installation.
+    pub fn start_without_core() -> Self {
+        Self::launch(None, false)
+    }
+
+    fn launch(network: Option<&str>, mount_core: bool) -> Self {
         let bin = herdr_core_bin();
         let fixture = repo_root().join("fixtures/sshd");
         let image = sshd_image();
@@ -347,9 +352,10 @@ impl SshdHost {
             &container,
             "-p",
             "127.0.0.1::22",
-            "-v",
-            &mount,
         ];
+        if mount_core {
+            args.extend(["-v", &mount]);
+        }
         if let Some(network) = network {
             args.extend(["--network", network]);
         }

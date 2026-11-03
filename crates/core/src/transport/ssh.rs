@@ -44,7 +44,7 @@ pub(crate) struct SshHop {
     pub trusted: Option<String>,
 }
 
-pub(super) struct Checker {
+pub(crate) struct Checker {
     trusted: Option<String>,
     outcome: Arc<Mutex<Option<HostKeyCheck>>>,
 }
@@ -131,7 +131,7 @@ impl HopFailure {
     }
 }
 
-pub(super) type Session = client::Handle<Checker>;
+pub(crate) type Session = client::Handle<Checker>;
 
 fn client_config() -> Arc<client::Config> {
     Arc::new(client::Config {
@@ -251,7 +251,7 @@ async fn through_jumps(
 /// Opens an SSH session to the Host at `address:port` through `jumps` and
 /// checks its Host key against `trusted`. Authentication to the Host is up
 /// to the caller. Returns the jump sessions, which must outlive the Host's.
-pub(super) async fn handshake(
+pub(crate) async fn handshake(
     jumps: &[SshHop],
     address: &str,
     port: u16,

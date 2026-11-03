@@ -397,6 +397,22 @@ fn the_most_recently_written_open_thread_is_the_current_one() {
 }
 
 #[test]
+fn backtracking_keeps_the_thread_and_selects_its_newest_rollout_in_any_fd_order() {
+    let home = tempfile::tempdir().unwrap();
+    let day = home.path().join("sessions/2026/11/03");
+    let old = day.join(format!("rollout-2026-11-03T15-21-10-{OLD}.jsonl"));
+    let replacement = day.join(format!("rollout-2026-11-03T15-21-51-{OLD}_{NEW}.jsonl"));
+    touch(&old);
+    touch(&replacement);
+    let expected = Some(Located {
+        session: OLD.into(),
+        path: replacement.clone(),
+    });
+    assert_eq!(locate_in([old.clone(), replacement.clone()]), expected);
+    assert_eq!(locate_in([replacement, old]), expected);
+}
+
+#[test]
 fn a_process_holding_a_rollout_open_is_paired() {
     let home = tempfile::tempdir().unwrap();
     let path = home.path().join(format!(
