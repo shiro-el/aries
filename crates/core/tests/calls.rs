@@ -170,7 +170,11 @@ async fn a_watch_reports_new_calls_once_across_reconnects() {
     let s = setup();
     s.call_from_outside("old");
     let rec = Arc::new(Recorder::default());
-    let watch = s.core.watch_calls(s.host.clone(), rec.clone()).await.unwrap();
+    let watch = s
+        .core
+        .watch_calls(s.host.clone(), rec.clone())
+        .await
+        .unwrap();
     wait_until("the first sync", || rec.titles() == ["old"]);
     assert_eq!(
         rec.new_titles(),
