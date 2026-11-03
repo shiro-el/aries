@@ -3,7 +3,6 @@ package io.github.shiroel.aries.ui
 import android.annotation.SuppressLint
 import android.content.ClipData
 import android.content.ClipboardManager
-import android.graphics.Color as AndroidColor
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.webkit.WebResourceRequest
@@ -85,7 +84,7 @@ private fun MermaidSurface(
             val adapter = context.assets.open("mermaid/renderer.js").bufferedReader().use { it.readText() }
             """<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1">
                 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'none'; connect-src 'none'; base-uri 'none'; form-action 'none'">
-                <style>html,body{margin:0;width:100%;height:100%;overflow:hidden}#diagram{width:100%;height:100%}svg{display:block;width:100%;height:auto}#diagram.zoom svg{height:100%}</style>
+                <style>html,body{margin:0;width:100%;overflow:hidden}#diagram{width:100%}svg{display:block;width:100%;height:auto}#diagram.zoom svg{height:100%}</style>
                 <script>$bundle</script><script>$adapter</script></head><body><div id="diagram"></div></body></html>"""
         }
     }
@@ -102,7 +101,7 @@ private fun MermaidSurface(
             modifier = if (zoom) modifier else modifier.fillMaxWidth().aspectRatio(ratio.coerceIn(0.05f, 20f)),
             factory = { ctx ->
                 WebView(ctx).apply {
-                    setBackgroundColor(AndroidColor.TRANSPARENT)
+                    setBackgroundColor(colors.surface.toArgb())
                     settings.apply {
                         javaScriptEnabled = true
                         allowFileAccess = false
@@ -144,7 +143,7 @@ private fun MermaidSurface(
                                 const theme=$theme; const el=document.getElementById('diagram');
                                 for(const [key,value] of Object.entries(theme)) el.style.setProperty('--pele-'+key,value);
                                 document.body.style.background=theme.bg;
-                                if($zoom) el.classList.add('zoom');
+                                if($zoom) { el.classList.add('zoom'); el.style.height='${view.height / resources.displayMetrics.density}px'; }
                                 return ariesMermaidShow(${JSONObject.quote(source)},window.innerWidth,$zoom);
                             })()"""
                             view.evaluateJavascript(script) { result ->
