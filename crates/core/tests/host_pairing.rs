@@ -131,15 +131,24 @@ async fn qr_registers_one_phone_and_pins_the_host_without_password_bootstrap() {
         .filter(|line| !line.is_empty())
         .map(|line| line.chars().collect())
         .collect();
-    let size = rows.len();
-    assert!(rows.iter().all(|row| row.len() == size * 2));
-    let mut image = rqrr::PreparedImage::prepare_from_greyscale(size * 4, size * 4, |x, y| {
-        if rows[y / 4][(x / 4) * 2] == '█' {
-            0
-        } else {
-            255
-        }
-    });
+    assert!(
+        rows[0].len() <= 120,
+        "terminal QR should fit a 120-column terminal"
+    );
+    let width = rows[0].len();
+    assert!(rows.iter().all(|row| row.len() == width));
+    // Each terminal cell packs two vertical QR modules into ▀, ▄ or █.
+    let mut image =
+        rqrr::PreparedImage::prepare_from_greyscale(width * 4, rows.len() * 8, |x, y| {
+            let cell = rows[y / 8][x / 4];
+            let dark = cell == '█'
+                || if (y / 4).is_multiple_of(2) {
+                    cell == '▀'
+                } else {
+                    cell == '▄'
+                };
+            if dark { 0 } else { 255 }
+        });
     let grids = image.detect_grids();
     assert_eq!(grids.len(), 1);
     let (_, decoded) = grids[0].decode().unwrap();

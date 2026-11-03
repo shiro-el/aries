@@ -99,11 +99,8 @@ async fn run(args: &[String]) -> Result<(), String> {
         let code = qrcode::QrCode::new(qr.as_bytes()).map_err(|e| e.to_string())?;
         println!(
             "\x1b[30;47m{}\x1b[0m",
-            code.render::<char>()
+            code.render::<qrcode::render::unicode::Dense1x2>()
                 .quiet_zone(true)
-                .module_dimensions(2, 1)
-                .dark_color('█')
-                .light_color(' ')
                 .build()
         );
     }
