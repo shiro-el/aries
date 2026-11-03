@@ -6,7 +6,11 @@ use std::path::PathBuf;
 
 use aries_beacon::chat::Interpreter;
 use aries_beacon::chat::claude::ClaudeInterpreter;
-use aries_protocol::chat::{ChatBody, ChatEvent, ChatItem, ToolStatus};
+use aries_protocol::chat::{
+    ChatBody, ChatDiff, ChatEvent, ChatImage, ChatItem, ChatQuestion, DIFF_MAX_LINE_CHARS,
+    DIFF_MAX_LINES, DiffHunk, IMAGE_MAX_BYTES, ToolStatus,
+};
+use serde_json::{Value, json};
 
 fn fixture(name: &str) -> String {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -56,7 +60,7 @@ impl Chat {
 fn short(body: &ChatBody) -> String {
     let cut = |s: &str| s.chars().take(40).collect::<String>();
     match body {
-        ChatBody::User { text } => format!("user: {}", cut(text)),
+        ChatBody::User { text, .. } => format!("user: {}", cut(text)),
         ChatBody::Agent { text } => format!("agent: {}", cut(text)),
         ChatBody::Thinking { text } => format!("thinking: {text:?}"),
         ChatBody::Tool {
@@ -196,6 +200,82 @@ fn several_questions_title_with_the_first() {
     assert!(!tool.0.is_empty());
 }
 
+fn question_of(chat: &Chat) -> (String, ToolStatus, ChatQuestion) {
+    chat.items
+        .iter()
+        .find_map(|i| match &i.body {
+            ChatBody::Tool {
+                status,
+                question: Some(q),
+                ..
+            } => Some((i.id.clone(), *status, q.clone())),
+            _ => None,
+        })
+        .expect("a question tool")
+}
+
+#[test]
+fn an_ask_user_question_is_an_open_question_until_answered() {
+    let text = fixture("main-session.jsonl");
+    let lines: Vec<&str> = text.lines().collect();
+    let mut interp = ClaudeInterpreter::default();
+    let mut chat = Chat::default();
+    // Up to the AskUserQuestion tool_use (line 65), before its answer.
+    for line in &lines[..65] {
+        chat.apply(interp.line(line));
+    }
+    let (id, status, q) = question_of(&chat);
+    assert_eq!(id, "toolu_012hzhteG39obz5TwRGEb26o");
+    assert_eq!(status, ToolStatus::Running);
+    assert_eq!(q.questions.len(), 1);
+    let first = &q.questions[0];
+    assert_eq!(first.text, "Which color do you prefer?");
+    assert_eq!(first.header.as_deref(), Some("Color"));
+    assert!(!first.multi);
+    let labels: Vec<&str> = first.options.iter().map(|o| o.label.as_str()).collect();
+    assert_eq!(labels, ["Red", "Blue", "Green"]);
+    assert_eq!(first.options[1].description.as_deref(), Some("Choose Blue"));
+
+    for line in &lines[65..] {
+        chat.apply(interp.line(line));
+    }
+    let (_, status, _) = question_of(&chat);
+    assert_eq!(status, ToolStatus::Done);
+}
+
+#[test]
+fn a_multi_select_question_is_marked() {
+    let chat = Chat::feed(&fixture("concurrent-same-cwd-multi-question.jsonl"));
+    let (_, _, q) = question_of(&chat);
+    let multi: Vec<(&str, bool, usize)> = q
+        .questions
+        .iter()
+        .map(|q| (q.text.as_str(), q.multi, q.options.len()))
+        .collect();
+    assert_eq!(
+        multi,
+        [("Which size?", false, 2), ("Which toppings?", true, 3)]
+    );
+}
+
+#[test]
+fn other_tools_ask_nothing() {
+    let chat = Chat::feed(&fixture("main-session.jsonl"));
+    let asking: Vec<&str> = chat
+        .items
+        .iter()
+        .filter_map(|i| match &i.body {
+            ChatBody::Tool {
+                name,
+                question: Some(_),
+                ..
+            } => Some(name.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(asking, ["AskUserQuestion"]);
+}
+
 #[test]
 fn nothing_outside_the_conversation_leaks_into_the_chat() {
     // System prompts, account ids and hook commands live in non-conversation
@@ -218,6 +298,159 @@ fn nothing_outside_the_conversation_leaks_into_the_chat() {
             assert!(!all.contains(secret), "{name} leaks {secret}");
         }
     }
+}
+
+fn tool<'a>(chat: &'a Chat, id: &str) -> (&'a Option<ChatDiff>, &'a Vec<ChatImage>) {
+    match &chat.items[chat.index[id]].body {
+        ChatBody::Tool { diff, images, .. } => (diff, images),
+        other => panic!("{id} is {other:?}"),
+    }
+}
+
+/// A Claude Code tool call line and its result line.
+fn call_and_result(name: &str, input: Value, content: Value, result: Value) -> String {
+    let call = json!({"type": "assistant", "uuid": "a1", "message": {"content": [
+        {"type": "tool_use", "id": "t1", "name": name, "input": input}]}});
+    let result = json!({"type": "user", "uuid": "u2", "message": {"content": [
+        {"type": "tool_result", "tool_use_id": "t1", "content": content}]},
+        "toolUseResult": result});
+    format!("{call}\n{result}\n")
+}
+
+#[test]
+fn an_edit_shows_as_its_diff() {
+    let chat = Chat::feed(&fixture("main-session.jsonl"));
+    let (diff, _) = tool(&chat, "toolu_01FrSiNjJuh1XEFmbmqwWPFR");
+    assert_eq!(
+        diff.as_ref().unwrap(),
+        &ChatDiff {
+            path: "/tmp/aries-fixture/work-a/hello.txt".into(),
+            hunks: vec![DiffHunk {
+                old_start: 1,
+                old_lines: 1,
+                new_start: 1,
+                new_lines: 1,
+                lines: vec!["-hi".into(), "+hello".into()],
+            }],
+            truncated: false,
+        }
+    );
+}
+
+#[test]
+fn a_new_file_shows_as_all_added_lines() {
+    let chat = Chat::feed(&fixture("main-session.jsonl"));
+    let (diff, _) = tool(&chat, "toolu_01Tff5bVucbZw1bfv3n5KVhk");
+    let diff = diff.as_ref().unwrap();
+    assert_eq!(diff.path, "/tmp/aries-fixture/work-a/hello.txt");
+    assert_eq!(
+        diff.hunks,
+        [DiffHunk {
+            old_start: 0,
+            old_lines: 0,
+            new_start: 1,
+            new_lines: 1,
+            lines: vec!["+hi".into()],
+        }]
+    );
+}
+
+#[test]
+fn a_read_picture_comes_with_its_image() {
+    let chat = Chat::feed(&fixture("main-session.jsonl"));
+    let (diff, images) = tool(&chat, "toolu_015qGcCimQaWpgMd6JgFmZEq");
+    assert_eq!(*diff, None);
+    assert_eq!(
+        images,
+        &[ChatImage {
+            media_type: "image/png".into(),
+            data: Some(
+                "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEklEQVR4nGP4z8CAFWEXHbQSACj/P8Fu7N9hAAAAAElFTkSuQmCC".into()
+            ),
+            bytes: 75,
+            width: Some(8),
+            height: Some(8),
+        }]
+    );
+    // Reads of text files and failed tools carry neither.
+    for id in [
+        "toolu_01P6V5KH2PV6rekhK1PPh9eu",
+        "toolu_012kC6jnHAabF5tLjG4fNc7b",
+    ] {
+        let (diff, images) = tool(&chat, id);
+        assert!(diff.is_none() && images.is_empty(), "{id}");
+    }
+}
+
+#[test]
+fn an_image_over_the_cap_is_described_not_carried() {
+    let size = (IMAGE_MAX_BYTES + 3) as usize;
+    let data = "A".repeat(size.div_ceil(3) * 4);
+    let text = call_and_result(
+        "Read",
+        json!({"file_path": "big.png"}),
+        json!([{"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": data}}]),
+        json!({"type": "image"}),
+    );
+    let chat = Chat::feed(&text);
+    let (_, images) = tool(&chat, "t1");
+    assert_eq!(images.len(), 1);
+    assert_eq!(images[0].data, None);
+    assert!(images[0].bytes > IMAGE_MAX_BYTES, "{}", images[0].bytes);
+    let line = serde_json::to_string(&chat.items).unwrap();
+    assert!(line.len() < 10_000, "the image leaked into the line");
+}
+
+#[test]
+fn a_huge_edit_is_cut_to_the_line_cap() {
+    let lines: Vec<String> = (0..DIFF_MAX_LINES + 500)
+        .map(|i| format!("+line {i}"))
+        .collect();
+    let long = format!("+{}", "x".repeat(DIFF_MAX_LINE_CHARS * 3));
+    let mut first = vec![long];
+    first.extend(lines);
+    let text = call_and_result(
+        "Edit",
+        json!({"file_path": "big.txt"}),
+        json!("ok"),
+        json!({"filePath": "big.txt", "structuredPatch": [
+            {"oldStart": 1, "oldLines": 0, "newStart": 1, "newLines": first.len(), "lines": first},
+            {"oldStart": 9000, "oldLines": 1, "newStart": 9000, "newLines": 1, "lines": ["-a", "+b"]}
+        ]}),
+    );
+    let chat = Chat::feed(&text);
+    let (diff, _) = tool(&chat, "t1");
+    let diff = diff.as_ref().unwrap();
+    assert!(diff.truncated);
+    let total: usize = diff.hunks.iter().map(|h| h.lines.len()).sum();
+    assert_eq!(total, DIFF_MAX_LINES);
+    let first = &diff.hunks[0].lines[0];
+    assert_eq!(first.chars().count(), DIFF_MAX_LINE_CHARS);
+    assert!(first.ends_with('…'));
+}
+
+#[test]
+fn a_pasted_image_shows_on_the_user_message() {
+    let line = json!({"type": "user", "uuid": "u1", "message": {"content": [
+        {"type": "text", "text": "what is this?"},
+        {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": "/9j/4AAQ"}}
+    ]}});
+    let chat = Chat::feed(&line.to_string());
+    let ChatBody::User { text, images } = &chat.items[0].body else {
+        panic!("{:?}", chat.items)
+    };
+    assert_eq!(text, "what is this?");
+    assert_eq!(images[0].media_type, "image/jpeg");
+    assert_eq!(images[0].data.as_deref(), Some("/9j/4AAQ"));
+    assert_eq!(images[0].bytes, 6);
+    // An image alone is still a user message.
+    let alone = json!({"type": "user", "uuid": "u1", "message": {"content": [
+        {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "iVBO"}}
+    ]}});
+    let chat = Chat::feed(&alone.to_string());
+    assert!(
+        matches!(&chat.items[0].body, ChatBody::User { text, images } if text.is_empty() && images.len() == 1)
+    );
 }
 
 #[test]

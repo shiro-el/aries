@@ -91,11 +91,12 @@ fn texts(s: &ChatSnapshot) -> Vec<String> {
     s.entries
         .iter()
         .map(|e| match &e.body {
-            ChatEntryBody::User { text } => format!("user: {text}"),
+            ChatEntryBody::User { text, .. } => format!("user: {text}"),
             ChatEntryBody::Agent { text } => format!("agent: {text}"),
             ChatEntryBody::Thinking { .. } => "thinking".into(),
             ChatEntryBody::Tool { name, status, .. } => format!("tool {name} {status:?}"),
             ChatEntryBody::AgentError { detail } => format!("error: {detail}"),
+            ChatEntryBody::Question { name, status, .. } => format!("question {name} {status:?}"),
             ChatEntryBody::Unsupported => "unsupported".into(),
         })
         .collect()
@@ -179,6 +180,51 @@ cat {second}; sleep 30"#,
     assert_eq!(
         args.lines().collect::<Vec<_>>(),
         ["chat t1 --follow", "chat t1 --follow --cursor cc:s:20"]
+    );
+    watch.stop();
+}
+
+#[tokio::test]
+async fn images_are_fetched_on_demand_and_a_capped_one_is_only_described() {
+    let env = Env::new();
+    let lines = env.file(
+        "lines",
+        concat!(
+            r#"{"v":1,"type":"reset","agent":"claude-code","session":"s"}"#, "\n",
+            r#"{"v":1,"type":"item","item":{"id":"u1","kind":"user","text":"see","images":[{"media_type":"image/png","data":"aGVsbG8=","bytes":5},{"media_type":"image/jpeg","bytes":9000000}]}}"#, "\n",
+            r#"{"v":1,"type":"item","item":{"id":"t1","kind":"tool","name":"Edit","status":"done","output":"ok","diff":{"path":"a.txt","hunks":[{"old_start":3,"old_lines":1,"new_start":3,"new_lines":2,"lines":[" a","-b","+c","+d"]}],"truncated":true}}}"#, "\n",
+            r#"{"v":1,"type":"state","state":"live"}"#, "\n",
+        ),
+    );
+    let host = env.fake_beacon(&format!("cat {lines}; sleep 30"));
+    let watch = env.watch(&host);
+    let s = wait_for(&watch, "live", |s| s.status == ChatStatus::Live).await;
+    let ChatEntryBody::User { text, images } = &s.entries[0].body else {
+        panic!()
+    };
+    assert_eq!(text, "see");
+    assert_eq!(images.len(), 2);
+    assert!(images[0].available);
+    assert_eq!(
+        watch.image(images[0].id.clone()).as_deref(),
+        Some(&b"hello"[..])
+    );
+    assert!(!images[1].available);
+    assert_eq!(images[1].bytes, 9_000_000);
+    assert_eq!(watch.image(images[1].id.clone()), None);
+    let ChatEntryBody::Tool { diff, .. } = &s.entries[1].body else {
+        panic!()
+    };
+    let diff = diff.as_ref().unwrap();
+    assert_eq!(diff.path, "a.txt");
+    assert!(diff.truncated);
+    assert_eq!(
+        (
+            diff.hunks[0].old_start,
+            diff.hunks[0].new_start,
+            diff.hunks[0].lines.len()
+        ),
+        (3, 3, 4)
     );
     watch.stop();
 }
@@ -271,6 +317,31 @@ async fn follows_a_claude_code_agent_through_the_real_beacon() {
     });
     assert_eq!(failed.count(), 1);
     assert!(s.cursor.as_deref().unwrap().starts_with("claude-code:S1:"));
+    // The Edit renders as its diff; the Read picture as the PNG itself.
+    let diff = s
+        .entries
+        .iter()
+        .find_map(|e| match &e.body {
+            ChatEntryBody::Tool { name, diff, .. } if name == "Edit" => diff.clone(),
+            _ => None,
+        })
+        .expect("edit diff");
+    assert_eq!(diff.hunks[0].lines, ["-hi", "+hello"]);
+    let image = s
+        .entries
+        .iter()
+        .find_map(|e| match &e.body {
+            ChatEntryBody::Tool { images, .. } => images.first().cloned(),
+            _ => None,
+        })
+        .expect("read image");
+    assert_eq!(
+        (image.width, image.height, image.bytes),
+        (Some(8), Some(8), 75)
+    );
+    let png = watch.image(image.id).expect("image bytes");
+    assert_eq!(png.len(), 75);
+    assert_eq!(&png[..4], b"\x89PNG");
 
     hc.hc(&["kill", &agent.address]);
     wait_for(&watch, "ended", |s| s.status == ChatStatus::Ended).await;

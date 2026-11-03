@@ -12,6 +12,10 @@ import io.github.shiroel.aries.core.BeaconInstall
 import io.github.shiroel.aries.core.BeaconRelease
 import io.github.shiroel.aries.core.BeaconSource
 import io.github.shiroel.aries.core.BeaconState
+import io.github.shiroel.aries.core.CallFeedState
+import io.github.shiroel.aries.core.CallInfo
+import io.github.shiroel.aries.core.CallListener
+import io.github.shiroel.aries.core.CallWatch
 import io.github.shiroel.aries.core.BeaconUpdate
 import io.github.shiroel.aries.core.ChatSnapshot
 import io.github.shiroel.aries.core.ChatWatch
@@ -40,10 +44,13 @@ import io.github.shiroel.aries.core.LaunchRequest
 import io.github.shiroel.aries.core.PaneInfo
 import io.github.shiroel.aries.core.QrMatrix
 import io.github.shiroel.aries.core.SavedLaunch
+import io.github.shiroel.aries.core.SendListener
+import io.github.shiroel.aries.core.SendOutcome
 import io.github.shiroel.aries.core.TerminalInfo
 import io.github.shiroel.aries.core.TerminalUpdate
 import io.github.shiroel.aries.core.TerminalView
 import io.github.shiroel.aries.core.TerminalWatch
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 
 /** In-memory stand-in for the Rust core, for UI tests. */
@@ -328,6 +335,9 @@ class FakeCore : AriesCoreInterface {
     var chatStopped = false
         private set
 
+    /** Bytes `ChatWatch.image` returns, by image id. */
+    val chatImages = mutableMapOf<String, ByteArray>()
+
     fun pushChat(snapshot: ChatSnapshot) {
         chat.trySend(snapshot)
     }
@@ -337,11 +347,59 @@ class FakeCore : AriesCoreInterface {
         return object : ChatWatch(NoHandle) {
             override suspend fun next(): ChatSnapshot = chat.receive()
 
+            override fun image(id: String): ByteArray? = chatImages[id]
+
             override fun stop() {
                 chatStopped = true
             }
 
             override fun close() {}
+        }
+    }
+
+    /** (terminal, question id, picks) of each `answerQuestion` call. */
+    val answers = mutableListOf<Triple<String, String, List<List<UInt>>>>()
+
+    /** Thrown by the next `answerQuestion` instead of answering. */
+    var answerFailure: CoreException? = null
+
+    override suspend fun answerQuestion(hostId: String, terminal: String, questionId: String, picks: List<List<UInt>>) {
+        answers += Triple(terminal, questionId, picks)
+        answerFailure?.let { answerFailure = null; throw it }
+    }
+
+    /** Each Host's Call history (newest first), by Host id. */
+    val callsOf = mutableMapOf<String, List<CallInfo>>()
+
+    /** The live Call watch of each Host, by Host id. */
+    val callListeners = mutableMapOf<String, CallListener>()
+
+    /** Host ids `watchCalls` was called for, in order. */
+    val callWatchesStarted = mutableListOf<String>()
+
+    override suspend fun calls(hostId: String): List<CallInfo> = callsOf[hostId].orEmpty()
+
+    override suspend fun watchCalls(hostId: String, listener: CallListener): CallWatch {
+        host(hostId)
+        callWatchesStarted += hostId
+        callListeners[hostId] = listener
+        listener.onState(CallFeedState.Live)
+        listener.onCalls(callsOf[hostId].orEmpty())
+        return object : CallWatch(NoHandle) {
+            override fun stop() {
+                if (callListeners[hostId] === listener) callListeners.remove(hostId)
+            }
+
+            override fun close() {}
+        }
+    }
+
+    /** An Agent on [call]'s Host sent it: the Host's watch hears of it. */
+    fun sendCall(call: CallInfo) {
+        callsOf[call.hostId] = listOf(call) + callsOf[call.hostId].orEmpty()
+        callListeners[call.hostId]?.let {
+            it.onNewCall(call)
+            it.onCalls(callsOf[call.hostId].orEmpty())
         }
     }
 
@@ -450,6 +508,27 @@ class FakeConnection(
     fun push(structure: HostStructure) {
         current = structure
         listener?.onStructure(structure)
+    }
+
+    /** The fake Agents' input record: (address, text) of each message typed in. */
+    val typed = mutableListOf<Pair<String, String>>()
+
+    /** How `sendMessage` ends: typed in ([SendOutcome.Sent]), refused, or this error. */
+    var sendOutcome: SendOutcome = SendOutcome.Sent
+    var sendFailWith: CoreException? = null
+
+    /** When set, `sendMessage` is held (someone types at the Host) until it completes. */
+    var sendHold: CompletableDeferred<Unit>? = null
+
+    override suspend fun sendMessage(address: String, text: String, listener: SendListener): SendOutcome {
+        calls += "sendMessage"
+        sendHold?.let {
+            listener.onHeld()
+            it.await()
+        }
+        sendFailWith?.let { throw it }
+        if (sendOutcome == SendOutcome.Sent) typed += address to text
+        return sendOutcome
     }
 
     /** Terminals attached on this connection, in order. */

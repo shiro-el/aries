@@ -5,12 +5,17 @@
 //!   attached to the user's local herdr-core (default session) and records
 //!   that in its service file.
 //! - `status`: prints one [`BeaconStatus`] JSON line.
+//! - `call`: an Agent asks for the user (see `calls.rs`).
+//! - `calls [--follow]`: Call history as JSON lines (see `calls.rs`).
 //! - `pair` / `push-test` / `unpair`: the push pairing with one phone
 //!   ([`push`]); run by the phone over SSH.
 //! - `chat <terminal> [--follow] [--cursor C]`: the Terminal's Agent Chat
 //!   as JSON lines (`aries_protocol::chat`).
+//! - `answer <terminal> <question> <picks>...`: answers the question the
+//!   Terminal's Agent shows (`aries_protocol::answer`); one reply line.
 //! - `--version`: `aries-beacon <version> (contract <n>)`.
 
+mod calls;
 mod push;
 
 use std::io::{BufRead, BufReader, Write};
@@ -34,13 +39,16 @@ fn main() {
             println!("{line}");
         }
         Some("serve") => serve(),
+        Some("call") => std::process::exit(calls::call_command(&call_log(), &rest_args())),
+        Some("calls") => std::process::exit(calls::calls_command(&call_log(), &rest_args())),
         Some("pair") => exit_on_error(push::pair_command()),
         Some("push-test") => exit_on_error(push::push_test_command()),
         Some("unpair") => exit_on_error(push::unpair_command()),
         Some("chat") => chat(std::env::args().skip(2).collect()),
+        Some("answer") => answer(std::env::args().skip(2).collect()),
         _ => {
             eprintln!(
-                "usage: aries-beacon --version | status | serve | pair | push-test | unpair | chat TERMINAL [--follow] [--cursor C]"
+                "usage: aries-beacon --version | status | serve | call ... | calls [--follow] | pair | push-test | unpair | chat TERMINAL [--follow] [--cursor C] | answer TERMINAL QUESTION PICKS..."
             );
             std::process::exit(2);
         }
@@ -69,6 +77,14 @@ fn state_dir() -> PathBuf {
         .map(PathBuf::from)
         .unwrap_or_else(|| home().join(".local/state"));
     base.join("aries-beacon")
+}
+
+fn call_log() -> calls::Log {
+    calls::Log::new(state_dir())
+}
+
+fn rest_args() -> Vec<String> {
+    std::env::args().skip(2).collect()
 }
 
 fn service_file() -> PathBuf {
@@ -247,5 +263,89 @@ fn chat(args: Vec<String>) {
             eprintln!("aries-beacon chat: {e}");
             std::process::exit(1);
         }
+    }
+}
+
+fn answer(args: Vec<String>) {
+    use aries_protocol::answer::Answer;
+    let parsed = args
+        .split_first()
+        .ok_or_else(|| "missing terminal".to_string())
+        .and_then(|(t, rest)| Ok((t.clone(), Answer::from_args(rest)?)));
+    let (terminal, answer) = match parsed {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("aries-beacon answer: {e}");
+            eprintln!("usage: aries-beacon answer TERMINAL QUESTION PICKS...");
+            std::process::exit(2);
+        }
+    };
+    let mut link = aries_beacon::core_link::CoreLookup::default();
+    let agents = aries_beacon::chat::agents();
+    let reply = aries_beacon::chat::answer::answer(&terminal, &answer, &mut link, &agents)
+        .unwrap_or_else(|e| {
+            aries_protocol::answer::AnswerReply::new(
+                aries_protocol::answer::AnswerOutcome::Gone,
+                Some(format!("transcript: {e}")),
+            )
+        });
+    println!("{}", reply.to_json());
+    if !reply.outcome.is_sent() {
+        std::process::exit(1);
+    }
+}
+
+/// One plain-mode call to the local herdr-core (the session the environment
+/// points at): `hello`, then `method`. Gives up after `timeout`.
+fn rpc_once(
+    method: &str,
+    params: serde_json::Value,
+    timeout: Duration,
+) -> Result<serde_json::Value, String> {
+    let bin = herdr_core().ok_or("herdr-core not found on PATH or in ~/.local/bin")?;
+    let mut child = Command::new(&bin)
+        .arg("connect")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| format!("{}: {e}", bin.display()))?;
+    let mut stdin = child.stdin.take().expect("piped stdin");
+    let stdout = child.stdout.take().expect("piped stdout");
+    let hello =
+        serde_json::json!({"jsonrpc":"2.0","id":0,"method":"hello","params":{"generation":1}});
+    let call = serde_json::json!({"jsonrpc":"2.0","id":1,"method":method,"params":params});
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let reply = (|| {
+            for line in BufReader::new(stdout).lines() {
+                let line = line.map_err(|e| e.to_string())?;
+                let Ok(v) = serde_json::from_str::<serde_json::Value>(&line) else {
+                    continue; // login noise
+                };
+                if v["id"] == 1 {
+                    return Ok(v);
+                }
+            }
+            Err("herdr-core closed without answering".to_owned())
+        })();
+        let _ = tx.send(reply);
+    });
+    let result = writeln!(stdin, "{hello}\n{call}")
+        .map_err(|e| format!("talk to herdr-core: {e}"))
+        .and_then(|_| {
+            rx.recv_timeout(timeout)
+                .map_err(|_| "herdr-core did not answer in time".to_owned())?
+        });
+    drop(stdin);
+    let _ = child.kill();
+    let _ = child.wait();
+    let reply = result?;
+    match reply.get("error") {
+        Some(e) => Err(format!(
+            "{method}: {}",
+            e["message"].as_str().unwrap_or("refused")
+        )),
+        None => Ok(reply["result"].clone()),
     }
 }

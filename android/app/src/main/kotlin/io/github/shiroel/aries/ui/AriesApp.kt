@@ -51,6 +51,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleStartEffect
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AttachMode
 import io.github.shiroel.aries.core.Endpoint
@@ -59,8 +60,16 @@ import io.github.shiroel.aries.core.QrMatrix
 
 @Composable
 fun AriesApp(model: HostsModel) {
+    // Calls are followed (for the banner) only while the app is in front.
+    LifecycleStartEffect(model) {
+        model.resumeCalls()
+        onStopOrDispose { model.pauseCalls() }
+    }
     Scaffold { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
+            model.calls.banner?.let { entry ->
+                CallBanner(entry, onView = model::openCalls, onDismiss = model.calls::dismissBanner)
+            }
             when (val s = model.screen) {
                 Screen.Hosts -> HostListScreen(model)
                 is Screen.Connecting -> Connecting(s.host)
@@ -105,9 +114,13 @@ fun AriesApp(model: HostsModel) {
                         onChat = { model.openChat(it.host, it.terminal) },
                     )
                 }
+                Screen.Calls -> {
+                    BackHandler { model.back() }
+                    CallsScreen(model.calls, onBack = model::back, onTerminal = model::openCallTerminal)
+                }
                 is Screen.Chat -> {
                     BackHandler { model.closeChat() }
-                    ChatScreen(s.chat, onBack = model::closeChat)
+                    ChatScreen(s.chat, onBack = model::closeChat, onOpenTerminal = { model.openTerminal(s.chat.terminal) })
                 }
             }
         }
@@ -130,7 +143,10 @@ private fun HostListScreen(model: HostsModel) {
             ) {
                 Text(stringResource(R.string.hosts_title), style = MaterialTheme.typography.headlineMedium)
                 if (model.hosts.isNotEmpty()) {
-                    Button(onClick = model::openAgents) { Text(stringResource(R.string.agents_button)) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = model::openCalls) { Text(stringResource(R.string.calls_button)) }
+                        Button(onClick = model::openAgents) { Text(stringResource(R.string.agents_button)) }
+                    }
                 }
             }
         }

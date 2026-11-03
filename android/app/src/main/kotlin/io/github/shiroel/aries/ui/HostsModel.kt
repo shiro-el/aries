@@ -67,6 +67,8 @@ sealed interface Screen {
     /** Every Host's Agents in one list. */
     data class Agents(val board: AgentBoard) : Screen
 
+    /** Every Host's Call history ([HostsModel.calls]). */
+    data object Calls : Screen
     /** An Agent's Chat; back returns to [returnTo] (its Host's Browse or the Agents list). */
     data class Chat(val chat: ChatModel, val returnTo: Screen) : Screen
 }
@@ -134,6 +136,9 @@ class HostsModel(
         scope.launch { core.flushPushRevocations(http) }
     }
 
+    /** Every Host's Calls and the new-Call banner; see [resumeCalls]. */
+    val calls = CallsModel(core, scope, keyWork)
+
     var key by mutableStateOf<PublicKeyInfo?>(null)
         private set
     var keyProtection by mutableStateOf<KeyProtection?>(null)
@@ -168,7 +173,7 @@ class HostsModel(
     )
 
     /** Every line the screens use now: the open Host's and the Agent list's. */
-    private val links: List<HostLink> get() = listOfNotNull(browseLink) + agentLinks.values
+    private val links: List<HostLink> get() = listOfNotNull(browseLink, callLink) + agentLinks.values
 
     /** The phone's network changed (Wi-Fi to LTE, airplane mode): replace every line and restore the screens. */
     fun networkChanged() = links.forEach { it.networkChanged() }
@@ -239,6 +244,7 @@ class HostsModel(
         core.addHost(label, Endpoint.Ssh(address.trim(), port.toUShort(), user.trim()))
         hosts = core.hosts()
         refreshRoutes()
+        hostsChanged()
     }
 
     fun connect(host: Host) {
@@ -403,6 +409,7 @@ class HostsModel(
         guard {
             core.removeHost(prompt.host.id)
             hosts = core.hosts()
+            hostsChanged()
             flushPushRevocations()
         }
     }
@@ -431,7 +438,11 @@ class HostsModel(
                     val watch = conn.watchTerminals()
                     try {
                         // Each change replaces the list, so Agent status stays live.
-                        while (true) browser.updateTerminals(watch.next())
+                        while (true) {
+                            val list = watch.next()
+                            browser.updateTerminals(list)
+                            chatOn(browser.host.id)?.update(list)
+                        }
                     } finally {
                         watch.stop()
                     }
@@ -465,6 +476,12 @@ class HostsModel(
                 if (key.address != terminal.address) return
                 val link = agentLinks[key.hostId] ?: return
                 observe(link, s.board.find(key)?.terminal ?: terminal, s)
+            }
+            // From a Chat (a Blocked Agent): back returns to the still-live Chat.
+            is Screen.Chat -> {
+                val link = s.chat.link ?: return
+                if (terminal.address != s.chat.terminal.address) return
+                observe(link, s.chat.terminal, s)
             }
             else -> return
         }
@@ -607,7 +624,11 @@ class HostsModel(
                     link.keep { c, _ ->
                         val watch = c.watchTerminals()
                         try {
-                            while (true) board.update(host.id, watch.next())
+                            while (true) {
+                                val list = watch.next()
+                                board.update(host.id, list)
+                                chatOn(host.id)?.update(list)
+                            }
                         } finally {
                             watch.stop()
                         }
@@ -649,11 +670,73 @@ class HostsModel(
         agentLinks.clear()
     }
 
+    /** The app is in front: follow Calls (banner) until [pauseCalls]. */
+    private var callsActive = false
+
+    fun resumeCalls() {
+        callsActive = true
+        calls.watch(hosts, everyHost = screen == Screen.Calls)
+    }
+
+    fun pauseCalls() {
+        callsActive = false
+        calls.stopAll()
+    }
+
+    private fun hostsChanged() {
+        if (callsActive || screen == Screen.Calls) calls.watch(hosts, everyHost = screen == Screen.Calls)
+    }
+
+    /** Opens Call history for every Host (Hosts whose key needs a biometric unlock too). */
+    fun openCalls() {
+        back()
+        calls.dismissBanner()
+        screen = Screen.Calls
+        calls.watch(hosts, everyHost = true)
+    }
+
+    /** The line a Call's Terminal is shown over, until Call history is left. */
+    private var callLink: HostLink? = null
+
+    /** Shows the Terminal that sent [entry]'s Call; back returns to Call history. */
+    fun openCallTerminal(entry: CallEntry) {
+        val address = entry.call.terminal ?: return
+        if (screen != Screen.Calls) return
+        scope.launch {
+            try {
+                val link = callLink?.takeIf { it.host.id == entry.host.id }
+                    ?: link(entry.host, withContext(keyWork) { core.connect(entry.host.id) }).also { fresh ->
+                        callLink?.close()
+                        callLink = fresh
+                    }
+                val terminal = link.keep { conn, _ -> conn.terminals() }
+                    .find { it.address == address && it.state == "live" }
+                if (terminal == null) {
+                    prompt = Prompt.Problem(
+                        Message(R.string.call_terminal_gone_title),
+                        Message(R.string.call_terminal_gone_body, listOf(address, entry.host.name)),
+                    )
+                    return@launch
+                }
+                if (screen == Screen.Calls) observe(link, terminal, Screen.Calls)
+            } catch (e: CoreException) {
+                prompt = when (e) {
+                    is CoreException.HostKeyUnknown -> Prompt.TrustHostKey(entry.host, e.fingerprint)
+                    else -> problemFor(e)
+                }
+            }
+        }
+    }
+
     /** Opens the Chat of the Agent in [terminal] on [host], from Browse or the Agents list. */
     fun openChat(host: Host, terminal: TerminalInfo) {
         val from = screen
-        if (from !is Screen.Browse && from !is Screen.Agents) return
-        val chat = ChatModel(core, host, terminal)
+        val link = when (from) {
+            is Screen.Browse -> browseLink
+            is Screen.Agents -> agentLinks[host.id]
+            else -> return
+        }
+        val chat = ChatModel(core, host, terminal, link)
         screen = Screen.Chat(chat, from)
         chat.start(scope)
     }
@@ -665,10 +748,25 @@ class HostsModel(
         screen = s.returnTo
     }
 
+    /** The Chat that is open (or under the Terminal opened from it) on [hostId]. */
+    private fun chatOn(hostId: String): ChatModel? {
+        val s = screen
+        val chat = (s as? Screen.Chat ?: (s as? Screen.Terminal)?.returnTo as? Screen.Chat)?.chat
+        return chat?.takeIf { it.host.id == hostId }
+    }
+
     fun back() {
         (screen as? Screen.Chat)?.chat?.stop()
+        ((screen as? Screen.Terminal)?.returnTo as? Screen.Chat)?.chat?.stop()
         viewing?.cancel()
         viewing = null
+        callLink?.close()
+        callLink = null
+        if (screen == Screen.Calls && callsActive) {
+            // Leaving Call history: keep only the watches a banner may use.
+            calls.stopAll()
+            calls.watch(hosts, everyHost = false)
+        }
         if (screen is Screen.Agents) closeAgents()
         screen = Screen.Hosts
         status?.cancel()

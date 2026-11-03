@@ -75,7 +75,7 @@ fn user_texts(lines: &[ChatLine]) -> Vec<String> {
         .iter()
         .filter_map(|l| match &l.event {
             ChatEvent::Item { item } => match &item.body {
-                ChatBody::User { text } => Some(text.clone()),
+                ChatBody::User { text, .. } => Some(text.clone()),
                 _ => None,
             },
             _ => None,

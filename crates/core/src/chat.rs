@@ -17,7 +17,9 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::{Mutex, watch};
 use tokio::task::JoinHandle;
 
-use crate::error::CoreError;
+use aries_protocol::answer::{Answer, AnswerOutcome, AnswerReply};
+
+use crate::error::{AnswerProblem, CoreError};
 use crate::transport::{Ssh, Stream};
 
 /// One Chat entry, ready to render.
@@ -34,6 +36,9 @@ pub struct ChatEntry {
 pub enum ChatEntryBody {
     User {
         text: String,
+        /// Pictures the user attached.
+        #[uniffi(default)]
+        images: Vec<ChatImage>,
     },
     Agent {
         text: String,
@@ -50,12 +55,78 @@ pub enum ChatEntryBody {
         input: String,
         status: ChatToolStatus,
         output: Option<String>,
+        /// What a file edit changed; render it instead of raw input.
+        #[uniffi(default)]
+        diff: Option<ChatDiff>,
+        /// Pictures in the result.
+        #[uniffi(default)]
+        images: Vec<ChatImage>,
     },
     AgentError {
         detail: String,
     },
+    /// The Agent asks the user to choose. While `status` is `Running` it is
+    /// open: show `questions` with their options as buttons and answer
+    /// with [`crate::AriesCore::answer_question`] (this entry's id).
+    /// `output` is the Agent's record of the answer once there is one.
+    Question {
+        name: String,
+        title: String,
+        questions: Vec<ChatQuestionPart>,
+        status: ChatToolStatus,
+        output: Option<String>,
+    },
     /// Something a newer Beacon sends that this app cannot show yet.
     Unsupported,
+}
+
+/// An image in the Chat. The entry only describes it; the bytes come from
+/// [`ChatWatch::image`] when the app draws it, so snapshots stay small.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ChatImage {
+    /// Key for [`ChatWatch::image`].
+    pub id: String,
+    pub media_type: String,
+    /// Decoded size in bytes.
+    pub bytes: u64,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    /// `false` when the image is over the size cap
+    /// (`aries_protocol::chat::IMAGE_MAX_BYTES`): show a placeholder.
+    pub available: bool,
+}
+
+/// A file edit as unified-diff hunks.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ChatDiff {
+    pub path: String,
+    pub hunks: Vec<ChatDiffHunk>,
+    /// The Beacon cut a very large diff.
+    pub truncated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ChatDiffHunk {
+    pub old_start: u32,
+    pub new_start: u32,
+    /// Each starts with `-`, `+` or ` `.
+    pub lines: Vec<String>,
+}
+
+/// One question of a [`ChatEntryBody::Question`].
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ChatQuestionPart {
+    pub text: String,
+    pub header: Option<String>,
+    /// Several options may be picked.
+    pub multi: bool,
+    pub options: Vec<ChatQuestionOption>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ChatQuestionOption {
+    pub label: String,
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
@@ -110,7 +181,11 @@ pub(crate) struct ChatModel {
     index: HashMap<String, usize>,
     pub status: ChatStatus,
     pub cursor: Option<String>,
+    /// Decoded image bytes by [`ChatImage::id`], shared with [`ChatWatch`].
+    pub images: Images,
 }
+
+pub(crate) type Images = Arc<std::sync::Mutex<HashMap<String, Arc<Vec<u8>>>>>;
 
 impl ChatModel {
     pub fn new(cursor: Option<String>) -> Self {
@@ -119,7 +194,53 @@ impl ChatModel {
             index: HashMap::new(),
             status: ChatStatus::Connecting,
             cursor,
+            images: Images::default(),
         }
+    }
+
+    fn images(&self) -> std::sync::MutexGuard<'_, HashMap<String, Arc<Vec<u8>>>> {
+        self.images.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    fn forget_images(&self, entry: &str) {
+        let prefix = format!("{entry}#");
+        self.images().retain(|k, _| !k.starts_with(&prefix));
+    }
+
+    /// Describes an item's images and keeps their bytes for
+    /// [`ChatWatch::image`].
+    fn keep_images(
+        &self,
+        entry: &str,
+        images: Vec<aries_protocol::chat::ChatImage>,
+    ) -> Vec<ChatImage> {
+        use base64::Engine as _;
+        self.forget_images(entry);
+        let mut store = self.images();
+        images
+            .into_iter()
+            .enumerate()
+            .map(|(i, image)| {
+                let id = format!("{entry}#{i}");
+                let data = image.data.and_then(|d| {
+                    base64::engine::general_purpose::STANDARD
+                        .decode(d.trim())
+                        .ok()
+                });
+                let available = data.is_some();
+                if let Some(data) = data {
+                    store.insert(id.clone(), Arc::new(data));
+                }
+                ChatImage {
+                    id,
+                    media_type: image.media_type,
+                    bytes: image.bytes,
+                    width: image.width,
+                    height: image.height,
+                    available,
+                }
+            })
+            .collect()
     }
 
     pub fn snapshot(&self) -> ChatSnapshot {
@@ -145,9 +266,10 @@ impl ChatModel {
             ChatEvent::Reset { .. } => {
                 self.entries.clear();
                 self.index.clear();
+                self.images().clear();
             }
             ChatEvent::Item { item } => {
-                let entry = entry(item);
+                let entry = self.entry(item);
                 match self.index.get(&entry.id) {
                     Some(&i) => self.entries[i] = entry,
                     None => {
@@ -157,6 +279,7 @@ impl ChatModel {
                 }
             }
             ChatEvent::Remove { id } => {
+                self.forget_images(&id);
                 if self.index.remove(&id).is_some() {
                     self.entries.retain(|e| e.id != id);
                     self.index = (self.entries.iter().enumerate())
@@ -190,39 +313,91 @@ fn status(state: ChatState) -> Option<ChatStatus> {
     })
 }
 
-fn entry(item: ChatItem) -> ChatEntry {
-    let body = match item.body {
-        ChatBody::User { text } => ChatEntryBody::User { text },
-        ChatBody::Agent { text } => ChatEntryBody::Agent { text },
-        ChatBody::Thinking { text } => ChatEntryBody::Thinking { text },
-        ChatBody::Tool {
-            name,
-            title,
-            input,
-            status,
-            output,
-        } => ChatEntryBody::Tool {
-            name,
-            title,
-            input: match input {
-                serde_json::Value::Null => String::new(),
-                serde_json::Value::String(s) => s,
-                v => serde_json::to_string_pretty(&v).unwrap_or_default(),
+impl ChatModel {
+    fn entry(&self, item: ChatItem) -> ChatEntry {
+        let body = match item.body {
+            ChatBody::User { text, images } => ChatEntryBody::User {
+                text,
+                images: self.keep_images(&item.id, images),
             },
-            status: match status {
-                ToolStatus::Running | ToolStatus::Unknown => ChatToolStatus::Running,
-                ToolStatus::Done => ChatToolStatus::Done,
-                ToolStatus::Error => ChatToolStatus::Failed,
+            ChatBody::Agent { text } => ChatEntryBody::Agent { text },
+            ChatBody::Thinking { text } => ChatEntryBody::Thinking { text },
+            ChatBody::Tool {
+                name,
+                title,
+                status,
+                output,
+                question: Some(q),
+                ..
+            } => ChatEntryBody::Question {
+                name,
+                title,
+                questions: q
+                    .questions
+                    .into_iter()
+                    .map(|q| ChatQuestionPart {
+                        text: q.text,
+                        header: q.header,
+                        multi: q.multi,
+                        options: (q.options.into_iter())
+                            .map(|o| ChatQuestionOption {
+                                label: o.label,
+                                description: o.description,
+                            })
+                            .collect(),
+                    })
+                    .collect(),
+                status: tool_status(status),
+                output,
             },
-            output,
-        },
-        ChatBody::Error { message } => ChatEntryBody::AgentError { detail: message },
-        ChatBody::Unsupported => ChatEntryBody::Unsupported,
-    };
-    ChatEntry {
-        id: item.id,
-        timestamp: item.ts,
-        body,
+            ChatBody::Tool {
+                name,
+                title,
+                input,
+                status,
+                output,
+                diff,
+                images,
+                question: None,
+            } => ChatEntryBody::Tool {
+                images: self.keep_images(&item.id, images),
+                diff: diff.map(|d| ChatDiff {
+                    path: d.path,
+                    truncated: d.truncated,
+                    hunks: (d.hunks.into_iter())
+                        .map(|h| ChatDiffHunk {
+                            old_start: h.old_start,
+                            new_start: h.new_start,
+                            lines: h.lines,
+                        })
+                        .collect(),
+                }),
+                name,
+                title,
+                input: match input {
+                    serde_json::Value::Null => String::new(),
+                    serde_json::Value::String(s) => s,
+                    v => serde_json::to_string_pretty(&v).unwrap_or_default(),
+                },
+                status: tool_status(status),
+                output,
+            },
+            ChatBody::Error { message } => ChatEntryBody::AgentError { detail: message },
+            ChatBody::Unsupported => ChatEntryBody::Unsupported,
+        };
+        ChatEntry {
+            id: item.id,
+            timestamp: item.ts,
+            body,
+        }
+    }
+}
+
+fn tool_status(status: ToolStatus) -> ChatToolStatus {
+    match status {
+        ToolStatus::Running | ToolStatus::Unknown => ChatToolStatus::Running,
+        ToolStatus::Done => ChatToolStatus::Done,
+        ToolStatus::Error => ChatToolStatus::Failed,
     }
 }
 
@@ -245,7 +420,7 @@ const LEAKY_ENV: &[&str] = &[
 ];
 
 impl ChatHost {
-    async fn open(&self, command: &str) -> Result<Stream, CoreError> {
+    pub(crate) async fn open(&self, command: &str) -> Result<Stream, CoreError> {
         match self {
             Self::Ssh(ssh) => ssh.exec_stream(command).await,
             Self::Local(env) => {
@@ -300,6 +475,70 @@ pub(crate) fn command(terminal: &str, cursor: Option<&str>) -> String {
     format!("sh -c {}", quote(&script))
 }
 
+/// The Host-side `aries-beacon answer` command; without a Beacon it prints
+/// a `no_beacon` reply.
+pub(crate) fn answer_command(terminal: &str, answer: &Answer) -> String {
+    let no_beacon = AnswerReply::new(AnswerOutcome::NoBeacon, None).to_json();
+    let args: Vec<String> = answer.args().iter().map(|a| quote(a)).collect();
+    let script = format!(
+        r#"b="${{ARIES_BEACON:-$HOME/.local/bin/aries-beacon}}"; if [ -x "$b" ]; then exec "$b" answer {} {}; else printf '%s\n' {}; fi"#,
+        quote(terminal),
+        args.join(" "),
+        quote(&no_beacon),
+    );
+    format!("sh -c {}", quote(&script))
+}
+
+/// Runs `aries-beacon answer` on the Host once. Not retried: a key press
+/// that may have landed must not land twice.
+pub(crate) async fn answer(
+    host: &ChatHost,
+    terminal: &str,
+    answer: &Answer,
+) -> Result<(), CoreError> {
+    let Stream {
+        reader,
+        writer,
+        guard,
+    } = host.open(&answer_command(terminal, answer)).await?;
+    let mut lines = BufReader::new(reader).lines();
+    let mut reply = None;
+    let read = tokio::time::timeout(Duration::from_secs(30), async {
+        while let Ok(Some(text)) = lines.next_line().await {
+            if let Ok(r) = AnswerReply::parse(&text) {
+                reply = Some(r);
+            }
+        }
+    })
+    .await;
+    drop((writer, guard));
+    let refused = |reason, detail: Option<String>| CoreError::AnswerRefused {
+        reason,
+        detail: detail.unwrap_or_default(),
+    };
+    let Some(reply) = reply else {
+        let why = if read.is_err() {
+            "timed out"
+        } else {
+            "no reply"
+        };
+        return Err(refused(AnswerProblem::Failed, Some(why.into())));
+    };
+    let reason = match reply.outcome {
+        AnswerOutcome::Sent => return Ok(()),
+        AnswerOutcome::Answered => AnswerProblem::Answered,
+        AnswerOutcome::Gone | AnswerOutcome::NoAgent | AnswerOutcome::NoTerminal => {
+            AnswerProblem::Gone
+        }
+        AnswerOutcome::Invalid => AnswerProblem::Invalid,
+        AnswerOutcome::Unsupported => AnswerProblem::Unsupported,
+        AnswerOutcome::NoBeacon => AnswerProblem::NoBeacon,
+        AnswerOutcome::NoCore => AnswerProblem::NoCore,
+        AnswerOutcome::Failed | AnswerOutcome::Unknown => AnswerProblem::Failed,
+    };
+    Err(refused(reason, reply.detail))
+}
+
 /// Silence after which the stream counts as dead (the Beacon sends a
 /// heartbeat every 15 s).
 const SILENCE: Duration = Duration::from_secs(45);
@@ -309,6 +548,7 @@ const SILENCE: Duration = Duration::from_secs(45);
 pub struct ChatWatch {
     rx: Arc<Mutex<watch::Receiver<Option<ChatSnapshot>>>>,
     task: JoinHandle<()>,
+    images: Images,
 }
 
 impl ChatWatch {
@@ -320,10 +560,12 @@ impl ChatWatch {
     ) -> Self {
         let model = ChatModel::new(cursor);
         let (tx, rx) = watch::channel(Some(model.snapshot()));
+        let images = model.images.clone();
         let task = crate::runtime().spawn(follow(host, terminal, model, tx, retry));
         Self {
             rx: Arc::new(Mutex::new(rx)),
             task,
+            images,
         }
     }
 }
@@ -393,6 +635,13 @@ impl ChatWatch {
         .await
     }
 
+    /// The bytes (PNG, JPEG, ...) of a [`ChatImage`] in the current Chat;
+    /// `None` when it is over the cap or no longer in the Chat.
+    pub fn image(&self, id: String) -> Option<Vec<u8>> {
+        let store = self.images.lock().unwrap_or_else(|e| e.into_inner());
+        store.get(&id).map(|b| b.as_ref().clone())
+    }
+
     /// Stops following; the Beacon on the Host exits.
     pub fn stop(&self) {
         self.task.abort();
@@ -421,6 +670,24 @@ mod tests {
         assert_eq!(
             String::from_utf8(script.stdout).unwrap(),
             "chat it's --follow --cursor claude-code:s:1\n"
+        );
+    }
+
+    #[test]
+    fn the_answer_command_quotes_terminal_and_question() {
+        let answer = Answer {
+            question: "it's".into(),
+            picks: vec![vec![1], vec![0, 2]],
+        };
+        let c = answer_command("t'1", &answer);
+        let out = std::process::Command::new("/bin/sh")
+            .arg("-c")
+            .arg(format!("export ARIES_BEACON=/bin/echo; {c}"))
+            .output()
+            .unwrap();
+        assert_eq!(
+            String::from_utf8(out.stdout).unwrap(),
+            "answer t'1 it's 1 0,2\n"
         );
     }
 

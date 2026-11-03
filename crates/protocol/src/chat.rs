@@ -52,6 +52,8 @@ pub struct ChatLine {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+// An event lives for one line; boxing the item would only add an allocation.
+#[allow(clippy::large_enum_variant)]
 pub enum ChatEvent {
     /// Forget every item: what follows is transcript `session` of `agent`
     /// (`claude-code`, `codex`, `opencode`, `pi`).
@@ -115,8 +117,17 @@ pub struct ChatItem {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ChatBody {
-    /// What the user typed (or a slash command such as `/clear`).
-    User { text: String },
+    /// What the user typed (or a slash command such as `/clear`), with the
+    /// images they attached.
+    User {
+        text: String,
+        #[serde(
+            default,
+            deserialize_with = "lenient",
+            skip_serializing_if = "Vec::is_empty"
+        )]
+        images: Vec<ChatImage>,
+    },
     /// The Agent's reply text (Markdown).
     Agent { text: String },
     /// The Agent thought. `text` is `None` when the Agent does not record
@@ -139,12 +150,119 @@ pub enum ChatBody {
         /// The full result text; `None` while running.
         #[serde(default)]
         output: Option<String>,
+        /// What a file edit changed, once the result is in.
+        #[serde(
+            default,
+            deserialize_with = "lenient",
+            skip_serializing_if = "Option::is_none"
+        )]
+        diff: Option<ChatDiff>,
+        /// Images in the result (a Read of a picture, a screenshot tool).
+        /// `output` still names them as text for older readers.
+        #[serde(
+            default,
+            deserialize_with = "lenient",
+            skip_serializing_if = "Vec::is_empty"
+        )]
+        images: Vec<ChatImage>,
+        /// Set when the tool asks the user to choose (Claude Code's
+        /// AskUserQuestion, Codex `request_user_input`, ...). While `status`
+        /// is `running` it is open: the app shows its options as buttons and
+        /// answers with `aries-beacon answer` (`crate::answer`), naming this
+        /// item's `id`. Readers that predate it show the plain tool.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        question: Option<ChatQuestion>,
     },
     /// An error the Agent reported (API failure, model not found).
     Error { message: String },
     /// An item kind this reader does not know.
     #[serde(other)]
     Unsupported,
+}
+
+/// Reads an optional extra (diff, images) without letting a shape this
+/// reader does not understand drop the whole item: it reads as absent.
+fn lenient<'de, D, T>(d: D) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::de::DeserializeOwned + Default,
+{
+    let value = serde_json::Value::deserialize(d)?;
+    Ok(serde_json::from_value(value).unwrap_or_default())
+}
+
+/// Largest image (decoded bytes) a Chat line carries. A bigger one is sent
+/// without `data`, so the reader shows a placeholder with its size.
+pub const IMAGE_MAX_BYTES: u64 = 2 * 1024 * 1024;
+/// Most diff lines one tool item carries (over all hunks); the rest is cut
+/// and `truncated` set.
+pub const DIFF_MAX_LINES: usize = 2000;
+/// Longest diff line, in chars; longer ones end in `…`.
+pub const DIFF_MAX_LINE_CHARS: usize = 1000;
+
+/// An image from the transcript. The Beacon reads it from the transcript
+/// itself (Agents embed images as base64) and sends it inline.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChatImage {
+    /// `image/png`, `image/jpeg`, ...
+    pub media_type: String,
+    /// Base64 of the image; `None` when it is over [`IMAGE_MAX_BYTES`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data: Option<String>,
+    /// Decoded size.
+    #[serde(default)]
+    pub bytes: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub width: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub height: Option<u32>,
+}
+
+/// A file edit as unified-diff hunks.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChatDiff {
+    pub path: String,
+    pub hunks: Vec<DiffHunk>,
+    /// Lines beyond [`DIFF_MAX_LINES`] were left out.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub truncated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DiffHunk {
+    pub old_start: u32,
+    pub old_lines: u32,
+    pub new_start: u32,
+    pub new_lines: u32,
+    /// Each line starts with `-`, `+` or ` `.
+    pub lines: Vec<String>,
+}
+
+/// What a question tool asks: one or more questions, each answered by
+/// picking options. Agent-neutral; the Beacon turns picks into the Agent's
+/// own keys.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChatQuestion {
+    pub questions: Vec<Question>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Question {
+    pub text: String,
+    /// A short tag (Claude Code's `header`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub header: Option<String>,
+    /// Several options may be picked.
+    #[serde(default)]
+    pub multi: bool,
+    pub options: Vec<QuestionOption>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QuestionOption {
+    pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

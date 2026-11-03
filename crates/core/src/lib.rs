@@ -6,6 +6,7 @@
 //! chat, push, calls and beacon manager modules arrive with their tickets.
 
 mod beacon;
+mod calls;
 mod chat;
 mod error;
 mod hc;
@@ -13,6 +14,7 @@ mod host_model;
 mod launch;
 mod push;
 mod removal;
+mod send;
 mod settings;
 mod store;
 mod structure;
@@ -31,8 +33,14 @@ pub use beacon::{
     ALLOWED_BEACON, BeaconArtifact, BeaconCheck, BeaconFetcher, BeaconInstall, BeaconRelease,
     BeaconSource, BeaconState, BeaconUpdate, FetchError, Linger, pinned_release,
 };
-pub use chat::{ChatEntry, ChatEntryBody, ChatSnapshot, ChatStatus, ChatToolStatus, ChatWatch};
-pub use error::{CoreError, Incompatibility, VaultError};
+pub use calls::{
+    CallAnswer, CallAnswerState, CallFeedState, CallInfo, CallListener, CallUrgency, CallWatch,
+};
+pub use chat::{
+    ChatEntry, ChatEntryBody, ChatQuestionOption, ChatQuestionPart, ChatSnapshot, ChatStatus,
+    ChatToolStatus, ChatWatch,
+};
+pub use error::{AnswerProblem, CoreError, Incompatibility, VaultError};
 pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
 pub use host_model::{AgentStatus, BlockedReason, TerminalWatch};
 pub use launch::{AgentPreset, LaunchRequest, RECENT_CWDS_KEPT, SavedLaunch};
@@ -40,6 +48,7 @@ pub use push::{
     HttpClient, HttpRequest, HttpResponse, PushContent, PushDevice, PushDisable, PushNotice,
     PushPairing, PushProgress, PushStep,
 };
+pub use send::{HELD_AFTER, SendListener, SendOutcome};
 pub use settings::AttachMode;
 pub use structure::{HostStructure, PaneInfo, SpaceInfo, StructureProblem, TabInfo};
 pub use terminal::{
@@ -864,6 +873,55 @@ impl AriesCore {
             std::time::Duration::from_secs(1),
         )))
     }
+
+    /// Answers the open question `question_id` (a
+    /// [`ChatEntryBody::Question`] entry id) of the Agent in `terminal`:
+    /// `picks` holds, per question in order, the 0-based indexes of the
+    /// chosen options. The Host's Beacon checks the Agent still shows that
+    /// question and presses its keys. Not retried; fails with
+    /// [`CoreError::AnswerRefused`] when nothing was (or may not have been)
+    /// pressed.
+    pub async fn answer_question(
+        &self,
+        host_id: String,
+        terminal: String,
+        question_id: String,
+        picks: Vec<Vec<u32>>,
+    ) -> Result<(), CoreError> {
+        let host = self.chat_host(&host_id)?;
+        let answer = aries_protocol::answer::Answer {
+            question: question_id,
+            picks: (picks.into_iter())
+                .map(|p| p.into_iter().map(|n| n as usize).collect())
+                .collect(),
+        };
+        on_runtime(async move { chat::answer(&host, &terminal, &answer).await }).await
+    }
+}
+
+/// Calls (`calls` module).
+#[uniffi::export]
+impl AriesCore {
+    /// The Host's whole Call history, newest first, as its Beacon keeps it.
+    pub async fn calls(&self, host_id: String) -> Result<Vec<CallInfo>, CoreError> {
+        let runner = self.chat_host(&host_id)?;
+        on_runtime(async move { calls::history(&runner, &host_id).await }).await
+    }
+
+    /// Follows the Host's Call history: `listener` gets the whole list after
+    /// the first sync and each change, and each Call that arrives while
+    /// watching once. Reconnects by itself (reported through `on_state`)
+    /// until `stop`. Uses its own SSH connection, not a [`HostConnection`].
+    /// Opening the Host's key may ask for a biometric unlock, so call it
+    /// off the UI thread.
+    pub async fn watch_calls(
+        &self,
+        host_id: String,
+        listener: Arc<dyn CallListener>,
+    ) -> Result<Arc<CallWatch>, CoreError> {
+        let runner = self.chat_host(&host_id)?;
+        Ok(Arc::new(calls::watch(runner, host_id, listener)))
+    }
 }
 
 impl AriesCore {
@@ -1075,6 +1133,21 @@ impl HostConnection {
     /// Deletes the saved launch `id`; succeeds if it is already gone.
     pub fn delete_saved_launch(&self, id: String) -> Result<(), CoreError> {
         self.saved.delete(&id)
+    }
+
+    /// Types `text` into the Agent's Terminal at `address` and submits it, as
+    /// a Chat message. Never forced: a Blocked Agent refuses it
+    /// ([`SendOutcome::Blocked`]). `listener` hears when the send is held
+    /// because a person at the Host is typing.
+    pub async fn send_message(
+        &self,
+        address: String,
+        text: String,
+        listener: Arc<dyn SendListener>,
+    ) -> Result<SendOutcome, CoreError> {
+        let client = self.client.clone();
+        on_runtime(async move { send::send(&client, &address, &text, || listener.on_held()).await })
+            .await
     }
 
     pub async fn disconnect(&self) {

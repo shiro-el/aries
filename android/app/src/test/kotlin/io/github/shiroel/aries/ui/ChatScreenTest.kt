@@ -10,8 +10,16 @@ import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentStatus
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import io.github.shiroel.aries.core.ChatDiff
+import io.github.shiroel.aries.core.ChatDiffHunk
+import io.github.shiroel.aries.core.AnswerProblem
+import io.github.shiroel.aries.core.ChatQuestionOption
+import io.github.shiroel.aries.core.ChatQuestionPart
+import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.ChatEntry
 import io.github.shiroel.aries.core.ChatEntryBody
+import io.github.shiroel.aries.core.ChatImage
 import io.github.shiroel.aries.core.ChatSnapshot
 import io.github.shiroel.aries.core.ChatStatus
 import io.github.shiroel.aries.core.ChatToolStatus
@@ -23,6 +31,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /** An Agent's Chat, opened from the Agent list, against a fake core. */
 @RunWith(RobolectricTestRunner::class)
@@ -122,6 +131,73 @@ class ChatScreenTest {
         compose.onNodeWithText("File created successfully").assertDoesNotExist()
     }
 
+    private fun edit(lines: List<String>, truncated: Boolean = false) = entry(
+        "toolu_2",
+        ChatEntryBody.Tool(
+            "Edit", "/repo/hello.txt", "{}", ChatToolStatus.DONE, "The file has been updated.",
+            diff = ChatDiff("/repo/hello.txt", listOf(ChatDiffHunk(1u, 1u, lines)), truncated),
+        ),
+    )
+
+    @Test
+    fun anEditShowsAsItsDiffWithoutExpanding() {
+        val core = FakeCore()
+        openChat(core)
+        core.pushChat(ChatSnapshot(listOf(edit(listOf(" keep", "-hi", "+hello"))), ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        compose.onNodeWithText("-hi", substring = true).assertExists()
+        compose.onNodeWithText("+hello", substring = true).assertExists()
+        compose.onNodeWithText("@@ -1 +1 @@", substring = true).assertExists()
+        // The raw input stays behind the tap.
+        compose.onNodeWithText(str(R.string.chat_tool_input)).assertDoesNotExist()
+    }
+
+    @Test
+    fun aHugeDiffShowsAPreviewUntilTapped() {
+        val core = FakeCore()
+        openChat(core)
+        val lines = (1..2000).map { "+line $it" }
+        core.pushChat(ChatSnapshot(listOf(edit(lines, truncated = true)), ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        compose.onNodeWithText("+line 1\n", substring = true).assertExists()
+        compose.onNodeWithText("+line 2000", substring = true).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.chat_diff_more, 2000 - 12)).assertExists()
+
+        compose.onNodeWithContentDescription(str(R.string.chat_tool_expand_label, "Edit")).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("+line 2000", substring = true).assertExists()
+        compose.onNodeWithText(str(R.string.chat_diff_truncated)).assertExists()
+    }
+
+    @Test
+    fun imagesShowAndATooLargeOneIsAPlaceholder() {
+        val core = FakeCore()
+        core.chatImages["u1#0"] = PNG
+        openChat(core)
+        core.pushChat(
+            ChatSnapshot(
+                listOf(
+                    entry(
+                        "u1",
+                        ChatEntryBody.User(
+                            "what is this?",
+                            listOf(
+                                ChatImage("u1#0", "image/png", 75uL, 8u, 8u, true),
+                                ChatImage("u1#1", "image/jpeg", 9_000_000uL, null, null, false),
+                            ),
+                        ),
+                    ),
+                ),
+                ChatStatus.LIVE, null,
+            ),
+        )
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithContentDescription(str(R.string.chat_image)).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("what is this?").assertExists()
+        compose.onNodeWithText(str(R.string.chat_image_too_large, "8.6")).assertExists()
+    }
+
     @Test
     fun showsWhyThereIsNoChatAndWhatANewerBeaconSent() {
         val core = FakeCore()
@@ -165,6 +241,90 @@ class ChatScreenTest {
         compose.onNodeWithText(str(R.string.agent_detail_host, "server")).assertExists()
     }
 
+    private fun option(label: String) = ChatQuestionOption(label, "Choose $label")
+
+    private fun color(status: ChatToolStatus, output: String? = null) = entry(
+        "toolu_q",
+        ChatEntryBody.Question(
+            "AskUserQuestion", "Which color do you prefer?",
+            listOf(ChatQuestionPart("Which color do you prefer?", "Color", false, listOf(option("Red"), option("Blue")))),
+            status, output,
+        ),
+    )
+
+    @Test
+    fun anOpenQuestionIsAnsweredWithOneTap() {
+        val core = FakeCore()
+        openChat(core)
+        core.pushChat(ChatSnapshot(listOf(color(ChatToolStatus.RUNNING)), ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        compose.onNodeWithText("Which color do you prefer?").assertExists()
+        compose.onNodeWithText("Choose Blue").assertExists()
+
+        compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue")).performClick()
+        compose.waitForIdle()
+        assertEquals(listOf(Triple("t1", "toolu_q", listOf(listOf(1u)))), core.answers)
+        compose.onNodeWithText(str(R.string.chat_question_sent)).assertExists()
+
+        // The Agent took it: no buttons, the answer shows.
+        core.pushChat(
+            ChatSnapshot(listOf(color(ChatToolStatus.DONE, "\"Which color do you prefer?\"=\"Blue\"")), ChatStatus.LIVE, null),
+        )
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue")).assertDoesNotExist()
+        compose.onNodeWithText("\"Which color do you prefer?\"=\"Blue\"").assertExists()
+    }
+
+    @Test
+    @Config(qualifiers = "h1200dp") // the whole card on screen
+    fun severalQuestionsAreChosenThenSentTogether() {
+        val core = FakeCore()
+        openChat(core)
+        val q = entry(
+            "toolu_m",
+            ChatEntryBody.Question(
+                "AskUserQuestion", "Which size?",
+                listOf(
+                    ChatQuestionPart("Which size?", "Size", false, listOf(option("S"), option("M"))),
+                    ChatQuestionPart("Which toppings?", "Toppings", true, listOf(option("Cheese"), option("Ham"), option("Olive"))),
+                ),
+                ChatToolStatus.RUNNING, null,
+            ),
+        )
+        core.pushChat(ChatSnapshot(listOf(q), ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        val send = compose.onNodeWithText(str(R.string.chat_question_send))
+        send.performClick()
+        compose.waitForIdle()
+        assertTrue("nothing is sent before every question has a pick", core.answers.isEmpty())
+
+        for (label in listOf("M", "Cheese", "Ham", "Olive", "Ham")) {
+            compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, label)).performClick()
+        }
+        compose.waitForIdle()
+        assertTrue(core.answers.isEmpty())
+        send.performClick()
+        compose.waitForIdle()
+        assertEquals(listOf(Triple("t1", "toolu_m", listOf(listOf(1u), listOf(0u, 2u)))), core.answers)
+    }
+
+    @Test
+    fun aQuestionAnsweredElsewhereSaysSo() {
+        val core = FakeCore()
+        openChat(core)
+        core.pushChat(ChatSnapshot(listOf(color(ChatToolStatus.RUNNING)), ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        core.answerFailure = CoreException.AnswerRefused(AnswerProblem.ANSWERED, "")
+        compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Red")).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.chat_answer_answered)).assertExists()
+
+        core.answerFailure = CoreException.AnswerRefused(AnswerProblem.GONE, "")
+        compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Red")).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.chat_answer_gone)).assertExists()
+    }
+
     @Test
     fun backLeavesTheChatAndStopsFollowing() {
         val core = FakeCore()
@@ -174,5 +334,12 @@ class ChatScreenTest {
         assertTrue(core.chatStopped)
         compose.onNodeWithText("claude").assertExists()
         compose.onNodeWithText(str(R.string.chat_title, "claude")).assertDoesNotExist()
+    }
+
+    private companion object {
+        /** The 8x8 red PNG of the Claude Code fixture. */
+        val PNG: ByteArray = java.util.Base64.getDecoder().decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEklEQVR4nGP4z8CAFWEXHbQSACj/P8Fu7N9hAAAAAElFTkSuQmCC",
+        )
     }
 }

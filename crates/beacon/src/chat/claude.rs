@@ -10,10 +10,13 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use aries_protocol::chat::{ChatBody, ChatEvent, ChatItem, ToolStatus};
+use aries_protocol::chat::{
+    ChatBody, ChatDiff, ChatEvent, ChatImage, ChatItem, ChatQuestion, DiffHunk, Question,
+    QuestionOption, ToolStatus,
+};
 use serde_json::Value;
 
-use super::{Agent, Interpreter, Located, TerminalFacts};
+use super::{Agent, Interpreter, KeysError, Located, TerminalFacts, media};
 
 pub const AGENT: &str = "claude-code";
 
@@ -65,6 +68,31 @@ impl Agent for ClaudeCode {
 
     fn interpreter(&self) -> Box<dyn Interpreter> {
         Box::<ClaudeInterpreter>::default()
+    }
+
+    /// AskUserQuestion: a single-choice question takes its option number
+    /// and moves on by itself; a multi-select one toggles each number, then
+    /// `tab` moves on. With several questions or any multi-select, a review
+    /// screen follows where `1` submits.
+    fn answer_keys(
+        &self,
+        question: &ChatQuestion,
+        picks: &[Vec<usize>],
+    ) -> Result<Vec<String>, KeysError> {
+        if question.questions.iter().any(|q| q.options.len() > 9) {
+            return Err(KeysError::Unsupported("more than 9 options".into()));
+        }
+        let mut keys = Vec::new();
+        for (q, p) in question.questions.iter().zip(picks) {
+            keys.extend(p.iter().map(|n| (n + 1).to_string()));
+            if q.multi {
+                keys.push("tab".into());
+            }
+        }
+        if question.questions.len() > 1 || question.questions.iter().any(|q| q.multi) {
+            keys.push("1".into());
+        }
+        Ok(keys)
     }
 }
 
@@ -121,32 +149,45 @@ impl ClaudeInterpreter {
                 .map(|text| ChatItem {
                     id: uuid.to_owned(),
                     ts,
-                    body: ChatBody::User { text },
+                    body: ChatBody::User {
+                        text,
+                        images: Vec::new(),
+                    },
                 })
                 .into_iter()
                 .collect(),
             Value::Array(blocks) => {
                 let mut items = Vec::new();
                 let mut text = Vec::new();
+                let mut images = Vec::new();
+                // The structured result belongs to the record's only result.
+                let results = blocks.iter().filter(|b| b["type"] == "tool_result").count();
+                let structured = if results == 1 {
+                    &record["toolUseResult"]
+                } else {
+                    &Value::Null
+                };
                 for block in blocks {
                     match block["type"].as_str() {
                         Some("tool_result") => {
-                            if let Some(item) = self.tool_result(block) {
+                            if let Some(item) = self.tool_result(block, structured) {
                                 items.push(item);
                             }
                         }
                         Some("text") => text.extend(block["text"].as_str()),
+                        Some("image") => images.extend(image(block, None)),
                         _ => {}
                     }
                 }
                 let text = text.join("\n");
-                if let Some(text) = user_text(&text) {
+                let text = user_text(&text).or_else(|| (!images.is_empty()).then(String::new));
+                if let Some(text) = text {
                     items.insert(
                         0,
                         ChatItem {
                             id: uuid.to_owned(),
                             ts,
-                            body: ChatBody::User { text },
+                            body: ChatBody::User { text, images },
                         },
                     );
                 }
@@ -156,16 +197,30 @@ impl ClaudeInterpreter {
         }
     }
 
-    fn tool_result(&mut self, block: &Value) -> Option<ChatItem> {
+    /// `structured` is the record's `toolUseResult` (Null when unknown).
+    fn tool_result(&mut self, block: &Value, structured: &Value) -> Option<ChatItem> {
         let id = block["tool_use_id"].as_str()?;
         let item = self.tools.get_mut(id)?;
-        if let ChatBody::Tool { status, output, .. } = &mut item.body {
-            *status = if block["is_error"] == true {
+        if let ChatBody::Tool {
+            status,
+            output,
+            diff,
+            images,
+            input,
+            ..
+        } = &mut item.body
+        {
+            let failed = block["is_error"] == true;
+            *status = if failed {
                 ToolStatus::Error
             } else {
                 ToolStatus::Done
             };
             *output = Some(result_text(&block["content"]));
+            if !failed {
+                *diff = edit_diff(structured, input);
+            }
+            *images = result_images(&block["content"], structured);
         }
         Some(item.clone())
     }
@@ -215,10 +270,15 @@ impl ClaudeInterpreter {
                         ts: ts.clone(),
                         body: ChatBody::Tool {
                             title: tool_title(&name, &input),
+                            question: (name == "AskUserQuestion")
+                                .then(|| question(&input))
+                                .flatten(),
                             name,
                             input,
                             status: ToolStatus::Running,
                             output: None,
+                            diff: None,
+                            images: Vec::new(),
                         },
                     };
                     self.tools.insert(call.to_owned(), item.clone());
@@ -235,6 +295,34 @@ impl ClaudeInterpreter {
         }
         items
     }
+}
+
+/// AskUserQuestion `input.questions[{question, header, multiSelect,
+/// options[{label, description}]}]`. `None` if it has no usable question.
+fn question(input: &Value) -> Option<ChatQuestion> {
+    let text = |v: &Value| v.as_str().filter(|s| !s.is_empty()).map(str::to_owned);
+    let questions = input["questions"]
+        .as_array()?
+        .iter()
+        .map(|q| {
+            Some(Question {
+                text: text(&q["question"])?,
+                header: text(&q["header"]),
+                multi: q["multiSelect"] == true,
+                options: q["options"]
+                    .as_array()?
+                    .iter()
+                    .map(|o| {
+                        Some(QuestionOption {
+                            label: text(&o["label"])?,
+                            description: text(&o["description"]),
+                        })
+                    })
+                    .collect::<Option<Vec<_>>>()?,
+            })
+        })
+        .collect::<Option<Vec<_>>>()?;
+    (!questions.is_empty()).then_some(ChatQuestion { questions })
 }
 
 fn timestamp(record: &Value) -> Option<String> {
@@ -283,6 +371,66 @@ fn result_text(content: &Value) -> String {
         Value::Null => String::new(),
         other => other.to_string(),
     }
+}
+
+/// An `{type: image, source: {type: base64, media_type, data}}` block.
+fn image(block: &Value, size: Option<(u32, u32)>) -> Option<ChatImage> {
+    let source = &block["source"];
+    if source["type"] != "base64" {
+        return None;
+    }
+    Some(media::image(
+        source["media_type"].as_str().unwrap_or("image/png"),
+        source["data"].as_str()?,
+        size,
+    ))
+}
+
+/// The images of a tool result. Claude Code records the size of a Read
+/// image in `toolUseResult.file.dimensions`.
+fn result_images(content: &Value, structured: &Value) -> Vec<ChatImage> {
+    let Some(blocks) = content.as_array() else {
+        return Vec::new();
+    };
+    let blocks: Vec<&Value> = blocks.iter().filter(|b| b["type"] == "image").collect();
+    let dims = &structured["file"]["dimensions"];
+    let size = match (
+        dims["displayWidth"].as_u64(),
+        dims["displayHeight"].as_u64(),
+    ) {
+        (Some(w), Some(h)) if blocks.len() == 1 => Some((w as u32, h as u32)),
+        _ => None,
+    };
+    blocks.into_iter().filter_map(|b| image(b, size)).collect()
+}
+
+/// The diff of an Edit, MultiEdit or Write result: `structuredPatch`, or a
+/// new file's `content`.
+fn edit_diff(structured: &Value, input: &Value) -> Option<ChatDiff> {
+    let path = structured["filePath"]
+        .as_str()
+        .or_else(|| input["file_path"].as_str())
+        .unwrap_or_default();
+    if let Some(patch) = structured["structuredPatch"]
+        .as_array()
+        .filter(|p| !p.is_empty())
+    {
+        let num = |h: &Value, k: &str| h[k].as_u64().unwrap_or(0) as u32;
+        let hunks = patch.iter().map(|h| DiffHunk {
+            old_start: num(h, "oldStart"),
+            old_lines: num(h, "oldLines"),
+            new_start: num(h, "newStart"),
+            new_lines: num(h, "newLines"),
+            lines: (h["lines"].as_array().into_iter().flatten())
+                .filter_map(|l| l.as_str().map(str::to_owned))
+                .collect(),
+        });
+        return Some(media::diff(path, hunks));
+    }
+    if structured["type"] == "create" {
+        return Some(media::created(path, structured["content"].as_str()?));
+    }
+    None
 }
 
 /// The one line shown on a collapsed tool row.
