@@ -82,6 +82,15 @@ pub struct LaunchRequest {
     #[uniffi(default = None)]
     #[serde(default)]
     pub preset: Option<AgentPreset>,
+    /// Agent model ID (or alias), passed as one argument. Ignored for custom commands.
+    #[uniffi(default = None)]
+    #[serde(default)]
+    pub model: Option<String>,
+    /// Agent reasoning effort. OpenCode's interactive launcher has no effort flag.
+    /// Ignored for OpenCode and custom commands; blank means the Agent's default.
+    #[uniffi(default = None)]
+    #[serde(default)]
+    pub effort: Option<String>,
 }
 
 /// A named [`LaunchRequest`] the user saved for this Host.
@@ -104,6 +113,29 @@ pub(crate) fn run_params(req: &LaunchRequest) -> Value {
     if let Some(preset) = req.preset {
         let mut argv = preset.argv();
         argv.extend(command.split_whitespace());
+        if let Some(model) = non_blank(&req.model) {
+            argv.extend([
+                if preset == AgentPreset::Codex {
+                    "-m"
+                } else {
+                    "--model"
+                },
+                model,
+            ]);
+        }
+        let codex_effort;
+        if let Some(effort) = non_blank(&req.effort) {
+            match preset {
+                AgentPreset::ClaudeCode => argv.extend(["--effort", effort]),
+                AgentPreset::Codex => {
+                    // A quoted TOML string: never reinterpret the value as config syntax.
+                    codex_effort = format!("model_reasoning_effort={}", json!(effort));
+                    argv.extend(["-c", &codex_effort]);
+                }
+                AgentPreset::Pi => argv.extend(["--thinking", effort]),
+                AgentPreset::OpenCode => {}
+            }
+        }
         params.insert("argv".into(), json!(argv));
     } else if needs_shell(command) {
         params.insert("line".into(), json!(command));
@@ -263,6 +295,8 @@ mod tests {
             space_id: Some("".into()),
             tab_id: Some("t".into()),
             preset: None,
+            model: None,
+            effort: None,
         }
     }
 

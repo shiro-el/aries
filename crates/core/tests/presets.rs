@@ -84,11 +84,102 @@ fn preset_request(preset: AgentPreset, extra: &str, cwd: &Path) -> LaunchRequest
         space_id: Some("s1".into()),
         tab_id: Some("tab1".into()),
         preset: Some(preset),
+        model: None,
+        effort: None,
     }
 }
 
 async fn connect(core: &Arc<AriesCore>, host_id: &str) -> Arc<HostConnection> {
     core.connect(host_id.into()).await.unwrap()
+}
+
+#[tokio::test]
+async fn model_and_effort_reach_each_agent_as_separate_arguments() {
+    let tmp = tempfile::tempdir().unwrap();
+    let hc = session(tmp.path());
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    let host = core.add_host("dev".into(), local_endpoint(&hc)).unwrap();
+    let conn = connect(&core, &host.id).await;
+    for (preset, name, model, effort, expected) in [
+        (
+            AgentPreset::ClaudeCode,
+            "claude",
+            "sonnet",
+            "high",
+            vec!["claude", "--model", "sonnet", "--effort", "high"],
+        ),
+        (
+            AgentPreset::Codex,
+            "codex",
+            "custom model;$(echo nope)",
+            "xhigh",
+            vec![
+                "codex",
+                "--no-daemon",
+                "-m",
+                "custom model;$(echo nope)",
+                "-c",
+                "model_reasoning_effort=\"xhigh\"",
+            ],
+        ),
+        (
+            AgentPreset::OpenCode,
+            "opencode",
+            "provider/model",
+            "",
+            vec!["opencode", "--model", "provider/model"],
+        ),
+        (
+            AgentPreset::Pi,
+            "pi",
+            "provider/model",
+            "off",
+            vec!["pi", "--model", "provider/model", "--thinking", "off"],
+        ),
+    ] {
+        let cwd = tmp.path().join(name);
+        std::fs::create_dir_all(&cwd).unwrap();
+        let mut request = preset_request(preset, "", &cwd);
+        request.model = Some(model.into());
+        request.effort = Some(effort.into());
+        conn.launch(request).await.unwrap();
+        assert_eq!(recorded(&cwd, name).0, expected, "{name}");
+    }
+    conn.disconnect().await;
+}
+
+#[tokio::test]
+async fn saved_launches_from_before_model_and_effort_still_launch() {
+    let tmp = tempfile::tempdir().unwrap();
+    let hc = session(tmp.path());
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    let host = core.add_host("dev".into(), local_endpoint(&hc)).unwrap();
+    let host_dir = data.path().join("hosts").join(&host.id);
+    std::fs::create_dir_all(&host_dir).unwrap();
+    std::fs::write(
+        host_dir.join("saved-launches.json"),
+        serde_json::to_vec(&serde_json::json!([
+            {"id":"old", "name":"Codex", "request":{
+                "command":"-m old-model", "cwd":tmp.path(),
+                "space_id":null, "tab_id":null, "preset":"codex"
+            }}
+        ]))
+        .unwrap(),
+    )
+    .unwrap();
+    let conn = connect(&core, &host.id).await;
+    let saved = conn.saved_launches();
+    assert_eq!(saved.len(), 1);
+    assert_eq!(saved[0].request.model, None);
+    assert_eq!(saved[0].request.effort, None);
+    conn.launch(saved[0].request.clone()).await.unwrap();
+    assert_eq!(
+        recorded(tmp.path(), "codex").0,
+        ["codex", "--no-daemon", "-m", "old-model"]
+    );
+    conn.disconnect().await;
 }
 
 #[tokio::test]
@@ -189,6 +280,8 @@ async fn saved_launches_are_kept_per_host_and_relaunch_in_one_call() {
                 space_id: None,
                 tab_id: None,
                 preset: None,
+                model: None,
+                effort: None,
             },
         })
         .unwrap();
@@ -198,7 +291,11 @@ async fn saved_launches_are_kept_per_host_and_relaunch_in_one_call() {
     // Edit keeps its id and place in the list.
     let edited = SavedLaunch {
         name: "Codex high".into(),
-        request: preset_request(AgentPreset::Codex, "-c model_reasoning_effort=high", &cwd),
+        request: LaunchRequest {
+            model: Some("custom-model".into()),
+            effort: Some("high".into()),
+            ..preset_request(AgentPreset::Codex, "--search", &cwd)
+        },
         ..codex.clone()
     };
     assert_eq!(conn.save_launch(edited.clone()).unwrap(), edited);
@@ -225,7 +322,15 @@ async fn saved_launches_are_kept_per_host_and_relaunch_in_one_call() {
     let (argv, _) = recorded(&cwd, "codex");
     assert_eq!(
         argv,
-        vec!["codex", "--no-daemon", "-c", "model_reasoning_effort=high"]
+        vec![
+            "codex",
+            "--no-daemon",
+            "--search",
+            "-m",
+            "custom-model",
+            "-c",
+            "model_reasoning_effort=\"high\""
+        ]
     );
     assert_eq!(t.cwd.as_deref(), Some(cwd.to_str().unwrap()));
 

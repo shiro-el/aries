@@ -55,7 +55,18 @@ class LaunchForm(
     saved: List<SavedLaunch> = emptyList(),
 ) {
     /** Without a preset, [command] is a command line; with one, the Agent's extra arguments. */
-    var preset by mutableStateOf<AgentPreset?>(null)
+    private var selectedPreset by mutableStateOf<AgentPreset?>(null)
+    var preset: AgentPreset?
+        get() = selectedPreset
+        set(value) {
+            if (selectedPreset != value) {
+                model = ""
+                effort = ""
+            }
+            selectedPreset = value
+        }
+    var model by mutableStateOf("")
+    var effort by mutableStateOf("")
     var command by mutableStateOf("")
     var cwd by mutableStateOf("")
 
@@ -95,6 +106,8 @@ class LaunchForm(
         spaceId = spaceId,
         tabId = spaceId?.let { tabId },
         preset = preset,
+        model = preset?.let { model.trim().ifEmpty { null } },
+        effort = preset?.takeUnless { it == AgentPreset.OPEN_CODE }?.let { effort.ifEmpty { null } },
     )
 
     /** Loads [launch] into the form; saving then replaces it. */
@@ -107,6 +120,8 @@ class LaunchForm(
     /** Puts [request] in the form (a Space or Tab that no longer exists is dropped). */
     fun fill(request: LaunchRequest) {
         preset = request.preset
+        model = request.model ?: ""
+        effort = request.effort ?: ""
         command = request.command
         cwd = request.cwd ?: ""
         selectSpace(request.spaceId?.takeIf { id -> structure.spaces.any { it.id == id } })
@@ -195,6 +210,7 @@ fun LaunchDialog(
                         )
                     }
                 }
+                form.preset?.let { preset -> LaunchOptions(form, preset) }
                 OutlinedTextField(
                     form.command, { form.command = it },
                     modifier = Modifier.testTag("launch_command"),
