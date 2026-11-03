@@ -364,6 +364,24 @@ impl TerminalView {
         crate::on_runtime(async move { inner.input(text.as_bytes()).await }).await
     }
 
+    /// Pastes an edited draft in one DATA frame without pressing Enter.
+    /// Uses the live VT's DEC 2004 mode: bracket and strip embedded end
+    /// markers when enabled, otherwise normalize CRLF/LF to CR.
+    /// Fails on an observing view, just like ordinary typing.
+    pub async fn paste_text(&self, text: String) -> Result<(), CoreError> {
+        let inner = self.inner.clone();
+        crate::on_runtime(async move {
+            let bytes = inner
+                .state
+                .lock()
+                .expect("state lock")
+                .vt
+                .paste_bytes(&text);
+            inner.input(&bytes).await
+        })
+        .await
+    }
+
     /// Presses `key` with `mods`, encoded as xterm does and following the
     /// program's cursor-key mode. Ctrl-C (`Char { text: "c" }` + ctrl) is
     /// the interrupt. Fails on an observing view.

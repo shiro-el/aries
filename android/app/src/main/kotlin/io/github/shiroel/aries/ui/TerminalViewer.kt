@@ -183,6 +183,30 @@ class TerminalViewer(terminal: TerminalInfo) {
      */
     var onCompositionInterrupted: (() -> Unit)? = null
 
+    /** The editable draft stays local until Send, including across input-mode switches. */
+    var draft by mutableStateOf("")
+    var composerOpen by mutableStateOf(false)
+        private set
+
+    fun openComposer() {
+        interruptComposition()
+        composerOpen = true
+    }
+
+    fun closeComposer() {
+        composerOpen = false
+    }
+
+    val canPasteDraft: Boolean
+        get() = draft.isNotEmpty() && exit == null && !closed
+
+    fun pasteDraft() {
+        if (!canPasteDraft) return
+        startTyping()
+        send(TerminalInput.Paste(draft))
+        draft = ""
+    }
+
     /** Ctrl from the key bar, held for the next key only. */
     var ctrl by mutableStateOf(false)
         private set
@@ -314,6 +338,7 @@ private fun isHangul(cp: Int): Boolean =
 /** One thing typed into a Terminal. */
 sealed interface TerminalInput {
     data class Text(val text: String) : TerminalInput
+    data class Paste(val text: String) : TerminalInput
     data class Key(val key: TerminalKey, val mods: KeyMods) : TerminalInput
 }
 
@@ -344,15 +369,15 @@ fun TerminalScreen(viewer: TerminalViewer, onBack: () -> Unit, onView: ((AgentVi
         TerminalLookBar(viewer, look)
         TerminalCanvas(viewer, look, Modifier.fillMaxWidth().weight(1f))
         if (viewer.typing) KeyBar(viewer)
-        TerminalInput(viewer)
+        TerminalComposer(viewer)
     }
 }
 
 /** The input field under the screen: tap it to type (and to get the keyboard). */
 @Composable
-private fun TerminalInput(viewer: TerminalViewer) {
+internal fun TerminalInput(viewer: TerminalViewer, modifier: Modifier = Modifier) {
     Box(
-        Modifier.fillMaxWidth().height(48.dp).background(MaterialTheme.colorScheme.surface)
+        modifier.fillMaxWidth().height(48.dp).background(MaterialTheme.colorScheme.surface)
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant),
         contentAlignment = Alignment.CenterStart,
     ) {

@@ -476,4 +476,16 @@
     <string name="dictation_unauthorized">Check your Groq API key in Settings.</string>
     <string name="dictation_rate_limit">Groq rate limit reached. Retry in %1$d seconds.</string>
     <string name="dictation_http_failed">Groq could not transcribe audio (HTTP %1$d).</string>
+    <string name="terminal_compose_button">Compose message</string>
+    <string name="terminal_direct_input_button">Direct typing</string>
+    <string name="terminal_composer_hint">Edit text to send to the Terminal</string>
+    <string name="terminal_composer_send_button">Send</string>
+    <string name="terminal_enter_button">Enter</string>
+    <string name="push_channel_done">Done</string>
+    <string name="push_channel_attention">Blocked and Error</string>
+    <string name="push_host_summary">%1$s: %2$d waiting</string>
+    <string name="quiet_hours_title">Quiet hours</string>
+    <string name="quiet_hours_hint">Done, Blocked and Error stay silent during this phone’s local time range. Calls keep their alert settings. Matching times mean all day.</string>
+    <string name="quiet_hours_start">Start</string>
+    <string name="quiet_hours_end">End</string>
 </resources>

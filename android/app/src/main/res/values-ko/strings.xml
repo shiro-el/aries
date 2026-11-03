@@ -466,4 +466,16 @@
     <string name="dictation_unauthorized">설정에서 Groq API 키를 확인해 주세요.</string>
     <string name="dictation_rate_limit">Groq 사용 한도에 도달했습니다. %1$d초 뒤 다시 시도해 주세요.</string>
     <string name="dictation_http_failed">Groq에서 받아쓰기를 처리하지 못했습니다 (HTTP %1$d).</string>
+    <string name="terminal_compose_button">메시지 작성</string>
+    <string name="terminal_direct_input_button">직접 입력</string>
+    <string name="terminal_composer_hint">터미널로 보낼 내용 편집</string>
+    <string name="terminal_composer_send_button">전송</string>
+    <string name="terminal_enter_button">Enter</string>
+    <string name="push_channel_done">완료</string>
+    <string name="push_channel_attention">막힘 및 오류</string>
+    <string name="push_host_summary">%1$s: 대기 %2$d</string>
+    <string name="quiet_hours_title">조용한 시간</string>
+    <string name="quiet_hours_hint">기기 현지 시각을 기준으로 완료·막힘·오류 알림을 무음으로 표시합니다. Call 알림 설정은 유지됩니다. 시작과 끝이 같으면 하루 종일 적용됩니다.</string>
+    <string name="quiet_hours_start">시작</string>
+    <string name="quiet_hours_end">끝</string>
 </resources>

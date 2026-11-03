@@ -14,6 +14,9 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToKey
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.performClick
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentStatus
@@ -96,6 +99,37 @@ class TerminalTypingTest {
         typing.push(TerminalUpdate.Screen(ScreenFrame(cols.toUShort(), rows.toUShort(), true, emptyList(), null, null, 0u, 0u)))
         compose.waitForIdle()
         compose.onNodeWithText(str(R.string.terminal_typing, "t1", cols, rows)).assertExists()
+    }
+
+    @Test
+    fun composeEditsStayLocalAndSendAsOnePasteWithoutEnter() {
+        val core = FakeCore()
+        open(core)
+        val observer = core.connection!!.views.single()
+        compose.onNodeWithText(str(R.string.terminal_compose_button)).performClick()
+        compose.onNodeWithText(str(R.string.terminal_composer_send_button)).assertIsNotEnabled()
+        val editor = compose.onNodeWithTag("terminal-composer")
+        editor.performTextReplacement("pasted\ntext to edit")
+        editor.performTextReplacement("edited\n한국어\ntext")
+        compose.runOnIdle {
+            assertTrue(observer.sent.isEmpty())
+            assertEquals(1, core.connection!!.views.size)
+        }
+        // Switching input modes keeps the draft and preserves ordinary typing.
+        compose.onNodeWithText(str(R.string.terminal_direct_input_button)).performClick()
+        compose.onNodeWithText(str(R.string.terminal_compose_button)).performClick()
+        compose.onNodeWithText("edited\n한국어\ntext").assertExists()
+        compose.onNodeWithText(str(R.string.terminal_composer_send_button)).performClick()
+        compose.waitForIdle()
+        val typing = core.connection!!.views.last()
+        assertFalse(typing.options.observe)
+        assertTrue(observer.detached)
+        assertEquals(listOf("paste:edited\n한국어\ntext"), typing.sent)
+        compose.onNodeWithText(str(R.string.terminal_composer_send_button)).assertIsNotEnabled()
+        compose.onNodeWithText(str(R.string.terminal_enter_button)).performClick()
+        compose.runOnIdle {
+            assertEquals(listOf("paste:edited\n한국어\ntext", "key:Enter"), typing.sent)
+        }
     }
 
     @Test
