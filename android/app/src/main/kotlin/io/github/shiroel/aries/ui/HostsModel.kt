@@ -210,6 +210,24 @@ class HostsModel(
     fun foregrounded() {
         links.forEach { it.check() }
         liveChat?.retryNow()
+        // Live connections publish their lists in the core. Other Hosts
+        // get a short pull while the foreground biometric prompt is available.
+        hosts.filter { host -> links.none { it.host.id == host.id && it.connection != null } }
+            .forEach { refreshLastKnownState(it.id) }
+    }
+
+    /** Foreground refresh, including biometric Hosts; surfaces use WorkManager instead. */
+    fun refreshLastKnownState(hostId: String) {
+        scope.launch {
+            try {
+                val connection = links.firstOrNull { it.host.id == hostId }?.connection
+                withContext(keyWork) {
+                    if (connection != null) connection.terminals() else core.snapshot(hostId)
+                }
+            } catch (_: CoreException) {
+                // Keep the previous value and its age on a failed pull.
+            }
+        }
     }
 
     /** The Chat that is open, or still running under the Terminal opened from it. */
@@ -762,20 +780,31 @@ class HostsModel(
                 try {
                     // A new line starts from its snapshot, so what changed while away shows.
                     link.keep { c, _ ->
-                        val watch = c.watchTerminals()
+                        val structure = c.watchStructure(object : StructureListener {
+                            override fun onStructure(structure: HostStructure) {
+                                scope.launch { board.updateStructure(host.id, structure) }
+                            }
+
+                            override fun onClosed() { scope.launch { link.lost(c) } }
+                        })
                         try {
-                            while (true) {
-                                val list = watch.next()
-                                board.update(host.id, list)
-                                chatOn(host.id)?.update(list)
-                                terminalOn(host.id)?.update(list)
-                                focusing?.let { key ->
-                                    focusing = null
-                                    if (screen === agents) focusOn(agents, host, key, list)
+                            val watch = c.watchTerminals()
+                            try {
+                                while (true) {
+                                    val list = watch.next()
+                                    board.update(host.id, list)
+                                    chatOn(host.id)?.update(list)
+                                    terminalOn(host.id)?.update(list)
+                                    focusing?.let { key ->
+                                        focusing = null
+                                        if (screen === agents) focusOn(agents, host, key, list)
+                                    }
                                 }
+                            } finally {
+                                watch.stop()
                             }
                         } finally {
-                            watch.stop()
+                            structure.stop()
                         }
                     }
                 } catch (e: CoreException) {
@@ -797,7 +826,7 @@ class HostsModel(
         openAgent(agents.board, AgentEntry(host, terminal))
     }
 
-    /** Opens an Agent in its saved view over the list; a Done Agent counts as seen for every client. */
+    /** Opens an Agent in its saved view over the list; the visible screen owns seen sync. */
     fun openAgent(board: AgentBoard, entry: AgentEntry) {
         val agents = screen as? Screen.Agents ?: return
         if (agents.board !== board) return
@@ -805,9 +834,6 @@ class HostsModel(
         val link = agentLinks[current.host.id] ?: return
         val t = current.terminal
         show(link, t, agents)
-        if (t.agentStatus == AgentStatus.Done) {
-            labelWrite(board, current) { it.markSeen(t.address, t.turn) }
-        }
     }
 
     /** Pins or unpins an Agent for every client. */

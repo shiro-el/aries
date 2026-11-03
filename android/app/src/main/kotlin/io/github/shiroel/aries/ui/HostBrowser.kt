@@ -90,7 +90,7 @@ class HostBrowser(val host: Host) {
 
     /** Latest Agent snapshot for the navigation drawer; no additional watch is opened. */
     val agents: List<AgentEntry>
-        get() = agentFamily(host, live.values.toList()).sortedBy { it.terminal.address }
+        get() = orderAgents(withAgentSpaces(agentFamily(host, live.values.toList()), structure))
 
     /** The "new Terminal" form, while it is open. */
     var launchForm by mutableStateOf<LaunchForm?>(null)

@@ -87,14 +87,71 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
         return Ok(reply(AnswerOutcome::NoAgent, terminal));
     };
 
-    // The whole transcript as the Chat shows it.
-    let mut source = agent.open(&located, None).source;
+    let Some(items) = transcript(agent.as_ref(), &located)? else {
+        return Ok(reply(AnswerOutcome::Gone, "no transcript"));
+    };
+
+    let open = |item: &ChatItem| match &item.body {
+        ChatBody::Tool {
+            status: ToolStatus::Running,
+            question: Some(q),
+            ..
+        } => Some(q.clone()),
+        _ => None,
+    };
+    let Some(item) = items.iter().find(|i| i.id == answer.question) else {
+        return Ok(reply(AnswerOutcome::Gone, "no such question"));
+    };
+    let ChatBody::Tool {
+        question: Some(_), ..
+    } = &item.body
+    else {
+        return Ok(reply(AnswerOutcome::Gone, "not a question"));
+    };
+    let Some(question) = open(item) else {
+        return Ok(reply(AnswerOutcome::Answered, "the question has a result"));
+    };
+    // The Agent shows its newest open question; an older one still
+    // "running" was interrupted.
+    let newest = open_question(&items);
+    if newest.is_some_and(|(id, _)| id != answer.question) {
+        return Ok(reply(AnswerOutcome::Gone, "a newer question is open"));
+    }
+    let asking = facts
+        .status
+        .as_ref()
+        .is_some_and(|s| s.state == "blocked" && s.kind.as_deref() == Some("question"));
+    if !asking {
+        return Ok(reply(AnswerOutcome::Gone, "the Agent is not asking"));
+    }
+
+    let keys = match validate(&question, &answer.picks)
+        .and_then(|()| agent.answer_keys(&question, &answer.picks))
+    {
+        Ok(keys) => keys,
+        Err(KeysError::Invalid(d)) => return Ok(reply(AnswerOutcome::Invalid, d)),
+        Err(KeysError::Unsupported(d)) => return Ok(reply(AnswerOutcome::Unsupported, d)),
+    };
+    Ok(match link.keys(terminal, &keys) {
+        Ok(()) => AnswerReply::new(AnswerOutcome::Sent, None),
+        Err(e) => reply(AnswerOutcome::Failed, e),
+    })
+}
+
+/// A current transcript, applying the same upsert / remove / reset semantics
+/// as Chat. Shared by answers and status notifications; missing or replaced
+/// transcripts have no details to show.
+pub fn transcript(
+    agent: &dyn Agent,
+    located: &super::Located,
+) -> std::io::Result<Option<Vec<ChatItem>>> {
+    let mut source = agent.open(located, None).source;
     let mut items: Vec<ChatItem> = Vec::new();
     let mut index: HashMap<String, usize> = HashMap::new();
     loop {
         match source.poll()? {
             Batch::Missing | Batch::Replaced => {
-                return Ok(reply(AnswerOutcome::Gone, "no transcript"));
+                return Ok(None);
             }
             Batch::Events { events, more } => {
                 for (event, _) in events {
@@ -127,50 +184,17 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
             }
         }
     }
+    Ok(Some(items))
+}
 
-    let open = |item: &ChatItem| match &item.body {
+/// The newest running question. Older running tools may have been interrupted.
+pub fn open_question(items: &[ChatItem]) -> Option<(&str, &ChatQuestion)> {
+    items.iter().rev().find_map(|item| match &item.body {
         ChatBody::Tool {
             status: ToolStatus::Running,
             question: Some(q),
             ..
-        } => Some(q.clone()),
+        } => Some((item.id.as_str(), q)),
         _ => None,
-    };
-    let Some(item) = index.get(&answer.question).map(|&i| &items[i]) else {
-        return Ok(reply(AnswerOutcome::Gone, "no such question"));
-    };
-    let ChatBody::Tool {
-        question: Some(_), ..
-    } = &item.body
-    else {
-        return Ok(reply(AnswerOutcome::Gone, "not a question"));
-    };
-    let Some(question) = open(item) else {
-        return Ok(reply(AnswerOutcome::Answered, "the question has a result"));
-    };
-    // The Agent shows its newest open question; an older one still
-    // "running" was interrupted.
-    let newest = items.iter().rev().find(|i| open(i).is_some());
-    if newest.is_some_and(|i| i.id != answer.question) {
-        return Ok(reply(AnswerOutcome::Gone, "a newer question is open"));
-    }
-    let asking = facts
-        .status
-        .as_ref()
-        .is_some_and(|s| s.state == "blocked" && s.kind.as_deref() == Some("question"));
-    if !asking {
-        return Ok(reply(AnswerOutcome::Gone, "the Agent is not asking"));
-    }
-
-    let keys = match validate(&question, &answer.picks)
-        .and_then(|()| agent.answer_keys(&question, &answer.picks))
-    {
-        Ok(keys) => keys,
-        Err(KeysError::Invalid(d)) => return Ok(reply(AnswerOutcome::Invalid, d)),
-        Err(KeysError::Unsupported(d)) => return Ok(reply(AnswerOutcome::Unsupported, d)),
-    };
-    Ok(match link.keys(terminal, &keys) {
-        Ok(()) => AnswerReply::new(AnswerOutcome::Sent, None),
-        Err(e) => reply(AnswerOutcome::Failed, e),
     })
 }

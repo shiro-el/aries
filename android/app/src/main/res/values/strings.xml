@@ -5,6 +5,22 @@
   Add every new string to values-ko/strings.xml too (TranslationsTest checks it).
 -->
 <resources>
+    <string name="agents_elapsed_less_than_minute">&lt;1m</string>
+    <string name="agents_elapsed_minutes">%1$dm</string>
+    <string name="agents_elapsed_hours">%1$dh</string>
+    <string name="agents_elapsed_days">%1$dd</string>
+    <string name="agents_elapsed_label">Status changed %1$s ago</string>
+    <string name="agents_view_priority">Priority</string>
+    <string name="agents_view_grouped">Grouped by space</string>
+    <string name="agents_needs_you">Needs you</string>
+    <string name="agents_pinned_group">Pinned · %1$d</string>
+    <string name="agents_priority_group">%1$s · %2$d</string>
+    <string name="agents_space_group">%1$s · %2$s · %3$d</string>
+    <string name="agents_expand_children">Expand %1$s, %2$d child Agents</string>
+    <string name="agents_collapse_children">Collapse %1$s, %2$d child Agents</string>
+    <string name="agents_child_count">%1$d</string>
+    <string name="agents_fold_closed" translatable="false">▸</string>
+    <string name="agents_fold_open" translatable="false">▾</string>
     <string name="app_name" translatable="false">Aries</string>
 
     <string name="ok_button">OK</string>
@@ -483,6 +499,33 @@
     <string name="layout_close_space_button">Close Space</string>
     <string name="layout_close_tab_button">Close Tab</string>
     <string name="layout_target_gone">This item has already been closed.</string>
+    <string name="dictation_title">Voice dictation</string>
+    <string name="dictation_key_label">Groq API key</string>
+    <string name="dictation_key_saved">API key saved on this device</string>
+    <string name="dictation_key_save_button">Save key</string>
+    <string name="dictation_key_remove_button">Remove key</string>
+    <string name="dictation_key_failed">Could not store the API key. Enter it again.</string>
+    <string name="dictation_language_label">Language (ISO code, empty for auto-detect)</string>
+    <string name="dictation_language_invalid">Use a two-letter language code, such as ko or en.</string>
+    <string name="dictation_model_label">Transcription model</string>
+    <string name="dictation_vocabulary_label">Vocabulary (names and terms)</string>
+    <string name="dictation_context_label">Automatic context</string>
+    <string name="dictation_context_hint">Send Host, Agent and project names and the end of the last Agent response to Groq.</string>
+    <string name="dictation_start_button">Dictate</string>
+    <string name="dictation_record_button">Start recording</string>
+    <string name="dictation_stop_button">Stop and transcribe</string>
+    <string name="dictation_recording">Recording…</string>
+    <string name="dictation_uploading">Transcribing…</string>
+    <string name="dictation_retry_button">Retry transcription</string>
+    <string name="dictation_disclosure">Your audio is sent to Groq for transcription. The text is added to your draft. Review and send it yourself.</string>
+    <string name="dictation_permission_denied">Allow microphone access to record dictation.</string>
+    <string name="dictation_record_failed">Could not record audio. Try again.</string>
+    <string name="dictation_failed">Could not transcribe audio. Try again.</string>
+    <string name="dictation_empty">No speech was transcribed. Try recording again.</string>
+    <string name="dictation_too_large">Audio must be no larger than 25 MB. Make a shorter recording.</string>
+    <string name="dictation_unauthorized">Check your Groq API key in Settings.</string>
+    <string name="dictation_rate_limit">Groq rate limit reached. Retry in %1$d seconds.</string>
+    <string name="dictation_http_failed">Groq could not transcribe audio (HTTP %1$d).</string>
     <string name="terminal_compose_button">Compose message</string>
     <string name="terminal_direct_input_button">Direct typing</string>
     <string name="terminal_composer_hint">Edit text to send to the Terminal</string>
