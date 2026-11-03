@@ -352,7 +352,8 @@ fun TerminalScreen(viewer: TerminalViewer, onBack: () -> Unit, onView: ((AgentVi
     // (the Scaffold already keeps clear of the navigation bar).
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))) {
         AgentScreenHeader(viewer.terminal, viewer.link?.host?.name, onBack, AgentView.TERMINAL, onView,
-            title = viewer.terminal.name?.takeIf { it.isNotBlank() } ?: viewer.title?.takeIf { it.isNotBlank() } ?: displayName(viewer.terminal))
+            title = viewer.terminal.name?.takeIf { it.isNotBlank() } ?: viewer.title?.takeIf { it.isNotBlank() } ?: displayName(viewer.terminal),
+            link = viewer.link, onTerminalUpdate = { viewer.update(listOf(it)) })
         Text(
             stringResource(if (viewer.typing) R.string.terminal_typing else R.string.terminal_observing,
                 viewer.terminal.address, viewer.cols, viewer.rows),

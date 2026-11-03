@@ -35,6 +35,8 @@ internal fun AgentScreenHeader(
     current: AgentView,
     onView: ((AgentView) -> Unit)?,
     title: String = displayName(terminal),
+    link: HostLink? = null,
+    onTerminalUpdate: (TerminalInfo) -> Unit = {},
 ) {
     val colors = MaterialTheme.colorScheme
     val hostPrefix = hostName?.let { stringResource(R.string.console_agent_host_prefix, it) }
@@ -54,7 +56,10 @@ internal fun AgentScreenHeader(
                 fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         },
-        actions = { onView?.let { AgentViewToggle(current, it) } },
+        actions = {
+            LocalRemoteFilesAction.current?.invoke()
+            onView?.let { AgentViewToggle(current, it) }
+        },
     )
     Row(
         Modifier.fillMaxWidth().testTag("agent-meta").padding(horizontal = 16.dp, vertical = 8.dp),
@@ -70,5 +75,6 @@ internal fun AgentScreenHeader(
             color = colors.onSurfaceVariant, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         AgentElapsedTime(terminal.statusMs, R.string.console_agent_missing_value, R.string.console_agent_unknown_age)
     }
+    WatchAgentToggle(terminal, link, onTerminalUpdate)
     HorizontalDivider()
 }

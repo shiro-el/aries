@@ -21,11 +21,12 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        // Cold start from a tapped notification (not a re-creation, which already handled it).
+        // Cold start from a notification or share; re-creations have already handled the intent.
         if (savedInstanceState == null) {
             pushTarget = PushTarget.from(intent)
             tileRequested = isTileIntent(intent)
             savedLaunchTarget = SavedLaunchTarget.from(intent)
+            shareIntent = intent
             NotificationGroups.opened(this, intent)
         }
         val core = app.core
@@ -50,8 +51,17 @@ class MainActivity : ComponentActivity() {
     private var savedLaunchTarget: SavedLaunchTarget? = null
     private fun isTileIntent(intent: Intent?) = intent?.action == AgentSurfaces.OPEN_ATTENTION &&
         intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY == 0
+    private var shareIntent: Intent? = null
     private var resumed = false
     private var needsForegroundRefresh = true
+
+    private fun openShare() {
+        val m = model ?: return
+        if (!resumed) return
+        val incoming = shareIntent ?: return
+        shareIntent = null
+        m.receiveShare(incoming)
+    }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
@@ -69,6 +79,8 @@ class MainActivity : ComponentActivity() {
             tileRequested = true
             openEntryTarget()
         }
+        shareIntent = intent
+        openShare()
         // Warm start: the app was running when the notification was tapped.
         PushTarget.from(intent)?.let {
             savedLaunchTarget = null
@@ -94,7 +106,7 @@ class MainActivity : ComponentActivity() {
         }
         val target = pushTarget ?: return
         pushTarget = null
-        m.openPushedAgent(target.hostId, target.terminal)
+        m.openPushedAgent(target.hostId, target.terminal, openChat = target.chat)
     }
 
     override fun onStart() {
@@ -111,6 +123,7 @@ class MainActivity : ComponentActivity() {
             if (savedLaunchTarget == null && !tileRequested) m.foregrounded()
         }
         openEntryTarget()
+        openShare()
     }
 
     override fun onDestroy() {

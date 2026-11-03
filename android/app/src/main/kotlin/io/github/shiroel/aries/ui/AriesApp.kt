@@ -83,7 +83,7 @@ private fun AriesContent(model: HostsModel, settings: ThemeSettings) {
     Scaffold { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
             ConsoleShell(model) {
-                Column(Modifier.fillMaxSize()) {
+                RemoteFilesAccess(model) {
                     when (val s = model.screen) {
                         Screen.Hosts -> HostListScreen(model)
                         Screen.Settings -> {
@@ -125,13 +125,19 @@ private fun AriesContent(model: HostsModel, settings: ThemeSettings) {
                             JumpHostsScreen(model, s.host, s.jumps, s.hostKeyId, showHeader = false)
                         }
                         is Screen.Agents -> {
-                            AgentsScreen(
-                                s.board,
-                                showHeader = false,
-                                onBack = model::back,
-                                onOpen = { model.openAgent(s.board, it) },
-                                onPin = { entry, pinned -> model.pin(s.board, entry, pinned) },
-                            )
+                            Column {
+                                if (model.pendingShare != null) {
+                                    Text(stringResource(R.string.attachments_choose_agent), Modifier.padding(12.dp))
+                                    TextButton(onClick = model::cancelShare) { Text(stringResource(R.string.cancel_button)) }
+                                }
+                                AgentsScreen(
+                                    s.board,
+                                    showHeader = false,
+                                    onBack = model::back,
+                                    onOpen = { model.openAgent(s.board, it) },
+                                    onPin = { entry, pinned -> model.pin(s.board, entry, pinned) },
+                                )
+                            }
                         }
                         is Screen.Chat -> {
                             ChatScreen(

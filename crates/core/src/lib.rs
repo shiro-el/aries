@@ -10,6 +10,7 @@ mod calls;
 mod chat;
 mod chat_cache;
 mod error;
+mod files;
 mod hc;
 mod host_edit;
 mod host_model;
@@ -47,6 +48,7 @@ pub use chat::{
     ChatToolStatus, ChatWatch,
 };
 pub use error::{AnswerProblem, CoreError, Incompatibility, VaultError};
+pub use files::{RemoteDirectory, RemoteFileEntry, RemoteFilePage};
 pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
 pub use host_model::{AgentStatus, BlockedReason, TerminalWatch};
 pub use last_known_state::{LastKnownState, LastKnownStateWatch};
@@ -206,6 +208,10 @@ pub struct TerminalInfo {
     /// Seeing a completed turn does not reset this clock.
     #[uniffi(default = None)]
     pub status_ms: Option<u64>,
+    /// Explicit progress watching, shared with the Beacon through aries.watch.
+    #[uniffi(default = false)]
+    #[serde(default)]
+    pub watched: bool,
 }
 
 fn runtime() -> &'static tokio::runtime::Runtime {
@@ -1038,6 +1044,40 @@ impl AriesCore {
         };
         on_runtime(async move { chat::answer(&host, &terminal, &answer).await }).await
     }
+
+    /// Answers from a notification without a [`HostConnection`] or UI.
+    /// Every key on the route must be PLAIN; never asks for biometrics.
+    /// Sign-in is limited to 15 seconds, then the existing one-shot answer
+    /// path waits at most 30 seconds for the Beacon. Nothing is retried.
+    pub async fn answer_question_background(
+        &self,
+        host_id: String,
+        terminal: String,
+        question_id: String,
+        picks: Vec<Vec<u32>>,
+    ) -> Result<(), CoreError> {
+        if !self.can_answer_in_background(host_id.clone())? {
+            return Err(CoreError::KeyLocked);
+        }
+        let host = self.chat_host(&host_id)?;
+        let answer = aries_protocol::answer::Answer {
+            question: question_id,
+            picks: picks
+                .into_iter()
+                .map(|p| p.into_iter().map(|n| n as usize).collect())
+                .collect(),
+        };
+        on_runtime(async move {
+            chat::answer_within(
+                &host,
+                &terminal,
+                &answer,
+                std::time::Duration::from_secs(15),
+            )
+            .await
+        })
+        .await
+    }
 }
 
 /// Calls (`calls` module).
@@ -1367,6 +1407,18 @@ impl HostConnection {
         on_runtime(async move { set_labels(&client, &address, labels).await }).await
     }
 
+    /// Selects an Agent for ongoing progress notifications. The label belongs
+    /// to the Terminal on the Host; other clients and the Beacon see it.
+    pub async fn set_watched(
+        &self,
+        address: String,
+        watched: bool,
+    ) -> Result<TerminalInfo, CoreError> {
+        let client = self.client.clone();
+        let labels = serde_json::json!({ "aries.watch": if watched { "1" } else { "" } });
+        on_runtime(async move { set_labels(&client, &address, labels).await }).await
+    }
+
     /// Starts a new Terminal running `request.command` (see `launch.rs`),
     /// placed in the requested Space/Tab by label; the document is never
     /// written. herdr-core's refusal (`spawn_failed` for a missing program or
@@ -1420,6 +1472,39 @@ impl HostConnection {
         let client = self.client.clone();
         on_runtime(async move { send::send(&client, &address, &text, || listener.on_held()).await })
             .await
+    }
+
+    /// Saves an attachment beside this Terminal on its Host, returning the
+    /// Host path. Does not type or submit anything. The raw limit is 8 MiB;
+    /// herdr-core owns filename sanitization, collisions and retention.
+    pub async fn upload_attachment(
+        &self,
+        terminal: String,
+        name: String,
+        bytes: Vec<u8>,
+    ) -> Result<String, CoreError> {
+        use base64::Engine;
+        if bytes.len() > 8 * 1024 * 1024 {
+            return Err(CoreError::Rpc {
+                kind: "attachment_too_large".into(),
+                detail: "attachments must be at most 8 MiB".into(),
+            });
+        }
+        let client = self.client.clone();
+        on_runtime(async move {
+            let data = base64::engine::general_purpose::STANDARD.encode(bytes);
+            let reply = client
+                .call(
+                    "terminal.put",
+                    serde_json::json!({ "terminal": terminal, "name": name, "data": data }),
+                )
+                .await?;
+            reply["path"]
+                .as_str()
+                .map(str::to_owned)
+                .ok_or_else(|| error::protocol("terminal.put returned no path"))
+        })
+        .await
     }
 
     pub async fn disconnect(&self) {
@@ -1513,6 +1598,7 @@ pub(crate) fn terminal_info(v: &serde_json::Value) -> TerminalInfo {
     TerminalInfo {
         machine: address.rsplit_once('/').map(|(m, _)| m.to_owned()),
         pinned: host_model::pinned(v),
+        watched: v["labels"]["aries.watch"].as_str() == Some("1"),
         address,
         parent: s("parent"),
         name: s("name"),

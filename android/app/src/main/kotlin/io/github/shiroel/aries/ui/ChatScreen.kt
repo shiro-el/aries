@@ -1,5 +1,10 @@
 package io.github.shiroel.aries.ui
 
+import android.content.Context
+import androidx.compose.material3.LinearProgressIndicator
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -107,6 +112,48 @@ class ChatModel(
     var sendError by mutableStateOf<String?>(null)
         private set
 
+    var pendingShare by mutableStateOf<SharedContent?>(null)
+    var uploading by mutableStateOf(false)
+        private set
+    var attachmentError by mutableStateOf<Message?>(null)
+        private set
+    private var uploadJob: Job? = null
+
+    fun attachmentFailed(error: Exception) {
+        attachmentError = if (error is AttachmentTooLarge) Message(R.string.attachments_too_large)
+            else Message(R.string.attachments_failed, listOf(error.message ?: ""))
+    }
+
+    /** Saves bytes and appends paths to the current draft; never calls sendMessage. */
+    fun attach(context: Context, content: SharedContent, cleanup: () -> Unit = {}) {
+        val scope = scope ?: return
+        if (uploading || sending != null) return
+        val connection = link?.connection ?: run { attachmentFailed(CoreException.Closed()); return }
+        val resize = AttachmentSettings.from(context).resizeImages
+        attachmentError = null
+        uploading = true
+        fun append(value: String) {
+            draft += (if (draft.isEmpty() || draft.last().isWhitespace()) "" else " ") + value
+        }
+        content.text?.let(::append)
+        uploadJob = scope.launch {
+            try {
+                for (uri in content.uris) {
+                    val attachment = withContext(Dispatchers.IO) { prepareAttachment(context, uri, resize) }
+                    val path = connection.uploadAttachment(terminal.address, attachment.name, attachment.bytes)
+                    append(shellQuote(path))
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                attachmentFailed(e)
+            } finally {
+                uploading = false
+                cleanup()
+            }
+        }
+    }
+
     enum class Sending { Sending, Held }
 
     private var watch: ChatWatch? = null
@@ -120,7 +167,7 @@ class ChatModel(
         if (now.agentStatus !is AgentStatus.Blocked) refused = false
     }
 
-    val canSend: Boolean get() = link != null && sending == null && draft.isNotBlank()
+    val canSend: Boolean get() = link != null && sending == null && !uploading && pendingShare == null && draft.isNotBlank()
 
     /**
      * Types [draft] into the Agent's Terminal. It stays in the input until it
@@ -252,6 +299,7 @@ class ChatModel(
     }
 
     fun stop() {
+        uploadJob?.cancel()
         job?.cancel()
         watch?.stop()
         watch = null
@@ -302,7 +350,8 @@ fun ChatScreen(
         if (count > 0) list.scrollToItem(count - 1)
     }
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))) {
-        AgentScreenHeader(chat.terminal, chat.host.name, onBack, AgentView.CHAT, onView)
+        AgentScreenHeader(chat.terminal, chat.host.name, onBack, AgentView.CHAT, onView,
+            link = chat.link, onTerminalUpdate = { chat.update(listOf(it)) })
         statusText(snapshot?.status ?: ChatStatus.CONNECTING)?.let { ChatNotice(it) }
         if (snapshot != null && entries.isEmpty() && snapshot.status == ChatStatus.LIVE) {
             Text(stringResource(R.string.chat_empty))
@@ -339,7 +388,15 @@ fun ChatScreen(
         chat.sendError?.let {
             Text(stringResource(R.string.chat_send_failed, it), color = MaterialTheme.colorScheme.error)
         }
-        if (chat.link != null) MessageInput(chat)
+        if (chat.uploading) {
+            LinearProgressIndicator(Modifier.fillMaxWidth())
+            ChatNotice(stringResource(R.string.attachments_uploading))
+        }
+        chat.attachmentError?.let { Text(stringResource(it.res, *it.args.toTypedArray()), color = MaterialTheme.colorScheme.error) }
+        if (chat.link != null) {
+            AttachmentControls(chat)
+            MessageInput(chat)
+        }
     }
 }
 

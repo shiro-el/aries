@@ -5,6 +5,26 @@
   Glossary terms: Host = 호스트, Terminal = 터미널, Agent = 에이전트.
 -->
 <resources>
+    <!-- Remote file browser (90) -->
+    <string name="files_open_button">파일</string>
+    <string name="files_title">Host 파일</string>
+    <string name="files_close_button">파일 닫기</string>
+    <string name="files_up_button">상위 폴더</string>
+    <string name="files_refresh_button">새로고침</string>
+    <string name="files_back_folder_button">폴더로 돌아가기</string>
+    <string name="files_send_file_button">Agent에게 파일 보내기</string>
+    <string name="files_send_line_label">Agent에게 %1$d행 보내기</string>
+    <string name="files_line_hint">줄을 누르면 Chat 초안에 추가합니다.</string>
+    <string name="files_not_text">미리 볼 수 없음: 바이너리 또는 UTF-8이 아닌 파일입니다.</string>
+    <string name="files_loading">파일을 불러오는 중…</string>
+    <string name="files_failed">폴더 또는 파일을 불러오지 못했습니다. 연결, 경로, 권한을 확인한 뒤 다시 시도하세요.</string>
+    <string name="files_empty_folder">빈 폴더입니다.</string>
+    <string name="files_empty_file">빈 파일입니다.</string>
+    <string name="files_range">전체 %3$d행 중 %1$d–%2$d행</string>
+    <string name="files_previous_button">이전 페이지</string>
+    <string name="files_next_button">다음 페이지</string>
+
+
     <string name="agents_elapsed_less_than_minute">1분 미만</string>
     <string name="agents_elapsed_minutes">%1$d분</string>
     <string name="agents_elapsed_hours">%1$d시간</string>
@@ -172,6 +192,11 @@
     <string name="chat_question_send">답 보내기</string>
     <string name="chat_question_sending">보내는 중…</string>
     <string name="chat_question_sent">답을 보냈습니다.</string>
+    <!-- Notification question answers -->
+    <string name="question_notify_open_app">앱에서 답하기</string>
+    <string name="question_notify_sent">“%1$s” 전송 완료</string>
+    <string name="question_notify_unknown">답변이 전송되었을 수 있습니다. 다시 답하기 전에 Chat을 확인하세요.</string>
+
     <string name="chat_answer_answered">이미 답한 질문입니다.</string>
     <string name="chat_answer_gone">Agent가 더 이상 이 질문을 묻고 있지 않습니다.</string>
     <string name="chat_answer_invalid">질문에 맞지 않는 답입니다.</string>
@@ -356,6 +381,12 @@
     <string name="push_permission_denied">Aries 알림이 허용되지 않았습니다. Android 설정에서 허용한 뒤 다시 푸시를 켜세요.</string>
     <string name="push_off_host_unreachable">푸시를 껐고 Relay에서 이 페어링을 삭제했습니다. Host에 연결할 수 없어 Host 쪽 페어링 사본은 다음 페어링 때까지 남지만 더는 동작하지 않습니다.</string>
     <string name="push_channel_name">Host 알림</string>
+    <!-- Watched Agent progress -->
+    <string name="agent_watch_label">진행 상황 지켜보기</string>
+    <string name="agent_watch_error">지켜보기를 변경하지 못했습니다: %1$s</string>
+    <string name="push_progress_channel">지켜보는 Agent 진행 상황</string>
+    <string name="push_progress_body">%1$d분 경과 · 하위 Agent %2$d개</string>
+
     <string name="push_test_title">%1$s 푸시 동작 확인</string>
     <string name="push_test_body">%1$s의 Beacon이 보낸 테스트 알림입니다. 종단 간 암호화돼 있습니다.</string>
     <string name="push_status_title">%2$s의 %1$s</string>
@@ -463,6 +494,15 @@
     <string name="host_edit_title">Host 편집</string>
     <string name="host_edit_save_button">저장</string>
     <string name="host_edit_invalid_body">중복되지 않는 Host 이름, 올바른 주소와 사용자, 1~65535 사이의 포트를 입력하세요.</string>
+
+    <string name="attachments_choose_agent">공유한 내용을 붙일 Agent 선택</string>
+    <string name="attachments_uploading">첨부 파일을 올리는 중…</string>
+    <string name="attachments_too_large">첨부 파일이 8 MiB를 초과합니다. 더 작은 파일을 선택하거나 이미지 축소를 켜세요.</string>
+    <string name="attachments_failed">첨부할 수 없음: %1$s</string>
+    <string name="attachments_file_button">파일 첨부</string>
+    <string name="attachments_camera_button">사진 촬영</string>
+    <string name="attachments_resize_label">첨부 이미지 축소</string>
+    <string name="attachments_resize_hint">긴 변이 최대 2048픽셀인 JPEG로 변환합니다.</string>
     <string name="layout_new_space_button">새 Space</string>
     <string name="layout_app_unavailable">Space와 Tab을 편집하려면 이 Host에서 herdr-app을 여세요.</string>
     <string name="layout_kill_button">종료</string>

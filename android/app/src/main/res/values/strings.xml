@@ -5,6 +5,26 @@
   Add every new string to values-ko/strings.xml too (TranslationsTest checks it).
 -->
 <resources>
+    <!-- Remote file browser (90) -->
+    <string name="files_open_button">Files</string>
+    <string name="files_title">Host files</string>
+    <string name="files_close_button">Close files</string>
+    <string name="files_up_button">Parent folder</string>
+    <string name="files_refresh_button">Refresh</string>
+    <string name="files_back_folder_button">Back to folder</string>
+    <string name="files_send_file_button">Send file to Agent</string>
+    <string name="files_send_line_label">Send line %1$d to Agent</string>
+    <string name="files_line_hint">Tap a line to add it to the Chat draft.</string>
+    <string name="files_not_text">Cannot preview this file: binary or non-UTF-8 text.</string>
+    <string name="files_loading">Loading files…</string>
+    <string name="files_failed">Could not load this folder or file. Check the connection, path and permissions, then retry.</string>
+    <string name="files_empty_folder">This folder is empty.</string>
+    <string name="files_empty_file">This file is empty.</string>
+    <string name="files_range">Lines %1$d–%2$d of %3$d</string>
+    <string name="files_previous_button">Previous page</string>
+    <string name="files_next_button">Next page</string>
+
+
     <string name="agents_elapsed_less_than_minute">&lt;1m</string>
     <string name="agents_elapsed_minutes">%1$dm</string>
     <string name="agents_elapsed_hours">%1$dh</string>
@@ -176,6 +196,11 @@
     <string name="chat_question_send">Send answer</string>
     <string name="chat_question_sending">Sending…</string>
     <string name="chat_question_sent">Answer sent.</string>
+    <!-- Notification question answers -->
+    <string name="question_notify_open_app">Answer in app</string>
+    <string name="question_notify_sent">Sent “%1$s”</string>
+    <string name="question_notify_unknown">The answer may have been sent. Check the Chat before answering again.</string>
+
     <string name="chat_answer_answered">This question was already answered.</string>
     <string name="chat_answer_gone">The Agent is no longer asking this question.</string>
     <string name="chat_answer_invalid">That answer does not fit the question.</string>
@@ -367,6 +392,12 @@
     <string name="push_permission_denied">Notifications are not allowed for Aries. Allow them in Android settings, then turn on push again.</string>
     <string name="push_off_host_unreachable">Push is off and the Relay deleted this pairing. The Host could not be reached, so its copy of the pairing stays until the next pairing; it no longer works.</string>
     <string name="push_channel_name">Host notifications</string>
+    <!-- Watched Agent progress -->
+    <string name="agent_watch_label">Watch progress</string>
+    <string name="agent_watch_error">Could not update watching: %1$s</string>
+    <string name="push_progress_channel">Watched Agent progress</string>
+    <string name="push_progress_body">%1$d min elapsed · %2$d subagents</string>
+
     <string name="push_test_title">Push works for %1$s</string>
     <string name="push_test_body">This test notification came from the Beacon on %1$s, end-to-end encrypted.</string>
     <string name="push_status_title">%1$s on %2$s</string>
@@ -475,6 +506,15 @@
     <string name="host_edit_title">Edit Host</string>
     <string name="host_edit_save_button">Save</string>
     <string name="host_edit_invalid_body">Use a unique Host name, a valid address and user, and a port from 1 to 65535.</string>
+
+    <string name="attachments_choose_agent">Choose an Agent for the shared content</string>
+    <string name="attachments_uploading">Uploading attachment…</string>
+    <string name="attachments_too_large">Attachment exceeds 8 MiB. Choose a smaller file or enable image resizing.</string>
+    <string name="attachments_failed">Could not attach: %1$s</string>
+    <string name="attachments_file_button">Attach files</string>
+    <string name="attachments_camera_button">Take a photo</string>
+    <string name="attachments_resize_label">Resize attachment images</string>
+    <string name="attachments_resize_hint">Convert images to JPEG with the longest side at most 2048 pixels.</string>
     <string name="layout_new_space_button">New Space</string>
     <string name="layout_app_unavailable">Open herdr-app on this Host to edit Spaces and Tabs.</string>
     <string name="layout_kill_button">End</string>

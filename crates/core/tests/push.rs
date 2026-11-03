@@ -1135,3 +1135,85 @@ async fn question_and_done_details_reach_the_phone() {
         other => panic!("{other:?}"),
     }
 }
+
+/// Real resident Beacon + real herdr-core over a docker SSH Host: no events
+/// are needed for the second update, and Done bypasses the ordinary policy.
+#[tokio::test]
+#[ignore = "needs docker; observes the real 60 second progress interval"]
+async fn watched_progress_is_normal_priority_throttled_and_replaced_on_done() {
+    use base64::Engine;
+    let s = setup_with(true).await;
+    s.enable("watched-device").await;
+    s.relay.wait_pushes(1, Duration::from_secs(10));
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    while !as_user(&s.host, "~/.local/bin/aries-beacon status").contains("\"core_version\":\"") {
+        assert!(std::time::Instant::now() < deadline, "serve never attached");
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+    let agent = base64::engine::general_purpose::STANDARD
+        .encode(std::fs::read(aries_test_support::fake_agent_path()).unwrap());
+    let script = base64::engine::general_purpose::STANDARD
+        .encode("status working\nwait\nstatus done\nwait\n");
+    s.host.root(&format!("echo {agent} | base64 -d > /tmp/watched-agent && echo {script} | base64 -d > /tmp/watched-script && chmod 644 /tmp/watched-agent /tmp/watched-script"));
+    let run = as_user(
+        &s.host,
+        "herdr-core run --bg --json --no-parent --name watched -- env FAKE_AGENT_INPUT=/tmp/watched-input sh /tmp/watched-agent /tmp/watched-script",
+    );
+    let address = serde_json::from_str::<serde_json::Value>(run.trim()).unwrap()["address"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let conn = s.core.connect(s.id.clone()).await.unwrap();
+    assert!(
+        conn.set_watched(address.clone(), true)
+            .await
+            .unwrap()
+            .watched
+    );
+    let first = s.relay.wait_pushes(2, Duration::from_secs(15));
+    let first_at = match s.core.open_push(first[1].1.clone()).unwrap().content {
+        PushContent::Progress {
+            terminal,
+            at,
+            child_agents,
+            cancelled,
+            ..
+        } => {
+            assert_eq!(terminal, address);
+            assert_eq!(child_agents, 0);
+            assert!(!cancelled);
+            at
+        }
+        other => panic!("{other:?}"),
+    };
+    // Repeated label events cannot bypass the per-Agent timer.
+    for _ in 0..3 {
+        conn.set_watched(address.clone(), true).await.unwrap();
+    }
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    assert_eq!(s.relay.log().pushes.len(), 2);
+    let second = s.relay.wait_pushes(3, Duration::from_secs(70));
+    match s.core.open_push(second[2].1.clone()).unwrap().content {
+        PushContent::Progress {
+            at, elapsed_secs, ..
+        } => {
+            assert!(at >= first_at + 60);
+            assert!(elapsed_secs >= 60);
+        }
+        other => panic!("{other:?}"),
+    }
+    assert_eq!(&s.relay.log().push_priorities[1..], ["normal", "normal"]);
+    as_user(&s.host, &format!("herdr-core send {address} finish"));
+    let all = s.relay.wait_pushes(4, Duration::from_secs(15));
+    assert!(matches!(
+        s.core.open_push(all[3].1.clone()).unwrap().content,
+        PushContent::Status {
+            status: AgentStatus::Done,
+            ..
+        }
+    ));
+    assert_eq!(s.relay.log().push_priorities[3], "high");
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    assert_eq!(s.relay.log().pushes.len(), 4);
+    conn.disconnect().await;
+}
