@@ -14,11 +14,14 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 class AriesApplication : Application(), HasCore, Configuration.Provider {
+    internal val notificationVisibility = NotificationVisibility()
+
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder().build()
 
     override fun onCreate() {
         super.onCreate()
+        registerActivityLifecycleCallbacks(notificationVisibility)
         LastKnownStates.schedule(this)
         updateHomeWidgetObservation()
     }

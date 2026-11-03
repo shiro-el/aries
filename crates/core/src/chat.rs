@@ -43,6 +43,9 @@ pub enum ChatEntryBody {
         /// Pictures the user attached.
         #[uniffi(default)]
         images: Vec<ChatImage>,
+        /// Still waiting in the Agent's input queue.
+        #[uniffi(default = false)]
+        queued: bool,
     },
     Agent {
         text: String,
@@ -438,7 +441,12 @@ fn status(state: ChatState) -> Option<ChatStatus> {
 impl ChatModel {
     fn entry(&self, item: ChatItem) -> ChatEntry {
         let body = match item.body {
-            ChatBody::User { text, images } => ChatEntryBody::User {
+            ChatBody::User {
+                text,
+                images,
+                queued,
+            } => ChatEntryBody::User {
+                queued,
                 text,
                 images: self.keep_images(&item.id, images),
             },

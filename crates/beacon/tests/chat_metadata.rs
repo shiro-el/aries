@@ -15,6 +15,32 @@ fn feed(interpreter: &mut dyn Interpreter, record: Value) -> Vec<Value> {
 }
 
 #[test]
+fn codex_function_image_results_keep_the_embedded_image_and_host_path() {
+    use aries_beacon::chat::codex::CodexInterpreter;
+    let mut chat = CodexInterpreter::default();
+    feed(
+        &mut chat,
+        json!({"type":"response_item","payload":{
+            "type":"function_call","call_id":"image","name":"view_image",
+            "arguments": r#"{"local_path":"/repo/shot.png"}"#
+        }}),
+    );
+    let result = feed(
+        &mut chat,
+        json!({"type":"response_item","payload":{
+            "type":"function_call_output","call_id":"image","output":[
+                {"type":"input_text","text":"Image opened"},
+                {"type":"input_image","image_url":"data:image/png;base64,AQID"}
+            ]
+        }}),
+    );
+    assert_eq!(result[0]["images"][0]["data"], "AQID");
+    assert_eq!(result[0]["images"][0]["media_type"], "image/png");
+    assert_eq!(result[0]["details"]["path"], "/repo/shot.png");
+    assert_eq!(result[0]["output"], "Image opened");
+}
+
+#[test]
 fn claude_exposes_command_results_and_response_usage_without_inventing_missing_fields() {
     let mut chat = ClaudeInterpreter::default();
     let items = feed(

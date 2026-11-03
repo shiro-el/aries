@@ -98,7 +98,16 @@ class FakeCore : AriesCoreInterface {
     /** When set, `connect` fails with it. */
     var failWith: CoreException? = null
 
-    var terminals: List<TerminalInfo> = emptyList()
+    private var terminalList: List<TerminalInfo>? = null
+    /** Structure-only fixtures describe the same Terminal inventory to both watches.
+     * Explicit lists (including empty) can model a layout that lags the live inventory. */
+    var terminals: List<TerminalInfo>
+        get() = terminalList ?: structure?.let { snapshot ->
+            snapshot.unplaced + snapshot.spaces.flatMap { space ->
+                space.tabs.flatMap { tab -> tab.panes.flatMap { listOfNotNull(it.terminal) + it.subAgents } }
+            }
+        }.orEmpty().distinctBy { it.address }
+        set(value) { terminalList = value }
 
     /** When set, `connect` asks to trust this fingerprint for each jump host first. */
     var requireJumpTrust: String? = null
@@ -803,6 +812,11 @@ class FakeConnection(
     }
     override suspend fun readFilePage(address: String, path: String, offset: ULong, limit: UInt) =
         fileReader(address, path, offset, limit)
+    var fileBytesReader: (String, String, ULong, UInt) -> io.github.shiroel.aries.core.RemoteFileBytes = { _, _, _, _ ->
+        throw CoreException.Rpc("not_found", "missing")
+    }
+    override suspend fun readFileBytes(address: String, path: String, offset: ULong, length: UInt) =
+        fileBytesReader(address, path, offset, length)
     var catalog = io.github.shiroel.aries.core.AgentCatalog(emptyList(), emptyList())
     var catalogFailure: CoreException? = null
     val catalogRequests = mutableListOf<Boolean>()
@@ -918,6 +932,10 @@ class FakeConnection(
             else s.copy(tabs = s.tabs.map { tab -> if (tab.id == request.tabId) tab.copy(panes = tab.panes + pane) else tab })
         }
         val inTab = placed != current.spaces
+        core?.let { core ->
+            val next = (core.terminalsOf[hostId] ?: core.terminals) + t
+            if (hostId in core.terminalsOf) core.push(hostId, next) else core.push(next)
+        }
         push(current.copy(spaces = placed, unplaced = if (inTab) current.unplaced else current.unplaced + t))
         return t
     }

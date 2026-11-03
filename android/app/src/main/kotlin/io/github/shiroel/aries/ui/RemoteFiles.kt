@@ -60,7 +60,8 @@ fun RemoteFilesScreen(
     val changedFile = changes?.let { git -> git.files.find { gitFilePath(git.cwd, it.path) == file?.let { path -> java.nio.file.Paths.get(path).normalize().toString() } } }
     var preview by remember(address, file) { mutableStateOf(initialLocation?.path != file) }
     val markupFile = file?.substringAfterLast('.', "")?.lowercase(java.util.Locale.ROOT) in setOf("md", "mmd", "mermaid")
-    val showingDiff = changedFile != null && !fullFile
+    val mediaFile = remoteMediaKind(file.orEmpty()) != null
+    val showingDiff = changedFile != null && !fullFile && !mediaFile
     val showingMarkup = markupFile && preview && !showingDiff
     val scope = rememberCoroutineScope()
     var subfolders by remember(address, directory?.path, retry) { mutableStateOf<Map<String, RemoteDirectory>>(emptyMap()) }
@@ -140,7 +141,7 @@ fun RemoteFilesScreen(
                 onBack = { if (file != null) backToFolder() else onClose() }, onClose = onClose,
                 onFolder = { path -> folder = path; backToFolder() },
                 onRefresh = { retry++ }, refreshing = loading || !changesLoaded,
-                diffAvailable = changedFile != null, fullFile = fullFile, onFullFile = { fullFile = !fullFile },
+                diffAvailable = changedFile != null && !mediaFile, fullFile = fullFile, onFullFile = { fullFile = !fullFile },
                 wrap = wrap, onWrap = if (file != null && !showingDiff && page != null) ({ wrap = !wrap }) else null,
                 onSend = if (file != null && !showingDiff && onSend != null) ({ onSend(quotedFileReference(file!!)) }) else null,
                 onSave = save, onShare = share, exportEnabled = exportEnabled,
@@ -218,7 +219,8 @@ fun RemoteFilesScreen(
                 RemoteMarkdownPreview(connection, address, file!!, Modifier.weight(1f))
             }
             remoteMediaKind(file!!) != null -> key(connection, address, file, retry) {
-                RemoteFilePreview(connection, address, file!!, Modifier.weight(1f))
+                RemoteFilePreview(connection, address, file!!, Modifier.weight(1f),
+                    preview = initialLocation?.takeIf { it.path == file }?.preview)
             }
             else -> page?.let { content ->
                 unavailableLine?.let { Text(stringResource(R.string.files_line_unavailable, it.toLong())) }
