@@ -755,6 +755,9 @@
     <string name="push_test_button">Send a test notification</string>
     <string name="push_retry_button">Try again</string>
     <string name="push_step_register">Register this phone with the Relay</string>
+    <string name="push_verification_pending">Waiting for this phone to receive the Relay’s verification push…</string>
+    <string name="push_verification_failed">Push delivery has not been verified. Retry push setup.</string>
+    <string name="push_step_verify">Confirm this phone can receive push</string>
     <string name="push_step_pair">Exchange keys with the Beacon</string>
     <string name="push_step_test">Send a test notification</string>
     <string name="push_step_unpair">Remove the pairing from the Relay</string>
@@ -855,6 +858,7 @@
     <string name="diagnostics_beacon_remove">Remove Beacon</string>
     <string name="diagnostics_push_enable">Enable push</string>
     <string name="diagnostics_push_disable">Disable push</string>
+    <string name="diagnostics_push_verification">Push token verification</string>
     <string name="diagnostics_push_test">Test push</string>
     <string name="diagnostics_relay_request">Relay request</string>
     <string name="diagnostics_push_receive">Receive push</string>
@@ -872,6 +876,7 @@
     <string name="diagnostics_error_download">Beacon download failed</string>
     <string name="diagnostics_error_checksum">Beacon checksum mismatch</string>
     <string name="diagnostics_error_operation">Beacon operation failed</string>
+    <string name="diagnostics_error_verify">Push delivery not verified</string>
     <string name="diagnostics_error_register">Relay registration failed</string>
     <string name="diagnostics_error_revoke">Relay removal failed</string>
     <string name="diagnostics_error_push">Push rejected</string>

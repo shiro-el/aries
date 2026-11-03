@@ -747,6 +747,9 @@
     <string name="push_test_button">테스트 알림 보내기</string>
     <string name="push_retry_button">다시 시도</string>
     <string name="push_step_register">Relay에 이 폰 등록</string>
+    <string name="push_verification_pending">이 폰에서 Relay의 확인 푸시를 받기를 기다리는 중…</string>
+    <string name="push_verification_failed">푸시 수신이 확인되지 않았습니다. 푸시 설정을 다시 시도하세요.</string>
+    <string name="push_step_verify">이 폰의 푸시 수신 확인</string>
     <string name="push_step_pair">Beacon과 키 교환</string>
     <string name="push_step_test">테스트 알림 보내기</string>
     <string name="push_step_unpair">Relay에서 페어링 삭제</string>
@@ -845,6 +848,7 @@
     <string name="diagnostics_beacon_remove">Beacon 제거</string>
     <string name="diagnostics_push_enable">push 켜기</string>
     <string name="diagnostics_push_disable">push 끄기</string>
+    <string name="diagnostics_push_verification">푸시 토큰 수신 확인</string>
     <string name="diagnostics_push_test">push 테스트</string>
     <string name="diagnostics_relay_request">Relay 요청</string>
     <string name="diagnostics_push_receive">push 수신</string>
@@ -862,6 +866,7 @@
     <string name="diagnostics_error_download">Beacon 다운로드 실패</string>
     <string name="diagnostics_error_checksum">Beacon 체크섬 불일치</string>
     <string name="diagnostics_error_operation">Beacon 작업 실패</string>
+    <string name="diagnostics_error_verify">푸시 수신 미확인</string>
     <string name="diagnostics_error_register">Relay 등록 실패</string>
     <string name="diagnostics_error_revoke">Relay 등록 해제 실패</string>
     <string name="diagnostics_error_push">push 거부됨</string>
