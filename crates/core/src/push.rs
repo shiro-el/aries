@@ -119,6 +119,23 @@ pub enum PushContent {
         /// Unix seconds on the Host.
         at: u64,
     },
+    /// An Agent sent a Call; the Android notification channel follows its
+    /// urgency. The full Call (and its answer) is in Call history under `id`.
+    Call {
+        id: String,
+        /// Address of the calling Terminal on the Host.
+        terminal: String,
+        /// Not a subagent's Call.
+        top_level: bool,
+        title: String,
+        /// May be cut short (ending in `…`); Call history has it in full.
+        body: String,
+        urgency: crate::calls::CallUrgency,
+        /// An answer names one of these by its index.
+        choices: Vec<String>,
+        /// When the Host recorded it, Unix milliseconds.
+        at_ms: u64,
+    },
 }
 
 /// An opened push, from a paired Host.
@@ -499,6 +516,25 @@ pub(crate) fn open(
                         top_level,
                         status: status.into(),
                         at,
+                    },
+                    envelope::PushMessage::Call {
+                        id,
+                        terminal,
+                        top_level,
+                        title,
+                        body,
+                        urgency,
+                        choices,
+                        at_ms,
+                    } => PushContent::Call {
+                        id,
+                        terminal,
+                        top_level,
+                        title,
+                        body,
+                        urgency: urgency.into(),
+                        choices,
+                        at_ms,
                     },
                 };
                 return Ok(PushNotice {

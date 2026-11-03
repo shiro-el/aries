@@ -78,7 +78,7 @@ impl Call {
     /// caller is a confirmed top-level Agent and the urgency asks for one.
     /// Everything else is only recorded.
     pub fn pushes_by_default(&self) -> bool {
-        self.terminal.is_some() && self.top_level && self.urgency != Urgency::Record
+        crate::push_policy::PushPolicy::default().allows_call(self)
     }
 }
 
