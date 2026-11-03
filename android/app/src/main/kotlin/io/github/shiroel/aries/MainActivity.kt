@@ -9,16 +9,29 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import io.github.shiroel.aries.ui.AriesApp
 import io.github.shiroel.aries.ui.HostsModel
+import kotlinx.coroutines.Dispatchers
 
 class MainActivity : ComponentActivity() {
+    private val app get() = application as AriesApplication
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        val core = (application as AriesApplication).core
+        val core = app.core
         setContent {
             val scope = rememberCoroutineScope()
-            val model = remember { HostsModel(core, scope) }
+            val model = remember { HostsModel(core, scope, keyWork = Dispatchers.IO) }
             MaterialTheme { AriesApp(model) }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        app.vault.authorizer = BiometricUnlock(this)
+    }
+
+    override fun onPause() {
+        app.vault.authorizer = null
+        super.onPause()
     }
 }

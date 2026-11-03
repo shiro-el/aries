@@ -3,6 +3,8 @@ package io.github.shiroel.aries
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.shiroel.aries.core.AriesCore
+import io.github.shiroel.aries.core.CoreException
+import io.github.shiroel.aries.core.KeyProtection
 import io.github.shiroel.aries.core.VaultException
 import java.io.File
 import java.security.KeyStore
@@ -11,6 +13,8 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -23,24 +27,24 @@ class KeystoreVaultTest {
     @After
     fun cleanUp() {
         dir.deleteRecursively()
-        KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(alias)
+        KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.apply { deleteEntry(alias); deleteEntry("$alias-biometric") }
     }
 
     @Test
     fun sealsAndOpens() {
         val vault = KeystoreVault(alias)
         val secret = "-----BEGIN OPENSSH PRIVATE KEY-----".toByteArray()
-        val sealed = vault.seal(secret)
+        val sealed = vault.seal(secret, KeyProtection.PLAIN)
         assertFalse(String(sealed, Charsets.ISO_8859_1).contains("OPENSSH"))
-        assertArrayEquals(secret, vault.open(sealed))
+        assertArrayEquals(secret, vault.open(sealed, KeyProtection.PLAIN))
     }
 
     @Test
     fun rejectsTamperedData() {
         val vault = KeystoreVault(alias)
-        val sealed = vault.seal(byteArrayOf(1, 2, 3))
+        val sealed = vault.seal(byteArrayOf(1, 2, 3), KeyProtection.PLAIN)
         sealed[sealed.size - 1] = (sealed.last() + 1).toByte()
-        assertThrows(VaultException::class.java) { vault.open(sealed) }
+        assertThrows(VaultException::class.java) { vault.open(sealed, KeyProtection.PLAIN) }
     }
 
     @Test
@@ -51,5 +55,44 @@ class KeystoreVaultTest {
         dir.listFiles()!!.forEach { f ->
             assertFalse(f.name, String(f.readBytes(), Charsets.ISO_8859_1).contains("PRIVATE KEY"))
         }
+    }
+
+    @Test
+    fun plainKeyNeedsNoUserEvenWithoutAnAuthorizer() {
+        val vault = KeystoreVault(alias) // no Activity installed a prompt
+        val sealed = vault.seal(byteArrayOf(4, 5, 6), KeyProtection.PLAIN)
+        assertArrayEquals(byteArrayOf(4, 5, 6), vault.open(sealed, KeyProtection.PLAIN))
+    }
+
+    @Test
+    fun biometricKeyIsNeverUsedQuietlyInTheBackground() {
+        // No authorizer = no Activity in the foreground. On a phone with a
+        // biometric this is Locked; on a device without one (this emulator)
+        // the key cannot even be made. Either way it fails, at once.
+        val vault = KeystoreVault(alias)
+        val started = System.nanoTime()
+        try {
+            vault.seal(byteArrayOf(1), KeyProtection.BIOMETRIC)
+            fail("a biometric key must not work without the user")
+        } catch (e: VaultException) {
+            assertTrue(e.toString(), e is VaultException.Locked || e is VaultException.BiometricUnavailable)
+        }
+        assertTrue("must fail fast", System.nanoTime() - started < 5_000_000_000L)
+    }
+
+    @Test
+    fun coreKeepsThePlainKeyWhenBiometricCannotBeSetUp() {
+        val core = AriesCore(dir.absolutePath, KeystoreVault(alias))
+        val key = core.ensureKey()
+        try {
+            core.setKeyProtection(KeyProtection.BIOMETRIC)
+            // Only possible with an enrolled biometric and a user present.
+            fail("no authorizer installed, so biometric must not be set")
+        } catch (e: CoreException) {
+            assertTrue(e.toString(), e is CoreException.KeyLocked || e is CoreException.BiometricUnavailable)
+        }
+        val again = AriesCore(dir.absolutePath, KeystoreVault(alias))
+        assertEquals(KeyProtection.PLAIN, again.keyProtection())
+        assertEquals(key, again.publicKey())
     }
 }

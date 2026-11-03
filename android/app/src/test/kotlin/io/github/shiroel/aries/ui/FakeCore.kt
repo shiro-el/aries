@@ -1,7 +1,9 @@
 package io.github.shiroel.aries.ui
 
+import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.core.AriesCoreInterface
 import io.github.shiroel.aries.core.BeaconCheck
+import io.github.shiroel.aries.core.AttachOptions
 import io.github.shiroel.aries.core.BeaconFetcher
 import io.github.shiroel.aries.core.BeaconInstall
 import io.github.shiroel.aries.core.BeaconRelease
@@ -17,12 +19,17 @@ import io.github.shiroel.aries.core.Linger
 import io.github.shiroel.aries.core.JumpHost
 import io.github.shiroel.aries.core.KeyInfo
 import io.github.shiroel.aries.core.HostStructure
+import io.github.shiroel.aries.core.KeyProtection
 import io.github.shiroel.aries.core.NoHandle
 import io.github.shiroel.aries.core.PublicKeyInfo
 import io.github.shiroel.aries.core.StructureListener
 import io.github.shiroel.aries.core.StructureWatch
+import io.github.shiroel.aries.core.LaunchRequest
+import io.github.shiroel.aries.core.PaneInfo
 import io.github.shiroel.aries.core.QrMatrix
 import io.github.shiroel.aries.core.TerminalInfo
+import io.github.shiroel.aries.core.TerminalUpdate
+import io.github.shiroel.aries.core.TerminalView
 import io.github.shiroel.aries.core.TerminalWatch
 import kotlinx.coroutines.channels.Channel
 
@@ -45,6 +52,38 @@ class FakeCore : AriesCoreInterface {
     fun push(list: List<TerminalInfo>) {
         updates.trySend(list)
     }
+    /** Per-Host Terminal lists (by Host id), for tests with several Hosts; others get [terminals]. */
+    val terminalsOf = mutableMapOf<String, List<TerminalInfo>>()
+
+    /** The latest connection to each Host in [terminalsOf], by Host id. */
+    val connectionsOf = mutableMapOf<String, FakeConnection>()
+
+    /** Per-Host failures of `connect`. */
+    val failFor = mutableMapOf<String, CoreException>()
+
+    /** Shared label writes through any connection: `"<host id> <address> seen=N"` or `pinned=true|false`. */
+    val labelWrites = mutableListOf<String>()
+
+    private val hostUpdates = mutableMapOf<String, Channel<List<TerminalInfo>>>()
+
+    private fun updatesOf(hostId: String) = hostUpdates.getOrPut(hostId) { Channel(Channel.UNLIMITED) }
+
+    /** [hostId]'s Terminal list changed (on the Host or another client). */
+    fun push(hostId: String, list: List<TerminalInfo>) {
+        terminalsOf[hostId] = list
+        updatesOf(hostId).trySend(list)
+    }
+
+    /** What the fake Host does on a label write: change its Terminal and tell its watchers. */
+    internal fun label(hostId: String, address: String, write: String, change: (TerminalInfo) -> TerminalInfo): TerminalInfo {
+        labelWrites += "$hostId $address $write"
+        val list = terminalsOf[hostId] ?: throw CoreException.UnknownHost(hostId)
+        val t = list.find { it.address == address } ?: throw CoreException.Closed()
+        val changed = change(t)
+        push(hostId, list.map { if (it.address == address) changed else it })
+        return changed
+    }
+
     /** What `structure`/`watchStructure` deliver; default: [terminals], all unplaced. */
     var structure: HostStructure? = null
 
@@ -128,6 +167,24 @@ class FakeCore : AriesCoreInterface {
         if (!hosts.removeIf { it.id == hostId }) throw CoreException.UnknownHost(hostId)
     }
 
+    /** When set, `setKeyProtection` fails with it and the policy stays. */
+    var failProtectionWith: CoreException? = null
+
+    private var protection = KeyProtection.PLAIN
+
+    override fun keyProtection(): KeyProtection? = key?.let { protection }
+
+    override fun setKeyProtection(protection: KeyProtection) {
+        if (key == null) throw CoreException.NoKey()
+        failProtectionWith?.let { throw it }
+        this.protection = protection
+    }
+
+    override fun canAnswerInBackground(hostId: String): Boolean {
+        val host = hosts.find { it.id == hostId } ?: throw CoreException.UnknownHost(hostId)
+        return host.endpoint is Endpoint.Local || keyProtection() == KeyProtection.PLAIN
+    }
+
     override suspend fun connect(hostId: String): HostConnection {
         failWith?.let { throw it }
         val host = hosts.find { it.id == hostId } ?: throw CoreException.UnknownHost(hostId)
@@ -137,6 +194,11 @@ class FakeCore : AriesCoreInterface {
             }
         }
         requireTrust?.let { if (host.hostKey != it) throw CoreException.HostKeyUnknown(it) }
+        failFor[hostId]?.let { throw it }
+        terminalsOf[hostId]?.let { list ->
+            return FakeConnection(list, structure ?: HostStructure(emptyList(), list, null), updatesOf(hostId), hostId, this)
+                .also { connection = it; connectionsOf[hostId] = it }
+        }
         return FakeConnection(terminals, structure ?: HostStructure(emptyList(), terminals, null), updates)
             .also { connection = it }
     }
@@ -194,7 +256,17 @@ class FakeConnection(
     private val list: List<TerminalInfo>,
     private var current: HostStructure,
     private val updates: Channel<List<TerminalInfo>> = Channel(),
+    private val hostId: String = "",
+    private val core: FakeCore? = null,
 ) : HostConnection(NoHandle) {
+    override suspend fun markSeen(address: String, turn: ULong): TerminalInfo =
+        core!!.label(hostId, address, "seen=$turn") {
+            if (it.agentStatus == AgentStatus.Done && turn >= it.turn) it.copy(agentStatus = AgentStatus.Idle) else it
+        }
+
+    override suspend fun setPinned(address: String, pinned: Boolean): TerminalInfo =
+        core!!.label(hostId, address, "pinned=$pinned") { it.copy(pinned = pinned) }
+
     /** Core API methods called on this connection, in order. */
     val calls = mutableListOf<String>()
     var disconnected = false
@@ -224,11 +296,43 @@ class FakeConnection(
         }
     }
 
+    /** What `launch` was asked to start, in order. */
+    val launched = mutableListOf<LaunchRequest>()
+
+    /** When set, `launch` fails with it. */
+    var launchFailWith: CoreException? = null
+
+    var recentCwds: List<String> = emptyList()
+
+    override fun recentCwds(): List<String> = recentCwds
+
+    /** Like herdr-core: a new live Terminal, shown in its labelled Tab (or unplaced). */
+    override suspend fun launch(request: LaunchRequest): TerminalInfo {
+        calls += "launch"
+        launchFailWith?.let { throw it }
+        launched += request
+        val t = TerminalInfo("t${100 + launched.size}", null, "", request.command.split(" "), request.cwd, "live")
+        val pane = PaneInfo(t.address, t.address, t)
+        val placed = current.spaces.map { s ->
+            if (s.id != request.spaceId) s
+            else s.copy(tabs = s.tabs.map { tab -> if (tab.id == request.tabId) tab.copy(panes = tab.panes + pane) else tab })
+        }
+        val inTab = placed != current.spaces
+        push(current.copy(spaces = placed, unplaced = if (inTab) current.unplaced else current.unplaced + t))
+        return t
+    }
+
     /** The desktop changed the structure. */
     fun push(structure: HostStructure) {
         current = structure
         listener?.onStructure(structure)
     }
+
+    /** Terminals attached on this connection, in order. */
+    val views = mutableListOf<FakeTerminalView>()
+
+    override suspend fun attachTerminal(address: String, options: AttachOptions): TerminalView =
+        FakeTerminalView(address, options).also { views += it }
 
     override suspend fun disconnect() {
         disconnected = true
@@ -253,6 +357,36 @@ class FakeWatch(
     }
 
     override fun stop() {}
+
+    override fun close() {}
+}
+
+/** An attached Terminal whose screen updates the test pushes. */
+class FakeTerminalView(val address: String, val options: AttachOptions) : TerminalView(NoHandle) {
+    private val updates = Channel<TerminalUpdate>(Channel.UNLIMITED)
+    var detached = false
+        private set
+
+    fun push(update: TerminalUpdate) {
+        updates.trySend(update)
+    }
+
+    /** The stream ends without an exit (the connection dropped). */
+    fun end() {
+        updates.close()
+    }
+
+    override suspend fun next(): TerminalUpdate =
+        try {
+            updates.receive()
+        } catch (e: kotlinx.coroutines.channels.ClosedReceiveChannelException) {
+            throw CoreException.Closed()
+        }
+
+    override suspend fun detach() {
+        detached = true
+        updates.close()
+    }
 
     override fun close() {}
 }

@@ -9,7 +9,9 @@
 //! stability promise for other readers (herdr-app#43), so Aries only ever
 //! reads it, walks it leniently, and when it is missing, unreadable or of an
 //! unknown shape groups Terminals by the documented `herdr.space` /
-//! `herdr.tab` labels instead, saying so.
+//! `herdr.tab` labels instead, saying so. Terminals the document does not show
+//! yet but whose labels name one of its Tabs (just launched from the phone)
+//! are listed in that Tab until herdr-app adopts them.
 //!
 //! Which Space/Tab/Pane the phone shows, and any zoom, is the app's own
 //! state: nothing here writes to the Host.
@@ -22,8 +24,8 @@ use crate::{TerminalInfo, terminal_info};
 
 /// Name of herdr-app's document in herdr-core.
 pub(crate) const DOCUMENT: &str = "herdr-app";
-const SPACE_LABEL: &str = "herdr.space";
-const TAB_LABEL: &str = "herdr.tab";
+pub(crate) const SPACE_LABEL: &str = "herdr.space";
+pub(crate) const TAB_LABEL: &str = "herdr.tab";
 
 /// A Host's Terminals as herdr-app arranges them.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -75,7 +77,8 @@ pub enum StructureProblem {
 /// Builds the structure from a `doc.get` result and `terminal.list` records.
 pub(crate) fn build(doc: &Value, terminals: &[Value]) -> HostStructure {
     match parse(&doc["value"], terminals) {
-        Ok(spaces) => {
+        Ok(mut spaces) => {
+            place_by_labels(&mut spaces, terminals);
             let placed: HashSet<&str> = spaces
                 .iter()
                 .flat_map(|s| &s.tabs)
@@ -205,6 +208,40 @@ fn walk(node: &Value, at: &str, panes: &mut Vec<(String, String)>) -> Result<(),
         }
     }
     Ok(())
+}
+
+/// Appends to a document Tab the Terminals that no Pane shows yet but whose
+/// `herdr.space` / `herdr.tab` labels name that Tab (just launched from the
+/// phone, not adopted by herdr-app yet). Pane id = Terminal address. Labels
+/// naming a Space or Tab the document lacks leave the Terminal unplaced.
+fn place_by_labels(spaces: &mut [SpaceInfo], terminals: &[Value]) {
+    let shown: HashSet<String> = spaces
+        .iter()
+        .flat_map(|s| &s.tabs)
+        .flat_map(|t| &t.panes)
+        .map(|p| p.terminal_address.clone())
+        .collect();
+    for t in terminals {
+        let label = |k: &str| t["labels"][k].as_str();
+        let (Some(space), Some(tab)) = (label(SPACE_LABEL), label(TAB_LABEL)) else {
+            continue;
+        };
+        let info = terminal_info(t);
+        if shown.contains(&info.address) {
+            continue;
+        }
+        if let Some(tab) = spaces
+            .iter_mut()
+            .find(|s| s.id == space)
+            .and_then(|s| s.tabs.iter_mut().find(|x| x.id == tab))
+        {
+            tab.panes.push(PaneInfo {
+                id: info.address.clone(),
+                terminal_address: info.address.clone(),
+                terminal: Some(info),
+            });
+        }
+    }
 }
 
 /// The fallback: one Space per `herdr.space` label, one Tab per `herdr.tab`

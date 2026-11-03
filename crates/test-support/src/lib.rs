@@ -711,3 +711,37 @@ impl HcSession {
         FakeAgent { address, input_log }
     }
 }
+
+impl HcSession {
+    /// Adds `remote` to this core as machine `name` (`hc machine add --via`),
+    /// so its Terminals show up here as `name/tN`. The `--via` command is a
+    /// small script that runs herdr-core's shell line in `remote`'s
+    /// environment instead of over ssh.
+    pub fn add_machine(&self, name: &str, remote: &HcSession) {
+        let via = self.dir.path().join(format!("via-{name}.sh"));
+        let mut script = String::from("#!/bin/sh\nfor line; do :; done\nexec env");
+        for (k, v) in remote.env() {
+            script.push_str(&format!(" '{k}={v}'"));
+        }
+        let bin_dir = remote.bin.parent().expect("bin dir").display().to_string();
+        script.push_str(&format!(" \"PATH={bin_dir}:$PATH\" /bin/sh -c \"$line\"\n"));
+        std::fs::write(&via, script).expect("write via script");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&via, std::fs::Permissions::from_mode(0o755))
+                .expect("chmod via script");
+        }
+        self.hc(&[
+            "machine",
+            "add",
+            "--json",
+            "--via",
+            &via.to_string_lossy(),
+            "--name",
+            name,
+            "--session",
+            remote.name(),
+        ]);
+    }
+}
