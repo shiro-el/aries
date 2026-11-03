@@ -309,9 +309,19 @@ class FakeConnection(
 
     override fun coreVersion(): String = "0.1.17"
 
-    override suspend fun terminals(): List<TerminalInfo> = list.also { calls += "terminals" }
+    /** The line is dead without anyone noticing yet (the phone slept): calls fail with `Closed`. */
+    var dead = false
 
-    override suspend fun watchTerminals(): TerminalWatch = FakeWatch(list, updates)
+    /** Completes on [disconnect]: every watch and view on this connection then ends, as on a cut line. */
+    private val gone = kotlinx.coroutines.CompletableDeferred<Unit>()
+
+    override suspend fun terminals(): List<TerminalInfo> {
+        calls += "terminals"
+        if (dead) throw CoreException.Closed()
+        return list
+    }
+
+    override suspend fun watchTerminals(): TerminalWatch = FakeWatch(list, updates, gone)
     override suspend fun structure(): HostStructure = current.also { calls += "structure" }
 
     override suspend fun watchStructure(listener: StructureListener): StructureWatch {
@@ -382,6 +392,9 @@ class FakeConnection(
 
     override suspend fun disconnect() {
         disconnected = true
+        gone.complete(Unit)
+        views.forEach { it.end() }
+        listener?.onClosed()
     }
 
     override fun close() {}
@@ -391,6 +404,7 @@ class FakeConnection(
 class FakeWatch(
     private val first: List<TerminalInfo>,
     private val updates: Channel<List<TerminalInfo>>,
+    private val gone: kotlinx.coroutines.Deferred<Unit> = kotlinx.coroutines.CompletableDeferred(),
 ) : TerminalWatch(NoHandle) {
     private var started = false
 
@@ -399,7 +413,11 @@ class FakeWatch(
             started = true
             return first
         }
-        return updates.receive()
+        if (gone.isCompleted) throw CoreException.Closed()
+        return kotlinx.coroutines.selects.select {
+            updates.onReceive { it }
+            gone.onAwait { throw CoreException.Closed() }
+        }
     }
 
     override fun stop() {}
@@ -433,6 +451,11 @@ class FakeTerminalView(val address: String, val options: AttachOptions) : Termin
         detached = true
         updates.close()
     }
+
+    /** Every [scrollTo] the UI made, in order. */
+    val scrolls = mutableListOf<UInt>()
+
+    override fun scrollTo(lines: UInt): UInt = lines.also { scrolls += it }
 
     override fun close() {}
 }
