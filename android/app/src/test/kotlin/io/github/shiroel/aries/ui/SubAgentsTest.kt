@@ -51,7 +51,6 @@ class SubAgentsTest {
         }
         compose.onNodeWithText("home").performClick()
         compose.onNodeWithText(context.getString(R.string.unplaced_title)).assertDoesNotExist()
-        compose.onNodeWithText("project").performClick()
         assertUnder("child", "parent")
         assertUnder("grandchild", "child")
         compose.onNodeWithText("child").performClick()
@@ -106,6 +105,13 @@ class SubAgentsTest {
         val sub = compose.onNodeWithTag("drawer-agent:h1:t2").fetchSemanticsNode().boundsInRoot
         assertTrue(root.top < sub.top)
         assertUnder("child", "parent", drawer = true)
+        compose.onNode(hasTestTag("agent-fold:h1:t1") and hasAnyAncestor(hasTestTag("console-drawer"))).performClick()
+        compose.onNodeWithTag("drawer-agent:h1:t2").assertDoesNotExist()
+        compose.onNodeWithText(context.getString(R.string.agents_button)).performClick()
+        compose.onNodeWithText("child").assertDoesNotExist()
+        compose.onNodeWithTag("agent-fold:h1:t1").performClick()
+        compose.onNodeWithText("child").assertExists()
+        compose.openConsoleDrawer()
         compose.onNodeWithTag("drawer-agent:h1:t2").performClick()
         compose.waitForIdle()
         assertEquals("t2", core.connectionsOf.getValue("h1").views.single().address)

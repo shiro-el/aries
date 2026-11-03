@@ -5,6 +5,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -72,6 +75,10 @@ class DrawerShellTest {
         compose.onNodeWithTag("drawer-agent:h2:t1").assertExists()
         core.push("h1", listOf(agent("home-agent", AgentStatus.Error("also waiting"))))
         compose.onNodeWithText(context.getString(R.string.console_agents_waiting, 2)).assertExists()
+        compose.onNode(hasTestTag("agent-pin:h2:t1") and hasAnyAncestor(hasTestTag("console-drawer"))).performClick()
+        compose.waitForIdle()
+        org.junit.Assert.assertEquals(listOf("h2 t1 pinned=true"), core.labelWrites)
+        compose.onNode(hasTestTag("agent-pin:h2:t1") and hasAnyAncestor(hasTestTag("console-drawer"))).assertIsSelected()
         compose.onNodeWithTag("drawer-agent:h2:t1").performClick()
         compose.onNodeWithText(context.getString(R.string.console_agent_host_prefix, "work") + "work-agent").assertExists()
         compose.onNodeWithContentDescription(context.getString(R.string.back_button)).performClick()

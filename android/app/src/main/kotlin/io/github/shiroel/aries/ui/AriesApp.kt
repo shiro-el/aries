@@ -109,6 +109,7 @@ private fun AriesContent(model: HostsModel, settings: ThemeSettings, terminalDis
                                 showHeader = false,
                                 onBack = model::back,
                                 onOpen = model::openTerminal,
+                                onPin = model::pin,
                                 onNewTerminal = { model.newTerminal(s.browser) },
                                 onLaunch = { model.launch(s.browser, it) },
                                 onSaveLaunch = { model.saveLaunch(s.browser, it) },

@@ -577,3 +577,44 @@ async fn sub_agents_follow_their_parent_into_its_pane_and_watch_updates() {
     watch.stop();
     conn.disconnect().await;
 }
+
+#[tokio::test]
+async fn desktop_where_names_distinguish_spaces_in_the_same_checkout() {
+    let hc = HcSession::start();
+    let cwd = tempfile::tempdir().unwrap();
+    let first = terminal_at(&hc, cwd.path(), "s1", "tab1");
+    let second = terminal_at(&hc, cwd.path(), "s2", "tab2");
+    for (address, place) in [(&first, "aries / 1"), (&second, "sopodam-web / root")] {
+        hc.rpc(
+            "terminal.label",
+            json!({"terminal": address, "labels": {"where": place}}),
+        );
+    }
+    hc.set_doc("herdr-app", json!({"spaces": [
+        {"id": "s1", "tabs": [{"id": "tab1", "root": {"id": "p1", "content": {"terminal": first}}}]},
+        {"id": "s2", "tabs": [{"id": "tab2", "root": {"id": "p2", "content": {"terminal": second}}}]}
+    ]}));
+    let version = doc_version(&hc);
+    let (_data, conn) = connect(&hc).await;
+    let structure = conn.structure().await.unwrap();
+    assert_eq!(
+        structure
+            .spaces
+            .iter()
+            .map(|s| s.name.as_str())
+            .collect::<Vec<_>>(),
+        ["aries", "sopodam-web"]
+    );
+    assert_eq!(structure.spaces[1].tabs[0].name, "root");
+    assert!(!structure.spaces[0].named && !structure.spaces[1].tabs[0].named);
+    assert_eq!(doc_version(&hc), version);
+    // Label changes must bypass cached checkout facts.
+    hc.rpc(
+        "terminal.label",
+        json!({"terminal": first, "labels": {"where": "renamed / work"}}),
+    );
+    let renamed = conn.structure().await.unwrap();
+    assert_eq!(renamed.spaces[0].name, "renamed");
+    assert_eq!(renamed.spaces[0].tabs[0].name, "work");
+    conn.disconnect().await;
+}

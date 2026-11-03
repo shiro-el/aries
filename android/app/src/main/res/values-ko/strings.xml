@@ -216,6 +216,8 @@
     <string name="agents_elapsed_hours">%1$d시간</string>
     <string name="agents_elapsed_days">%1$d일</string>
     <string name="agents_elapsed_label">%1$s 전에 상태 변경</string>
+    <string name="tree_expanded">펼쳐짐</string>
+    <string name="tree_collapsed">접힘</string>
     <string name="agents_view_priority">우선순위</string>
     <string name="agents_view_grouped">Space별 그룹</string>
     <string name="agents_needs_you">확인 필요</string>
@@ -305,6 +307,7 @@
     <string name="host_remove_confirm_button">호스트 삭제</string>
 
     <string name="connecting">%1$s에 연결하는 중…</string>
+    <string name="terminals_actions_label">Terminal 작업</string>
     <string name="terminals_title">%1$s의 터미널</string>
     <string name="terminals_empty">이 호스트에서 실행 중인 터미널이 없습니다.</string>
     <string name="terminal_subtitle">%1$s · %2$s</string>
