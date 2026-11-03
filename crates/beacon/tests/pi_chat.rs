@@ -71,7 +71,7 @@ impl Chat {
 fn short(item: &ChatItem) -> String {
     match &item.body {
         ChatBody::User { text, images } => format!("user {text:?} images={}", images.len()),
-        ChatBody::Agent { text } => format!("agent {:?}", text.trim()),
+        ChatBody::Agent { text, .. } => format!("agent {:?}", text.trim()),
         ChatBody::Thinking { text } => format!("thinking {:?}", text.as_deref().map(str::trim)),
         ChatBody::Tool {
             name,
