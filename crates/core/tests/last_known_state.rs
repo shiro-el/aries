@@ -140,6 +140,8 @@ async fn snapshot_uses_short_ssh_connection_to_real_herdr_core() {
             space_id: None,
             tab_id: None,
             preset: None,
+            model: None,
+            effort: None,
         })
         .await
         .unwrap();

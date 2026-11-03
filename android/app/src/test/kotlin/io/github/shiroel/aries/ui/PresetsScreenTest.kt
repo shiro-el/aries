@@ -3,6 +3,9 @@ package io.github.shiroel.aries.ui
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -13,6 +16,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.text.AnnotatedString
 import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentPreset
@@ -61,6 +65,70 @@ class PresetsScreenTest {
     private fun click(id: Int) = compose.onNodeWithText(str(id)).performClick()
 
     private fun pick(preset: AgentPreset) = compose.onNodeWithTag("preset:" + preset.name).performScrollTo().performClick()
+
+    @Test
+    fun modelAndEffortAreSavedRestoredAndUsedByOneTapLaunch() {
+        val core = FakeCore().apply { structure = desktop }
+        open(core)
+        openForm()
+        pick(AgentPreset.CODEX)
+        compose.onNodeWithTag("launch_model").performScrollTo().performTextInput("my-model")
+        compose.onNodeWithTag("launch_effort").performScrollTo().performClick()
+        compose.onNodeWithText(str(R.string.launch_effort_high)).performClick()
+        compose.onNodeWithTag("launch_command").performScrollTo().performTextInput("--search")
+        compose.onNodeWithTag("launch_name").performScrollTo().performTextInput("Review")
+        compose.onNodeWithText(str(R.string.launch_save_button)).performScrollTo().performClick()
+        compose.waitForIdle()
+        val saved = core.savedLaunches.single()
+        assertEquals(LaunchRequest("--search", null, null, null, AgentPreset.CODEX, "my-model", "high"), saved.request)
+
+        // Switching Agents must not carry another Agent's model or effort.
+        pick(AgentPreset.PI)
+        compose.onNodeWithTag("launch_model").assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
+        compose.onNodeWithTag("launch_effort").assertTextContains(str(R.string.launch_agent_default))
+        compose.onNodeWithTag("saved_edit:${saved.id}").performScrollTo().performClick()
+        compose.onNodeWithTag("launch_model").assertTextContains("my-model")
+        compose.onNodeWithTag("launch_effort").assertTextContains(str(R.string.launch_effort_high))
+        click(R.string.cancel_button)
+        compose.onNodeWithTag("saved_run:${saved.id}").performClick()
+        compose.waitForIdle()
+        assertEquals(listOf(saved.request), core.connection!!.launched)
+    }
+
+    @Test
+    fun claudeAliasesPiThinkingAndOpenCodeModelUseTheirOwnControls() {
+        val core = FakeCore().apply { structure = desktop }
+        open(core)
+        openForm()
+        // Custom commands have no Agent options.
+        compose.onNodeWithTag("launch_model").assertDoesNotExist()
+        pick(AgentPreset.CLAUDE_CODE)
+        compose.onNodeWithText(str(R.string.launch_model_choose)).performScrollTo().performClick()
+        compose.onNodeWithText("sonnet").performClick()
+        compose.onNodeWithTag("launch_effort").performScrollTo().performClick()
+        compose.onNodeWithText(str(R.string.launch_effort_max)).performClick()
+        click(R.string.launch_button)
+        compose.waitForIdle()
+        assertEquals(LaunchRequest("", null, null, null, AgentPreset.CLAUDE_CODE, "sonnet", "max"), core.connection!!.launched.last())
+
+        openForm()
+        pick(AgentPreset.PI)
+        compose.onNodeWithTag("launch_model").performScrollTo().performTextInput("provider/model")
+        compose.onNodeWithTag("launch_effort").performScrollTo().performClick()
+        compose.onNodeWithText(str(R.string.launch_effort_off)).performClick()
+        click(R.string.launch_button)
+        compose.waitForIdle()
+        assertEquals(LaunchRequest("", null, null, null, AgentPreset.PI, "provider/model", "off"), core.connection!!.launched.last())
+
+        openForm()
+        pick(AgentPreset.OPEN_CODE)
+        compose.onNodeWithTag("launch_model").performScrollTo().performTextInput("provider/model")
+        compose.onNodeWithTag("launch_effort").assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.launch_effort_unavailable)).assertExists()
+        click(R.string.launch_button)
+        compose.waitForIdle()
+        assertEquals(LaunchRequest("", null, null, null, AgentPreset.OPEN_CODE, "provider/model", null), core.connection!!.launched.last())
+    }
 
     @Test
     fun startsEachPresetWithNoCommandAndOnlyExtraArguments() {
