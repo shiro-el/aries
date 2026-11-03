@@ -14,6 +14,7 @@ mod hc;
 mod host_edit;
 mod host_model;
 mod launch;
+mod layout_edit;
 mod push;
 mod removal;
 mod send;
@@ -48,9 +49,10 @@ pub use error::{AnswerProblem, CoreError, Incompatibility, VaultError};
 pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
 pub use host_model::{AgentStatus, BlockedReason, TerminalWatch};
 pub use launch::{AgentPreset, LaunchRequest, RECENT_CWDS_KEPT, SavedLaunch};
+pub use layout_edit::{ExecOutput, LayoutEdit};
 pub use push::{
     HttpClient, HttpRequest, HttpResponse, PushContent, PushDevice, PushDisable, PushNotice,
-    PushPairing, PushPolicy, PushProgress, PushStep,
+    PushPairing, PushPolicy, PushProgress, PushQuestion, PushStep,
 };
 pub use send::{HELD_AFTER, SendListener, SendOutcome};
 pub use settings::{AgentView, AttachMode};
@@ -198,6 +200,10 @@ pub struct TerminalInfo {
     /// Terminal that started this one, as reported by herdr-core.
     #[uniffi(default = None)]
     pub parent: Option<String>,
+    /// When herdr-core's root status last changed, milliseconds since the epoch.
+    /// Seeing a completed turn does not reset this clock.
+    #[uniffi(default = None)]
+    pub status_ms: Option<u64>,
 }
 
 fn runtime() -> &'static tokio::runtime::Runtime {
@@ -1491,6 +1497,7 @@ pub(crate) fn terminal_info(v: &serde_json::Value) -> TerminalInfo {
         agent_status,
         needs_attention,
         turn: v["turn"].as_u64().unwrap_or(0),
+        status_ms: v["status_ms"].as_u64(),
     }
 }
 

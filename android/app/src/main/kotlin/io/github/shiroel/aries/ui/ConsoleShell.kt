@@ -156,6 +156,7 @@ private fun consoleBack(model: HostsModel): (() -> Unit)? = when (val screen = m
 @Composable
 private fun ConsoleDrawer(model: HostsModel, navigate: (() -> Unit) -> Unit) {
     val agents = model.drawerAgents
+    val folded = remember { mutableStateMapOf<AgentKey, Boolean>() }
     val waiting = agents.count { it.terminal.parent == null && isWaiting(it.terminal.agentStatus) }
     val current = model.screen
     val currentAgent = when (current) {
@@ -188,7 +189,8 @@ private fun ConsoleDrawer(model: HostsModel, navigate: (() -> Unit) -> Unit) {
             item(key = "host:${host.id}") {
                 DrawerRow(host.name, hostId == host.id, Modifier.testTag("drawer-host:${host.id}"), onClick = { navigate { model.openHost(host) } })
             }
-            val children = terminalTree(agents.filter { it.host.id == host.id }, rootGuides = true) { it.terminal }
+            val hostAgents = agents.filter { it.host.id == host.id }
+            val children = agentTreeRows(hostAgents, folded.filterValues { it }.keys, rootGuides = true)
             children.forEach { row ->
                 val entry = row.value
                 item(key = "agent:${entry.key.hostId}\n${entry.key.address}") {
@@ -197,7 +199,12 @@ private fun ConsoleDrawer(model: HostsModel, navigate: (() -> Unit) -> Unit) {
                         Modifier.testTag("drawer-agent:${entry.key.hostId}:${entry.key.address}"),
                         guide = row.guide,
                         onClick = { navigate { model.openDrawerAgent(entry) } },
-                    ) { DrawerAgentStatus(entry.terminal.agentStatus) }
+                    ) {
+                        AgentFoldButton(entry, agentDescendants(hostAgents, entry.key), folded[entry.key] == true) {
+                            folded[entry.key] = folded[entry.key] != true
+                        }
+                        DrawerAgentStatus(entry.terminal.agentStatus)
+                    }
                 }
             }
         }
