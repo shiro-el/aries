@@ -41,10 +41,13 @@ import io.github.shiroel.aries.core.LaunchRequest
 import io.github.shiroel.aries.core.PaneInfo
 import io.github.shiroel.aries.core.QrMatrix
 import io.github.shiroel.aries.core.SavedLaunch
+import io.github.shiroel.aries.core.SendListener
+import io.github.shiroel.aries.core.SendOutcome
 import io.github.shiroel.aries.core.TerminalInfo
 import io.github.shiroel.aries.core.TerminalUpdate
 import io.github.shiroel.aries.core.TerminalView
 import io.github.shiroel.aries.core.TerminalWatch
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 
 /** In-memory stand-in for the Rust core, for UI tests. */
@@ -494,6 +497,27 @@ class FakeConnection(
     fun push(structure: HostStructure) {
         current = structure
         listener?.onStructure(structure)
+    }
+
+    /** The fake Agents' input record: (address, text) of each message typed in. */
+    val typed = mutableListOf<Pair<String, String>>()
+
+    /** How `sendMessage` ends: typed in ([SendOutcome.Sent]), refused, or this error. */
+    var sendOutcome: SendOutcome = SendOutcome.Sent
+    var sendFailWith: CoreException? = null
+
+    /** When set, `sendMessage` is held (someone types at the Host) until it completes. */
+    var sendHold: CompletableDeferred<Unit>? = null
+
+    override suspend fun sendMessage(address: String, text: String, listener: SendListener): SendOutcome {
+        calls += "sendMessage"
+        sendHold?.let {
+            listener.onHeld()
+            it.await()
+        }
+        sendFailWith?.let { throw it }
+        if (sendOutcome == SendOutcome.Sent) typed += address to text
+        return sendOutcome
     }
 
     /** Terminals attached on this connection, in order. */

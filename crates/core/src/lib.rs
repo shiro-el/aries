@@ -14,6 +14,7 @@ mod host_model;
 mod launch;
 mod push;
 mod removal;
+mod send;
 mod store;
 mod structure;
 mod terminal;
@@ -46,6 +47,7 @@ pub use push::{
     HttpClient, HttpRequest, HttpResponse, PushContent, PushDevice, PushDisable, PushNotice,
     PushPairing, PushProgress, PushStep,
 };
+pub use send::{HELD_AFTER, SendListener, SendOutcome};
 pub use structure::{HostStructure, PaneInfo, SpaceInfo, StructureProblem, TabInfo};
 pub use terminal::{
     AttachOptions, CellRun, CursorPos, FRAME_INTERVAL, ScreenFrame, ScreenLine, TerminalExit,
@@ -1129,6 +1131,21 @@ impl HostConnection {
     /// Deletes the saved launch `id`; succeeds if it is already gone.
     pub fn delete_saved_launch(&self, id: String) -> Result<(), CoreError> {
         self.saved.delete(&id)
+    }
+
+    /// Types `text` into the Agent's Terminal at `address` and submits it, as
+    /// a Chat message. Never forced: a Blocked Agent refuses it
+    /// ([`SendOutcome::Blocked`]). `listener` hears when the send is held
+    /// because a person at the Host is typing.
+    pub async fn send_message(
+        &self,
+        address: String,
+        text: String,
+        listener: Arc<dyn SendListener>,
+    ) -> Result<SendOutcome, CoreError> {
+        let client = self.client.clone();
+        on_runtime(async move { send::send(&client, &address, &text, || listener.on_held()).await })
+            .await
     }
 
     pub async fn disconnect(&self) {

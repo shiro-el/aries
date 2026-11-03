@@ -143,6 +143,16 @@
     <string name="chat_answer_unsupported">이 Agent의 질문은 Chat에서 답할 수 없습니다. Terminal에서 답하세요.</string>
     <string name="chat_answer_no_core">Beacon이 이 Host의 herdr-core에 연결하지 못합니다.</string>
     <string name="chat_answer_failed">답을 보내지 못했습니다: %1$s</string>
+    <string name="chat_input_label">Agent에게 보낼 메시지</string>
+    <string name="chat_send_button">보내기</string>
+    <string name="chat_sending">보내는 중…</string>
+    <string name="chat_send_held">누군가 이 Terminal에 입력하고 있습니다. 입력이 멈추면 메시지가 들어갑니다.</string>
+    <string name="chat_send_refused">보내지 않았습니다: Agent가 Blocked 상태로 Terminal에서 기다리고 있습니다.</string>
+    <string name="chat_send_failed">메시지를 보내지 못했습니다: %1$s</string>
+    <string name="chat_blocked_permission">Agent가 권한을 요청합니다. 승인이나 거부는 Terminal에서 하세요.</string>
+    <string name="chat_blocked_question">Agent가 Terminal에서 질문하고 있습니다.</string>
+    <string name="chat_blocked_auth">Agent가 Terminal에서 로그인을 기다립니다.</string>
+    <string name="chat_blocked_other">Agent가 Terminal에서 기다리고 있습니다.</string>
 
     <string name="space_unnamed">이름 없는 스페이스</string>
     <string name="space_summary">탭 %1$d개 · 페인 %2$d개</string>
