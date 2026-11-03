@@ -3,6 +3,7 @@
 
 pub mod chat;
 pub mod core_link;
+pub mod skill;
 pub mod status_watch;
 
 use std::path::PathBuf;

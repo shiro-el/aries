@@ -197,6 +197,63 @@ async fn installs_the_beacon_as_a_user_service_and_removes_it_keeping_calls() {
     assert!(s.host.check(&format!("test -f {CALLS}")));
 }
 
+const CLAUDE_SKILL: &str = "/home/aries/.claude/skills/call-human";
+const AGENTS_SKILL: &str = "/home/aries/.agents/skills/call-human";
+
+/// Runs `script` as the Host user (files it makes belong to them).
+fn as_user(host: &SystemdHost, script: &str) {
+    host.root(&format!("su aries -s /bin/sh -c '{script}'"));
+}
+
+#[tokio::test]
+#[ignore = "needs docker"]
+async fn installs_the_call_human_skill_and_removal_keeps_the_users_version() {
+    let s = setup();
+    let bytes = std::fs::read(beacon_bin()).unwrap();
+    s.core
+        .set_beacon_release(release(env!("CARGO_PKG_VERSION"), sha256sum(&bytes)));
+    let fetcher = Fetcher::new(bytes);
+    s.core
+        .install_beacon(s.id.clone(), fetcher.clone())
+        .await
+        .unwrap();
+    for dir in [CLAUDE_SKILL, AGENTS_SKILL] {
+        assert!(
+            s.host
+                .check(&format!("grep -q 'aries-beacon call' {dir}/SKILL.md")),
+            "{dir}"
+        );
+    }
+
+    // The user edits Claude's copy and adds a file to the other one; the
+    // next install (an update) keeps both.
+    as_user(
+        &s.host,
+        &format!("echo mine > {CLAUDE_SKILL}/SKILL.md && echo notes > {AGENTS_SKILL}/NOTES.md"),
+    );
+    s.core
+        .install_beacon(s.id.clone(), fetcher.clone())
+        .await
+        .unwrap();
+    assert!(
+        s.host
+            .check(&format!("test \"$(cat {CLAUDE_SKILL}/SKILL.md)\" = mine"))
+    );
+    assert!(s.host.check(&format!(
+        "grep -q 'aries-beacon call' {AGENTS_SKILL}/SKILL.md && test -f {AGENTS_SKILL}/NOTES.md"
+    )));
+
+    s.core.uninstall_beacon(s.id.clone()).await.unwrap();
+    assert!(
+        s.host
+            .check(&format!("test \"$(cat {CLAUDE_SKILL}/SKILL.md)\" = mine"))
+    );
+    assert!(s.host.check(&format!(
+        "test ! -e {AGENTS_SKILL}/SKILL.md && test -f {AGENTS_SKILL}/NOTES.md"
+    )));
+    assert!(!s.host.check(&format!("test -e {BIN}")));
+}
+
 #[tokio::test]
 #[ignore = "needs docker"]
 async fn refuses_a_binary_that_does_not_match_the_pinned_checksum() {
@@ -416,6 +473,10 @@ async fn updates_an_old_beacon_when_connecting() {
         BeaconState::Installed { version, supported: true, .. } if version == env!("CARGO_PKG_VERSION")
     ));
     assert_eq!(server.requests().len(), 1);
+    // The old release had no skill; the update brings it.
+    assert!(s.host.check(&format!(
+        "test -f {CLAUDE_SKILL}/SKILL.md && test -f {AGENTS_SKILL}/SKILL.md"
+    )));
 
     // Connecting again finds it current and leaves it alone.
     let again = s.core.check_beacon(s.id.clone(), fetcher).await.unwrap();
