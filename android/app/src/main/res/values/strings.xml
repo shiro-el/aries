@@ -119,6 +119,16 @@
     <string name="chat_tool_expand_label">Show the full %1$s call</string>
     <string name="chat_agent_error">Agent error</string>
     <string name="chat_unsupported">This entry needs a newer version of Aries.</string>
+    <string name="chat_input_label">Message to the Agent</string>
+    <string name="chat_send_button">Send</string>
+    <string name="chat_sending">Sending…</string>
+    <string name="chat_send_held">Someone is typing in this Terminal. The message goes in once they pause.</string>
+    <string name="chat_send_refused">Not sent: the Agent is Blocked and waits for you in the Terminal.</string>
+    <string name="chat_send_failed">Could not send the message: %1$s</string>
+    <string name="chat_blocked_permission">The Agent asks for permission. Approve or deny it in the Terminal.</string>
+    <string name="chat_blocked_question">The Agent asks you a question in the Terminal.</string>
+    <string name="chat_blocked_auth">The Agent needs you to sign in, in the Terminal.</string>
+    <string name="chat_blocked_other">The Agent waits for you in the Terminal.</string>
     <string name="space_unnamed">Unnamed Space</string>
     <string name="space_summary">Tabs: %1$d · Panes: %2$d</string>
     <string name="space_no_tabs">This Space has no Tabs.</string>

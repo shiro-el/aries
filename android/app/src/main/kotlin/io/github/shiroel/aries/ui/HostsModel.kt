@@ -386,7 +386,11 @@ class HostsModel(
         }
         try {
             // Each change replaces the list, so Agent status stays live.
-            while (true) browser.updateTerminals(watch.next())
+            while (true) {
+                val list = watch.next()
+                browser.updateTerminals(list)
+                chatOn(browser.host.id)?.update(list)
+            }
         } catch (e: CoreException) {
             browser.markClosed()
         } finally {
@@ -415,6 +419,12 @@ class HostsModel(
                 if (key.address != terminal.address) return
                 val conn = agentConns[key.hostId] ?: return
                 observe(conn, s.board.find(key)?.terminal ?: terminal, s)
+            }
+            // From a Chat (a Blocked Agent): back returns to the still-live Chat.
+            is Screen.Chat -> {
+                val conn = s.chat.connection ?: return
+                if (terminal.address != s.chat.terminal.address) return
+                observe(conn, s.chat.terminal, s)
             }
             else -> return
         }
@@ -474,7 +484,11 @@ class HostsModel(
                 try {
                     val watch = conn.watchTerminals()
                     try {
-                        while (true) board.update(host.id, watch.next())
+                        while (true) {
+                            val list = watch.next()
+                            board.update(host.id, list)
+                            chatOn(host.id)?.update(list)
+                        }
                     } finally {
                         watch.stop()
                     }
@@ -519,8 +533,12 @@ class HostsModel(
     /** Opens the Chat of the Agent in [terminal] on [host], from Browse or the Agents list. */
     fun openChat(host: Host, terminal: TerminalInfo) {
         val from = screen
-        if (from !is Screen.Browse && from !is Screen.Agents) return
-        val chat = ChatModel(core, host, terminal)
+        val conn = when (from) {
+            is Screen.Browse -> open?.first
+            is Screen.Agents -> agentConns[host.id]
+            else -> return
+        }
+        val chat = ChatModel(core, host, terminal, conn)
         screen = Screen.Chat(chat, from)
         chat.start(scope)
     }
@@ -532,8 +550,16 @@ class HostsModel(
         screen = s.returnTo
     }
 
+    /** The Chat that is open (or under the Terminal opened from it) on [hostId]. */
+    private fun chatOn(hostId: String): ChatModel? {
+        val s = screen
+        val chat = (s as? Screen.Chat ?: (s as? Screen.Terminal)?.returnTo as? Screen.Chat)?.chat
+        return chat?.takeIf { it.host.id == hostId }
+    }
+
     fun back() {
         (screen as? Screen.Chat)?.chat?.stop()
+        ((screen as? Screen.Terminal)?.returnTo as? Screen.Chat)?.chat?.stop()
         viewing?.cancel()
         viewing = null
         if (screen is Screen.Agents) closeAgents()

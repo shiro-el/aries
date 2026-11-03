@@ -103,7 +103,7 @@ fun AriesApp(model: HostsModel) {
                 }
                 is Screen.Chat -> {
                     BackHandler { model.closeChat() }
-                    ChatScreen(s.chat, onBack = model::closeChat)
+                    ChatScreen(s.chat, onBack = model::closeChat, onOpenTerminal = { model.openTerminal(s.chat.terminal) })
                 }
             }
         }

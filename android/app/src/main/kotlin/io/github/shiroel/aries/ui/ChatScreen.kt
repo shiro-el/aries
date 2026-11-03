@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -29,7 +31,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
+import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.core.AriesCoreInterface
+import io.github.shiroel.aries.core.BlockedReason
 import io.github.shiroel.aries.core.ChatEntry
 import io.github.shiroel.aries.core.ChatEntryBody
 import io.github.shiroel.aries.core.ChatSnapshot
@@ -38,6 +42,9 @@ import io.github.shiroel.aries.core.ChatToolStatus
 import io.github.shiroel.aries.core.ChatWatch
 import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Host
+import io.github.shiroel.aries.core.HostConnection
+import io.github.shiroel.aries.core.SendListener
+import io.github.shiroel.aries.core.SendOutcome
 import io.github.shiroel.aries.core.TerminalInfo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -51,18 +58,85 @@ import kotlinx.coroutines.launch
 class ChatModel(
     private val core: AriesCoreInterface,
     val host: Host,
-    val terminal: TerminalInfo,
+    terminal: TerminalInfo,
+    /** The open Host's connection: messages go through it. */
+    val connection: HostConnection? = null,
 ) {
+    /** The Agent's Terminal, its Agent status kept live by [update]. */
+    var terminal by mutableStateOf(terminal)
+        private set
     var snapshot by mutableStateOf<ChatSnapshot?>(null)
         private set
     /** Ids of tool entries the user expanded. */
     var expanded by mutableStateOf<Set<String>>(emptySet())
         private set
 
+    /** What the user is typing into the input. */
+    var draft by mutableStateOf("")
+    var sending by mutableStateOf<Sending?>(null)
+        private set
+    /** The Blocked Agent refused the last message; cleared once it is no longer Blocked. */
+    var refused by mutableStateOf(false)
+        private set
+    /** Why the last message could not be sent, other than a refusal. */
+    var sendError by mutableStateOf<String?>(null)
+        private set
+
+    enum class Sending { Sending, Held }
+
     private var watch: ChatWatch? = null
     private var job: Job? = null
+    private var scope: CoroutineScope? = null
+
+    /** The Host's Terminals changed: follow this Agent's status. */
+    fun update(terminals: List<TerminalInfo>) {
+        val now = terminals.find { it.address == terminal.address } ?: return
+        terminal = now
+        if (now.agentStatus !is AgentStatus.Blocked) refused = false
+    }
+
+    val canSend: Boolean get() = connection != null && sending == null && draft.isNotBlank()
+
+    /**
+     * Types [draft] into the Agent's Terminal. It stays in the input until it
+     * went in, so a refused or failed message can be sent again.
+     */
+    fun send() {
+        val conn = connection ?: return
+        val scope = scope ?: return
+        if (!canSend) return
+        val text = draft
+        sending = Sending.Sending
+        refused = false
+        sendError = null
+        scope.launch {
+            try {
+                when (val outcome = conn.sendMessage(terminal.address, text, HeldListener())) {
+                    SendOutcome.Sent -> if (draft == text) draft = ""
+                    is SendOutcome.Blocked -> {
+                        refused = true
+                        terminal = terminal.copy(
+                            agentStatus = AgentStatus.Blocked(outcome.reason, outcome.message),
+                            needsAttention = true,
+                        )
+                    }
+                }
+            } catch (e: CoreException) {
+                sendError = e.message ?: e.toString()
+            } finally {
+                sending = null
+            }
+        }
+    }
+
+    private inner class HeldListener : SendListener {
+        override fun onHeld() {
+            if (sending == Sending.Sending) sending = Sending.Held
+        }
+    }
 
     fun start(scope: CoroutineScope) {
+        this.scope = scope
         job = scope.launch {
             val w = try {
                 core.watchChat(host.id, terminal.address, null)
@@ -91,7 +165,7 @@ class ChatModel(
 }
 
 @Composable
-fun ChatScreen(chat: ChatModel, onBack: () -> Unit) {
+fun ChatScreen(chat: ChatModel, onBack: () -> Unit, onOpenTerminal: () -> Unit = {}) {
     val snapshot = chat.snapshot
     val entries = snapshot?.entries.orEmpty()
     val list = rememberLazyListState()
@@ -111,11 +185,68 @@ fun ChatScreen(chat: ChatModel, onBack: () -> Unit) {
         if (snapshot != null && entries.isEmpty() && snapshot.status == ChatStatus.LIVE) {
             Text(stringResource(R.string.chat_empty))
         }
-        LazyColumn(state = list, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(Modifier.weight(1f), state = list, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(entries, key = { it.id }) { entry ->
                 ChatEntryView(entry, expanded = entry.id in chat.expanded) { chat.toggle(entry.id) }
             }
         }
+        (chat.terminal.agentStatus as? AgentStatus.Blocked)?.let {
+            BlockedNotice(it, refused = chat.refused, onOpenTerminal)
+        }
+        when (chat.sending) {
+            ChatModel.Sending.Sending -> ChatNotice(stringResource(R.string.chat_sending))
+            ChatModel.Sending.Held -> ChatNotice(stringResource(R.string.chat_send_held))
+            null -> {}
+        }
+        chat.sendError?.let {
+            Text(stringResource(R.string.chat_send_failed, it), color = MaterialTheme.colorScheme.error)
+        }
+        if (chat.connection != null) MessageInput(chat)
+    }
+}
+
+@Composable
+private fun MessageInput(chat: ChatModel) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedTextField(
+            value = chat.draft,
+            onValueChange = { chat.draft = it },
+            modifier = Modifier.weight(1f),
+            label = { Text(stringResource(R.string.chat_input_label)) },
+            enabled = chat.sending == null,
+        )
+        Button(onClick = chat::send, enabled = chat.canSend) {
+            Text(stringResource(R.string.chat_send_button))
+        }
+    }
+}
+
+/**
+ * The Agent is Blocked: say why and send the user to the Terminal. A
+ * permission request is only shown here, never answered: approving happens
+ * in the Terminal.
+ */
+@Composable
+private fun BlockedNotice(status: AgentStatus.Blocked, refused: Boolean, onOpenTerminal: () -> Unit) {
+    val why = when (status.reason) {
+        BlockedReason.PERMISSION -> R.string.chat_blocked_permission
+        BlockedReason.QUESTION -> R.string.chat_blocked_question
+        BlockedReason.AUTH -> R.string.chat_blocked_auth
+        null -> R.string.chat_blocked_other
+    }
+    val color = MaterialTheme.colorScheme.onErrorContainer
+    Column(
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.errorContainer).padding(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        if (refused) {
+            Text(stringResource(R.string.chat_send_refused), color = color, style = MaterialTheme.typography.labelLarge)
+        }
+        Text(stringResource(why), color = color)
+        status.message?.let {
+            Text(it, color = color, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+        }
+        Button(onClick = onOpenTerminal) { Text(stringResource(R.string.terminal_open_button)) }
     }
 }
 
