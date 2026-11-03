@@ -210,7 +210,7 @@ impl Drop for Llm {
 
 #[test]
 #[ignore = "needs a Pi install (ARIES_TEST_PI_BIN) and node"]
-fn real_pi_with_the_extension_reports_status_and_shows_its_chat() {
+fn pi_cli_real_pi_with_the_extension_reports_status_and_shows_its_chat() {
     let pi_bin = PathBuf::from(std::env::var("ARIES_TEST_PI_BIN").expect("ARIES_TEST_PI_BIN"));
     let hc = HcSession::start();
     let home = tempfile::tempdir().unwrap();
