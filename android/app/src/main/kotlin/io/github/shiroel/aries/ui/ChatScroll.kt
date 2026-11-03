@@ -36,12 +36,13 @@ internal fun rememberChatScrollState(
     entries: List<ChatEntry>,
     callKeys: List<String>,
     markdown: Map<String, ChatMarkdownDocument>,
+    followEnabled: Boolean = true,
 ): ChatScrollState {
     val context = LocalContext.current
     val store = remember(chat, context) { ChatReadingStore(context, chat.host.id, chat.terminal.address) }
     val saved = remember(store) { store.load() }
     val state = remember(chat) { ChatScrollState(saved?.following ?: true) }
-    val content = rememberUpdatedState(ChatScrollContent(entries, callKeys, markdown))
+    val content = rememberUpdatedState(ChatScrollContent(entries, callKeys, markdown, followEnabled))
     LaunchedEffect(state) {
         var previousEntries: List<ChatEntry>? = null
         var previousCalls = emptyList<String>()
@@ -59,7 +60,7 @@ internal fun rememberChatScrollState(
                 state.latestRequest,
             )
         }.collect { (data, _, latestRequest) ->
-            val (rows, calls, documents) = data
+            val (rows, calls, documents, followEnabled) = data
             val transcript = rows.map { "transcript:${it.id}" }
             val keys = buildList {
                 rows.forEach { entry ->
@@ -81,6 +82,7 @@ internal fun rememberChatScrollState(
             if (previousEntries != null && lastViewport != currentViewport) {
                 state.following = !state.list.canScrollForward
             }
+            if (!followEnabled) state.following = false
             lastViewport = currentViewport
             val ready = rows.all { entry ->
                 val text = when (val body = entry.body) {
@@ -108,13 +110,15 @@ internal fun rememberChatScrollState(
                     // have arrived while Chat was closed. Follow again only
                     // if that saved viewport still reaches the current end.
                     val anchorIndex = keys.indexOf(saved.anchor)
-                    state.list.scrollToItem(
-                        if (anchorIndex >= 0) anchorIndex else saved.index.coerceIn(keys.indices),
-                        if (anchorIndex >= 0) saved.offset else 0,
-                    )
-                    state.following = !state.list.canScrollForward
+                    if (followEnabled) {
+                        state.list.scrollToItem(
+                            if (anchorIndex >= 0) anchorIndex else saved.index.coerceIn(keys.indices),
+                            if (anchorIndex >= 0) saved.offset else 0,
+                        )
+                        state.following = !state.list.canScrollForward
+                    }
                 }
-                if (latest || (state.following && (previous != null || saved == null))) {
+                if (followEnabled && (latest || (state.following && (previous != null || saved == null)))) {
                     state.list.scrollToLatest(keys.lastIndex, alignBottom)
                     state.following = !state.list.canScrollForward
                 }
@@ -122,7 +126,7 @@ internal fun rememberChatScrollState(
                 previousCalls = calls
                 previousItemKeys = keys
                 request = latestRequest
-            } else if (state.following && state.list.canScrollForward) {
+            } else if (followEnabled && state.following && state.list.canScrollForward) {
                 state.list.scrollToLatest(keys.lastIndex, alignBottom)
                 state.following = !state.list.canScrollForward
             }
@@ -154,6 +158,7 @@ private data class ChatScrollContent(
     val entries: List<ChatEntry>,
     val calls: List<String>,
     val markdown: Map<String, ChatMarkdownDocument>,
+    val followEnabled: Boolean,
 )
 
 private fun after(tail: String?, keys: List<String>): List<String> {
