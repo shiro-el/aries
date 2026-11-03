@@ -422,7 +422,7 @@
     <string name="call_open_chat_label">Open %1$s in Chat for Call: %2$s</string>
     <string name="call_inbox_close">Close Calls</string>
     <string name="console_chat_choice_number">%1$d</string>
-    <string name="console_chat_call_label">Call %1$s</string>
+    <string name="console_chat_call_label">Call</string>
     <string name="console_agent_host_prefix">%1$s /\u0020</string>
     <string name="console_agent_unknown_folder">Folder unavailable</string>
     <string name="console_agent_unknown_age">Age unavailable</string>
