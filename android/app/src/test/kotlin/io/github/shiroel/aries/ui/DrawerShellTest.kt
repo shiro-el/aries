@@ -9,6 +9,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
@@ -49,7 +50,7 @@ class DrawerShellTest {
         compose.onNodeWithTag("console-menu").performClick()
         compose.onNodeWithTag("settings-open").performClick()
         compose.onNodeWithText(context.getString(R.string.theme_title)).assertExists()
-        compose.onNodeWithText(context.getString(R.string.back_button)).performClick()
+        compose.onNodeWithContentDescription(context.getString(R.string.back_button)).performClick()
         compose.onNodeWithText("me@home.test:22").assertExists()
     }
 
@@ -80,7 +81,7 @@ class DrawerShellTest {
         compose.onNode(hasTestTag("agent-pin:h2:t1") and hasAnyAncestor(hasTestTag("console-drawer"))).assertIsSelected()
         compose.onNodeWithTag("drawer-agent:h2:t1").performClick()
         compose.onNodeWithText(context.getString(R.string.console_agent_host_prefix, "work") + "work-agent").assertExists()
-        compose.onNodeWithText(context.getString(R.string.back_button)).performClick()
+        compose.onNodeWithContentDescription(context.getString(R.string.back_button)).performClick()
         compose.onNodeWithTag("agent-row:h2:t1").assertExists()
         compose.onNodeWithTag("agent-row:h1:t1").assertExists()
         compose.openConsoleDrawer()
@@ -107,7 +108,7 @@ class DrawerShellTest {
         }
         compose.onNodeWithText("home").performClick()
         // Connecting offers Back; return to Hosts, then choose Settings.
-        compose.onNodeWithText(context.getString(R.string.back_button)).performClick()
+        compose.onNodeWithContentDescription(context.getString(R.string.back_button)).performClick()
         compose.openConsoleDrawer()
         compose.onNodeWithTag("settings-open").performClick()
         compose.runOnIdle { ready.complete(Unit) }
