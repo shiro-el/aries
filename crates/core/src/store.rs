@@ -48,12 +48,18 @@ pub(crate) struct SavedKey {
 pub(crate) struct Settings {
     /// Connecting updates an out-of-date Beacon (ticket 26).
     pub beacon_auto_update: bool,
+    /// Days a cached Chat is kept after its last update (ticket 44).
+    pub chat_cache_days: u32,
+    /// How opening a Terminal attaches (ticket 17).
+    pub attach_mode: crate::AttachMode,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Self {
             beacon_auto_update: true,
+            chat_cache_days: crate::chat_cache::DEFAULT_RETENTION_DAYS,
+            attach_mode: crate::AttachMode::default(),
         }
     }
 }

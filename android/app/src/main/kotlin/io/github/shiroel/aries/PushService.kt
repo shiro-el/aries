@@ -8,10 +8,13 @@ import android.util.Base64
 import android.util.Log
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import io.github.shiroel.aries.core.AgentStatus
+import io.github.shiroel.aries.core.CallUrgency
 import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.PushContent
 import io.github.shiroel.aries.core.PushDevice
 import io.github.shiroel.aries.core.PushNotice
+import io.github.shiroel.aries.ui.agentStatusLabel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -56,24 +59,98 @@ class PushService : FirebaseMessagingService() {
     companion object {
         private const val TAG = "AriesPush"
         private const val CHANNEL = "host_notifications"
+        private const val CALL_CHECK = "calls_check"
+        private const val CALL_URGENT = "calls_urgent"
+        private const val CALL_EMERGENCY = "calls_emergency"
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
         fun show(context: Context, notice: PushNotice) {
             val manager = context.getSystemService(NotificationManager::class.java)
+            val content = notice.content
+            if (content is PushContent.Call) {
+                showCall(context, manager, notice.hostId, notice.hostName, content)
+                return
+            }
             manager.createNotificationChannel(
                 NotificationChannel(CHANNEL, context.getString(R.string.push_channel_name), NotificationManager.IMPORTANCE_HIGH),
             )
-            val (title, body) = when (notice.content) {
+            val (title, body) = when (content) {
                 is PushContent.Test -> context.getString(R.string.push_test_title, notice.hostName) to
                     context.getString(R.string.push_test_body, notice.hostName)
+                is PushContent.Status -> {
+                    val agent = content.name ?: content.title ?: content.terminal
+                    val label = context.getString(agentStatusLabel(content.status))
+                    val message = when (val s = content.status) {
+                        is AgentStatus.Blocked -> s.message
+                        is AgentStatus.Error -> s.message
+                        else -> null
+                    }
+                    context.getString(R.string.push_status_title, agent, notice.hostName) to
+                        (message?.let { context.getString(R.string.push_status_body, label, it) } ?: label)
+                }
+                is PushContent.Call -> return // shown by showCall
             }
-            val notification = Notification.Builder(context, CHANNEL)
+            val builder = Notification.Builder(context, CHANNEL)
                 .setSmallIcon(android.R.drawable.stat_notify_chat)
                 .setContentTitle(title)
                 .setContentText(body)
                 .setAutoCancel(true)
-                .build()
-            manager.notify(notice.hostId.hashCode(), notification)
+            // A tap opens that Agent's Terminal.
+            if (content is PushContent.Status) builder.setContentIntent(PushTarget(notice.hostId, content.terminal).pendingIntent(context))
+            val notification = builder.build()
+            // One notification per Agent: its newer status replaces the older.
+            val tag = when (content) {
+                is PushContent.Status -> content.terminal
+                else -> null
+            }
+            manager.notify(tag, notice.hostId.hashCode(), notification)
+        }
+
+        /**
+         * One channel per urgency, so the user can tune each in Android
+         * settings: Check is a normal notification, Urgent and Emergency
+         * pop up, Emergency is also an alarm. `record` Calls are never
+         * pushed; one that arrives anyway goes to Check.
+         */
+        private fun callChannel(context: Context, manager: NotificationManager, urgency: CallUrgency): String {
+            val (id, name, importance) = when (urgency) {
+                CallUrgency.RECORD, CallUrgency.CHECK ->
+                    Triple(CALL_CHECK, R.string.push_call_channel_check, NotificationManager.IMPORTANCE_DEFAULT)
+                CallUrgency.URGENT ->
+                    Triple(CALL_URGENT, R.string.push_call_channel_urgent, NotificationManager.IMPORTANCE_HIGH)
+                CallUrgency.EMERGENCY ->
+                    Triple(CALL_EMERGENCY, R.string.push_call_channel_emergency, NotificationManager.IMPORTANCE_HIGH)
+            }
+            val channel = NotificationChannel(id, context.getString(name), importance)
+            if (urgency == CallUrgency.EMERGENCY) {
+                channel.enableVibration(true)
+                channel.vibrationPattern = longArrayOf(0, 600, 300, 600, 300, 600)
+                // Honoured only if the user lets Aries override Do Not Disturb.
+                channel.setBypassDnd(true)
+            }
+            manager.createNotificationChannel(channel)
+            return id
+        }
+
+        private fun showCall(context: Context, manager: NotificationManager, hostId: String, hostName: String, call: PushContent.Call) {
+            val choices = call.choices.takeIf { it.isNotEmpty() }
+                ?.let { context.getString(R.string.call_choices, it.joinToString(" / ")) }
+            val text = call.body.ifEmpty { choices ?: "" }
+            val big = listOfNotNull(call.body.ifEmpty { null }, choices).joinToString("\n")
+            val builder = Notification.Builder(context, callChannel(context, manager, call.urgency))
+                .setSmallIcon(android.R.drawable.stat_notify_chat)
+                .setContentTitle(call.title)
+                .setContentText(text)
+                .setSubText(hostName)
+                .setStyle(Notification.BigTextStyle().bigText(big))
+                .setWhen(call.atMs.toLong())
+                .setShowWhen(true)
+                .setAutoCancel(true)
+            if (call.urgency == CallUrgency.EMERGENCY) builder.setCategory(Notification.CATEGORY_ALARM)
+            // A tap opens the Terminal that called (only confirmed Calls are pushed).
+            builder.setContentIntent(PushTarget(hostId, call.terminal).pendingIntent(context))
+            // One notification per Call.
+            manager.notify("call:${call.id}", hostId.hashCode(), builder.build())
         }
     }
 }

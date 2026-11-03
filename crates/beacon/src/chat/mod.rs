@@ -10,10 +10,12 @@
 
 pub mod answer;
 pub mod claude;
+pub mod codex;
 mod follow;
 mod jsonl;
 pub mod media;
 pub mod opencode;
+pub mod pi;
 mod source;
 
 use std::path::PathBuf;
@@ -147,6 +149,8 @@ fn children(pid: u32) -> Vec<u32> {
 pub fn agents() -> Vec<Box<dyn Agent>> {
     vec![
         Box::new(claude::ClaudeCode::from_env()),
+        Box::new(codex::Codex),
         Box::new(opencode::OpenCode::from_env()),
+        Box::new(pi::Pi),
     ]
 }

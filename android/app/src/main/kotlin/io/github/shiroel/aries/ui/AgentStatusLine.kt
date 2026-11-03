@@ -21,18 +21,7 @@ import io.github.shiroel.aries.core.TerminalInfo
 fun AgentStatusLine(t: TerminalInfo) {
     val status = t.agentStatus ?: return
     val color = if (t.needsAttention) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
-    val label = when (status) {
-        AgentStatus.Working -> R.string.agent_status_working
-        is AgentStatus.Blocked -> when (status.reason) {
-            BlockedReason.PERMISSION -> R.string.agent_status_blocked_permission
-            BlockedReason.QUESTION -> R.string.agent_status_blocked_question
-            BlockedReason.AUTH -> R.string.agent_status_blocked_auth
-            null -> R.string.agent_status_blocked
-        }
-        is AgentStatus.Error -> R.string.agent_status_error
-        AgentStatus.Done -> R.string.agent_status_done
-        AgentStatus.Idle -> R.string.agent_status_idle
-    }
+    val label = agentStatusLabel(status)
     val message = when (status) {
         is AgentStatus.Blocked -> status.message
         is AgentStatus.Error -> status.message
@@ -45,4 +34,18 @@ fun AgentStatusLine(t: TerminalInfo) {
         }
     }
     message?.let { Text(it, color = color, style = MaterialTheme.typography.bodySmall) }
+}
+
+/** The string resource naming [status] (with the Blocked reason). */
+fun agentStatusLabel(status: AgentStatus): Int = when (status) {
+    AgentStatus.Working -> R.string.agent_status_working
+    is AgentStatus.Blocked -> when (status.reason) {
+        BlockedReason.PERMISSION -> R.string.agent_status_blocked_permission
+        BlockedReason.QUESTION -> R.string.agent_status_blocked_question
+        BlockedReason.AUTH -> R.string.agent_status_blocked_auth
+        null -> R.string.agent_status_blocked
+    }
+    is AgentStatus.Error -> R.string.agent_status_error
+    AgentStatus.Done -> R.string.agent_status_done
+    AgentStatus.Idle -> R.string.agent_status_idle
 }

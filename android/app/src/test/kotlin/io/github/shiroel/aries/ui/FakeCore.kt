@@ -2,8 +2,11 @@ package io.github.shiroel.aries.ui
 
 import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.core.AriesCoreInterface
+import io.github.shiroel.aries.core.AttachMode
 import io.github.shiroel.aries.core.BeaconCheck
 import io.github.shiroel.aries.core.AttachOptions
+import io.github.shiroel.aries.core.KeyMods
+import io.github.shiroel.aries.core.TerminalKey
 import io.github.shiroel.aries.core.BeaconFetcher
 import io.github.shiroel.aries.core.BeaconInstall
 import io.github.shiroel.aries.core.BeaconRelease
@@ -12,6 +15,8 @@ import io.github.shiroel.aries.core.BeaconState
 import io.github.shiroel.aries.core.CallFeedState
 import io.github.shiroel.aries.core.CallInfo
 import io.github.shiroel.aries.core.CallListener
+import io.github.shiroel.aries.core.CallReply
+import io.github.shiroel.aries.core.CallReplyOutcome
 import io.github.shiroel.aries.core.CallWatch
 import io.github.shiroel.aries.core.BeaconUpdate
 import io.github.shiroel.aries.core.ChatSnapshot
@@ -192,6 +197,14 @@ class FakeCore : AriesCoreInterface {
 
     override fun keyProtection(): KeyProtection? = key?.let { protection }
 
+    private var attach = AttachMode.OBSERVE
+
+    override fun attachMode(): AttachMode = attach
+
+    override fun setAttachMode(mode: AttachMode) {
+        attach = mode
+    }
+
     override fun setKeyProtection(protection: KeyProtection) {
         if (key == null) throw CoreException.NoKey()
         failProtectionWith?.let { throw it }
@@ -273,6 +286,9 @@ class FakeCore : AriesCoreInterface {
 
     /** When set, `enablePush` reports steps up to this one and then fails there. */
     var pushFailAt: PushStep? = null
+
+    /** The Relay URL of each `enablePush` call, in order. */
+    val pushRelays = mutableListOf<String>()
     var pushDisableHostCleared = true
     var testPushes = 0
     var revocationFlushes = 0
@@ -284,6 +300,7 @@ class FakeCore : AriesCoreInterface {
         http: HttpClient,
         progress: PushProgress,
     ): PushPairing {
+        pushRelays += relayUrl
         for (step in listOf(PushStep.REGISTER, PushStep.PAIR, PushStep.TEST)) {
             progress.onStep(step)
             if (step == pushFailAt) {
@@ -331,11 +348,43 @@ class FakeCore : AriesCoreInterface {
         chat.trySend(snapshot)
     }
 
+    /** When set, `watchChat` fails with it. */
+    var failChatWith: CoreException? = null
+    var chatReconnects = 0
+        private set
+    var chatRetries = 0
+        private set
+
+    /** The Chat cache, by (host id, terminal). */
+    val cachedChats = mutableMapOf<Pair<String, String>, ChatSnapshot>()
+    var retentionDays = 30u
+
+    override fun chatCacheRetentionDays(): UInt = retentionDays
+
+    override fun setChatCacheRetentionDays(days: UInt) {
+        retentionDays = maxOf(days, 1u)
+    }
+
+    override suspend fun cachedChat(hostId: String, terminal: String): ChatSnapshot? = cachedChats[hostId to terminal]
+
+    override suspend fun clearChatCache(hostId: String) {
+        if (hosts.none { it.id == hostId }) throw CoreException.UnknownHost(hostId)
+        cachedChats.keys.removeIf { it.first == hostId }
+    }
+
     override fun watchChat(hostId: String, terminal: String, cursor: String?): ChatWatch {
         chatsOpened += hostId to terminal
+        failChatWith?.let { throw it }
         return object : ChatWatch(NoHandle) {
             override suspend fun next(): ChatSnapshot = chat.receive()
 
+            override fun reconnect() {
+                chatReconnects++
+            }
+
+            override fun retryNow() {
+                chatRetries++
+            }
             override fun image(id: String): ByteArray? = chatImages[id]
 
             override fun stop() {
@@ -381,6 +430,25 @@ class FakeCore : AriesCoreInterface {
 
             override fun close() {}
         }
+    }
+
+    /** (host id, call id, choice) of each `replyCall`. */
+    val replies = mutableListOf<Triple<String, String, UInt>>()
+
+    /** What `replyCall` returns. */
+    var replyResult = CallReply(CallReplyOutcome.DELIVERED, null, null)
+
+    /** Thrown by the next `replyCall` instead (the reply never started on the Host). */
+    var replyFailure: CoreException? = null
+
+    /** When set, `replyCall` waits for it first. */
+    var replyHold: CompletableDeferred<Unit>? = null
+
+    override suspend fun replyCall(hostId: String, callId: String, choice: UInt): CallReply {
+        replies += Triple(hostId, callId, choice)
+        replyHold?.await()
+        replyFailure?.let { replyFailure = null; throw it }
+        return replyResult
     }
 
     /** An Agent on [call]'s Host sent it: the Host's watch hears of it. */
@@ -588,6 +656,33 @@ class FakeTerminalView(val address: String, val options: AttachOptions) : Termin
         updates.close()
     }
 
+    /** What was typed, in order: `text:ls`, `key:Enter`, `key:ctrl+c`. */
+    val sent = mutableListOf<String>()
+
+    /** Grids asked for with `resize`, in order. */
+    val resizes = mutableListOf<Pair<Int, Int>>()
+
+    override fun observing(): Boolean = options.observe
+
+    override suspend fun sendText(text: String) {
+        check(!options.observe) { "an observer cannot type" }
+        sent += "text:$text"
+    }
+
+    override suspend fun sendKey(key: TerminalKey, mods: KeyMods) {
+        check(!options.observe) { "an observer cannot type" }
+        val name = when (key) {
+            is TerminalKey.Char -> key.text
+            is TerminalKey.F -> "F${key.n}"
+            else -> key::class.simpleName
+        }
+        sent += "key:" + (if (mods.ctrl) "ctrl+" else "") + (if (mods.alt) "alt+" else "") + (if (mods.shift) "shift+" else "") + name
+    }
+
+    override suspend fun resize(cols: UShort, rows: UShort) {
+        check(!options.observe) { "an observer cannot resize" }
+        resizes += cols.toInt() to rows.toInt()
+    }
     /** Every [scrollTo] the UI made, in order. */
     val scrolls = mutableListOf<UInt>()
 

@@ -8,6 +8,7 @@
 mod beacon;
 mod calls;
 mod chat;
+mod chat_cache;
 mod error;
 mod hc;
 mod host_model;
@@ -15,6 +16,7 @@ mod launch;
 mod push;
 mod removal;
 mod send;
+mod settings;
 mod store;
 mod structure;
 mod terminal;
@@ -33,7 +35,8 @@ pub use beacon::{
     BeaconSource, BeaconState, BeaconUpdate, FetchError, Linger, pinned_release,
 };
 pub use calls::{
-    CallAnswer, CallAnswerState, CallFeedState, CallInfo, CallListener, CallUrgency, CallWatch,
+    CallAnswer, CallAnswerState, CallFeedState, CallInfo, CallListener, CallReply,
+    CallReplyOutcome, CallUrgency, CallWatch,
 };
 pub use chat::{
     ChatEntry, ChatEntryBody, ChatQuestionOption, ChatQuestionPart, ChatSnapshot, ChatStatus,
@@ -48,10 +51,11 @@ pub use push::{
     PushPairing, PushProgress, PushStep,
 };
 pub use send::{HELD_AFTER, SendListener, SendOutcome};
+pub use settings::AttachMode;
 pub use structure::{HostStructure, PaneInfo, SpaceInfo, StructureProblem, TabInfo};
 pub use terminal::{
-    AttachOptions, CellRun, CursorPos, FRAME_INTERVAL, ScreenFrame, ScreenLine, TerminalExit,
-    TerminalUpdate, TerminalView, ViewStats,
+    AttachOptions, CellRun, CursorPos, FRAME_INTERVAL, KeyMods, ScreenFrame, ScreenLine,
+    TerminalExit, TerminalKey, TerminalUpdate, TerminalView, ViewStats,
 };
 
 use hc::HcClient;
@@ -222,6 +226,7 @@ pub struct AriesCore {
     vault: Arc<dyn KeyVault>,
     hosts: Mutex<Vec<SavedHost>>,
     beacon_release: Mutex<BeaconRelease>,
+    chat_cache: chat_cache::ChatCache,
 }
 
 #[uniffi::export]
@@ -231,9 +236,15 @@ impl AriesCore {
     pub fn new(data_dir: String, vault: Arc<dyn KeyVault>) -> Result<Arc<Self>, CoreError> {
         let store = Store::open(&PathBuf::from(data_dir))?;
         let saved = store.load()?;
+        let chat_cache = chat_cache::ChatCache::new(
+            store.root(),
+            vault.clone(),
+            store.read_settings().chat_cache_days,
+        );
         Ok(Arc::new(Self {
             store,
             vault,
+            chat_cache,
             hosts: Mutex::new(saved.hosts),
             beacon_release: Mutex::new(pinned_release()),
         }))
@@ -734,7 +745,14 @@ impl AriesCore {
     /// phone (`device`) on the Relay at `relay_url`, exchanges keys with the
     /// Beacon over SSH and has it send a test notification. `progress`
     /// hears each step as it starts; a failure names its step
-    /// ([`CoreError::PushFailed`]). Turning it on again replaces the pairing.
+    /// ([`CoreError::PushFailed`]). `relay_url` must be `https://` (or
+    /// `http://` to this device's own address); a bad URL fails at
+    /// [`PushStep::Register`] before anything is sent.
+    ///
+    /// Turning it on again, for example with another (self-hosted) Relay,
+    /// replaces the pairing: only once the new one is paired is the old one
+    /// deleted on its Relay ([`PushStep::Unpair`], queued if unreachable).
+    /// A failed change keeps the old pairing working.
     pub async fn enable_push(
         &self,
         host_id: String,
@@ -863,13 +881,63 @@ impl AriesCore {
         terminal: String,
         cursor: Option<String>,
     ) -> Result<Arc<ChatWatch>, CoreError> {
-        let host = self.chat_host(&host_id)?;
-        Ok(Arc::new(ChatWatch::start(
-            host,
-            terminal,
-            cursor,
-            std::time::Duration::from_secs(1),
-        )))
+        self.watch_chat_retrying(host_id, terminal, cursor, std::time::Duration::from_secs(1))
+    }
+
+    /// The cached Chat of `terminal`, without reaching the Host. `None`
+    /// when nothing is cached (or it expired).
+    pub async fn cached_chat(
+        &self,
+        host_id: String,
+        terminal: String,
+    ) -> Result<Option<ChatSnapshot>, CoreError> {
+        self.saved_host(&host_id)?;
+        let cache = self.chat_cache.clone();
+        on_runtime(async move {
+            let cached = tokio::task::spawn_blocking(move || cache.load(&host_id, &terminal))
+                .await
+                .map_err(|e| CoreError::Protocol {
+                    detail: format!("cache task failed: {e}"),
+                })??;
+            Ok(cached.map(|c| {
+                let mut model = chat::ChatModel::new(None);
+                model.seed(c);
+                let mut s = model.snapshot();
+                s.status = ChatStatus::Reconnecting;
+                s
+            }))
+        })
+        .await
+    }
+
+    /// Deletes every cached Chat of the Host.
+    pub async fn clear_chat_cache(&self, host_id: String) -> Result<(), CoreError> {
+        self.saved_host(&host_id)?;
+        let cache = self.chat_cache.clone();
+        on_runtime(async move {
+            tokio::task::spawn_blocking(move || cache.clear(&host_id))
+                .await
+                .map_err(|e| CoreError::Protocol {
+                    detail: format!("cache task failed: {e}"),
+                })?
+        })
+        .await
+    }
+
+    /// Days a cached Chat is kept after its last update (default 30).
+    pub fn chat_cache_retention_days(&self) -> u32 {
+        self.chat_cache.retention_days()
+    }
+
+    /// Sets the retention period (at least one day); older Chats are
+    /// deleted on the next cache use.
+    pub fn set_chat_cache_retention_days(&self, days: u32) -> Result<(), CoreError> {
+        let days = days.max(1);
+        let mut settings = self.store.read_settings();
+        settings.chat_cache_days = days;
+        self.store.write_settings(&settings)?;
+        self.chat_cache.set_retention_days(days);
+        Ok(())
     }
 
     /// Answers the open question `question_id` (a
@@ -920,6 +988,30 @@ impl AriesCore {
         let runner = self.chat_host(&host_id)?;
         Ok(Arc::new(calls::watch(runner, host_id, listener)))
     }
+
+    /// Answers Call `call_id` with its Choice `choice` (0-based): the
+    /// Host's Beacon types that Choice into the calling Terminal, then
+    /// Enter, at most once ever (it claims the Call first).
+    ///
+    /// A plain core call with no UI state, so it also runs from a
+    /// notification action in the background (ticket 36). How it ends:
+    /// - `Err(..)`: the reply never started on the Host (no key, key locked,
+    ///   Host unreachable, key rejected, Host key unknown or changed).
+    ///   Nothing was claimed or typed; trying again is safe.
+    /// - `Ok` with [`CallReplyOutcome::Unknown`]: the Beacon was started but
+    ///   its result was lost (connection dropped, timed out). It may have
+    ///   been delivered; the Call history shows. Trying again is still safe:
+    ///   the claim makes a second try `Answered` if the first got through.
+    /// - Any other `Ok`: what the Beacon did and recorded.
+    pub async fn reply_call(
+        &self,
+        host_id: String,
+        call_id: String,
+        choice: u32,
+    ) -> Result<CallReply, CoreError> {
+        let runner = self.chat_host(&host_id)?;
+        on_runtime(async move { calls::reply(&runner, &call_id, choice).await }).await
+    }
 }
 
 impl AriesCore {
@@ -932,7 +1024,22 @@ impl AriesCore {
         retry: std::time::Duration,
     ) -> Result<Arc<ChatWatch>, CoreError> {
         let host = self.chat_host(&host_id)?;
-        Ok(Arc::new(ChatWatch::start(host, terminal, cursor, retry)))
+        let cache = chat::CacheSlot {
+            cache: self.chat_cache.clone(),
+            host: host_id,
+        };
+        Ok(Arc::new(ChatWatch::start(
+            host,
+            terminal,
+            cursor,
+            Some(cache),
+            retry,
+        )))
+    }
+
+    /// Moves the Chat cache's clock forward (tests of the retention period).
+    pub fn shift_clock(&self, by: std::time::Duration) {
+        self.chat_cache.shift_clock(by);
     }
 
     fn chat_host(&self, host_id: &str) -> Result<chat::ChatHost, CoreError> {

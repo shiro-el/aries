@@ -74,6 +74,17 @@ pub struct CallInfo {
     pub pushes_by_default: bool,
 }
 
+impl From<wire::Urgency> for CallUrgency {
+    fn from(u: wire::Urgency) -> Self {
+        match u {
+            wire::Urgency::Record => Self::Record,
+            wire::Urgency::Check => Self::Check,
+            wire::Urgency::Urgent => Self::Urgent,
+            wire::Urgency::Emergency => Self::Emergency,
+        }
+    }
+}
+
 impl CallInfo {
     pub(crate) fn from_wire(host_id: &str, c: wire::Call) -> Self {
         Self {
@@ -85,27 +96,65 @@ impl CallInfo {
             top_level: c.top_level,
             title: c.title,
             body: c.body,
-            urgency: match c.urgency {
-                wire::Urgency::Record => CallUrgency::Record,
-                wire::Urgency::Check => CallUrgency::Check,
-                wire::Urgency::Urgent => CallUrgency::Urgent,
-                wire::Urgency::Emergency => CallUrgency::Emergency,
-            },
+            urgency: c.urgency.into(),
             choices: c.choices,
-            answer: c.answer.map(|a| CallAnswer {
-                choice: a.choice,
-                text: a.text,
-                state: match a.state {
-                    wire::AnswerState::Claimed => CallAnswerState::Claimed,
-                    wire::AnswerState::Delivered => CallAnswerState::Delivered,
-                    wire::AnswerState::Failed => CallAnswerState::Failed,
-                    wire::AnswerState::Unconfirmed => CallAnswerState::Unconfirmed,
-                },
-                at_ms: a.at_ms,
-                detail: a.detail,
-            }),
+            answer: c.answer.map(CallAnswer::from_wire),
         }
     }
+}
+
+impl CallAnswer {
+    fn from_wire(a: wire::Answer) -> Self {
+        Self {
+            choice: a.choice,
+            text: a.text,
+            state: match a.state {
+                wire::AnswerState::Claimed => CallAnswerState::Claimed,
+                wire::AnswerState::Delivered => CallAnswerState::Delivered,
+                wire::AnswerState::Failed => CallAnswerState::Failed,
+                wire::AnswerState::Unconfirmed => CallAnswerState::Unconfirmed,
+            },
+            at_ms: a.at_ms,
+            detail: a.detail,
+        }
+    }
+}
+
+/// What [`crate::AriesCore::reply_call`] did, once the reply ran on the Host.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum CallReplyOutcome {
+    /// Typed into the calling Terminal, then Enter.
+    Delivered,
+    /// Not typed (the Terminal is gone, the Agent is Blocked, ...); recorded.
+    Failed,
+    /// Handed to herdr-core but not confirmed: may or may not be in the
+    /// Terminal. Recorded; never retried.
+    Unconfirmed,
+    /// The Call already had an answer (another phone, an earlier try).
+    Answered,
+    /// The Host has no such Call (any more).
+    NoCall,
+    /// The Call has no such Choice.
+    NoChoice,
+    /// The Call's caller was never confirmed: nothing to type into.
+    NotAnswerable,
+    /// The Host has no Beacon.
+    NoBeacon,
+    /// The reply started on the Host but its result never came back: it
+    /// may have been delivered. Check the Call history; trying again is
+    /// safe (it then says `Answered` if this one got through).
+    Unknown,
+}
+
+/// The result of [`crate::AriesCore::reply_call`].
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CallReply {
+    pub outcome: CallReplyOutcome,
+    /// The Call's answer as the Host recorded it (the earlier one for
+    /// `Answered`); `None` when nothing was recorded or nothing came back.
+    pub answer: Option<CallAnswer>,
+    /// Why, for the user; not for matching.
+    pub detail: Option<String>,
 }
 
 /// Where the feed is.
@@ -217,6 +266,76 @@ pub(crate) async fn history(runner: &ChatHost, host_id: &str) -> Result<Vec<Call
     let mut feed = Feed::new(runner.open(&command(&["calls"])).await?);
     let calls = feed.snapshot().await?;
     Ok(listing(host_id, &calls))
+}
+
+/// Longest wait for the Beacon's reply line once it runs. Above the
+/// Beacon's own 30 s limit for herdr-core to confirm the typing.
+const REPLY_WAIT: Duration = Duration::from_secs(45);
+
+/// The Host-side `aries-beacon reply`; without a Beacon it prints a
+/// `no_beacon` line.
+fn reply_command(call_id: &str, choice: u32) -> String {
+    let no_beacon = wire::ReplyLine::new(wire::ReplyOutcome::NoBeacon, None, None).to_json();
+    let script = format!(
+        r#"b="${{ARIES_BEACON:-$HOME/.local/bin/aries-beacon}}"; if [ -x "$b" ]; then exec "$b" reply {} {choice}; else printf '%s\n' {}; fi"#,
+        sh_quote(call_id),
+        sh_quote(&no_beacon),
+    );
+    format!("sh -c {}", sh_quote(&script))
+}
+
+/// Runs `aries-beacon reply` on the Host once; never retried. An `Err`
+/// means the command never started there ([`ChatHost::open`] failed before
+/// the exec request went out); once it started, every ending is an `Ok`.
+pub(crate) async fn reply(
+    runner: &ChatHost,
+    call_id: &str,
+    choice: u32,
+) -> Result<CallReply, CoreError> {
+    let Stream {
+        reader,
+        writer,
+        guard,
+    } = runner.open(&reply_command(call_id, choice)).await?;
+    let mut lines = BufReader::new(reader).lines();
+    let mut line = None;
+    let read = tokio::time::timeout(REPLY_WAIT, async {
+        while let Ok(Some(text)) = lines.next_line().await {
+            if let Ok(l) = wire::ReplyLine::parse(text.trim()) {
+                line = Some(l);
+            }
+        }
+    })
+    .await;
+    drop((writer, guard));
+    let Some(line) = line else {
+        let why = if read.is_err() {
+            "the Host did not answer in time"
+        } else {
+            "the connection ended before the Host answered"
+        };
+        return Ok(CallReply {
+            outcome: CallReplyOutcome::Unknown,
+            answer: None,
+            detail: Some(why.into()),
+        });
+    };
+    Ok(CallReply {
+        outcome: match line.outcome {
+            wire::ReplyOutcome::Delivered => CallReplyOutcome::Delivered,
+            wire::ReplyOutcome::Failed => CallReplyOutcome::Failed,
+            wire::ReplyOutcome::Unconfirmed => CallReplyOutcome::Unconfirmed,
+            wire::ReplyOutcome::Answered => CallReplyOutcome::Answered,
+            wire::ReplyOutcome::NoCall => CallReplyOutcome::NoCall,
+            wire::ReplyOutcome::NoChoice => CallReplyOutcome::NoChoice,
+            wire::ReplyOutcome::NotAnswerable => CallReplyOutcome::NotAnswerable,
+            wire::ReplyOutcome::NoBeacon => CallReplyOutcome::NoBeacon,
+            // A newer Beacon's outcome: it ran, the result is unclear.
+            wire::ReplyOutcome::Unknown => CallReplyOutcome::Unknown,
+        },
+        answer: line.answer.map(CallAnswer::from_wire),
+        detail: line.detail,
+    })
 }
 
 /// A running [`crate::AriesCore::watch_calls`].

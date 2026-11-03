@@ -49,6 +49,45 @@ pub enum PushMessage {
         /// Unix seconds on the Host.
         sent_at: u64,
     },
+    /// An Agent's status changed to one the push policy notifies about
+    /// ([`crate::push_policy`]); sent by the Beacon's `serve`.
+    Status {
+        /// Terminal address on the Host (`t7`, `box/t7`).
+        terminal: String,
+        /// The Terminal's name, when it has one.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
+        /// The Terminal's title, when not empty.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        title: Option<String>,
+        /// No parent Terminal: not a subagent.
+        top_level: bool,
+        /// The new status ([`crate::agent_status::agent_status`]).
+        status: crate::agent_status::AgentStatus,
+        /// Unix seconds on the Host.
+        at: u64,
+    },
+    /// An Agent sent a Call the push policy notifies about
+    /// ([`crate::push_policy::PushPolicy::allows_call`]); sent by
+    /// `aries-beacon call` right after it recorded the Call.
+    Call {
+        /// The Call's ID in the Host's Call history ([`crate::calls::Call::id`]).
+        id: String,
+        /// Address of the calling Terminal (only confirmed Calls are pushed).
+        terminal: String,
+        /// No parent Terminal: not a subagent.
+        top_level: bool,
+        title: String,
+        /// May be cut short (ending in `…`) to fit the envelope; Call
+        /// history has it in full.
+        body: String,
+        urgency: crate::calls::Urgency,
+        /// The Choices, in order; an answer names one by its index. Cut
+        /// short only if they would not fit otherwise.
+        choices: Vec<String>,
+        /// When the Beacon recorded it, Unix milliseconds.
+        at_ms: u64,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]

@@ -2,7 +2,7 @@
 //! out of OpenCode's SQLite database into Chat items. Facts:
 //! `docs/research/opencode-integration.md`.
 //!
-//! Pairing: the Beacon's OpenCode plugin ([`crate::integrations`]) labels
+//! Pairing: the Beacon's OpenCode plugin ([`crate::opencode_plugin`]) labels
 //! its Terminal `aries.opencode.session=<id>` at every prompt; before the
 //! first prompt of a resumed session the `-s <id>` argument says it. Labels
 //! outlive the program, so a label counts only while OpenCode runs in the

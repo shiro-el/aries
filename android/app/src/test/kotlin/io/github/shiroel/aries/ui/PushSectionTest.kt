@@ -4,7 +4,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
@@ -151,9 +155,91 @@ class PushSectionTest {
     }
 
     @Test
-    fun saysWhenTheBuildHasNoRelay() {
-        connectTo(FakeCore().apply { beacon = installed() }, Platform(relayUrl = null))
+    fun aBuildWithoutARelayAsksForTheUsersOwn() {
+        val core = FakeCore().apply { beacon = installed() }
+        connectTo(core, Platform(relayUrl = null))
         shows(str(R.string.push_no_relay))
+        compose.onNodeWithText(str(R.string.push_enable_button)).performScrollTo().assertIsNotEnabled()
+
+        typeRelay(MINE)
+        click(R.string.push_enable_button)
+
+        assertEquals(MINE, core.pushPaired.values.single())
+        shows(str(R.string.push_on_body, MINE))
+    }
+
+    @Test
+    fun usesASelfHostedRelayFromTheStart() {
+        val core = FakeCore().apply { beacon = installed() }
+        connectTo(core)
+        compose.onNodeWithTag(RELAY_FIELD).performScrollTo().assertTextContains(RELAY)
+
+        typeRelay(MINE)
+        click(R.string.push_enable_button)
+
+        assertEquals(MINE, core.pushPaired.values.single())
+    }
+
+    @Test
+    fun changesTheRelayAndSendsATestThroughTheNewOne() {
+        val core = FakeCore().apply { beacon = installed() }
+        connectTo(core)
+        click(R.string.push_enable_button)
+        val before = core.testPushes
+
+        click(R.string.push_change_relay_button)
+        compose.onNodeWithTag(RELAY_FIELD).performScrollTo().assertTextContains(RELAY)
+        typeRelay(MINE)
+        click(R.string.push_use_relay_button)
+
+        assertEquals(listOf(RELAY, MINE), core.pushRelays)
+        assertEquals(MINE, core.pushPaired.values.single())
+        assertEquals(before + 1, core.testPushes)
+        shows(str(R.string.push_on_body, MINE))
+        shows(str(R.string.push_test_sent))
+        compose.onNodeWithTag(RELAY_FIELD).assertDoesNotExist()
+    }
+
+    @Test
+    fun aFailedRelayChangeKeepsTheOldRelayAndSaysWhy() {
+        val core = FakeCore().apply { beacon = installed() }
+        connectTo(core)
+        click(R.string.push_enable_button)
+
+        click(R.string.push_change_relay_button)
+        typeRelay(MINE)
+        core.pushFailAt = PushStep.REGISTER
+        click(R.string.push_use_relay_button)
+
+        assertEquals(RELAY, core.pushPaired.values.single())
+        shows(str(R.string.push_on_body, RELAY))
+        shows(str(R.string.push_failed, str(R.string.push_step_register), "relay said no"))
+        // The typed URL stays, to fix and try again.
+        compose.onNodeWithTag(RELAY_FIELD).performScrollTo().assertTextContains(MINE)
+
+        core.pushFailAt = null
+        click(R.string.push_use_relay_button)
+        shows(str(R.string.push_on_body, MINE))
+    }
+
+    @Test
+    fun cancellingARelayChangeKeepsTheRelay() {
+        val core = FakeCore().apply { beacon = installed() }
+        connectTo(core)
+        click(R.string.push_enable_button)
+
+        click(R.string.push_change_relay_button)
+        typeRelay(MINE)
+        click(R.string.cancel_button)
+
+        assertEquals(listOf(RELAY), core.pushRelays)
+        shows(str(R.string.push_on_body, RELAY))
+        compose.onNodeWithTag(RELAY_FIELD).assertDoesNotExist()
+    }
+
+    private fun typeRelay(url: String) {
+        compose.onNodeWithTag(RELAY_FIELD).performScrollTo().performTextReplacement(url)
+        compose.waitForIdle()
     }
 
     @Test
@@ -196,5 +282,7 @@ class PushSectionTest {
 
     private companion object {
         const val RELAY = "https://relay.example"
+        const val MINE = "https://relay.mine.example"
+        const val RELAY_FIELD = "push_relay_url"
     }
 }

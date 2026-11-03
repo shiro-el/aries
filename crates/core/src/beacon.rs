@@ -20,7 +20,7 @@
 //!
 //! The Beacon also manages files in Agents' own configuration (the OpenCode
 //! plugin `${XDG_CONFIG_HOME:-~/.config}/opencode/plugins/aries-agent-state.js`):
-//! every install and update runs `aries-beacon integrations install`, which
+//! every install and update runs `aries-beacon opencode-plugin install`, which
 //! leaves a copy the user edited alone; removal deletes an unedited copy.
 
 use aries_protocol::beacon::{BeaconStatus, VersionRange, parse_version};
@@ -227,7 +227,7 @@ fn launch_agent() -> String {
 pub(crate) const UNINSTALL_STEPS: &[(&str, &str)] = &[
     // Ticket 42: the OpenCode plugin, unless the user edited it (its first
     // line holds the SHA-256 of the rest; same check as the Beacon's
-    // `integrations remove`, in shell so it works without the binary).
+    // `opencode-plugin remove`, in shell so it works without the binary).
     (
         "opencode plugin",
         r#"c="${XDG_CONFIG_HOME:-$HOME/.config}/opencode"; f="$c/plugins/aries-agent-state.js"
@@ -249,6 +249,18 @@ exit 0"#,
 if [ -x "$b" ]; then "$b" unpair >/dev/null 2>&1 || true; fi
 rm -f "${XDG_STATE_HOME:-$HOME/.local/state}/aries-beacon/pairing.json""#,
     ),
+    // Ticket 34: the managed `call-human` skill, unless the user changed it
+    // (the Beacon decides). Best effort, like the pairing: a Beacon from
+    // before the skill existed has no `skill` command.
+    (
+        "skill",
+        r#"b="$HOME/.local/bin/aries-beacon"
+if [ -x "$b" ]; then "$b" skill uninstall >/dev/null 2>&1 || true; fi"#,
+    ),
+    // Ticket 43: the managed Pi extension, unless the user edited it
+    // (same check as `aries_beacon::pi_extension::remove`, in plain sh so
+    // it works without the Beacon binary).
+    ("pi extension", PI_EXTENSION_REMOVE),
     (
         "service",
         r#"if [ "$(uname -s)" = Darwin ]; then
@@ -274,11 +286,39 @@ systemctl --user reset-failed aries-beacon.service >/dev/null 2>&1 || true"#,
     ),
 ];
 
+/// Removes `aries-status.ts` from Pi's extension dir if its marker line's
+/// hash still matches the rest of the file, then the dirs it leaves empty.
+const PI_EXTENSION_REMOVE: &str = r#"a="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
+case "$a" in "~") a="$HOME" ;; "~/"*) a="$HOME/${a#\~/}" ;; esac
+f="$a/extensions/aries-status.ts"
+[ -f "$f" ] || exit 0
+m='// @aries-managed-pi-extension sha256='
+first=$(head -n 1 "$f")
+case "$first" in "$m"*) ;; *) exit 0 ;; esac
+want=${first#"$m"}
+if command -v sha256sum >/dev/null 2>&1; then
+  have=$(tail -n +2 "$f" | sha256sum)
+else
+  have=$(tail -n +2 "$f" | shasum -a 256)
+fi
+have=${have%% *}
+[ "$want" = "$have" ] || exit 0
+rm -f "$f"
+rmdir "$a/extensions" 2>/dev/null || true
+if [ -z "${PI_CODING_AGENT_DIR:-}" ]; then rmdir "$a" "$HOME/.pi" 2>/dev/null || true; fi
+exit 0"#;
+
+/// Installs or updates the managed Pi extension with the Beacon just put
+/// in place (`aries-beacon pi-extension install`). Best effort: a Host
+/// where it cannot be written still gets its Beacon.
+const PI_EXTENSION_INSTALL: &str =
+    r#""$HOME/.local/bin/aries-beacon" pi-extension install >/dev/null 2>&1 || true"#;
+
 /// Where the Beacon binary is installed on the Host (for `sh`).
 pub(crate) const BEACON_BIN: &str = "$HOME/.local/bin/aries-beacon";
 
-/// Installs or updates the files the Beacon manages in Agents' configuration.
-const INTEGRATIONS: &str = r#""$HOME/.local/bin/aries-beacon" integrations install"#;
+/// Installs or updates the OpenCode status plugin (it keeps a user-edited copy).
+const OPENCODE_PLUGIN_INSTALL: &str = r#""$HOME/.local/bin/aries-beacon" opencode-plugin install"#;
 
 const DISCARD_UPLOAD: &str = r#"rm -f "$HOME/.local/bin/.aries-beacon.new""#;
 
@@ -351,9 +391,21 @@ pub(crate) async fn install(
     } else {
         register_systemd(ssh).await?
     };
-    // Best effort: an Agent's configuration the Beacon cannot write does not
-    // make the Beacon itself any less installed.
-    let _ = ssh.exec(&sh_c(INTEGRATIONS), &[]).await;
+    // Ticket 34: the new binary installs or updates its `call-human` skill
+    // (it leaves the user's own version alone).
+    run(
+        ssh,
+        "skill",
+        &sh_c(r#""$HOME/.local/bin/aries-beacon" skill install"#),
+        &[],
+    )
+    .await?;
+    // Ticket 43: and the Pi status extension.
+    let _ = ssh.exec(&sh_c(PI_EXTENSION_INSTALL), &[]).await;
+    // Ticket 42: and the OpenCode status plugin. Best effort, like Pi's: an
+    // Agent's configuration the Beacon cannot write does not make the
+    // Beacon itself any less installed.
+    let _ = ssh.exec(&sh_c(OPENCODE_PLUGIN_INSTALL), &[]).await;
     Ok(BeaconInstall {
         version: release.version.clone(),
         linger,
@@ -665,6 +717,50 @@ mod tests {
             normalize("FreeBSD", "riscv64"),
             ("FreeBSD".into(), "riscv64".into())
         );
+    }
+
+    /// The removal step on this machine's `sh`, with a scratch `HOME`.
+    #[test]
+    fn removes_only_an_untouched_managed_pi_extension() {
+        let marker = "// @aries-managed-pi-extension sha256=";
+        let managed = |body: &str| format!("{marker}{}\n{body}", sha256_hex(body.as_bytes()));
+        let remove = |home: &std::path::Path, agent_dir: Option<&str>| {
+            let mut cmd = std::process::Command::new("sh");
+            cmd.arg("-c").arg(PI_EXTENSION_REMOVE).env_clear();
+            cmd.env("HOME", home).env("PATH", "/usr/bin:/bin");
+            if let Some(d) = agent_dir {
+                cmd.env("PI_CODING_AGENT_DIR", d);
+            }
+            assert!(cmd.status().unwrap().success());
+        };
+        let home = tempfile::tempdir().unwrap();
+        let ext = home.path().join(".pi/agent/extensions");
+        let file = ext.join("aries-status.ts");
+        std::fs::create_dir_all(&ext).unwrap();
+
+        // Untouched: removed with the dirs it leaves empty.
+        std::fs::write(&file, managed("export default () => {};\n")).unwrap();
+        remove(home.path(), None);
+        assert!(!home.path().join(".pi").exists());
+
+        // Edited, or not ours: kept.
+        std::fs::create_dir_all(&ext).unwrap();
+        let edited = format!("{}// mine\n", managed("x\n"));
+        std::fs::write(&file, &edited).unwrap();
+        remove(home.path(), None);
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), edited);
+        std::fs::write(&file, "x\n").unwrap();
+        remove(home.path(), None);
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "x\n");
+
+        // `PI_CODING_AGENT_DIR` with a tilde; other files in the dir stay.
+        let custom = home.path().join("cfg/extensions");
+        std::fs::create_dir_all(&custom).unwrap();
+        std::fs::write(custom.join("aries-status.ts"), managed("y\n")).unwrap();
+        std::fs::write(custom.join("other.ts"), "z").unwrap();
+        remove(home.path(), Some("~/cfg"));
+        assert!(!custom.join("aries-status.ts").exists());
+        assert!(custom.join("other.ts").exists());
     }
 
     #[test]

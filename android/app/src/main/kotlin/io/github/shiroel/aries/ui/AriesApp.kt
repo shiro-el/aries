@@ -53,6 +53,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleStartEffect
 import io.github.shiroel.aries.R
+import io.github.shiroel.aries.core.AttachMode
 import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.Host
 import io.github.shiroel.aries.core.QrMatrix
@@ -157,6 +158,7 @@ private fun HostListScreen(model: HostsModel) {
         items(model.hosts, key = { it.id }) { host ->
             HostRow(host, onRemove = { model.askRemove(host) }) { model.connect(host) }
             JumpSummary(model.jumps[host.id].orEmpty())
+            ClearChatCacheButton(model.chatCache, host)
             if (host.endpoint is Endpoint.Ssh) {
                 TextButton(onClick = { model.editJumps(host) }) { Text(stringResource(R.string.host_jumps_button)) }
                 TextButton(onClick = { model.askPassword(host) }) {
@@ -167,6 +169,15 @@ private fun HostListScreen(model: HostsModel) {
         if (model.key != null) item { ExtraKeysSection(model) }
         item { HorizontalDivider() }
         item { AddHostForm(model) }
+        item { HorizontalDivider() }
+        item { ChatCacheSettings(model.chatCache) }
+        item(key = "attach-mode") {
+            OptionToggle(
+                R.string.attach_input_label,
+                R.string.attach_input_hint,
+                model.attachMode == AttachMode.INPUT,
+            ) { model.setDefaultAttachMode(if (it) AttachMode.INPUT else AttachMode.OBSERVE) }
+        }
     }
 }
 
@@ -203,6 +214,20 @@ private fun BiometricToggle(required: Boolean, onChange: (Boolean) -> Unit) {
             Text(stringResource(R.string.key_biometric_hint), style = MaterialTheme.typography.bodySmall)
         }
         Switch(checked = required, onCheckedChange = null)
+    }
+}
+
+@Composable
+private fun OptionToggle(label: Int, hint: Int, on: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().toggleable(value = on, role = Role.Switch, onValueChange = onChange),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(label), style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(hint), style = MaterialTheme.typography.bodySmall)
+        }
+        Switch(checked = on, onCheckedChange = null)
     }
 }
 

@@ -1,13 +1,13 @@
-//! Files the Beacon manages in Agents' own configuration, so the Agent
-//! reports to Aries. Today one: the OpenCode plugin
+//! The OpenCode plugin the Beacon manages
 //! (`$XDG_CONFIG_HOME/opencode/plugins/aries-agent-state.js`, OpenCode loads
-//! every `.js` there), which reports OSC 7501 status and labels the Terminal
-//! with the session id (`docs/research/opencode-integration.md`).
+//! every `.js` there): OpenCode reports no OSC 7501 status and names no
+//! session on its own, so the plugin reports its status and labels the
+//! Terminal with the session id (`docs/research/opencode-integration.md`).
 //!
 //! The installed file's first line marks it as managed and holds the
 //! SHA-256 of the rest. Install and update overwrite only a file whose rest
 //! still matches that hash; a file the user edited (or wrote) is kept. The
-//! phone runs `aries-beacon integrations install` after installing or
+//! phone runs `aries-beacon opencode-plugin install` after installing or
 //! updating the Beacon; removing the Beacon deletes an unedited copy (the
 //! core's `UNINSTALL_STEPS`, in shell, with the same check).
 

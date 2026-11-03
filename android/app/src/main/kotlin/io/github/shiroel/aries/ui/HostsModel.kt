@@ -9,7 +9,9 @@ import io.github.shiroel.aries.HttpRelayClient
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.core.AriesCoreInterface
+import io.github.shiroel.aries.core.AttachMode
 import io.github.shiroel.aries.core.AttachOptions
+import io.github.shiroel.aries.core.TerminalView
 import io.github.shiroel.aries.core.BeaconFetcher
 import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Endpoint
@@ -34,7 +36,16 @@ import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.selects.select
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.dropWhile
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.withContext
 
 /** A message for the user: a string resource and its format arguments. */
@@ -127,6 +138,8 @@ class HostsModel(
 
     /** Every Host's Calls and the new-Call banner; see [resumeCalls]. */
     val calls = CallsModel(core, scope, keyWork)
+    /** Chat cache retention and per-Host clearing (ticket 44). */
+    val chatCache = ChatCacheModel(core, scope, keyWork)
 
     var key by mutableStateOf<PublicKeyInfo?>(null)
         private set
@@ -145,6 +158,10 @@ class HostsModel(
     var jumps by mutableStateOf<Map<String, List<JumpHost>>>(emptyMap())
         private set
 
+    /** How opening a Terminal attaches (the user's option; observe by default). */
+    var attachMode by mutableStateOf(AttachMode.OBSERVE)
+        private set
+
     /** The open Host's connection and structure watch, while [Screen.Browse] shows (the latest line after a reconnect). */
     private var open: Pair<HostConnection, StructureWatch?>? = null
 
@@ -160,11 +177,26 @@ class HostsModel(
     /** Every line the screens use now: the open Host's and the Agent list's. */
     private val links: List<HostLink> get() = listOfNotNull(browseLink, callLink) + agentLinks.values
 
-    /** The phone's network changed (Wi-Fi to LTE, airplane mode): replace every line and restore the screens. */
-    fun networkChanged() = links.forEach { it.networkChanged() }
+    /**
+     * The phone's network changed (Wi-Fi to LTE, airplane mode): replace every
+     * line and restore the screens. Each line reconnects once, on its own path:
+     * Host connections through their [HostLink], the open Chat's stream (its
+     * own line, see `ChatWatch`) through [ChatModel.reconnect].
+     */
+    fun networkChanged() {
+        links.forEach { it.networkChanged() }
+        liveChat?.reconnect()
+    }
 
     /** The app is back in the foreground: reconnect any line that died meanwhile. */
-    fun foregrounded() = links.forEach { it.check() }
+    fun foregrounded() {
+        links.forEach { it.check() }
+        liveChat?.retryNow()
+    }
+
+    /** The Chat that is open, or still running under the Terminal opened from it. */
+    private val liveChat: ChatModel?
+        get() = (screen as? Screen.Chat ?: (screen as? Screen.Terminal)?.returnTo as? Screen.Chat)?.chat
 
     init {
         guard {
@@ -172,6 +204,7 @@ class HostsModel(
             keyProtection = core.keyProtection()
             hosts = core.hosts()
             refreshRoutes()
+            attachMode = core.attachMode()
         }
         flushPushRevocations()
     }
@@ -475,33 +508,103 @@ class HostsModel(
     private fun observe(link: HostLink, terminal: TerminalInfo, returnTo: Screen) {
         val viewer = TerminalViewer(terminal)
         viewer.link = link
+        if (attachMode == AttachMode.INPUT) viewer.startTyping()
         screen = Screen.Terminal(viewer, returnTo)
         viewing = scope.launch {
             try {
                 link.keep { conn, resumed ->
-                    val options = AttachOptions(observe = true, cols = 80u, rows = 24u, history = SCROLLBACK_LINES, resumed = resumed)
-                    val view = conn.attachTerminal(terminal.address, options)
-                    viewer.scroller = view::scrollTo
-                    try {
-                        while (true) {
-                            when (val u = view.next()) {
-                                is TerminalUpdate.Screen -> viewer.apply(u.frame)
-                                is TerminalUpdate.Exited -> {
-                                    viewer.exited(u.exit)
-                                    return@keep
-                                }
+                    if (!viewer.typing) {
+                        // Watch until the input is focused, then let go of the observer.
+                        val options = AttachOptions(observe = true, cols = 80u, rows = 24u, history = SCROLLBACK_LINES, resumed = resumed)
+                        val exited = coroutineScope {
+                            val watching = async { draw(conn, viewer, options, null) }
+                            val focused = async { snapshotFlow { viewer.typing }.first { it } }
+                            val done = select { watching.onAwait { it }; focused.onAwait { false } }
+                            focused.cancel()
+                            watching.cancelAndJoin()
+                            done
+                        }
+                        if (exited) return@keep
+                    }
+                    // An ordinary viewer at the phone's grid; from now on the phone sets the size.
+                    val (cols, rows) = snapshotFlow { viewer.phoneGrid }.filterNotNull().first()
+                    val options = AttachOptions(
+                        observe = false, cols = cols.toUShort(), rows = rows.toUShort(), history = SCROLLBACK_LINES, resumed = resumed,
+                    )
+                    draw(conn, viewer, options) { view ->
+                        // A failed send means the line is going; next() reports it and the link re-attaches.
+                        launch {
+                            try {
+                                snapshotFlow { viewer.phoneGrid }.filterNotNull().distinctUntilChanged()
+                                    .dropWhile { it == cols to rows }
+                                    .collect { (c, r) -> view.resize(c.toUShort(), r.toUShort()) }
+                            } catch (e: CoreException) {
                             }
                         }
-                    } finally {
-                        viewer.scroller = null
-                        withContext(NonCancellable) { view.detach() }
-                        view.close()
+                        launch {
+                            try {
+                                // One at a time, so keys arrive in the order they were typed. Keys typed
+                                // while the line is down wait here for the next attach.
+                                for (input in viewer.inputs) {
+                                    when (input) {
+                                        is TerminalInput.Text -> view.sendText(input.text)
+                                        is TerminalInput.Key -> view.sendKey(input.key, input.mods)
+                                    }
+                                }
+                            } catch (e: CoreException) {
+                            }
+                        }
                     }
                 }
             } catch (e: CoreException) {
                 viewer.markClosed()
             }
         }
+    }
+
+    /**
+     * Attaches [viewer] with [options] and draws its updates; [alongside]
+     * runs next to it (typing, resizing) and stops with it. Returns true once
+     * the program exited; a dropped line throws [CoreException.Closed].
+     * Detaches on the way out, also when cancelled.
+     */
+    private suspend fun draw(
+        conn: HostConnection,
+        viewer: TerminalViewer,
+        options: AttachOptions,
+        alongside: (CoroutineScope.(TerminalView) -> Unit)?,
+    ): Boolean {
+        val view = conn.attachTerminal(viewer.terminal.address, options)
+        viewer.scroller = view::scrollTo
+        try {
+            return coroutineScope {
+                val side = alongside?.let { f -> launch { f(view) } }
+                try {
+                    var exited = false
+                    while (!exited) {
+                        when (val u = view.next()) {
+                            is TerminalUpdate.Screen -> viewer.apply(u.frame)
+                            is TerminalUpdate.Exited -> {
+                                viewer.exited(u.exit)
+                                exited = true
+                            }
+                        }
+                    }
+                    true
+                } finally {
+                    side?.cancel()
+                }
+            }
+        } finally {
+            viewer.scroller = null
+            withContext(NonCancellable) { view.detach() }
+            view.close()
+        }
+    }
+
+    fun setDefaultAttachMode(mode: AttachMode) = guard {
+        core.setAttachMode(mode)
+        attachMode = core.attachMode()
     }
 
     /** Leaves the open Terminal (it keeps running) and shows where it was opened from. */
@@ -519,10 +622,30 @@ class HostsModel(
     private val agentJobs = mutableListOf<Job>()
 
     /** Connects to every Host and shows all their Agents in one list. */
-    fun openAgents() {
+    fun openAgents() = openAgents(focus = null)
+
+    /**
+     * A tapped Agent notification (warm or cold start): leaves whatever is
+     * open, shows the Agents list and, once [hostId]'s list arrives, opens
+     * that Agent's Terminal (back returns to its detail). A Terminal that is
+     * no longer live, or a Host that was removed, is explained instead.
+     */
+    fun openPushedAgent(hostId: String, address: String) {
+        back()
+        val host = hosts.find { it.id == hostId }
+        openAgents(focus = host?.let { AgentKey(it.id, address) })
+        if (host == null) {
+            prompt = Prompt.Problem(Message(R.string.push_terminal_gone_title), Message(R.string.push_host_gone_body, listOf(address)))
+        }
+    }
+
+    /** [focus]: the Agent whose Terminal to open once its Host's list arrives. */
+    private fun openAgents(focus: AgentKey?) {
         val board = AgentBoard(hosts)
-        screen = Screen.Agents(board)
+        val agents = Screen.Agents(board)
+        screen = agents
         hosts.forEach { host ->
+            var focusing = focus?.takeIf { it.hostId == host.id }
             agentJobs += scope.launch {
                 val conn = try {
                     core.connect(host.id)
@@ -542,6 +665,10 @@ class HostsModel(
                                 val list = watch.next()
                                 board.update(host.id, list)
                                 chatOn(host.id)?.update(list)
+                                focusing?.let { key ->
+                                    focusing = null
+                                    if (screen === agents) focusOn(agents, link, host, key, list)
+                                }
                             }
                         } finally {
                             watch.stop()
@@ -552,6 +679,19 @@ class HostsModel(
                 }
             }
         }
+    }
+
+    private fun focusOn(agents: Screen.Agents, link: HostLink, host: Host, key: AgentKey, list: List<TerminalInfo>) {
+        val terminal = list.find { it.address == key.address && it.state == "live" }
+        if (terminal == null) {
+            prompt = Prompt.Problem(
+                Message(R.string.push_terminal_gone_title),
+                Message(R.string.push_terminal_gone_body, listOf(key.address, host.name)),
+            )
+            return
+        }
+        agents.board.open(key)
+        observe(link, terminal, agents)
     }
 
     /** Opens an Agent's detail; a Done Agent counts as seen there, for every client. */
@@ -663,11 +803,7 @@ class HostsModel(
     }
 
     /** The Chat that is open (or under the Terminal opened from it) on [hostId]. */
-    private fun chatOn(hostId: String): ChatModel? {
-        val s = screen
-        val chat = (s as? Screen.Chat ?: (s as? Screen.Terminal)?.returnTo as? Screen.Chat)?.chat
-        return chat?.takeIf { it.host.id == hostId }
-    }
+    private fun chatOn(hostId: String): ChatModel? = liveChat?.takeIf { it.host.id == hostId }
 
     fun back() {
         (screen as? Screen.Chat)?.chat?.stop()
@@ -681,7 +817,8 @@ class HostsModel(
             calls.stopAll()
             calls.watch(hosts, everyHost = false)
         }
-        if (screen is Screen.Agents) closeAgents()
+        // Also under a Terminal or Chat opened from the Agents list.
+        closeAgents()
         screen = Screen.Hosts
         status?.cancel()
         status = null

@@ -51,7 +51,10 @@ impl Host {
 
     /// Installs the plugin the way the phone does, and returns its path.
     fn install_plugin(&self) -> PathBuf {
-        let out = self.beacon(&["integrations", "install"]).output().unwrap();
+        let out = self
+            .beacon(&["opencode-plugin", "install"])
+            .output()
+            .unwrap();
         assert!(out.status.success(), "{out:?}");
         assert_eq!(
             String::from_utf8_lossy(&out.stdout).trim(),

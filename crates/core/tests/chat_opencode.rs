@@ -70,7 +70,7 @@ async fn an_opencode_chat_shows_its_turns_and_answers_its_question() {
     // The plugin, installed by the Beacon as on a Host.
     let config = dir.path().join("config");
     let out = Command::new(&beacon)
-        .args(["integrations", "install"])
+        .args(["opencode-plugin", "install"])
         .env("XDG_CONFIG_HOME", &config)
         .output()
         .unwrap();
