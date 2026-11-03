@@ -3,7 +3,6 @@
 //! as the push policy says. Fake Agents report their status with OSC 7501.
 
 use std::io::Write;
-use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
@@ -50,17 +49,6 @@ impl Host {
         cmd.env("PATH", format!("{}:/usr/bin:/bin", bin_dir.display()));
         cmd.env("HOME", self.home.path());
         cmd
-    }
-
-    fn state_dir(&self) -> PathBuf {
-        let state = self
-            .hc
-            .env()
-            .into_iter()
-            .find(|(k, _)| k == "XDG_STATE_HOME")
-            .unwrap()
-            .1;
-        PathBuf::from(state).join("aries-beacon")
     }
 
     fn pair(&mut self) {
