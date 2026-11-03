@@ -105,8 +105,8 @@ class CallHistoryTest {
         compose.onNodeWithText(str(R.string.call_inbox_install_beacon, "home")).assertDoesNotExist()
         compose.onNodeWithText(str(R.string.calls_feed_down, "h1", "connection lost")).assertExists()
         compose.runOnIdle {
-            core.callListeners.getValue("h2").onState(io.github.shiroel.aries.core.CallFeedState.Reconnecting(
-                io.github.shiroel.aries.core.CoreException.BeaconNotInstalled().message.orEmpty(),
+            core.callListeners.getValue("h2").onState(io.github.shiroel.aries.core.CallFeedState.BeaconNotInstalled(
+                "the Beacon is not installed on this Host",
             ))
         }
         compose.onNodeWithText(str(R.string.call_inbox_install_beacon, "server")).performClick()
@@ -115,6 +115,40 @@ class CallHistoryTest {
         compose.onNodeWithText(str(R.string.beacon_install_button)).assertIsDisplayed().performClick()
         compose.onNodeWithText(str(R.string.beacon_version, "0.1.0")).assertExists()
         assertEquals(listOf("h2"), installs)
+    }
+
+    @Test
+    fun installLinkFollowsTheTypedStateAndIgnoresUnrelatedOrEmptyFailures() {
+        val core = twoHosts()
+        show(core)
+        openCalls()
+        val install = str(R.string.call_inbox_install_beacon, "home")
+        // Diagnostic wording is display data, not a discriminator.
+        compose.runOnIdle {
+            core.callListeners.getValue("h1").onState(
+                io.github.shiroel.aries.core.CallFeedState.BeaconNotInstalled(""),
+            )
+        }
+        compose.onNodeWithText(install).assertExists()
+        for (detail in listOf("connection lost", "", "the Beacon is not installed on this Host")) {
+            compose.runOnIdle {
+                core.callListeners.getValue("h1").onState(
+                    io.github.shiroel.aries.core.CallFeedState.Reconnecting(detail),
+                )
+            }
+            compose.onNodeWithText(install).assertDoesNotExist()
+            compose.onNodeWithText(str(R.string.calls_feed_down, "h1", detail)).assertExists()
+        }
+        compose.runOnIdle {
+            core.callListeners.getValue("h1").onState(
+                io.github.shiroel.aries.core.CallFeedState.BeaconNotInstalled("missing"),
+            )
+        }
+        compose.onNodeWithText(install).assertExists()
+        compose.runOnIdle {
+            core.callListeners.getValue("h1").onState(io.github.shiroel.aries.core.CallFeedState.Live)
+        }
+        compose.onNodeWithText(install).assertDoesNotExist()
     }
 
     @Test

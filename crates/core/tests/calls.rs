@@ -255,3 +255,29 @@ async fn a_host_without_a_beacon_says_so() {
         Err(CoreError::BeaconNotInstalled)
     ));
 }
+
+#[tokio::test]
+async fn a_watch_reports_a_missing_beacon_as_a_typed_state() {
+    let hc = HcSession::start();
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    let host = core
+        .add_host(
+            "bare".into(),
+            beacon_endpoint(&hc, "/nonexistent/aries-beacon"),
+        )
+        .unwrap()
+        .id;
+    let rec = Arc::new(Recorder::default());
+    let watch = core.watch_calls(host, rec.clone()).await.unwrap();
+    wait_until("the missing Beacon state", || {
+        !rec.states.lock().unwrap().is_empty()
+    });
+    assert_eq!(
+        rec.states.lock().unwrap().first(),
+        Some(&CallFeedState::BeaconNotInstalled {
+            detail: "the Beacon is not installed on this Host".into(),
+        })
+    );
+    watch.stop();
+}
