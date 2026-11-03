@@ -841,6 +841,22 @@ class HostsModel(
             return entries(screen)
         }
 
+    /** Resolve a Call against snapshots already available; opening the inbox starts no Agent watch. */
+    fun callCallerName(entry: CallEntry): String? {
+        val address = entry.call.terminal ?: return null
+        val key = AgentKey(entry.host.id, address)
+        fun find(route: Screen): TerminalInfo? = when (route) {
+            is Screen.Agents -> route.board.find(key)?.terminal
+            is Screen.Browse -> if (route.browser.host.id == key.hostId) route.browser.findTerminal(address) else null
+            is Screen.Terminal -> if (route.viewer.link?.host?.id == key.hostId && route.viewer.terminal.address == address)
+                route.viewer.terminal else find(route.returnTo)
+            is Screen.Chat -> if (route.chat.host.id == key.hostId && route.chat.terminal.address == address)
+                route.chat.terminal else find(route.returnTo)
+            else -> null
+        }
+        return find(screen)?.let(::displayName)?.takeIf { it.isNotBlank() }
+    }
+
     fun openHost(host: Host) {
         back()
         connect(host)

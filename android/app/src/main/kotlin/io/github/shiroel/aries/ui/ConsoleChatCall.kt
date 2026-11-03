@@ -27,7 +27,6 @@ import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.core.CallAnswerState
-import io.github.shiroel.aries.core.CallReplyOutcome
 
 /** Shared visual treatment; transcript questions and Beacon Calls keep their own reply protocols. */
 @Composable
@@ -84,13 +83,7 @@ internal fun ConsoleChatCall(entry: CallEntry, calls: CallsModel) {
         Text(call.title)
         if (call.body.isNotEmpty()) Text(call.body)
         call.answer?.let { answer ->
-            val label = when (answer.state) {
-                CallAnswerState.CLAIMED -> R.string.call_answer_claimed
-                CallAnswerState.DELIVERED -> R.string.call_answer_delivered
-                CallAnswerState.FAILED -> R.string.call_answer_failed
-                CallAnswerState.UNCONFIRMED -> R.string.call_answer_unconfirmed
-            }
-            Text(stringResource(label, answer.text), style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(answer.state.labelResource(), answer.text), style = MaterialTheme.typography.bodySmall)
             if (answer.state != CallAnswerState.DELIVERED) answer.detail?.let {
                 Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
@@ -104,17 +97,7 @@ internal fun ConsoleChatCall(entry: CallEntry, calls: CallsModel) {
             }
         }
         calls.replyNotes[entry.key]?.let { note ->
-            val text = when (note) {
-                is ReplyNote.NotSent -> stringResource(R.string.call_reply_not_sent, note.detail)
-                is ReplyNote.Outcome -> stringResource(when (note.outcome) {
-                    CallReplyOutcome.ANSWERED -> R.string.call_reply_answered
-                    CallReplyOutcome.NO_CALL -> R.string.call_reply_no_call
-                    CallReplyOutcome.NO_CHOICE -> R.string.call_reply_no_choice
-                    CallReplyOutcome.NOT_ANSWERABLE -> R.string.call_unconfirmed
-                    CallReplyOutcome.NO_BEACON -> R.string.call_reply_no_beacon
-                    else -> R.string.call_reply_unknown
-                })
-            }
+            val text = replyNoteText(note)
             Text(text, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
     }

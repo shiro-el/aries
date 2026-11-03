@@ -64,11 +64,12 @@ for dpi, size in [("mdpi", 24), ("hdpi", 36), ("xhdpi", 48), ("xxhdpi", 72), ("x
 ms = Image.open(os.path.join(png, "aries-mark-small-128.png")).convert("RGBA")
 ms = ms.crop(ms.getbbox())
 save(ms, "drawable-nodpi", "mark_ink.png")
-q = ms.copy(); qp = q.load()
-for y in range(q.size[1]):
-    for x in range(q.size[0]):
-        c = qp[x, y]
+light_mark = ms.copy()
+light_pixels = light_mark.load()
+for y in range(light_mark.size[1]):
+    for x in range(light_mark.size[0]):
+        c = light_pixels[x, y]
         if c[3] and near(c, DARK, 30):
-            qp[x, y] = (243, 237, 230, c[3])
-save(q, "drawable-nodpi", "mark_light.png")
+            light_pixels[x, y] = (243, 237, 230, c[3])
+save(light_mark, "drawable-nodpi", "mark_light.png")
 print("ok")

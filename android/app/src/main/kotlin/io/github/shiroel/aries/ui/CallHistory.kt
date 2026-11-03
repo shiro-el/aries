@@ -21,14 +21,13 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.CallAnswerState
-import io.github.shiroel.aries.core.CallReplyOutcome
 import io.github.shiroel.aries.core.CallUrgency
 import java.text.DateFormat
 import java.util.Date
 
 /** Waiting Calls first, then recorded history; reply state stays owned by CallsModel. */
 @Composable
-internal fun CallInboxPanel(model: CallsModel, onChat: (CallEntry) -> Unit, modifier: Modifier = Modifier) {
+internal fun CallInboxPanel(model: CallsModel, onChat: (CallEntry) -> Unit, modifier: Modifier = Modifier, callerName: (CallEntry) -> String? = { null }) {
     val waiting = model.calls.filter { it.answerable }
     val past = model.calls.filterNot { it.answerable }
     LazyColumn(modifier.fillMaxWidth().testTag("call-inbox-list")) {
@@ -44,9 +43,7 @@ internal fun CallInboxPanel(model: CallsModel, onChat: (CallEntry) -> Unit, modi
             Text(stringResource(R.string.call_inbox_empty), Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
         }
         items(waiting, key = { it.key }) { entry ->
-            CallRow(entry, entry.key in model.replying, model.replyNotes[entry.key],
-                onChoice = { model.reply(entry, it) }, onChat = { onChat(entry) })
-            HorizontalDivider()
+            CallInboxRow(model, entry, onChat, callerName(entry))
         }
         if (past.isNotEmpty()) item {
             Text(stringResource(R.string.call_inbox_past), Modifier.testTag("call-inbox-past").padding(12.dp),
@@ -54,11 +51,16 @@ internal fun CallInboxPanel(model: CallsModel, onChat: (CallEntry) -> Unit, modi
             HorizontalDivider()
         }
         items(past, key = { it.key }) { entry ->
-            CallRow(entry, entry.key in model.replying, model.replyNotes[entry.key],
-                onChoice = { model.reply(entry, it) }, onChat = { onChat(entry) })
-            HorizontalDivider()
+            CallInboxRow(model, entry, onChat, callerName(entry))
         }
     }
+}
+
+@Composable
+private fun CallInboxRow(model: CallsModel, entry: CallEntry, onChat: (CallEntry) -> Unit, callerName: String?) {
+    CallRow(entry, entry.key in model.replying, model.replyNotes[entry.key],
+        onChoice = { model.reply(entry, it) }, onChat = { onChat(entry) }, callerName = callerName)
+    HorizontalDivider()
 }
 
 @Composable
@@ -68,6 +70,7 @@ private fun CallRow(
     note: ReplyNote?,
     onChoice: (Int) -> Unit,
     onChat: () -> Unit,
+    callerName: String?,
 ) {
     val call = entry.call
     Column(Modifier.fillMaxWidth().testTag("call-${call.id}").padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -77,20 +80,14 @@ private fun CallRow(
             style = MaterialTheme.typography.bodySmall,
         )
         call.terminal?.let { address ->
-            Text(stringResource(R.string.call_inbox_caller, address, entry.host.name), style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.call_inbox_caller, callerName ?: address, entry.host.name), style = MaterialTheme.typography.bodySmall)
         }
         if (call.body.isNotEmpty()) Text(call.body, style = MaterialTheme.typography.bodyMedium)
         if (call.choices.isNotEmpty()) {
             Text(stringResource(R.string.call_choices, call.choices.joinToString(" · ")), style = MaterialTheme.typography.bodySmall)
         }
         call.answer?.let { a ->
-            val res = when (a.state) {
-                CallAnswerState.CLAIMED -> R.string.call_answer_claimed
-                CallAnswerState.DELIVERED -> R.string.call_answer_delivered
-                CallAnswerState.FAILED -> R.string.call_answer_failed
-                CallAnswerState.UNCONFIRMED -> R.string.call_answer_unconfirmed
-            }
-            Text(stringResource(res, a.text), style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(a.state.labelResource(), a.text), style = MaterialTheme.typography.bodySmall)
             if (a.state != CallAnswerState.DELIVERED) {
                 a.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
             }
@@ -107,19 +104,7 @@ private fun CallRow(
             }
         }
         note?.let { n ->
-            val text = when (n) {
-                is ReplyNote.NotSent -> stringResource(R.string.call_reply_not_sent, n.detail)
-                is ReplyNote.Outcome -> stringResource(
-                    when (n.outcome) {
-                        CallReplyOutcome.ANSWERED -> R.string.call_reply_answered
-                        CallReplyOutcome.NO_CALL -> R.string.call_reply_no_call
-                        CallReplyOutcome.NO_CHOICE -> R.string.call_reply_no_choice
-                        CallReplyOutcome.NOT_ANSWERABLE -> R.string.call_unconfirmed
-                        CallReplyOutcome.NO_BEACON -> R.string.call_reply_no_beacon
-                        else -> R.string.call_reply_unknown
-                    },
-                )
-            }
+            val text = replyNoteText(n)
             Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         }
         when {

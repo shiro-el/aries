@@ -23,7 +23,6 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.shiroel.aries.R
-import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.core.AgentView
 import io.github.shiroel.aries.core.TerminalInfo
 
@@ -63,7 +62,7 @@ internal fun AgentScreenHeader(
     ) {
         terminal.agentStatus?.let { status ->
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AgentMetaStatusMark(status)
+                AgentStatusMark(status)
                 Text(stringResource(agentStatusLabel(status)), color = statusColor(status), fontSize = 12.sp, maxLines = 1)
             }
         }
@@ -75,10 +74,4 @@ internal fun AgentScreenHeader(
             color = colors.onSurfaceVariant, fontSize = 12.sp)
     }
     HorizontalDivider()
-}
-
-/** Same mark as the Agents list, Browse and drawer. */
-@Composable
-internal fun AgentMetaStatusMark(status: AgentStatus) {
-    AgentStatusMark(status)
 }

@@ -12,7 +12,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -73,7 +72,7 @@ fun ExtraKeysSection(model: HostsModel) {
             }) { Text(stringResource(R.string.key_copy_button)) }
         }
         OutlinedTextField(label, { label = it }, label = { Text(stringResource(R.string.key_new_label)) }, singleLine = true)
-        Button(enabled = label.isNotBlank(), onClick = {
+        ConsoleButton(enabled = label.isNotBlank(), onClick = {
             model.createExtraKey(label)
             label = ""
         }) { Text(stringResource(R.string.key_new_button)) }
@@ -123,7 +122,7 @@ fun JumpHostsScreen(model: HostsModel, host: Host, jumps: List<JumpHost>, hostKe
         }
         HorizontalDivider()
         KeyPicker(R.string.jumps_host_key_label, model.keys, targetKey) { targetKey = it }
-        Button(
+        ConsoleButton(
             enabled = drafts.all { it.valid },
             onClick = { model.saveJumps(host, drafts.map { it.toJumpHost() }, targetKey) },
         ) { Text(stringResource(R.string.jumps_save_button)) }

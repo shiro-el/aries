@@ -25,7 +25,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -234,7 +233,7 @@ private fun KeySection(model: HostsModel) {
     val key = model.key
     if (key == null) {
         Text(stringResource(R.string.key_missing))
-        Button(onClick = model::createKey) { Text(stringResource(R.string.key_create_button)) }
+        ConsoleButton(onClick = model::createKey) { Text(stringResource(R.string.key_create_button)) }
         return
     }
     val context = LocalContext.current
@@ -242,11 +241,11 @@ private fun KeySection(model: HostsModel) {
     Text(stringResource(R.string.key_title), style = MaterialTheme.typography.titleMedium)
     Text(key.openssh, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
     Text(stringResource(R.string.key_fingerprint, key.fingerprint), style = MaterialTheme.typography.bodySmall)
-    Button(onClick = {
+    ConsoleButton(onClick = {
         context.getSystemService(ClipboardManager::class.java)
             ?.setPrimaryClip(ClipData.newPlainText(clipLabel, key.openssh))
     }) { Text(stringResource(R.string.key_copy_button)) }
-    Button(onClick = model::showKeyQr) { Text(stringResource(R.string.key_qr_button)) }
+    ConsoleButton(onClick = model::showKeyQr) { Text(stringResource(R.string.key_qr_button)) }
     Text(stringResource(R.string.key_copy_hint), style = MaterialTheme.typography.bodySmall)
     BiometricToggle(model.keyProtection == KeyProtection.BIOMETRIC, model::requireBiometric)
 }
@@ -296,7 +295,7 @@ private fun AddHostForm(model: HostsModel) {
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
     )
     OutlinedTextField(user, { user = it }, label = { Text(stringResource(R.string.host_add_user)) }, singleLine = true)
-    Button(
+    ConsoleButton(
         enabled = address.isNotBlank() && user.isNotBlank() && portNumber != null,
         onClick = {
             model.addHost(name, address, portNumber ?: 22, user)

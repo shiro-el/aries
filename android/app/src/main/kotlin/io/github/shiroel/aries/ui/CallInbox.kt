@@ -53,7 +53,7 @@ internal fun ConsoleInboxAction() {
             }
         }
         if (count > 0) Text(
-            count.toString(), Modifier.testTag("console-inbox-count"), fontSize = 12.sp,
+            count.toString(), Modifier.testTag("console-inbox-count"), fontSize = 12.sp, // i18n-ok: bare Console count digits
             fontWeight = FontWeight.Bold, color = statusColor(AgentStatus.Blocked(null, null)),
         )
     }
@@ -71,7 +71,7 @@ internal fun CallInboxOverlay(model: HostsModel, modifier: Modifier = Modifier) 
         Box(Modifier.fillMaxWidth().heightIn(max = maxHeight * .7f)
             .background(MaterialTheme.colorScheme.surface).testTag("call-inbox-panel")
             .semantics { paneTitle = title }) {
-            CallInboxPanel(model.calls, model::openCallChat)
+            CallInboxPanel(model.calls, model::openCallChat, callerName = model::callCallerName)
         }
     }
 }

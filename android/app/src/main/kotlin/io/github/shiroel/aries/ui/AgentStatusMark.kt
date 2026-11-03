@@ -67,7 +67,7 @@ fun AgentStatusMark(status: AgentStatus, modifier: Modifier = Modifier) {
                 )
             }
             else -> Text(
-                when (status) { is AgentStatus.Blocked -> "?"; is AgentStatus.Error -> "!"; else -> "-" },
+                when (status) { is AgentStatus.Blocked -> "?"; is AgentStatus.Error -> "!"; else -> "-" }, // i18n-ok: status glyphs with localized semantics
                 color = color, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 16.sp,
             )
         }

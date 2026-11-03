@@ -45,7 +45,7 @@ class KoreanImeDeviceTest {
         val metrics = instrumentation.targetContext.resources.displayMetrics
         assumeTrue("key positions are for 1080x2400", metrics.widthPixels == 1080 && metrics.heightPixels in 2337..2400)
         viewer = TerminalViewer(TerminalInfo("t1", "sh", "", listOf("sh"), "/", "live", AgentStatus.Working, false, 0uL))
-        compose.setContent { MaterialTheme { TerminalScreen(viewer) {} } }
+        compose.setContent { MaterialTheme { TerminalScreen(viewer, onBack = {}) } }
         compose.runOnUiThread { findInput(compose.activity.window.decorView)!!.showKeyboard() }
         SystemClock.sleep(2000)
 

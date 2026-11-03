@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -237,7 +236,7 @@ private fun AgentDetail(
         AgentStatusLine(t)
         PinButton(entry) { onPin(entry, it) }
         // One entry: the Agent opens in the view picked last (Terminal or Chat).
-        Button(onClick = { onTerminal(entry) }) { Text(stringResource(R.string.agent_open_button)) }
+        ConsoleButton(onClick = { onTerminal(entry) }) { Text(stringResource(R.string.agent_open_button)) }
         Text(stringResource(R.string.agent_detail_host, entry.host.name), style = MaterialTheme.typography.bodySmall)
         Text(stringResource(R.string.agent_detail_address, t.address), style = MaterialTheme.typography.bodySmall)
         t.cwd?.let { Text(stringResource(R.string.agent_detail_folder, it), style = MaterialTheme.typography.bodySmall) }

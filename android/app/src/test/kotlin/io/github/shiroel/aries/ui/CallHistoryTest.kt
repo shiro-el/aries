@@ -84,6 +84,44 @@ class CallHistoryTest {
     }
 
     @Test
+    fun inboxUsesTheBrowsedAgentsNameAndTracksLiveNamesWithAddressFallback() {
+        val core = twoHosts().apply {
+            terminalsOf["h1"] = listOf(agent.copy(name = "Review agent", agentStatus = io.github.shiroel.aries.core.AgentStatus.Working))
+            terminalsOf["h2"] = listOf(agent.copy(name = "Other host agent", agentStatus = io.github.shiroel.aries.core.AgentStatus.Working))
+            callsOf["h1"] = listOf(call("h1", "c1", "Question", 1uL))
+            callsOf["h2"] = listOf(call("h2", "c2", "Other question", 2uL))
+        }
+        show(core)
+        compose.onNodeWithText("home").performClick()
+        openCalls()
+        compose.onNodeWithText(str(R.string.call_inbox_caller, "Review agent", "home")).assertExists()
+        // The same Terminal address on an unbrowsed Host must not borrow home's name.
+        compose.onNodeWithText(str(R.string.call_inbox_caller, "t3", "server")).assertExists()
+        core.push("h1", listOf(agent.copy(name = "Renamed agent", agentStatus = io.github.shiroel.aries.core.AgentStatus.Working)))
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.call_inbox_caller, "Renamed agent", "home")).assertExists()
+        core.push("h1", listOf(agent.copy(name = "", agentStatus = io.github.shiroel.aries.core.AgentStatus.Working)))
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.call_inbox_caller, "t3", "home")).assertExists()
+    }
+
+    @Test
+    fun inboxUsesTheAgentsSnapshotForEachHostsWholeTerminalAddress() {
+        val core = twoHosts().apply {
+            terminalsOf["h1"] = listOf(agent.copy(name = "Review agent", agentStatus = io.github.shiroel.aries.core.AgentStatus.Working))
+            terminalsOf["h2"] = listOf(agent.copy(name = "Remote agent", agentStatus = io.github.shiroel.aries.core.AgentStatus.Working))
+            callsOf["h1"] = listOf(call("h1", "c1", "Question", 1uL))
+            callsOf["h2"] = listOf(call("h2", "c2", "Other question", 2uL))
+        }
+        show(core)
+        compose.openConsoleDrawer()
+        compose.onNodeWithText(str(R.string.agents_button)).performClick()
+        openCalls()
+        compose.onNodeWithText(str(R.string.call_inbox_caller, "Review agent", "home")).assertExists()
+        compose.onNodeWithText(str(R.string.call_inbox_caller, "Remote agent", "server")).assertExists()
+    }
+
+    @Test
     fun inboxCountsAnswerableCallsAndOpensOverTheCurrentHost() {
         val core = twoHosts().apply {
             callsOf["h1"] = listOf(

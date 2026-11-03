@@ -150,7 +150,7 @@ private fun consoleBack(model: HostsModel): (() -> Unit)? = when (val screen = m
 @Composable
 private fun ConsoleDrawer(model: HostsModel, navigate: (() -> Unit) -> Unit) {
     val agents = model.drawerAgents
-    val waiting = agents.count { it.terminal.agentStatus is AgentStatus.Blocked || it.terminal.agentStatus is AgentStatus.Error }
+    val waiting = agents.count { isWaiting(it.terminal.agentStatus) }
     val current = model.screen
     val hostId = when (current) {
         is Screen.Browse -> current.browser.host.id
@@ -212,7 +212,7 @@ private fun DrawerRow(
     ) {
         Box(Modifier.width(3.dp).height(44.dp).background(if (current) MaterialTheme.colorScheme.primary else Color.Transparent))
         Row(Modifier.weight(1f).padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            guide?.let { Text(it, Modifier.padding(end = 8.dp), fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            guide?.let { Text(it, Modifier.padding(end = 8.dp), fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) } // i18n-ok: decorative tree guides
             Text(title, Modifier.weight(1f), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             trailing()
         }

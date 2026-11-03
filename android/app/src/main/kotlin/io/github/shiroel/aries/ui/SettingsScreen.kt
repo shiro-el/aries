@@ -36,7 +36,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AttachMode
@@ -97,31 +96,6 @@ private fun SettingsField(title: Int? = null, content: @Composable () -> Unit) {
         content()
     }
     HorizontalDivider()
-}
-
-/** Square segments shared by appearance and cache retention; selected state is accessible. */
-@Composable
-fun <T> ConsoleSegments(options: List<T>, selected: T, onSelect: (T) -> Unit, label: @Composable (T) -> String) {
-    val c = MaterialTheme.colorScheme
-    Row(Modifier.fillMaxWidth().border(1.dp, c.outline).selectableGroup()) {
-        options.forEachIndexed { index, option ->
-            if (index > 0) Box(Modifier.width(1.dp).height(48.dp).background(c.outline))
-            val active = selected == option
-            Box(
-                Modifier.weight(1f).height(48.dp)
-                    .background(if (active) c.surfaceContainerHighest else c.surface)
-                    .selectable(selected = active, role = Role.RadioButton, onClick = { onSelect(option) }),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    label(option), color = if (active) c.primary else c.onSurface,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-                )
-                if (active) Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(3.dp).background(c.primary))
-            }
-        }
-    }
 }
 
 @Composable

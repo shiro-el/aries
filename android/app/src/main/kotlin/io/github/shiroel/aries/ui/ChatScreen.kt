@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedTextField
@@ -348,7 +347,7 @@ private fun MessageInput(chat: ChatModel) {
             shape = RectangleShape,
             enabled = chat.sending == null,
         )
-        Button(onClick = chat::send, enabled = chat.canSend, shape = RectangleShape) {
+        ConsoleButton(onClick = chat::send, enabled = chat.canSend) {
             Text(stringResource(R.string.chat_send_button))
         }
     }
@@ -376,7 +375,7 @@ private fun BlockedNotice(status: AgentStatus.Blocked, refused: Boolean, onOpenT
         status.message?.let {
             Text(it, color = color, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
         }
-        Button(onClick = onOpenTerminal, shape = RectangleShape) { Text(stringResource(R.string.terminal_open_button)) }
+        ConsoleButton(onClick = onOpenTerminal) { Text(stringResource(R.string.terminal_open_button)) }
     }
 }
 
@@ -547,10 +546,9 @@ private fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question)
             }
         }
         if (open && !lone && state != AnswerState.Sent) {
-            Button(
+            ConsoleButton(
                 onClick = { chat.send(id, q) },
                 enabled = state != AnswerState.Sending,
-                shape = RectangleShape,
             ) { Text(stringResource(R.string.chat_question_send)) }
         }
         if (open) {

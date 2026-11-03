@@ -72,6 +72,13 @@ class HostBrowser(val host: Host) {
     /** A Terminal as the status watch last saw it (the structure may be older). */
     fun current(t: TerminalInfo): TerminalInfo = live[t.address] ?: t
 
+    /** Whole-address lookup, preferring the live watch over the Browse structure. */
+    fun findTerminal(address: String): TerminalInfo? = live[address] ?: structure?.let { snapshot ->
+        (snapshot.unplaced + snapshot.spaces.flatMap { space ->
+            space.tabs.flatMap { tab -> tab.panes.mapNotNull { it.terminal } }
+        }).find { it.address == address }
+    }
+
     fun updateTerminals(list: List<TerminalInfo>) {
         val addresses = list.map { it.address }.toSet()
         live.keys.retainAll(addresses)
@@ -255,7 +262,7 @@ private fun SpaceList(
         items(s.spaces, key = { "space:" + it.id }) { space ->
             Row(Modifier.fillMaxWidth().clickable { browser.openSpace(space.id) }.heightIn(min = 48.dp).padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically) {
-                Text("▸", Modifier.width(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("▸", Modifier.width(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) // i18n-ok: decorative disclosure mark
                 Column(Modifier.weight(1f)) {
                     Text(space.name.ifBlank { stringResource(R.string.space_unnamed) }, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     val count = space.tabs.sumOf { it.panes.size }
@@ -337,7 +344,7 @@ private fun PaneRow(
         .background(if (focused) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surface)
         .drawBehind { if (focused) drawLine(accent, Offset.Zero, Offset(0f, size.height), 3.dp.toPx()) }
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        Text(if (last) "└─" else "├─", Modifier.padding(start = 12.dp).width(24.dp), style = MaterialTheme.typography.bodySmall,
+        Text(if (last) "└─" else "├─", Modifier.padding(start = 12.dp).width(24.dp), style = MaterialTheme.typography.bodySmall, // i18n-ok: tree guides
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         val t = pane.terminal?.let(browser::current)
         if (t == null) {
