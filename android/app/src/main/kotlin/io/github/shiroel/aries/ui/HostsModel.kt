@@ -64,8 +64,8 @@ sealed interface Screen {
     /** An open Host: its Spaces, Tabs and Panes. */
     data class Browse(val browser: HostBrowser) : Screen
 
-    /** One Terminal, observed; back returns to [returnTo] (its Host's Browse or the Agents list). */
-    data class Terminal(val viewer: TerminalViewer, val returnTo: Screen) : Screen
+    /** One Terminal; [chatDraft] carries unsent text across view switches. Back returns to [returnTo]. */
+    data class Terminal(val viewer: TerminalViewer, val returnTo: Screen, val chatDraft: String = "") : Screen
 
     /** Every Host's Agents in one list. */
     data class Agents(val board: AgentBoard) : Screen
@@ -855,9 +855,9 @@ class HostsModel(
         }
     }
 
-    private fun chat(link: HostLink?, terminal: TerminalInfo, returnTo: Screen) {
+    private fun chat(link: HostLink?, terminal: TerminalInfo, returnTo: Screen, draft: String = "") {
         val host = link?.host ?: return
-        val chat = ChatModel(core, host, terminal, link, keyWork)
+        val chat = ChatModel(core, host, terminal, link, keyWork).also { it.draft = draft }
         screen = Screen.Chat(chat, returnTo)
         chat.start(scope)
     }
@@ -878,14 +878,14 @@ class HostsModel(
                     val link = s.viewer.link ?: return
                     viewing?.cancel()
                     viewing = null
-                    chat(link, s.viewer.terminal, s.returnTo)
+                    chat(link, s.viewer.terminal, s.returnTo, s.chatDraft)
                 }
             }
             is Screen.Chat -> {
                 if (view != AgentView.TERMINAL) return
                 val link = s.chat.link ?: return
                 s.chat.stop()
-                observe(link, s.chat.terminal, s.returnTo)
+                observe(link, s.chat.terminal, s.returnTo, s.chat.draft)
             }
             else -> return
         }
@@ -895,12 +895,31 @@ class HostsModel(
         }
     }
 
+    /** Adds output to an editable draft, never to the Terminal input stream. */
+    fun sendTerminalSelectionToDraft(text: String) {
+        val s = screen as? Screen.Terminal ?: return
+        if (text.isEmpty()) return
+        // Output may itself contain Markdown fences. Keep all of it inside one code block.
+        val longest = Regex("`+").findAll(text).maxOfOrNull { it.value.length } ?: 0
+        val fence = "`".repeat(maxOf(3, longest + 1))
+        val block = "$fence\n$text${if (text.endsWith('\n')) "" else "\n"}$fence"
+        if (s.viewer.terminal.agentStatus != null) {
+            switchView(AgentView.CHAT)
+            (screen as? Screen.Chat)?.chat?.let { chat ->
+                chat.draft = if (chat.draft.isEmpty()) block else chat.draft + "\n\n" + block
+                return
+            }
+        }
+        s.viewer.draft = if (s.viewer.draft.isEmpty()) block else s.viewer.draft + "\n\n" + block
+        s.viewer.openComposer()
+    }
+
     /** Re-attaches with `resumed` on each new line, so the screen comes back after a network change. */
-    private fun observe(link: HostLink, terminal: TerminalInfo, returnTo: Screen) {
+    private fun observe(link: HostLink, terminal: TerminalInfo, returnTo: Screen, chatDraft: String = "") {
         val viewer = TerminalViewer(terminal)
         viewer.link = link
         if (attachMode == AttachMode.INPUT) viewer.startTyping()
-        screen = Screen.Terminal(viewer, returnTo)
+        screen = Screen.Terminal(viewer, returnTo, chatDraft)
         viewing = scope.launch {
             try {
                 link.keep { conn, resumed ->
