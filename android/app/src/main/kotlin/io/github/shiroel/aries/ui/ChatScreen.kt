@@ -670,12 +670,12 @@ private fun ToolView(
         Column(
             Modifier.fillMaxWidth()
                 .background(MaterialTheme.colorScheme.surfaceVariant)
-                .then(actions)
-                .semantics { contentDescription = label }
                 .padding(8.dp),
         ) {
             Row(
-                Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                    .then(actions)
+                    .semantics { contentDescription = label },
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
