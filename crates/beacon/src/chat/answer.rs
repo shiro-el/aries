@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use aries_protocol::answer::{Answer, AnswerOutcome, AnswerReply};
 use aries_protocol::chat::{ChatBody, ChatEvent, ChatItem, ChatQuestion, ToolStatus};
 
-use super::jsonl::{JsonlSource, Poll};
+use super::source::Batch;
 use super::{Agent, TerminalLookup};
 
 /// Presses named keys (`2`, `tab`, `enter`, `down`) in a Terminal
@@ -88,15 +88,15 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
     };
 
     // The whole transcript as the Chat shows it.
-    let mut source = JsonlSource::new(located.path.clone(), agent.interpreter(), 0);
+    let mut source = agent.open(&located, None).source;
     let mut items: Vec<ChatItem> = Vec::new();
     let mut index: HashMap<String, usize> = HashMap::new();
     loop {
         match source.poll()? {
-            Poll::Missing | Poll::Replaced => {
+            Batch::Missing | Batch::Replaced => {
                 return Ok(reply(AnswerOutcome::Gone, "no transcript"));
             }
-            Poll::Events { events, more } => {
+            Batch::Events { events, more } => {
                 for (event, _) in events {
                     match event {
                         ChatEvent::Item { item } => match index.get(&item.id) {
