@@ -43,6 +43,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.drawText
@@ -213,6 +214,10 @@ class TerminalViewer(terminal: TerminalInfo) {
     var ctrl by mutableStateOf(false)
         private set
 
+    /** Alt from the key bar, held for the next key only. */
+    var alt by mutableStateOf(false)
+        private set
+
     /** What was typed, in order, until the model sends it. */
     internal val inputs = Channel<TerminalInput>(Channel.UNLIMITED)
 
@@ -221,7 +226,13 @@ class TerminalViewer(terminal: TerminalInfo) {
     }
 
     fun toggleCtrl() {
+        interruptComposition()
         ctrl = !ctrl
+    }
+
+    fun toggleAlt() {
+        interruptComposition()
+        alt = !alt
     }
 
     /**
@@ -276,7 +287,7 @@ class TerminalViewer(terminal: TerminalInfo) {
         onCompositionInterrupted?.invoke()
     }
 
-    /** Types [text]; a newline is Enter. A held Ctrl applies to the first character. */
+    /** Types [text]; a newline is Enter. Held modifiers apply to the first character. */
     fun type(text: String) {
         interruptComposition()
         typeNow(text)
@@ -290,7 +301,7 @@ class TerminalViewer(terminal: TerminalInfo) {
                 rest = rest.substring(1)
                 continue
             }
-            if (ctrl) {
+            if (ctrl || alt) {
                 val n = Character.charCount(rest.codePointAt(0))
                 pressNow(TerminalKey.Char(rest.substring(0, n)), NoMods)
                 rest = rest.substring(n)
@@ -302,15 +313,16 @@ class TerminalViewer(terminal: TerminalInfo) {
         }
     }
 
-    /** Presses [key] with a held Ctrl (then lets go of it) and any extra [mods]. */
+    /** Presses [key] with held modifiers (then releases them) and any extra [mods]. */
     fun press(key: TerminalKey, mods: KeyMods = NoMods) {
         interruptComposition()
         pressNow(key, mods)
     }
 
     private fun pressNow(key: TerminalKey, mods: KeyMods) {
-        send(TerminalInput.Key(key, mods.copy(ctrl = mods.ctrl || ctrl)))
+        send(TerminalInput.Key(key, mods.copy(ctrl = mods.ctrl || ctrl, alt = mods.alt || alt)))
         ctrl = false
+        alt = false
     }
 
     /** Typing while scrolled back returns to the live screen, as terminals do. */
@@ -411,37 +423,46 @@ internal fun TerminalInput(viewer: TerminalViewer, modifier: Modifier = Modifier
     }
 }
 
-/** Keys a phone keyboard lacks: Esc, Tab, Ctrl (for the next key), arrows, and Ctrl-C. */
+/** Keys a phone keyboard lacks; modifiers apply to the next key only. */
 @Composable
 private fun KeyBar(viewer: TerminalViewer) {
-    // Every key fits on one row, so none is hidden off screen.
-    Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant)) {
-        BarKey(R.string.key_esc) { viewer.press(TerminalKey.Escape) }
-        BarKey(R.string.key_tab) { viewer.press(TerminalKey.Tab) }
-        BarKey(R.string.key_ctrl, held = viewer.ctrl, onClick = viewer::toggleCtrl)
-        BarKey(R.string.key_up) { viewer.press(TerminalKey.Up) }
-        BarKey(R.string.key_down) { viewer.press(TerminalKey.Down) }
-        BarKey(R.string.key_left) { viewer.press(TerminalKey.Left) }
-        BarKey(R.string.key_right) { viewer.press(TerminalKey.Right) }
-        BarKey(R.string.key_interrupt) {
-            viewer.press(TerminalKey.Char("c"), KeyMods(ctrl = true, alt = false, shift = false))
+    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant)) {
+        Row(Modifier.fillMaxWidth()) {
+            BarKey(R.string.key_esc) { viewer.press(TerminalKey.Escape) }
+            BarKey(R.string.key_tab) { viewer.press(TerminalKey.Tab) }
+            BarKey(R.string.key_ctrl, held = viewer.ctrl, onClick = viewer::toggleCtrl)
+            BarKey(R.string.key_alt, held = viewer.alt, onClick = viewer::toggleAlt)
+            BarKey(R.string.key_home) { viewer.press(TerminalKey.Home) }
+            BarKey(R.string.key_end) { viewer.press(TerminalKey.End) }
+            BarKey(R.string.key_interrupt) {
+                viewer.press(TerminalKey.Char("c"), KeyMods(ctrl = true, alt = false, shift = false))
+            }
+        }
+        Row(Modifier.fillMaxWidth()) {
+            BarKey(R.string.key_up) { viewer.press(TerminalKey.Up) }
+            BarKey(R.string.key_down) { viewer.press(TerminalKey.Down) }
+            BarKey(R.string.key_left) { viewer.press(TerminalKey.Left) }
+            BarKey(R.string.key_right) { viewer.press(TerminalKey.Right) }
+            BarKey(R.string.key_page_up) { viewer.press(TerminalKey.PageUp) }
+            BarKey(R.string.key_page_down) { viewer.press(TerminalKey.PageDown) }
         }
     }
 }
 
 @Composable
-private fun RowScope.BarKey(label: Int, held: Boolean = false, onClick: () -> Unit) {
+private fun RowScope.BarKey(label: Int, held: Boolean? = null, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Box(
-        Modifier.weight(1f).height(40.dp).padding(2.dp)
-            .background(if (held) colors.primary else colors.surface)
+        Modifier.weight(1f).height(48.dp).padding(2.dp)
+            .background(if (held == true) colors.primary else colors.surface)
             .border(1.dp, colors.outlineVariant)
+            .semantics { if (held != null) selected = held }
             .clickable(role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             stringResource(label),
-            color = if (held) colors.onPrimary else colors.onSurface,
+            color = if (held == true) colors.onPrimary else colors.onSurface,
             style = MaterialTheme.typography.labelLarge,
             maxLines = 1,
         )
