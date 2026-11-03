@@ -33,6 +33,7 @@ cd android && ./gradlew :app:assembleDebug          # debug APK (builds the core
 cd android && ./gradlew :app:connectedDebugAndroidTest   # device tests (Android Keystore); needs a device/emulator
 scripts/measure-terminal-latency.sh 40              # key -> drawn echo on a device over SSH (docker); logcat AriesLatency
 scripts/test-korean-ime.sh                          # Korean typed on the real Gboard (한국어 두벌식 added by hand)
+scripts/test-call-notification.sh                  # Call answered from its notification, locked + process killed (docker sshd)
 cd relay && npm ci --legacy-peer-deps && npm run typecheck && npm test   # Relay HTTP API (Workers runtime, fake FCM)
 ```
 
