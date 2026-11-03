@@ -21,7 +21,7 @@ class ReadAloudState(private val engine: SpeechEngine, private val preferences: 
         private set
     var speaking by mutableStateOf(false)
         private set
-    var notice by mutableStateOf<Int?>(R.string.read_aloud_loading)
+    var notice by mutableStateOf<Int?>(null)
         private set
     var rate by mutableStateOf(preferences.getFloat("rate", 1f).takeIf { it.isFinite() }?.coerceIn(.5f, 2f) ?: 1f)
         private set

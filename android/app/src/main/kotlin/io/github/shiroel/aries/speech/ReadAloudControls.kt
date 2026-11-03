@@ -23,7 +23,7 @@ fun ReadAloudButton(state: ReadAloudState, id: String, source: String) {
         onClick = { if (state.activeId == id) state.stop() else state.read(id, source) },
         enabled = state.ready,
         modifier = Modifier.testTag("read-aloud:$id"),
-    ) { Text(stringResource(if (state.activeId == id) R.string.read_aloud_stop else R.string.read_aloud_button)) }
+    ) { Text(stringResource(if (state.activeId == id) R.string.read_aloud_stop else if (!state.ready && state.notice == null) R.string.read_aloud_loading else R.string.read_aloud_button)) }
 }
 
 /** Stays outside the lazy transcript so Stop remains reachable while scrolling. */

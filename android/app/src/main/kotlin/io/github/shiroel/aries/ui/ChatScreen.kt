@@ -448,8 +448,8 @@ fun ChatScreen(
                     if (body is ChatEntryBody.Question) {
                         QuestionView(chat, entry.id, body)
                     } else {
-                        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-                            ChatEntryView(entry, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image) { chat.toggle(entry.id) }
+                        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (body is ChatEntryBody.Agent) 0.dp else 12.dp)) {
+                            ChatEntryView(entry, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image, readAloud) { chat.toggle(entry.id) }
                         }
                         if (source == null) HorizontalDivider()
                     }
@@ -458,9 +458,6 @@ fun ChatScreen(
                     // Keep the last complete document visible until the background parse swaps it.
                     chatMarkdownItems(entry.id, markdown[entry.id])
                     item(key = "transcript:${entry.id}:footer") {
-                        if (body is ChatEntryBody.Agent) {
-                            io.github.shiroel.aries.speech.ReadAloudButton(readAloud, entry.id, body.text)
-                        }
                         if (body is ChatEntryBody.User && body.images.isNotEmpty()) {
                             Column(Modifier.padding(horizontal = 16.dp)) {
                                 body.images.forEach { ChatImageView(it, chat::image) }
@@ -606,6 +603,7 @@ private fun ChatEntryView(
     agentName: String,
     expanded: Boolean,
     image: (String) -> ByteArray?,
+    readAloud: io.github.shiroel.aries.speech.ReadAloudState,
     onToggle: () -> Unit,
 ) {
     when (val b = entry.body) {
@@ -620,8 +618,9 @@ private fun ChatEntryView(
                 )
             }
         }
-        is ChatEntryBody.Agent -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(agentName, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        is ChatEntryBody.Agent -> Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(agentName, Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            io.github.shiroel.aries.speech.ReadAloudButton(readAloud, entry.id, b.text)
         }
         is ChatEntryBody.Thinking -> Column {
             Text(
