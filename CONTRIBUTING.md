@@ -26,7 +26,7 @@ scripts/fetch-herdr-core.sh                         # once: pinned herdr-core 0.
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace                              # unit + core API tests against real herdr-core
-cargo test -p aries-core --test ssh -- --ignored    # SSH tests against a docker sshd
+cargo test -p aries-core -- --ignored              # SSH + password bootstrap tests against a docker sshd
 cd android && ./gradlew :app:testDebugUnitTest      # Compose UI tests against a fake core (Robolectric)
 cd android && ./gradlew :app:assembleDebug          # debug APK (builds the core with cargo-ndk)
 cd android && ./gradlew :app:connectedDebugAndroidTest   # device tests (Android Keystore); needs a device/emulator

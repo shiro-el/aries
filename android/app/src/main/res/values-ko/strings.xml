@@ -19,6 +19,21 @@
     <string name="key_copy_button">공개 키 복사</string>
     <string name="key_copy_hint">각 호스트의 ~/.ssh/authorized_keys에 추가하세요.</string>
     <string name="key_clip_label">Aries SSH 공개 키</string>
+    <string name="key_qr_button">QR 코드 보기</string>
+    <string name="key_qr_title">공개 키 QR 코드</string>
+    <string name="key_qr_description">이 휴대폰의 SSH 공개 키 QR 코드</string>
+
+    <string name="host_install_key_button">비밀번호로 키 설치</string>
+    <string name="key_install_title">%1$s에 키 설치</string>
+    <string name="key_install_body">%1$s의 비밀번호로 한 번만 로그인하세요. Aries가 이 휴대폰의 공개 키를 ~/.ssh/authorized_keys에 추가하고, 그 뒤로는 키로만 접속합니다. 비밀번호는 저장하지 않습니다.</string>
+    <string name="key_install_password">비밀번호</string>
+    <string name="key_install_button">키 설치</string>
+    <string name="key_install_done_title">키 설치됨</string>
+    <string name="key_install_added_body">%1$s에 이 휴대폰의 키를 추가했습니다. 이제 키로 접속합니다.</string>
+    <string name="key_install_present_body">%1$s에는 이미 이 휴대폰의 키가 있습니다. 아무것도 바꾸지 않았습니다.</string>
+    <string name="key_install_failed_title">키를 설치하지 못했습니다</string>
+    <string name="key_install_password_rejected">호스트가 사용자 이름이나 비밀번호를 받아들이지 않았습니다. 호스트에서 비밀번호 로그인이 꺼져 있을 수도 있습니다. 그렇다면 공개 키를 ~/.ssh/authorized_keys에 직접 추가하세요.</string>
+    <string name="key_install_write_failed">로그인했지만 호스트의 ~/.ssh/authorized_keys에 쓰지 못했습니다: %1$s\n\n사용자가 ~/.ssh를 소유하고 쓸 수 있는지 확인하세요.</string>
 
     <string name="host_ssh_address">%1$s@%2$s:%3$d</string>
     <string name="host_local_address">로컬 프로세스</string>
