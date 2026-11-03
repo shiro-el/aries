@@ -78,6 +78,19 @@
     <string name="agents_expand_children">%1$s 펼치기, 하위 Agent %2$d개</string>
     <string name="agents_collapse_children">%1$s 접기, 하위 Agent %2$d개</string>
     <string name="agents_child_count">%1$d</string>
+    <!-- Home widgets (78). -->
+    <string name="widget_waiting_title">Aries · 대기</string>
+    <string name="widget_agents_title">Aries · Agent</string>
+    <string name="widget_waiting_description">모든 Host에서 응답이 필요한 Agent 수</string>
+    <string name="widget_agents_description">모든 Host의 상위 Agent 3개</string>
+    <string name="widget_waiting_count">대기 %1$d</string>
+    <string name="widget_waiting_unknown">대기 —</string>
+    <string name="widget_age_minutes">%1$d분 전</string>
+    <string name="widget_no_saved_state">Host 상태 수신 대기 중</string>
+    <string name="widget_refresh_button">새로고침</string>
+    <string name="widget_agents_empty">저장된 Agent 없음</string>
+    <string name="widget_agent_detail">%1$s · %2$s · %3$s</string>
+
     <string name="ok_button">확인</string>
     <string name="cancel_button">취소</string>
     <string name="back_button">뒤로</string>
@@ -441,6 +454,17 @@
     <string name="push_call_channel_urgent">긴급 Call</string>
     <string name="push_call_channel_emergency">비상 Call</string>
     <string name="push_no_firebase">이 빌드에는 Firebase 설정이 없습니다</string>
+    <!-- Inline notification actions -->
+    <string name="notification_reply_button">답장</string>
+    <string name="notification_reply_hint">Agent에게 메시지 보내기</string>
+    <string name="notification_seen_button">봤음</string>
+    <string name="notification_snooze_button">1시간 뒤에</string>
+    <string name="notification_message_sent">메시지를 보냈어요</string>
+    <string name="notification_action_failed">결과를 확인하지 못했어요. 다시 시도하기 전에 Terminal에서 확인해 주세요.</string>
+    <string name="notification_action_offline">네트워크가 없어 보내지 못했어요. Aries를 열어 다시 시도해 주세요.</string>
+    <string name="notification_action_key_locked">보내지 못했어요. Aries를 열어 이 Host의 SSH 키 잠금을 해제해 주세요.</string>
+    <string name="notification_marking_seen">봤음으로 표시 중…</string>
+
     <string name="call_notify_open_app">앱 열기</string>
     <string name="call_notify_try_again">다시 시도</string>
     <string name="call_notify_sending">“%1$s” 보내는 중…</string>
