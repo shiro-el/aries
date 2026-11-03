@@ -1,5 +1,6 @@
 package io.github.shiroel.aries.ui
 
+import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.core.AriesCoreInterface
 import io.github.shiroel.aries.core.AttachOptions
 import io.github.shiroel.aries.core.BeaconFetcher
@@ -48,6 +49,38 @@ class FakeCore : AriesCoreInterface {
     fun push(list: List<TerminalInfo>) {
         updates.trySend(list)
     }
+    /** Per-Host Terminal lists (by Host id), for tests with several Hosts; others get [terminals]. */
+    val terminalsOf = mutableMapOf<String, List<TerminalInfo>>()
+
+    /** The latest connection to each Host in [terminalsOf], by Host id. */
+    val connectionsOf = mutableMapOf<String, FakeConnection>()
+
+    /** Per-Host failures of `connect`. */
+    val failFor = mutableMapOf<String, CoreException>()
+
+    /** Shared label writes through any connection: `"<host id> <address> seen=N"` or `pinned=true|false`. */
+    val labelWrites = mutableListOf<String>()
+
+    private val hostUpdates = mutableMapOf<String, Channel<List<TerminalInfo>>>()
+
+    private fun updatesOf(hostId: String) = hostUpdates.getOrPut(hostId) { Channel(Channel.UNLIMITED) }
+
+    /** [hostId]'s Terminal list changed (on the Host or another client). */
+    fun push(hostId: String, list: List<TerminalInfo>) {
+        terminalsOf[hostId] = list
+        updatesOf(hostId).trySend(list)
+    }
+
+    /** What the fake Host does on a label write: change its Terminal and tell its watchers. */
+    internal fun label(hostId: String, address: String, write: String, change: (TerminalInfo) -> TerminalInfo): TerminalInfo {
+        labelWrites += "$hostId $address $write"
+        val list = terminalsOf[hostId] ?: throw CoreException.UnknownHost(hostId)
+        val t = list.find { it.address == address } ?: throw CoreException.Closed()
+        val changed = change(t)
+        push(hostId, list.map { if (it.address == address) changed else it })
+        return changed
+    }
+
     /** What `structure`/`watchStructure` deliver; default: [terminals], all unplaced. */
     var structure: HostStructure? = null
 
@@ -158,6 +191,11 @@ class FakeCore : AriesCoreInterface {
             }
         }
         requireTrust?.let { if (host.hostKey != it) throw CoreException.HostKeyUnknown(it) }
+        failFor[hostId]?.let { throw it }
+        terminalsOf[hostId]?.let { list ->
+            return FakeConnection(list, structure ?: HostStructure(emptyList(), list, null), updatesOf(hostId), hostId, this)
+                .also { connection = it; connectionsOf[hostId] = it }
+        }
         return FakeConnection(terminals, structure ?: HostStructure(emptyList(), terminals, null), updates)
             .also { connection = it }
     }
@@ -193,7 +231,17 @@ class FakeConnection(
     private val list: List<TerminalInfo>,
     private var current: HostStructure,
     private val updates: Channel<List<TerminalInfo>> = Channel(),
+    private val hostId: String = "",
+    private val core: FakeCore? = null,
 ) : HostConnection(NoHandle) {
+    override suspend fun markSeen(address: String, turn: ULong): TerminalInfo =
+        core!!.label(hostId, address, "seen=$turn") {
+            if (it.agentStatus == AgentStatus.Done && turn >= it.turn) it.copy(agentStatus = AgentStatus.Idle) else it
+        }
+
+    override suspend fun setPinned(address: String, pinned: Boolean): TerminalInfo =
+        core!!.label(hostId, address, "pinned=$pinned") { it.copy(pinned = pinned) }
+
     /** Core API methods called on this connection, in order. */
     val calls = mutableListOf<String>()
     var disconnected = false

@@ -139,3 +139,13 @@ fn an_unknown_state_word_follows_the_turn_rule() {
         Some(AgentStatus::Idle)
     );
 }
+
+#[test]
+fn herdr_pinned_1_pins_and_an_absent_empty_or_zero_value_does_not() {
+    use aries_protocol::agent_status::is_pinned;
+    assert!(is_pinned(&labels(&[("herdr.pinned", "1")])));
+    assert!(!is_pinned(&labels(&[])));
+    assert!(!is_pinned(&labels(&[("herdr.pinned", "")])));
+    assert!(!is_pinned(&labels(&[("herdr.pinned", "0")])));
+    assert!(!is_pinned(&labels(&[("herdr.seen", "1")])));
+}
