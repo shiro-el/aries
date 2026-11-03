@@ -431,4 +431,13 @@
     <string name="console_agent_accessibility">%1$s · %2$s</string>
     <string name="console_agent_age_unknown">—</string>
     <string name="console_agent_age_unavailable">Age unavailable</string>
+
+    <!-- Beacon call-human skill diagnostics. -->
+    <string name="beacon_skill_title">Call-human skill</string>
+    <string name="beacon_skill_unknown">This Beacon did not report call-human skill status. The Aries Call connection cannot be verified.</string>
+    <string name="beacon_skill_foreign">Another tool’s skill was kept. Agents using this path cannot send Calls to Aries.</string>
+    <string name="beacon_skill_modified">Your modified skill was kept. The Aries Call connection cannot be verified.</string>
+    <string name="beacon_skill_symlink">The symlink was kept. The Aries Call connection cannot be verified.</string>
+    <string name="beacon_skill_absent">The Aries call-human skill is not installed at this path.</string>
+    <string name="beacon_skill_ready">The Aries call-human skill is installed.</string>
 </resources>
