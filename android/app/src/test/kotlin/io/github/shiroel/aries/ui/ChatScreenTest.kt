@@ -3,6 +3,9 @@ package io.github.shiroel.aries.ui
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -110,8 +113,12 @@ class ChatScreenTest {
                 ChatStatus.LIVE, "c:2",
             ),
         )
-        compose.waitUntil(5_000) { compose.onAllNodesWithText("Done.").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitForIdle()
+        // Each response now has a reading control; live entries can be outside
+        // the small test viewport while remaining available in the lazy transcript.
+        compose.onNodeWithTag("chat-transcript").performScrollToNode(hasText("Done."))
         compose.onNodeWithText("Done.").assertExists()
+        compose.onNodeWithTag("chat-transcript").performScrollToNode(hasText("model not found"))
         compose.onNodeWithText("model not found").assertExists()
         compose.onNodeWithText(str(R.string.chat_agent_error)).assertExists()
     }

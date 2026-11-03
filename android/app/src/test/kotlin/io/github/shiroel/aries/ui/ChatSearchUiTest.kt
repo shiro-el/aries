@@ -2,6 +2,9 @@ package io.github.shiroel.aries.ui
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.CompositionLocalProvider
+import io.github.shiroel.aries.speech.FakeSpeechEngine
+import io.github.shiroel.aries.speech.LocalSpeechEngineFactory
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.semantics.SemanticsActions
@@ -24,6 +27,7 @@ import org.robolectric.annotation.Config
 @Config(qualifiers = "h1200dp")
 class ChatSearchUiTest {
     @get:Rule val compose = createComposeRule()
+    private val speech = FakeSpeechEngine()
     private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
     private fun str(id: Int, vararg args: Any) = context.getString(id, *args)
     private fun entry(id: String, body: ChatEntryBody) = ChatEntry(id, null, body)
@@ -34,7 +38,7 @@ class ChatSearchUiTest {
         compose.setContent {
             val scope = rememberCoroutineScope()
             val model = remember { HostsModel(core, scope) }
-            MaterialTheme { AriesApp(model) }
+            CompositionLocalProvider(LocalSpeechEngineFactory provides { speech }) { MaterialTheme { AriesApp(model) } }
         }
         compose.onNodeWithText("home").performClick()
         compose.onNodeWithText("claude").performClick()
@@ -164,5 +168,25 @@ class ChatSearchUiTest {
         search("needle", 1)
         compose.onNodeWithText("raw needle").assertIsDisplayed()
         assertHighlight("raw needle", "needle", true)
+    }
+    @Test
+    fun searchAndReadAloudRemainAvailableTogetherWithoutRestartingSpeech() {
+        val core = FakeCore()
+        openChat(core)
+        core.pushChat(ChatSnapshot(listOf(entry("reply", ChatEntryBody.Agent("A needle response."))), ChatStatus.LIVE, null))
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("A needle response.").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("read-aloud:reply").performScrollTo().performClick()
+        assertEquals(listOf("A needle response."), speech.spoken)
+        search("needle", 1)
+        assertHighlight("A needle response.", "needle", true)
+        assertMatchVisible("A needle response.", "needle")
+        compose.onNodeWithTag("read-aloud-stop").assertIsDisplayed()
+        compose.onNodeWithText(str(R.string.chat_search_next)).performClick()
+        assertEquals(1, speech.spoken.size)
+        compose.onNodeWithText(str(R.string.chat_search_close)).performClick()
+        compose.onNodeWithTag("read-aloud-stop").performClick()
+        compose.onNodeWithTag("read-aloud-stop").assertDoesNotExist()
+        compose.onNodeWithTag("chat-transcript").performScrollToNode(hasTestTag("read-aloud:reply"))
+        compose.onNodeWithTag("read-aloud:reply").assertIsDisplayed()
     }
 }
