@@ -6,6 +6,7 @@
 mod bootstrap;
 mod local;
 mod ssh;
+pub(crate) use ssh::handshake;
 
 use std::future::Future;
 use std::pin::Pin;

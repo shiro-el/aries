@@ -126,6 +126,60 @@ fn the_chat_of_a_codex_terminal_is_its_open_rollout() {
 }
 
 #[test]
+fn backtracking_restores_the_retained_history_before_the_replacement_turn() {
+    let mut host = Host::new();
+    let fixtures = aries_test_support::repo_root().join("fixtures/agents/codex/history-base");
+    let day = host.home.path().join(".codex/sessions/2026/10/29");
+    std::fs::create_dir_all(&day).unwrap();
+    for entry in std::fs::read_dir(fixtures).unwrap().flatten() {
+        let name = entry.file_name();
+        if name.to_string_lossy().ends_with(".jsonl") {
+            std::fs::copy(entry.path(), day.join(&name)).unwrap();
+            if name.to_string_lossy().contains('_') {
+                host.rollout = day.join(name);
+            }
+        }
+    }
+    let agent = host.codex("status done\n");
+    host.wait_status(&agent, "done");
+    let (text, ok) = host.beacon(&["chat", &agent.address]);
+    assert!(ok, "{text}");
+    let lines: Vec<ChatLine> = text.lines().map(|l| ChatLine::parse(l).unwrap()).collect();
+    let prompts: Vec<&str> = lines
+        .iter()
+        .filter_map(|line| match &line.event {
+            ChatEvent::Item { item } => match &item.body {
+                ChatBody::User { text, .. } => Some(text.as_str()),
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        prompts,
+        [
+            "Retained prompt 1",
+            "Retained prompt 2",
+            "Retained prompt 3",
+            "Retained prompt 4",
+            "Replacement prompt 1"
+        ]
+    );
+    assert!(matches!(&lines[0].event, ChatEvent::Reset { session, .. }
+        if session == "00000000-0000-4000-8000-000000000100"));
+    let cursor = lines.last().unwrap().cursor.as_deref().unwrap();
+    let (resumed, ok) = host.beacon(&["chat", &agent.address, "--cursor", cursor]);
+    assert!(ok, "{resumed}");
+    assert!(
+        !resumed
+            .lines()
+            .map(|l| ChatLine::parse(l).unwrap())
+            .any(|l| matches!(l.event, ChatEvent::Item { .. } | ChatEvent::Reset { .. })),
+        "{resumed}"
+    );
+}
+
+#[test]
 fn a_codex_question_is_answered_with_down_and_enter_and_only_once() {
     let host = Host::new();
     // The rollout up to the open question (ordinal 13), blocked on it;

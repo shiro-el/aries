@@ -199,7 +199,7 @@ impl Store {
         self.write_atomic("settings.json", &bytes)
     }
 
-    fn write_atomic(&self, name: &str, bytes: &[u8]) -> Result<(), CoreError> {
+    pub(crate) fn write_atomic(&self, name: &str, bytes: &[u8]) -> Result<(), CoreError> {
         let tmp = self.dir.join(format!(".{name}.tmp"));
         std::fs::write(&tmp, bytes).map_err(storage)?;
         std::fs::rename(&tmp, self.dir.join(name)).map_err(storage)

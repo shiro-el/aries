@@ -1,5 +1,6 @@
 package io.github.shiroel.aries.ui
 
+import io.github.shiroel.aries.core.HerdrCoreState
 import androidx.annotation.StringRes
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -127,10 +128,13 @@ class HostsModel(
     /** Current Host's settings models; a previous Host's pending work keeps its own state. */
     var beacon by mutableStateOf(BeaconModel(core, scope, beaconFetcher, keyWork = keyWork))
         private set
+    var herdrInstall by mutableStateOf(HerdrInstallModel(core, scope, beaconFetcher, keyWork))
+        private set
     var push by mutableStateOf(PushModel(core, scope, pushPlatform, http, keyWork))
         private set
 
     private fun loadHostSettings(host: Host) {
+        herdrInstall = HerdrInstallModel(core, scope, beaconFetcher, keyWork).also { it.load(host) }
         val hostPush = PushModel(core, scope, pushPlatform, http, keyWork)
         push = hostPush
         beacon = BeaconModel(core, scope, beaconFetcher, onRemoved = {
@@ -150,6 +154,7 @@ class HostsModel(
     val calls = CallsModel(core, scope, keyWork)
     /** Chat cache retention and per-Host clearing (ticket 44). */
     val chatCache = ChatCacheModel(core, scope, keyWork)
+    val diagnosticHistory = DiagnosticsModel(core, scope, keyWork)
 
     var key by mutableStateOf<PublicKeyInfo?>(null)
         private set
@@ -178,6 +183,8 @@ class HostsModel(
 
     /** Settings subpages share the drawer destination and own all configuration. */
     var settingsHost by mutableStateOf<Host?>(null)
+        private set
+    var settingsDiagnostics by mutableStateOf(false)
         private set
     var settingsKeys by mutableStateOf(false)
         private set
@@ -527,6 +534,15 @@ class HostsModel(
         hostsChanged()
     }
 
+    fun inspectPairingQr(qr: String) = core.inspectPairingQr(qr)
+
+    suspend fun pairHostQr(name: String, qr: String) {
+        withContext(keyWork) { core.pairHostQr(name, qr) }
+        hosts = core.hosts()
+        refreshRoutes()
+        hostsChanged()
+    }
+
     /** Saves in place; the core closes old lines only when the endpoint changed. */
     suspend fun saveHost(host: Host, name: String, address: String, port: Int, user: String): Boolean {
         return try {
@@ -578,6 +594,20 @@ class HostsModel(
                 if (restore != null && e is CoreException.KeyLocked) return@launch
                 if (e is CoreException.NoKey && key == null) {
                     missingKeyHostId = host.id
+                    return@launch
+                }
+                // A missing/old core cannot open Browse. Offer the installer in
+                // Host settings, which uses SSH directly and still asks approval.
+                val canNeedCore = e is CoreException.Protocol ||
+                    (e is CoreException.Incompatible && e.reason is Incompatibility.CoreTooOld)
+                val needsCore = host.endpoint is Endpoint.Ssh && canNeedCore && try {
+                    when (val state = withContext(keyWork) { core.herdrCoreStatus(host.id) }) {
+                        HerdrCoreState.Missing -> true
+                        is HerdrCoreState.Installed -> state.needsUpdate
+                    }
+                } catch (_: CoreException) { false }
+                if (needsCore) {
+                    openHostSettings(host)
                     return@launch
                 }
                 prompt = when (e) {
@@ -730,6 +760,7 @@ class HostsModel(
             hostsChanged()
             settingsHost = null
             settingsKeys = false
+            settingsDiagnostics = false
             screen = Screen.Settings
             flushPushRevocations()
         }
@@ -1308,6 +1339,7 @@ class HostsModel(
         back()
         settingsHost = null
         settingsKeys = false
+        settingsDiagnostics = false
         screen = Screen.Settings
     }
 
@@ -1323,12 +1355,18 @@ class HostsModel(
         settingsKeys = true
     }
 
+    fun openDiagnostics() {
+        openSettings()
+        settingsDiagnostics = true
+    }
+
     fun settingsBack() {
         if (screen is Screen.JumpHosts) {
             screen = Screen.Settings
-        } else if (settingsHost != null || settingsKeys) {
+        } else if (settingsHost != null || settingsKeys || settingsDiagnostics) {
             settingsHost = null
             settingsKeys = false
+            settingsDiagnostics = false
         } else {
             back()
         }

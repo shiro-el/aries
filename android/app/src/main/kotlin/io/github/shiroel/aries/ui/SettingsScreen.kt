@@ -1,5 +1,6 @@
 package io.github.shiroel.aries.ui
 
+import io.github.shiroel.aries.core.HerdrCoreState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
@@ -66,6 +67,10 @@ fun SettingsScreen(
     terminalDisplay: TerminalDisplaySettings = rememberTerminalDisplaySettings(),
     hostEditor: @Composable (Host) -> Unit = {},
 ) {
+    if (model.settingsDiagnostics) {
+        DiagnosticsScreen(model.diagnosticHistory, model.hosts)
+        return
+    }
     val host = model.settingsHost?.let { selected -> model.hosts.find { it.id == selected.id } }
     if (host != null) {
         HostSettingsScreen(model, host, hostEditor)
@@ -163,6 +168,12 @@ fun SettingsScreen(
                     io.github.shiroel.aries.guidance.AppGuidanceSettings(it)
                 }
             }
+            item(key = "diagnostics") {
+                Text(stringResource(R.string.diagnostics_title),
+                    Modifier.fillMaxWidth().testTag("settings-diagnostics").clickable(onClick = model::openDiagnostics).padding(16.dp),
+                    color = MaterialTheme.colorScheme.primary)
+                HorizontalDivider()
+            }
         }
     }
 }
@@ -170,6 +181,10 @@ fun SettingsScreen(
 /** Host configuration stays reachable even when a herdr-core Browse connection fails. */
 @Composable
 private fun HostSettingsScreen(model: HostsModel, host: Host, hostEditor: @Composable (Host) -> Unit) {
+    val installState = model.herdrInstall.state
+    val installFirst = installState == HerdrCoreState.Missing ||
+        (installState is HerdrCoreState.Installed && installState.needsUpdate) ||
+        model.herdrInstall.step != null
     LazyColumn(Modifier.fillMaxSize().testTag("host-actions:${host.id}")) {
         item {
             SettingsField {
@@ -191,8 +206,10 @@ private fun HostSettingsScreen(model: HostsModel, host: Host, hostEditor: @Compo
                 }
             }
         }
+        if (installFirst) item(key = "herdr-install") { SettingsField { HerdrInstallSection(model.herdrInstall) { model.openHost(host) } } }
         item { SettingsField { BeaconSection(model.beacon) } }
         item { SettingsField { PushSection(model.push, beaconInstalled = model.beacon.installed) } }
+        if (!installFirst) item(key = "herdr-install") { SettingsField { HerdrInstallSection(model.herdrInstall) { model.openHost(host) } } }
     }
 }
 
