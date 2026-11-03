@@ -12,6 +12,9 @@
 #   wait                            read one input line (and record it)
 #   transcript SRC DST              append fixture SRC to DST (SRC relative to this
 #                                   script's fixtures/agents dir unless absolute)
+#   lines SRC FROM TO DST           append lines FROM..TO (1-based, inclusive) of SRC to DST
+#   keys N                          read N raw bytes (no line editing, no echo) and record
+#                                   them as one line "keys <hex> <hex> ..."
 #   claude-session DIR ID CWD       act as a running Claude Code: write its session
 #                                   registry entry DIR/sessions/<pid>.json (sessionId ID)
 #   sleep SECONDS
@@ -62,6 +65,18 @@ while IFS= read -r step <&3 || [ -n "$step" ]; do
         src=$1
         case $src in /*) ;; *) src=$fixtures/$src ;; esac
         cat "$src" >>"$2"
+        ;;
+    lines)
+        src=$1
+        case $src in /*) ;; *) src=$fixtures/$src ;; esac
+        sed -n "$2,$3p" "$src" >>"$4"
+        ;;
+    keys)
+        saved=$(stty -g)
+        stty raw -echo
+        bytes=$(dd bs=1 count="$1" 2>/dev/null | od -An -tx1 | tr '\n' ' ' | tr -s ' ')
+        stty "$saved"
+        printf 'keys%s\n' "$bytes" | sed 's/ *$//' >>"$log"
         ;;
     claude-session)
         mkdir -p "$1/sessions"

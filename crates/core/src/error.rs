@@ -12,8 +12,34 @@ pub enum Incompatibility {
     MissingMethods { methods: Vec<String> },
 }
 
+/// Why an answer to an Agent's question was not pressed (or may not have
+/// been: `Failed`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum AnswerProblem {
+    /// Someone already answered it (in the Terminal or on another phone).
+    Answered,
+    /// The question is no longer on screen (or the Agent or Terminal is gone).
+    Gone,
+    /// The picks do not fit the question.
+    Invalid,
+    /// This Agent's questions cannot be answered from Chat.
+    Unsupported,
+    /// The Host has no Beacon.
+    NoBeacon,
+    /// The Beacon cannot reach the Host's herdr-core.
+    NoCore,
+    /// The key presses failed or the Beacon did not reply.
+    Failed,
+}
+
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum CoreError {
+    /// `answer_question` did not answer; nothing was retried.
+    #[error("the answer was not sent ({reason:?}): {detail}")]
+    AnswerRefused {
+        reason: AnswerProblem,
+        detail: String,
+    },
     #[error("no SSH key has been created yet")]
     NoKey,
     #[error("no Host with id {id}")]

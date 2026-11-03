@@ -17,7 +17,9 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::{Mutex, watch};
 use tokio::task::JoinHandle;
 
-use crate::error::CoreError;
+use aries_protocol::answer::{Answer, AnswerOutcome, AnswerReply};
+
+use crate::error::{AnswerProblem, CoreError};
 use crate::transport::{Ssh, Stream};
 
 /// One Chat entry, ready to render.
@@ -54,8 +56,35 @@ pub enum ChatEntryBody {
     AgentError {
         detail: String,
     },
+    /// The Agent asks the user to choose. While `status` is `Running` it is
+    /// open: show `questions` with their options as buttons and answer
+    /// with [`crate::AriesCore::answer_question`] (this entry's id).
+    /// `output` is the Agent's record of the answer once there is one.
+    Question {
+        name: String,
+        title: String,
+        questions: Vec<ChatQuestionPart>,
+        status: ChatToolStatus,
+        output: Option<String>,
+    },
     /// Something a newer Beacon sends that this app cannot show yet.
     Unsupported,
+}
+
+/// One question of a [`ChatEntryBody::Question`].
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ChatQuestionPart {
+    pub text: String,
+    pub header: Option<String>,
+    /// Several options may be picked.
+    pub multi: bool,
+    pub options: Vec<ChatQuestionOption>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ChatQuestionOption {
+    pub label: String,
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
@@ -198,9 +227,38 @@ fn entry(item: ChatItem) -> ChatEntry {
         ChatBody::Tool {
             name,
             title,
+            status,
+            output,
+            question: Some(q),
+            ..
+        } => ChatEntryBody::Question {
+            name,
+            title,
+            questions: q
+                .questions
+                .into_iter()
+                .map(|q| ChatQuestionPart {
+                    text: q.text,
+                    header: q.header,
+                    multi: q.multi,
+                    options: (q.options.into_iter())
+                        .map(|o| ChatQuestionOption {
+                            label: o.label,
+                            description: o.description,
+                        })
+                        .collect(),
+                })
+                .collect(),
+            status: tool_status(status),
+            output,
+        },
+        ChatBody::Tool {
+            name,
+            title,
             input,
             status,
             output,
+            question: None,
         } => ChatEntryBody::Tool {
             name,
             title,
@@ -209,11 +267,7 @@ fn entry(item: ChatItem) -> ChatEntry {
                 serde_json::Value::String(s) => s,
                 v => serde_json::to_string_pretty(&v).unwrap_or_default(),
             },
-            status: match status {
-                ToolStatus::Running | ToolStatus::Unknown => ChatToolStatus::Running,
-                ToolStatus::Done => ChatToolStatus::Done,
-                ToolStatus::Error => ChatToolStatus::Failed,
-            },
+            status: tool_status(status),
             output,
         },
         ChatBody::Error { message } => ChatEntryBody::AgentError { detail: message },
@@ -223,6 +277,14 @@ fn entry(item: ChatItem) -> ChatEntry {
         id: item.id,
         timestamp: item.ts,
         body,
+    }
+}
+
+fn tool_status(status: ToolStatus) -> ChatToolStatus {
+    match status {
+        ToolStatus::Running | ToolStatus::Unknown => ChatToolStatus::Running,
+        ToolStatus::Done => ChatToolStatus::Done,
+        ToolStatus::Error => ChatToolStatus::Failed,
     }
 }
 
@@ -298,6 +360,70 @@ pub(crate) fn command(terminal: &str, cursor: Option<&str>) -> String {
         quote(&no_beacon),
     );
     format!("sh -c {}", quote(&script))
+}
+
+/// The Host-side `aries-beacon answer` command; without a Beacon it prints
+/// a `no_beacon` reply.
+pub(crate) fn answer_command(terminal: &str, answer: &Answer) -> String {
+    let no_beacon = AnswerReply::new(AnswerOutcome::NoBeacon, None).to_json();
+    let args: Vec<String> = answer.args().iter().map(|a| quote(a)).collect();
+    let script = format!(
+        r#"b="${{ARIES_BEACON:-$HOME/.local/bin/aries-beacon}}"; if [ -x "$b" ]; then exec "$b" answer {} {}; else printf '%s\n' {}; fi"#,
+        quote(terminal),
+        args.join(" "),
+        quote(&no_beacon),
+    );
+    format!("sh -c {}", quote(&script))
+}
+
+/// Runs `aries-beacon answer` on the Host once. Not retried: a key press
+/// that may have landed must not land twice.
+pub(crate) async fn answer(
+    host: &ChatHost,
+    terminal: &str,
+    answer: &Answer,
+) -> Result<(), CoreError> {
+    let Stream {
+        reader,
+        writer,
+        guard,
+    } = host.open(&answer_command(terminal, answer)).await?;
+    let mut lines = BufReader::new(reader).lines();
+    let mut reply = None;
+    let read = tokio::time::timeout(Duration::from_secs(30), async {
+        while let Ok(Some(text)) = lines.next_line().await {
+            if let Ok(r) = AnswerReply::parse(&text) {
+                reply = Some(r);
+            }
+        }
+    })
+    .await;
+    drop((writer, guard));
+    let refused = |reason, detail: Option<String>| CoreError::AnswerRefused {
+        reason,
+        detail: detail.unwrap_or_default(),
+    };
+    let Some(reply) = reply else {
+        let why = if read.is_err() {
+            "timed out"
+        } else {
+            "no reply"
+        };
+        return Err(refused(AnswerProblem::Failed, Some(why.into())));
+    };
+    let reason = match reply.outcome {
+        AnswerOutcome::Sent => return Ok(()),
+        AnswerOutcome::Answered => AnswerProblem::Answered,
+        AnswerOutcome::Gone | AnswerOutcome::NoAgent | AnswerOutcome::NoTerminal => {
+            AnswerProblem::Gone
+        }
+        AnswerOutcome::Invalid => AnswerProblem::Invalid,
+        AnswerOutcome::Unsupported => AnswerProblem::Unsupported,
+        AnswerOutcome::NoBeacon => AnswerProblem::NoBeacon,
+        AnswerOutcome::NoCore => AnswerProblem::NoCore,
+        AnswerOutcome::Failed | AnswerOutcome::Unknown => AnswerProblem::Failed,
+    };
+    Err(refused(reason, reply.detail))
 }
 
 /// Silence after which the stream counts as dead (the Beacon sends a
@@ -421,6 +547,24 @@ mod tests {
         assert_eq!(
             String::from_utf8(script.stdout).unwrap(),
             "chat it's --follow --cursor claude-code:s:1\n"
+        );
+    }
+
+    #[test]
+    fn the_answer_command_quotes_terminal_and_question() {
+        let answer = Answer {
+            question: "it's".into(),
+            picks: vec![vec![1], vec![0, 2]],
+        };
+        let c = answer_command("t'1", &answer);
+        let out = std::process::Command::new("/bin/sh")
+            .arg("-c")
+            .arg(format!("export ARIES_BEACON=/bin/echo; {c}"))
+            .output()
+            .unwrap();
+        assert_eq!(
+            String::from_utf8(out.stdout).unwrap(),
+            "answer t'1 it's 1 0,2\n"
         );
     }
 

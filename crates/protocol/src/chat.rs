@@ -139,12 +139,46 @@ pub enum ChatBody {
         /// The full result text; `None` while running.
         #[serde(default)]
         output: Option<String>,
+        /// Set when the tool asks the user to choose (Claude Code's
+        /// AskUserQuestion, Codex `request_user_input`, ...). While `status`
+        /// is `running` it is open: the app shows its options as buttons and
+        /// answers with `aries-beacon answer` (`crate::answer`), naming this
+        /// item's `id`. Readers that predate it show the plain tool.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        question: Option<ChatQuestion>,
     },
     /// An error the Agent reported (API failure, model not found).
     Error { message: String },
     /// An item kind this reader does not know.
     #[serde(other)]
     Unsupported,
+}
+
+/// What a question tool asks: one or more questions, each answered by
+/// picking options. Agent-neutral; the Beacon turns picks into the Agent's
+/// own keys.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChatQuestion {
+    pub questions: Vec<Question>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Question {
+    pub text: String,
+    /// A short tag (Claude Code's `header`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub header: Option<String>,
+    /// Several options may be picked.
+    #[serde(default)]
+    pub multi: bool,
+    pub options: Vec<QuestionOption>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QuestionOption {
+    pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

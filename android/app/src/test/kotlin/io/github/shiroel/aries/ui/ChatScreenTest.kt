@@ -10,6 +10,10 @@ import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentStatus
+import io.github.shiroel.aries.core.AnswerProblem
+import io.github.shiroel.aries.core.ChatQuestionOption
+import io.github.shiroel.aries.core.ChatQuestionPart
+import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.ChatEntry
 import io.github.shiroel.aries.core.ChatEntryBody
 import io.github.shiroel.aries.core.ChatSnapshot
@@ -23,6 +27,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /** An Agent's Chat, opened from the Agent list, against a fake core. */
 @RunWith(RobolectricTestRunner::class)
@@ -163,6 +168,90 @@ class ChatScreenTest {
         compose.waitForIdle()
         assertTrue(core.chatStopped)
         compose.onNodeWithText(str(R.string.agent_detail_host, "server")).assertExists()
+    }
+
+    private fun option(label: String) = ChatQuestionOption(label, "Choose $label")
+
+    private fun color(status: ChatToolStatus, output: String? = null) = entry(
+        "toolu_q",
+        ChatEntryBody.Question(
+            "AskUserQuestion", "Which color do you prefer?",
+            listOf(ChatQuestionPart("Which color do you prefer?", "Color", false, listOf(option("Red"), option("Blue")))),
+            status, output,
+        ),
+    )
+
+    @Test
+    fun anOpenQuestionIsAnsweredWithOneTap() {
+        val core = FakeCore()
+        openChat(core)
+        core.pushChat(ChatSnapshot(listOf(color(ChatToolStatus.RUNNING)), ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        compose.onNodeWithText("Which color do you prefer?").assertExists()
+        compose.onNodeWithText("Choose Blue").assertExists()
+
+        compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue")).performClick()
+        compose.waitForIdle()
+        assertEquals(listOf(Triple("t1", "toolu_q", listOf(listOf(1u)))), core.answers)
+        compose.onNodeWithText(str(R.string.chat_question_sent)).assertExists()
+
+        // The Agent took it: no buttons, the answer shows.
+        core.pushChat(
+            ChatSnapshot(listOf(color(ChatToolStatus.DONE, "\"Which color do you prefer?\"=\"Blue\"")), ChatStatus.LIVE, null),
+        )
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue")).assertDoesNotExist()
+        compose.onNodeWithText("\"Which color do you prefer?\"=\"Blue\"").assertExists()
+    }
+
+    @Test
+    @Config(qualifiers = "h1200dp") // the whole card on screen
+    fun severalQuestionsAreChosenThenSentTogether() {
+        val core = FakeCore()
+        openChat(core)
+        val q = entry(
+            "toolu_m",
+            ChatEntryBody.Question(
+                "AskUserQuestion", "Which size?",
+                listOf(
+                    ChatQuestionPart("Which size?", "Size", false, listOf(option("S"), option("M"))),
+                    ChatQuestionPart("Which toppings?", "Toppings", true, listOf(option("Cheese"), option("Ham"), option("Olive"))),
+                ),
+                ChatToolStatus.RUNNING, null,
+            ),
+        )
+        core.pushChat(ChatSnapshot(listOf(q), ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        val send = compose.onNodeWithText(str(R.string.chat_question_send))
+        send.performClick()
+        compose.waitForIdle()
+        assertTrue("nothing is sent before every question has a pick", core.answers.isEmpty())
+
+        for (label in listOf("M", "Cheese", "Ham", "Olive", "Ham")) {
+            compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, label)).performClick()
+        }
+        compose.waitForIdle()
+        assertTrue(core.answers.isEmpty())
+        send.performClick()
+        compose.waitForIdle()
+        assertEquals(listOf(Triple("t1", "toolu_m", listOf(listOf(1u), listOf(0u, 2u)))), core.answers)
+    }
+
+    @Test
+    fun aQuestionAnsweredElsewhereSaysSo() {
+        val core = FakeCore()
+        openChat(core)
+        core.pushChat(ChatSnapshot(listOf(color(ChatToolStatus.RUNNING)), ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        core.answerFailure = CoreException.AnswerRefused(AnswerProblem.ANSWERED, "")
+        compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Red")).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.chat_answer_answered)).assertExists()
+
+        core.answerFailure = CoreException.AnswerRefused(AnswerProblem.GONE, "")
+        compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Red")).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.chat_answer_gone)).assertExists()
     }
 
     @Test

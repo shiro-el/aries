@@ -7,5 +7,6 @@
 pub const CONTRACT_VERSION: u32 = 1;
 
 pub mod agent_status;
+pub mod answer;
 pub mod beacon;
 pub mod chat;

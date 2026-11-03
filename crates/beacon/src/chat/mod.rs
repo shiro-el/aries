@@ -7,13 +7,17 @@
 //! The follow loop, cursor, partial lines, rotation and the app's rendering
 //! are shared.
 
+pub mod answer;
 pub mod claude;
 mod follow;
 mod jsonl;
 
 use std::path::PathBuf;
 
-use aries_protocol::chat::ChatEvent;
+use aries_protocol::agent_status::StatusRecord;
+use aries_protocol::chat::{ChatEvent, ChatQuestion};
+
+pub use answer::{KeysError, TerminalInput};
 
 pub use follow::{Options, TerminalLookup, run};
 pub use jsonl::{JsonlSource, Poll};
@@ -27,6 +31,18 @@ pub trait Agent {
     fn locate(&self, terminal: &TerminalFacts) -> Option<Located>;
     /// A fresh reader for one transcript.
     fn interpreter(&self) -> Box<dyn Interpreter>;
+    /// The TUI keys (herdr-core `terminal.keys` names) that answer the open
+    /// `question` with `picks` (already checked by [`answer::validate`]).
+    fn answer_keys(
+        &self,
+        _question: &ChatQuestion,
+        _picks: &[Vec<usize>],
+    ) -> Result<Vec<String>, KeysError> {
+        Err(KeysError::Unsupported(format!(
+            "{} questions cannot be answered from Chat",
+            self.name()
+        )))
+    }
 }
 
 /// Turns transcript lines into Chat events. Must ignore lines it does not
@@ -48,6 +64,8 @@ pub struct TerminalFacts {
     pub pid: Option<u32>,
     pub foreground_pid: Option<u32>,
     pub labels: serde_json::Map<String, serde_json::Value>,
+    /// The OSC 7501 status (`None` if the program never reported one).
+    pub status: Option<StatusRecord>,
 }
 
 impl TerminalFacts {
@@ -57,6 +75,7 @@ impl TerminalFacts {
             pid: pid(&v["pid"]),
             foreground_pid: pid(&v["foreground"]["pid"]),
             labels: v["labels"].as_object().cloned().unwrap_or_default(),
+            status: serde_json::from_value(v["status"].clone()).ok(),
         }
     }
 

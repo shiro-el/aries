@@ -29,8 +29,11 @@ pub use beacon::{
     ALLOWED_BEACON, BeaconArtifact, BeaconCheck, BeaconFetcher, BeaconInstall, BeaconRelease,
     BeaconSource, BeaconState, BeaconUpdate, FetchError, Linger, pinned_release,
 };
-pub use chat::{ChatEntry, ChatEntryBody, ChatSnapshot, ChatStatus, ChatToolStatus, ChatWatch};
-pub use error::{CoreError, Incompatibility, VaultError};
+pub use chat::{
+    ChatEntry, ChatEntryBody, ChatQuestionOption, ChatQuestionPart, ChatSnapshot, ChatStatus,
+    ChatToolStatus, ChatWatch,
+};
+pub use error::{AnswerProblem, CoreError, Incompatibility, VaultError};
 pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
 pub use host_model::{AgentStatus, BlockedReason, TerminalWatch};
 pub use launch::{AgentPreset, LaunchRequest, RECENT_CWDS_KEPT, SavedLaunch};
@@ -754,6 +757,30 @@ impl AriesCore {
             cursor,
             std::time::Duration::from_secs(1),
         )))
+    }
+
+    /// Answers the open question `question_id` (a
+    /// [`ChatEntryBody::Question`] entry id) of the Agent in `terminal`:
+    /// `picks` holds, per question in order, the 0-based indexes of the
+    /// chosen options. The Host's Beacon checks the Agent still shows that
+    /// question and presses its keys. Not retried; fails with
+    /// [`CoreError::AnswerRefused`] when nothing was (or may not have been)
+    /// pressed.
+    pub async fn answer_question(
+        &self,
+        host_id: String,
+        terminal: String,
+        question_id: String,
+        picks: Vec<Vec<u32>>,
+    ) -> Result<(), CoreError> {
+        let host = self.chat_host(&host_id)?;
+        let answer = aries_protocol::answer::Answer {
+            question: question_id,
+            picks: (picks.into_iter())
+                .map(|p| p.into_iter().map(|n| n as usize).collect())
+                .collect(),
+        };
+        on_runtime(async move { chat::answer(&host, &terminal, &answer).await }).await
     }
 }
 

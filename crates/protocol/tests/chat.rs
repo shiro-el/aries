@@ -1,7 +1,8 @@
 //! The Chat line format and its version rule, from the reader's side.
 
 use aries_protocol::chat::{
-    CHAT_FORMAT, ChatBody, ChatEvent, ChatItem, ChatLine, ChatLineError, ChatState, ToolStatus,
+    CHAT_FORMAT, ChatBody, ChatEvent, ChatItem, ChatLine, ChatLineError, ChatQuestion, ChatState,
+    Question, QuestionOption, ToolStatus,
 };
 use serde_json::json;
 
@@ -23,11 +24,58 @@ fn a_tool_item_line_reads_back_with_its_cursor() {
                         input: json!({"file_path": "hello.txt"}),
                         status: ToolStatus::Done,
                         output: Some("File created".into()),
+                        question: None,
                     },
                 },
             },
         }
     );
+}
+
+#[test]
+fn a_question_tool_carries_its_questions_and_options() {
+    let line = r#"{"v":1,"type":"item","item":{"id":"toolu_q","kind":"tool","name":"AskUserQuestion","title":"Which?","status":"running","question":{"questions":[{"text":"Which?","header":"Pick","multi":false,"options":[{"label":"Red","description":"Choose Red"},{"label":"Blue"}]}]}}}"#;
+    let ChatEvent::Item { item } = ChatLine::parse(line).unwrap().event else {
+        panic!("not an item");
+    };
+    let ChatBody::Tool {
+        question: Some(q),
+        status: ToolStatus::Running,
+        ..
+    } = item.body
+    else {
+        panic!("no question: {item:?}");
+    };
+    assert_eq!(
+        q,
+        ChatQuestion {
+            questions: vec![Question {
+                text: "Which?".into(),
+                header: Some("Pick".into()),
+                multi: false,
+                options: vec![
+                    QuestionOption {
+                        label: "Red".into(),
+                        description: Some("Choose Red".into()),
+                    },
+                    QuestionOption {
+                        label: "Blue".into(),
+                        description: None,
+                    },
+                ],
+            }],
+        }
+    );
+    // A plain tool line has no question and writes none.
+    let plain = ChatBody::Tool {
+        name: "Bash".into(),
+        title: "ls".into(),
+        input: json!({}),
+        status: ToolStatus::Done,
+        output: None,
+        question: None,
+    };
+    assert!(!serde_json::to_string(&plain).unwrap().contains("question"));
 }
 
 #[test]
