@@ -93,6 +93,12 @@
     <string name="files_range">전체 %3$d행 중 %1$d–%2$d행</string>
     <string name="files_previous_button">이전 페이지</string>
     <string name="files_next_button">다음 페이지</string>
+    <!-- Remote image and PDF preview (111) -->
+    <string name="files_pdf_title">PDF 페이지</string>
+    <string name="files_pdf_page">%2$d쪽 중 %1$d쪽</string>
+    <string name="files_preview_open">미리보기 열기</string>
+    <string name="files_preview_too_large">이 파일은 미리보기 한도인 %1$d MiB를 초과합니다.</string>
+    <string name="files_preview_failed">파일을 미리 볼 수 없습니다. 파일과 연결을 확인한 뒤 새로고침하여 다시 시도하세요.</string>
     <!-- File code view and Chat links (110) -->
     <string name="files_wrap_lines">자동 줄바꿈</string>
     <string name="files_missing">파일을 찾을 수 없습니다: %1$s</string>

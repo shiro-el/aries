@@ -54,7 +54,7 @@ fun RemoteFilesScreen(
             checkNotNull(connection)
             if (file == null) {
                 directory = connection.listFiles(address, folder)
-            } else {
+            } else if (remoteMediaKind(file!!) == null) {
                 val requested = offsets.last()
                 val result = try {
                     connection.readFilePage(address, file!!, requested, 200u)
@@ -127,6 +127,9 @@ fun RemoteFilesScreen(
                         HorizontalDivider()
                     }
                 }
+            }
+            remoteMediaKind(file!!) != null -> key(connection, address, file, retry) {
+                RemoteFilePreview(connection, address, file!!, Modifier.weight(1f))
             }
             else -> page?.let { content ->
                 unavailableLine?.let { Text(stringResource(R.string.files_line_unavailable, it.toLong())) }
