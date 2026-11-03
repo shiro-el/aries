@@ -943,8 +943,11 @@
     <string name="dictation_key_save_button">Save key</string>
     <string name="dictation_key_remove_button">Remove key</string>
     <string name="dictation_key_failed">Could not store the API key. Enter it again.</string>
-    <string name="dictation_language_label">Language (ISO code, empty for auto-detect)</string>
-    <string name="dictation_language_invalid">Use a two-letter language code, such as ko or en.</string>
+    <string name="dictation_language_label">Language</string>
+    <!-- Shared searchable language picker -->
+    <string name="language_picker_auto">Auto-detect</string>
+    <string name="language_picker_search">Search languages</string>
+    <string name="language_picker_no_results">No languages found</string>
     <string name="dictation_model_label">Transcription model</string>
     <string name="dictation_vocabulary_label">Vocabulary (names and terms)</string>
     <string name="dictation_context_label">Automatic context</string>
