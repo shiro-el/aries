@@ -14,6 +14,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.Alignment
+import androidx.compose.material3.Switch
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -76,10 +80,55 @@ fun PushSection(model: PushModel, beaconInstalled: Boolean) {
                     }
                     TextButton(onClick = model::changeRelay) { Text(stringResource(R.string.push_change_relay_button)) }
                 }
+                PolicyOptions(model)
             }
         }
         model.problem?.let { Text(resolve(it), color = MaterialTheme.colorScheme.error) }
         model.notice?.let { Text(resolve(it), style = MaterialTheme.typography.bodySmall) }
+    }
+}
+
+/** Which Agent statuses the Host notifies about; saved on the Host through its Beacon. */
+@Composable
+private fun PolicyOptions(model: PushModel) {
+    Text(stringResource(R.string.push_policy_title), style = MaterialTheme.typography.titleSmall)
+    Text(stringResource(R.string.push_policy_body), style = MaterialTheme.typography.bodySmall)
+    val policy = model.policy
+    if (policy == null) {
+        if (model.policyBusy) CircularProgressIndicator()
+        model.policyProblem?.let {
+            Text(resolve(it), color = MaterialTheme.colorScheme.error)
+            TextButton(onClick = model::loadPolicy) { Text(stringResource(R.string.push_policy_retry)) }
+        }
+        return
+    }
+    val enabled = !model.policyBusy
+    PolicyOption(R.string.push_policy_blocked, R.string.push_policy_blocked_hint, policy.blocked, enabled) { on ->
+        model.changePolicy { it.copy(blocked = on) }
+    }
+    PolicyOption(R.string.push_policy_error, R.string.push_policy_error_hint, policy.error, enabled) { on ->
+        model.changePolicy { it.copy(error = on) }
+    }
+    PolicyOption(R.string.push_policy_done, R.string.push_policy_done_hint, policy.done, enabled) { on ->
+        model.changePolicy { it.copy(done = on) }
+    }
+    PolicyOption(R.string.push_policy_child_agents, R.string.push_policy_child_agents_hint, policy.childAgents, enabled) { on ->
+        model.changePolicy { it.copy(childAgents = on) }
+    }
+    model.policyProblem?.let { Text(resolve(it), color = MaterialTheme.colorScheme.error) }
+}
+
+@Composable
+private fun PolicyOption(label: Int, hint: Int, on: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().toggleable(value = on, enabled = enabled, role = Role.Switch, onValueChange = onChange),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(label))
+            Text(stringResource(hint), style = MaterialTheme.typography.bodySmall)
+        }
+        Switch(checked = on, onCheckedChange = null, enabled = enabled)
     }
 }
 

@@ -29,6 +29,7 @@ import io.github.shiroel.aries.core.PushDevice
 import io.github.shiroel.aries.core.PushDisable
 import io.github.shiroel.aries.core.PushNotice
 import io.github.shiroel.aries.core.PushPairing
+import io.github.shiroel.aries.core.PushPolicy
 import io.github.shiroel.aries.core.PushProgress
 import io.github.shiroel.aries.core.PushStep
 import io.github.shiroel.aries.core.Linger
@@ -320,6 +321,23 @@ class FakeCore : AriesCoreInterface {
     override suspend fun disablePush(hostId: String, http: HttpClient): PushDisable {
         pushPaired.remove(hostId)
         return PushDisable(pushDisableHostCleared)
+    }
+
+    /** Push policies saved per Host id (absent: the Beacon's defaults). */
+    val pushPolicies = mutableMapOf<String, PushPolicy>()
+
+    /** When set, `pushPolicy` and `setPushPolicy` throw it. */
+    var pushPolicyFailure: CoreException? = null
+
+    override suspend fun pushPolicy(hostId: String): PushPolicy {
+        pushPolicyFailure?.let { throw it }
+        return pushPolicies[hostId] ?: PushPolicy(blocked = true, error = true, done = false, childAgents = false)
+    }
+
+    override suspend fun setPushPolicy(hostId: String, policy: PushPolicy): PushPolicy {
+        pushPolicyFailure?.let { throw it }
+        pushPolicies[hostId] = policy
+        return policy
     }
 
     override suspend fun updatePushToken(device: PushDevice, http: HttpClient) {}

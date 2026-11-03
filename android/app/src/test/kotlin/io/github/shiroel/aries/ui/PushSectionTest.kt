@@ -5,6 +5,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -20,6 +22,8 @@ import io.github.shiroel.aries.core.FetchException
 import io.github.shiroel.aries.core.HttpClient
 import io.github.shiroel.aries.core.HttpRequest
 import io.github.shiroel.aries.core.HttpResponse
+import io.github.shiroel.aries.core.CoreException
+import io.github.shiroel.aries.core.PushPolicy
 import io.github.shiroel.aries.core.PushStep
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -273,6 +277,66 @@ class PushSectionTest {
         assertTrue(core.pushPaired.isEmpty())
         assertEquals(flushesBefore + 1, core.revocationFlushes)
         shows(str(R.string.push_needs_beacon))
+    }
+
+    private fun option(res: Int) = compose.onNodeWithText(str(res)).performScrollTo()
+
+    @Test
+    fun showsTheHostsNotificationOptionsWithTheDefaults() {
+        val core = FakeCore().apply { beacon = installed() }
+        connectTo(core)
+        click(R.string.push_enable_button)
+
+        shows(str(R.string.push_policy_title))
+        option(R.string.push_policy_blocked).assertIsOn()
+        option(R.string.push_policy_error).assertIsOn()
+        option(R.string.push_policy_done).assertIsOff()
+        option(R.string.push_policy_child_agents).assertIsOff()
+        shows(str(R.string.push_policy_child_agents_hint))
+    }
+
+    @Test
+    fun aChangedOptionIsSavedOnTheHost() {
+        val core = FakeCore().apply { beacon = installed() }
+        val host = connectTo(core).hosts.single()
+        click(R.string.push_enable_button)
+
+        click(R.string.push_policy_done)
+        click(R.string.push_policy_child_agents)
+        click(R.string.push_policy_blocked)
+
+        assertEquals(PushPolicy(blocked = false, error = true, done = true, childAgents = true), core.pushPolicies[host.id])
+        option(R.string.push_policy_done).assertIsOn()
+        option(R.string.push_policy_child_agents).assertIsOn()
+        option(R.string.push_policy_blocked).assertIsOff()
+    }
+
+    @Test
+    fun aFailedChangeKeepsTheOldOptionAndSaysWhy() {
+        val core = FakeCore().apply { beacon = installed() }
+        val host = connectTo(core).hosts.single()
+        click(R.string.push_enable_button)
+        core.pushPolicyFailure = CoreException.BeaconStep("policy", "disk full")
+
+        click(R.string.push_policy_done)
+
+        option(R.string.push_policy_done).assertIsOff()
+        shows(str(R.string.push_policy_failed, "disk full"))
+        assertEquals(null, core.pushPolicies[host.id])
+    }
+
+    @Test
+    fun optionsTheHostCannotBeAskedForSayWhy() {
+        val core = FakeCore().apply { beacon = installed(); pushPolicyFailure = CoreException.BeaconStep("policy", "no answer") }
+        connectTo(core)
+        click(R.string.push_enable_button)
+
+        shows(str(R.string.push_policy_failed, "no answer"))
+        compose.onNodeWithText(str(R.string.push_policy_done)).assertDoesNotExist()
+
+        core.pushPolicyFailure = null
+        click(R.string.push_policy_retry)
+        option(R.string.push_policy_blocked).assertIsOn()
     }
 
     private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.onAllNodesWithTextLast(text: String) {
