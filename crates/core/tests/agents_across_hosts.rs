@@ -49,6 +49,33 @@ fn labels(hc: &HcSession, address: &str) -> serde_json::Value {
 }
 
 #[tokio::test]
+async fn viewing_an_agent_at_turn_zero_joins_the_shared_seen_rules() {
+    let hc = HcSession::start();
+    let agent = hc.run_fake_agent("agent", "status working\n");
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    let host = core.add_host("dev".into(), local_endpoint(&hc)).unwrap();
+    let conn = core.connect(host.id).await.unwrap();
+    let watch = conn.watch_terminals().await.unwrap();
+    until(&watch, "Working at turn zero", |list| {
+        has(list, &agent.address, |t| {
+            t.agent_status == Some(AgentStatus::Working) && t.turn == 0
+        })
+    })
+    .await;
+
+    conn.mark_seen(agent.address.clone(), 0).await.unwrap();
+    assert_eq!(labels(&hc, &agent.address)["herdr.seen"], "0");
+
+    // Existing higher labels survive stale viewing snapshots.
+    hc.hc(&["label", &agent.address, "herdr.seen=2"]);
+    conn.mark_seen(agent.address.clone(), 0).await.unwrap();
+    assert_eq!(labels(&hc, &agent.address)["herdr.seen"], "2");
+    watch.stop();
+    conn.disconnect().await;
+}
+
+#[tokio::test]
 async fn seen_and_pinned_are_shared_with_other_clients_both_ways() {
     let hc = HcSession::start();
     let agent = hc.run_fake_agent(

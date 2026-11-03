@@ -74,6 +74,11 @@ internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit) {
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val screen = model.screen
+    SeenAgentEffect(
+        screen,
+        enabled = drawer.isClosed && drawer.targetValue == DrawerValue.Closed &&
+            !model.callInboxOpen && model.prompt == null,
+    )
     val drawerWidth = (LocalConfiguration.current.screenWidthDp.dp * .86f).coerceAtMost(320.dp)
     LaunchedEffect(screen) { drawer.close(); model.closeCallInbox() }
     LaunchedEffect(model.callInboxOpen) { if (model.callInboxOpen) drawer.close() }

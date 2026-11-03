@@ -826,7 +826,7 @@ class HostsModel(
         openAgent(agents.board, AgentEntry(host, terminal))
     }
 
-    /** Opens an Agent in its saved view over the list; a Done Agent counts as seen for every client. */
+    /** Opens an Agent in its saved view over the list; the visible screen owns seen sync. */
     fun openAgent(board: AgentBoard, entry: AgentEntry) {
         val agents = screen as? Screen.Agents ?: return
         if (agents.board !== board) return
@@ -834,9 +834,6 @@ class HostsModel(
         val link = agentLinks[current.host.id] ?: return
         val t = current.terminal
         show(link, t, agents)
-        if (t.agentStatus == AgentStatus.Done) {
-            labelWrite(board, current) { it.markSeen(t.address, t.turn) }
-        }
     }
 
     /** Pins or unpins an Agent for every client. */
