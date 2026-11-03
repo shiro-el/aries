@@ -727,6 +727,7 @@ fn question(input: &Value) -> Option<ChatQuestion> {
         .iter()
         .map(|q| {
             Some(Question {
+                answer: None,
                 text: text(&q["question"])?,
                 header: text(&q["header"]),
                 multi: q["multiple"] == true,

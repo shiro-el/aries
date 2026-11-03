@@ -619,6 +619,7 @@ fn only_one_single_choice_question_maps_to_keys() {
     let q = |multi: bool, n: usize, count: usize| aries_protocol::chat::ChatQuestion {
         questions: (0..count)
             .map(|_| aries_protocol::chat::Question {
+                answer: None,
                 text: "q".into(),
                 header: None,
                 multi,

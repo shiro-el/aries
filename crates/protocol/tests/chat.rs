@@ -53,6 +53,7 @@ fn a_question_tool_carries_its_questions_and_options() {
         q,
         ChatQuestion {
             questions: vec![Question {
+                answer: None,
                 text: "Which?".into(),
                 header: Some("Pick".into()),
                 multi: false,

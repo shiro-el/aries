@@ -28,7 +28,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -339,6 +338,9 @@ class ChatModel(
         val mode = questionMode(id)
         if (mode != QuestionMode.Live && mode != QuestionMode.History) return
         val texts = question.questions.indices.map { questionText[id]?.getOrNull(it)?.takeIf(String::isNotBlank) }
+        // Single-choice taps submit directly, without going through the
+        // draft selection map. Keep their submitted choice visible too.
+        picks = picks + (id to chosen.map { it.toSet() })
         answers = answers + (id to AnswerState.Sending)
         scope.launch {
             val state = try {
@@ -765,68 +767,5 @@ private fun ToolView(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question) {
-    val mode = chat.questionMode(id)
-    val open = mode == ChatModel.QuestionMode.Live || mode == ChatModel.QuestionMode.History
-    val state = chat.answers[id]
-    val lone = q.questions.size == 1 && !q.questions[0].multi
-    val chosen = chat.picks[id]
-    val enabled = state != AnswerState.Sending && state != AnswerState.Sent
-    ConsoleChatCallSurface {
-        Text(
-            stringResource(R.string.chat_question_label),
-            style = MaterialTheme.typography.labelMedium,
-            color = statusColor(AgentStatus.Blocked(null, null)),
-        )
-        if (mode == ChatModel.QuestionMode.Queued) Text(stringResource(R.string.chat_question_queued))
-        if (mode == ChatModel.QuestionMode.History) Text(stringResource(R.string.chat_question_history), style = MaterialTheme.typography.bodySmall)
-        q.questions.forEachIndexed { part, question ->
-            question.header?.let { SearchableChatText(it, "question:$part:header", style = MaterialTheme.typography.labelSmall) }
-            SearchableChatText(question.text, "question:$part")
-            if (open && question.multi) {
-            }
-            if (open) {
-                question.options.forEachIndexed { i, option ->
-                    val label = stringResource(R.string.chat_question_option_label, option.label)
-                    val selected = chosen?.getOrNull(part)?.contains(i) == true
-                    ConsoleChatChoice(i + 1, option.label, option.description, label,
-                        enabled = enabled, selected = selected, onClick = { chat.pick(id, q, part, i) })
-                }
-                val inputLabel = stringResource(R.string.chat_question_text_label, question.text)
-                OutlinedTextField(
-                    value = chat.questionText[id]?.getOrNull(part).orEmpty(),
-                    onValueChange = { chat.writeAnswer(id, q, part, it) },
-                    label = { Text(stringResource(R.string.chat_question_text_hint)) },
-                    modifier = Modifier.fillMaxWidth().semantics { contentDescription = inputLabel },
-                    enabled = enabled,
-                    singleLine = true,
-                    shape = RectangleShape,
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
-                )
-            }
-        }
-        if (open && (!lone || chat.questionText[id]?.any { it.isNotBlank() } == true)) {
-            ConsoleButton(
-                onClick = { chat.send(id, q) },
-                enabled = enabled && chat.complete(id, q),
-            ) { Text(stringResource(R.string.chat_question_send)) }
-        }
-        if (open || state is AnswerState.Failed) {
-            when (state) {
-                AnswerState.Sending -> Text(stringResource(R.string.chat_question_sending), style = MaterialTheme.typography.bodySmall)
-                AnswerState.Sent -> Text(stringResource(R.string.chat_question_sent), style = MaterialTheme.typography.bodySmall)
-                is AnswerState.Failed -> Text(
-                    stringResource(state.why.res, *state.why.args.toTypedArray()),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-                null -> {}
-            }
-        }
-        q.output?.let { SearchableChatText(it, "question-output", style = MaterialTheme.typography.bodySmall) }
     }
 }

@@ -509,7 +509,11 @@
     <string name="chat_question_history">Past question</string>
     <string name="chat_question_send">Send answer</string>
     <string name="chat_question_sending">Sending…</string>
-    <string name="chat_question_sent">Answer sent.</string>
+    <string name="chat_question_sent">Answered</string>
+    <string name="chat_question_cancelled">Cancelled</string>
+    <string name="chat_question_expired">Expired</string>
+    <string name="chat_question_other">Other</string>
+    <string name="chat_question_notes">Notes</string>
     <!-- Notification question answers -->
     <string name="question_notify_open_app">Answer in app</string>
     <string name="question_notify_sent">Sent “%1$s”</string>

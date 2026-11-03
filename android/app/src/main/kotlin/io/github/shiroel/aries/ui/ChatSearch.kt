@@ -135,11 +135,16 @@ internal fun chatSearchFields(entries: List<ChatEntry>, markdown: Map<String, Ch
             is ChatEntryBody.Thinking -> { field("thinking", body.text); item++ }
             is ChatEntryBody.AgentError -> { field("error", body.detail); item++ }
             is ChatEntryBody.Question -> {
+                val answers = questionAnswers(body)
                 body.questions.forEachIndexed { part, question ->
                     field("question:$part:header", question.header)
                     field("question:$part", question.text)
+                    if (body.status == io.github.shiroel.aries.core.ChatToolStatus.DONE) {
+                        question.options.forEachIndexed { index, option -> field("question:$part:option:$index", option.label) }
+                        field("question:$part:answer", answers[part]?.text)
+                        field("question:$part:notes", answers[part]?.notes)
+                    }
                 }
-                field("question-output", body.output)
                 item++
             }
             ChatEntryBody.Unsupported -> item++

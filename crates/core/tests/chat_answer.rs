@@ -200,7 +200,19 @@ async fn answer_once(background: bool) {
     assert_eq!(inputs(&agent, 1).await, ["keys 32"]);
 
     wait_for(&watch, "answered question", |s| {
-        question(s).is_some_and(|(_, status, _)| status == ChatToolStatus::Done)
+        if !question(s).is_some_and(|(_, status, _)| status == ChatToolStatus::Done) {
+            return false;
+        }
+        let recorded = s
+            .entries
+            .iter()
+            .find_map(|entry| match &entry.body {
+                ChatEntryBody::Question { questions, .. } => questions[0].answer.as_ref(),
+                _ => None,
+            })
+            .expect("the recorded answer reaches the phone core");
+        assert_eq!(recorded.choices, [1]);
+        true
     })
     .await;
     let again = if background {

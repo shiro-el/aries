@@ -57,8 +57,9 @@ pub use calls::{
     CallReplyOutcome, CallUrgency, CallWatch,
 };
 pub use chat::{
-    ChatEntry, ChatEntryBody, ChatQuestionOption, ChatQuestionPart, ChatResponseCompletion,
-    ChatResponseMetadata, ChatSnapshot, ChatStatus, ChatToolDetails, ChatToolStatus, ChatWatch,
+    ChatEntry, ChatEntryBody, ChatQuestionAnswer, ChatQuestionOption, ChatQuestionPart,
+    ChatResponseCompletion, ChatResponseMetadata, ChatSnapshot, ChatStatus, ChatToolDetails,
+    ChatToolStatus, ChatWatch,
 };
 pub use diagnostics::{
     DIAGNOSTICS_KEPT, DiagnosticEntry, DiagnosticError, DiagnosticEvent, DiagnosticSource,

@@ -387,7 +387,32 @@ impl CodexInterpreter {
             Value::Null => String::new(),
             other => exec_result(other).0,
         };
-        let text = match self.question_ids.remove(call) {
+        let ids = self.question_ids.remove(call);
+        if let (
+            Some(ids),
+            ChatBody::Tool {
+                question: Some(q), ..
+            },
+        ) = (&ids, &mut it.body)
+            && let Ok(result) = serde_json::from_str::<Value>(&raw)
+        {
+            for (part, id) in q.questions.iter_mut().zip(ids) {
+                let entry = &result["answers"][id];
+                if let Some(values) = entry["answers"].as_array() {
+                    let values = values
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_owned)
+                        .collect::<Vec<_>>();
+                    let notes = entry["notes"]
+                        .as_str()
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_owned);
+                    part.answer = Some(super::question::answer(part, &values, notes));
+                }
+            }
+        }
+        let text = match ids {
             Some(ids) => answers(&raw, &ids).unwrap_or(raw),
             None => raw,
         };
@@ -760,6 +785,7 @@ fn parse_question(input: &Value) -> Option<ChatQuestion> {
                 return None;
             }
             Some(Question {
+                answer: None,
                 text: text(&q["question"])?,
                 header: text(&q["header"]),
                 multi: q["multiSelect"] == true || q["multi_select"] == true,

@@ -266,6 +266,7 @@ impl ClaudeInterpreter {
             images,
             input,
             details,
+            question,
             ..
         } = &mut item.body
         {
@@ -278,6 +279,29 @@ impl ClaudeInterpreter {
             *output = Some(result_text(&block["content"]));
             if !failed {
                 *diff = edit_diff(structured, input);
+                if let Some(question) = question {
+                    let prompts = question
+                        .questions
+                        .iter()
+                        .map(|q| q.text.clone())
+                        .collect::<Vec<_>>();
+                    for q in &mut question.questions {
+                        let value = structured["answers"][&q.text].as_str().or_else(|| {
+                            super::question::claude_text(
+                                output.as_deref().unwrap_or_default(),
+                                &q.text,
+                                &prompts,
+                            )
+                        });
+                        if let Some(value) = value {
+                            let notes = structured["annotations"][&q.text]["notes"]
+                                .as_str()
+                                .filter(|s| !s.is_empty())
+                                .map(str::to_owned);
+                            q.answer = Some(super::question::answer(q, &[value.to_owned()], notes));
+                        }
+                    }
+                }
             }
             let cwd = details.as_ref().and_then(|d| d.cwd.clone());
             *details = super::details::tool(input, structured);
@@ -393,6 +417,7 @@ fn question(input: &Value) -> Option<ChatQuestion> {
         .iter()
         .map(|q| {
             Some(Question {
+                answer: None,
                 text: text(&q["question"])?,
                 header: text(&q["header"]),
                 multi: q["multiSelect"] == true,

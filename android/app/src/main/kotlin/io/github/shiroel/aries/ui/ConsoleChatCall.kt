@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -19,7 +21,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
@@ -30,8 +34,8 @@ import io.github.shiroel.aries.core.CallAnswerState
 
 /** Shared visual treatment; transcript questions and Beacon Calls keep their own reply protocols. */
 @Composable
-internal fun ConsoleChatCallSurface(content: @Composable ColumnScope.() -> Unit) {
-    val blocked = statusColor(AgentStatus.Blocked(null, null))
+internal fun ConsoleChatCallSurface(accent: Color? = null, content: @Composable ColumnScope.() -> Unit) {
+    val blocked = accent ?: statusColor(AgentStatus.Blocked(null, null))
     Column(
         Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainer)
             .drawBehind { drawLine(blocked, Offset(1.dp.toPx(), 0f), Offset(1.dp.toPx(), size.height), strokeWidth = 2.dp.toPx()) }
@@ -64,7 +68,9 @@ internal fun ConsoleChatChoice(
         ),
     ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(stringResource(R.string.console_chat_choice_number, number), Modifier.width(24.dp), color = colors.primary)
+            if (selected) Icon(painterResource(R.drawable.ic_check), contentDescription = null,
+                modifier = Modifier.size(24.dp), tint = colors.onPrimaryContainer)
+            else Text(stringResource(R.string.console_chat_choice_number, number), Modifier.width(24.dp), color = colors.primary)
             Column(Modifier.weight(1f)) {
                 Text(label)
                 description?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
