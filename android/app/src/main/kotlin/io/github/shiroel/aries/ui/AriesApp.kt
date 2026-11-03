@@ -138,6 +138,7 @@ private fun HostListScreen(model: HostsModel) {
         items(model.hosts, key = { it.id }) { host ->
             HostRow(host, onRemove = { model.askRemove(host) }) { model.connect(host) }
             JumpSummary(model.jumps[host.id].orEmpty())
+            ClearChatCacheButton(model.chatCache, host)
             if (host.endpoint is Endpoint.Ssh) {
                 TextButton(onClick = { model.editJumps(host) }) { Text(stringResource(R.string.host_jumps_button)) }
                 TextButton(onClick = { model.askPassword(host) }) {
@@ -148,6 +149,8 @@ private fun HostListScreen(model: HostsModel) {
         if (model.key != null) item { ExtraKeysSection(model) }
         item { HorizontalDivider() }
         item { AddHostForm(model) }
+        item { HorizontalDivider() }
+        item { ChatCacheSettings(model.chatCache) }
     }
 }
 

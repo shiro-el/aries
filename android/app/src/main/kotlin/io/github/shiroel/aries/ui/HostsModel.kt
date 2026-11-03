@@ -106,6 +106,9 @@ class HostsModel(
     /** The Beacon section of the connected Host. */
     val beacon = BeaconModel(core, scope, beaconFetcher, keyWork)
 
+    /** Chat cache retention and per-Host clearing (ticket 44). */
+    val chatCache = ChatCacheModel(core, scope, keyWork)
+
     var key by mutableStateOf<PublicKeyInfo?>(null)
         private set
     var keyProtection by mutableStateOf<KeyProtection?>(null)
@@ -139,10 +142,16 @@ class HostsModel(
     private val links: List<HostLink> get() = listOfNotNull(browseLink) + agentLinks.values
 
     /** The phone's network changed (Wi-Fi to LTE, airplane mode): replace every line and restore the screens. */
-    fun networkChanged() = links.forEach { it.networkChanged() }
+    fun networkChanged() {
+        links.forEach { it.networkChanged() }
+        (screen as? Screen.Chat)?.chat?.reconnect()
+    }
 
     /** The app is back in the foreground: reconnect any line that died meanwhile. */
-    fun foregrounded() = links.forEach { it.check() }
+    fun foregrounded() {
+        links.forEach { it.check() }
+        (screen as? Screen.Chat)?.chat?.retryNow()
+    }
 
     init {
         guard {

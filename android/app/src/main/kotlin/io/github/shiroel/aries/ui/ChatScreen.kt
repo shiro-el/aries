@@ -67,7 +67,9 @@ class ChatModel(
             val w = try {
                 core.watchChat(host.id, terminal.address, null)
             } catch (e: CoreException) {
-                snapshot = ChatSnapshot(emptyList(), ChatStatus.NO_BEACON, null)
+                // Still show what the cache holds (ticket 44).
+                val cached = try { core.cachedChat(host.id, terminal.address) } catch (e: CoreException) { null }
+                snapshot = ChatSnapshot(cached?.entries.orEmpty(), ChatStatus.NO_BEACON, cached?.cursor)
                 return@launch
             }
             watch = w
@@ -81,6 +83,16 @@ class ChatModel(
 
     fun toggle(id: String) {
         expanded = if (id in expanded) expanded - id else expanded + id
+    }
+
+    /** The network changed: replace the Chat's line now; it resumes after its cursor. */
+    fun reconnect() {
+        watch?.reconnect()
+    }
+
+    /** The app is back in front: retry a waiting reconnect now. */
+    fun retryNow() {
+        watch?.retryNow()
     }
 
     fun stop() {

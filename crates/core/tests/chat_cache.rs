@@ -384,3 +384,61 @@ async fn removing_a_host_leaves_no_trace_of_its_cache() {
     let core = env.core();
     assert!(core.cached_chat(kept, "t1".into()).await.unwrap().is_some());
 }
+
+// The app's reconnect signals (HostLink, ticket 19): a network change
+// replaces the Chat's line at once; coming back to the foreground retries a
+// waiting reconnect at once. Both resume after the cursor.
+
+#[tokio::test]
+async fn a_network_change_replaces_the_line_and_resumes_after_the_cursor() {
+    let env = Env::new();
+    let core = env.core();
+    let host = env.host(&core, "h");
+    let log = env.beacon_printing("h", FIRST);
+    let watch = watch(&core, &host);
+    wait_for(&watch, "first", |s| s.status == ChatStatus::Live).await;
+
+    env.beacon_printing("h", AFTER);
+    watch.reconnect();
+    let s = wait_for(&watch, "resumed", |s| s.entries.len() == 3).await;
+    assert_eq!(
+        texts(&s),
+        [
+            "user: the secret word is aubergine",
+            "tool Bash Failed",
+            "agent: it failed"
+        ]
+    );
+    let args = std::fs::read_to_string(&log).unwrap();
+    assert_eq!(
+        args.lines().collect::<Vec<_>>(),
+        ["chat t1 --follow --cursor cc:s:20"]
+    );
+    watch.stop();
+}
+
+#[tokio::test]
+async fn coming_back_retries_a_waiting_reconnect_at_once() {
+    let env = Env::new();
+    let core = env.core();
+    let host = env.host(&core, "h");
+    // The first attempt fails; the next one would wait a minute.
+    let watch = core
+        .watch_chat_retrying(host.clone(), "t1".into(), None, Duration::from_secs(60))
+        .unwrap();
+    wait_for(&watch, "reconnecting", |s| {
+        s.status == ChatStatus::Reconnecting
+    })
+    .await;
+
+    env.beacon_printing("h", FIRST);
+    watch.retry_now();
+    let s = tokio::time::timeout(
+        Duration::from_secs(10),
+        wait_for(&watch, "live", |s| s.status == ChatStatus::Live),
+    )
+    .await
+    .expect("retry_now did not retry");
+    assert_eq!(s.entries.len(), 2);
+    watch.stop();
+}

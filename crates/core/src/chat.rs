@@ -14,7 +14,7 @@ use aries_protocol::chat::{
     ChatBody, ChatEvent, ChatItem, ChatLine, ChatLineError, ChatState, ToolStatus,
 };
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::sync::{Mutex, watch};
+use tokio::sync::{Mutex, Notify, watch};
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
 
@@ -338,6 +338,16 @@ const SILENCE: Duration = Duration::from_secs(45);
 pub struct ChatWatch {
     rx: Arc<Mutex<watch::Receiver<Option<ChatSnapshot>>>>,
     task: JoinHandle<()>,
+    wake: Arc<Wake>,
+}
+
+/// The app's reconnect signals (see [`ChatWatch::reconnect`]).
+#[derive(Default)]
+struct Wake {
+    /// Drop the current line and connect again now.
+    replace: Notify,
+    /// Skip the wait before the next attempt.
+    retry: Notify,
 }
 
 impl ChatWatch {
@@ -350,6 +360,8 @@ impl ChatWatch {
     ) -> Self {
         let model = ChatModel::new(cursor);
         let (tx, rx) = watch::channel(Some(model.snapshot()));
+        let wake = Arc::new(Wake::default());
+        let signals = wake.clone();
         let task = crate::runtime().spawn(async move {
             let mut model = model;
             if let Some(slot) = &cache
@@ -362,11 +374,12 @@ impl ChatWatch {
                     return;
                 }
             }
-            follow(host, terminal, model, cache, tx, retry).await
+            follow(host, terminal, model, cache, tx, retry, &signals).await
         });
         Self {
             rx: Arc::new(Mutex::new(rx)),
             task,
+            wake,
         }
     }
 }
@@ -431,6 +444,7 @@ async fn follow(
     cache: Option<CacheSlot>,
     tx: watch::Sender<Option<ChatSnapshot>>,
     retry: Duration,
+    wake: &Wake,
 ) {
     let mut saver = Saver {
         slot: cache.as_ref(),
@@ -452,8 +466,12 @@ async fn follow(
             let mut heard = Instant::now();
             loop {
                 let silent = heard + SILENCE;
-                let wake = saver.due().map_or(silent, |d| d.min(silent));
-                let text = match tokio::time::timeout_at(wake, lines.next_line()).await {
+                let wake_at = saver.due().map_or(silent, |d| d.min(silent));
+                let next = tokio::select! {
+                    next = tokio::time::timeout_at(wake_at, lines.next_line()) => next,
+                    _ = wake.replace.notified() => break,
+                };
+                let text = match next {
                     Ok(Ok(Some(text))) => text,
                     Ok(_) => break,
                     Err(_) if Instant::now() >= silent => break,
@@ -489,8 +507,11 @@ async fn follow(
         if tx.send(Some(model.snapshot())).is_err() {
             return;
         }
-        tokio::time::sleep(backoff).await;
-        backoff = (backoff * 2).min(Duration::from_secs(30));
+        tokio::select! {
+            _ = tokio::time::sleep(backoff) => backoff = (backoff * 2).min(Duration::from_secs(30)),
+            _ = wake.replace.notified() => backoff = retry,
+            _ = wake.retry.notified() => backoff = retry,
+        }
     }
 }
 
@@ -511,6 +532,18 @@ impl ChatWatch {
     }
 
     /// Stops following; the Beacon on the Host exits.
+    /// The phone's network changed: the line is likely dead, so drop it
+    /// and connect again now, after the last cursor.
+    pub fn reconnect(&self) {
+        self.wake.replace.notify_waiters();
+    }
+
+    /// The app is back in front: if the Chat waits to reconnect, try now.
+    /// A live line is kept (a dead one is noticed by its silence).
+    pub fn retry_now(&self) {
+        self.wake.retry.notify_waiters();
+    }
+
     pub fn stop(&self) {
         self.task.abort();
     }

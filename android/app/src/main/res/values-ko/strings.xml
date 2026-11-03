@@ -125,6 +125,13 @@
     <string name="chat_tool_expand_label">%1$s 호출 전체 보기</string>
     <string name="chat_agent_error">Agent 오류</string>
     <string name="chat_unsupported">이 항목을 보려면 새 버전의 Aries가 필요합니다.</string>
+    <string name="chat_cache_title">Chat 캐시</string>
+    <string name="chat_cache_hint">읽은 Chat은 이 폰의 키로 암호화해 폰에 보관하므로 Host 없이도 열립니다. 이 기간 동안 갱신되지 않은 Chat은 삭제됩니다.</string>
+    <string name="chat_cache_days">%1$d일</string>
+    <string name="chat_cache_clear_button">Chat 캐시 삭제</string>
+    <string name="chat_cache_clear_label">%1$s의 캐시된 Chat 삭제</string>
+    <string name="chat_cache_cleared">%1$s의 캐시된 Chat을 삭제했습니다.</string>
+    <string name="chat_cache_failed">Chat 캐시를 변경하지 못했습니다.</string>
 
     <string name="space_unnamed">이름 없는 스페이스</string>
     <string name="space_summary">탭 %1$d개 · 페인 %2$d개</string>
