@@ -64,6 +64,21 @@ class AgentViewToggleTest {
     }
 
     @Test
+    fun watchingCanBeToggledFromTerminalAndChatThroughTheSharedLabel() {
+        val core = FakeCore()
+        core.terminalsOf["h1"] = listOf(claude, vim)
+        browseHome(core)
+        click("claude")
+        compose.onNodeWithTag("agent-watch").performClick()
+        compose.waitForIdle()
+        assertEquals(listOf("h1 t1 watched=true"), core.labelWrites)
+        click(str(R.string.agent_view_chat))
+        compose.onNodeWithTag("agent-watch").performClick()
+        compose.waitForIdle()
+        assertEquals(listOf("h1 t1 watched=true", "h1 t1 watched=false"), core.labelWrites)
+    }
+
+    @Test
     fun anAgentOpensAsItsTerminalByDefaultAndTheToggleSwitchesWithoutStacking() {
         val core = FakeCore()
         browseHome(core)

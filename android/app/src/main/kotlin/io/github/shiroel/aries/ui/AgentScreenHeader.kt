@@ -35,6 +35,8 @@ internal fun AgentScreenHeader(
     current: AgentView,
     onView: ((AgentView) -> Unit)?,
     title: String = displayName(terminal),
+    link: HostLink? = null,
+    onTerminalUpdate: (TerminalInfo) -> Unit = {},
 ) {
     val colors = MaterialTheme.colorScheme
     val hostPrefix = hostName?.let { stringResource(R.string.console_agent_host_prefix, it) }
@@ -73,5 +75,6 @@ internal fun AgentScreenHeader(
         Text(stringResource(R.string.console_agent_missing_value), Modifier.semantics { contentDescription = ageLabel },
             color = colors.onSurfaceVariant, fontSize = 12.sp)
     }
+    WatchAgentToggle(terminal, link, onTerminalUpdate)
     HorizontalDivider()
 }

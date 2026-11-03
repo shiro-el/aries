@@ -67,6 +67,20 @@ pub enum PushMessage {
         /// Unix seconds on the Host.
         at: u64,
     },
+    /// A user-selected Watched Agent is Working. Older phones reject this
+    /// new kind as UnknownMessage without changing the v1 envelope.
+    Progress {
+        terminal: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
+        elapsed_secs: u64,
+        child_agents: u32,
+        /// Unix seconds on the Host, for rejecting delayed progress after Done.
+        at: u64,
+        /// Optional cleanup when watching is turned off or the Terminal disappears.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        cancelled: bool,
+    },
     /// An Agent sent a Call the push policy notifies about
     /// ([`crate::push_policy::PushPolicy::allows_call`]); sent by
     /// `aries-beacon call` right after it recorded the Call.

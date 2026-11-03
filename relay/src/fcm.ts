@@ -1,9 +1,8 @@
 /**
  * FCM HTTP v1: a service account JWT (RS256) is exchanged for an OAuth
  * access token, cached in memory until shortly before it expires, and used
- * to send one high-priority data message per push (high priority so Doze
- * and restricted standby buckets do not delay it; see
- * docs/research/background-choice-reply.md).
+ * to send one data message per push. Attention uses HIGH (see
+ * docs/research/background-choice-reply.md); watched progress uses NORMAL.
  */
 
 export interface FcmConfig {
@@ -77,13 +76,13 @@ async function accessToken(c: FcmConfig): Promise<string> {
 }
 
 /** Sends a data-only message; throws [FcmError] on failure. */
-export async function sendFcm(c: FcmConfig, deviceToken: string, data: Record<string, string>): Promise<void> {
+export async function sendFcm(c: FcmConfig, deviceToken: string, data: Record<string, string>, priority: "HIGH" | "NORMAL" = "HIGH"): Promise<void> {
   const token = await accessToken(c);
   const r = await c.fetch(`https://fcm.googleapis.com/v1/projects/${c.projectId}/messages:send`, {
     method: "POST",
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
     body: JSON.stringify({
-      message: { token: deviceToken, data, android: { priority: "HIGH", ttl: "86400s" } },
+      message: { token: deviceToken, data, android: { priority, ttl: "86400s" } },
     }),
   });
   if (r.ok) return;

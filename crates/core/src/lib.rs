@@ -198,6 +198,9 @@ pub struct TerminalInfo {
     /// Terminal that started this one, as reported by herdr-core.
     #[uniffi(default = None)]
     pub parent: Option<String>,
+    /// Explicit progress watching, shared with the Beacon through aries.watch.
+    #[uniffi(default = false)]
+    pub watched: bool,
 }
 
 fn runtime() -> &'static tokio::runtime::Runtime {
@@ -1328,6 +1331,18 @@ impl HostConnection {
         on_runtime(async move { set_labels(&client, &address, labels).await }).await
     }
 
+    /// Selects an Agent for ongoing progress notifications. The label belongs
+    /// to the Terminal on the Host; other clients and the Beacon see it.
+    pub async fn set_watched(
+        &self,
+        address: String,
+        watched: bool,
+    ) -> Result<TerminalInfo, CoreError> {
+        let client = self.client.clone();
+        let labels = serde_json::json!({ "aries.watch": if watched { "1" } else { "" } });
+        on_runtime(async move { set_labels(&client, &address, labels).await }).await
+    }
+
     /// Starts a new Terminal running `request.command` (see `launch.rs`),
     /// placed in the requested Space/Tab by label; the document is never
     /// written. herdr-core's refusal (`spawn_failed` for a missing program or
@@ -1474,6 +1489,7 @@ pub(crate) fn terminal_info(v: &serde_json::Value) -> TerminalInfo {
     TerminalInfo {
         machine: address.rsplit_once('/').map(|(m, _)| m.to_owned()),
         pinned: host_model::pinned(v),
+        watched: v["labels"]["aries.watch"].as_str() == Some("1"),
         address,
         parent: s("parent"),
         name: s("name"),

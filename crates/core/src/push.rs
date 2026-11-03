@@ -164,6 +164,15 @@ pub enum PushContent {
         /// Unix seconds on the Host.
         at: u64,
     },
+    /// Live progress for an explicitly Watched Agent; cancelled removes its card.
+    Progress {
+        terminal: String,
+        name: Option<String>,
+        elapsed_secs: u64,
+        child_agents: u32,
+        at: u64,
+        cancelled: bool,
+    },
     /// An Agent sent a Call; the Android notification channel follows its
     /// urgency. The full Call (and its answer) is in Call history under `id`.
     Call {
@@ -732,6 +741,21 @@ pub(crate) fn open(
                         top_level,
                         status: status.into(),
                         at,
+                    },
+                    envelope::PushMessage::Progress {
+                        terminal,
+                        name,
+                        elapsed_secs,
+                        child_agents,
+                        at,
+                        cancelled,
+                    } => PushContent::Progress {
+                        terminal,
+                        name,
+                        elapsed_secs,
+                        child_agents,
+                        at,
+                        cancelled,
                     },
                     envelope::PushMessage::Call {
                         id,

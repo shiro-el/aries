@@ -220,3 +220,41 @@ async fn two_hosts_with_the_same_terminal_address_stay_apart() {
     c1.disconnect().await;
     c2.disconnect().await;
 }
+
+#[tokio::test]
+async fn watching_is_shared_through_terminal_labels_and_preserves_other_labels() {
+    let hc = HcSession::start();
+    let agent = hc.run_fake_agent("watched", "status working\nwait\n");
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    let host = core.add_host("dev".into(), local_endpoint(&hc)).unwrap();
+    let conn = core.connect(host.id).await.unwrap();
+    hc.hc(&["label", &agent.address, "other=keep"]);
+    assert!(
+        conn.set_watched(agent.address.clone(), true)
+            .await
+            .unwrap()
+            .watched
+    );
+    assert_eq!(labels(&hc, &agent.address)["aries.watch"], "1");
+    assert_eq!(labels(&hc, &agent.address)["other"], "keep");
+    assert!(
+        !conn
+            .set_watched(agent.address.clone(), false)
+            .await
+            .unwrap()
+            .watched
+    );
+    assert!(labels(&hc, &agent.address).get("aries.watch").is_none());
+    hc.hc(&["label", &agent.address, "aries.watch=1"]);
+    assert!(
+        conn.terminals()
+            .await
+            .unwrap()
+            .iter()
+            .find(|t| t.address == agent.address)
+            .unwrap()
+            .watched
+    );
+    conn.disconnect().await;
+}
