@@ -31,6 +31,7 @@ for t in scripts/tests/*.test.sh; do sh "$t"; done  # release script tests
 cd android && ./gradlew :app:testDebugUnitTest      # Compose UI tests against a fake core (Robolectric)
 cd android && ./gradlew :app:assembleDebug          # debug APK (builds the core with cargo-ndk)
 cd android && ./gradlew :app:connectedDebugAndroidTest   # device tests (Android Keystore); needs a device/emulator
+scripts/measure-terminal-latency.sh 40              # key -> drawn echo on a device over SSH (docker); logcat AriesLatency
 cd relay && npm ci --legacy-peer-deps && npm run typecheck && npm test   # Relay HTTP API (Workers runtime, fake FCM)
 ```
 

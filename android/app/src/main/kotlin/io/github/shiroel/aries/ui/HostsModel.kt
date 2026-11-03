@@ -9,7 +9,9 @@ import io.github.shiroel.aries.HttpRelayClient
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.core.AriesCoreInterface
+import io.github.shiroel.aries.core.AttachMode
 import io.github.shiroel.aries.core.AttachOptions
+import io.github.shiroel.aries.core.TerminalView
 import io.github.shiroel.aries.core.BeaconFetcher
 import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Endpoint
@@ -34,7 +36,16 @@ import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.selects.select
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.dropWhile
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.withContext
 
 /** A message for the user: a string resource and its format arguments. */
@@ -147,6 +158,10 @@ class HostsModel(
     var jumps by mutableStateOf<Map<String, List<JumpHost>>>(emptyMap())
         private set
 
+    /** How opening a Terminal attaches (the user's option; observe by default). */
+    var attachMode by mutableStateOf(AttachMode.OBSERVE)
+        private set
+
     /** The open Host's connection and structure watch, while [Screen.Browse] shows (the latest line after a reconnect). */
     private var open: Pair<HostConnection, StructureWatch?>? = null
 
@@ -189,6 +204,7 @@ class HostsModel(
             keyProtection = core.keyProtection()
             hosts = core.hosts()
             refreshRoutes()
+            attachMode = core.attachMode()
         }
         flushPushRevocations()
     }
@@ -492,33 +508,103 @@ class HostsModel(
     private fun observe(link: HostLink, terminal: TerminalInfo, returnTo: Screen) {
         val viewer = TerminalViewer(terminal)
         viewer.link = link
+        if (attachMode == AttachMode.INPUT) viewer.startTyping()
         screen = Screen.Terminal(viewer, returnTo)
         viewing = scope.launch {
             try {
                 link.keep { conn, resumed ->
-                    val options = AttachOptions(observe = true, cols = 80u, rows = 24u, history = SCROLLBACK_LINES, resumed = resumed)
-                    val view = conn.attachTerminal(terminal.address, options)
-                    viewer.scroller = view::scrollTo
-                    try {
-                        while (true) {
-                            when (val u = view.next()) {
-                                is TerminalUpdate.Screen -> viewer.apply(u.frame)
-                                is TerminalUpdate.Exited -> {
-                                    viewer.exited(u.exit)
-                                    return@keep
-                                }
+                    if (!viewer.typing) {
+                        // Watch until the input is focused, then let go of the observer.
+                        val options = AttachOptions(observe = true, cols = 80u, rows = 24u, history = SCROLLBACK_LINES, resumed = resumed)
+                        val exited = coroutineScope {
+                            val watching = async { draw(conn, viewer, options, null) }
+                            val focused = async { snapshotFlow { viewer.typing }.first { it } }
+                            val done = select { watching.onAwait { it }; focused.onAwait { false } }
+                            focused.cancel()
+                            watching.cancelAndJoin()
+                            done
+                        }
+                        if (exited) return@keep
+                    }
+                    // An ordinary viewer at the phone's grid; from now on the phone sets the size.
+                    val (cols, rows) = snapshotFlow { viewer.phoneGrid }.filterNotNull().first()
+                    val options = AttachOptions(
+                        observe = false, cols = cols.toUShort(), rows = rows.toUShort(), history = SCROLLBACK_LINES, resumed = resumed,
+                    )
+                    draw(conn, viewer, options) { view ->
+                        // A failed send means the line is going; next() reports it and the link re-attaches.
+                        launch {
+                            try {
+                                snapshotFlow { viewer.phoneGrid }.filterNotNull().distinctUntilChanged()
+                                    .dropWhile { it == cols to rows }
+                                    .collect { (c, r) -> view.resize(c.toUShort(), r.toUShort()) }
+                            } catch (e: CoreException) {
                             }
                         }
-                    } finally {
-                        viewer.scroller = null
-                        withContext(NonCancellable) { view.detach() }
-                        view.close()
+                        launch {
+                            try {
+                                // One at a time, so keys arrive in the order they were typed. Keys typed
+                                // while the line is down wait here for the next attach.
+                                for (input in viewer.inputs) {
+                                    when (input) {
+                                        is TerminalInput.Text -> view.sendText(input.text)
+                                        is TerminalInput.Key -> view.sendKey(input.key, input.mods)
+                                    }
+                                }
+                            } catch (e: CoreException) {
+                            }
+                        }
                     }
                 }
             } catch (e: CoreException) {
                 viewer.markClosed()
             }
         }
+    }
+
+    /**
+     * Attaches [viewer] with [options] and draws its updates; [alongside]
+     * runs next to it (typing, resizing) and stops with it. Returns true once
+     * the program exited; a dropped line throws [CoreException.Closed].
+     * Detaches on the way out, also when cancelled.
+     */
+    private suspend fun draw(
+        conn: HostConnection,
+        viewer: TerminalViewer,
+        options: AttachOptions,
+        alongside: (CoroutineScope.(TerminalView) -> Unit)?,
+    ): Boolean {
+        val view = conn.attachTerminal(viewer.terminal.address, options)
+        viewer.scroller = view::scrollTo
+        try {
+            return coroutineScope {
+                val side = alongside?.let { f -> launch { f(view) } }
+                try {
+                    var exited = false
+                    while (!exited) {
+                        when (val u = view.next()) {
+                            is TerminalUpdate.Screen -> viewer.apply(u.frame)
+                            is TerminalUpdate.Exited -> {
+                                viewer.exited(u.exit)
+                                exited = true
+                            }
+                        }
+                    }
+                    true
+                } finally {
+                    side?.cancel()
+                }
+            }
+        } finally {
+            viewer.scroller = null
+            withContext(NonCancellable) { view.detach() }
+            view.close()
+        }
+    }
+
+    fun setDefaultAttachMode(mode: AttachMode) = guard {
+        core.setAttachMode(mode)
+        attachMode = core.attachMode()
     }
 
     /** Leaves the open Terminal (it keeps running) and shows where it was opened from. */
