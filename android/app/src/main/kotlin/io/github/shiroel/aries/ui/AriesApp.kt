@@ -63,7 +63,10 @@ fun AriesApp(model: HostsModel) {
                     BackHandler {
                         if (s.browser.openSpaceId != null) s.browser.closeSpace() else model.back()
                     }
-                    BrowseScreen(s.browser, onBack = model::back) { BeaconSection(model.beacon) }
+                    BrowseScreen(s.browser, onBack = model::back) {
+                        BeaconSection(model.beacon)
+                        PushSection(model.push, beaconInstalled = model.beacon.installed)
+                    }
                 }
                 is Screen.JumpHosts -> {
                     BackHandler { model.back() }

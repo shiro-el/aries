@@ -24,6 +24,9 @@ android {
         versionName = findProperty("aries.versionName") as String? ?: "0.1.0-dev"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += rustAbis() }
+        // Push: the Relay this build talks to, and Firebase from google-services.json.
+        buildConfigField("String", "ARIES_RELAY_URL", "\"${relayUrl()}\"")
+        firebaseValues("io.github.shiroel.aries").forEach { (name, value) -> resValue("string", name, value) }
     }
 
     signingConfigs {
@@ -45,7 +48,10 @@ android {
         release { signingConfigs.findByName("upload")?.let { signingConfig = it } }
     }
 
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
 
     // The per-app language list (Android 13+) comes from the res/values-* dirs.
     androidResources { generateLocaleConfig = true }
@@ -68,6 +74,12 @@ kotlin { jvmToolchain(21) }
 // Add a permissive license here when a new dependency needs it.
 licensee {
     allow("Apache-2.0")
+    allow("BSD-3-Clause")
+    // Firebase Cloud Messaging pulls in Google Play services artifacts, which
+    // ship under the Android SDK license. Push (FCM) cannot work without them.
+    allowUrl("https://developer.android.com/studio/terms.html") {
+        because("Google Play services / Firebase, required for FCM push")
+    }
     bundleAndroidAsset.set(true)
 }
 
@@ -78,6 +90,8 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.kotlinx.coroutines.android)
     implementation("${libs.jna.get()}@aar")
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
 
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
@@ -89,6 +103,36 @@ dependencies {
 
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.ext.junit)
+}
+
+// ---- Push ------------------------------------------------------------------
+// The Relay URL comes from the ARIES_RELAY_URL repo variable (CI) or env, or
+// -Paries.relayUrl; without one the app says push is not available.
+// Firebase is configured from android/app/google-services.json (CI writes it
+// from GOOGLE_SERVICES_JSON_BASE64; never committed) as the resource values
+// the google-services plugin would generate; without it FCM is unavailable.
+
+fun relayUrl(): String =
+    (findProperty("aries.relayUrl") as String?) ?: System.getenv("ARIES_RELAY_URL") ?: ""
+
+@Suppress("UNCHECKED_CAST")
+fun firebaseValues(packageName: String): Map<String, String> {
+    val file = file("google-services.json")
+    if (!file.isFile) return emptyMap()
+    val root = groovy.json.JsonSlurper().parse(file) as Map<String, Any?>
+    val project = root["project_info"] as Map<String, Any?>
+    val clients = root["client"] as List<Map<String, Any?>>
+    fun pkg(c: Map<String, Any?>) =
+        ((c["client_info"] as Map<String, Any?>)["android_client_info"] as Map<String, Any?>)["package_name"]
+    val client = clients.firstOrNull { pkg(it) == packageName } ?: return emptyMap()
+    val appId = (client["client_info"] as Map<String, Any?>)["mobilesdk_app_id"] as String
+    val apiKey = ((client["api_key"] as List<Map<String, Any?>>).first())["current_key"] as String
+    return mapOf(
+        "google_app_id" to appId,
+        "google_api_key" to apiKey,
+        "gcm_defaultSenderId" to project["project_number"].toString(),
+        "project_id" to project["project_id"].toString(),
+    )
 }
 
 // ---- Upload key --------------------------------------------------------------

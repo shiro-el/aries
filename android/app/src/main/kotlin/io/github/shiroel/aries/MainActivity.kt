@@ -15,9 +15,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val core = (application as AriesApplication).core
+        val push = AndroidPushPlatform(this)
         setContent {
             val scope = rememberCoroutineScope()
-            val model = remember { HostsModel(core, scope) }
+            val model = remember { HostsModel(core, scope, pushPlatform = push) }
             MaterialTheme { AriesApp(model) }
         }
     }

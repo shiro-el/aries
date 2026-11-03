@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github.shiroel.aries.HttpBeaconFetcher
+import io.github.shiroel.aries.HttpRelayClient
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AriesCoreInterface
 import io.github.shiroel.aries.core.BeaconFetcher
@@ -13,6 +14,7 @@ import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.Host
 import io.github.shiroel.aries.core.HostConnection
 import io.github.shiroel.aries.core.HostStructure
+import io.github.shiroel.aries.core.HttpClient
 import io.github.shiroel.aries.core.Incompatibility
 import io.github.shiroel.aries.core.JumpHost
 import io.github.shiroel.aries.core.KeyInfo
@@ -76,9 +78,24 @@ class HostsModel(
     private val core: AriesCoreInterface,
     private val scope: CoroutineScope,
     beaconFetcher: BeaconFetcher = HttpBeaconFetcher(),
+    pushPlatform: PushPlatform = NoPush,
+    private val http: HttpClient = HttpRelayClient(),
 ) {
     /** The Beacon section of the connected Host. */
-    val beacon = BeaconModel(core, scope, beaconFetcher)
+    val beacon = BeaconModel(core, scope, beaconFetcher, onRemoved = { onBeaconRemoved() })
+
+    /** The push section of the connected Host. */
+    val push = PushModel(core, scope, pushPlatform, http)
+
+    private fun onBeaconRemoved() {
+        flushPushRevocations()
+        beacon.host?.let(push::load)
+    }
+
+    /** Sends the Relay revocations that Host or Beacon removal queued. */
+    fun flushPushRevocations() {
+        scope.launch { core.flushPushRevocations(http) }
+    }
 
     var key by mutableStateOf<PublicKeyInfo?>(null)
         private set
@@ -104,6 +121,7 @@ class HostsModel(
             hosts = core.hosts()
             refreshRoutes()
         }
+        flushPushRevocations()
     }
 
     fun createKey() = guard {
@@ -148,6 +166,7 @@ class HostsModel(
                 open = conn to null
                 screen = Screen.Browse(browser)
                 beacon.load(host)
+                push.load(host)
                 try {
                     val watch = conn.watchStructure(object : StructureListener {
                         override fun onStructure(structure: HostStructure) {
@@ -248,6 +267,7 @@ class HostsModel(
         guard {
             core.removeHost(prompt.host.id)
             hosts = core.hosts()
+            flushPushRevocations()
         }
     }
 

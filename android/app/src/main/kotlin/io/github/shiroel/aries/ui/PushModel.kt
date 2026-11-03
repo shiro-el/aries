@@ -1,0 +1,179 @@
+package io.github.shiroel.aries.ui
+
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import io.github.shiroel.aries.R
+import io.github.shiroel.aries.core.AriesCoreInterface
+import io.github.shiroel.aries.core.CoreException
+import io.github.shiroel.aries.core.Host
+import io.github.shiroel.aries.core.HttpClient
+import io.github.shiroel.aries.core.PushDevice
+import io.github.shiroel.aries.core.PushProgress
+import io.github.shiroel.aries.core.PushStep
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
+
+/** What the phone offers for push: the Relay this build uses, the FCM token, the permission. */
+interface PushPlatform {
+    /** The Relay URL of this build (`ARIES_RELAY_URL`); `null` when none is configured. */
+    val relayUrl: String?
+
+    /** This phone's FCM registration token; throws [PushUnavailable]. */
+    suspend fun deviceToken(): String
+
+    /** Asks for the notification permission where Android needs it (13+); `true` when allowed. */
+    suspend fun allowNotifications(): Boolean
+}
+
+class PushUnavailable(reason: String) : Exception(reason)
+
+/** A build without push (and the default in tests that do not care). */
+object NoPush : PushPlatform {
+    override val relayUrl: String? = null
+    override suspend fun deviceToken(): String = throw PushUnavailable("no push in this build")
+    override suspend fun allowNotifications(): Boolean = false
+}
+
+/** One step of turning push on, as the section lists it. */
+enum class StepState { Running, Done, Failed }
+
+sealed interface PushUi {
+    data object Loading : PushUi
+    data object NoRelay : PushUi
+    data object Off : PushUi
+
+    /** Turning push on: the steps reached so far. */
+    data class Enabling(val steps: List<Pair<PushStep, StepState>>) : PushUi
+
+    data class On(val relayUrl: String) : PushUi
+    data object Working : PushUi
+}
+
+/** Turn push on/off for the Host being shown (its Beacon must be installed). */
+class PushModel(
+    private val core: AriesCoreInterface,
+    private val scope: CoroutineScope,
+    private val platform: PushPlatform,
+    private val http: HttpClient,
+) {
+    var host by mutableStateOf<Host?>(null)
+        private set
+    var ui by mutableStateOf<PushUi>(PushUi.Loading)
+        private set
+
+    /** Why the last action failed, shown under the section. */
+    var problem by mutableStateOf<Message?>(null)
+        private set
+
+    /** Something to tell after an action that worked. */
+    var notice by mutableStateOf<Message?>(null)
+        private set
+
+    fun load(host: Host) {
+        this.host = host
+        problem = null
+        notice = null
+        refresh()
+    }
+
+    private fun refresh() {
+        val host = host ?: return
+        ui = try {
+            core.pushPairing(host.id)?.let { PushUi.On(it.relayUrl) }
+                ?: if (platform.relayUrl == null) PushUi.NoRelay else PushUi.Off
+        } catch (e: CoreException) {
+            PushUi.Off
+        }
+    }
+
+    fun enable() {
+        val host = host ?: return
+        val relay = platform.relayUrl ?: return
+        problem = null
+        notice = null
+        ui = PushUi.Enabling(emptyList())
+        scope.launch {
+            if (!platform.allowNotifications()) {
+                problem = Message(R.string.push_permission_denied)
+                refresh()
+                return@launch
+            }
+            val token = try {
+                platform.deviceToken()
+            } catch (e: PushUnavailable) {
+                problem = Message(R.string.push_unavailable, listOf(e.message ?: ""))
+                refresh()
+                return@launch
+            }
+            val progress = object : PushProgress {
+                override fun onStep(step: PushStep) {
+                    scope.launch { advance(step) }
+                }
+            }
+            try {
+                core.enablePush(host.id, relay, PushDevice("fcm", token), http, progress)
+                notice = Message(R.string.push_test_sent)
+                refresh()
+            } catch (e: CoreException) {
+                problem = pushProblem(e)
+                // Paired but the test failed: push is on. Otherwise keep the
+                // steps on screen, the failed one marked.
+                finishSteps(StepState.Failed)
+                if (runCatching { core.pushPairing(host.id) }.getOrNull() != null) refresh()
+            }
+        }
+    }
+
+    fun sendTest() {
+        val host = host ?: return
+        problem = null
+        notice = null
+        scope.launch {
+            try {
+                core.sendTestPush(host.id)
+                notice = Message(R.string.push_test_sent)
+            } catch (e: CoreException) {
+                problem = pushProblem(e)
+            }
+        }
+    }
+
+    fun disable() {
+        val host = host ?: return
+        problem = null
+        notice = null
+        ui = PushUi.Working
+        scope.launch {
+            try {
+                val off = core.disablePush(host.id, http)
+                if (!off.hostCleared) notice = Message(R.string.push_off_host_unreachable)
+            } catch (e: CoreException) {
+                problem = pushProblem(e)
+            }
+            refresh()
+        }
+    }
+
+    private fun advance(step: PushStep) {
+        val steps = (ui as? PushUi.Enabling)?.steps ?: return
+        ui = PushUi.Enabling(steps.map { (s, st) -> s to if (st == StepState.Running) StepState.Done else st } + (step to StepState.Running))
+    }
+
+    private fun finishSteps(last: StepState) {
+        val steps = (ui as? PushUi.Enabling)?.steps ?: return
+        ui = PushUi.Enabling(steps.map { (s, st) -> s to if (st == StepState.Running) last else st })
+    }
+}
+
+fun stepLabel(step: PushStep): Int = when (step) {
+    PushStep.REGISTER -> R.string.push_step_register
+    PushStep.PAIR -> R.string.push_step_pair
+    PushStep.TEST -> R.string.push_step_test
+    PushStep.UNPAIR -> R.string.push_step_unpair
+}
+
+fun pushProblem(e: CoreException): Message = when (e) {
+    is CoreException.PushFailed -> Message(R.string.push_failed, listOf(Message(stepLabel(e.step)), e.detail))
+    else -> problemFor(e).body
+}

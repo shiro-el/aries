@@ -73,12 +73,15 @@ jobs:
             echo "ARIES_UPLOAD_KEY_PASSWORD=$ANDROID_UPLOAD_KEY_PASSWORD"
             echo "ARIES_UPLOAD_KEY_ALIAS=$ANDROID_UPLOAD_KEY_ALIAS"
           } >> "$GITHUB_ENV"
-          # Not read by the build yet; the FCM ticket applies the google-services plugin.
+          # Read by android/app/build.gradle.kts (Firebase resource values for FCM).
           if [ -n "$GOOGLE_SERVICES_JSON_BASE64" ]; then
             printf '%s' "$GOOGLE_SERVICES_JSON_BASE64" | base64 -d > android/app/google-services.json
           fi
       - name: Build, verify signature, check Play policy
         id: build
+        env:
+          # The Relay the app pushes through (repo variable; empty: push unavailable).
+          ARIES_RELAY_URL: ${{ vars.ARIES_RELAY_URL }}
         run: scripts/build-release.sh "$TAG" dist
       - uses: actions/upload-artifact@v4
         with:
