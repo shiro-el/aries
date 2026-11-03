@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 
 use aries_core::{
     AttachOptions, BlockedReason, HostConnection, SendListener, SendOutcome, TerminalUpdate,
+    TerminalView,
 };
 use aries_test_support::{FakeAgent, HcSession};
 use common::{core_in, local_endpoint};
@@ -115,6 +116,46 @@ async fn a_blocked_agent_refuses_the_message_and_says_why() {
     assert!(agent.inputs().is_empty(), "nothing may answer its dialog");
 }
 
+/// Types through a separate interactive viewer and waits until its input is
+/// echoed, so a send cannot race the person's attach/typing startup.
+async fn person_typing(conn: &HostConnection, address: &str, text: &str) -> Arc<TerminalView> {
+    let person = conn
+        .attach_terminal(
+            address.to_owned(),
+            AttachOptions {
+                observe: false,
+                cols: 80,
+                rows: 24,
+                history: 0,
+                resumed: false,
+            },
+        )
+        .await
+        .unwrap();
+    person.send_text(text.into()).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            match person.next().await.unwrap() {
+                TerminalUpdate::Screen { frame } => {
+                    if frame.lines.iter().any(|line| {
+                        line.runs
+                            .iter()
+                            .map(|run| run.text.as_str())
+                            .collect::<String>()
+                            .contains(text)
+                    }) {
+                        break;
+                    }
+                }
+                update => panic!("person's Terminal ended before echoing input: {update:?}"),
+            }
+        }
+    })
+    .await
+    .expect("person's input never reached the Terminal");
+    person
+}
+
 #[tokio::test]
 async fn a_message_waits_while_a_person_types_then_goes_in() {
     let hc = HcSession::start();
@@ -128,40 +169,7 @@ async fn a_message_waits_while_a_person_types_then_goes_in() {
     // after 600 ms (attach itself can spend 500 ms querying its outer tty).
     let person_data = tempfile::tempdir().unwrap();
     let person_conn = connect(&hc, &person_data).await;
-    let person = person_conn
-        .attach_terminal(
-            agent.address.clone(),
-            AttachOptions {
-                observe: false,
-                cols: 80,
-                rows: 24,
-                history: 0,
-                resumed: false,
-            },
-        )
-        .await
-        .unwrap();
-    person.send_text("ab".into()).await.unwrap();
-    tokio::time::timeout(Duration::from_secs(10), async {
-        loop {
-            match person.next().await.unwrap() {
-                TerminalUpdate::Screen { frame } => {
-                    if frame.lines.iter().any(|line| {
-                        line.runs
-                            .iter()
-                            .map(|run| run.text.as_str())
-                            .collect::<String>()
-                            .contains("ab")
-                    }) {
-                        break;
-                    }
-                }
-                update => panic!("person's Terminal ended before echoing input: {update:?}"),
-            }
-        }
-    })
-    .await
-    .expect("person's input never reached the Terminal");
+    let person = person_typing(&person_conn, &agent.address, "ab").await;
     let held = Arc::new(Held::default());
     let send = conn.send_message(agent.address.clone(), "after you".into(), held.clone());
     tokio::pin!(send);
@@ -342,17 +350,9 @@ async fn a_background_reply_reports_when_typing_holds_it() {
     let data = tempfile::tempdir().unwrap();
     let core = core_in(data.path());
     let host = core.add_host("dev".into(), local_endpoint(&hc)).unwrap();
-    let person = person_typing(&hc, &agent.address, "abcd");
-    // Attach startup varies under parallel builds. Observe echoed human input
-    // before sending, so this tests the input gate rather than a startup race.
-    let deadline = Instant::now() + Duration::from_secs(10);
-    while !hc.hc(&["read", &agent.address]).contains("ab") {
-        assert!(
-            Instant::now() < deadline,
-            "the person never attached and typed"
-        );
-        std::thread::sleep(Duration::from_millis(50));
-    }
+    let person_data = tempfile::tempdir().unwrap();
+    let person_conn = connect(&hc, &person_data).await;
+    let person = person_typing(&person_conn, &agent.address, "abcd").await;
     let held = Arc::new(Held::default());
     let outcome = core
         .send_message_background(
@@ -362,7 +362,7 @@ async fn a_background_reply_reports_when_typing_holds_it() {
             held.clone(),
         )
         .await;
-    finish(person);
+    person.detach().await;
     assert_eq!(outcome.unwrap(), SendOutcome::Sent);
     assert_eq!(held.count(), 1);
     assert_eq!(inputs_after(&agent, 1), vec!["abcdafter you"]);
