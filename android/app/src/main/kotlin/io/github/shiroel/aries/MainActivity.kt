@@ -1,10 +1,12 @@
 package io.github.shiroel.aries
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import io.github.shiroel.aries.ui.AriesApp
@@ -17,11 +19,14 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // Cold start from a tapped notification (not a re-creation, which already handled it).
+        if (savedInstanceState == null) pushTarget = PushTarget.from(intent)
         val core = app.core
         val push = AndroidPushPlatform(this)
         setContent {
             val scope = rememberCoroutineScope()
             val model = remember { HostsModel(core, scope, keyWork = Dispatchers.IO, pushPlatform = push).also { this@MainActivity.model = it } }
+            LaunchedEffect(model) { openPushTarget() }
             MaterialTheme { AriesApp(model) }
         }
         network = NetworkWatch(this) { model?.networkChanged() }.also { it.start() }
@@ -30,6 +35,29 @@ class MainActivity : ComponentActivity() {
     /** The screens' model, for network and foreground events. */
     private var model: HostsModel? = null
     private var network: NetworkWatch? = null
+
+    /** A tapped notification's Agent, until the model exists and the activity is in front. */
+    private var pushTarget: PushTarget? = null
+    private var resumed = false
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        // Warm start: the app was running when the notification was tapped.
+        PushTarget.from(intent)?.let {
+            pushTarget = it
+            openPushTarget()
+        }
+    }
+
+    /** Opens the Agent once both are ready; the biometric prompt needs a resumed activity. */
+    private fun openPushTarget() {
+        val m = model ?: return
+        if (!resumed) return
+        val target = pushTarget ?: return
+        pushTarget = null
+        m.openPushedAgent(target.hostId, target.terminal)
+    }
 
     override fun onStart() {
         super.onStart()
@@ -45,9 +73,12 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         app.vault.authorizer = BiometricUnlock(this)
+        resumed = true
+        openPushTarget()
     }
 
     override fun onPause() {
+        resumed = false
         app.vault.authorizer = null
         super.onPause()
     }

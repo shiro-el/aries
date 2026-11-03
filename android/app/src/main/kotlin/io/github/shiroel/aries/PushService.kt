@@ -90,12 +90,14 @@ class PushService : FirebaseMessagingService() {
                 }
                 is PushContent.Call -> return // shown by showCall
             }
-            val notification = Notification.Builder(context, CHANNEL)
+            val builder = Notification.Builder(context, CHANNEL)
                 .setSmallIcon(android.R.drawable.stat_notify_chat)
                 .setContentTitle(title)
                 .setContentText(body)
                 .setAutoCancel(true)
-                .build()
+            // A tap opens that Agent's Terminal.
+            if (content is PushContent.Status) builder.setContentIntent(PushTarget(notice.hostId, content.terminal).pendingIntent(context))
+            val notification = builder.build()
             // One notification per Agent: its newer status replaces the older.
             val tag = when (content) {
                 is PushContent.Status -> content.terminal
@@ -145,6 +147,8 @@ class PushService : FirebaseMessagingService() {
                 .setShowWhen(true)
                 .setAutoCancel(true)
             if (call.urgency == CallUrgency.EMERGENCY) builder.setCategory(Notification.CATEGORY_ALARM)
+            // A tap opens the Terminal that called (only confirmed Calls are pushed).
+            builder.setContentIntent(PushTarget(hostId, call.terminal).pendingIntent(context))
             // One notification per Call.
             manager.notify("call:${call.id}", hostId.hashCode(), builder.build())
         }
