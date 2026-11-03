@@ -1,0 +1,8 @@
+<resources>
+    <string name="console_chat_choice_number">%1$d</string>
+    <string name="console_chat_call_label">Call %1$s</string>
+    <string name="console_agent_host_prefix">%1$s /\u0020</string>
+    <string name="console_agent_unknown_folder">폴더 정보 없음</string>
+    <string name="console_agent_unknown_age">시간 정보 없음</string>
+    <string name="console_agent_missing_value">—</string>
+</resources>

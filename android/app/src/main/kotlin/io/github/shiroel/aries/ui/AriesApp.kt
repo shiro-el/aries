@@ -140,6 +140,7 @@ private fun AriesContent(model: HostsModel, settings: ThemeSettings) {
                                 onBack = model::closeChat,
                                 onOpenTerminal = { model.openTerminal(s.chat.terminal) },
                                 onView = model::switchView,
+                                calls = model.calls,
                             )
                         }
                     }

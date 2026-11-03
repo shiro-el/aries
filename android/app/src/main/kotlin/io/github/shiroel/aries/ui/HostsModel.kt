@@ -472,6 +472,7 @@ class HostsModel(
                             val list = watch.next()
                             browser.updateTerminals(list)
                             chatOn(browser.host.id)?.update(list)
+                            terminalOn(browser.host.id)?.update(list)
                         }
                     } finally {
                         watch.stop()
@@ -731,6 +732,7 @@ class HostsModel(
                                 val list = watch.next()
                                 board.update(host.id, list)
                                 chatOn(host.id)?.update(list)
+                                terminalOn(host.id)?.update(list)
                                 focusing?.let { key ->
                                     focusing = null
                                     if (screen === agents) focusOn(agents, link, host, key, list)
@@ -892,6 +894,9 @@ class HostsModel(
 
     /** The Chat that is open (or under the Terminal opened from it) on [hostId]. */
     private fun chatOn(hostId: String): ChatModel? = liveChat?.takeIf { it.host.id == hostId }
+
+    private fun terminalOn(hostId: String): TerminalViewer? =
+        (screen as? Screen.Terminal)?.viewer?.takeIf { it.link?.host?.id == hostId }
 
     fun back() {
         (screen as? Screen.Chat)?.chat?.stop()

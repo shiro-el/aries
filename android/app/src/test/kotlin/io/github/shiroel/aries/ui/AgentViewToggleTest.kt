@@ -78,7 +78,7 @@ class AgentViewToggleTest {
         compose.onNodeWithTag(AGENT_VIEW_TOGGLE).assertExists()
 
         click(str(R.string.agent_view_chat))
-        compose.onNodeWithText(str(R.string.chat_title, "claude")).assertExists()
+        compose.onNodeWithText(str(R.string.console_agent_host_prefix, "home") + "claude").assertExists()
         assertEquals(listOf("h1" to "t1"), core.chatsOpened)
         assertTrue("the Terminal let go", view.detached)
         assertEquals(AgentView.CHAT, core.savedView)
