@@ -27,7 +27,7 @@ class DeviceAppUnlock(private val activity: ComponentActivity) : AppAuthenticato
             return
         }
         pending = result
-        if (Build.VERSION.SDK_INT == 28) {
+        if (Build.VERSION.SDK_INT < 29) {
             // Android 9 has no combined BiometricPrompt + device credential API.
             val intent = keyguard.createConfirmDeviceCredentialIntent(
                 activity.getString(R.string.app_lock_screen_title),

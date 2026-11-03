@@ -10,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import android.content.res.Configuration
 import java.util.Locale
 import androidx.compose.ui.res.stringResource
@@ -63,10 +64,11 @@ fun ReadAloudSettings(state: ReadAloudState) {
         Text(stringResource(R.string.read_aloud_voice, selected?.let { "${it.name} (${it.languageTag})" } ?: stringResource(R.string.read_aloud_default_voice)))
     }
     val context = LocalContext.current
+    val currentConfiguration = LocalConfiguration.current
     val defaultSample = stringResource(R.string.read_aloud_sample)
-    val sample = remember(context, selected, defaultSample) {
+    val sample = remember(context, currentConfiguration, selected, defaultSample) {
         selected?.let {
-            val configuration = Configuration(context.resources.configuration).apply { setLocale(Locale.forLanguageTag(it.languageTag)) }
+            val configuration = Configuration(currentConfiguration).apply { setLocale(Locale.forLanguageTag(it.languageTag)) }
             context.createConfigurationContext(configuration).getString(R.string.read_aloud_sample)
         } ?: defaultSample
     }
