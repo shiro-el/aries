@@ -31,7 +31,6 @@ fun DictationSettings(store: DictationStore? = null) {
     fun save(next: DictationOptions) { credentials.saveOptions(next); options = next }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.dictation_title), style = MaterialTheme.typography.titleMedium)
-        Text(stringResource(R.string.dictation_disclosure), style = MaterialTheme.typography.bodySmall)
         if (hasKey) Text(stringResource(R.string.dictation_key_saved))
         OutlinedTextField(
             value = key, onValueChange = { key = it; keyError = false },
@@ -61,7 +60,7 @@ fun DictationSettings(store: DictationStore? = null) {
             value = options.vocabulary, onValueChange = { save(options.copy(vocabulary = it)) },
             label = { Text(stringResource(R.string.dictation_vocabulary_label)) }, modifier = Modifier.fillMaxWidth(),
         )
-        OptionToggle(R.string.dictation_context_label, R.string.dictation_context_hint, options.autoContext) {
+        OptionToggle(R.string.dictation_context_label, options.autoContext) {
             save(options.copy(autoContext = it))
         }
     }

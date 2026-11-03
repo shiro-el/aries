@@ -47,7 +47,6 @@ internal fun QrHostPairing(model: HostsModel, scanQr: (((String) -> Unit) -> Uni
                 else launcher.launch(ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE).setPrompt(prompt).setBeepEnabled(false).setOrientationLocked(false))
             },
         ) { Text(stringResource(R.string.host_pair_scan_button)) }
-        Text(stringResource(R.string.host_pair_hint), style = MaterialTheme.typography.bodySmall)
         details?.let { offer ->
             Text(stringResource(R.string.host_pair_review_title), style = MaterialTheme.typography.titleMedium)
             OutlinedTextField(name, { name = it }, Modifier.testTag("host-pair-name"), enabled = !busy, label = { Text(stringResource(R.string.host_add_name)) }, singleLine = true)
@@ -55,7 +54,6 @@ internal fun QrHostPairing(model: HostsModel, scanQr: (((String) -> Unit) -> Uni
             OutlinedTextField(offer.port.toString(), {}, Modifier.testTag("host-pair-port"), readOnly = true, label = { Text(stringResource(R.string.host_add_port)) })
             OutlinedTextField(offer.user, {}, Modifier.testTag("host-pair-user"), readOnly = true, label = { Text(stringResource(R.string.host_add_user)) })
             Text(stringResource(R.string.host_pair_fingerprint, offer.hostKey), style = MaterialTheme.typography.bodySmall)
-            Text(stringResource(R.string.host_pair_review_body), style = MaterialTheme.typography.bodySmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ConsoleButton(
                     modifier = Modifier.testTag("host-pair-confirm"),

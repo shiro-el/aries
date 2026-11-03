@@ -788,7 +788,6 @@ private fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question)
             question.header?.let { SearchableChatText(it, "question:$part:header", style = MaterialTheme.typography.labelSmall) }
             SearchableChatText(question.text, "question:$part")
             if (open && question.multi) {
-                Text(stringResource(R.string.chat_question_multi_hint), style = MaterialTheme.typography.bodySmall)
             }
             if (open) {
                 question.options.forEachIndexed { i, option ->

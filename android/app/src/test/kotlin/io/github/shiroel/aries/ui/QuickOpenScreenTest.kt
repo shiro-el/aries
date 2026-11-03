@@ -160,7 +160,7 @@ class QuickOpenScreenTest {
         start(core)
         compose.onNodeWithTag("quick-open-button").performClick()
         compose.onNodeWithTag("quick-open-query").performTextReplacement(">" + str(R.string.layout_new_space_button))
-        compose.onNodeWithTag("quick-command:NEW_SPACE").assertIsNotEnabled()
+        compose.onNodeWithTag("quick-command:NEW_SPACE").performClick()
         compose.onNodeWithText(str(R.string.quick_open_choose_host)).assertExists()
         compose.onNodeWithTag("quick-open-query").performTextReplacement(">" + str(R.string.settings_title))
         compose.onNodeWithTag("quick-command:SETTINGS").performClick()
@@ -187,7 +187,7 @@ class QuickOpenScreenTest {
     }
 
 
-    @Test fun unavailableHerdrAppDisablesLayoutCommandsButAllowsAgentLaunch() {
+    @Test fun unavailableHerdrAppRejectsLayoutCommandsButAllowsAgentLaunch() {
         val core = FakeCore().apply {
             addHost("home", Endpoint.Ssh("home.test", 22u, "me"))
             herdrAppAvailable = false
@@ -196,8 +196,8 @@ class QuickOpenScreenTest {
         compose.onNodeWithText("home").performClick()
         compose.onNodeWithTag("quick-open-button").performClick()
         compose.onNodeWithTag("quick-open-query").performTextReplacement(">" + str(R.string.layout_new_space_button))
-        compose.onNodeWithTag("quick-command:NEW_SPACE").assertIsNotEnabled()
-        compose.onNode(hasText(str(R.string.layout_app_unavailable)) and hasAnyAncestor(hasTestTag("quick-command:NEW_SPACE")), useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("quick-command:NEW_SPACE").performClick()
+        compose.runOnIdle { assertTrue(core.connection!!.edits.isEmpty()) }
         compose.onNodeWithTag("quick-open-query").performTextReplacement(">" + str(R.string.quick_open_run_agent))
         compose.onNodeWithTag("quick-command:RUN_AGENT").performClick()
         compose.onNodeWithText(str(R.string.launch_title)).assertExists()

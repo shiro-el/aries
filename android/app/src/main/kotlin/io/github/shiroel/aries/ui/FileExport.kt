@@ -123,7 +123,6 @@ private fun FileExportActions(connection: HostConnection?, address: String, path
                 Text(stringResource(R.string.files_share_button))
             }
         }
-        Text(stringResource(R.string.files_export_limit), style = MaterialTheme.typography.bodySmall)
         if (busy) {
             if (saving || total == null) LinearProgressIndicator(Modifier.fillMaxWidth())
             else LinearProgressIndicator(progress = { if (total == 0L) 1f else completed.toFloat() / total!!.toFloat() }, modifier = Modifier.fillMaxWidth())

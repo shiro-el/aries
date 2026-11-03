@@ -143,6 +143,7 @@ internal fun QuickOpenButton() {
 @Composable
 internal fun QuickOpenDialog(model: HostsModel) {
     var query by remember { mutableStateOf("") }
+    var commandError by remember { mutableStateOf<Int?>(null) }
     val focus = remember { FocusRequester() }
     val now by produceState(System.currentTimeMillis()) {
         while (true) { delay(30_000); value = System.currentTimeMillis() }
@@ -154,9 +155,10 @@ internal fun QuickOpenDialog(model: HostsModel) {
                     Text(stringResource(R.string.quick_open_title), Modifier.weight(1f).padding(12.dp), style = MaterialTheme.typography.titleMedium)
                     TextButton(onClick = model::closeQuickOpen) { Text(stringResource(R.string.cancel_button)) }
                 }
-                OutlinedTextField(query, { query = it }, singleLine = true,
+                OutlinedTextField(query, { query = it; commandError = null }, singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).testTag("quick-open-query").focusRequester(focus),
                     label = { Text(stringResource(R.string.quick_open_hint)) })
+                commandError?.let { Text(stringResource(it), Modifier.padding(12.dp), color = MaterialTheme.colorScheme.error) }
                 Spacer(Modifier.height(8.dp))
                 if (query.startsWith(">")) {
                     val commands = QuickOpenCommand.entries.mapNotNull { command ->
@@ -166,12 +168,12 @@ internal fun QuickOpenDialog(model: HostsModel) {
                     LazyColumn(Modifier.weight(1f, fill = false)) {
                         if (commands.isEmpty()) item { EmptyQuickOpen() }
                         items(commands, key = { it.first.name }) { (command, label, _) ->
-                            val reason = model.quickOpenCommandReason(command)
                             Column(Modifier.fillMaxWidth().testTag("quick-command:${command.name}")
-                                .clickable(enabled = reason == null) { model.runQuickOpenCommand(command) }.padding(12.dp)) {
-                                Text(label, style = MaterialTheme.typography.bodyMedium,
-                                    color = if (reason == null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
-                                reason?.let { Text(stringResource(it), style = MaterialTheme.typography.bodySmall) }
+                                .clickable {
+                                    commandError = model.quickOpenCommandReason(command)
+                                    if (commandError == null) model.runQuickOpenCommand(command)
+                                }.padding(12.dp)) {
+                                Text(label, style = MaterialTheme.typography.bodyMedium)
                             }
                             HorizontalDivider()
                         }

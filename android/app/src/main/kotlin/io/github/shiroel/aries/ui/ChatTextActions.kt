@@ -88,8 +88,6 @@ internal fun ChatTextActions(
                         TextButton(onClick = { selection = null }) { Text(stringResource(R.string.back_button)) }
                         Text(stringResource(R.string.chat_select_text), Modifier.padding(12.dp), style = MaterialTheme.typography.titleMedium)
                     }
-                    Text(stringResource(R.string.chat_select_hint), Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        style = MaterialTheme.typography.bodySmall)
                     HorizontalDivider()
                     SelectionContainer(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp)) {
                         Text(selected, Modifier.fillMaxWidth())

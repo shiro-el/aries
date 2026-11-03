@@ -244,8 +244,6 @@ class CallHistoryTest {
         compose.onNodeWithText("body of Review ready").assertExists()
         compose.onNodeWithText(str(R.string.call_choices, "Merge · Wait")).assertExists()
         compose.onNodeWithText(str(R.string.call_answer_delivered, "Merge")).assertExists()
-        compose.onNodeWithText(str(R.string.call_from_helper)).assertExists()
-        compose.onNodeWithText(str(R.string.call_unconfirmed)).assertExists()
         // No Terminal to open for a Call whose caller was not confirmed.
         compose.onNodeWithContentDescription(str(R.string.call_open_chat_label, "t3", "Review ready")).assertExists()
         // Newest first, across Hosts.

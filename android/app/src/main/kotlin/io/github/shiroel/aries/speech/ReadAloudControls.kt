@@ -56,7 +56,6 @@ private fun ReadAloudSpeed(state: ReadAloudState) {
 fun ReadAloudSettings(state: ReadAloudState) {
     var picker by remember { mutableStateOf(false) }
     Text(stringResource(R.string.read_aloud_title), style = MaterialTheme.typography.titleSmall)
-    Text(stringResource(R.string.read_aloud_hint), style = MaterialTheme.typography.bodySmall)
     ReadAloudSpeed(state)
     val selected = state.voices.find { it.id == state.voice }
     TextButton(onClick = { picker = true }, enabled = state.ready, modifier = Modifier.testTag("read-aloud-voice")) {

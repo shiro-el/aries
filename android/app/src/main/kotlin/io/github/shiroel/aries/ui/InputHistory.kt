@@ -81,7 +81,6 @@ internal fun InputHistoryButton(history: InputHistoryModel, enabled: Boolean = t
         title = { Text(stringResource(R.string.input_history_title)) },
         text = {
             Column {
-                Text(stringResource(R.string.input_history_hint), style = MaterialTheme.typography.bodySmall)
                 if (history.failed) {
                     Text(stringResource(R.string.input_history_failed), color = MaterialTheme.colorScheme.error)
                 } else if (history.entries.isEmpty()) {
