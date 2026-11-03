@@ -27,6 +27,8 @@ pub struct JsonlSource {
     partial: Vec<u8>,
     inode: Option<(u64, u64)>,
     checkpoint: Sha256,
+    /// An inherited rollout is immutable only through this byte boundary.
+    limit: Option<u64>,
 }
 
 /// What one [`JsonlSource::poll`] found.
@@ -55,7 +57,13 @@ impl JsonlSource {
             partial: Vec::new(),
             inode: None,
             checkpoint: Sha256::new(),
+            limit: None,
         }
+    }
+
+    pub(super) fn with_limit(mut self, limit: u64) -> Self {
+        self.limit = Some(limit);
+        self
     }
 
     /// Bytes of complete lines read so far.
@@ -102,16 +110,24 @@ impl JsonlSource {
             Err(e) => return Err(e),
         };
         let meta = file.metadata()?;
+        if self.limit.is_some_and(|limit| meta.len() < limit) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "inherited rollout was truncated",
+            ));
+        }
+        let len = self.limit.unwrap_or(meta.len());
         let inode = (meta.dev(), meta.ino());
         let read_to = self.offset + self.partial.len() as u64;
-        if self.inode.is_some_and(|i| i != inode) || meta.len() < read_to {
+        if self.inode.is_some_and(|i| i != inode) || len < read_to {
             return Ok(Poll::Replaced);
         }
         self.inode = Some(inode);
         file.seek(SeekFrom::Start(read_to))?;
         let mut buf = Vec::new();
-        file.take(CHUNK as u64).read_to_end(&mut buf)?;
-        let more = read_to + (buf.len() as u64) < meta.len();
+        file.take((CHUNK as u64).min(len - read_to))
+            .read_to_end(&mut buf)?;
+        let more = read_to + (buf.len() as u64) < len;
         // Only the new bytes can hold a newline the old ones did not.
         let fresh = self.partial.len();
         self.partial.extend_from_slice(&buf);

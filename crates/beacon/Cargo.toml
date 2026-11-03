@@ -20,9 +20,10 @@ serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.11"
 thiserror.workspace = true
+tempfile.workspace = true
+zstd = { version = "0.13.3", default-features = false }
 # rustls with ring and bundled web PKI roots: no system TLS libraries needed on the Host.
 ureq = "3.5.1"
 
 [dev-dependencies]
 aries-test-support.workspace = true
-tempfile.workspace = true
