@@ -19,7 +19,6 @@
     <string name="github_next">다음</string>
     <string name="github_page">%1$d페이지</string>
     <string name="github_refresh">새로고침</string>
-    <string name="github_loading">GitHub 불러오는 중…</string>
     <string name="github_empty">일치하는 이슈나 풀 리퀘스트가 없습니다.</string>
     <string name="github_limited">GitHub 검색이 불완전하거나 결과가 1,000개로 제한됩니다. 검색 범위를 좁혀 주세요.</string>
     <string name="github_item_title">#%1$d · %2$s</string>
@@ -45,18 +44,63 @@
     <string name="github_draft_failed">이 폰에 초안을 저장하지 못했습니다. 이 화면을 열어 둔 채 다시 편집해 주세요.</string>
     <string name="github_draft_limit">댓글 텍스트는 최대 64 KiB까지 입력할 수 있습니다.</string>
 
+    <!-- GitHub PR resources (114) -->
+    <string name="github_pr_truncated">이 PR 응답이 Host의 크기 제한을 초과하여 일부 세부 정보를 표시할 수 없습니다.</string>
+    <string name="github_pr_conversation">대화</string>
+    <string name="github_pr_files">파일</string>
+    <string name="github_pr_commits">커밋</string>
+    <string name="github_pr_checks">검사</string>
+    <string name="github_pr_reviews">리뷰</string>
+    <string name="github_pr_no_files">변경된 파일이 없습니다.</string>
+    <string name="github_pr_no_commits">커밋이 없습니다.</string>
+    <string name="github_pr_no_checks">이 PR의 최신 커밋에 보고된 검사가 없습니다.</string>
+    <string name="github_pr_no_reviews">아직 리뷰가 없습니다.</string>
+    <string name="github_pr_patch_unavailable">GitHub에서 이 파일의 패치를 제공하지 않았습니다. 바이너리 파일이나 큰 파일의 패치는 제공되지 않을 수 있습니다.</string>
+    <string name="github_pr_files_limited">GitHub는 최대 3,000개 파일을 반환합니다. 파일 목록이 불완전할 수 있습니다.</string>
+    <string name="github_pr_commits_limited">GitHub는 PR 커밋을 최대 250개 반환합니다. 커밋 목록이 불완전할 수 있습니다.</string>
+    <string name="github_pr_file_stats">%1$s · +%2$d −%3$d</string>
+    <string name="github_pr_previous_path">이전 경로: %1$s</string>
+    <string name="github_pr_added">추가됨</string>
+    <string name="github_pr_removed">삭제됨</string>
+    <string name="github_pr_renamed">이름 변경됨</string>
+    <string name="github_pr_copied">복사됨</string>
+    <string name="github_pr_changed">변경됨</string>
+    <string name="github_pr_queued">대기열에 있음</string>
+    <string name="github_pr_in_progress">진행 중</string>
+    <string name="github_pr_pending">대기 중</string>
+    <string name="github_pr_waiting">대기 중</string>
+    <string name="github_pr_requested">요청됨</string>
+    <string name="github_pr_success">통과</string>
+    <string name="github_pr_failure">실패</string>
+    <string name="github_pr_neutral">중립</string>
+    <string name="github_pr_cancelled">취소됨</string>
+    <string name="github_pr_skipped">건너뜀</string>
+    <string name="github_pr_timed_out">시간 초과</string>
+    <string name="github_pr_action_required">조치 필요</string>
+    <string name="github_pr_stale">오래됨</string>
+    <string name="github_pr_error">오류</string>
+    <string name="github_pr_unknown">알 수 없음</string>
+    <string name="github_pr_approved">승인됨</string>
+    <string name="github_pr_changes_requested">변경 요청됨</string>
+    <string name="github_pr_commented">의견 남김</string>
+    <string name="github_pr_dismissed">기각됨</string>
+
+    <!-- App language (130) -->
+    <string name="app_language_title">앱 언어</string>
+    <string name="app_language_system">시스템 기본</string>
+    <string name="app_language_english">English</string>
+    <string name="app_language_korean">한국어</string>
+    <string name="app_language_search">언어 검색</string>
+
     <!-- App lock (117) -->
     <string name="app_lock_settings_title">앱 잠금</string>
     <string name="app_lock_enabled_label">인증 요구</string>
-    <string name="app_lock_settings_hint">백그라운드에서 돌아올 때 앱 내용을 보호합니다. 알림 액션은 이전과 동일하게 동작합니다.</string>
     <string name="app_lock_delay_label">앱을 떠난 뒤 잠그기</string>
     <string name="app_lock_delay_immediate">즉시</string>
     <string name="app_lock_delay_one_minute">1분</string>
     <string name="app_lock_delay_five_minutes">5분</string>
-    <string name="app_lock_previews_label">앱 미리보기 숨기기</string>
-    <string name="app_lock_previews_hint">앱 잠금이 켜져 있으면 최근 앱에서 Aries를 가리고 스크린샷과 화면 공유를 차단합니다.</string>
+    <string name="app_lock_previews_label">앱 미리보기 및 스크린샷 차단</string>
     <string name="app_lock_screen_title">Aries가 잠겨 있습니다</string>
-    <string name="app_lock_screen_body">계속하려면 생체인증 또는 기기 잠금 해제로 인증하세요.</string>
     <string name="app_lock_unlock_button">Aries 잠금 해제</string>
     <string name="app_lock_authenticating">인증 중…</string>
     <string name="app_lock_cancelled">인증을 취소했습니다.</string>
@@ -83,7 +127,6 @@
     <string name="read_aloud_voice_local">기기 내장</string>
     <string name="read_aloud_preview">미리 듣기</string>
     <string name="read_aloud_sample">안녕하세요. Aries가 Agent의 응답을 읽어 드립니다.</string>
-    <string name="read_aloud_hint">Chat 응답의 읽기를 누르면 시스템 음성으로 읽습니다. 코드 블록은 건너뛰며 화면을 떠나면 정지합니다. 한국어 텍스트는 가능한 경우 한국어 음성으로 읽습니다. 네트워크 음성은 텍스트를 음성 제공업체로 보낼 수 있습니다.</string>
 
     <!-- 퀵오픈과 명령 팔레트 -->
     <string name="quick_open_title">퀵오픈</string>
@@ -111,16 +154,15 @@
     <string name="onboarding_open_button">시작 안내</string>
     <string name="whats_new_open_button">새로운 기능</string>
     <string name="onboarding_permission_button">알림 허용</string>
-    <string name="onboarding_permission_granted">알림이 허용되었습니다. 다음으로 Host 설정에서 푸시를 켜세요.</string>
+    <string name="onboarding_permission_granted">알림이 허용되었습니다.</string>
     <string name="onboarding_permission_denied">알림이 꺼져 있습니다. 나중에 Android 설정에서 허용할 수 있습니다.</string>
     <string name="app_update_url_label">업데이트 메타 파일 URL</string>
-    <string name="app_update_url_hint">HTTPS를 사용하세요. 기본 개발 서버는 HTTP를 지원합니다. 확인 전에 URL을 저장하세요.</string>
     <string name="app_update_url_invalid">인증 정보가 없는 HTTP 또는 HTTPS URL을 입력하세요.</string>
     <string name="app_update_save_button">업데이트 URL 저장</string>
     <string name="app_update_check_button">새 버전 확인</string>
     <string name="app_update_checking">새 버전 확인 중…</string>
     <string name="app_update_current">새 버전이 없습니다.</string>
-    <string name="app_update_found">새 버전이 있습니다. 배너를 눌러 다운로드를 여세요.</string>
+    <string name="app_update_found">새 버전이 있습니다.</string>
     <string name="app_update_failed">새 버전을 확인할 수 없습니다. URL과 연결을 확인한 뒤 다시 시도하세요.</string>
 
     <string name="app_update_available">Aries %1$s 버전이 있습니다</string>
@@ -132,11 +174,8 @@
 
     <string name="onboarding_title">시작 안내 · %1$d/3</string>
     <string name="onboarding_host_title">Host 추가</string>
-    <string name="onboarding_host_body">설정 → SSH 키에서 키를 만든 뒤 Host 목록에서 Host를 추가하세요. Host는 herdr-core를 실행하는 컴퓨터입니다.</string>
     <string name="onboarding_beacon_title">Beacon 설치</string>
-    <string name="onboarding_beacon_body">Host 설정에서 Beacon을 설치하세요. Beacon은 Host에서 실행되며 Agent 알림과 Call을 보냅니다.</string>
     <string name="onboarding_notifications_title">알림 권한 허용</string>
-    <string name="onboarding_notifications_body">Agent 상태와 Call을 받으려면 알림을 허용하세요. 그런 다음 Host 설정에서 푸시를 켜서 Host와 이 휴대폰을 연결하세요.</string>
     <string name="onboarding_next_button">다음</string>
     <string name="onboarding_finish_button">완료</string>
     <string name="onboarding_skip_button">안내 건너뛰기</string>
@@ -146,7 +185,6 @@
     <string name="files_save_button">폰에 저장</string>
     <string name="files_share_button">공유</string>
     <string name="files_share_title">Host 파일 공유</string>
-    <string name="files_export_limit">파일 하나를 최대 64 MiB까지 저장하거나 공유할 수 있습니다.</string>
     <string name="files_export_starting">다운로드 시작 중…</string>
     <string name="files_export_progress">%2$d바이트 중 %1$d바이트 다운로드</string>
     <string name="files_export_saving">선택한 폴더에 저장 중…</string>
@@ -157,6 +195,12 @@
     <string name="files_export_failed">파일을 전송하지 못했습니다. 연결, 파일과 폴더의 접근 권한, 여유 공간을 확인한 뒤 다시 시도하세요.</string>
     <!-- Remote file browser (90) -->
     <string name="files_open_button">파일</string>
+    <string name="files_changed_heading">변경됨</string>
+    <string name="files_folders_heading">폴더</string>
+    <string name="files_diff_button">Diff</string>
+    <string name="files_full_button">전체 파일</string>
+    <string name="files_folder_expanded">펼침</string>
+    <string name="files_folder_collapsed">접힘</string>
     <string name="files_title">Host 파일</string>
     <string name="files_close_button">파일 닫기</string>
     <string name="files_up_button">상위 폴더</string>
@@ -164,7 +208,6 @@
     <string name="files_back_folder_button">폴더로 돌아가기</string>
     <string name="files_send_file_button">Agent에게 파일 보내기</string>
     <string name="files_send_line_label">Agent에게 %1$d행 보내기</string>
-    <string name="files_line_hint">줄을 누르면 Chat 초안에 추가합니다.</string>
     <string name="files_not_text">미리 볼 수 없음: 바이너리 또는 UTF-8이 아닌 파일입니다.</string>
     <string name="files_loading">파일을 불러오는 중…</string>
     <string name="files_failed">폴더 또는 파일을 불러오지 못했습니다. 연결, 경로, 권한을 확인한 뒤 다시 시도하세요.</string>
@@ -185,8 +228,6 @@
     <string name="files_line_unavailable">이 파일에 %1$d줄이 더 이상 없습니다. 처음부터 표시합니다.</string>
     <string name="files_no_folder">이 Terminal의 현재 폴더가 없습니다. 파일의 절대 경로를 사용하세요.</string>
     <!-- Git changes (ticket 89) -->
-    <string name="git_changes_button">변경</string>
-    <string name="git_changes_title">Git 변경 · 읽기 전용</string>
     <string name="git_loading">변경을 읽는 중…</string>
     <string name="git_not_repository">이 폴더는 Git 저장소가 아닙니다.</string>
     <string name="git_clean">변경이 없습니다.</string>
@@ -199,9 +240,7 @@
     <string name="git_empty_diff">이 파일의 텍스트 diff가 없습니다.</string>
     <string name="git_send_file">Agent에게 파일 보내기</string>
     <string name="git_send_selection">Agent에게 선택한 줄 보내기</string>
-    <string name="git_select_hint">줄을 누르고 다른 줄을 누르면 범위를 선택합니다. 참조는 Chat 입력란에 추가됩니다.</string>
     <string name="git_error">Git 변경을 읽지 못했습니다: %1$s</string>
-    <string name="git_retry_button">새로고침</string>
     <string name="git_line_label">이전 %1$s · 새 %2$s: %3$s</string>
 
 
@@ -212,15 +251,11 @@
     <string name="agents_elapsed_label">%1$s 전에 상태 변경</string>
     <string name="tree_expanded">펼쳐짐</string>
     <string name="tree_collapsed">접힘</string>
-    <string name="agents_view_priority">우선순위</string>
-    <string name="agents_view_grouped">Space별 그룹</string>
     <string name="agents_needs_you">확인 필요</string>
     <string name="agents_pinned_group">고정 · %1$d</string>
     <string name="agents_priority_group">%1$s · %2$d</string>
-    <string name="agents_space_group">%1$s · %2$s · %3$d</string>
     <string name="agents_expand_children">%1$s 펼치기, 하위 Agent %2$d개</string>
     <string name="agents_collapse_children">%1$s 접기, 하위 Agent %2$d개</string>
-    <string name="agents_child_count">%1$d</string>
     <!-- Home widgets (78). -->
     <string name="widget_waiting_title">Aries · 대기</string>
     <string name="widget_agents_title">Aries · Agent</string>
@@ -246,12 +281,9 @@
     <string name="key_title">이 휴대폰의 SSH 키</string>
     <string name="key_fingerprint">지문: %1$s</string>
     <string name="key_copy_button">공개 키 복사</string>
-    <string name="key_copy_hint">각 호스트의 ~/.ssh/authorized_keys에 추가하세요.</string>
     <string name="key_clip_label">Aries SSH 공개 키</string>
-    <string name="key_biometric_label">생체 인증으로 잠금 해제</string>
-    <string name="key_biometric_hint">SSH 키(기본 키와 다른 모든 키)를 쓸 때마다 지문이나 얼굴 인증을 요구합니다. 인증 없이는 키를 쓸 수 없으므로 호출 알림에 선택지 대신 앱 열기가 표시됩니다.</string>
+    <string name="key_biometric_label">SSH 키 사용 시 생체 인증</string>
     <string name="key_biometric_prompt_title">SSH 키 잠금 해제</string>
-    <string name="key_biometric_prompt_subtitle">호스트에 로그인하려면 키가 필요합니다.</string>
     <string name="key_locked_title">SSH 키가 잠겨 있음</string>
     <string name="key_locked_body">SSH 키를 쓰려면 생체 인증이 필요한데 인증이 완료되지 않았습니다. 다시 시도하고 인증 창을 확인하세요.</string>
     <string name="key_biometric_unavailable_title">생체 인증을 쓸 수 없음</string>
@@ -263,12 +295,11 @@
 
     <string name="host_install_key_button">비밀번호로 키 설치</string>
     <string name="key_install_title">%1$s에 키 설치</string>
-    <string name="key_install_body">%1$s의 비밀번호로 한 번만 로그인하세요. Aries가 이 휴대폰의 공개 키를 ~/.ssh/authorized_keys에 추가하고, 그 뒤로는 키로만 접속합니다. 비밀번호는 저장하지 않습니다.</string>
     <string name="key_install_password">비밀번호</string>
     <string name="key_install_button">키 설치</string>
     <string name="key_install_done_title">키 설치됨</string>
-    <string name="key_install_added_body">%1$s에 이 휴대폰의 키를 추가했습니다. 이제 키로 접속합니다.</string>
-    <string name="key_install_present_body">%1$s에는 이미 이 휴대폰의 키가 있습니다. 아무것도 바꾸지 않았습니다.</string>
+    <string name="key_install_added_body">%1$s에 SSH 키를 설치했습니다.</string>
+    <string name="key_install_present_body">%1$s에 SSH 키가 이미 설치되어 있습니다.</string>
     <string name="key_install_failed_title">키를 설치하지 못했습니다</string>
     <string name="key_install_password_rejected">호스트가 사용자 이름이나 비밀번호를 받아들이지 않았습니다. 호스트에서 비밀번호 로그인이 꺼져 있을 수도 있습니다. 그렇다면 공개 키를 ~/.ssh/authorized_keys에 직접 추가하세요.</string>
     <string name="key_install_write_failed">로그인했지만 호스트의 ~/.ssh/authorized_keys에 쓰지 못했습니다: %1$s\n\n사용자가 ~/.ssh를 소유하고 쓸 수 있는지 확인하세요.</string>
@@ -278,10 +309,8 @@
     <!-- QR Host pairing -->
     <string name="host_pair_scan_button">Host QR 스캔</string>
     <string name="host_pair_scan_prompt">aries-beacon pair-qr에 표시된 QR을 스캔하세요</string>
-    <string name="host_pair_hint">Host에서 aries-beacon pair-qr --address ADDRESS를 실행하세요. QR은 5분 뒤 만료되며 폰 한 대만 등록할 수 있습니다.</string>
     <string name="host_pair_review_title">스캔한 Host 등록</string>
     <string name="host_pair_fingerprint">Host 키: %1$s</string>
-    <string name="host_pair_review_body">내 Host에서 표시한 QR인지 확인하세요. 등록하면 폰의 공개키를 Host에 설치하고 위 Host 키를 신뢰합니다.</string>
     <string name="host_pair_confirm_button">QR로 등록</string>
     <string name="host_pair_busy">등록 중…</string>
     <string name="host_pair_invalid">Host QR이 올바르지 않거나 만료되었습니다. Host에서 새 QR을 만드세요.</string>
@@ -297,7 +326,6 @@
     <string name="host_remove_button">삭제</string>
     <string name="host_remove_button_label">%1$s 삭제</string>
     <string name="host_remove_title">%1$s을(를) 삭제할까요?</string>
-    <string name="host_remove_body">이 호스트의 주소, 신뢰한 호스트 키, 이 휴대폰에 저장된 모든 정보를 지웁니다. 호스트 자체는 바뀌지 않습니다.</string>
     <string name="host_remove_confirm_button">호스트 삭제</string>
 
     <string name="connecting">%1$s에 연결하는 중…</string>
@@ -314,14 +342,12 @@
     <string name="terminal_display_font_label">글꼴</string>
     <string name="terminal_display_font_system">시스템 고정폭</string>
     <string name="terminal_display_size_label">기본 글꼴 크기: %1$d</string>
-    <string name="terminal_display_size_hint">관찰 모드에서는 Host의 격자에 맞춥니다. 두 손가락으로 확대할 수 있습니다.</string>
-    <string name="terminal_display_contrast_label">최소 대비 보장</string>
-    <string name="terminal_display_contrast_hint">대비가 1.6:1 미만인 글자를 보정합니다. 그래픽 색상은 유지합니다.</string>
+    <string name="terminal_display_contrast_label">저대비 텍스트 보정</string>
     <string name="terminal_display_license_button">JetBrains Mono 라이선스</string>
 
     <string name="terminal_observing">%1$s · 보기 전용 · %2$d×%3$d</string>
     <string name="terminal_typing">%1$s · 입력 중 · %2$d×%3$d</string>
-    <string name="terminal_input_hint">여기를 누르면 입력할 수 있습니다. 그때부터 Terminal 크기는 이 폰을 따릅니다.</string>
+    <string name="terminal_input_hint">Terminal 입력</string>
     <string name="terminal_input_typing">Terminal에 입력 중</string>
     <string name="key_esc">Esc</string>
     <string name="key_tab">Tab</string>
@@ -337,7 +363,6 @@
     <string name="key_right">→</string>
     <string name="key_interrupt">^C</string>
     <string name="attach_input_label">Terminal을 입력 모드로 열기</string>
-    <string name="attach_input_hint">끄면 Terminal을 보기 전용으로 열어 입력창을 누르기 전까지 데스크톱 크기를 그대로 둡니다. 켜면 바로 입력할 수 있게 열고 크기는 이 폰을 따릅니다.</string>
     <string name="terminal_exited_code">프로그램이 종료 코드 %1$d(으)로 끝났습니다.</string>
     <string name="terminal_exited_signal">프로그램이 시그널 %1$s(으)로 중지되었습니다.</string>
     <string name="terminal_exited_reason">프로그램이 끝났습니다(%1$s).</string>
@@ -370,16 +395,8 @@
     <string name="agents_host_unavailable">%1$s에 연결할 수 없습니다</string>
     <string name="agents_host_closed">%1$s와의 연결이 끊어졌습니다. 에이전트 정보가 최신이 아닐 수 있습니다.</string>
     <string name="agents_host_reconnecting">%1$s에 다시 연결하는 중…</string>
-    <string name="agent_pinned_label">고정됨</string>
-    <string name="agent_pin_button">고정</string>
-    <string name="agent_unpin_button">고정 해제</string>
     <string name="agent_pin_button_label">%2$s의 %1$s 고정</string>
     <string name="agent_unpin_button_label">%2$s의 %1$s 고정 해제</string>
-    <string name="agent_detail_host">호스트: %1$s</string>
-    <string name="agent_detail_address">주소: %1$s</string>
-    <string name="agent_detail_folder">폴더: %1$s</string>
-    <string name="agent_detail_command">명령: %1$s</string>
-    <string name="agent_detail_gone">이 에이전트는 더 이상 실행 중이 아닙니다.</string>
 
     <string name="agent_status_working">작업 중</string>
     <string name="agent_status_blocked">막힘</string>
@@ -395,12 +412,10 @@
     <string name="agent_view_chat">chat</string>
     <!-- Terminal and Chat input history (108) -->
     <string name="input_history_title">입력 이력</string>
-    <string name="input_history_hint">이 폰에서 보낸 최근 입력입니다. 선택한 뒤 편집하고 보내세요.</string>
     <string name="input_history_empty">입력 이력이 없습니다.</string>
     <string name="input_history_clear_button">이력 지우기</string>
     <string name="input_history_failed">입력 이력을 읽거나 저장하지 못했습니다.</string>
 
-    <string name="chat_title">Chat: %1$s</string>
     <!-- Chat search -->
     <string name="chat_search_button">Chat 검색</string>
     <string name="chat_search_hint">저장된 Chat 검색</string>
@@ -415,9 +430,6 @@
 
     <string name="chat_empty">아직 메시지가 없습니다.</string>
     <string name="chat_status_connecting">Beacon에 연결하는 중…</string>
-    <string name="chat_status_waiting">Agent가 아직 아무것도 기록하지 않았습니다.</string>
-    <string name="chat_status_no_agent">이 Terminal에서 지원하는 Agent가 실행 중이지 않습니다.</string>
-    <string name="chat_status_ended">Agent가 종료되었습니다. 마지막 Chat입니다.</string>
     <string name="chat_status_reconnecting">연결이 끊겼습니다. 다시 연결하는 중…</string>
     <string name="chat_status_no_terminal">이 Terminal은 더 이상 없습니다.</string>
     <string name="chat_status_no_beacon">Chat을 보려면 이 Host에 Beacon이 있어야 합니다. Host 화면에서 설치하세요.</string>
@@ -432,7 +444,6 @@
     <string name="chat_text_actions">텍스트 메뉴</string>
     <string name="chat_copy_all">전체 복사</string>
     <string name="chat_select_text">텍스트 선택</string>
-    <string name="chat_select_hint">단어를 길게 누른 뒤 선택 핸들을 끌어 복사할 텍스트를 선택하세요.</string>
     <string name="chat_thinking">생각함</string>
     <string name="chat_tool_running">실행 중</string>
     <string name="chat_tool_failed">실패</string>
@@ -462,8 +473,7 @@
     <string name="chat_tool_expand_label">%1$s 호출 전체 보기</string>
     <string name="chat_agent_error">Agent 오류</string>
     <string name="chat_unsupported">이 항목을 보려면 새 버전의 Aries가 필요합니다.</string>
-    <string name="chat_cache_title">Chat 캐시</string>
-    <string name="chat_cache_hint">읽은 Chat은 이 폰의 키로 암호화해 폰에 보관하므로 Host 없이도 열립니다. 이 기간 동안 갱신되지 않은 Chat은 삭제됩니다.</string>
+    <string name="chat_cache_title">Chat 보관 기간</string>
     <string name="chat_cache_days">%1$d일</string>
     <string name="chat_cache_clear_button">Chat 캐시 삭제</string>
     <string name="chat_cache_clear_label">%1$s의 캐시된 Chat 삭제</string>
@@ -490,11 +500,10 @@
     <string name="chat_diff_truncated">diff가 너무 커서 나머지는 표시하지 않습니다.</string>
     <string name="chat_question_label">질문</string>
     <string name="chat_question_option_label">%1$s(으)로 답하기</string>
-    <string name="chat_question_multi_hint">하나 이상 고르세요.</string>
     <string name="chat_question_text_label">%1$s에 직접 답 쓰기</string>
     <string name="chat_question_text_hint">직접 답 쓰기</string>
-    <string name="chat_question_queued">대기 중 · 위의 질문부터 답하세요.</string>
-    <string name="chat_question_history">지난 질문 · 답은 일반 메시지로 보냅니다.</string>
+    <string name="chat_question_queued">대기 중인 질문</string>
+    <string name="chat_question_history">지난 질문</string>
     <string name="chat_question_send">답 보내기</string>
     <string name="chat_question_sending">보내는 중…</string>
     <string name="chat_question_sent">답을 보냈습니다.</string>
@@ -530,14 +539,9 @@
     <string name="chat_blocked_auth">Agent가 Terminal에서 로그인을 기다립니다.</string>
     <string name="chat_blocked_other">Agent가 Terminal에서 기다리고 있습니다.</string>
 
-    <string name="space_summary">탭 %1$d개 · 페인 %2$d개</string>
-    <string name="space_no_tabs">이 스페이스에는 탭이 없습니다.</string>
-    <string name="tab_empty">이 탭에는 터미널이 없습니다.</string>
     <string name="pane_terminal_gone">%1$s (종료됨)</string>
-    <string name="pane_zoom_button">확대</string>
-    <string name="pane_unzoom_button">모든 페인 보기</string>
     <string name="unplaced_title">기타 터미널</string>
-    <string name="structure_no_document">이 호스트에 herdr-app이 저장한 레이아웃이 없습니다. 터미널을 스페이스·탭 label로 묶어 보여 줍니다.</string>
+    <string name="structure_no_document">저장된 herdr-app 레이아웃이 없습니다.</string>
     <string name="structure_unreadable">이 호스트의 herdr-app 레이아웃을 읽지 못했습니다(%1$s). 터미널을 스페이스·탭 label로 묶어 보여 줍니다.</string>
     <string name="structure_unknown_format">이 호스트의 herdr-app 레이아웃은 Aries가 모르는 형식입니다. 터미널을 스페이스·탭 label로 묶어 보여 줍니다. Aries를 업데이트하세요.</string>
     <string name="structure_connection_closed">호스트와의 연결이 끊어졌습니다. 보이는 내용이 최신이 아닐 수 있습니다.</string>
@@ -559,7 +563,6 @@
     <string name="worktrees_empty">Worktree가 없습니다.</string>
     <string name="worktrees_program_label">이 worktree에서 실행</string>
     <string name="worktrees_shell">셸</string>
-    <string name="worktrees_fallback_hint">현재 Space의 새 Tab으로 엽니다. Space가 없거나 herdr-app이 꺼져 있으면 Terminal을 실행합니다.</string>
     <string name="worktrees_detached">분리된 HEAD · %1$s</string>
     <string name="worktrees_bare">Bare 저장소</string>
     <string name="worktrees_locked">잠김 · %1$s</string>
@@ -584,11 +587,7 @@
     <string name="launch_model_label">모델 ID 또는 별칭</string>
     <string name="launch_model_choose">선택</string>
     <string name="launch_agent_default">Agent 기본값</string>
-    <string name="launch_model_hint">이 Host에서 사용 가능한 모델을 입력하세요. 비워 두면 Agent 기본값을 사용합니다.</string>
-    <string name="launch_model_provider_hint">이 Host의 provider/model을 입력하세요. 비워 두면 Agent 기본값을 사용합니다.</string>
     <string name="launch_effort_label">추론 강도</string>
-    <string name="launch_effort_hint">사용 가능한 강도는 이 Host의 모델과 Agent 버전에 따라 다릅니다.</string>
-    <string name="launch_effort_unavailable">OpenCode의 대화형 실행은 추론 강도 선택을 지원하지 않습니다. OpenCode의 모델 설정을 사용하세요.</string>
     <string name="launch_effort_off">끄기</string>
     <string name="launch_effort_minimal">최소</string>
     <string name="launch_effort_low">낮음</string>
@@ -634,7 +633,6 @@
     <string name="herdr_install_update">Herdr Core 업데이트</string>
     <string name="herdr_install_refresh">Herdr Core 다시 확인</string>
     <string name="herdr_install_consent_title">Herdr Core를 설치하거나 업데이트할까요?</string>
-    <string name="herdr_install_consent_body">공식 herdr-core 0.1.17 릴리스를 내려받아 고정된 SHA-256 checksum을 검증한 뒤 SSH로 이 Host의 ~/.local/bin에 설치합니다. 기존 사용자 설치는 Terminal을 유지하는 업데이트 기능을 사용합니다. 관리자 권한은 사용하지 않습니다.</string>
     <string name="herdr_install_confirm">설치 승인</string>
     <string name="herdr_install_detect">Host 플랫폼 확인 중…</string>
     <string name="herdr_install_download">릴리스 내려받는 중…</string>
@@ -644,12 +642,11 @@
     <string name="herdr_install_connect">Host에 접속</string>
     <string name="herdr_install_checksum">checksum 검증에 실패했습니다. 아무것도 설치하지 않았습니다. 예상: %1$s, 실제: %2$s</string>
     <string name="herdr_install_failed">Herdr Core %1$s 단계 실패: %2$s</string>
-    <string name="herdr_install_recovery">Host 연결, 남은 디스크 공간, 다운로드 접근을 확인한 뒤 다시 확인하고 재시도하세요.</string>
 
     <string name="beacon_title">Beacon</string>
     <string name="beacon_needs_ssh">Beacon은 SSH 호스트에만 설치할 수 있습니다.</string>
     <string name="beacon_status_unknown">이 호스트의 Beacon 상태를 읽을 수 없습니다.</string>
-    <string name="beacon_not_installed">Beacon이 설치되어 있지 않습니다. Beacon은 이 호스트의 알림과 Call을 보냅니다.</string>
+    <string name="beacon_not_installed">Beacon이 설치되지 않았습니다.</string>
     <string name="beacon_install_button">Beacon 설치</string>
     <string name="beacon_reinstall_button">다시 설치</string>
     <string name="beacon_remove_button">Beacon 제거</string>
@@ -658,11 +655,9 @@
     <string name="beacon_not_attached">실행 중이지만 아직 herdr-core에 연결되지 않았습니다.</string>
     <string name="beacon_attached">실행 중, herdr-core %1$s에 연결됨.</string>
     <string name="beacon_out_of_range">이 앱은 Beacon %1$s을(를) 지원하지 않습니다(%2$s 필요). Beacon을 다시 설치하세요.</string>
-    <string name="beacon_no_linger">Beacon은 호스트에 로그인해 있는 동안에만 실행됩니다. 계속 실행하려면 호스트에서 실행하세요: sudo loginctl enable-linger %1$s</string>
     <string name="beacon_linger_title">로그아웃하면 Beacon이 멈춥니다</string>
     <string name="beacon_linger_body">Beacon은 설치되었지만, 호스트가 로그아웃 후에도 서비스를 계속 실행하는 설정을 거부했습니다(%1$s). 이 설정이 없으면 다시 로그인할 때까지 Beacon과 알림이 멈춥니다.\n\n호스트에서 실행하세요: sudo loginctl enable-linger %2$s</string>
-    <string name="beacon_remove_title">Beacon을 제거할까요?</string>
-    <string name="beacon_remove_body">%1$s에서 Beacon을 멈추고 서비스와 프로그램을 지웁니다. Call 기록은 호스트에 남습니다.</string>
+    <string name="beacon_remove_title">%1$s에서 Beacon을 삭제할까요?</string>
     <string name="beacon_failed_title">Beacon을 설치하지 못했습니다</string>
     <string name="beacon_checksum_body">내려받은 Beacon이 앱에 내장된 checksum과 일치하지 않아 아무것도 설치하지 않았습니다.\n\n예상: %1$s\n실제: %2$s</string>
     <string name="beacon_unsupported_host_body">Beacon은 %1$s/%2$s 호스트를 지원하지 않습니다.</string>
@@ -673,15 +668,11 @@
     <string name="beacon_update_needed">Beacon 업데이트가 필요합니다 (%1$s → %2$s). 자동 업데이트가 꺼져 있어 설치하지 않았습니다.</string>
     <string name="beacon_update_button">Beacon 업데이트</string>
     <string name="beacon_auto_update">Beacon 자동 업데이트</string>
-    <string name="beacon_macos_login_title">로그인해 있는 동안에만 Beacon이 실행됩니다</string>
-    <string name="beacon_macos_login_body">Beacon이 macOS LaunchAgent로 설치되었습니다. macOS는 LaunchAgent를 로그인 세션에 묶어 둡니다. Mac에서 로그아웃하면 Beacon과 알림이 멈추고, 재시동 후에도 다음에 로그인할 때 다시 시작됩니다.</string>
-    <string name="beacon_macos_login_limit">macOS에서는 Mac에 로그인해 있는 동안에만 Beacon이 실행됩니다.</string>
 
     <string name="key_default_label">기본 키</string>
     <!-- SSH key import -->
     <string name="key_import_button">기존 키 가져오기</string>
     <string name="key_import_title">SSH 개인키 가져오기</string>
-    <string name="key_import_hint">OpenSSH ed25519, RSA 또는 ECDSA 개인키를 파일로 선택하거나 붙여넣으세요(최대 64 KiB). 암호는 한 번만 사용하고 저장하지 않습니다. 가져온 키에도 다른 키와 같은 생체인증 설정이 적용됩니다. 추가 키는 Host의 SSH 경로 설정에서 선택하세요.</string>
     <string name="key_import_file_button">키 파일 선택</string>
     <string name="key_import_private_label">개인키</string>
     <string name="key_import_passphrase_label">암호(암호화된 키)</string>
@@ -697,7 +688,6 @@
     <string name="host_jumps_button">jump host</string>
     <string name="host_jumps_summary">경유: %1$s</string>
     <string name="jumps_title">%1$s까지의 경로</string>
-    <string name="jumps_hint">Aries는 jump host에 순서대로 로그인한 뒤, 마지막 jump host를 거쳐 호스트에 접속합니다.</string>
     <string name="jumps_empty">jump host가 없습니다. Aries가 호스트에 바로 접속합니다.</string>
     <string name="jumps_hop_title">jump host %1$d</string>
     <string name="jumps_add_button">jump host 추가</string>
@@ -710,9 +700,7 @@
     <string name="jump_key_changed_title">jump host 키가 바뀌었습니다</string>
     <string name="jump_key_changed_body">jump host %1$d(%2$s)가 이전과 다른 키를 보내서 Aries가 연결하지 않았습니다. 누군가 연결을 가로채고 있거나 jump host를 다시 설치했을 수 있습니다.\n\n신뢰한 키: %3$s\n현재 키: %4$s</string>
     <string name="connect_jump_auth_rejected">jump host %1$d(%2$s)가 지정한 키를 받아들이지 않았습니다. 그 jump host의 ~/.ssh/authorized_keys에 해당 키의 공개 키를 추가하세요.</string>
-    <string name="calls_button">Call 기록</string>
     <string name="calls_title">Call 기록</string>
-    <string name="calls_empty">아직 Call이 없습니다. 에이전트는 사용자가 필요할 때 aries-beacon call로 Call을 보냅니다.</string>
     <string name="calls_feed_down">%1$s: Call 기록이 최신이 아닙니다(%2$s). 다시 시도하는 중입니다.</string>
     <string name="call_meta">%1$s · %2$s · %3$s</string>
     <string name="call_choices">선택지: %1$s</string>
@@ -724,15 +712,9 @@
     <string name="call_answer_delivered">답함: %1$s</string>
     <string name="call_answer_failed">답 전달 실패: %1$s</string>
     <string name="call_answer_unconfirmed">답 전달 미확인: %1$s</string>
-    <string name="call_unconfirmed">Beacon이 이 Call을 보낸 터미널을 확인하지 못해 기록만 했습니다.</string>
-    <string name="call_from_helper">하위 에이전트의 Call입니다. Call 기록에 남고, \"하위 에이전트 포함\"이 켜져 있을 때만 알립니다.</string>
-    <string name="call_open_terminal">터미널 열기</string>
-    <string name="call_open_terminal_label">%2$s을(를) 보낸 터미널 %1$s 열기</string>
+    <string name="call_unconfirmed">답장할 수 없습니다. 요청한 Terminal을 확인할 수 없습니다.</string>
     <string name="call_terminal_gone_title">터미널이 없습니다</string>
     <string name="call_terminal_gone_body">이 Call을 보낸 터미널 %1$s이(가) %2$s에서 더 이상 실행 중이 아닙니다.</string>
-    <string name="call_banner_from">%1$s에서 새 Call · %2$s</string>
-    <string name="call_banner_view">보기</string>
-    <string name="call_banner_dismiss">닫기</string>
     <string name="call_answer_choice_label">%1$s에 %2$s(으)로 답하기</string>
     <string name="call_answer_sending">답을 보내는 중…</string>
     <string name="call_reply_not_sent">보내지 못했습니다: %1$s. 아무것도 입력되지 않았으니 다시 시도할 수 있습니다.</string>
@@ -743,14 +725,12 @@
     <string name="call_reply_no_beacon">이 Host에 Beacon이 설치돼 있지 않습니다.</string>
     <string name="push_title">푸시 알림</string>
     <string name="push_needs_beacon">이 Host의 푸시 알림을 켜려면 Beacon을 설치하세요.</string>
-    <string name="push_off_body">Aries가 꺼져 있거나 폰이 잠겨 있어도 이 Host의 알림을 이 폰에서 받습니다. 알림은 종단 간 암호화되어, 전달하는 Relay도 내용을 읽을 수 없습니다.</string>
-    <string name="push_force_stop_note">Android 설정에서 Aries를 강제 중지하면 Aries를 다시 열 때까지 알림이 오지 않고, 이미 표시된 알림도 지워집니다.</string>
     <string name="push_enable_button">푸시 켜기</string>
     <string name="push_disable_button">푸시 끄기</string>
     <string name="push_test_button">테스트 알림 보내기</string>
     <string name="push_retry_button">다시 시도</string>
     <string name="push_step_register">Relay에 이 폰 등록</string>
-    <string name="push_verification_pending">이 폰에서 Relay의 확인 푸시를 받기를 기다리는 중…</string>
+    <string name="push_verification_pending">푸시 수신 확인 중…</string>
     <string name="push_verification_failed">푸시 수신이 확인되지 않았습니다. 푸시 설정을 다시 시도하세요.</string>
     <string name="push_step_verify">이 폰의 푸시 수신 확인</string>
     <string name="push_step_pair">Beacon과 키 교환</string>
@@ -761,25 +741,22 @@
     <string name="push_step_failed_description">실패</string>
     <string name="push_failed">\"%1$s\" 단계 실패: %2$s</string>
     <string name="push_on_body">푸시가 켜져 있습니다. Relay: %1$s</string>
-    <string name="push_test_sent">테스트 알림을 보냈습니다. 도착하지 않으면 Aries 알림이 허용돼 있는지 확인하세요.</string>
-    <string name="push_no_relay">이 Aries 빌드에는 기본 Relay가 없습니다. 직접 운영하는 Relay의 URL을 입력하세요.</string>
+    <string name="push_test_sent">테스트 알림을 보냈습니다.</string>
     <string name="push_relay_label">Relay URL</string>
-    <string name="push_relay_hint">https://만 됩니다. 직접 운영하는 Relay는 이 Aries 빌드의 Firebase 프로젝트로 보내야 합니다.</string>
     <string name="push_change_relay_button">Relay 변경</string>
-    <string name="push_change_relay_body">Aries는 먼저 새 Relay와 페어링한 뒤 기존 Relay에서 페어링을 삭제합니다. 새 Relay가 실패하면 기존 Relay가 계속 동작합니다.</string>
     <string name="push_use_relay_button">이 Relay 사용</string>
     <string name="push_unavailable">이 폰에서는 푸시 알림을 쓸 수 없습니다: %1$s</string>
     <string name="push_permission_denied">Aries 알림이 허용되지 않았습니다. Android 설정에서 허용한 뒤 다시 푸시를 켜세요.</string>
     <string name="push_off_host_unreachable">푸시를 껐고 Relay에서 이 페어링을 삭제했습니다. Host에 연결할 수 없어 Host 쪽 페어링 사본은 다음 페어링 때까지 남지만 더는 동작하지 않습니다.</string>
-    <string name="push_channel_name">Host 알림</string>
     <!-- Watched Agent progress -->
+    <string name="agent_actions_label">Agent 동작</string>
     <string name="agent_watch_label">진행 상황 지켜보기</string>
     <string name="agent_watch_error">지켜보기를 변경하지 못했습니다: %1$s</string>
     <string name="push_progress_channel">지켜보는 Agent 진행 상황</string>
     <string name="push_progress_body">%1$d분 경과 · 하위 Agent %2$d개</string>
 
     <string name="push_test_title">%1$s 푸시 동작 확인</string>
-    <string name="push_test_body">%1$s의 Beacon이 보낸 테스트 알림입니다. 종단 간 암호화돼 있습니다.</string>
+    <string name="push_test_body">%1$s의 테스트 알림입니다.</string>
     <string name="push_status_title">%2$s의 %1$s</string>
     <string name="push_terminal_gone_title">Agent가 없습니다</string>
     <string name="push_terminal_gone_body">터미널 %1$s이(가) %2$s에서 더 이상 실행 중이 아닙니다. 실행 중인 Agent 목록을 보여 드립니다.</string>
@@ -811,15 +788,10 @@
     <string name="call_notify_unknown">알 수 없음: 전달됐을 수 있습니다. Call 기록을 확인하세요</string>
     <string name="call_notify_channel_sending">답 보내는 중</string>
     <string name="push_policy_title">알림 받을 때</string>
-    <string name="push_policy_body">이 Host에 저장되므로 Aries가 꺼져 있어도 Beacon이 이 설정을 따릅니다.</string>
     <string name="push_policy_blocked">에이전트가 막혔을 때</string>
-    <string name="push_policy_blocked_hint">권한, 답변 또는 로그인을 기다리는 경우입니다. 같은 이유로 반복되면 다시 알리지 않습니다.</string>
     <string name="push_policy_error">에이전트가 오류를 보고할 때</string>
-    <string name="push_policy_error_hint">문제가 생겨 멈춘 경우입니다.</string>
     <string name="push_policy_done">에이전트가 한 턴을 마쳤을 때</string>
-    <string name="push_policy_done_hint">여기나 다른 Herdr 앱에서 아직 확인하지 않은 턴만 알립니다.</string>
     <string name="push_policy_child_agents">하위 에이전트 포함</string>
-    <string name="push_policy_child_agents_hint">다른 에이전트가 시작한 에이전트와 그 Call도 알립니다. 끄면 최상위 에이전트만 알리고, 하위 에이전트의 Call은 Call 기록에만 남습니다.</string>
     <string name="push_policy_failed">Host의 알림 옵션을 읽거나 바꾸지 못했습니다: %1$s</string>
     <string name="push_policy_retry">옵션 다시 불러오기</string>
 
@@ -827,7 +799,6 @@
     <string name="settings_title">설정</string>
     <!-- Local diagnostics -->
     <string name="diagnostics_title">진단</string>
-    <string name="diagnostics_retention">기기에 최근 500건을 보관합니다. 오류 분류만 기록하며 인증 정보와 메시지 본문은 제외합니다. 복사·내보내기는 현재 필터에 적용됩니다.</string>
     <string name="diagnostics_all">전체</string>
     <string name="diagnostics_all_hosts">모든 Host</string>
     <string name="diagnostics_failures">실패만</string>
@@ -898,9 +869,6 @@
     <string name="console_agents_waiting">%1$d개 기다림</string>
     <string name="console_all_hosts">Hosts</string>
     <!-- i18n-ok: decorative tree guides, shared across languages. -->
-    <string name="console_tree_last">└─</string>
-    <string name="console_tree_branch">├─</string>
-    <string name="console_key_band">키 / %1$s</string>
     <string name="console_add_host">+ Host 추가</string>
     <string name="console_add_close">− 추가 폼 닫기</string>
     <string name="console_ssh">ssh</string>
@@ -953,8 +921,7 @@
     <string name="attachments_failed">첨부할 수 없음: %1$s</string>
     <string name="attachments_file_button">파일 첨부</string>
     <string name="attachments_camera_button">사진 촬영</string>
-    <string name="attachments_resize_label">첨부 이미지 축소</string>
-    <string name="attachments_resize_hint">긴 변이 최대 2048픽셀인 JPEG로 변환합니다.</string>
+    <string name="attachments_resize_label">이미지 크기 2048px로 줄이기</string>
     <string name="layout_new_space_button">새 Space</string>
     <string name="layout_app_unavailable">Space와 Tab을 편집하려면 이 Host에서 herdr-app을 여세요.</string>
     <string name="layout_kill_button">종료</string>
@@ -980,19 +947,19 @@
     <string name="dictation_key_save_button">키 저장</string>
     <string name="dictation_key_remove_button">키 삭제</string>
     <string name="dictation_key_failed">API 키를 저장하지 못했습니다. 다시 입력해 주세요.</string>
-    <string name="dictation_language_label">언어 (ISO 코드, 비워 두면 자동 감지)</string>
-    <string name="dictation_language_invalid">ko, en 같은 두 글자 언어 코드를 입력해 주세요.</string>
+    <string name="dictation_language_label">언어</string>
+    <!-- Shared searchable language picker -->
+    <string name="language_picker_auto">자동 감지</string>
+    <string name="language_picker_search">언어 검색</string>
+    <string name="language_picker_no_results">검색 결과 없음</string>
     <string name="dictation_model_label">받아쓰기 모델</string>
     <string name="dictation_vocabulary_label">사용자 어휘 (이름과 용어)</string>
-    <string name="dictation_context_label">자동 컨텍스트</string>
-    <string name="dictation_context_hint">Host·Agent·프로젝트 이름과 마지막 Agent 응답 끝부분을 Groq로 전송합니다.</string>
+    <string name="dictation_context_label">이름 및 마지막 응답 포함</string>
     <string name="dictation_start_button">받아쓰기</string>
-    <string name="dictation_record_button">녹음 시작</string>
     <string name="dictation_stop_button">녹음 종료 및 받아쓰기</string>
     <string name="dictation_recording">녹음 중…</string>
     <string name="dictation_uploading">받아쓰는 중…</string>
     <string name="dictation_retry_button">받아쓰기 다시 시도</string>
-    <string name="dictation_disclosure">음성은 Groq로 전송되어 텍스트로 변환됩니다. 결과는 입력란에 추가됩니다. 직접 검토한 뒤 보내세요.</string>
     <string name="dictation_permission_denied">받아쓰기를 녹음하려면 마이크 권한을 허용해 주세요.</string>
     <string name="dictation_record_failed">음성을 녹음하지 못했습니다. 다시 시도해 주세요.</string>
     <string name="dictation_failed">받아쓰기를 완료하지 못했습니다. 다시 시도해 주세요.</string>
@@ -1010,7 +977,6 @@
     <string name="push_channel_attention">막힘 및 오류</string>
     <string name="push_host_summary">%1$s: 대기 %2$d</string>
     <string name="quiet_hours_title">조용한 시간</string>
-    <string name="quiet_hours_hint">기기 현지 시각을 기준으로 완료·막힘·오류 알림을 무음으로 표시합니다. Call 알림 설정은 유지됩니다. 시작과 끝이 같으면 하루 종일 적용됩니다.</string>
     <string name="quiet_hours_start">시작</string>
     <string name="quiet_hours_end">끝</string>
 </resources>

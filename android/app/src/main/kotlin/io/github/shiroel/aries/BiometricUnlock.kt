@@ -20,7 +20,6 @@ class BiometricUnlock(private val activity: Activity) : BiometricAuthorizer {
         activity.runOnUiThread {
             BiometricPrompt.Builder(activity)
                 .setTitle(activity.getString(R.string.key_biometric_prompt_title))
-                .setSubtitle(activity.getString(R.string.key_biometric_prompt_subtitle))
                 .setNegativeButton(activity.getString(R.string.cancel_button), activity.mainExecutor) { _, _ ->
                     done.countDown()
                 }

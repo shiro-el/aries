@@ -106,11 +106,7 @@ class BeaconModel(
                 Message(R.string.beacon_linger_title),
                 Message(R.string.beacon_linger_body, listOf(linger.reason, userOf(host))),
             )
-            Linger.LoginSession -> Prompt.Problem(
-                Message(R.string.beacon_macos_login_title),
-                Message(R.string.beacon_macos_login_body),
-            )
-            Linger.Enabled -> return
+            Linger.LoginSession, Linger.Enabled -> return
         }
     }
 

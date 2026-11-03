@@ -54,12 +54,13 @@ class QuestionReplyWorker(context: Context, params: WorkerParameters) : Coroutin
     }
 
     override suspend fun getForegroundInfo(): ForegroundInfo {
+        val context = AppLanguage.context(applicationContext)
         val manager = applicationContext.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(NotificationChannel(CHANNEL,
-            applicationContext.getString(R.string.call_notify_channel_sending), NotificationManager.IMPORTANCE_LOW))
-        val notification = Notification.Builder(applicationContext, CHANNEL)
+            context.getString(R.string.call_notify_channel_sending), NotificationManager.IMPORTANCE_LOW))
+        val notification = Notification.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_aries)
-            .setContentTitle(applicationContext.getString(R.string.call_notify_channel_sending)).build()
+            .setContentTitle(context.getString(R.string.call_notify_channel_sending)).build()
         return ForegroundInfo(0x72, notification)
     }
 
@@ -82,6 +83,7 @@ class QuestionReplyWorker(context: Context, params: WorkerParameters) : Coroutin
 
 object QuestionReplies {
     suspend fun answer(context: Context, core: AriesCoreInterface, notice: QuestionNotice, choice: Int, online: Boolean): QuestionView.Done {
+        val context = AppLanguage.context(context)
         if (!online) return QuestionView.Done(context.getString(R.string.call_notify_no_network))
         return try {
             // The core bounds sign-in (15 s) and the Beacon result (30 s).

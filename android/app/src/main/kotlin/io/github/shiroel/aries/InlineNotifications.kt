@@ -111,6 +111,7 @@ object InlineNotifications {
 
 class InlineActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        val context = AppLanguage.context(context)
         val target = intent.getStringExtra(InlineNotifications.TARGET)?.let(InlineTarget::fromJson) ?: return
         if (intent.action == InlineNotifications.RESTORE) {
             @Suppress("DEPRECATION")

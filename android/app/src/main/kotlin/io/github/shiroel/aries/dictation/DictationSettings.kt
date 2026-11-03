@@ -15,6 +15,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import io.github.shiroel.aries.R
+import io.github.shiroel.aries.ui.LanguagePicker
 import io.github.shiroel.aries.ui.OptionToggle
 import androidx.compose.ui.unit.dp
 
@@ -24,15 +25,12 @@ fun DictationSettings(store: DictationStore? = null) {
     val context = LocalContext.current
     val credentials = store ?: remember(context) { DictationStore(context) }
     var options by remember { mutableStateOf(credentials.options()) }
-    var language by remember { mutableStateOf(options.language.orEmpty()) }
     var key by remember { mutableStateOf("") }
     var hasKey by remember { mutableStateOf(credentials.hasKey) }
     var keyError by remember { mutableStateOf(false) }
     fun save(next: DictationOptions) { credentials.saveOptions(next); options = next }
-    val invalidLanguage = language.isNotEmpty() && !language.matches(Regex("[a-z]{2}"))
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.dictation_title), style = MaterialTheme.typography.titleMedium)
-        Text(stringResource(R.string.dictation_disclosure), style = MaterialTheme.typography.bodySmall)
         if (hasKey) Text(stringResource(R.string.dictation_key_saved))
         OutlinedTextField(
             value = key, onValueChange = { key = it; keyError = false },
@@ -48,14 +46,11 @@ fun DictationSettings(store: DictationStore? = null) {
             Text(stringResource(R.string.dictation_key_remove_button))
         }
         if (keyError) Text(stringResource(R.string.dictation_key_failed), color = MaterialTheme.colorScheme.error)
-        OutlinedTextField(
-            value = language, onValueChange = {
-                language = it.trim().lowercase(java.util.Locale.ROOT)
-                if (language.isEmpty() || language.matches(Regex("[a-z]{2}"))) save(options.copy(language = language.ifEmpty { null }))
-            },
-            label = { Text(stringResource(R.string.dictation_language_label)) }, singleLine = true,
-            isError = invalidLanguage, modifier = Modifier.fillMaxWidth(),
-            supportingText = if (invalidLanguage) ({ Text(stringResource(R.string.dictation_language_invalid)) }) else null,
+        LanguagePicker(
+            label = stringResource(R.string.dictation_language_label),
+            languageCodes = dictationLanguageCodes,
+            selectedCode = options.language,
+            onSelect = { save(options.copy(language = it)) },
         )
         Text(stringResource(R.string.dictation_model_label))
         DictationModel.entries.forEach { model ->
@@ -65,7 +60,7 @@ fun DictationSettings(store: DictationStore? = null) {
             value = options.vocabulary, onValueChange = { save(options.copy(vocabulary = it)) },
             label = { Text(stringResource(R.string.dictation_vocabulary_label)) }, modifier = Modifier.fillMaxWidth(),
         )
-        OptionToggle(R.string.dictation_context_label, R.string.dictation_context_hint, options.autoContext) {
+        OptionToggle(R.string.dictation_context_label, options.autoContext) {
             save(options.copy(autoContext = it))
         }
     }

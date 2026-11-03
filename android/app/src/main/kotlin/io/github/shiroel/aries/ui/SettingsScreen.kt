@@ -96,7 +96,8 @@ fun SettingsScreen(
             }
             HorizontalDivider()
         }
-        LazyColumn(Modifier.fillMaxSize()) {
+        LazyColumn(Modifier.fillMaxSize().testTag("settings-list")) {
+            item(key = "app-language") { SettingsField { AppLanguageSetting() } }
             item {
                 Text(
                     stringResource(R.string.settings_keys_open),
@@ -134,7 +135,7 @@ fun SettingsScreen(
                 val context = androidx.compose.ui.platform.LocalContext.current
                 val attachments = remember(context) { AttachmentSettings.from(context) }
                 SettingsField {
-                    OptionToggle(R.string.attachments_resize_label, R.string.attachments_resize_hint,
+                    OptionToggle(R.string.attachments_resize_label,
                         attachments.resizeImages, attachments::chooseResizeImages)
                 }
             }
@@ -153,7 +154,7 @@ fun SettingsScreen(
             item(key = "attach-mode") {
                 SettingsField {
                     OptionToggle(
-                        R.string.attach_input_label, R.string.attach_input_hint,
+                        R.string.attach_input_label,
                         model.attachMode == AttachMode.INPUT,
                     ) { model.setDefaultAttachMode(if (it) AttachMode.INPUT else AttachMode.OBSERVE) }
                 }

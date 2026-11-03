@@ -219,23 +219,6 @@ class BeaconSectionTest {
     }
 
     @Test
-    fun explainsThatAMacLaunchAgentNeedsALogin() {
-        val core = FakeCore().apply {
-            beaconOs = "macos"
-            beaconLinger = Linger.LoginSession
-        }
-        connectTo(core)
-
-        click(R.string.beacon_install_button)
-
-        compose.onNodeWithText(str(R.string.beacon_macos_login_title)).assertExists()
-        compose.onNodeWithText(str(R.string.ok_button)).performClick()
-        compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.beacon_macos_login_limit)).performScrollTo().assertExists()
-        compose.onAllNodesWithText(str(R.string.beacon_no_linger, "me")).assertCountEquals(0)
-    }
-
-    @Test
     fun removesTheBeaconAfterConfirmation() {
         val core = FakeCore().apply {
             beacon = installed("0.1.0")
@@ -243,7 +226,6 @@ class BeaconSectionTest {
         connectTo(core)
 
         click(R.string.beacon_remove_button)
-        compose.onNodeWithText(str(R.string.beacon_remove_body, "box")).assertExists()
         assertEquals(true, core.beacon is BeaconState.Installed)
 
         compose.onAllNodesWithText(str(R.string.beacon_remove_button)).onLast().performClick() // the dialog's

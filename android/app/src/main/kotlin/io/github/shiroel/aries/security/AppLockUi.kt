@@ -38,7 +38,6 @@ fun AppLockGate(session: AppLockSession, onLeave: () -> Unit = {}, content: @Com
             verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
         ) {
             Text(stringResource(R.string.app_lock_screen_title), style = MaterialTheme.typography.headlineSmall)
-            Text(stringResource(R.string.app_lock_screen_body))
             AppLockNotice(session)
             TextButton(onClick = session::unlock, enabled = !session.busy, modifier = Modifier.testTag("app-lock-unlock")) {
                 Text(stringResource(if (session.busy) R.string.app_lock_authenticating else R.string.app_lock_unlock_button))

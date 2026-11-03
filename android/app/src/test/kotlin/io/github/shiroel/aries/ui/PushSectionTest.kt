@@ -97,8 +97,12 @@ class PushSectionTest {
 
     @Test
     fun asksForTheBeaconFirst() {
-        connectTo(FakeCore())
-        shows(str(R.string.push_needs_beacon))
+        val core = FakeCore()
+        val platform = Platform()
+        connectTo(core, platform)
+        click(R.string.push_enable_button)
+        assertEquals(0, platform.asked)
+        assertTrue(core.pushPaired.isEmpty())
     }
 
     @Test
@@ -106,7 +110,6 @@ class PushSectionTest {
         val core = FakeCore().apply { beacon = installed() }
         val platform = Platform()
         connectTo(core, platform)
-        shows(str(R.string.push_force_stop_note))
 
         click(R.string.push_enable_button)
 
@@ -171,7 +174,6 @@ class PushSectionTest {
     fun aBuildWithoutARelayAsksForTheUsersOwn() {
         val core = FakeCore().apply { beacon = installed() }
         connectTo(core, Platform(relayUrl = null))
-        shows(str(R.string.push_no_relay))
         compose.onNodeWithText(str(R.string.push_enable_button)).performScrollTo().assertIsNotEnabled()
 
         typeRelay(MINE)
@@ -280,12 +282,13 @@ class PushSectionTest {
         val flushesBefore = core.revocationFlushes
 
         click(R.string.beacon_remove_button)
-        compose.onNodeWithText(str(R.string.beacon_remove_title)).assertExists()
+        compose.onNodeWithText(str(R.string.beacon_remove_title, "box")).assertExists()
         compose.onAllNodesWithTextLast(str(R.string.beacon_remove_button))
 
         assertTrue(core.pushPaired.isEmpty())
         assertEquals(flushesBefore + 1, core.revocationFlushes)
-        shows(str(R.string.push_needs_beacon))
+        click(R.string.push_enable_button)
+        assertTrue(core.pushPaired.isEmpty())
     }
 
     private fun option(res: Int) = compose.onNodeWithText(str(res)).performScrollTo()
@@ -301,7 +304,6 @@ class PushSectionTest {
         option(R.string.push_policy_error).assertIsOn()
         option(R.string.push_policy_done).assertIsOff()
         option(R.string.push_policy_child_agents).assertIsOff()
-        shows(str(R.string.push_policy_child_agents_hint))
     }
 
     @Test

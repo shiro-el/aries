@@ -43,7 +43,6 @@ class KeyPolicyTest {
         show(core)
         compose.openKeyDetails()
         toggle().assertIsOff()
-        compose.onNodeWithText(str(R.string.key_biometric_hint)).assertExists()
 
         toggle().performClick()
         compose.waitForIdle()

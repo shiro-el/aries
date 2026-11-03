@@ -132,12 +132,6 @@ private fun AriesContent(model: HostsModel, settings: ThemeSettings, terminalDis
                                 onView = model::switchView.takeIf { s.viewer.terminal.agentStatus != null },
                                 displaySettings = terminalDisplay,
                                 onSelectionSend = model::sendTerminalSelectionToDraft,
-                                onGitSend = if (s.viewer.terminal.agentStatus == null) null else { text ->
-                                    model.switchView(io.github.shiroel.aries.core.AgentView.CHAT)
-                                    (model.screen as? Screen.Chat)?.chat?.let { chat ->
-                                        chat.draft = if (chat.draft.isBlank()) text else chat.draft + "\n\n" + text
-                                    }
-                                },
                             )
                         }
                         is Screen.JumpHosts -> {
@@ -243,7 +237,6 @@ internal fun KeySection(model: HostsModel) {
             ?.setPrimaryClip(ClipData.newPlainText(clipLabel, key.openssh))
     }) { Text(stringResource(R.string.key_copy_button)) }
     ConsoleButton(onClick = model::showKeyQr) { Text(stringResource(R.string.key_qr_button)) }
-    Text(stringResource(R.string.key_copy_hint), style = MaterialTheme.typography.bodySmall)
     BiometricToggle(model.keyProtection == KeyProtection.BIOMETRIC, model::requireBiometric)
 }
 
@@ -253,24 +246,18 @@ private fun BiometricToggle(required: Boolean, onChange: (Boolean) -> Unit) {
         Modifier.fillMaxWidth().toggleable(value = required, role = Role.Switch, onValueChange = onChange),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(stringResource(R.string.key_biometric_label), style = MaterialTheme.typography.titleSmall)
-            Text(stringResource(R.string.key_biometric_hint), style = MaterialTheme.typography.bodySmall)
-        }
+        Text(stringResource(R.string.key_biometric_label), Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
         Switch(checked = required, onCheckedChange = null)
     }
 }
 
 @Composable
-internal fun OptionToggle(label: Int, hint: Int, on: Boolean, onChange: (Boolean) -> Unit) {
+internal fun OptionToggle(label: Int, on: Boolean, onChange: (Boolean) -> Unit) {
     Row(
         Modifier.fillMaxWidth().toggleable(value = on, role = Role.Switch, onValueChange = onChange),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(stringResource(label), style = MaterialTheme.typography.titleSmall)
-            Text(stringResource(hint), style = MaterialTheme.typography.bodySmall)
-        }
+        Text(stringResource(label), Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
         Switch(checked = on, onCheckedChange = null)
     }
 }
@@ -345,7 +332,6 @@ private fun PromptDialog(prompt: Prompt, model: HostsModel) {
         is Prompt.ConfirmRemove -> AlertDialog(
             onDismissRequest = model::dismiss,
             title = { Text(stringResource(R.string.host_remove_title, prompt.host.name)) },
-            text = { Text(stringResource(R.string.host_remove_body)) },
             confirmButton = { TextButton(onClick = { model.remove(prompt) }) { Text(stringResource(R.string.host_remove_confirm_button)) } },
             dismissButton = { TextButton(onClick = model::dismiss) { Text(stringResource(R.string.cancel_button)) } },
         )
@@ -367,7 +353,6 @@ private fun PasswordDialog(prompt: Prompt.Password, model: HostsModel) {
         title = { Text(stringResource(R.string.key_install_title, prompt.host.name)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(stringResource(R.string.key_install_body, prompt.host.name))
                 OutlinedTextField(
                     password, { password = it },
                     label = { Text(stringResource(R.string.key_install_password)) },

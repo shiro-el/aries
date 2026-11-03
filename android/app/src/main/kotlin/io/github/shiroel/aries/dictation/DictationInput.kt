@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -49,7 +48,6 @@ fun DictationInput(
     val client = transcriber ?: remember { GroqTranscriber() }
     val scope = rememberCoroutineScope()
     val callback by rememberUpdatedState(onTranscript)
-    var consent by remember { mutableStateOf(false) }
     var recording by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<Int?>(null) }
@@ -126,25 +124,6 @@ fun DictationInput(
     LaunchedEffect(retrySeconds) {
         if (retrySeconds > 0) { delay(1000); retrySeconds-- }
     }
-    if (consent) AlertDialog(
-        onDismissRequest = { consent = false },
-        title = { Text(stringResource(R.string.dictation_title)) },
-        text = { Text(stringResource(R.string.dictation_disclosure)) },
-        confirmButton = {
-            TextButton(onClick = {
-                consent = false
-                options = credentials.options()
-                prompt = DictationPrompt.build(options.vocabulary, names, lastResponse, options.autoContext)
-                awaitingPermission = true
-                when {
-                    requestPermission != null -> requestPermission(::start)
-                    context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED -> start(true)
-                    else -> permission.launch(Manifest.permission.RECORD_AUDIO)
-                }
-            }) { Text(stringResource(R.string.dictation_record_button)) }
-        },
-        dismissButton = { TextButton(onClick = { consent = false }) { Text(stringResource(R.string.cancel_button)) } },
-    )
     Column(Modifier.padding(horizontal = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         if (recording) Text(stringResource(R.string.dictation_recording))
         if (busy) Text(stringResource(R.string.dictation_uploading))
@@ -162,7 +141,16 @@ fun DictationInput(
                     try { audio = microphone.stop(); transcribe() }
                     catch (_: Exception) { microphone.cancel(); error = R.string.dictation_record_failed }
                 }) { Text(stringResource(R.string.dictation_stop_button)) }
-                !busy && audio == null -> TextButton(enabled = enabled && !awaitingPermission, onClick = { consent = true }) {
+                !busy && audio == null -> TextButton(enabled = enabled && !awaitingPermission, onClick = {
+                    options = credentials.options()
+                    prompt = DictationPrompt.build(options.vocabulary, names, lastResponse, options.autoContext)
+                    awaitingPermission = true
+                    when {
+                        requestPermission != null -> requestPermission(::start)
+                        context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED -> start(true)
+                        else -> permission.launch(Manifest.permission.RECORD_AUDIO)
+                    }
+                }) {
                     Text(stringResource(R.string.dictation_start_button))
                 }
                 !busy && audio != null -> TextButton(enabled = enabled && retrySeconds == 0L, onClick = ::transcribe) {
