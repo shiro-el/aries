@@ -54,7 +54,7 @@ class RemoteFilesTest {
         compose.onNodeWithText("src/").performClick()
         compose.onNodeWithText("a.kt").performClick()
         compose.onNodeWithText("first").assertExists()
-        compose.onNodeWithText(str(R.string.files_next_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.files_next_button)).performClick()
         compose.onNodeWithText("last").assertExists()
         compose.onNodeWithTag("files-line:3").performClick()
         assertEquals("'/repo/src/a.kt':3\nlast", draft)
@@ -83,10 +83,10 @@ class RemoteFilesTest {
         } }
         compose.onNodeWithText("+updated").assertExists()
         assertEquals(emptyList<ULong>(), reads)
-        compose.onNodeWithText("Full file").performClick()
+        compose.onNodeWithContentDescription("Full file").performClick()
         compose.onNodeWithText("full source").assertExists()
         assertEquals(listOf(415uL), reads)
-        compose.onNodeWithText("Diff").performClick()
+        compose.onNodeWithContentDescription("Diff").performClick()
         compose.onNodeWithText(str(R.string.git_staged)).performClick()
         compose.onNodeWithText("+updated").assertExists()
         assertEquals(Triple("/repo", "src/Main.kt", GitDiffKind.UNSTAGED), diffs.first())
@@ -107,10 +107,11 @@ class RemoteFilesTest {
         compose.setContent { MaterialTheme { RemoteFilesScreen(conn, "t1", {}, { draft = it }) } }
         compose.onNodeWithText("binary").performClick()
         compose.onNodeWithText(str(R.string.files_not_text)).assertExists()
-        compose.onNodeWithText(str(R.string.files_back_folder_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.files_back_folder_button)).performClick()
         binary = true
         compose.onNodeWithText("binary").performClick()
         compose.onNodeWithText(str(R.string.files_not_text)).assertExists()
+        compose.onNodeWithContentDescription(str(R.string.files_actions_label)).performClick()
         compose.onNodeWithText(str(R.string.files_send_file_button)).performClick()
         assertEquals("'/repo/binary'", draft)
     }
@@ -135,6 +136,7 @@ class RemoteFilesTest {
         compose.onNodeWithTag("agent-actions").performClick()
         compose.onNodeWithTag("files-open").performClick()
         compose.onNodeWithText("a'b.kt").performClick()
+        compose.onNodeWithContentDescription(str(R.string.files_actions_label)).performClick()
         compose.onNodeWithText(str(R.string.files_send_file_button)).performClick()
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("Please review\n'/repo/a'\\''b.kt'")
         assertEquals(emptyList<Pair<String, String>>(), core.connection!!.typed)
@@ -144,6 +146,7 @@ class RemoteFilesTest {
         compose.onNodeWithTag("agent-actions").performClick()
         compose.onNodeWithTag("files-open").performClick()
         compose.onNodeWithText("a'b.kt").performClick()
+        compose.onNodeWithContentDescription(str(R.string.files_actions_label)).performClick()
         compose.onNodeWithText(str(R.string.files_send_file_button)).performClick()
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("Please review\n'/repo/a'\\''b.kt'\n'/repo/a'\\''b.kt'")
         assertEquals(emptyList<Pair<String, String>>(), core.connection!!.typed)
@@ -180,6 +183,7 @@ class RemoteFilesTest {
         compose.onNodeWithTag("files-line:415").assertExists()
         compose.onNodeWithText("val answer = 42").assertExists()
         assertEquals(listOf(Triple("box/t7", "/repo/src/Main.kt", 415uL)), reads)
+        compose.onNodeWithContentDescription(str(R.string.files_actions_label)).performClick()
         compose.onNodeWithText(str(R.string.files_close_button)).performClick()
         core.push(core.terminals.map { it.copy(foreground = ForegroundInfo(42u, "codex", listOf("codex"), "/current")) })
         core.pushChat(ChatSnapshot(listOf(ChatEntry("a2", null, ChatEntryBody.Agent("README.md"))), ChatStatus.LIVE, null))
@@ -188,6 +192,7 @@ class RemoteFilesTest {
         compose.waitForIdle()
         compose.waitUntil(5000) { reads.size >= 2 }
         assertEquals(Triple("box/t7", "/current/README.md", 1uL), reads.last())
+        compose.onNodeWithContentDescription(str(R.string.files_actions_label)).performClick()
         compose.onNodeWithText(str(R.string.files_close_button)).performClick()
         core.push(core.terminals.map { it.copy(cwd = null, foreground = null) })
         core.pushChat(ChatSnapshot(listOf(ChatEntry("a3", null, ChatEntryBody.Agent("/etc/hosts"))), ChatStatus.LIVE, null))
@@ -196,6 +201,7 @@ class RemoteFilesTest {
         compose.waitForIdle()
         compose.waitUntil(5000) { reads.size >= 3 }
         assertEquals(Triple("box/t7", "/etc/hosts", 1uL), reads.last())
+        compose.onNodeWithContentDescription(str(R.string.files_actions_label)).performClick()
         compose.onNodeWithText(str(R.string.files_close_button)).performClick()
         core.pushChat(ChatSnapshot(listOf(ChatEntry("a4", null, ChatEntryBody.Agent("missing.kt"))), ChatStatus.LIVE, null))
         compose.waitUntil(5000) { compose.onAllNodesWithText("missing.kt").fetchSemanticsNodes().isNotEmpty() }
@@ -219,7 +225,7 @@ class RemoteFilesTest {
         compose.runOnIdle { target = FileLocation("/repo/a.kt", 35u) }
         compose.onNodeWithText("Line 35 is no longer in this file. Showing the start.").assertExists()
         compose.onNodeWithText("first").assertExists()
-        compose.onNodeWithText(str(R.string.files_close_button)).assertExists()
+        compose.onNodeWithContentDescription(str(R.string.files_actions_label)).assertExists()
     }
 
     @Test fun codeCanWrapWithoutChangingItsText() {
@@ -235,10 +241,12 @@ class RemoteFilesTest {
             return results.single()
         }
         assertEquals(1, layout().lineCount)
+        compose.onNodeWithContentDescription(str(R.string.files_actions_label)).performClick()
         compose.onNodeWithText("Wrap lines").performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.waitForIdle()
         compose.waitUntil(5000) { layout().lineCount > 1 }
         org.junit.Assert.assertTrue(layout().layoutInput.text.spanStyles.isNotEmpty())
+        compose.onNodeWithContentDescription(str(R.string.files_actions_label)).performClick()
         compose.onNodeWithText("Wrap lines").performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.waitForIdle()
         compose.waitUntil(5000) { layout().lineCount == 1 }

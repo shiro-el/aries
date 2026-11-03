@@ -1,5 +1,9 @@
 package io.github.shiroel.aries.ui
 
+import androidx.compose.ui.test.hasAnyDescendant
+
+import androidx.compose.ui.test.assert
+
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
@@ -110,7 +114,7 @@ class HostListScreenTest {
         compose.waitForIdle()
 
         assertEquals("SHA256:abc", core.hosts().single().hostKey)
-        compose.onNodeWithText(str(R.string.terminals_title, "home")).assertExists()
+        compose.onNodeWithTag("console-top-bar").assert(hasAnyDescendant(hasText("home")))
         compose.onNodeWithText("claude").assertExists()
     }
 

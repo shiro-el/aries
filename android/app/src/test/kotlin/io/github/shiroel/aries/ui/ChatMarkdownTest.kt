@@ -207,6 +207,7 @@ class ChatMarkdownTest {
             compose.onNodeWithText(displayed).performFirstLinkClick()
             compose.onNodeWithTag("files-line:${expected.second}").assertExists()
             assertEquals(expected, reads.last())
+            compose.onNodeWithContentDescription(str(R.string.files_actions_label)).performClick()
             compose.onNodeWithText(str(R.string.files_close_button)).performClick()
         }
     }
