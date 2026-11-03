@@ -242,6 +242,7 @@
     <string name="terminal_back_to_live">실시간으로</string>
     <string name="terminal_zoom_reset">확대 %1$d%% · 원래대로</string>
     <string name="terminal_copy">복사</string>
+    <string name="terminal_send_to_agent">Agent에게 보내기</string>
     <string name="terminal_open_link">링크 열기</string>
     <string name="terminal_copy_link">링크 복사</string>
 

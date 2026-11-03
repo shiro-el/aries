@@ -247,6 +247,7 @@
     <string name="terminal_back_to_live">Back to live</string>
     <string name="terminal_zoom_reset">Zoom %1$d%% · Reset</string>
     <string name="terminal_copy">Copy</string>
+    <string name="terminal_send_to_agent">Send to Agent</string>
     <string name="terminal_open_link">Open link</string>
     <string name="terminal_copy_link">Copy link</string>
 
