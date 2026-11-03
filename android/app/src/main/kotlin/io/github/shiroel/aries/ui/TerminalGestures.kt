@@ -170,6 +170,19 @@ class TerminalLook(private val viewer: TerminalViewer) {
         panY = 0f
     }
 
+    /** Bring the selected search cells into the phone's visible part of the grid. */
+    fun revealSearchMatch() {
+        val match = viewer.search?.highlights?.firstOrNull { it.current } ?: return
+        val x = match.column.toInt() * cellW
+        val y = match.row.toInt() * cellH
+        if (x + panX < 0) panX = -x
+        else if (x + cellW + panX > viewW) panX = viewW - x - cellW
+        if (y + panY < 0) panY = -y
+        else if (y + cellH + panY > viewH) panY = viewH - y - cellH
+        selection = null
+        clamp()
+    }
+
     fun cellAt(p: Offset): Cell = Cell(
         ((p.y - panY) / cellH).toInt().coerceIn(0, (viewer.rows - 1).coerceAtLeast(0)),
         ((p.x - panX) / cellW).toInt().coerceIn(0, (viewer.cols - 1).coerceAtLeast(0)),

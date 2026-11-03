@@ -6,12 +6,14 @@ use std::time::Instant;
 
 use alacritty_terminal::event::{Event, EventListener};
 use alacritty_terminal::grid::{Dimensions, Scroll};
-use alacritty_terminal::index::{Column, Line};
+use alacritty_terminal::index::{Column, Direction, Line, Point};
 use alacritty_terminal::term::cell::{Cell, Flags};
+use alacritty_terminal::term::search::{Match, RegexIter, RegexSearch};
 use alacritty_terminal::term::{Config, Term, TermDamage, TermMode};
 use alacritty_terminal::vte::ansi::{Color, NamedColor, Processor, Rgb};
 
-use super::{CellRun, CursorPos, ScreenFrame, ScreenLine};
+use super::{CellRun, CursorPos, ScreenFrame, ScreenLine, TerminalSearch, TerminalSearchHighlight};
+use crate::error::{CoreError, protocol};
 
 /// Scrollback kept in the VT when the attach asked for less. The frames
 /// carry only the viewport; [`Vt::scroll_to`] moves it into the scrollback.
@@ -60,6 +62,14 @@ pub(crate) struct Vt {
     listener: Listener,
     /// The next frame must carry every row (new grid size, first paint).
     full: bool,
+    search: Option<Search>,
+    search_dirty: bool,
+}
+
+struct Search {
+    regex: RegexSearch,
+    matches: Vec<Match>,
+    current: Option<usize>,
 }
 
 impl Vt {
@@ -76,11 +86,14 @@ impl Vt {
             parser: Processor::new(),
             listener,
             full: true,
+            search: None,
+            search_dirty: false,
         }
     }
 
     pub fn feed(&mut self, bytes: &[u8]) {
         self.parser.advance(&mut self.term, bytes);
+        self.search_dirty = true;
     }
 
     /// When a synchronized update (`CSI ?2026h`) is buffering output, the
@@ -92,6 +105,7 @@ impl Vt {
     /// Shows a synchronized update whose deadline passed.
     pub fn flush_sync(&mut self) {
         self.parser.stop_sync(&mut self.term);
+        self.search_dirty = true;
     }
 
     pub fn resize(&mut self, cols: u16, rows: u16) {
@@ -100,6 +114,7 @@ impl Vt {
         }
         self.term.resize(size(cols, rows));
         self.full = true;
+        self.search_dirty = true;
     }
 
     /// The program asked for application cursor keys (`CSI ?1h`).
@@ -135,8 +150,126 @@ impl Vt {
         self.term.columns() as u16
     }
 
+    pub fn search(
+        &mut self,
+        query: &str,
+        case_sensitive: bool,
+        regex: bool,
+    ) -> Result<(), CoreError> {
+        if query.is_empty() {
+            self.search = None;
+            return Ok(());
+        }
+        if query.len() > 4096 {
+            return Err(protocol("terminal search query is too long"));
+        }
+        let pattern = if regex {
+            query.to_owned()
+        } else {
+            let mut escaped = String::new();
+            for c in query.chars() {
+                if "\\.+*?()|[]{}^$#&-~".contains(c) {
+                    escaped.push('\\');
+                }
+                escaped.push(c);
+            }
+            escaped
+        };
+        // Override Alacritty's smart-case default with the explicit option.
+        let pattern = format!("(?{}i:{pattern})", if case_sensitive { "-" } else { "" });
+        let regex =
+            RegexSearch::new(&pattern).map_err(|_| protocol("invalid terminal search pattern"))?;
+        self.search = Some(Search {
+            regex,
+            matches: Vec::new(),
+            current: None,
+        });
+        self.search_dirty = true;
+        self.refresh_search();
+        self.reveal_match();
+        Ok(())
+    }
+
+    fn refresh_search(&mut self) {
+        if !self.search_dirty {
+            return;
+        }
+        self.search_dirty = false;
+        let Some(search) = &mut self.search else {
+            return;
+        };
+        let start = Point::new(self.term.topmost_line(), Column(0));
+        let end = Point::new(self.term.bottommost_line(), self.term.last_column());
+        search.matches =
+            RegexIter::new(start, end, Direction::Right, &self.term, &mut search.regex).collect();
+        search.current = if search.matches.is_empty() {
+            None
+        } else {
+            Some(search.current.unwrap_or(0).min(search.matches.len() - 1))
+        };
+    }
+
+    pub fn search_next(&mut self, backwards: bool) {
+        self.refresh_search();
+        if let Some(search) = &mut self.search
+            && let Some(current) = search.current
+        {
+            let len = search.matches.len();
+            search.current = Some(if backwards {
+                (current + len - 1) % len
+            } else {
+                (current + 1) % len
+            });
+        }
+        self.reveal_match();
+    }
+
+    fn reveal_match(&mut self) {
+        let Some(search) = &self.search else { return };
+        let Some(current) = search.current else {
+            return;
+        };
+        let line = search.matches[current].start().line.0;
+        self.scroll_to((-line).max(0) as u32);
+    }
+
+    fn search_frame(&self) -> Option<TerminalSearch> {
+        let search = self.search.as_ref()?;
+        let offset = self.term.grid().display_offset() as i32;
+        let mut highlights = Vec::new();
+        for (i, found) in search.matches.iter().enumerate() {
+            let first = (found.start().line.0 + offset).max(0);
+            let last = (found.end().line.0 + offset).min(self.term.screen_lines() as i32 - 1);
+            for row in first..=last {
+                let line = row - offset;
+                let column = if line == found.start().line.0 {
+                    found.start().column.0
+                } else {
+                    0
+                };
+                let end = if line == found.end().line.0 {
+                    found.end().column.0
+                } else {
+                    self.term.columns() - 1
+                };
+                highlights.push(TerminalSearchHighlight {
+                    row: row as u16,
+                    column: column as u16,
+                    width: (end - column + 1) as u16,
+                    current: search.current == Some(i),
+                });
+            }
+        }
+        Some(TerminalSearch {
+            total: search.matches.len() as u32,
+            current: search.current.map(|i| i as u32),
+            highlights,
+        })
+    }
+
     /// The rows changed since the last frame (all rows when `full`).
     pub fn take_frame(&mut self) -> ScreenFrame {
+        self.refresh_search();
         let rows = self.term.screen_lines();
         let damaged: Vec<usize> = match self.term.damage() {
             TermDamage::Full => (0..rows).collect(),
@@ -174,6 +307,7 @@ impl Vt {
             title: self.listener.title.lock().expect("title lock").clone(),
             scrolled: offset as u32,
             history: self.term.grid().history_size() as u32,
+            search: self.search_frame(),
         }
     }
 

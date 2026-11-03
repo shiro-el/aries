@@ -89,6 +89,25 @@ pub struct CursorPos {
     pub column: u16,
 }
 
+/// A search match's cells on one row of this frame's viewport.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct TerminalSearchHighlight {
+    pub row: u16,
+    pub column: u16,
+    pub width: u16,
+    pub current: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct TerminalSearch {
+    /// Non-overlapping matches across the retained scrollback and live screen.
+    pub total: u32,
+    /// Zero-based selected match, oldest first; None when no matches exist.
+    pub current: Option<u32>,
+    /// Visible matches only, in the same coordinates as this frame's cells.
+    pub highlights: Vec<TerminalSearchHighlight>,
+}
+
 /// A batch of screen changes.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct ScreenFrame {
@@ -108,6 +127,9 @@ pub struct ScreenFrame {
     /// Scrollback lines above the live screen.
     #[uniffi(default = 0)]
     pub history: u32,
+    /// Search metadata is refreshed with the VT, even for a partial frame.
+    #[uniffi(default = None)]
+    pub search: Option<TerminalSearch>,
 }
 
 /// How the Terminal's program ended, from the stream's CLOSE.
@@ -124,7 +146,8 @@ pub enum TerminalUpdate {
     Screen {
         frame: ScreenFrame,
     },
-    /// The program ended; this is the last update.
+    /// The program ended; this is the last remote update. Local search/scroll
+    /// operations can still queue screen frames until the view is detached.
     Exited {
         exit: TerminalExit,
     },
@@ -344,8 +367,9 @@ impl TerminalView {
     /// The next screen change: right away for the first paint, then each
     /// time the screen changes (at most one frame per 16 ms; changes in
     /// between are merged). After the program ends, one
-    /// [`TerminalUpdate::Exited`]; after that, or when the connection or
-    /// the view ends, fails with [`CoreError::Closed`].
+    /// [`TerminalUpdate::Exited`]; after that, fails with [`CoreError::Closed`]
+    /// unless a local search/scroll operation queued another screen frame.
+    /// Also fails when the connection or the view ends.
     pub async fn next(&self) -> Result<TerminalUpdate, CoreError> {
         let inner = self.inner.clone();
         crate::on_runtime(async move { inner.next().await }).await
@@ -412,6 +436,34 @@ impl TerminalView {
         drop(st);
         self.inner.wake.notify_one();
         at
+    }
+
+    /// Search this view's retained VT, including soft-wrapped lines. An empty
+    /// query clears the search. Selects and reveals the oldest match; it never
+    /// types into or resizes the remote Terminal. Invalid regex leaves the
+    /// previous search intact. Matching uses Alacritty's bounded regex engine.
+    pub fn search(
+        &self,
+        query: String,
+        case_sensitive: bool,
+        regex: bool,
+    ) -> Result<(), CoreError> {
+        let mut st = self.inner.state.lock().expect("state lock");
+        st.vt.search(&query, case_sensitive, regex)?;
+        st.dirty = true;
+        drop(st);
+        self.inner.wake.notify_one();
+        Ok(())
+    }
+
+    /// Selects and reveals the next (or previous) match, wrapping at either end.
+    /// New output refreshes results on the next frame without moving the view.
+    pub fn search_next(&self, backwards: bool) {
+        let mut st = self.inner.state.lock().expect("state lock");
+        st.vt.search_next(backwards);
+        st.dirty = true;
+        drop(st);
+        self.inner.wake.notify_one();
     }
 
     /// Detaches from the Terminal (the program keeps running). Later `next`
