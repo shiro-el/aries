@@ -1,5 +1,6 @@
 package io.github.shiroel.aries.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -18,22 +19,31 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.CallAnswerState
 import io.github.shiroel.aries.core.CallUrgency
+import io.github.shiroel.aries.core.Host
 import java.text.DateFormat
 import java.util.Date
 
 /** Waiting Calls first, then recorded history; reply state stays owned by CallsModel. */
 @Composable
-internal fun CallInboxPanel(model: CallsModel, onChat: (CallEntry) -> Unit, modifier: Modifier = Modifier, callerName: (CallEntry) -> String? = { null }) {
+internal fun CallInboxPanel(model: CallsModel, onChat: (CallEntry) -> Unit, modifier: Modifier = Modifier, callerName: (CallEntry) -> String? = { null }, onInstallBeacon: (Host) -> Unit) {
     val waiting = model.calls.filter { it.answerable }
     val past = model.calls.filterNot { it.answerable }
     LazyColumn(modifier.fillMaxWidth().testTag("call-inbox-list")) {
         val names = model.calls.associate { it.host.id to it.host.name }
         items(model.problems.toList(), key = { "problem-${it.first}" }) { (hostId, detail) ->
-            Text(
+            val missingHost = model.missingBeaconHosts[hostId]
+            if (missingHost != null) Text(
+                stringResource(R.string.call_inbox_install_beacon, missingHost.name),
+                Modifier.fillMaxWidth().clickable(role = Role.Button) { onInstallBeacon(missingHost) }.padding(12.dp),
+                style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.primary,
+            ) else Text(
                 stringResource(R.string.calls_feed_down, names[hostId] ?: hostId, detail),
                 Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,

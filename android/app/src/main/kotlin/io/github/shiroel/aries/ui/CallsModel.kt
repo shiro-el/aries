@@ -56,9 +56,22 @@ class CallsModel(
     var banner by mutableStateOf<CallEntry?>(null)
         private set
 
-    /** Hosts whose feed is down, with why (shown in Call history). */
-    var problems by mutableStateOf<Map<String, String>>(emptyMap())
-        private set
+    private var feedProblems by mutableStateOf<Map<String, CallFeedState>>(emptyMap())
+
+    /** Hosts whose feed is down, with diagnostics for display only. */
+    val problems: Map<String, String>
+        get() = feedProblems.mapValues { (_, state) ->
+            when (state) {
+                is CallFeedState.BeaconNotInstalled -> state.detail
+                is CallFeedState.Reconnecting -> state.detail
+                CallFeedState.Live -> ""
+            }
+        }
+
+    /** Hosts whose feed explicitly reports a missing Beacon. */
+    val missingBeaconHosts: Map<String, Host>
+        get() = feedProblems.filterValues { it is CallFeedState.BeaconNotInstalled }
+            .keys.mapNotNull { hosts[it] }.associateBy { it.id }
 
     /** Calls being answered, by [CallEntry.key]. */
     var replying by mutableStateOf<Set<String>>(emptySet())
@@ -139,7 +152,7 @@ class CallsModel(
                     }
                 } catch (e: CoreException) {
                     if (watches[host.id] === slot) watches.remove(host.id)
-                    problems = problems + (host.id to (e.message ?: ""))
+                    feedProblems = feedProblems + (host.id to CallFeedState.Reconnecting(e.message.orEmpty()))
                 }
             }
         }
@@ -191,9 +204,9 @@ class CallsModel(
         override fun onState(state: CallFeedState) {
             scope.launch {
                 if (!current) return@launch
-                problems = when (state) {
-                    CallFeedState.Live -> problems - hostId
-                    is CallFeedState.Reconnecting -> problems + (hostId to state.detail)
+                feedProblems = when (state) {
+                    CallFeedState.Live -> feedProblems - hostId
+                    else -> feedProblems + (hostId to state)
                 }
             }
         }

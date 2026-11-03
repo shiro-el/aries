@@ -71,7 +71,8 @@ internal fun CallInboxOverlay(model: HostsModel, modifier: Modifier = Modifier) 
         Box(Modifier.fillMaxWidth().heightIn(max = maxHeight * .7f)
             .background(MaterialTheme.colorScheme.surface).testTag("call-inbox-panel")
             .semantics { paneTitle = title }) {
-            CallInboxPanel(model.calls, model::openCallChat, callerName = model::callCallerName)
+            CallInboxPanel(model.calls, model::openCallChat, callerName = model::callCallerName,
+                onInstallBeacon = model::openHostSettings)
         }
     }
 }

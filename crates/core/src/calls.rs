@@ -164,6 +164,8 @@ pub enum CallFeedState {
     Live,
     /// Lost the Host (or never reached it); trying again.
     Reconnecting { detail: String },
+    /// The Host has no Beacon; trying again so installation can recover the feed.
+    BeaconNotInstalled { detail: String },
 }
 
 /// Receives a Host's Calls from [`crate::AriesCore::watch_calls`].
@@ -444,11 +446,18 @@ async fn run_watch(
             Ok::<(), CoreError>(())
         }
         .await;
-        let detail = match result {
-            Err(e) => e.to_string(),
-            Ok(()) => "the Call feed ended".into(),
+        let state = match result {
+            Err(e @ CoreError::BeaconNotInstalled) => CallFeedState::BeaconNotInstalled {
+                detail: e.to_string(),
+            },
+            Err(e) => CallFeedState::Reconnecting {
+                detail: e.to_string(),
+            },
+            Ok(()) => CallFeedState::Reconnecting {
+                detail: "the Call feed ended".into(),
+            },
         };
-        listener.on_state(CallFeedState::Reconnecting { detail });
+        listener.on_state(state);
         tokio::time::sleep(backoff).await;
         backoff = (backoff * 2).min(MAX_BACKOFF);
     }
