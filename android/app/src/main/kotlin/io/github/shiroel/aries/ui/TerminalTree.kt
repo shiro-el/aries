@@ -79,7 +79,7 @@ internal fun TerminalBranch(
     val density = androidx.compose.ui.platform.LocalDensity.current
     val titleCenter = with(density) { 8.dp + MaterialTheme.typography.bodyMedium.lineHeight.toDp() / 2 }
     // Keep very deep families usable on a phone; identity/folding retain full depth.
-    val visibleDepth = depth.coerceAtMost(4)
+    val visibleDepth = depth.coerceAtMost(3)
     val indent = (visibleDepth * 16).dp
     val leadingWidth = if (leading != null) 32.dp else 0.dp
     androidx.compose.foundation.layout.Box(modifier.fillMaxWidth().drawBehind {

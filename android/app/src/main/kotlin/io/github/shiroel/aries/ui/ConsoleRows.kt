@@ -84,17 +84,19 @@ internal fun ConsoleTerminalRow(
                 Column(Modifier.weight(1f)) {
                     Text(displayName(terminal), style = MaterialTheme.typography.bodyMedium,
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(sub, style = MaterialTheme.typography.bodySmall,
-                        color = if (waiting) statusColor(AgentStatus.Blocked(null, null)) else MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-                Box(Modifier.width(kindWidth).height(titleHeight), contentAlignment = Alignment.CenterStart) {
-                    Text(terminal.currentProgram.orEmpty(), Modifier.testTag("terminal-kind:${terminal.address}"),
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-                Box(Modifier.width(ageWidth).height(titleHeight).testTag("terminal-age:${terminal.address}"), contentAlignment = Alignment.CenterEnd) {
-                    if (status != null) AgentElapsedTime(terminal.statusMs)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(sub, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
+                            color = if (waiting) statusColor(AgentStatus.Blocked(null, null)) else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Box(Modifier.width(kindWidth), contentAlignment = Alignment.CenterStart) {
+                            Text(terminal.currentProgram.orEmpty(), Modifier.testTag("terminal-kind:${terminal.address}"),
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        Box(Modifier.width(ageWidth).testTag("terminal-age:${terminal.address}"), contentAlignment = Alignment.CenterEnd) {
+                            if (status != null) AgentElapsedTime(terminal.statusMs)
+                        }
+                    }
                 }
             }
             trailing()
