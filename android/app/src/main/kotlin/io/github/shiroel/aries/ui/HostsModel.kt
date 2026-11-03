@@ -739,6 +739,20 @@ class HostsModel(
         get() = agentLinks.mapNotNull { (id, link) -> link.connection?.let { id to it } }.toMap()
     private val agentJobs = mutableListOf<Job>()
 
+    /** Shared content awaiting an explicit Agent selection. */
+    var pendingShare by mutableStateOf<SharedContent?>(null)
+        private set
+
+    /** Both cold and warm ACTION_SEND routes use the existing multi-Host Agent list. */
+    fun receiveShare(intent: android.content.Intent): Boolean {
+        val content = SharedContent.from(intent) ?: return false
+        openAgents()
+        pendingShare = content
+        return true
+    }
+
+    fun cancelShare() { pendingShare = null }
+
     /** Connects to every Host and shows all their Agents in one list. */
     fun openAgents() {
         back()
@@ -833,7 +847,13 @@ class HostsModel(
         val current = board.find(entry.key) ?: return
         val link = agentLinks[current.host.id] ?: return
         val t = current.terminal
-        show(link, t, agents)
+        val shared = pendingShare
+        if (shared != null) {
+            if (t.agentStatus == null || t.state != "live") return
+            chat(link, t, agents)
+            (screen as Screen.Chat).chat.pendingShare = shared
+            pendingShare = null
+        } else show(link, t, agents)
     }
 
     /** Pins or unpins an Agent for every client. */
@@ -1042,6 +1062,7 @@ class HostsModel(
         (screen as? Screen.Terminal)?.viewer?.takeIf { it.link?.host?.id == hostId }
 
     fun back() {
+        pendingShare = null
         (screen as? Screen.Chat)?.chat?.stop()
         ((screen as? Screen.Terminal)?.returnTo as? Screen.Chat)?.chat?.stop()
         viewing?.cancel()

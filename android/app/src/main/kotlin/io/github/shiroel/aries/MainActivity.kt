@@ -18,9 +18,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        // Cold start from a tapped notification (not a re-creation, which already handled it).
+        // Cold start from a notification or share; re-creations have already handled the intent.
         if (savedInstanceState == null) {
             pushTarget = PushTarget.from(intent)
+            shareIntent = intent
             NotificationGroups.opened(this, intent)
         }
         val core = app.core
@@ -40,13 +41,24 @@ class MainActivity : ComponentActivity() {
 
     /** A tapped notification's Agent, until the model exists and the activity is in front. */
     private var pushTarget: PushTarget? = null
+    private var shareIntent: Intent? = null
     private var resumed = false
     private var needsForegroundRefresh = true
+
+    private fun openShare() {
+        val m = model ?: return
+        if (!resumed) return
+        val incoming = shareIntent ?: return
+        shareIntent = null
+        m.receiveShare(incoming)
+    }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         NotificationGroups.opened(this, intent)
+        shareIntent = intent
+        openShare()
         // Warm start: the app was running when the notification was tapped.
         PushTarget.from(intent)?.let {
             pushTarget = it
@@ -76,6 +88,7 @@ class MainActivity : ComponentActivity() {
             m.foregrounded()
         }
         openPushTarget()
+        openShare()
     }
 
     override fun onDestroy() {
