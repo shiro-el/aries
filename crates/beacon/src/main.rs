@@ -19,6 +19,7 @@
 //!   installs, updates or removes the Beacon. One `SkillReport` line.
 //! - `--version`: `aries-beacon <version> (contract <n>)`.
 
+mod call_push;
 mod calls;
 mod push;
 mod status_push;

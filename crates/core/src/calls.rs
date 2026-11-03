@@ -74,6 +74,17 @@ pub struct CallInfo {
     pub pushes_by_default: bool,
 }
 
+impl From<wire::Urgency> for CallUrgency {
+    fn from(u: wire::Urgency) -> Self {
+        match u {
+            wire::Urgency::Record => Self::Record,
+            wire::Urgency::Check => Self::Check,
+            wire::Urgency::Urgent => Self::Urgent,
+            wire::Urgency::Emergency => Self::Emergency,
+        }
+    }
+}
+
 impl CallInfo {
     pub(crate) fn from_wire(host_id: &str, c: wire::Call) -> Self {
         Self {
@@ -85,12 +96,7 @@ impl CallInfo {
             top_level: c.top_level,
             title: c.title,
             body: c.body,
-            urgency: match c.urgency {
-                wire::Urgency::Record => CallUrgency::Record,
-                wire::Urgency::Check => CallUrgency::Check,
-                wire::Urgency::Urgent => CallUrgency::Urgent,
-                wire::Urgency::Emergency => CallUrgency::Emergency,
-            },
+            urgency: c.urgency.into(),
             choices: c.choices,
             answer: c.answer.map(|a| CallAnswer {
                 choice: a.choice,

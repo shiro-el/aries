@@ -12,9 +12,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use aries_core::{
-    AgentStatus, AriesCore, BeaconArtifact, BeaconFetcher, BeaconRelease, BlockedReason, CoreError,
-    Endpoint, FetchError, HttpClient, HttpRequest, HttpResponse, PushContent, PushDevice,
-    PushProgress, PushStep,
+    AgentStatus, AriesCore, BeaconArtifact, BeaconFetcher, BeaconRelease, BlockedReason,
+    CallUrgency, CoreError, Endpoint, FetchError, HttpClient, HttpRequest, HttpResponse,
+    PushContent, PushDevice, PushProgress, PushStep,
 };
 use aries_test_support::{FakeRelay, ReverseTunnel, SystemdHost, beacon_bin, http_request};
 use common::core_in;
@@ -701,4 +701,47 @@ async fn a_blocked_agent_reaches_the_phone_once() {
         &notices[1].content,
         PushContent::Status { terminal, status: AgentStatus::Error { .. }, .. } if *terminal == address
     ));
+}
+
+// ---- Call pushes (ticket 33) --------------------------------------------------
+
+#[tokio::test]
+#[ignore = "needs docker"]
+async fn a_call_reaches_the_phone_with_its_urgency_and_choices() {
+    let s = setup_with(true).await;
+    s.enable("dev-1").await;
+    s.relay.wait_pushes(1, Duration::from_secs(10)); // the test push
+
+    let run = as_user(
+        &s.host,
+        "herdr-core run --bg --json --no-parent --name claude -- sh -c \"$HOME/.local/bin/aries-beacon call --title Deploy? --body Ready --urgency emergency --choice Go --choice Stop; sleep 60\"",
+    );
+    let address = serde_json::from_str::<serde_json::Value>(run.trim()).unwrap()["address"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    let pushes = s.relay.wait_pushes(2, Duration::from_secs(20));
+    let notice = s.core.open_push(pushes[1].1.clone()).unwrap();
+    assert_eq!(notice.host_id, s.id);
+    match notice.content {
+        PushContent::Call {
+            id,
+            terminal,
+            top_level,
+            title,
+            body,
+            urgency,
+            choices,
+            ..
+        } => {
+            assert!(id.starts_with('c'), "{id}");
+            assert_eq!(terminal, address);
+            assert!(top_level);
+            assert_eq!((title.as_str(), body.as_str()), ("Deploy?", "Ready"));
+            assert_eq!(urgency, CallUrgency::Emergency);
+            assert_eq!(choices, ["Go", "Stop"]);
+        }
+        other => panic!("not a Call push: {other:?}"),
+    }
 }

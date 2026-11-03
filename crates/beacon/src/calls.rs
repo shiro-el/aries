@@ -272,9 +272,11 @@ pub fn call_command(log: &Log, args: &[String]) -> i32 {
             return 1;
         }
     };
-    // Recorded first: whatever delivery does next (push, tickets 27/33),
-    // a failure there never loses the Call.
+    // Recorded first: whatever the push does next, a failure there never
+    // loses the Call.
     println!("{}", serde_json::to_string(&call).expect("call json"));
+    let _ = std::io::stdout().flush();
+    crate::call_push::deliver(&call);
     0
 }
 

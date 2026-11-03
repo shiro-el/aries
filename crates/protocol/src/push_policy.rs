@@ -9,6 +9,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::agent_status::AgentStatus;
+use crate::calls::{Call, Urgency};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -50,6 +51,15 @@ impl PushPolicy {
             AgentStatus::Working | AgentStatus::Idle => false,
         }
     }
+
+    /// Whether `call` is pushed. Only a confirmed caller with an urgency
+    /// above `record` is; a subagent's Call only with
+    /// [`PushPolicy::child_agents`]. Everything else is only recorded.
+    pub fn allows_call(&self, call: &Call) -> bool {
+        call.terminal.is_some()
+            && call.urgency != Urgency::Record
+            && (call.top_level || self.child_agents)
+    }
 }
 
 #[cfg(test)]
@@ -83,6 +93,41 @@ mod tests {
         };
         assert!(p.allows(&AgentStatus::Done, false));
         assert!(p.allows(&blocked(), false));
+    }
+
+    fn call(confirmed: bool, top_level: bool, urgency: Urgency) -> Call {
+        Call {
+            id: "c1".into(),
+            at_ms: 1,
+            terminal: confirmed.then(|| "t1".into()),
+            top_level,
+            title: "t".into(),
+            body: String::new(),
+            urgency,
+            choices: vec![],
+            answer: None,
+        }
+    }
+
+    #[test]
+    fn calls_push_from_confirmed_top_level_agents_unless_record() {
+        let p = PushPolicy::default();
+        assert!(p.allows_call(&call(true, true, Urgency::Check)));
+        assert!(p.allows_call(&call(true, true, Urgency::Emergency)));
+        assert!(!p.allows_call(&call(true, true, Urgency::Record)));
+        assert!(!p.allows_call(&call(false, false, Urgency::Emergency)));
+        assert!(!p.allows_call(&call(true, false, Urgency::Urgent)));
+    }
+
+    #[test]
+    fn the_child_agents_option_also_pushes_subagent_calls() {
+        let p = PushPolicy {
+            child_agents: true,
+            ..PushPolicy::default()
+        };
+        assert!(p.allows_call(&call(true, false, Urgency::Urgent)));
+        assert!(!p.allows_call(&call(true, false, Urgency::Record)));
+        assert!(!p.allows_call(&call(false, false, Urgency::Urgent)));
     }
 
     #[test]

@@ -135,6 +135,16 @@ baseline) and sends `PushMessage::Status` for what
 top-level only; `<state>/push-policy.json` overrides). The real Claude Code
 check: `ARIES_REAL_CLAUDE=1 cargo test -p aries-beacon --test status_push -- --ignored real_claude`.
 
+Call pushes: `aries-beacon call` records the Call first, prints it, then
+sends `PushMessage::Call` (ID, Terminal, title, body, urgency, Choices)
+when `PushPolicy::allows_call` agrees (confirmed caller, urgency above
+`record`, top-level unless `child_agents`). A push failure is a stderr line
+and exit 0; the Call stays in Call history. The body is cut to fit the
+envelope. Android shows each Call on the channel for its urgency
+(`calls_check`, `calls_urgent`, `calls_emergency`). Tests:
+`cargo test -p aries-beacon --test call_push` (FakeRelay
+`fail_pushes(status)` plays a failing Relay).
+
 The Relay is `relay/` (Cloudflare Worker + D1, TypeScript). It stores only
 pairing token hashes, device push tokens and rate limit counters, and never
 stores or logs an envelope.
