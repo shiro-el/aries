@@ -382,3 +382,18 @@ async fn a_background_connection_has_a_deadline_even_during_the_handshake() {
     ));
     assert!(start.elapsed() < Duration::from_secs(18));
 }
+
+#[tokio::test]
+async fn background_seen_writes_turn_zero_when_the_shared_label_is_absent() {
+    let hc = HcSession::start();
+    let agent = hc.run_fake_agent("agent", "status idle\n");
+    wait_state(&hc, &agent.address, "idle");
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    let host = core.add_host("dev".into(), local_endpoint(&hc)).unwrap();
+    core.mark_seen_background(host.id, agent.address.clone(), 0)
+        .await
+        .unwrap();
+    let record: serde_json::Value = serde_json::from_str(&hc.hc(&["get", &agent.address])).unwrap();
+    assert_eq!(record["labels"]["herdr.seen"], "0");
+}

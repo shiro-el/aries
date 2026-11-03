@@ -54,7 +54,6 @@ object InlineNotifications {
                 .addRemoteInput(RemoteInput.Builder(REPLY_TEXT).setLabel(context.getString(R.string.notification_reply_hint)).build())
                 .setAllowGeneratedReplies(false)
                 .setSemanticAction(Notification.Action.SEMANTIC_ACTION_REPLY)
-                .setShowsUserInterface(false)
             if (Build.VERSION.SDK_INT >= 31) action.setAuthenticationRequired(true)
             builder.addAction(action.build())
         }
