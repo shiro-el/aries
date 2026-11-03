@@ -16,7 +16,14 @@ import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.Host
 import io.github.shiroel.aries.core.HostConnection
+import io.github.shiroel.aries.core.HttpClient
 import io.github.shiroel.aries.core.KeyInstall
+import io.github.shiroel.aries.core.PushDevice
+import io.github.shiroel.aries.core.PushDisable
+import io.github.shiroel.aries.core.PushNotice
+import io.github.shiroel.aries.core.PushPairing
+import io.github.shiroel.aries.core.PushProgress
+import io.github.shiroel.aries.core.PushStep
 import io.github.shiroel.aries.core.Linger
 import io.github.shiroel.aries.core.JumpHost
 import io.github.shiroel.aries.core.KeyInfo
@@ -171,6 +178,7 @@ class FakeCore : AriesCoreInterface {
 
     override fun removeHost(hostId: String) {
         if (!hosts.removeIf { it.id == hostId }) throw CoreException.UnknownHost(hostId)
+        pushPaired.remove(hostId) // queued for revocation, like the core
     }
 
     /** When set, `setKeyProtection` fails with it and the policy stays. */
@@ -253,7 +261,56 @@ class FakeCore : AriesCoreInterface {
 
     override suspend fun uninstallBeacon(hostId: String) {
         beacon = BeaconState.NotInstalled
+        pushPaired.remove(hostId)
     }
+
+    /** Push pairings per Host id: the Relay URL. */
+    val pushPaired = mutableMapOf<String, String>()
+
+    /** When set, `enablePush` reports steps up to this one and then fails there. */
+    var pushFailAt: PushStep? = null
+    var pushDisableHostCleared = true
+    var testPushes = 0
+    var revocationFlushes = 0
+
+    override suspend fun enablePush(
+        hostId: String,
+        relayUrl: String,
+        device: PushDevice,
+        http: HttpClient,
+        progress: PushProgress,
+    ): PushPairing {
+        for (step in listOf(PushStep.REGISTER, PushStep.PAIR, PushStep.TEST)) {
+            progress.onStep(step)
+            if (step == pushFailAt) {
+                if (step == PushStep.TEST) pushPaired[hostId] = relayUrl
+                throw CoreException.PushFailed(step, "relay said no")
+            }
+        }
+        pushPaired[hostId] = relayUrl
+        testPushes++
+        return PushPairing(relayUrl)
+    }
+
+    override fun pushPairing(hostId: String): PushPairing? = pushPaired[hostId]?.let { PushPairing(it) }
+
+    override suspend fun sendTestPush(hostId: String) {
+        testPushes++
+    }
+
+    override suspend fun disablePush(hostId: String, http: HttpClient): PushDisable {
+        pushPaired.remove(hostId)
+        return PushDisable(pushDisableHostCleared)
+    }
+
+    override suspend fun updatePushToken(device: PushDevice, http: HttpClient) {}
+
+    override suspend fun flushPushRevocations(http: HttpClient): UInt {
+        revocationFlushes++
+        return 0u
+    }
+
+    override fun openPush(envelope: ByteArray): PushNotice = throw CoreException.PushRejected("fake")
 
     /** Chat snapshots `watchChat` delivers, in order (see [pushChat]). */
     val chat = Channel<ChatSnapshot>(Channel.UNLIMITED)
@@ -312,9 +369,19 @@ class FakeConnection(
 
     override fun coreVersion(): String = "0.1.17"
 
-    override suspend fun terminals(): List<TerminalInfo> = list.also { calls += "terminals" }
+    /** The line is dead without anyone noticing yet (the phone slept): calls fail with `Closed`. */
+    var dead = false
 
-    override suspend fun watchTerminals(): TerminalWatch = FakeWatch(list, updates)
+    /** Completes on [disconnect]: every watch and view on this connection then ends, as on a cut line. */
+    private val gone = kotlinx.coroutines.CompletableDeferred<Unit>()
+
+    override suspend fun terminals(): List<TerminalInfo> {
+        calls += "terminals"
+        if (dead) throw CoreException.Closed()
+        return list
+    }
+
+    override suspend fun watchTerminals(): TerminalWatch = FakeWatch(list, updates, gone)
     override suspend fun structure(): HostStructure = current.also { calls += "structure" }
 
     override suspend fun watchStructure(listener: StructureListener): StructureWatch {
@@ -406,6 +473,9 @@ class FakeConnection(
 
     override suspend fun disconnect() {
         disconnected = true
+        gone.complete(Unit)
+        views.forEach { it.end() }
+        listener?.onClosed()
     }
 
     override fun close() {}
@@ -415,6 +485,7 @@ class FakeConnection(
 class FakeWatch(
     private val first: List<TerminalInfo>,
     private val updates: Channel<List<TerminalInfo>>,
+    private val gone: kotlinx.coroutines.Deferred<Unit> = kotlinx.coroutines.CompletableDeferred(),
 ) : TerminalWatch(NoHandle) {
     private var started = false
 
@@ -423,7 +494,11 @@ class FakeWatch(
             started = true
             return first
         }
-        return updates.receive()
+        if (gone.isCompleted) throw CoreException.Closed()
+        return kotlinx.coroutines.selects.select {
+            updates.onReceive { it }
+            gone.onAwait { throw CoreException.Closed() }
+        }
     }
 
     override fun stop() {}
@@ -457,6 +532,11 @@ class FakeTerminalView(val address: String, val options: AttachOptions) : Termin
         detached = true
         updates.close()
     }
+
+    /** Every [scrollTo] the UI made, in order. */
+    val scrolls = mutableListOf<UInt>()
+
+    override fun scrollTo(lines: UInt): UInt = lines.also { scrolls += it }
 
     override fun close() {}
 }

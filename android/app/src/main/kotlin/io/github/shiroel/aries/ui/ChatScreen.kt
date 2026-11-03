@@ -42,7 +42,6 @@ import io.github.shiroel.aries.core.ChatToolStatus
 import io.github.shiroel.aries.core.ChatWatch
 import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Host
-import io.github.shiroel.aries.core.HostConnection
 import io.github.shiroel.aries.core.SendListener
 import io.github.shiroel.aries.core.SendOutcome
 import io.github.shiroel.aries.core.TerminalInfo
@@ -59,8 +58,8 @@ class ChatModel(
     private val core: AriesCoreInterface,
     val host: Host,
     terminal: TerminalInfo,
-    /** The open Host's connection: messages go through it. */
-    val connection: HostConnection? = null,
+    /** The open Host's line: messages go through its live connection. */
+    val link: HostLink? = null,
 ) {
     /** The Agent's Terminal, its Agent status kept live by [update]. */
     var terminal by mutableStateOf(terminal)
@@ -95,16 +94,21 @@ class ChatModel(
         if (now.agentStatus !is AgentStatus.Blocked) refused = false
     }
 
-    val canSend: Boolean get() = connection != null && sending == null && draft.isNotBlank()
+    val canSend: Boolean get() = link != null && sending == null && draft.isNotBlank()
 
     /**
      * Types [draft] into the Agent's Terminal. It stays in the input until it
-     * went in, so a refused or failed message can be sent again.
+     * went in, so a refused or failed message can be sent again. Never resent
+     * on its own after a dropped line: it may have gone in already.
      */
     fun send() {
-        val conn = connection ?: return
         val scope = scope ?: return
         if (!canSend) return
+        val conn = link?.connection
+        if (conn == null) {
+            sendError = CoreException.Closed().let { it.message ?: it.toString() }
+            return
+        }
         val text = draft
         sending = Sending.Sending
         refused = false
@@ -201,7 +205,7 @@ fun ChatScreen(chat: ChatModel, onBack: () -> Unit, onOpenTerminal: () -> Unit =
         chat.sendError?.let {
             Text(stringResource(R.string.chat_send_failed, it), color = MaterialTheme.colorScheme.error)
         }
-        if (chat.connection != null) MessageInput(chat)
+        if (chat.link != null) MessageInput(chat)
     }
 }
 
