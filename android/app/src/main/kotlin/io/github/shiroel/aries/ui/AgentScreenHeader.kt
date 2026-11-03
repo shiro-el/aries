@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -35,6 +36,7 @@ internal fun AgentScreenHeader(
     current: AgentView,
     onView: ((AgentView) -> Unit)?,
     title: String = displayName(terminal),
+    onChanges: (() -> Unit)? = null,
     link: HostLink? = null,
     onTerminalUpdate: (TerminalInfo) -> Unit = {},
 ) {
@@ -73,6 +75,7 @@ internal fun AgentScreenHeader(
         }
         Text(terminal.cwd ?: stringResource(R.string.console_agent_unknown_folder), Modifier.weight(1f),
             color = colors.onSurfaceVariant, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        onChanges?.let { TextButton(onClick = it) { Text(stringResource(R.string.git_changes_button)) } }
         AgentElapsedTime(terminal.statusMs, R.string.console_agent_missing_value, R.string.console_agent_unknown_age)
     }
     WatchAgentToggle(terminal, link, onTerminalUpdate)
