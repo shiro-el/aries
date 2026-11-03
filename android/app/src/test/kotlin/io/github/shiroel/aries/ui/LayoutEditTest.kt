@@ -3,7 +3,6 @@ package io.github.shiroel.aries.ui
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -48,14 +47,15 @@ class LayoutEditTest {
         compose.waitForIdle()
     }
 
-    @Test fun unavailableAppDisablesLayoutEditsButTerminalKillStillWorks() {
+    @Test fun unavailableAppRejectsLayoutAttemptsButTerminalKillStillWorks() {
         val terminal = TerminalInfo("t1", "build", "", listOf("sleep"), "/repo", "live")
         val core = FakeCore().apply {
             herdrAppAvailable = false
             structure = HostStructure(emptyList(), listOf(terminal), null)
         }
         open(core)
-        compose.onNodeWithText(str(R.string.layout_new_space_button)).assertIsNotEnabled()
+        compose.onNodeWithText(str(R.string.layout_new_space_button)).performClick()
+        assertEquals(emptyList<LayoutEdit>(), core.connection!!.edits)
         compose.onNodeWithText(str(R.string.layout_app_unavailable)).assertExists()
         compose.onNodeWithText(str(R.string.layout_kill_button)).performClick()
         compose.onNodeWithText(str(R.string.layout_confirm_title, "build")).assertExists()

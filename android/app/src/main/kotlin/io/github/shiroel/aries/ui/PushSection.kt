@@ -13,6 +13,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.Alignment
 import androidx.compose.material3.Switch
@@ -28,20 +32,19 @@ import io.github.shiroel.aries.R
 /** Push for the open Host: turn on (with each step's progress), test, turn off. */
 @Composable
 fun PushSection(model: PushModel, beaconInstalled: Boolean) {
-    model.host ?: return
+    val host = model.host ?: return
+    var beaconRequired by remember(host.id, beaconInstalled) { mutableStateOf(false) }
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(stringResource(R.string.push_title), style = MaterialTheme.typography.titleMedium)
         if (!beaconInstalled) {
-            Text(stringResource(R.string.push_needs_beacon))
+            TextButton(onClick = { beaconRequired = true }) { Text(stringResource(R.string.push_enable_button)) }
+            if (beaconRequired) Text(stringResource(R.string.push_needs_beacon), color = MaterialTheme.colorScheme.error)
             return@Column
         }
         when (val ui = model.ui) {
             PushUi.Loading, PushUi.Working -> CircularProgressIndicator()
             PushUi.Off -> {
-                Text(stringResource(R.string.push_off_body))
-                Text(stringResource(R.string.push_force_stop_note), style = MaterialTheme.typography.bodySmall)
-                if (!model.hasDefaultRelay) Text(stringResource(R.string.push_no_relay))
                 RelayField(model)
                 TextButton(onClick = model::enable, enabled = model.relayDraft.isNotBlank()) {
                     Text(stringResource(if (model.problem == null) R.string.push_enable_button else R.string.push_retry_button))
@@ -63,9 +66,7 @@ fun PushSection(model: PushModel, beaconInstalled: Boolean) {
             }
             is PushUi.On -> {
                 Text(stringResource(R.string.push_on_body, ui.relayUrl))
-                Text(stringResource(R.string.push_force_stop_note), style = MaterialTheme.typography.bodySmall)
                 if (model.changingRelay) {
-                    Text(stringResource(R.string.push_change_relay_body), style = MaterialTheme.typography.bodySmall)
                     RelayField(model)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(onClick = model::enable, enabled = model.relayDraft.isNotBlank()) {
@@ -92,7 +93,6 @@ fun PushSection(model: PushModel, beaconInstalled: Boolean) {
 @Composable
 private fun PolicyOptions(model: PushModel) {
     Text(stringResource(R.string.push_policy_title), style = MaterialTheme.typography.titleSmall)
-    Text(stringResource(R.string.push_policy_body), style = MaterialTheme.typography.bodySmall)
     val policy = model.policy
     if (policy == null) {
         if (model.policyBusy) CircularProgressIndicator()
@@ -103,31 +103,28 @@ private fun PolicyOptions(model: PushModel) {
         return
     }
     val enabled = !model.policyBusy
-    PolicyOption(R.string.push_policy_blocked, R.string.push_policy_blocked_hint, policy.blocked, enabled) { on ->
+    PolicyOption(R.string.push_policy_blocked, policy.blocked, enabled) { on ->
         model.changePolicy { it.copy(blocked = on) }
     }
-    PolicyOption(R.string.push_policy_error, R.string.push_policy_error_hint, policy.error, enabled) { on ->
+    PolicyOption(R.string.push_policy_error, policy.error, enabled) { on ->
         model.changePolicy { it.copy(error = on) }
     }
-    PolicyOption(R.string.push_policy_done, R.string.push_policy_done_hint, policy.done, enabled) { on ->
+    PolicyOption(R.string.push_policy_done, policy.done, enabled) { on ->
         model.changePolicy { it.copy(done = on) }
     }
-    PolicyOption(R.string.push_policy_child_agents, R.string.push_policy_child_agents_hint, policy.childAgents, enabled) { on ->
+    PolicyOption(R.string.push_policy_child_agents, policy.childAgents, enabled) { on ->
         model.changePolicy { it.copy(childAgents = on) }
     }
     model.policyProblem?.let { Text(resolve(it), color = MaterialTheme.colorScheme.error) }
 }
 
 @Composable
-private fun PolicyOption(label: Int, hint: Int, on: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) {
+private fun PolicyOption(label: Int, on: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) {
     Row(
         Modifier.fillMaxWidth().toggleable(value = on, enabled = enabled, role = Role.Switch, onValueChange = onChange),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(stringResource(label))
-            Text(stringResource(hint), style = MaterialTheme.typography.bodySmall)
-        }
+        Text(stringResource(label), Modifier.weight(1f))
         Switch(checked = on, onCheckedChange = null, enabled = enabled)
     }
 }
@@ -140,7 +137,6 @@ private fun RelayField(model: PushModel) {
         modifier = Modifier.fillMaxWidth().testTag("push_relay_url"),
         label = { Text(stringResource(R.string.push_relay_label)) },
         placeholder = { Text(stringResource(R.string.push_relay_placeholder)) },
-        supportingText = { Text(stringResource(R.string.push_relay_hint)) },
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false),
     )

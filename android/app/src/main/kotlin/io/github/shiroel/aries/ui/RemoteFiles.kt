@@ -135,7 +135,6 @@ fun RemoteFilesScreen(
                 unavailableLine?.let { Text(stringResource(R.string.files_line_unavailable, it.toLong())) }
                 if (content.lines == 0uL) Text(stringResource(R.string.files_empty_file))
                 else Text(stringResource(R.string.files_range, content.first.toLong(), content.last.toLong(), content.lines.toLong()))
-                if (onSend != null) Text(stringResource(R.string.files_line_hint), style = MaterialTheme.typography.bodySmall)
                 TextButton(onClick = { wrap = !wrap }) {
                     Checkbox(checked = wrap, onCheckedChange = null)
                     Text(stringResource(R.string.files_wrap_lines))

@@ -67,7 +67,6 @@ class ChatCacheModel(
 fun ChatCacheSettings(model: ChatCacheModel) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(stringResource(R.string.chat_cache_title), style = MaterialTheme.typography.titleMedium)
-        Text(stringResource(R.string.chat_cache_hint), style = MaterialTheme.typography.bodySmall)
         ConsoleSegments(CHAT_CACHE_DAYS, model.retentionDays, model::setRetention) {
             stringResource(R.string.chat_cache_days, it)
         }

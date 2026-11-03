@@ -110,7 +110,6 @@ internal fun GitChangesDialog(
                         if (selectedFile.untracked) Text(stringResource(R.string.git_untracked), Modifier.padding(12.dp))
                     }
                     if (onSend != null) {
-                        Text(stringResource(R.string.git_select_hint), Modifier.padding(horizontal = 12.dp), style = MaterialTheme.typography.bodySmall)
                         Row {
                             val path = "${changes?.cwd?.trimEnd('/')}/${selectedFile.path}"
                             TextButton(onClick = { onSend(formatGitReference(path, diff?.lines.orEmpty().take(visible))); onDismiss() }) { Text(stringResource(R.string.git_send_file)) }

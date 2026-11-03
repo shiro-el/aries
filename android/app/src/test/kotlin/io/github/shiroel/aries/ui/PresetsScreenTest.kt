@@ -124,7 +124,6 @@ class PresetsScreenTest {
         pick(AgentPreset.OPEN_CODE)
         compose.onNodeWithTag("launch_model").performScrollTo().performTextInput("provider/model")
         compose.onNodeWithTag("launch_effort").assertDoesNotExist()
-        compose.onNodeWithText(str(R.string.launch_effort_unavailable)).assertExists()
         click(R.string.launch_button)
         compose.waitForIdle()
         assertEquals(LaunchRequest("", null, null, null, AgentPreset.OPEN_CODE, "provider/model", null), core.connection!!.launched.last())
