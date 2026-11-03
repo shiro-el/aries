@@ -34,13 +34,25 @@ internal class ExportTooLarge : Exception()
 
 /** Disposing the file/Host panel cancels its transfer, including partial output cleanup. */
 @Composable
-internal fun FileExportControls(connection: HostConnection?, address: String, path: String) {
-    key(connection, address, path) { FileExportActions(connection, address, path) }
+internal fun FileExportControls(
+    connection: HostConnection?, address: String, path: String,
+    actions: @Composable ((() -> Unit)?, (() -> Unit)?, Boolean) -> Unit = { save, share, enabled ->
+        Row {
+            ActionIcon(R.drawable.ic_download, R.string.files_save_button, onClick = { save?.invoke() }, enabled = enabled)
+            ActionIcon(R.drawable.ic_share_2, R.string.files_share_button, onClick = { share?.invoke() }, enabled = enabled)
+        }
+    },
+) {
+    key(connection, address, path) { FileExportActions(connection, address, path, actions) }
 }
 
 @Composable
-private fun FileExportActions(connection: HostConnection?, address: String, path: String) {
+private fun FileExportActions(
+    connection: HostConnection?, address: String, path: String,
+    actions: @Composable ((() -> Unit)?, (() -> Unit)?, Boolean) -> Unit,
+) {
     val context = LocalContext.current
+    val shareTitle = stringResource(R.string.files_share_title)
     val scope = rememberCoroutineScope()
     var job by remember { mutableStateOf<Job?>(null) }
     var busy by remember { mutableStateOf(false) }
@@ -88,7 +100,7 @@ private fun FileExportActions(connection: HostConnection?, address: String, path
                         clipData = ClipData.newRawUri(name, uri)
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     }
-                    context.startActivity(Intent.createChooser(send, context.getString(R.string.files_share_title))
+                    context.startActivity(Intent.createChooser(send, shareTitle)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     shared = true
                     status = R.string.files_share_ready
@@ -114,16 +126,10 @@ private fun FileExportActions(connection: HostConnection?, address: String, path
         if (tree != null) start(tree)
     }
     Column {
-        Row {
-            TextButton(enabled = connection != null && !busy && !picking, onClick = {
-                try { picking = true; folders.launch(null) }
-                catch (_: Exception) { picking = false; status = R.string.files_export_failed }
-            }) { Text(stringResource(R.string.files_save_button)) }
-            TextButton(enabled = connection != null && !busy && !picking, onClick = { start(null) }) {
-                Text(stringResource(R.string.files_share_button))
-            }
-        }
-        Text(stringResource(R.string.files_export_limit), style = MaterialTheme.typography.bodySmall)
+        actions({
+            try { picking = true; folders.launch(null) }
+            catch (_: Exception) { picking = false; status = R.string.files_export_failed }
+        }, { start(null) }, connection != null && !busy && !picking)
         if (busy) {
             if (saving || total == null) LinearProgressIndicator(Modifier.fillMaxWidth())
             else LinearProgressIndicator(progress = { if (total == 0L) 1f else completed.toFloat() / total!!.toFloat() }, modifier = Modifier.fillMaxWidth())

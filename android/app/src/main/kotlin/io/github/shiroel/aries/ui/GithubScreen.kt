@@ -53,9 +53,9 @@ internal fun GithubDialog(link: HostLink?, terminal: TerminalInfo, onDismiss: ()
         Surface(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().safeDrawingPadding().imePadding()) {
                 Row(Modifier.fillMaxWidth()) {
-                    TextButton(onClick = ::back, enabled = !writing, modifier = Modifier.testTag("github-back")) { Text(stringResource(R.string.back_button)) }
+                    ActionIcon(R.drawable.ic_arrow_left, R.string.back_button, ::back, enabled = !writing, modifier = Modifier.testTag("github-back"))
                     Text(stringResource(R.string.github_button), Modifier.weight(1f).padding(12.dp))
-                    TextButton(onClick = { revision++ }, enabled = !loading && !writing) { Text(stringResource(R.string.github_refresh)) }
+                    ActionIcon(R.drawable.ic_refresh_cw, R.string.github_refresh, { revision++ }, enabled = !loading && !writing)
                 }
                 repository?.let { Text(it.nameWithOwner, Modifier.padding(horizontal = 16.dp)) }
                 val opened = selected
@@ -81,7 +81,7 @@ internal fun GithubDialog(link: HostLink?, terminal: TerminalInfo, onDismiss: ()
                     OutlinedTextField(value = input, onValueChange = { input = it.take(256) },
                         singleLine = true, label = { Text(stringResource(R.string.github_search_hint)) },
                         modifier = Modifier.weight(1f).testTag("github-search"))
-                    TextButton(onClick = { search = input; page = 1; revision++ }) { Text(stringResource(R.string.github_search_button)) }
+                    ActionIcon(R.drawable.ic_search, R.string.github_search_button, { search = input; page = 1; revision++ })
                 }
                 error?.let { Text(stringResource(it), Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error) }
                 if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -97,9 +97,9 @@ internal fun GithubDialog(link: HostLink?, terminal: TerminalInfo, onDismiss: ()
                     }
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    TextButton(onClick = { page-- }, enabled = page > 1 && !loading) { Text(stringResource(R.string.github_previous)) }
+                    ActionIcon(R.drawable.ic_chevron_left, R.string.github_previous, { page-- }, enabled = page > 1 && !loading)
                     Text(stringResource(R.string.github_page, page), Modifier.padding(12.dp))
-                    TextButton(onClick = { page++ }, enabled = result?.hasMore == true && !loading) { Text(stringResource(R.string.github_next)) }
+                    ActionIcon(R.drawable.ic_chevron_right, R.string.github_next, { page++ }, enabled = result?.hasMore == true && !loading)
                 }
                 }
             }

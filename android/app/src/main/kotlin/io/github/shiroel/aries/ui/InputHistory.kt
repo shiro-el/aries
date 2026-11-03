@@ -17,7 +17,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
@@ -72,9 +71,7 @@ class InputHistoryModel(
 
 @Composable
 internal fun InputHistoryButton(history: InputHistoryModel, enabled: Boolean = true, onSelect: (String) -> Unit) {
-    TextButton(onClick = history::show, enabled = enabled, shape = RectangleShape) {
-        Text(stringResource(R.string.input_history_title))
-    }
+    ActionIcon(R.drawable.ic_history, R.string.input_history_title, history::show, enabled)
     if (!history.open) return
     AlertDialog(
         onDismissRequest = { history.open = false },

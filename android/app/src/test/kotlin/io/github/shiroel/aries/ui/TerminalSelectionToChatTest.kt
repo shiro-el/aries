@@ -1,5 +1,7 @@
 package io.github.shiroel.aries.ui
 
+import androidx.compose.ui.test.onNodeWithContentDescription
+
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.geometry.Offset
@@ -75,7 +77,7 @@ class TerminalSelectionToChatTest {
             viewer.draft = "Explain this"
         }
         selectWord(view)
-        compose.onNodeWithText(str(R.string.terminal_send_to_agent)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.terminal_send_to_agent)).performClick()
         compose.onNodeWithTag("terminal-composer").assertTextEquals("Explain this\n\n```\nerror\n```")
         compose.runOnIdle {
             assertSame(viewer, (model.screen as Screen.Terminal).viewer)
@@ -84,7 +86,7 @@ class TerminalSelectionToChatTest {
             assertTrue(view.sent.isEmpty())
             assertTrue(core.connection!!.typed.isEmpty())
         }
-        compose.onNodeWithText(str(R.string.terminal_send_to_agent)).assertDoesNotExist()
+        compose.onNodeWithContentDescription(str(R.string.terminal_send_to_agent)).assertDoesNotExist()
     }
 
     @Test
@@ -95,7 +97,7 @@ class TerminalSelectionToChatTest {
         compose.onNodeWithText(str(R.string.agent_view_terminal)).performClick()
         val currentView = core.connection!!.views.last()
         selectWord(currentView)
-        compose.onNodeWithText(str(R.string.terminal_send_to_agent)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.terminal_send_to_agent)).performClick()
         compose.runOnIdle {
             val chat = (model.screen as Screen.Chat).chat
             assertEquals("h1", chat.host.id)
@@ -123,7 +125,7 @@ class TerminalSelectionToChatTest {
             moveTo(bottomRight - Offset(1f, 1f), delayMillis = 500)
             up()
         }
-        compose.onNodeWithText(str(R.string.terminal_send_to_agent)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.terminal_send_to_agent)).performClick()
         compose.onNodeWithTag("terminal-composer").assertTextEquals("````\nfailure\n```\n  details\n````")
         compose.runOnIdle { assertTrue(view.sent.isEmpty()) }
     }
@@ -140,7 +142,7 @@ class TerminalSelectionToChatTest {
         }
         val view = core.connection!!.views.last()
         selectWord(view)
-        compose.onNodeWithText(str(R.string.terminal_send_to_agent)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.terminal_send_to_agent)).performClick()
         compose.runOnIdle {
             assertSame(chat, (model.screen as Screen.Chat).chat)
             assertEquals("Existing draft\n\n```\nerror\n```", chat.draft)

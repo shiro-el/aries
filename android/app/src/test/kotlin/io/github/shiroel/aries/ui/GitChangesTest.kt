@@ -1,5 +1,7 @@
 package io.github.shiroel.aries.ui
 
+import androidx.compose.ui.test.onNodeWithContentDescription
+
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -50,7 +52,7 @@ class GitChangesTest {
         compose.onNodeWithText(str(R.string.files_open_button)).performClick()
         compose.onNodeWithText("x").performClick()
         compose.onNodeWithText("+hello").performClick()
-        compose.onNodeWithText(str(R.string.git_send_selection)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.git_send_selection)).performClick()
         compose.runOnIdle {
             assertEquals("/repo/x:3\n```diff\n+hello\n```", (model.screen as Screen.Chat).chat.draft)
             assertEquals(emptyList<String>(), core.connection!!.typed.map { it.toString() })
@@ -66,7 +68,7 @@ class GitChangesTest {
         compose.onNodeWithTag("agent-actions").performClick()
         compose.onNodeWithText(str(R.string.files_open_button)).performClick()
         compose.onNodeWithText("x").performClick()
-        compose.onNodeWithText(str(R.string.git_send_file)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.git_send_file)).performClick()
         compose.runOnIdle {
             assertEquals("Review this\n\n/repo/x:3\n```diff\n+hello\n```", (model.screen as Screen.Chat).chat.draft)
             assertEquals(emptyList<Pair<String, String>>(), core.connection!!.typed)
@@ -80,7 +82,7 @@ class GitChangesTest {
         compose.onNodeWithText(str(R.string.files_open_button)).performClick()
         compose.onNodeWithText(str(R.string.git_not_repository)).assertExists()
         compose.runOnIdle { core.connection!!.gitFiles = GitChanges("/repo", emptyList(), false, false) }
-        compose.onNodeWithText(str(R.string.files_refresh_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.files_refresh_button)).performClick()
         compose.onNodeWithText(str(R.string.git_clean)).assertExists()
     }
 

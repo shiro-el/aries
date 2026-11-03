@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -113,13 +112,11 @@ internal fun ImageViewerExport(bytes: ByteArray, mime: String?, name: String) {
 
     Column {
         Row {
-            TextButton(enabled = mime != null && !busy && !picking, onClick = {
+            ActionIcon(R.drawable.ic_download, R.string.image_viewer_save, enabled = mime != null && !busy && !picking, onClick = {
                 try { picking = true; status = 0; save.launch(filename) }
                 catch (_: Exception) { picking = false; status = R.string.image_viewer_export_failed }
-            }) { Text(stringResource(R.string.image_viewer_save)) }
-            TextButton(enabled = mime != null && !busy && !picking, onClick = ::share) {
-                Text(stringResource(R.string.image_viewer_share))
-            }
+            })
+            ActionIcon(R.drawable.ic_share_2, R.string.image_viewer_share, ::share, enabled = mime != null && !busy && !picking)
         }
         if (busy) Text(stringResource(R.string.image_viewer_exporting), style = MaterialTheme.typography.bodySmall)
         else if (status != 0) Text(stringResource(status), color = if (status == R.string.image_viewer_export_failed)

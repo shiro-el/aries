@@ -167,15 +167,13 @@ internal fun LayoutEditControls(browser: HostBrowser, editor: LayoutEditor) {
     val tab = browser.tab
     var menu by remember { mutableStateOf(false) }
     Row(Modifier.horizontalScroll(rememberScrollState())) {
-        TextButton(onClick = { editor.naming = LayoutNameForm(LayoutNameKind.NEW_SPACE) }, enabled = enabled) {
-            Text(stringResource(R.string.layout_new_space_button))
-        }
+        ActionIcon(R.drawable.ic_folder_plus, R.string.layout_new_space_button,
+            { editor.naming = LayoutNameForm(LayoutNameKind.NEW_SPACE) }, enabled = enabled)
         if (space != null) {
-            TextButton(onClick = { editor.naming = LayoutNameForm(LayoutNameKind.NEW_TAB, space.id, folder = space.folder.orEmpty()) }, enabled = enabled) {
-                Text(stringResource(R.string.layout_new_tab_button))
-            }
+            ActionIcon(R.drawable.ic_list_plus, R.string.layout_new_tab_button,
+                { editor.naming = LayoutNameForm(LayoutNameKind.NEW_TAB, space.id, folder = space.folder.orEmpty()) }, enabled = enabled)
             Box {
-                TextButton(onClick = { menu = true }, enabled = enabled) { Text(stringResource(R.string.layout_actions_button)) }
+                ActionIcon(R.drawable.ic_ellipsis_vertical, R.string.layout_actions_button, { menu = true }, enabled = enabled)
                 DropdownMenu(expanded = menu && enabled, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(text = { Text(stringResource(R.string.layout_rename_space_button)) }, onClick = {
                         menu = false

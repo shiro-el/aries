@@ -170,6 +170,8 @@
     <string name="files_full_button">Full file</string>
     <string name="files_folder_expanded">Expanded</string>
     <string name="files_folder_collapsed">Collapsed</string>
+    <string name="files_actions_label">File actions</string>
+    <string name="files_open_folder_label">Open folder %1$s</string>
     <string name="files_title">Host files</string>
     <string name="files_close_button">Close files</string>
     <string name="files_up_button">Parent folder</string>
@@ -523,7 +525,7 @@
     <string name="chat_skills_search">Search skills</string>
     <string name="chat_catalog_refresh">Refresh catalog</string>
     <string name="chat_catalog_empty">No matches</string>
-    <string name="chat_catalog_failed">Could not read the Host catalog. Refresh to retry.</string>
+    <string name="chat_catalog_failed">Could not read the Host catalog.</string>
     <string name="chat_catalog_builtin">Built-in command</string>
 
     <string name="chat_input_label">Message to the Agent</string>

@@ -66,11 +66,11 @@ internal fun WorktreeControls(browser: HostBrowser, unplaced: TerminalInfo? = nu
             }
         }
     }
-    TextButton(enabled = cwd != null && connection != null && !browser.closed, onClick = {
-        val target = WorktreeForm(cwd ?: return@TextButton, space?.id)
+    ActionIcon(R.drawable.ic_folder, R.string.worktrees_button, enabled = cwd != null && connection != null && !browser.closed, onClick = {
+        val target = WorktreeForm(cwd ?: return@ActionIcon, space?.id)
         form = target
         load(target)
-    }) { Text(stringResource(R.string.worktrees_button)) }
+    })
     form?.let { target ->
         AlertDialog(
             onDismissRequest = { if (!target.busy) form = null },

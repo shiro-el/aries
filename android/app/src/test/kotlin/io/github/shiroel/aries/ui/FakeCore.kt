@@ -785,11 +785,12 @@ class FakeConnection(
     var catalog = io.github.shiroel.aries.core.AgentCatalog(emptyList(), emptyList())
     var catalogFailure: CoreException? = null
     val catalogRequests = mutableListOf<Boolean>()
+    var catalogReader: ((Boolean) -> io.github.shiroel.aries.core.AgentCatalog)? = null
     override suspend fun agentCatalog(address: String, preset: io.github.shiroel.aries.core.AgentPreset, refresh: Boolean) = chatCatalog(address, refresh)
     override suspend fun chatCatalog(address: String, refresh: Boolean): io.github.shiroel.aries.core.AgentCatalog {
         catalogRequests += refresh
         catalogFailure?.let { throw it }
-        return catalog
+        return catalogReader?.invoke(refresh) ?: catalog
     }
     var gitFiles = io.github.shiroel.aries.core.GitChanges("/repo", emptyList(), false, false)
     var gitPatch = io.github.shiroel.aries.core.GitDiff(emptyList(), false, false)
