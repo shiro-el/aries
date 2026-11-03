@@ -1,0 +1,114 @@
+package io.github.shiroel.aries.ui
+
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onLast
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.test.core.app.ApplicationProvider
+import io.github.shiroel.aries.R
+import io.github.shiroel.aries.core.BeaconFetcher
+import io.github.shiroel.aries.core.BeaconState
+import io.github.shiroel.aries.core.CoreException
+import io.github.shiroel.aries.core.Endpoint
+import io.github.shiroel.aries.core.Linger
+import org.junit.Assert.assertEquals
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+
+/** Seam 3: the Beacon section of a connected Host against a fake core API. */
+@RunWith(RobolectricTestRunner::class)
+class BeaconSectionTest {
+    @get:Rule val compose = createComposeRule()
+
+    private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+    private fun str(id: Int, vararg args: Any) = context.getString(id, *args)
+
+    private val noDownload = object : BeaconFetcher {
+        override fun fetch(url: String): ByteArray = error("the fake core does not download")
+    }
+
+    private fun connectTo(core: FakeCore) {
+        core.addHost("box", Endpoint.Ssh("10.0.0.2", 22u, "me"))
+        compose.setContent {
+            val scope = rememberCoroutineScope()
+            val model = remember { HostsModel(core, scope, noDownload) }
+            MaterialTheme { AriesApp(model) }
+        }
+        compose.onNodeWithText("box").performClick()
+        compose.waitForIdle()
+    }
+
+    private fun click(res: Int) {
+        compose.onNodeWithText(str(res)).performScrollTo().performClick()
+        compose.waitForIdle()
+    }
+
+    @Test
+    fun installsTheBeaconAndShowsItsVersionAndCore() {
+        val core = FakeCore()
+        connectTo(core)
+        compose.onNodeWithText(str(R.string.beacon_not_installed)).assertExists()
+
+        click(R.string.beacon_install_button)
+
+        compose.onNodeWithText(str(R.string.beacon_version, "0.1.0")).assertExists()
+        compose.onNodeWithText(str(R.string.beacon_attached, "0.1.17")).assertExists()
+    }
+
+    @Test
+    fun explainsHowToKeepTheBeaconRunningWhenLingerFails() {
+        val core = FakeCore().apply { beaconLinger = Linger.Failed("Access denied") }
+        connectTo(core)
+
+        click(R.string.beacon_install_button)
+
+        compose.onNodeWithText(str(R.string.beacon_linger_title)).assertExists()
+        compose.onNodeWithText(str(R.string.beacon_linger_body, "Access denied", "me")).assertExists()
+    }
+
+    @Test
+    fun reportsABinaryThatFailedTheChecksum() {
+        val core = FakeCore().apply { beaconFailWith = CoreException.BeaconChecksum("aa", "bb") }
+        connectTo(core)
+
+        click(R.string.beacon_install_button)
+
+        compose.onNodeWithText(str(R.string.beacon_checksum_body, "aa", "bb")).assertExists()
+        assertEquals(BeaconState.NotInstalled, core.beacon)
+    }
+
+    @Test
+    fun flagsABeaconOutsideTheSupportedRange() {
+        val core = FakeCore().apply {
+            beacon = BeaconState.Installed("9.0.0", 1u, true, "0.1.17", true, false, ">=0.1.0, <0.2.0")
+        }
+        connectTo(core)
+
+        compose.onNodeWithText(str(R.string.beacon_out_of_range, "9.0.0", ">=0.1.0, <0.2.0")).assertExists()
+    }
+
+    @Test
+    fun removesTheBeaconAfterConfirmation() {
+        val core = FakeCore().apply {
+            beacon = BeaconState.Installed("0.1.0", 1u, true, "0.1.17", true, true, ">=0.1.0, <0.2.0")
+        }
+        connectTo(core)
+
+        click(R.string.beacon_remove_button)
+        compose.onNodeWithText(str(R.string.beacon_remove_body, "box")).assertExists()
+        assertEquals(true, core.beacon is BeaconState.Installed)
+
+        compose.onAllNodesWithText(str(R.string.beacon_remove_button)).onLast().performClick() // the dialog's
+        compose.waitForIdle()
+
+        assertEquals(BeaconState.NotInstalled, core.beacon)
+        compose.onNodeWithText(str(R.string.beacon_not_installed)).assertExists()
+    }
+}

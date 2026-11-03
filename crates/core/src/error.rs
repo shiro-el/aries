@@ -52,6 +52,49 @@ pub enum CoreError {
     Rpc { kind: String, detail: String },
     #[error("the connection to the Host closed")]
     Closed,
+    /// Installing or managing the Beacon needs an SSH Host.
+    #[error("the Beacon can only be managed on an SSH Host")]
+    BeaconNeedsSsh,
+    /// The Host's OS/CPU is not one the Beacon supports (yet).
+    #[error("the Beacon does not support {os}/{arch} Hosts")]
+    UnsupportedHost { os: String, arch: String },
+    /// The release pinned in this app has no binary for the Host.
+    #[error("this app has no Beacon for {os}/{arch}")]
+    BeaconUnavailable { os: String, arch: String },
+    #[error("downloading the Beacon failed: {detail}")]
+    BeaconDownload { detail: String },
+    /// The downloaded binary is not the one pinned in the app. Nothing was
+    /// installed.
+    #[error("the Beacon download has checksum {actual}, expected {expected}")]
+    BeaconChecksum { expected: String, actual: String },
+    /// A step on the Host (`upload`, `verify`, `service`, `status`, ...)
+    /// failed.
+    #[error("Beacon {step} failed on the Host: {detail}")]
+    BeaconStep { step: String, detail: String },
+    #[error("no SSH key with id {id}")]
+    UnknownKey { id: String },
+    /// `hop` is an index into the Host's jump hosts.
+    #[error("the Host has no jump host {hop}")]
+    UnknownJumpHost { hop: u32 },
+    /// Like [`CoreError::HostKeyUnknown`], for jump host `hop` (index into
+    /// the Host's jump hosts): confirm with `trust_jump_host_key`.
+    #[error("jump host {hop} ({address}) key {fingerprint} is not trusted yet")]
+    JumpHostKeyUnknown {
+        hop: u32,
+        address: String,
+        fingerprint: String,
+    },
+    /// Like [`CoreError::HostKeyChanged`], for jump host `hop`.
+    #[error("jump host {hop} ({address}) key changed from {expected} to {actual}")]
+    JumpHostKeyChanged {
+        hop: u32,
+        address: String,
+        expected: String,
+        actual: String,
+    },
+    /// Jump host `hop` did not accept the key chosen for it.
+    #[error("jump host {hop} ({address}) did not accept its SSH key")]
+    JumpAuthRejected { hop: u32, address: String },
 }
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]

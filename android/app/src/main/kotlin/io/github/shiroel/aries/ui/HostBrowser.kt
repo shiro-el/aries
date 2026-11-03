@@ -117,8 +117,9 @@ class HostBrowser(val host: Host) {
 
 fun displayName(t: TerminalInfo): String = t.name ?: t.title.ifBlank { t.argv.joinToString(" ") }
 
+/** [hostSections] are per-Host panels (the Beacon) shown at the end of the Space list. */
 @Composable
-fun BrowseScreen(browser: HostBrowser, onBack: () -> Unit) {
+fun BrowseScreen(browser: HostBrowser, onBack: () -> Unit, hostSections: @Composable () -> Unit = {}) {
     val space = browser.openSpace
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row {
@@ -130,7 +131,7 @@ fun BrowseScreen(browser: HostBrowser, onBack: () -> Unit) {
         browser.structure?.problem?.let { Notice(problemText(it)) }
         when {
             browser.structure == null -> Text(stringResource(R.string.connecting, browser.host.name))
-            space == null -> SpaceList(browser, browser.structure!!)
+            space == null -> SpaceList(browser, browser.structure!!, hostSections)
             else -> SpaceView(browser, space)
         }
     }
@@ -154,7 +155,7 @@ private fun Notice(text: String) {
 }
 
 @Composable
-private fun SpaceList(browser: HostBrowser, s: HostStructure) {
+private fun SpaceList(browser: HostBrowser, s: HostStructure, hostSections: @Composable () -> Unit) {
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
             Text(stringResource(R.string.terminals_title, browser.host.name), style = MaterialTheme.typography.headlineSmall)
@@ -177,6 +178,10 @@ private fun SpaceList(browser: HostBrowser, s: HostStructure) {
                 Text(stringResource(R.string.unplaced_title), style = MaterialTheme.typography.titleMedium)
             }
             items(s.unplaced, key = { "unplaced:" + it.address }) { TerminalRow(browser.current(it)) }
+        }
+        item {
+            HorizontalDivider()
+            hostSections()
         }
     }
 }

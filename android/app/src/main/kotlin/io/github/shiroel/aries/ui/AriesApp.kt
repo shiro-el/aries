@@ -63,7 +63,11 @@ fun AriesApp(model: HostsModel) {
                     BackHandler {
                         if (s.browser.openSpaceId != null) s.browser.closeSpace() else model.back()
                     }
-                    BrowseScreen(s.browser, onBack = model::back)
+                    BrowseScreen(s.browser, onBack = model::back) { BeaconSection(model.beacon) }
+                }
+                is Screen.JumpHosts -> {
+                    BackHandler { model.back() }
+                    JumpHostsScreen(model, s.host, s.jumps, s.hostKeyId)
                 }
                 is Screen.Agents -> {
                     BackHandler {
@@ -99,12 +103,15 @@ private fun HostListScreen(model: HostsModel) {
         }
         items(model.hosts, key = { it.id }) { host ->
             HostRow(host, onRemove = { model.askRemove(host) }) { model.connect(host) }
+            JumpSummary(model.jumps[host.id].orEmpty())
             if (host.endpoint is Endpoint.Ssh) {
+                TextButton(onClick = { model.editJumps(host) }) { Text(stringResource(R.string.host_jumps_button)) }
                 TextButton(onClick = { model.askPassword(host) }) {
                     Text(stringResource(R.string.host_install_key_button))
                 }
             }
         }
+        if (model.key != null) item { ExtraKeysSection(model) }
         item { HorizontalDivider() }
         item { AddHostForm(model) }
     }
@@ -193,6 +200,7 @@ private fun PromptDialog(prompt: Prompt, model: HostsModel) {
             confirmButton = { TextButton(onClick = { model.trust(prompt) }) { Text(stringResource(R.string.host_key_trust_button)) } },
             dismissButton = { TextButton(onClick = model::dismiss) { Text(stringResource(R.string.cancel_button)) } },
         )
+        is Prompt.TrustJumpHostKey -> TrustJumpHostKeyDialog(prompt, model)
         is Prompt.Password -> PasswordDialog(prompt, model)
         is Prompt.KeyQr -> AlertDialog(
             onDismissRequest = model::dismiss,

@@ -4,7 +4,7 @@
 use russh::ChannelMsg;
 use russh::client::KeyboardInteractiveAuthResponse;
 
-use super::ssh::{handshake, unreachable_err};
+use super::ssh::{Session, SshHop, handshake, unreachable_err};
 use crate::KeyInstall;
 use crate::error::CoreError;
 
@@ -19,6 +19,8 @@ pub(crate) struct PasswordLogin {
     pub user: String,
     pub password: String,
     pub trusted: Option<String>,
+    /// Jump hosts to pass through; they sign in with their own keys.
+    pub jumps: Vec<SshHop>,
 }
 
 impl PasswordLogin {
@@ -26,7 +28,9 @@ impl PasswordLogin {
     /// unless the same key is already authorized.
     pub async fn install_key(self, public_key: &str) -> Result<KeyInstall, CoreError> {
         let script = install_script(public_key)?;
-        let mut session = handshake(&self.address, self.port, self.trusted.clone()).await?;
+        // The jump sessions carry the Host's, so they stay bound until the end.
+        let (_jumps, mut session) =
+            handshake(&self.jumps, &self.address, self.port, self.trusted.clone()).await?;
         if !self.authenticate(&mut session).await? {
             return Err(CoreError::PasswordRejected);
         }
@@ -61,10 +65,7 @@ impl PasswordLogin {
 
     /// Tries `password`, then keyboard-interactive (PAM-style Hosts), with
     /// the same password.
-    async fn authenticate(
-        &self,
-        session: &mut russh::client::Handle<super::ssh::Checker>,
-    ) -> Result<bool, CoreError> {
+    async fn authenticate(&self, session: &mut Session) -> Result<bool, CoreError> {
         let auth = session
             .authenticate_password(self.user.clone(), self.password.clone())
             .await
