@@ -1,5 +1,8 @@
 package io.github.shiroel.aries.ui
 
+import io.github.shiroel.aries.core.HerdrInstallListener
+import io.github.shiroel.aries.core.HerdrInstallStep
+import io.github.shiroel.aries.core.HerdrCoreState
 import io.github.shiroel.aries.core.LastKnownState
 import io.github.shiroel.aries.core.LastKnownStateWatch
 import io.github.shiroel.aries.core.AgentStatus
@@ -352,6 +355,25 @@ class FakeCore : AriesCoreInterface {
     override fun savedLaunches(hostId: String): List<SavedLaunch> {
         host(hostId)
         return (savedLaunchesOf[hostId] ?: savedLaunches).toList()
+    }
+
+    var herdrState: HerdrCoreState = HerdrCoreState.Installed("0.1.17", false)
+    var herdrInstalls = 0
+    var herdrFailWith: CoreException? = null
+    var herdrGate: CompletableDeferred<Unit>? = null
+    override suspend fun herdrCoreStatus(hostId: String): HerdrCoreState {
+        signsIn("herdrCoreStatus")
+        return herdrState
+    }
+    override suspend fun installHerdrCore(hostId: String, fetcher: BeaconFetcher, listener: HerdrInstallListener): HerdrCoreState {
+        signsIn("installHerdrCore")
+        herdrInstalls++
+        listener.progress(HerdrInstallStep.DOWNLOAD, "")
+        herdrGate?.await()
+        herdrFailWith?.let { throw it }
+        listener.progress(HerdrInstallStep.INSTALL, "hc 0.1.17")
+        herdrState = HerdrCoreState.Installed("0.1.17", false)
+        return herdrState
     }
 
     /** What `beaconStatus` reports; `installBeacon` / `uninstallBeacon` change it. */

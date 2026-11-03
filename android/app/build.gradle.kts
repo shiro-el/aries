@@ -173,7 +173,7 @@ abstract class CargoNdk : DefaultTask() {
 }
 
 val rustSources = files(
-    fileTree(repoRoot.resolve("crates")) { include("**/*.rs", "**/Cargo.toml", "**/uniffi.toml") },
+    fileTree(repoRoot.resolve("crates")) { include("**/*.rs", "**/Cargo.toml", "**/uniffi.toml", "**/herdr-release.json") },
     repoRoot.resolve("Cargo.toml"),
     repoRoot.resolve("Cargo.lock"),
 )

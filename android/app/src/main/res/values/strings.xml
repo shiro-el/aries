@@ -522,6 +522,27 @@
     <string name="connect_unreachable">Could not reach the Host: %1$s</string>
     <string name="connect_protocol">The Host did not speak the herdr-core protocol: %1$s</string>
     <string name="connect_other">%1$s</string>
+    <!-- Herdr Core installation -->
+    <string name="herdr_install_title">Herdr Core</string>
+    <string name="herdr_install_missing">herdr-core is missing on this Host.</string>
+    <string name="herdr_install_version">herdr-core %1$s</string>
+    <string name="herdr_install_old">Aries needs herdr-core 0.1.17 or newer.</string>
+    <string name="herdr_install_button">Install Herdr Core</string>
+    <string name="herdr_install_update">Update Herdr Core</string>
+    <string name="herdr_install_refresh">Check Herdr Core again</string>
+    <string name="herdr_install_consent_title">Install or update Herdr Core?</string>
+    <string name="herdr_install_consent_body">Download the official herdr-core 0.1.17 release, verify its pinned SHA-256 checksum and install it over SSH into ~/.local/bin on this Host. Existing user installations use the terminal-preserving updater. No administrator access is used.</string>
+    <string name="herdr_install_confirm">Approve installation</string>
+    <string name="herdr_install_detect">Checking Host platform…</string>
+    <string name="herdr_install_download">Downloading release…</string>
+    <string name="herdr_install_verify">Verifying checksum and version…</string>
+    <string name="herdr_install_working">Installing Herdr Core…</string>
+    <string name="herdr_install_done">Herdr Core is ready. Connect to continue.</string>
+    <string name="herdr_install_connect">Connect to Host</string>
+    <string name="herdr_install_checksum">Checksum verification failed. Nothing was installed. Expected: %1$s; got: %2$s</string>
+    <string name="herdr_install_failed">Herdr Core failed at %1$s: %2$s</string>
+    <string name="herdr_install_recovery">Check the Host connection, available disk space and download access, then check again and retry.</string>
+
     <string name="beacon_title">Beacon</string>
     <string name="beacon_needs_ssh">The Beacon can only be installed on an SSH Host.</string>
     <string name="beacon_status_unknown">Could not read the Beacon on this Host.</string>

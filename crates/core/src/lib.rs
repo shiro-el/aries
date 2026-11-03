@@ -15,6 +15,7 @@ mod error;
 mod files;
 mod git_changes;
 mod hc;
+mod herdr_install;
 mod host_edit;
 mod host_model;
 mod input_history;
@@ -58,6 +59,7 @@ pub use error::{AnswerProblem, CoreError, Incompatibility, VaultError};
 pub use files::{RemoteDirectory, RemoteFileBytes, RemoteFileEntry, RemoteFilePage};
 pub use git_changes::*;
 pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
+pub use herdr_install::*;
 pub use host_model::{AgentStatus, BlockedReason, TerminalWatch};
 pub use last_known_state::{LastKnownState, LastKnownStateWatch};
 pub use launch::{AgentPreset, LaunchRequest, RECENT_CWDS_KEPT, SavedLaunch};
@@ -269,6 +271,7 @@ pub struct AriesCore {
     last_known: last_known_state::States,
     sessions: host_edit::HostSessions,
     beacon_release: Mutex<BeaconRelease>,
+    herdr_release: Mutex<HerdrCoreRelease>,
     chat_cache: chat_cache::ChatCache,
     push_replay: push_replay::Ledger,
 }
@@ -300,6 +303,7 @@ impl AriesCore {
             hosts,
             sessions: Default::default(),
             beacon_release: Mutex::new(pinned_release()),
+            herdr_release: Mutex::new(pinned_herdr_core_release()),
         }))
     }
 
@@ -879,6 +883,27 @@ impl AriesCore {
     }
 }
 
+/// herdr-core is installed only after explicit user approval in the app.
+#[uniffi::export]
+impl AriesCore {
+    pub async fn herdr_core_status(&self, host_id: String) -> Result<HerdrCoreState, CoreError> {
+        let ssh = self.beacon_ssh(&host_id)?;
+        on_runtime(async move { herdr_install::status(&ssh).await }).await
+    }
+
+    pub async fn install_herdr_core(
+        &self,
+        host_id: String,
+        fetcher: Arc<dyn BeaconFetcher>,
+        listener: Arc<dyn HerdrInstallListener>,
+    ) -> Result<HerdrCoreState, CoreError> {
+        let ssh = self.beacon_ssh(&host_id)?;
+        let release = self.herdr_release.lock().expect("release lock").clone();
+        on_runtime(async move { herdr_install::install(&ssh, &release, fetcher, listener).await })
+            .await
+    }
+}
+
 /// Beacon management (`beacon` module).
 #[uniffi::export]
 impl AriesCore {
@@ -1372,6 +1397,11 @@ impl AriesCore {
     /// builds; not exposed to the app.
     pub fn set_beacon_release(&self, release: BeaconRelease) {
         *self.beacon_release.lock().expect("release lock") = release;
+    }
+
+    /// Test/development release seam; not exposed to the app.
+    pub fn set_herdr_core_release(&self, release: HerdrCoreRelease) {
+        *self.herdr_release.lock().expect("release lock") = release;
     }
 
     fn beacon_ssh(&self, host_id: &str) -> Result<Ssh, CoreError> {

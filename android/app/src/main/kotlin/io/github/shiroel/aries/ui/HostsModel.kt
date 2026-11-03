@@ -1,5 +1,6 @@
 package io.github.shiroel.aries.ui
 
+import io.github.shiroel.aries.core.HerdrCoreState
 import androidx.annotation.StringRes
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -127,10 +128,13 @@ class HostsModel(
     /** Current Host's settings models; a previous Host's pending work keeps its own state. */
     var beacon by mutableStateOf(BeaconModel(core, scope, beaconFetcher, keyWork = keyWork))
         private set
+    var herdrInstall by mutableStateOf(HerdrInstallModel(core, scope, beaconFetcher, keyWork))
+        private set
     var push by mutableStateOf(PushModel(core, scope, pushPlatform, http, keyWork))
         private set
 
     private fun loadHostSettings(host: Host) {
+        herdrInstall = HerdrInstallModel(core, scope, beaconFetcher, keyWork).also { it.load(host) }
         val hostPush = PushModel(core, scope, pushPlatform, http, keyWork)
         push = hostPush
         beacon = BeaconModel(core, scope, beaconFetcher, onRemoved = {
@@ -578,6 +582,20 @@ class HostsModel(
                 if (restore != null && e is CoreException.KeyLocked) return@launch
                 if (e is CoreException.NoKey && key == null) {
                     missingKeyHostId = host.id
+                    return@launch
+                }
+                // A missing/old core cannot open Browse. Offer the installer in
+                // Host settings, which uses SSH directly and still asks approval.
+                val canNeedCore = e is CoreException.Protocol ||
+                    (e is CoreException.Incompatible && e.reason is Incompatibility.CoreTooOld)
+                val needsCore = host.endpoint is Endpoint.Ssh && canNeedCore && try {
+                    when (val state = withContext(keyWork) { core.herdrCoreStatus(host.id) }) {
+                        HerdrCoreState.Missing -> true
+                        is HerdrCoreState.Installed -> state.needsUpdate
+                    }
+                } catch (_: CoreException) { false }
+                if (needsCore) {
+                    openHostSettings(host)
                     return@launch
                 }
                 prompt = when (e) {
