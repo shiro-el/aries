@@ -60,7 +60,8 @@ object InlineNotifications {
         if (turn != null) builder.addAction(Notification.Action.Builder(null,
             context.getString(R.string.notification_seen_button), pending(context, target, SEEN)).build())
         builder.addAction(Notification.Action.Builder(null,
-            context.getString(R.string.notification_snooze_button), pending(context, target, SNOOZE)).build())
+            context.getString(R.string.notification_snooze_button), pending(context, target, SNOOZE))
+            .addExtras(Bundle().apply { putBoolean(WearNotificationBridge.PHONE_ONLY, true) }).build())
     }
 
     internal fun current(context: Context, target: InlineTarget): Notification? =
