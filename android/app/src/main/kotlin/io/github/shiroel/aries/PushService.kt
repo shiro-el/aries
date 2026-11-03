@@ -32,17 +32,17 @@ class PushService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         val data = message.data
-        if (data["v"] != "1") return
-        val envelope = try {
-            Base64.decode(data["e"] ?: return, Base64.DEFAULT)
-        } catch (e: IllegalArgumentException) {
-            return
-        }
+        val envelope = if (data["v"] == "1") try {
+            data["e"]?.let { Base64.decode(it, Base64.DEFAULT) }
+        } catch (_: IllegalArgumentException) {
+            null
+        } else null
         val notice = try {
-            core.openPush(envelope)
+            // Malformed FCM data follows the core's sanitized rejection path too.
+            core.openPush(envelope ?: ByteArray(0))
         } catch (e: CoreException) {
             // Not from a paired Host, tampered with, or a newer format: drop it.
-            Log.w(TAG, "push rejected: ${e.message}")
+            Log.w(TAG, "push rejected")
             return
         }
         LastKnownStates.requestRefresh(this, notice.hostId)
@@ -60,7 +60,7 @@ class PushService : FirebaseMessagingService() {
             try {
                 core.updatePushToken(PushDevice("fcm", token), HttpRelayClient())
             } catch (e: CoreException) {
-                Log.w(TAG, "push token update failed: ${e.message}")
+                Log.w(TAG, "push token update failed")
             }
         }
     }

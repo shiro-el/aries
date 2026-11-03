@@ -65,6 +65,11 @@ val inKeyWork = ThreadLocal<Boolean>()
 
 /** In-memory stand-in for the Rust core, for UI tests. */
 class FakeCore : AriesCoreInterface {
+    var diagnosticEntries = emptyList<io.github.shiroel.aries.core.DiagnosticEntry>()
+    override fun diagnostics(source: io.github.shiroel.aries.core.DiagnosticSource?, hostId: String?, failuresOnly: Boolean) =
+        diagnosticEntries.filter { (source == null || it.source == source) &&
+            (hostId == null || it.hostId == hostId) && (!failuresOnly || it.error != null) }
+
     /**
      * Calls that open the SSH key outside [inKeyWork]. On a phone a
      * biometric key cannot be opened on the main thread, so each is a crash.
@@ -470,7 +475,12 @@ class FakeCore : AriesCoreInterface {
     }
 
     var openedPush: PushNotice? = null
-    override fun openPush(envelope: ByteArray): PushNotice = openedPush ?: throw CoreException.PushRejected("fake")
+    val receivedPushEnvelopes = mutableListOf<ByteArray>()
+    var rejectPushReason = "fake"
+    override fun openPush(envelope: ByteArray): PushNotice {
+        receivedPushEnvelopes += envelope
+        return openedPush ?: throw CoreException.PushRejected(rejectPushReason)
+    }
 
     /** Chat snapshots `watchChat` delivers, in order (see [pushChat]). */
     val chat = Channel<ChatSnapshot>(Channel.UNLIMITED)
