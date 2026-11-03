@@ -3,12 +3,14 @@ package io.github.shiroel.aries.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.ime
@@ -19,7 +21,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,12 +33,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AnswerProblem
 import io.github.shiroel.aries.core.AgentStatus
@@ -339,19 +346,41 @@ fun ChatScreen(
 @Composable
 private fun MessageInput(chat: ChatModel) {
     val inputLabel = stringResource(R.string.chat_input_label)
+    val inputStyle = MaterialTheme.typography.bodyLarge.copy(
+        fontFamily = FontFamily.Monospace,
+        fontSize = 14.sp,
+        lineHeight = 20.sp,
+    )
     HorizontalDivider()
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        OutlinedTextField(
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+        BasicTextField(
             value = chat.draft,
             onValueChange = { chat.draft = it },
-            modifier = Modifier.weight(1f).heightIn(min = 48.dp).semantics { contentDescription = inputLabel },
-            placeholder = { Text(inputLabel) },
-            singleLine = true,
-            shape = RectangleShape,
+            modifier = Modifier.weight(1f)
+                .heightIn(min = 48.dp)
+                .semantics { contentDescription = inputLabel },
+            textStyle = inputStyle.copy(color = MaterialTheme.colorScheme.onSurface),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
+            maxLines = 6,
             enabled = chat.sending == null,
+            decorationBox = { field ->
+                Box(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+                    if (chat.draft.isEmpty()) {
+                        Text(inputLabel, style = inputStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    field()
+                }
+            },
         )
-        ConsoleButton(onClick = chat::send, enabled = chat.canSend) {
-            Text(stringResource(R.string.chat_send_button))
+        TextButton(
+            onClick = chat::send,
+            enabled = chat.canSend,
+            modifier = Modifier.heightIn(min = 48.dp),
+            shape = RectangleShape,
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+        ) {
+            Text(stringResource(R.string.chat_send_button), style = inputStyle)
         }
     }
 }
