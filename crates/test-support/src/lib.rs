@@ -704,3 +704,6 @@ impl HcSession {
         FakeAgent { address, input_log }
     }
 }
+
+pub mod relay;
+pub use relay::{FakeRelay, RelayLog, docker_gateway, http_request};

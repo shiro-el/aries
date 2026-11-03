@@ -4,7 +4,11 @@
 //!   attached to the user's local herdr-core (default session) and records
 //!   that in its service file.
 //! - `status`: prints one [`BeaconStatus`] JSON line.
+//! - `pair` / `push-test` / `unpair`: the push pairing with one phone
+//!   ([`push`]); run by the phone over SSH.
 //! - `--version`: `aries-beacon <version> (contract <n>)`.
+
+mod push;
 
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -26,10 +30,22 @@ fn main() {
             println!("{line}");
         }
         Some("serve") => serve(),
+        Some("pair") => exit_on_error(push::pair_command()),
+        Some("push-test") => exit_on_error(push::push_test_command()),
+        Some("unpair") => exit_on_error(push::unpair_command()),
         _ => {
-            eprintln!("usage: aries-beacon --version | status | serve");
+            eprintln!(
+                "usage: aries-beacon --version | status | serve | pair | push-test | unpair"
+            );
             std::process::exit(2);
         }
+    }
+}
+
+fn exit_on_error(result: Result<(), String>) {
+    if let Err(e) = result {
+        eprintln!("aries-beacon: {e}");
+        std::process::exit(1);
     }
 }
 
