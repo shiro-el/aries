@@ -46,7 +46,11 @@ async fn trusts_the_host_key_on_first_use_then_refuses_a_changed_one() {
     // Trust survives a relaunch.
     drop(core);
     let core = core_in(data.path());
-    core.connect(host.id.clone()).await.unwrap().disconnect().await;
+    core.connect(host.id.clone())
+        .await
+        .unwrap()
+        .disconnect()
+        .await;
 
     // The Host now presents another key: warn and refuse.
     sshd.rotate_host_keys();
