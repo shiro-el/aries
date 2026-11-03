@@ -210,6 +210,24 @@ class HostsModel(
     fun foregrounded() {
         links.forEach { it.check() }
         liveChat?.retryNow()
+        // Live connections publish their lists in the core. Other Hosts
+        // get a short pull while the foreground biometric prompt is available.
+        hosts.filter { host -> links.none { it.host.id == host.id && it.connection != null } }
+            .forEach { refreshLastKnownState(it.id) }
+    }
+
+    /** Foreground refresh, including biometric Hosts; surfaces use WorkManager instead. */
+    fun refreshLastKnownState(hostId: String) {
+        scope.launch {
+            try {
+                val connection = links.firstOrNull { it.host.id == hostId }?.connection
+                withContext(keyWork) {
+                    if (connection != null) connection.terminals() else core.snapshot(hostId)
+                }
+            } catch (_: CoreException) {
+                // Keep the previous value and its age on a failed pull.
+            }
+        }
     }
 
     /** The Chat that is open, or still running under the Terminal opened from it. */

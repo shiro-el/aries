@@ -29,10 +29,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val scope = rememberCoroutineScope()
             val model = remember { HostsModel(core, scope, keyWork = Dispatchers.IO, pushPlatform = push).also { this@MainActivity.model = it } }
-            LaunchedEffect(model) {
-                openPushTarget()
-                openShare()
-            }
+            LaunchedEffect(model) { resumeModel() }
             AriesApp(model)
         }
         network = NetworkWatch(this) { model?.networkChanged() }.also { it.start() }
@@ -46,6 +43,7 @@ class MainActivity : ComponentActivity() {
     private var pushTarget: PushTarget? = null
     private var shareIntent: Intent? = null
     private var resumed = false
+    private var needsForegroundRefresh = true
 
     private fun openShare() {
         val m = model ?: return
@@ -79,8 +77,18 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        // Back from the background: lines may have died while the phone slept.
-        model?.foregrounded()
+        needsForegroundRefresh = true
+    }
+
+    private fun resumeModel() {
+        if (!resumed) return
+        val m = model ?: return
+        if (needsForegroundRefresh) {
+            needsForegroundRefresh = false
+            m.foregrounded()
+        }
+        openPushTarget()
+        openShare()
     }
 
     override fun onDestroy() {
@@ -92,8 +100,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         app.vault.authorizer = BiometricUnlock(this)
         resumed = true
-        openPushTarget()
-        openShare()
+        resumeModel()
     }
 
     override fun onPause() {
