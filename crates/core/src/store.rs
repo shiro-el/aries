@@ -1,14 +1,15 @@
 //! What the app remembers between launches, under the app's data dir:
 //! `hosts.json` (Hosts and their trusted Host key fingerprints),
 //! `identity.sealed` (the SSH private key, sealed by the [`KeyVault`]) and
-//! `identity.pub`.
+//! `identity.pub`; extra SSH keys in `keys.json` (id, label, public half) and
+//! `key-<id>.sealed`.
 
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::Endpoint;
 use crate::error::{CoreError, storage};
+use crate::{Endpoint, JumpHost};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub(crate) struct Saved {
@@ -23,6 +24,19 @@ pub(crate) struct SavedHost {
     pub endpoint: Endpoint,
     #[serde(default)]
     pub host_key: Option<String>,
+    /// Hops in order, the first one reached directly.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub jumps: Vec<JumpHost>,
+    /// SSH key for the Host itself; `None` is the default key.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct SavedKey {
+    pub id: String,
+    pub label: String,
+    pub public: String,
 }
 
 pub(crate) struct Store {
@@ -63,6 +77,28 @@ impl Store {
     pub fn write_identity(&self, sealed: &[u8], public: &str) -> Result<(), CoreError> {
         self.write_atomic("identity.pub", format!("{public}\n").as_bytes())?;
         self.write_atomic("identity.sealed", sealed)
+    }
+
+    pub fn read_keys(&self) -> Result<Vec<SavedKey>, CoreError> {
+        match std::fs::read(self.dir.join("keys.json")) {
+            Ok(bytes) => serde_json::from_slice(&bytes).map_err(storage),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+            Err(e) => Err(storage(e)),
+        }
+    }
+
+    pub fn read_key_sealed(&self, id: &str) -> Result<Vec<u8>, CoreError> {
+        std::fs::read(self.dir.join(format!("key-{id}.sealed"))).map_err(storage)
+    }
+
+    /// Adds a key: the sealed private half first, so `keys.json` never lists
+    /// a key whose private half is missing.
+    pub fn add_key(&self, key: &SavedKey, sealed: &[u8]) -> Result<(), CoreError> {
+        let mut keys = self.read_keys()?;
+        self.write_atomic(&format!("key-{}.sealed", key.id), sealed)?;
+        keys.push(key.clone());
+        let bytes = serde_json::to_vec_pretty(&keys).map_err(storage)?;
+        self.write_atomic("keys.json", &bytes)
     }
 
     fn write_atomic(&self, name: &str, bytes: &[u8]) -> Result<(), CoreError> {

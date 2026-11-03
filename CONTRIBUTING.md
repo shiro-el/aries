@@ -27,6 +27,7 @@ cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace                              # unit + core API tests against real herdr-core
 cargo test -p aries-core --test ssh -- --ignored    # SSH tests against a docker sshd
+cargo test -p aries-core --test ssh_jump -- --ignored   # multi-hop jump hosts across docker sshds
 cd android && ./gradlew :app:testDebugUnitTest      # Compose UI tests against a fake core (Robolectric)
 cd android && ./gradlew :app:assembleDebug          # debug APK (builds the core with cargo-ndk)
 cd android && ./gradlew :app:connectedDebugAndroidTest   # device tests (Android Keystore); needs a device/emulator

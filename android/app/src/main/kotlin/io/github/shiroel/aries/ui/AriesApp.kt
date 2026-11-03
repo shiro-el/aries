@@ -51,6 +51,10 @@ fun AriesApp(model: HostsModel) {
                     BackHandler { model.back() }
                     TerminalListScreen(s.host, s.terminals, onBack = model::back)
                 }
+                is Screen.JumpHosts -> {
+                    BackHandler { model.back() }
+                    JumpHostsScreen(model, s.host, s.jumps, s.hostKeyId)
+                }
             }
         }
         model.prompt?.let { PromptDialog(it, model) }
@@ -69,7 +73,14 @@ private fun HostListScreen(model: HostsModel) {
         if (model.hosts.isEmpty()) {
             item { Text(stringResource(R.string.hosts_empty)) }
         }
-        items(model.hosts, key = { it.id }) { host -> HostRow(host) { model.connect(host) } }
+        items(model.hosts, key = { it.id }) { host ->
+            HostRow(host) { model.connect(host) }
+            JumpSummary(model.jumps[host.id].orEmpty())
+            if (host.endpoint is Endpoint.Ssh) {
+                TextButton(onClick = { model.editJumps(host) }) { Text(stringResource(R.string.host_jumps_button)) }
+            }
+        }
+        if (model.key != null) item { ExtraKeysSection(model) }
         item { HorizontalDivider() }
         item { AddHostForm(model) }
     }
@@ -171,6 +182,7 @@ private fun PromptDialog(prompt: Prompt, model: HostsModel) {
             confirmButton = { TextButton(onClick = { model.trust(prompt) }) { Text(stringResource(R.string.host_key_trust_button)) } },
             dismissButton = { TextButton(onClick = model::dismiss) { Text(stringResource(R.string.cancel_button)) } },
         )
+        is Prompt.TrustJumpHostKey -> TrustJumpHostKeyDialog(prompt, model)
         is Prompt.Problem -> AlertDialog(
             onDismissRequest = model::dismiss,
             title = { Text(text(prompt.title)) },

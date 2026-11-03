@@ -5,6 +5,8 @@
 //!   developer's own herdr-core session.
 //! - [`SshdHost`]: a docker container running a real OpenSSH sshd with the
 //!   pinned herdr-core installed, for the few tests that exercise SSH itself.
+//!   [`DockerNetwork`] + [`SshdHost::start_on`] chain several of them for
+//!   jump host tests.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
@@ -213,6 +215,24 @@ impl SshdHost {
 
     /// Builds the image if needed and starts a container.
     pub fn start() -> Self {
+        Self::launch(None)
+    }
+
+    /// Like [`SshdHost::start`], also attached to `network`, where other
+    /// containers reach it as [`SshdHost::network_name`]. Its host keys are
+    /// fresh, so every container on the network has its own fingerprint.
+    pub fn start_on(network: &DockerNetwork) -> Self {
+        let host = Self::launch(Some(network.name()));
+        host.rotate_host_keys();
+        host
+    }
+
+    /// The container's name, which resolves to it on a [`DockerNetwork`].
+    pub fn network_name(&self) -> &str {
+        &self.container
+    }
+
+    fn launch(network: Option<&str>) -> Self {
         let bin = herdr_core_bin();
         let fixture = repo_root().join("fixtures/sshd");
         docker(&["build", "-q", "-t", SSHD_IMAGE, &fixture.to_string_lossy()]);
@@ -220,7 +240,7 @@ impl SshdHost {
             std::env::var("ARIES_TEST_CONTAINER_PREFIX").unwrap_or_else(|_| "aries-test".into());
         let container = unique(&format!("{prefix}-sshd"));
         let mount = format!("{}:/usr/local/bin/herdr-core:ro", bin.display());
-        docker(&[
+        let mut args = vec![
             "run",
             "-d",
             "--rm",
@@ -230,8 +250,12 @@ impl SshdHost {
             "127.0.0.1::22",
             "-v",
             &mount,
-            SSHD_IMAGE,
-        ]);
+        ];
+        if let Some(network) = network {
+            args.extend(["--network", network]);
+        }
+        args.push(SSHD_IMAGE);
+        docker(&args);
         let mut host = Self { container, port: 0 };
         let mapped = docker(&["port", &host.container, "22/tcp"]);
         host.port = mapped
@@ -318,6 +342,36 @@ impl Drop for SshdHost {
     fn drop(&mut self) {
         let _ = Command::new("docker")
             .args(["rm", "-f", &self.container])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+}
+
+/// A user-defined docker network, so [`SshdHost`]s can reach each other by
+/// name (jump host tests). Drop it after the containers on it.
+pub struct DockerNetwork {
+    name: String,
+}
+
+impl DockerNetwork {
+    pub fn create() -> Self {
+        let prefix =
+            std::env::var("ARIES_TEST_CONTAINER_PREFIX").unwrap_or_else(|_| "aries-test".into());
+        let name = unique(&format!("{prefix}-net"));
+        docker(&["network", "create", &name]);
+        Self { name }
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+impl Drop for DockerNetwork {
+    fn drop(&mut self) {
+        let _ = Command::new("docker")
+            .args(["network", "rm", &self.name])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status();

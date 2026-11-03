@@ -53,7 +53,11 @@ async fn reconnects_to_the_same_host_after_a_relaunch() {
     let id = {
         let core = core_in(data.path());
         let host = core.add_host("dev".into(), local_endpoint(&hc)).unwrap();
-        core.connect(host.id.clone()).await.unwrap().disconnect().await;
+        core.connect(host.id.clone())
+            .await
+            .unwrap()
+            .disconnect()
+            .await;
         host.id
     };
 
