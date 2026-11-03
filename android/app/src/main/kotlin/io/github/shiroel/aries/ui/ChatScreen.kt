@@ -702,8 +702,40 @@ private fun ToolView(
     image: (String) -> ByteArray?,
     onToggle: () -> Unit,
 ) {
+    val open = LocalOpenRemoteFile.current
+    // Relative tool paths refer to the cwd recorded with the call, which may
+    // differ from the Terminal's current foreground directory.
+    val cwd = tool.details?.cwd
+    val path = tool.details?.path ?: chatFileLocation(tool.title)?.path
+    val toolOpen: ((FileLocation) -> Unit)? = open?.let { navigate ->
+        { target ->
+            val embedded = if (target.path == path) tool.images.firstOrNull { it.available } else null
+            val preview = embedded?.let { picture -> image(picture.id)?.let { FilePreview(it, picture.mediaType) } }
+            navigate(target.copy(
+                path = if (!target.path.startsWith('/') && !cwd.isNullOrBlank()) cwd.trimEnd('/') + "/" + target.path else target.path,
+                preview = preview,
+            ))
+        }
+    }
+    CompositionLocalProvider(LocalOpenRemoteFile provides toolOpen) {
+        ToolContent(tool, expanded, image, onToggle)
+    }
+}
+
+@Composable
+private fun ToolContent(
+    tool: ChatEntryBody.Tool,
+    expanded: Boolean,
+    image: (String) -> ByteArray?,
+    onToggle: () -> Unit,
+) {
     val label = stringResource(R.string.chat_tool_expand_label, tool.name)
     val failed = tool.status == ChatToolStatus.FAILED
+    val open = LocalOpenRemoteFile.current
+    val color = MaterialTheme.colorScheme.primary
+    val title = remember(tool.title, tool.details?.path, open, color) {
+        annotateChatFileLinks(chatToolPathText(tool.title, tool.details?.path), open, color)
+    }
     ChatTextActions(tool.output?.takeIf { it.isNotEmpty() } ?: tool.input, onClick = onToggle) { actions ->
         Column(
             Modifier.fillMaxWidth()
@@ -719,7 +751,7 @@ private fun ToolView(
             ) {
                 SearchableChatText(tool.name, "tool-name", style = MaterialTheme.typography.labelLarge)
                 SearchableChatText(
-                    tool.title, "tool-title",
+                    title, "tool-title",
                     Modifier.weight(1f, fill = false),
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,

@@ -60,17 +60,13 @@ class HostBrowser(val host: Host) {
 
     /** The latest facts per Terminal address, from the live Agent status watch. */
     private val live = mutableStateMapOf<String, TerminalInfo>()
-    private var liveOrder by mutableStateOf<List<String>>(emptyList())
+    private var liveOrder by mutableStateOf<List<String>?>(null)
 
     /** A Terminal as the status watch last saw it (the structure may be older). */
     fun current(t: TerminalInfo): TerminalInfo = live[t.address] ?: t
 
-    /** Whole-address lookup, preferring the live watch over the Browse structure. */
-    fun findTerminal(address: String): TerminalInfo? = live[address] ?: structure?.let { snapshot ->
-        (snapshot.unplaced + snapshot.spaces.flatMap { space ->
-            space.tabs.flatMap { tab -> tab.panes.flatMap { listOfNotNull(it.terminal) + it.subAgents } }
-        }).find { it.address == address }
-    }
+    /** Whole-address lookup in the latest complete Terminal snapshot. */
+    fun findTerminal(address: String): TerminalInfo? = terminals.find { it.address == address }
 
     fun replaceTerminal(terminal: TerminalInfo) { live[terminal.address] = terminal }
 
@@ -81,13 +77,14 @@ class HostBrowser(val host: Host) {
         list.forEach { live[it.address] = it }
     }
 
-    /** Structure bootstraps Browse before the status watch delivers its first list. */
+    /** Structure bootstraps Browse until the status watch delivers its first list.
+     * Thereafter even an empty live list replaces it; stale layout must not revive removed Terminals. */
     val terminals: List<TerminalInfo>
-        get() = (liveOrder.mapNotNull(live::get) + structure?.let { snapshot ->
+        get() = liveOrder?.mapNotNull(live::get) ?: structure?.let { snapshot ->
             snapshot.unplaced + snapshot.spaces.flatMap { space ->
                 space.tabs.flatMap { tab -> tab.panes.flatMap { listOfNotNull(it.terminal) + it.subAgents } }
             }
-        }.orEmpty().map(::current)).distinctBy { it.address }
+        }.orEmpty().map(::current).distinctBy { it.address }
 
     /** Latest Agent snapshot for Browse and its drawer; no additional watch is opened. */
     val agents: List<AgentEntry>
