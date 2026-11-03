@@ -3,6 +3,7 @@ package io.github.shiroel.aries.ui
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onLast
@@ -87,7 +88,8 @@ class BeaconSectionTest {
     @Test
     fun flagsABeaconOutsideTheSupportedRange() {
         val core = FakeCore().apply {
-            beacon = BeaconState.Installed("9.0.0", 1u, true, "0.1.17", true, false, ">=0.1.0, <0.2.0")
+            beacon = installed("9.0.0", supported = false)
+            autoUpdate = false
         }
         connectTo(core)
 
@@ -95,9 +97,65 @@ class BeaconSectionTest {
     }
 
     @Test
+    fun updatesAnUnsupportedBeaconWhenConnecting() {
+        val core = FakeCore().apply { beacon = installed("0.0.9", supported = false) }
+        connectTo(core)
+
+        assertEquals(1, core.installs)
+        compose.onNodeWithText(str(R.string.beacon_updated, "0.0.9", "0.1.0")).assertExists()
+        compose.onNodeWithText(str(R.string.beacon_version, "0.1.0")).assertExists()
+    }
+
+    @Test
+    fun withAutoUpdateOffOnlySaysAnUpdateIsNeeded() {
+        val core = FakeCore().apply {
+            beacon = installed("0.0.9", supported = false)
+            autoUpdate = false
+        }
+        connectTo(core)
+
+        assertEquals(0, core.installs)
+        compose.onNodeWithText(str(R.string.beacon_update_needed, "0.0.9", "0.1.0")).assertExists()
+        compose.onNodeWithText(str(R.string.beacon_version, "0.0.9")).assertExists()
+
+        click(R.string.beacon_update_button)
+
+        assertEquals(1, core.installs)
+        compose.onNodeWithText(str(R.string.beacon_version, "0.1.0")).assertExists()
+    }
+
+    @Test
+    fun turnsAutomaticUpdatesOff() {
+        val core = FakeCore().apply { beacon = installed("0.1.0") }
+        connectTo(core)
+        assertEquals(true, core.autoUpdate)
+
+        click(R.string.beacon_auto_update)
+
+        assertEquals(false, core.autoUpdate)
+    }
+
+    @Test
+    fun explainsThatAMacLaunchAgentNeedsALogin() {
+        val core = FakeCore().apply {
+            beaconOs = "macos"
+            beaconLinger = Linger.LoginSession
+        }
+        connectTo(core)
+
+        click(R.string.beacon_install_button)
+
+        compose.onNodeWithText(str(R.string.beacon_macos_login_title)).assertExists()
+        compose.onNodeWithText(str(R.string.ok_button)).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.beacon_macos_login_limit)).performScrollTo().assertExists()
+        compose.onAllNodesWithText(str(R.string.beacon_no_linger, "me")).assertCountEquals(0)
+    }
+
+    @Test
     fun removesTheBeaconAfterConfirmation() {
         val core = FakeCore().apply {
-            beacon = BeaconState.Installed("0.1.0", 1u, true, "0.1.17", true, true, ">=0.1.0, <0.2.0")
+            beacon = installed("0.1.0")
         }
         connectTo(core)
 

@@ -23,8 +23,8 @@ use russh::keys::{Algorithm, HashAlg, PrivateKey};
 use serde::{Deserialize, Serialize};
 
 pub use beacon::{
-    ALLOWED_BEACON, BeaconArtifact, BeaconFetcher, BeaconInstall, BeaconRelease, BeaconState,
-    FetchError, Linger, pinned_release,
+    ALLOWED_BEACON, BeaconArtifact, BeaconCheck, BeaconFetcher, BeaconInstall, BeaconRelease,
+    BeaconSource, BeaconState, BeaconUpdate, FetchError, Linger, pinned_release,
 };
 pub use error::{CoreError, Incompatibility, VaultError};
 pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
@@ -578,6 +578,32 @@ impl AriesCore {
     pub async fn uninstall_beacon(&self, host_id: String) -> Result<(), CoreError> {
         let ssh = self.beacon_ssh(&host_id)?;
         on_runtime(async move { beacon::uninstall(&ssh).await }).await
+    }
+
+    /// Call when connecting: reads the Beacon and, if it is older than the
+    /// pinned release or outside [`ALLOWED_BEACON`], installs the pinned one
+    /// when [`AriesCore::beacon_auto_update`] is on, or only reports
+    /// [`BeaconUpdate::Needed`] when it is off.
+    pub async fn check_beacon(
+        &self,
+        host_id: String,
+        fetcher: Arc<dyn BeaconFetcher>,
+    ) -> Result<BeaconCheck, CoreError> {
+        let ssh = self.beacon_ssh(&host_id)?;
+        let release = self.beacon_release();
+        let auto = self.beacon_auto_update();
+        on_runtime(async move { beacon::check(&ssh, &release, auto, fetcher).await }).await
+    }
+
+    /// Whether connecting updates an out-of-date Beacon by itself (default on).
+    pub fn beacon_auto_update(&self) -> bool {
+        self.store.read_settings().beacon_auto_update
+    }
+
+    pub fn set_beacon_auto_update(&self, on: bool) -> Result<(), CoreError> {
+        let mut settings = self.store.read_settings();
+        settings.beacon_auto_update = on;
+        self.store.write_settings(&settings)
     }
 }
 

@@ -22,6 +22,9 @@ rand = { version = "0.10", features = ["thread_rng"] }
 qrcode = { version = "0.14.1", default-features = false }
 sha2 = "0.11"
 
+[build-dependencies]
+serde_json.workspace = true
+
 [dev-dependencies]
 aries-test-support.workspace = true
 rqrr = "0.11.0"

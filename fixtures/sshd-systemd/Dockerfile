@@ -1,5 +1,5 @@
 # A Linux Host with systemd as PID 1 and a real OpenSSH sshd, for the Beacon
-# install tests: an SSH login gets a logind session and a systemd user
+# install tests (curl: the Host downloads the Beacon itself): an SSH login gets a logind session and a systemd user
 # manager, so `systemctl --user` and `loginctl enable-linger` behave as on a
 # real Host. herdr-core is bind-mounted at /usr/local/bin/herdr-core by the
 # test harness (crates/test-support, `SystemdHost`).
@@ -8,7 +8,7 @@ FROM debian:trixie-slim
 ENV container=docker
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      systemd systemd-sysv dbus dbus-user-session libpam-systemd openssh-server \
+      systemd systemd-sysv dbus dbus-user-session libpam-systemd openssh-server curl \
  && rm -rf /var/lib/apt/lists/* \
  && printf '%s\n' \
       'PasswordAuthentication no' \
