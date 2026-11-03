@@ -56,6 +56,15 @@
     <string name="terminals_empty">No Terminals are running on this Host.</string>
     <string name="terminal_subtitle">%1$s · %2$s</string>
 
+    <string name="agent_status_working">Working</string>
+    <string name="agent_status_blocked">Blocked</string>
+    <string name="agent_status_blocked_permission">Blocked: permission</string>
+    <string name="agent_status_blocked_question">Blocked: question</string>
+    <string name="agent_status_blocked_auth">Blocked: sign-in</string>
+    <string name="agent_status_error">Error</string>
+    <string name="agent_status_done">Done</string>
+    <string name="agent_status_idle">Idle</string>
+    <string name="agent_attention_label">Needs you</string>
     <string name="space_unnamed">Unnamed Space</string>
     <string name="space_summary">Tabs: %1$d · Panes: %2$d</string>
     <string name="space_no_tabs">This Space has no Tabs.</string>
@@ -100,4 +109,26 @@
     <string name="connect_unreachable">Could not reach the Host: %1$s</string>
     <string name="connect_protocol">The Host did not speak the herdr-core protocol: %1$s</string>
     <string name="connect_other">%1$s</string>
+
+    <string name="key_default_label">Default key</string>
+    <string name="keys_title">Other SSH keys</string>
+    <string name="key_new_label">Label for a new key</string>
+    <string name="key_new_button">Create another key</string>
+
+    <string name="host_jumps_button">Jump hosts</string>
+    <string name="host_jumps_summary">via %1$s</string>
+    <string name="jumps_title">Route to %1$s</string>
+    <string name="jumps_hint">Aries signs in to each jump host in order, then to the Host through the last one.</string>
+    <string name="jumps_empty">No jump hosts: Aries connects to the Host directly.</string>
+    <string name="jumps_hop_title">Jump host %1$d</string>
+    <string name="jumps_add_button">Add jump host</string>
+    <string name="jumps_remove_button">Remove</string>
+    <string name="jumps_key_label">Key: %1$s</string>
+    <string name="jumps_host_key_label">Key for the Host: %1$s</string>
+    <string name="jumps_save_button">Save</string>
+    <string name="jump_key_trust_title">Trust this jump host?</string>
+    <string name="jump_key_trust_body">This is the first connection to jump host %1$d (%2$s) on the way to %3$s. Check that its Host key fingerprint is:\n\n%4$s\n\nOn the jump host, run: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</string>
+    <string name="jump_key_changed_title">Jump host key changed</string>
+    <string name="jump_key_changed_body">Jump host %1$d (%2$s) presented a different key than before, so Aries did not connect. Someone may be intercepting the connection, or the jump host was reinstalled.\n\nTrusted: %3$s\nNow: %4$s</string>
+    <string name="connect_jump_auth_rejected">Jump host %1$d (%2$s) did not accept the key chosen for it. Add that key\'s public key to ~/.ssh/authorized_keys on the jump host.</string>
 </resources>

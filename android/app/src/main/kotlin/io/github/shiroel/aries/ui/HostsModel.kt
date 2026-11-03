@@ -12,12 +12,15 @@ import io.github.shiroel.aries.core.Host
 import io.github.shiroel.aries.core.HostConnection
 import io.github.shiroel.aries.core.HostStructure
 import io.github.shiroel.aries.core.Incompatibility
+import io.github.shiroel.aries.core.JumpHost
+import io.github.shiroel.aries.core.KeyInfo
 import io.github.shiroel.aries.core.KeyInstall
 import io.github.shiroel.aries.core.PublicKeyInfo
 import io.github.shiroel.aries.core.StructureListener
 import io.github.shiroel.aries.core.StructureWatch
 import io.github.shiroel.aries.core.QrMatrix
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /** A message for the user: a string resource and its format arguments. */
@@ -26,6 +29,10 @@ data class Message(@StringRes val res: Int, val args: List<Any> = emptyList())
 sealed interface Screen {
     data object Hosts : Screen
     data class Connecting(val host: Host) : Screen
+
+    /** Editing the jump hosts on the way to [host] and the key for each hop. */
+    data class JumpHosts(val host: Host, val jumps: List<JumpHost>, val hostKeyId: String?) : Screen
+
     /** An open Host: its Spaces, Tabs and Panes. */
     data class Browse(val browser: HostBrowser) : Screen
 }
@@ -43,6 +50,15 @@ sealed interface Prompt {
 
     /** The public key as a QR code, for scanning on another device. */
     data class KeyQr(val key: PublicKeyInfo, val qr: QrMatrix) : Prompt
+
+    /** First connection through jump host [hop] (0-based): confirm its Host key, then do [then]. */
+    data class TrustJumpHostKey(
+        val host: Host,
+        val hop: UInt,
+        val address: String,
+        val fingerprint: String,
+        val then: AfterTrust = AfterTrust.Connect,
+    ) : Prompt
 
     /** Ask before removing [host] and everything stored for it. */
     data class ConfirmRemove(val host: Host) : Prompt
@@ -63,6 +79,12 @@ class HostsModel(private val core: AriesCoreInterface, private val scope: Corout
         private set
     var prompt by mutableStateOf<Prompt?>(null)
         private set
+    /** Every SSH key, the default one first. */
+    var keys by mutableStateOf<List<KeyInfo>>(emptyList())
+        private set
+    /** Jump hosts per Host id. */
+    var jumps by mutableStateOf<Map<String, List<JumpHost>>>(emptyMap())
+        private set
 
     /** The open Host's connection and structure watch, while [Screen.Browse] shows. */
     private var open: Pair<HostConnection, StructureWatch?>? = null
@@ -71,15 +93,41 @@ class HostsModel(private val core: AriesCoreInterface, private val scope: Corout
         guard {
             key = core.publicKey()
             hosts = core.hosts()
+            refreshRoutes()
         }
     }
 
-    fun createKey() = guard { key = core.ensureKey() }
+    fun createKey() = guard {
+        key = core.ensureKey()
+        keys = core.keys()
+    }
+
+    fun createExtraKey(label: String) = guard {
+        core.createKey(label.trim())
+        keys = core.keys()
+    }
+
+    fun editJumps(host: Host) = guard {
+        screen = Screen.JumpHosts(host, core.jumpHosts(host.id), core.hostSshKey(host.id))
+    }
+
+    fun saveJumps(host: Host, jumps: List<JumpHost>, hostKeyId: String?) = guard {
+        core.setJumpHosts(host.id, jumps)
+        core.setHostSshKey(host.id, hostKeyId)
+        refreshRoutes()
+        screen = Screen.Hosts
+    }
+
+    private fun refreshRoutes() {
+        keys = core.keys()
+        jumps = hosts.associate { it.id to core.jumpHosts(it.id) }
+    }
 
     fun addHost(name: String, address: String, port: Int, user: String) = guard {
         val label = name.ifBlank { address }
         core.addHost(label, Endpoint.Ssh(address.trim(), port.toUShort(), user.trim()))
         hosts = core.hosts()
+        refreshRoutes()
     }
 
     fun connect(host: Host) {
@@ -100,7 +148,12 @@ class HostsModel(private val core: AriesCoreInterface, private val scope: Corout
                             scope.launch { browser.markClosed() }
                         }
                     })
-                    if (open?.first === conn) open = conn to watch else watch.stop()
+                    if (open?.first === conn) {
+                        open = conn to watch
+                        status = watchStatus(conn, browser)
+                    } else {
+                        watch.stop()
+                    }
                 } catch (e: CoreException) {
                     if (open?.first === conn) open = null
                     conn.disconnect()
@@ -110,6 +163,7 @@ class HostsModel(private val core: AriesCoreInterface, private val scope: Corout
                 screen = Screen.Hosts
                 prompt = when (e) {
                     is CoreException.HostKeyUnknown -> Prompt.TrustHostKey(host, e.fingerprint)
+                    is CoreException.JumpHostKeyUnknown -> Prompt.TrustJumpHostKey(host, e.hop, e.address, e.fingerprint)
                     else -> problemFor(e)
                 }
             }
@@ -175,13 +229,29 @@ class HostsModel(private val core: AriesCoreInterface, private val scope: Corout
                     KeyInstall.ALREADY_PRESENT -> R.string.key_install_present_body
                 }
                 key = core.publicKey()
+                keys = core.keys()
                 Prompt.Problem(Message(R.string.key_install_done_title), Message(body, listOf(host.name)))
             } catch (e: CoreException) {
                 when (e) {
                     is CoreException.HostKeyUnknown -> Prompt.TrustHostKey(host, e.fingerprint, AfterTrust.InstallKey)
+                    is CoreException.JumpHostKeyUnknown ->
+                        Prompt.TrustJumpHostKey(host, e.hop, e.address, e.fingerprint, AfterTrust.InstallKey)
                     else -> problemFor(e)
                 }
             }
+        }
+    }
+
+    fun trust(prompt: Prompt.TrustJumpHostKey) {
+        this.prompt = null
+        guard {
+            core.trustJumpHostKey(prompt.host.id, prompt.hop, prompt.fingerprint)
+            refreshRoutes()
+        }
+        val host = hosts.find { it.id == prompt.host.id } ?: return
+        when (prompt.then) {
+            AfterTrust.Connect -> connect(host)
+            AfterTrust.InstallKey -> askPassword(host)
         }
     }
 
@@ -201,8 +271,30 @@ class HostsModel(private val core: AriesCoreInterface, private val scope: Corout
         prompt = null
     }
 
+    /** Live Agent status of the open Host's Terminals; cancelled on [back]. */
+    private var status: Job? = null
+
+    private fun watchStatus(conn: HostConnection, browser: HostBrowser): Job = scope.launch {
+        val watch = try {
+            conn.watchTerminals()
+        } catch (e: CoreException) {
+            browser.markClosed()
+            return@launch
+        }
+        try {
+            // Each change replaces the list, so Agent status stays live.
+            while (true) browser.updateTerminals(watch.next())
+        } catch (e: CoreException) {
+            browser.markClosed()
+        } finally {
+            watch.stop()
+        }
+    }
+
     fun back() {
         screen = Screen.Hosts
+        status?.cancel()
+        status = null
         val (conn, watch) = open ?: return
         open = null
         watch?.stop()
@@ -239,6 +331,12 @@ fun problemFor(e: CoreException): Prompt.Problem {
                 Message(R.string.incompatible_missing_methods, listOf(r.methods.joinToString(", "))),
             )
         }
+        is CoreException.JumpHostKeyChanged -> Prompt.Problem(
+            Message(R.string.jump_key_changed_title),
+            Message(R.string.jump_key_changed_body, listOf(e.hop.toInt() + 1, e.address, e.expected, e.actual)),
+        )
+        is CoreException.JumpAuthRejected ->
+            Prompt.Problem(failed, Message(R.string.connect_jump_auth_rejected, listOf(e.hop.toInt() + 1, e.address)))
         is CoreException.PasswordRejected -> Prompt.Problem(
             Message(R.string.key_install_failed_title),
             Message(R.string.key_install_password_rejected),

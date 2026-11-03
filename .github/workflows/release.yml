@@ -1,0 +1,121 @@
+name: Release
+
+# A tag vX.Y.Z (or vX.Y.Z-rc.N) builds the APK and AAB signed with the upload
+# key, publishes them on GitHub Releases, and uploads the AAB to Play internal
+# testing once the PLAY_UPLOAD_ENABLED variable is "true" (ticket 09).
+# workflow_dispatch builds and checks an existing tag without publishing.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to build (nothing is published)
+        required: true
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  NDK_VERSION: 27.1.12297006
+  CARGO_ABOUT_VERSION: 0.9.3
+  TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      name: ${{ steps.build.outputs.name }}
+      prerelease: ${{ steps.build.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - name: Tag is a release version
+        run: scripts/release-version.sh "$TAG"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android, x86_64-linux-android
+      - uses: Swatinem/rust-cache@v2
+      - name: NDK, cargo-ndk and cargo-about
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;$NDK_VERSION" >/dev/null
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+          cargo install cargo-ndk --locked
+          cargo install cargo-about --locked --features cli --version "$CARGO_ABOUT_VERSION"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Secrets (upload key, google-services.json)
+        env:
+          GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+          ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
+          ANDROID_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_STORE_PASSWORD }}
+          ANDROID_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+          ANDROID_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
+        run: |
+          for s in ANDROID_UPLOAD_KEYSTORE_BASE64 ANDROID_UPLOAD_STORE_PASSWORD ANDROID_UPLOAD_KEY_PASSWORD ANDROID_UPLOAD_KEY_ALIAS; do
+            eval "v=\${$s:-}"
+            [ -n "$v" ] || { echo "::error::secret $s is not set"; exit 1; }
+          done
+          keystore="$RUNNER_TEMP/aries-upload.p12"
+          printf '%s' "$ANDROID_UPLOAD_KEYSTORE_BASE64" | base64 -d > "$keystore"
+          {
+            echo "ARIES_UPLOAD_KEYSTORE=$keystore"
+            echo "ARIES_UPLOAD_STORE_PASSWORD=$ANDROID_UPLOAD_STORE_PASSWORD"
+            echo "ARIES_UPLOAD_KEY_PASSWORD=$ANDROID_UPLOAD_KEY_PASSWORD"
+            echo "ARIES_UPLOAD_KEY_ALIAS=$ANDROID_UPLOAD_KEY_ALIAS"
+          } >> "$GITHUB_ENV"
+          # Not read by the build yet; the FCM ticket applies the google-services plugin.
+          if [ -n "$GOOGLE_SERVICES_JSON_BASE64" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON_BASE64" | base64 -d > android/app/google-services.json
+          fi
+      - name: Build, verify signature, check Play policy
+        id: build
+        run: scripts/build-release.sh "$TAG" dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aries-release
+          path: dist/
+      - name: GitHub Release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NAME: ${{ steps.build.outputs.name }}
+          PRERELEASE: ${{ steps.build.outputs.prerelease }}
+        run: |
+          flags=""
+          [ "$PRERELEASE" = true ] && flags="--prerelease"
+          gh release create "$TAG" --verify-tag --title "Aries $NAME" --generate-notes $flags \
+            "dist/aries-$NAME.apk" dist/SHA256SUMS \
+            dist/third-party-notices-rust.txt dist/third-party-notices-android.json
+      - name: Remove the upload key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/aries-upload.p12" android/app/google-services.json
+
+  play:
+    needs: build
+    if: github.event_name == 'push' && vars.PLAY_UPLOAD_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: aries-release
+          path: dist
+      - name: Play internal testing
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: io.github.shiroel.aries
+          releaseFiles: dist/aries-${{ needs.build.outputs.name }}.aab
+          releaseName: ${{ needs.build.outputs.name }}
+          track: internal
+          # A Play app that was never published only accepts draft releases.
+          status: ${{ vars.PLAY_RELEASE_STATUS || 'draft' }}

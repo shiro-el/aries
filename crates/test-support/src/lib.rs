@@ -5,6 +5,8 @@
 //!   developer's own herdr-core session.
 //! - [`SshdHost`]: a docker container running a real OpenSSH sshd with the
 //!   pinned herdr-core installed, for the few tests that exercise SSH itself.
+//!   [`DockerNetwork`] + [`SshdHost::start_on`] chain several of them for
+//!   jump host tests.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
@@ -290,6 +292,24 @@ impl SshdHost {
 
     /// Builds the image if needed and starts a container.
     pub fn start() -> Self {
+        Self::launch(None)
+    }
+
+    /// Like [`SshdHost::start`], also attached to `network`, where other
+    /// containers reach it as [`SshdHost::network_name`]. Its host keys are
+    /// fresh, so every container on the network has its own fingerprint.
+    pub fn start_on(network: &DockerNetwork) -> Self {
+        let host = Self::launch(Some(network.name()));
+        host.rotate_host_keys();
+        host
+    }
+
+    /// The container's name, which resolves to it on a [`DockerNetwork`].
+    pub fn network_name(&self) -> &str {
+        &self.container
+    }
+
+    fn launch(network: Option<&str>) -> Self {
         let bin = herdr_core_bin();
         let fixture = repo_root().join("fixtures/sshd");
         let image = sshd_image();
@@ -298,7 +318,7 @@ impl SshdHost {
             std::env::var("ARIES_TEST_CONTAINER_PREFIX").unwrap_or_else(|_| "aries-test".into());
         let container = unique(&format!("{prefix}-sshd"));
         let mount = format!("{}:/usr/local/bin/herdr-core:ro", bin.display());
-        docker(&[
+        let mut args = vec![
             "run",
             "-d",
             "--rm",
@@ -308,8 +328,12 @@ impl SshdHost {
             "127.0.0.1::22",
             "-v",
             &mount,
-            &image,
-        ]);
+        ];
+        if let Some(network) = network {
+            args.extend(["--network", network]);
+        }
+        args.push(&image);
+        docker(&args);
         let mut host = Self { container, port: 0 };
         let mapped = docker(&["port", &host.container, "22/tcp"]);
         host.port = mapped
@@ -413,6 +437,36 @@ impl Drop for SshdHost {
     }
 }
 
+/// A user-defined docker network, so [`SshdHost`]s can reach each other by
+/// name (jump host tests). Drop it after the containers on it.
+pub struct DockerNetwork {
+    name: String,
+}
+
+impl DockerNetwork {
+    pub fn create() -> Self {
+        let prefix =
+            std::env::var("ARIES_TEST_CONTAINER_PREFIX").unwrap_or_else(|_| "aries-test".into());
+        let name = unique(&format!("{prefix}-net"));
+        docker(&["network", "create", &name]);
+        Self { name }
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+impl Drop for DockerNetwork {
+    fn drop(&mut self) {
+        let _ = Command::new("docker")
+            .args(["network", "rm", &self.name])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+}
+
 fn docker(args: &[&str]) -> String {
     let out = Command::new("docker")
         .args(args)
@@ -421,4 +475,53 @@ fn docker(args: &[&str]) -> String {
         .expect("run docker");
     assert_ok(&out, &format!("docker {}", args.join(" ")));
     String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
+/// Path of the fake Agent (`fixtures/agents/fake/fake-agent`, POSIX sh).
+pub fn fake_agent_path() -> PathBuf {
+    repo_root().join("fixtures/agents/fake/fake-agent")
+}
+
+/// A fake Agent running in a Terminal: it reports OSC 7501 status, writes
+/// transcript fixtures and records every input line, as its script says.
+pub struct FakeAgent {
+    /// Terminal address (`t3`).
+    pub address: String,
+    input_log: PathBuf,
+}
+
+impl FakeAgent {
+    /// The input lines the Agent has read so far, in order.
+    pub fn inputs(&self) -> Vec<String> {
+        std::fs::read_to_string(&self.input_log)
+            .unwrap_or_default()
+            .lines()
+            .map(str::to_owned)
+            .collect()
+    }
+}
+
+impl HcSession {
+    /// Starts the fake Agent in a new background Terminal running `script`
+    /// (steps are documented in the fake-agent file).
+    pub fn run_fake_agent(&self, name: &str, script: &str) -> FakeAgent {
+        let dir = self.dir.path().join("agents").join(name);
+        std::fs::create_dir_all(&dir).expect("agent dir");
+        let script_path = dir.join("script");
+        std::fs::write(&script_path, script).expect("write agent script");
+        let input_log = dir.join("input");
+        let log_env = format!("FAKE_AGENT_INPUT={}", input_log.display());
+        let agent = fake_agent_path();
+        let address = self.run_bg(
+            name,
+            &[
+                "env",
+                &log_env,
+                "/bin/sh",
+                &agent.to_string_lossy(),
+                &script_path.to_string_lossy(),
+            ],
+        );
+        FakeAgent { address, input_log }
+    }
 }

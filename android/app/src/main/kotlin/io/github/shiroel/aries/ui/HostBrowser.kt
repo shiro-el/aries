@@ -53,6 +53,18 @@ class HostBrowser(val host: Host) {
     private val focusOfTab = mutableStateMapOf<String, String>()
     private val zoomOfTab = mutableStateMapOf<String, String>()
 
+    /** The latest facts per Terminal address, from the live Agent status watch. */
+    private val live = mutableStateMapOf<String, TerminalInfo>()
+
+    /** A Terminal as the status watch last saw it (the structure may be older). */
+    fun current(t: TerminalInfo): TerminalInfo = live[t.address] ?: t
+
+    fun updateTerminals(list: List<TerminalInfo>) {
+        val addresses = list.map { it.address }.toSet()
+        live.keys.retainAll(addresses)
+        list.forEach { live[it.address] = it }
+    }
+
     /** The "new Terminal" form, while it is open. */
     var launchForm by mutableStateOf<LaunchForm?>(null)
 
@@ -207,7 +219,7 @@ private fun SpaceList(browser: HostBrowser, s: HostStructure) {
                 HorizontalDivider()
                 Text(stringResource(R.string.unplaced_title), style = MaterialTheme.typography.titleMedium)
             }
-            items(s.unplaced, key = { "unplaced:" + it.address }) { TerminalRow(it) }
+            items(s.unplaced, key = { "unplaced:" + it.address }) { TerminalRow(browser.current(it)) }
         }
     }
 }
@@ -233,7 +245,7 @@ private fun SpaceView(browser: HostBrowser, space: SpaceInfo) {
     val focused = browser.focusedPane(tab)
     if (zoomed != null) {
         TextButton(onClick = { browser.unzoom(tab) }) { Text(stringResource(R.string.pane_unzoom_button)) }
-        PaneRow(zoomed, focused = true) {}
+        PaneRow(zoomed, browser, focused = true) {}
         return
     }
     if (focused != null) {
@@ -242,23 +254,24 @@ private fun SpaceView(browser: HostBrowser, space: SpaceInfo) {
     if (tab.panes.isEmpty()) Text(stringResource(R.string.tab_empty))
     LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         items(tab.panes, key = { "pane:" + it.id + ":" + it.terminalAddress }) { pane ->
-            PaneRow(pane, focused = pane.id == focused) { browser.focus(tab, pane) }
+            PaneRow(pane, browser, focused = pane.id == focused) { browser.focus(tab, pane) }
         }
     }
 }
 
 @Composable
-private fun PaneRow(pane: PaneInfo, focused: Boolean, onClick: () -> Unit) {
+private fun PaneRow(pane: PaneInfo, browser: HostBrowser, focused: Boolean, onClick: () -> Unit) {
     val modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
     Column(
         (if (focused) modifier.background(MaterialTheme.colorScheme.secondaryContainer) else modifier).padding(8.dp),
     ) {
-        val t = pane.terminal
+        val t = pane.terminal?.let(browser::current)
         if (t == null) {
             Text(stringResource(R.string.pane_terminal_gone, pane.terminalAddress), style = MaterialTheme.typography.titleMedium)
         } else {
             Text(displayName(t), style = MaterialTheme.typography.titleMedium)
             Text(stringResource(R.string.terminal_subtitle, t.address, t.state), style = MaterialTheme.typography.bodySmall)
+            AgentStatusLine(t)
         }
     }
 }
@@ -268,5 +281,6 @@ private fun TerminalRow(t: TerminalInfo) {
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Text(displayName(t), style = MaterialTheme.typography.titleMedium)
         Text(stringResource(R.string.terminal_subtitle, t.address, t.state), style = MaterialTheme.typography.bodySmall)
+        AgentStatusLine(t)
     }
 }

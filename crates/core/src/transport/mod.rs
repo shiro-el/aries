@@ -16,7 +16,7 @@ use crate::error::CoreError;
 
 pub(crate) use bootstrap::PasswordLogin;
 pub(crate) use local::LocalProcess;
-pub(crate) use ssh::Ssh;
+pub(crate) use ssh::{Ssh, SshHop};
 
 /// A duplex byte stream plus whatever must stay alive while it is used
 /// (child process, SSH session).

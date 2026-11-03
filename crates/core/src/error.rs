@@ -52,6 +52,30 @@ pub enum CoreError {
     Rpc { kind: String, detail: String },
     #[error("the connection to the Host closed")]
     Closed,
+    #[error("no SSH key with id {id}")]
+    UnknownKey { id: String },
+    /// `hop` is an index into the Host's jump hosts.
+    #[error("the Host has no jump host {hop}")]
+    UnknownJumpHost { hop: u32 },
+    /// Like [`CoreError::HostKeyUnknown`], for jump host `hop` (index into
+    /// the Host's jump hosts): confirm with `trust_jump_host_key`.
+    #[error("jump host {hop} ({address}) key {fingerprint} is not trusted yet")]
+    JumpHostKeyUnknown {
+        hop: u32,
+        address: String,
+        fingerprint: String,
+    },
+    /// Like [`CoreError::HostKeyChanged`], for jump host `hop`.
+    #[error("jump host {hop} ({address}) key changed from {expected} to {actual}")]
+    JumpHostKeyChanged {
+        hop: u32,
+        address: String,
+        expected: String,
+        actual: String,
+    },
+    /// Jump host `hop` did not accept the key chosen for it.
+    #[error("jump host {hop} ({address}) did not accept its SSH key")]
+    JumpAuthRejected { hop: u32, address: String },
 }
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
