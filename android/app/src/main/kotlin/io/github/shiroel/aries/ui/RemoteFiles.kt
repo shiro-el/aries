@@ -1,5 +1,7 @@
 package io.github.shiroel.aries.ui
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -8,19 +10,25 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
+import io.github.shiroel.aries.core.GitChanges
+import io.github.shiroel.aries.core.GitFile
 import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.HostConnection
 import io.github.shiroel.aries.core.RemoteDirectory
 import io.github.shiroel.aries.core.RemoteFilePage
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
 /** One page at a time: no unbounded accumulation of file text in the phone. */
 @Composable
@@ -30,6 +38,7 @@ fun RemoteFilesScreen(
     onClose: () -> Unit,
     onSend: ((String) -> Unit)? = null,
     initialLocation: FileLocation? = null,
+    onDiffSend: ((String) -> Unit)? = onSend,
 ) {
     var folder by remember(address, initialLocation) { mutableStateOf(initialLocation?.path?.substringBeforeLast('/')?.ifEmpty { "/" }) }
     var directory by remember(address) { mutableStateOf<RemoteDirectory?>(null) }
@@ -43,7 +52,47 @@ fun RemoteFilesScreen(
     var notText by remember { mutableStateOf(false) }
     var missing by remember { mutableStateOf(false) }
     var unavailableLine by remember { mutableStateOf<ULong?>(null) }
-    LaunchedEffect(connection, address, folder, file, offsets, retry) {
+    var changes by remember(connection, address) { mutableStateOf<GitChanges?>(null) }
+    var loadedRevision by remember(connection, address) { mutableIntStateOf(-1) }
+    val requestedRevision = retry
+    val changesLoaded = loadedRevision == requestedRevision
+    var gitError by remember(connection, address) { mutableStateOf<String?>(null) }
+    var fullFile by remember(address, file) { mutableStateOf(false) }
+    val changedFile = changes?.let { git -> git.files.find { gitFilePath(git.cwd, it.path) == file?.let { path -> java.nio.file.Paths.get(path).normalize().toString() } } }
+    val showingDiff = changedFile != null && !fullFile
+    val scope = rememberCoroutineScope()
+    var subfolders by remember(address, directory?.path, retry) { mutableStateOf<Map<String, RemoteDirectory>>(emptyMap()) }
+    var expanded by remember(address, directory?.path, retry) { mutableStateOf<Set<String>>(emptySet()) }
+    var treeLoading by remember(address, directory?.path, retry) { mutableStateOf<Set<String>>(emptySet()) }
+    var treeFailed by remember(address, directory?.path, retry) { mutableStateOf<Set<String>>(emptySet()) }
+    val tree = directory?.let { flattenFileTree(it, subfolders, expanded) }.orEmpty()
+    fun toggleFolder(path: String) {
+        if (path in treeLoading) return
+        if (path in expanded) { expanded = expanded - path; return }
+        if (path in subfolders) { expanded = expanded + path; return }
+        treeLoading = treeLoading + path
+        treeFailed = treeFailed - path
+        scope.launch {
+            try {
+                val child = checkNotNull(connection).listFiles(address, path)
+                subfolders = subfolders + (path to child)
+                expanded = expanded + path
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) { treeFailed = treeFailed + path }
+            finally { treeLoading = treeLoading - path }
+        }
+    }
+    LaunchedEffect(connection, address, requestedRevision) {
+        gitError = null
+        try { changes = checkNotNull(connection).gitChanges(address) }
+        catch (e: CancellationException) { throw e }
+        catch (e: Exception) { changes = null; gitError = e.message ?: e.toString() }
+        finally { loadedRevision = requestedRevision }
+    }
+    fun backToFolder() { file = null; offsets = listOf(1uL) }
+    BackHandler(enabled = file != null, onBack = ::backToFolder)
+    LaunchedEffect(connection, address, folder, file, offsets, retry, changesLoaded, showingDiff) {
+        if (!changesLoaded) return@LaunchedEffect
         loading = true
         failed = false
         notText = false
@@ -54,7 +103,7 @@ fun RemoteFilesScreen(
             checkNotNull(connection)
             if (file == null) {
                 directory = connection.listFiles(address, folder)
-            } else if (remoteMediaKind(file!!) == null) {
+            } else if (!showingDiff && remoteMediaKind(file!!) == null) {
                 val requested = offsets.last()
                 val result = try {
                     connection.readFilePage(address, file!!, requested, 200u)
@@ -82,7 +131,7 @@ fun RemoteFilesScreen(
             loading = false
         }
     }
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
+    Column(Modifier.fillMaxSize().safeDrawingPadding().padding(12.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(stringResource(R.string.files_title), style = MaterialTheme.typography.titleMedium)
             TextButton(onClick = onClose) { Text(stringResource(R.string.files_close_button)) }
@@ -90,7 +139,7 @@ fun RemoteFilesScreen(
         Text(file ?: directory?.path.orEmpty(), fontFamily = FontFamily.Monospace)
         Row {
             if (file != null) {
-                TextButton(onClick = { file = null; offsets = listOf(1uL) }) {
+                TextButton(onClick = ::backToFolder) {
                     Text(stringResource(R.string.files_back_folder_button))
                 }
             } else {
@@ -100,34 +149,79 @@ fun RemoteFilesScreen(
             }
             TextButton(onClick = { retry++ }, enabled = !loading) { Text(stringResource(R.string.files_refresh_button)) }
         }
-        file?.let { FileExportControls(connection, address, it) }
-        if (file != null && onSend != null) {
+        if (changedFile != null) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = !fullFile, onClick = { fullFile = false }, label = { Text(stringResource(R.string.files_diff_button)) })
+            FilterChip(selected = fullFile, onClick = { fullFile = true }, label = { Text(stringResource(R.string.files_full_button)) })
+        }
+        if (!showingDiff) file?.let { FileExportControls(connection, address, it) }
+        if (file != null && !showingDiff && onSend != null) {
             TextButton(onClick = { onSend(quotedFileReference(file!!)) }) {
                 Text(stringResource(R.string.files_send_file_button))
             }
         }
         when {
-            loading -> Text(stringResource(R.string.files_loading))
-            notText -> Text(stringResource(R.string.files_not_text))
-            missing -> Text(stringResource(R.string.files_missing, file.orEmpty()), color = MaterialTheme.colorScheme.error)
-            failed -> Text(stringResource(R.string.files_failed), color = MaterialTheme.colorScheme.error)
+            !changesLoaded || loading -> Text(stringResource(R.string.files_loading))
             file == null -> {
                 val entries = directory?.entries.orEmpty()
-                if (entries.isEmpty()) Text(stringResource(R.string.files_empty_folder))
-                LazyColumn(Modifier.weight(1f)) {
-                    itemsIndexed(entries, key = { _, entry -> entry.name }) { _, entry ->
-                        Text(
-                            if (entry.directory) "${entry.name}/" else entry.name,
-                            Modifier.fillMaxWidth().clickable {
-                                val path = directory!!.path.trimEnd('/') + "/" + entry.name
-                                if (entry.directory) folder = path else { file = path; offsets = listOf(1uL) }
-                            }.padding(vertical = 12.dp),
-                            fontFamily = FontFamily.Monospace,
-                        )
+                LazyColumn(Modifier.weight(1f).testTag("files-tree")) {
+                    item {
+                        gitError?.let { Text(stringResource(R.string.git_error, it), color = MaterialTheme.colorScheme.error) }
+                        when {
+                            changes?.notRepository == true -> Text(stringResource(R.string.git_not_repository))
+                            changes?.files?.isEmpty() == true && changes?.truncated == false -> Text(stringResource(R.string.git_clean))
+                        }
+                        if (changes?.truncated == true) Text(stringResource(R.string.git_truncated))
+                        if (!changes?.files.isNullOrEmpty()) Text(stringResource(R.string.files_changed_heading), style = MaterialTheme.typography.titleSmall)
+                    }
+                    itemsIndexed(changes?.files.orEmpty(), key = { _, entry -> "changed:${entry.path}" }) { _, entry ->
+                        Row(Modifier.fillMaxWidth().clickable {
+                            val path = gitFilePath(changes!!.cwd, entry.path)
+                            if (folder == null && directory == null) folder = path.substringBeforeLast('/').ifEmpty { "/" }
+                            file = path
+                            offsets = listOf(1uL)
+                        }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Surface(color = MaterialTheme.colorScheme.secondaryContainer) {
+                                Text(gitFileBadge(entry), Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontFamily = FontFamily.Monospace)
+                            }
+                            Column(Modifier.padding(start = 8.dp)) {
+                                Text(entry.path, fontFamily = FontFamily.Monospace)
+                                entry.originalPath?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                            }
+                        }
+                        HorizontalDivider()
+                    }
+                    item {
+                        Text(stringResource(R.string.files_folders_heading), Modifier.padding(top = 12.dp), style = MaterialTheme.typography.titleSmall)
+                        if (failed) Text(stringResource(R.string.files_failed), color = MaterialTheme.colorScheme.error)
+                        else if (entries.isEmpty()) Text(stringResource(R.string.files_empty_folder))
+                    }
+                    itemsIndexed(if (failed) emptyList() else tree, key = { _, entry -> "tree:${entry.path}" }) { _, entry ->
+                        val isExpanded = entry.path in expanded
+                        val folderState = stringResource(if (isExpanded) R.string.files_folder_expanded else R.string.files_folder_collapsed)
+                        Row(Modifier.fillMaxWidth().clickable {
+                            if (entry.directory) toggleFolder(entry.path)
+                            else { file = entry.path; offsets = listOf(1uL) }
+                        }.then(if (entry.directory) Modifier.semantics { stateDescription = folderState } else Modifier)
+                            .padding(start = (entry.depth * 16).dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            if (entry.directory) {
+                                val color = MaterialTheme.colorScheme.onSurfaceVariant
+                                Canvas(Modifier.padding(end = 6.dp).size(12.dp)) {
+                                    drawLine(color, Offset(0f, size.height / 2), Offset(size.width, size.height / 2), 1.dp.toPx())
+                                    if (!isExpanded) drawLine(color, Offset(size.width / 2, 0f), Offset(size.width / 2, size.height), 1.dp.toPx())
+                                }
+                            }
+                            Text(if (entry.directory) "${entry.name}/" else entry.name, fontFamily = FontFamily.Monospace)
+                        }
+                        if (entry.path in treeLoading) Text(stringResource(R.string.files_loading))
+                        if (entry.path in treeFailed) Text(stringResource(R.string.files_failed), color = MaterialTheme.colorScheme.error)
                         HorizontalDivider()
                     }
                 }
             }
+            notText -> Text(stringResource(R.string.files_not_text))
+            missing -> Text(stringResource(R.string.files_missing, file.orEmpty()), color = MaterialTheme.colorScheme.error)
+            failed -> Text(stringResource(R.string.files_failed), color = MaterialTheme.colorScheme.error)
+            showingDiff -> GitFileDiff(connection, address, changes!!.cwd, changedFile, retry, onDiffSend)
             remoteMediaKind(file!!) != null -> key(connection, address, file, retry) {
                 RemoteFilePreview(connection, address, file!!, Modifier.weight(1f))
             }
@@ -186,9 +280,6 @@ fun RemoteFilesScreen(
 /** POSIX shell quoting also keeps apostrophes in file paths unambiguous. */
 internal fun quotedFileReference(path: String): String = "'" + path.replace("'", "'\\''") + "'"
 
-
-internal val LocalRemoteFilesAction = staticCompositionLocalOf<(@Composable () -> Unit)?> { null }
-
 /** Files reuse the current Host line; dismissing the panel retains the Agent view. */
 @Composable
 internal fun RemoteFilesAccess(model: HostsModel, content: @Composable () -> Unit) {
@@ -206,10 +297,18 @@ internal fun RemoteFilesAccess(model: HostsModel, content: @Composable () -> Uni
     var open by remember(screen) { mutableStateOf(false) }
     var noFolder by remember(screen) { mutableStateOf(false) }
     var location by remember(screen) { mutableStateOf<FileLocation?>(null) }
-    CompositionLocalProvider(LocalRemoteFilesAction provides {
-        TextButton(onClick = { noFolder = false; location = null; open = true }, modifier = Modifier.testTag("files-open")) {
-            Text(stringResource(R.string.files_open_button))
+    fun sendReference(reference: String, diff: Boolean) {
+        if (model.screen === screen) {
+            model.switchView(io.github.shiroel.aries.core.AgentView.CHAT)
+            (model.screen as? Screen.Chat)?.chat?.let { chat ->
+                chat.draft = if (diff && chat.draft.isNotBlank()) chat.draft + "\n\n" + reference
+                    else appendFileReference(chat.draft, reference)
+            }
         }
+        open = false
+    }
+    CompositionLocalProvider(LocalOpenFiles provides {
+        noFolder = false; location = null; open = true
     }, LocalOpenRemoteFile provides { target ->
         noFolder = !target.path.startsWith('/') && terminal.currentCwd.isNullOrBlank()
         location = target.copy(path = if (target.path.startsWith('/')) target.path
@@ -226,15 +325,8 @@ internal fun RemoteFilesAccess(model: HostsModel, content: @Composable () -> Uni
                 TextButton(onClick = { open = false }) { Text(stringResource(R.string.files_close_button)) }
             } else RemoteFilesScreen(link.connection, terminal.address, { open = false },
                 initialLocation = location,
-                onSend = if (terminal.agentStatus == null) null else { reference ->
-                    if (model.screen === screen) {
-                        model.switchView(io.github.shiroel.aries.core.AgentView.CHAT)
-                        (model.screen as? Screen.Chat)?.chat?.let { chat ->
-                            chat.draft = appendFileReference(chat.draft, reference)
-                        }
-                    }
-                    open = false
-                },
+                onSend = if (terminal.agentStatus == null) null else { reference -> sendReference(reference, false) },
+                onDiffSend = if (terminal.agentStatus == null) null else { reference -> sendReference(reference, true) },
             )
         }
     }
@@ -242,3 +334,35 @@ internal fun RemoteFilesAccess(model: HostsModel, content: @Composable () -> Uni
 
 internal fun appendFileReference(draft: String, reference: String): String =
     if (draft.isEmpty()) reference else "$draft\n$reference"
+
+internal val LocalOpenFiles = staticCompositionLocalOf<(() -> Unit)?> { null }
+
+/** Resolve Git paths with the same normalization for folder entries and transcript links. */
+private fun gitFilePath(cwd: String, path: String): String =
+    java.nio.file.Paths.get(cwd, path).normalize().toString()
+
+private fun gitFileBadge(file: GitFile): String = when {
+    file.untracked || 'A' in file.status -> "A"
+    'D' in file.status -> "D"
+    'R' in file.status -> "R"
+    'C' in file.status -> "C"
+    'U' in file.status -> "U"
+    else -> "M"
+}
+
+private data class FileTreeEntry(val name: String, val path: String, val directory: Boolean, val depth: Int)
+
+private fun flattenFileTree(
+    root: RemoteDirectory,
+    children: Map<String, RemoteDirectory>,
+    expanded: Set<String>,
+): List<FileTreeEntry> = buildList {
+    fun visit(folder: RemoteDirectory, depth: Int) {
+        for (entry in folder.entries) {
+            val path = folder.path.trimEnd('/') + "/" + entry.name
+            add(FileTreeEntry(entry.name, path, entry.directory, depth))
+            if (entry.directory && path in expanded) children[path]?.let { visit(it, depth + 1) }
+        }
+    }
+    visit(root, 0)
+}

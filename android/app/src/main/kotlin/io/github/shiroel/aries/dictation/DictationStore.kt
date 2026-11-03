@@ -50,14 +50,14 @@ class DictationStore(context: Context, private val vault: KeyVault = KeystoreVau
     fun clearKey() = keyFile.delete()
 
     fun options() = DictationOptions(
-        language = preferences.getString("language", null)?.takeIf { it.matches(Regex("[a-z]{2}")) },
+        language = preferences.getString("language", null)?.takeIf { it.matches(Regex("[a-z]{2,3}")) },
         model = DictationModel.entries.find { it.name == preferences.getString("model", null) } ?: DictationModel.LARGE,
         vocabulary = preferences.getString("vocabulary", "").orEmpty(),
         autoContext = preferences.getBoolean("auto-context", false),
     )
 
     fun saveOptions(options: DictationOptions) {
-        require(options.language == null || options.language.matches(Regex("[a-z]{2}")))
+        require(options.language == null || options.language.matches(Regex("[a-z]{2,3}")))
         preferences.edit().putString("language", options.language).putString("model", options.model.name)
             .putString("vocabulary", options.vocabulary).putBoolean("auto-context", options.autoContext).apply()
     }

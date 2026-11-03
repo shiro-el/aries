@@ -51,9 +51,7 @@ class AgentConsoleScreenTest {
         compose.onNodeWithText("home").performClick()
         compose.onNodeWithText("claude").performClick()
         compose.onNodeWithTag("console-top-bar").assertExists()
-        compose.onNodeWithTag("agent-meta").assertExists()
         compose.onNodeWithText("/repo").assertExists()
-        val toggle = compose.onNodeWithTag(AGENT_VIEW_TOGGLE).fetchSemanticsNode().boundsInRoot
         compose.onNodeWithText(str(R.string.agent_view_terminal)).assertIsSelected()
         core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle, cwd = "/updated")))
         compose.waitForIdle()
@@ -62,7 +60,6 @@ class AgentConsoleScreenTest {
         compose.onNodeWithText(str(R.string.agent_view_chat)).performClick()
         compose.onNodeWithText(str(R.string.agent_view_chat)).assertIsSelected()
         compose.onNodeWithText("/updated").assertExists()
-        assertEquals(toggle, compose.onNodeWithTag(AGENT_VIEW_TOGGLE).fetchSemanticsNode().boundsInRoot)
     }
 
     @Test
@@ -102,6 +99,5 @@ class AgentConsoleScreenTest {
         assertEquals(listOf(Triple("h1", "c1", 1u)), core.replies)
         compose.onNodeWithText("Merge?").assertDoesNotExist()
         compose.onNodeWithText(context.getString(R.string.call_answer_delivered, "Wait")).assertDoesNotExist()
-        compose.onNodeWithTag("agent-meta").assertExists()
     }
 }

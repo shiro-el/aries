@@ -86,7 +86,9 @@ class DictationUiTest {
         compose.onNodeWithText("saved-secret").assertDoesNotExist()
         compose.onNodeWithText(label(R.string.dictation_key_saved)).assertExists()
         assertEquals("saved-secret", store.readKey())
-        compose.onNodeWithText(label(R.string.dictation_language_label)).performTextInput("ko")
+        compose.onNodeWithText(label(R.string.dictation_language_label)).performClick()
+        compose.onNodeWithText(label(R.string.language_picker_search)).performTextInput(" K O ")
+        compose.onNodeWithText("Korean · 한국어").performClick()
         compose.onNodeWithText(label(R.string.dictation_vocabulary_label)).performTextInput("Aries, Herdr")
         compose.onNodeWithTag("dictation-model:TURBO").performClick()
         compose.onNodeWithText(label(R.string.dictation_context_label)).performClick()
@@ -95,6 +97,55 @@ class DictationUiTest {
         }
         compose.onNodeWithText(label(R.string.dictation_key_remove_button)).performClick()
         assertFalse(store.hasKey)
+    }
+
+    @Test fun existingSelectionSurvivesSearchDismissalAndAutoDetectClearsOnlyLanguage() {
+        // An old manually entered code outside the Whisper list must remain intact, too.
+        val saved = DictationOptions("zz", DictationModel.TURBO, "Aries", true)
+        val store = DictationStore(context, vault).apply { clearKey(); saveOptions(saved) }
+        compose.setContent { MaterialTheme { DictationSettings(store) } }
+        compose.onNodeWithText(label(R.string.dictation_language_label)).performClick()
+        compose.onNodeWithText(label(R.string.language_picker_search)).performTextInput(" Z Z ")
+        compose.onNode(isSelected() and hasText("zz · zz")).assertExists()
+        compose.onNodeWithText(label(R.string.language_picker_search)).performTextReplacement("no-such-language")
+        compose.onNode(isSelected() and hasText("zz · zz")).assertDoesNotExist()
+        compose.onNodeWithText(label(R.string.back_button)).performClick()
+        compose.runOnIdle { assertEquals(saved, DictationStore(context, vault).options()) }
+        compose.onNodeWithText(label(R.string.dictation_language_label)).performClick()
+        compose.onNodeWithText(label(R.string.language_picker_search)).performTextInput("zz")
+        compose.onNode(isSelected() and hasText("zz · zz")).assertExists()
+        compose.onNodeWithText(label(R.string.language_picker_auto)).performClick()
+        compose.runOnIdle { assertEquals(saved.copy(language = null), DictationStore(context, vault).options()) }
+        compose.onNodeWithText(label(R.string.dictation_language_label)).performClick()
+        compose.onNode(isSelected() and hasText(label(R.string.language_picker_auto))).assertExists()
+    }
+
+    @Test
+    @Config(qualifiers = "ko-h1200dp")
+    fun searchUsesAppLanguageAndNativeNamesWithoutChangingApiCodes() {
+        val store = DictationStore(context, vault).apply { clearKey(); saveOptions(DictationOptions()) }
+        compose.setContent { MaterialTheme { DictationSettings(store) } }
+        for ((query, name, code) in listOf(
+            Triple("일 본 어", "일본어 · 日本語", "ja"),
+            Triple(" E N G L I S H ", "영어 · English", "en"),
+            Triple(" J W ", "자바어", "jw"),
+        )) {
+            compose.onNodeWithText(label(R.string.dictation_language_label)).performClick()
+            compose.onNodeWithText(label(R.string.language_picker_search)).performTextInput(query)
+            compose.onNodeWithText(name, substring = true).performClick()
+            compose.runOnIdle { assertEquals(code, DictationStore(context, vault).options().language) }
+        }
+    }
+
+    @Test fun threeLetterWhisperLanguagesPersistAcrossStoreReloads() {
+        val store = DictationStore(context, vault).apply { clearKey(); saveOptions(DictationOptions()) }
+        compose.setContent { MaterialTheme { DictationSettings(store) } }
+        for ((query, name, code) in listOf(Triple(" H A W ", "Hawaiian", "haw"), Triple("YUE", "Cantonese", "yue"))) {
+            compose.onNodeWithText(label(R.string.dictation_language_label)).performClick()
+            compose.onNodeWithText(label(R.string.language_picker_search)).performTextInput(query)
+            compose.onNodeWithText(name, substring = true).performClick()
+            compose.runOnIdle { assertEquals(code, DictationStore(context, vault).options().language) }
+        }
     }
 
     @Test fun cancelDiscardsAudioAndNeverAppliesAnInFlightResult() {
