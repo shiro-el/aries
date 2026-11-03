@@ -10,3 +10,7 @@ Third-party notices for the software in the Android app are generated at
 build time: assets/licenses/rust-crates.txt (Rust crates in the core) and
 assets/app/cash/licensee/artifacts.json (Android dependencies) inside the APK,
 and attached to each GitHub Release.
+
+Chat Markdown uses commonmark-java and its GFM tables extension (BSD-2-Clause).
+Their copyright and license are included in
+assets/licenses/commonmark-java.txt inside the Android app.

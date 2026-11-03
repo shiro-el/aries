@@ -234,6 +234,10 @@
     <string name="chat_status_no_core">Beacon이 이 Host의 herdr-core에 연결하지 못했습니다. 다시 시도하는 중…</string>
     <string name="chat_status_incompatible">이 Host의 Beacon이 앱보다 새 버전입니다. Chat을 보려면 Aries를 업데이트하세요.</string>
     <string name="chat_you">나</string>
+    <!-- Chat Markdown code blocks (94) -->
+    <string name="chat_code_label">코드</string>
+    <string name="chat_code_copy_button">코드 복사</string>
+    <string name="chat_code_copied">복사됨</string>
     <string name="chat_thinking">생각함</string>
     <string name="chat_tool_running">실행 중</string>
     <string name="chat_tool_failed">실패</string>
