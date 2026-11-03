@@ -9,6 +9,8 @@
 //!   ([`push`]); run by the phone over SSH.
 //! - `chat <terminal> [--follow] [--cursor C]`: the Terminal's Agent Chat
 //!   as JSON lines (`aries_protocol::chat`).
+//! - `answer <terminal> <question> <picks>...`: answers the question the
+//!   Terminal's Agent shows (`aries_protocol::answer`); one reply line.
 //! - `--version`: `aries-beacon <version> (contract <n>)`.
 
 mod push;
@@ -38,9 +40,10 @@ fn main() {
         Some("push-test") => exit_on_error(push::push_test_command()),
         Some("unpair") => exit_on_error(push::unpair_command()),
         Some("chat") => chat(std::env::args().skip(2).collect()),
+        Some("answer") => answer(std::env::args().skip(2).collect()),
         _ => {
             eprintln!(
-                "usage: aries-beacon --version | status | serve | pair | push-test | unpair | chat TERMINAL [--follow] [--cursor C]"
+                "usage: aries-beacon --version | status | serve | pair | push-test | unpair | chat TERMINAL [--follow] [--cursor C] | answer TERMINAL QUESTION PICKS..."
             );
             std::process::exit(2);
         }
@@ -247,5 +250,34 @@ fn chat(args: Vec<String>) {
             eprintln!("aries-beacon chat: {e}");
             std::process::exit(1);
         }
+    }
+}
+
+fn answer(args: Vec<String>) {
+    use aries_protocol::answer::Answer;
+    let parsed = args
+        .split_first()
+        .ok_or_else(|| "missing terminal".to_string())
+        .and_then(|(t, rest)| Ok((t.clone(), Answer::from_args(rest)?)));
+    let (terminal, answer) = match parsed {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("aries-beacon answer: {e}");
+            eprintln!("usage: aries-beacon answer TERMINAL QUESTION PICKS...");
+            std::process::exit(2);
+        }
+    };
+    let mut link = aries_beacon::core_link::CoreLookup::default();
+    let agents = aries_beacon::chat::agents();
+    let reply = aries_beacon::chat::answer::answer(&terminal, &answer, &mut link, &agents)
+        .unwrap_or_else(|e| {
+            aries_protocol::answer::AnswerReply::new(
+                aries_protocol::answer::AnswerOutcome::Gone,
+                Some(format!("transcript: {e}")),
+            )
+        });
+    println!("{}", reply.to_json());
+    if !reply.outcome.is_sent() {
+        std::process::exit(1);
     }
 }

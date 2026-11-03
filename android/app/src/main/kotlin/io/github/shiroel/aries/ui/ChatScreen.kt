@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -29,6 +31,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
+import io.github.shiroel.aries.core.AnswerProblem
 import io.github.shiroel.aries.core.AriesCoreInterface
 import io.github.shiroel.aries.core.ChatEntry
 import io.github.shiroel.aries.core.ChatEntryBody
@@ -59,10 +62,19 @@ class ChatModel(
     var expanded by mutableStateOf<Set<String>>(emptySet())
         private set
 
+    /** Options the user picked per open question: entry id -> picks per part. */
+    var picks by mutableStateOf<Map<String, List<Set<Int>>>>(emptyMap())
+        private set
+    /** Where each answer the user sent stands, by entry id. */
+    var answers by mutableStateOf<Map<String, AnswerState>>(emptyMap())
+        private set
+
     private var watch: ChatWatch? = null
     private var job: Job? = null
+    private var scope: CoroutineScope? = null
 
     fun start(scope: CoroutineScope) {
+        this.scope = scope
         job = scope.launch {
             val w = try {
                 core.watchChat(host.id, terminal.address, null)
@@ -86,11 +98,79 @@ class ChatModel(
         expanded = if (id in expanded) expanded - id else expanded + id
     }
 
+    /**
+     * The user tapped option [option] of part [part] of question [id]. A
+     * lone single-choice question is answered right away, like the Agent's
+     * own TUI; otherwise the pick is toggled until [send].
+     */
+    fun pick(id: String, question: ChatEntryBody.Question, part: Int, option: Int) {
+        if (question.questions.size == 1 && !question.questions[0].multi) {
+            answer(id, listOf(listOf(option)))
+            return
+        }
+        val current = picks[id] ?: List(question.questions.size) { emptySet() }
+        val multi = question.questions[part].multi
+        val chosen = current[part]
+        val next = when {
+            !multi -> setOf(option)
+            option in chosen -> chosen - option
+            else -> chosen + option
+        }
+        picks = picks + (id to current.mapIndexed { i, p -> if (i == part) next else p })
+    }
+
+    /** Every part of question [id] has a pick. */
+    fun complete(id: String, question: ChatEntryBody.Question): Boolean {
+        val p = picks[id] ?: return false
+        return p.size == question.questions.size && p.all { it.isNotEmpty() }
+    }
+
+    fun send(id: String, question: ChatEntryBody.Question) {
+        if (!complete(id, question)) return
+        answer(id, picks.getValue(id).map { it.sorted() })
+    }
+
+    private fun answer(id: String, chosen: List<List<Int>>) {
+        val scope = scope ?: return
+        if (answers[id] == AnswerState.Sending) return
+        answers = answers + (id to AnswerState.Sending)
+        scope.launch {
+            val state = try {
+                core.answerQuestion(host.id, terminal.address, id, chosen.map { p -> p.map { it.toUInt() } })
+                AnswerState.Sent
+            } catch (e: CoreException) {
+                AnswerState.Failed(answerProblem(e))
+            }
+            answers = answers + (id to state)
+        }
+    }
+
     fun stop() {
         job?.cancel()
         watch?.stop()
         watch = null
     }
+}
+
+sealed interface AnswerState {
+    data object Sending : AnswerState
+    /** The keys reached the Agent; the Chat shows the result when it has it. */
+    data object Sent : AnswerState
+    data class Failed(val why: Message) : AnswerState
+}
+
+/** Why an answer was not sent, for the question card. */
+fun answerProblem(e: CoreException): Message = when (e) {
+    is CoreException.AnswerRefused -> when (e.reason) {
+        AnswerProblem.ANSWERED -> Message(R.string.chat_answer_answered)
+        AnswerProblem.GONE -> Message(R.string.chat_answer_gone)
+        AnswerProblem.INVALID -> Message(R.string.chat_answer_invalid)
+        AnswerProblem.UNSUPPORTED -> Message(R.string.chat_answer_unsupported)
+        AnswerProblem.NO_BEACON -> Message(R.string.chat_status_no_beacon)
+        AnswerProblem.NO_CORE -> Message(R.string.chat_answer_no_core)
+        AnswerProblem.FAILED -> Message(R.string.chat_answer_failed, listOf(e.detail))
+    }
+    else -> Message(R.string.chat_answer_failed, listOf(e.message ?: ""))
 }
 
 @Composable
@@ -116,7 +196,12 @@ fun ChatScreen(chat: ChatModel, onBack: () -> Unit) {
         }
         LazyColumn(state = list, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(entries, key = { it.id }) { entry ->
-                ChatEntryView(entry, expanded = entry.id in chat.expanded, chat::image) { chat.toggle(entry.id) }
+                val body = entry.body
+                if (body is ChatEntryBody.Question) {
+                    QuestionView(chat, entry.id, body)
+                } else {
+                    ChatEntryView(entry, expanded = entry.id in chat.expanded, chat::image) { chat.toggle(entry.id) }
+                }
             }
         }
     }
@@ -191,6 +276,8 @@ private fun ChatEntryView(
             )
             Text(b.detail, color = MaterialTheme.colorScheme.onErrorContainer)
         }
+        // Rendered by QuestionView, which needs the model.
+        is ChatEntryBody.Question -> {}
         ChatEntryBody.Unsupported -> Text(
             stringResource(R.string.chat_unsupported),
             style = MaterialTheme.typography.bodySmall,
@@ -251,6 +338,71 @@ private fun ToolView(
                     color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question) {
+    val open = q.status == ChatToolStatus.RUNNING
+    val state = chat.answers[id]
+    val lone = q.questions.size == 1 && !q.questions[0].multi
+    val chosen = chat.picks[id]
+    Column(
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.tertiaryContainer).padding(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            stringResource(R.string.chat_question_label),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onTertiaryContainer,
+        )
+        q.questions.forEachIndexed { part, question ->
+            question.header?.let { Text(it, style = MaterialTheme.typography.labelSmall) }
+            Text(question.text, color = MaterialTheme.colorScheme.onTertiaryContainer)
+            if (open && question.multi) {
+                Text(stringResource(R.string.chat_question_multi_hint), style = MaterialTheme.typography.bodySmall)
+            }
+            if (open) {
+                question.options.forEachIndexed { i, option ->
+                    val label = stringResource(R.string.chat_question_option_label, option.label)
+                    val selected = chosen?.getOrNull(part)?.contains(i) == true
+                    val enabled = state != AnswerState.Sending && state != AnswerState.Sent
+                    val onClick = { chat.pick(id, q, part, i) }
+                    val modifier = Modifier.fillMaxWidth().semantics { contentDescription = label }
+                    val content: @Composable () -> Unit = {
+                        Column(Modifier.fillMaxWidth()) {
+                            Text(option.label)
+                            option.description?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                        }
+                    }
+                    if (selected) {
+                        Button(onClick = onClick, modifier = modifier, enabled = enabled) { content() }
+                    } else {
+                        OutlinedButton(onClick = onClick, modifier = modifier, enabled = enabled) { content() }
+                    }
+                }
+            }
+        }
+        if (open && !lone && state != AnswerState.Sent) {
+            Button(
+                onClick = { chat.send(id, q) },
+                enabled = state != AnswerState.Sending,
+            ) { Text(stringResource(R.string.chat_question_send)) }
+        }
+        if (open) {
+            when (state) {
+                AnswerState.Sending -> Text(stringResource(R.string.chat_question_sending), style = MaterialTheme.typography.bodySmall)
+                AnswerState.Sent -> Text(stringResource(R.string.chat_question_sent), style = MaterialTheme.typography.bodySmall)
+                is AnswerState.Failed -> Text(
+                    stringResource(state.why.res, *state.why.args.toTypedArray()),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                null -> {}
+            }
+        } else {
+            q.output?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         }
     }
 }

@@ -7,8 +7,8 @@ use std::path::PathBuf;
 use aries_beacon::chat::Interpreter;
 use aries_beacon::chat::claude::ClaudeInterpreter;
 use aries_protocol::chat::{
-    ChatBody, ChatDiff, ChatEvent, ChatImage, ChatItem, DIFF_MAX_LINE_CHARS, DIFF_MAX_LINES,
-    DiffHunk, IMAGE_MAX_BYTES, ToolStatus,
+    ChatBody, ChatDiff, ChatEvent, ChatImage, ChatItem, ChatQuestion, DIFF_MAX_LINE_CHARS,
+    DIFF_MAX_LINES, DiffHunk, IMAGE_MAX_BYTES, ToolStatus,
 };
 use serde_json::{Value, json};
 
@@ -198,6 +198,82 @@ fn several_questions_title_with_the_first() {
         .unwrap();
     assert_eq!(tool.1, 2);
     assert!(!tool.0.is_empty());
+}
+
+fn question_of(chat: &Chat) -> (String, ToolStatus, ChatQuestion) {
+    chat.items
+        .iter()
+        .find_map(|i| match &i.body {
+            ChatBody::Tool {
+                status,
+                question: Some(q),
+                ..
+            } => Some((i.id.clone(), *status, q.clone())),
+            _ => None,
+        })
+        .expect("a question tool")
+}
+
+#[test]
+fn an_ask_user_question_is_an_open_question_until_answered() {
+    let text = fixture("main-session.jsonl");
+    let lines: Vec<&str> = text.lines().collect();
+    let mut interp = ClaudeInterpreter::default();
+    let mut chat = Chat::default();
+    // Up to the AskUserQuestion tool_use (line 65), before its answer.
+    for line in &lines[..65] {
+        chat.apply(interp.line(line));
+    }
+    let (id, status, q) = question_of(&chat);
+    assert_eq!(id, "toolu_012hzhteG39obz5TwRGEb26o");
+    assert_eq!(status, ToolStatus::Running);
+    assert_eq!(q.questions.len(), 1);
+    let first = &q.questions[0];
+    assert_eq!(first.text, "Which color do you prefer?");
+    assert_eq!(first.header.as_deref(), Some("Color"));
+    assert!(!first.multi);
+    let labels: Vec<&str> = first.options.iter().map(|o| o.label.as_str()).collect();
+    assert_eq!(labels, ["Red", "Blue", "Green"]);
+    assert_eq!(first.options[1].description.as_deref(), Some("Choose Blue"));
+
+    for line in &lines[65..] {
+        chat.apply(interp.line(line));
+    }
+    let (_, status, _) = question_of(&chat);
+    assert_eq!(status, ToolStatus::Done);
+}
+
+#[test]
+fn a_multi_select_question_is_marked() {
+    let chat = Chat::feed(&fixture("concurrent-same-cwd-multi-question.jsonl"));
+    let (_, _, q) = question_of(&chat);
+    let multi: Vec<(&str, bool, usize)> = q
+        .questions
+        .iter()
+        .map(|q| (q.text.as_str(), q.multi, q.options.len()))
+        .collect();
+    assert_eq!(
+        multi,
+        [("Which size?", false, 2), ("Which toppings?", true, 3)]
+    );
+}
+
+#[test]
+fn other_tools_ask_nothing() {
+    let chat = Chat::feed(&fixture("main-session.jsonl"));
+    let asking: Vec<&str> = chat
+        .items
+        .iter()
+        .filter_map(|i| match &i.body {
+            ChatBody::Tool {
+                name,
+                question: Some(_),
+                ..
+            } => Some(name.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(asking, ["AskUserQuestion"]);
 }
 
 #[test]

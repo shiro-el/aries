@@ -96,6 +96,7 @@ fn texts(s: &ChatSnapshot) -> Vec<String> {
             ChatEntryBody::Thinking { .. } => "thinking".into(),
             ChatEntryBody::Tool { name, status, .. } => format!("tool {name} {status:?}"),
             ChatEntryBody::AgentError { detail } => format!("error: {detail}"),
+            ChatEntryBody::Question { name, status, .. } => format!("question {name} {status:?}"),
             ChatEntryBody::Unsupported => "unsupported".into(),
         })
         .collect()

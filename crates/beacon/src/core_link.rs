@@ -6,7 +6,7 @@ use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 
 use serde_json::{Value, json};
 
-use crate::chat::{TerminalFacts, TerminalLookup};
+use crate::chat::{TerminalFacts, TerminalInput, TerminalLookup};
 
 pub struct CoreLink {
     child: Child,
@@ -115,5 +115,17 @@ impl TerminalLookup for CoreLookup {
             }
         }
         unreachable!()
+    }
+}
+
+impl TerminalInput for CoreLookup {
+    /// Not retried: a press that may have landed must not land twice.
+    fn keys(&mut self, terminal: &str, keys: &[String]) -> Result<(), String> {
+        if self.link.is_none() {
+            self.link = Some(CoreLink::connect()?);
+        }
+        let link = self.link.as_mut().expect("link");
+        link.call("terminal.keys", json!({"terminal": terminal, "keys": keys}))
+            .map(|_| ())
     }
 }

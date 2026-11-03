@@ -339,6 +339,17 @@ class FakeCore : AriesCoreInterface {
         }
     }
 
+    /** (terminal, question id, picks) of each `answerQuestion` call. */
+    val answers = mutableListOf<Triple<String, String, List<List<UInt>>>>()
+
+    /** Thrown by the next `answerQuestion` instead of answering. */
+    var answerFailure: CoreException? = null
+
+    override suspend fun answerQuestion(hostId: String, terminal: String, questionId: String, picks: List<List<UInt>>) {
+        answers += Triple(terminal, questionId, picks)
+        answerFailure?.let { answerFailure = null; throw it }
+    }
+
     companion object {
         const val PUBLIC_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeFakeFakeFakeFakeFakeFakeFakeFakeFake aries"
     }
