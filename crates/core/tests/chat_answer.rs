@@ -89,6 +89,15 @@ async fn inputs(agent: &FakeAgent, n: usize) -> Vec<String> {
 
 #[tokio::test]
 async fn a_claude_code_question_is_shown_with_options_and_answered_once() {
+    answer_once(false).await;
+}
+
+#[tokio::test]
+async fn a_notification_answers_from_a_fresh_core_and_refuses_an_already_answered_question() {
+    answer_once(true).await;
+}
+
+async fn answer_once(background: bool) {
     let env = Env::new();
     let hc = HcSession::start();
     let config = env.dir.path().join("claude");
@@ -146,8 +155,31 @@ async fn a_claude_code_question_is_shown_with_options_and_answered_once() {
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
 
-    env.core
-        .answer_question(
+    // A background action can start after the app process died: it has no
+    // HostConnection or ChatWatch and loads everything from the saved Host.
+    let core = common::core_in(&env.dir.path().join("data"));
+    if background {
+        let stale = core
+            .answer_question_background(
+                host.clone(),
+                agent.address.clone(),
+                "older-question".into(),
+                vec![vec![0]],
+            )
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(
+                stale,
+                CoreError::AnswerRefused {
+                    reason: AnswerProblem::Gone,
+                    ..
+                }
+            ),
+            "{stale:?}"
+        );
+        assert!(agent.inputs().is_empty());
+        core.answer_question_background(
             host.clone(),
             agent.address.clone(),
             COLOR.into(),
@@ -155,16 +187,29 @@ async fn a_claude_code_question_is_shown_with_options_and_answered_once() {
         )
         .await
         .unwrap();
+    } else {
+        core.answer_question(
+            host.clone(),
+            agent.address.clone(),
+            COLOR.into(),
+            vec![vec![1]],
+        )
+        .await
+        .unwrap();
+    }
     assert_eq!(inputs(&agent, 1).await, ["keys 32"]);
 
     wait_for(&watch, "answered question", |s| {
         question(s).is_some_and(|(_, status, _)| status == ChatToolStatus::Done)
     })
     .await;
-    let again = env
-        .core
-        .answer_question(host, agent.address.clone(), COLOR.into(), vec![vec![2]])
-        .await;
+    let again = if background {
+        core.answer_question_background(host, agent.address.clone(), COLOR.into(), vec![vec![2]])
+            .await
+    } else {
+        core.answer_question(host, agent.address.clone(), COLOR.into(), vec![vec![2]])
+            .await
+    };
     assert!(
         matches!(
             again,
