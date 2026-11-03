@@ -98,4 +98,16 @@ class ChatQuestionTest {
         compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue")).assertDoesNotExist()
     }
 
+
+    @Test fun waitingUserInputDoesNotRetireAnOpenQuestion() {
+        val core = FakeCore()
+        open(core)
+        val waiting = ChatEntry("queued-user", null, ChatEntryBody.User("Inspect the other file too.", queued = true))
+        core.pushChat(ChatSnapshot(listOf(question("q1"), waiting), ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue")).performClick()
+        compose.waitForIdle()
+        assertEquals("q1", core.answers.single().second)
+        assertTrue(core.connection!!.typed.isEmpty())
+    }
 }

@@ -37,6 +37,15 @@ impl Chat {
                         self.items.push(item);
                     }
                 },
+                ChatEvent::Remove { id } => {
+                    self.items.retain(|item| item.id != id);
+                    self.index = self
+                        .items
+                        .iter()
+                        .enumerate()
+                        .map(|(i, item)| (item.id.clone(), i))
+                        .collect();
+                }
                 other => panic!("interpreter emitted {other:?}"),
             }
         }
@@ -436,7 +445,7 @@ fn a_pasted_image_shows_on_the_user_message() {
         {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": "/9j/4AAQ"}}
     ]}});
     let chat = Chat::feed(&line.to_string());
-    let ChatBody::User { text, images } = &chat.items[0].body else {
+    let ChatBody::User { text, images, .. } = &chat.items[0].body else {
         panic!("{:?}", chat.items)
     };
     assert_eq!(text, "what is this?");
@@ -449,7 +458,7 @@ fn a_pasted_image_shows_on_the_user_message() {
     ]}});
     let chat = Chat::feed(&alone.to_string());
     assert!(
-        matches!(&chat.items[0].body, ChatBody::User { text, images } if text.is_empty() && images.len() == 1)
+        matches!(&chat.items[0].body, ChatBody::User { text, images, .. } if text.is_empty() && images.len() == 1)
     );
 }
 
@@ -466,4 +475,108 @@ fn unknown_and_broken_lines_are_ignored() {
     ] {
         assert!(interp.line(line).is_empty(), "{line}");
     }
+}
+
+#[test]
+fn mid_turn_messages_appear_once_at_delivery_instead_of_disappearing() {
+    let chat = Chat::feed(&fixture("mid-turn-messages.jsonl"));
+    assert_eq!(
+        chat.summary(),
+        [
+            "agent: I will inspect the view.",
+            "agent: The file is ready.",
+            "user: Please check the picture inside the tool",
+        ]
+    );
+    let delivered = chat.items.last().unwrap();
+    assert_eq!(delivered.id, "delivered-one");
+    assert_eq!(delivered.ts.as_deref(), Some("2026-11-04T10:00:04.000Z"));
+}
+
+#[test]
+fn an_undelivered_mid_turn_message_is_visible_as_queued() {
+    let text = fixture("mid-turn-messages.jsonl");
+    let prefix = text.lines().take(2).collect::<Vec<_>>().join("\n");
+    let chat = Chat::feed(&prefix);
+    assert_eq!(
+        chat.summary(),
+        [
+            "agent: I will inspect the view.",
+            "user: Please check the picture inside the tool",
+        ]
+    );
+    assert_eq!(
+        serde_json::to_value(&chat.items[1]).unwrap()["queued"],
+        true
+    );
+}
+
+#[test]
+fn delivering_one_of_two_identical_messages_keeps_the_other_waiting() {
+    let chat = Chat::feed(&fixture("repeated-queued-messages.jsonl"));
+    assert_eq!(chat.items.len(), 2);
+    assert_eq!(
+        serde_json::to_value(&chat.items[0]).unwrap()["queued"],
+        true
+    );
+    assert_eq!(chat.items[1].id, "delivered-one");
+}
+
+#[test]
+fn queued_pasted_text_and_images_survive_delivery_before_the_queue_removal() {
+    let chat = Chat::feed(&fixture("queued-media.jsonl"));
+    assert_eq!(
+        chat.items.len(),
+        2,
+        "queue entry, duplicate delivery and internal notification must not add rows"
+    );
+    let ChatBody::User {
+        text,
+        images,
+        queued,
+    } = &chat.items[0].body
+    else {
+        panic!()
+    };
+    assert!(!queued);
+    assert_eq!(text, "Check this pasted note.\nKeep the second line.");
+    assert_eq!(images[0].data.as_deref(), Some("iVBO"));
+    assert_eq!(images[0].media_type, "image/png");
+    let ChatBody::User { text, images, .. } = &chat.items[1].body else {
+        panic!()
+    };
+    assert!(text.is_empty());
+    assert_eq!(images.len(), 1);
+}
+
+#[test]
+fn waiting_input_does_not_make_the_beacon_refuse_the_open_question() {
+    let transcript = fixture("main-session.jsonl");
+    let mut interp = ClaudeInterpreter::default();
+    let mut chat = Chat::default();
+    for line in transcript.lines().take(65) {
+        chat.apply(interp.line(line));
+    }
+    let question = aries_beacon::chat::answer::open_question(&chat.items)
+        .unwrap()
+        .0
+        .to_owned();
+    let queued = fixture("mid-turn-messages.jsonl");
+    chat.apply(interp.line(queued.lines().nth(1).unwrap()));
+    assert_eq!(
+        aries_beacon::chat::answer::open_question(&chat.items)
+            .unwrap()
+            .0,
+        question
+    );
+    chat.apply(interp.line(queued.lines().nth(2).unwrap()));
+    chat.apply(interp.line(queued.lines().nth(4).unwrap()));
+    assert!(aries_beacon::chat::answer::open_question(&chat.items).is_none());
+}
+
+#[test]
+fn a_rewritten_delivery_is_reconciled_by_the_removals_original_content() {
+    let chat = Chat::feed(&fixture("queued-rewritten-prompt.jsonl"));
+    assert_eq!(chat.items.len(), 1);
+    assert_eq!(chat.items[0].id, "delivered-media");
 }
