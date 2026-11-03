@@ -10,7 +10,7 @@
 | `crates/test-support` | Test harness: isolated herdr-core sessions (`HcSession`) and docker sshd Hosts (`SshdHost`). |
 | `crates/uniffi-bindgen` | Generates the Kotlin bindings for `aries-core`. |
 | `android/` | Kotlin + Jetpack Compose app (`io.github.shiroel.aries`). |
-| `fixtures/` | Test fixtures (`fixtures/sshd/Dockerfile`). |
+| `fixtures/` | Test fixtures (`fixtures/sshd/Dockerfile`; `fixtures/sshd-systemd/Dockerfile`, a systemd Host for the Beacon install tests). |
 | `scripts/fetch-herdr-core.sh` | Downloads the pinned herdr-core the tests run against. |
 
 ## Requirements
@@ -27,6 +27,7 @@ cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace                              # unit + core API tests against real herdr-core
 cargo test -p aries-core --test ssh -- --ignored    # SSH tests against a docker sshd
+cargo test -p aries-core --test beacon -- --ignored # Beacon install/remove on a docker systemd Host
 cd android && ./gradlew :app:testDebugUnitTest      # Compose UI tests against a fake core (Robolectric)
 cd android && ./gradlew :app:assembleDebug          # debug APK (builds the core with cargo-ndk)
 cd android && ./gradlew :app:connectedDebugAndroidTest   # device tests (Android Keystore); needs a device/emulator
@@ -67,6 +68,18 @@ follow one rule:
   `_body`, `_button`, `_hint`, `_label`.
 - Format arguments are positional (`%1$s`, `%2$d`) so translations can reorder
   them; iOS maps them to `%1$@` / `%2$d`.
+
+## Beacon on a Host
+
+`crates/core/src/beacon.rs` installs it over SSH: binary
+`~/.local/bin/aries-beacon`, systemd user unit
+`~/.config/systemd/user/aries-beacon.service`, private state (Call records)
+in `~/.local/state/aries-beacon/`. Removal runs `UNINSTALL_STEPS` and keeps
+the state directory. A ticket that puts something else on the Host (pairing,
+managed skills) adds its own removal step there and tests it in
+`crates/core/tests/beacon.rs`. The pinned release (`pinned_release`) and its
+checksums come from the Beacon release pipeline; tests swap it with
+`AriesCore::set_beacon_release`.
 
 ## License
 

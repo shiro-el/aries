@@ -8,3 +8,9 @@ rust-version.workspace = true
 
 [dependencies]
 aries-protocol.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+aries-test-support.workspace = true
+tempfile.workspace = true

@@ -52,4 +52,27 @@
     <string name="connect_unreachable">Could not reach the Host: %1$s</string>
     <string name="connect_protocol">The Host did not speak the herdr-core protocol: %1$s</string>
     <string name="connect_other">%1$s</string>
+    <string name="beacon_title">Beacon</string>
+    <string name="beacon_needs_ssh">The Beacon can only be installed on an SSH Host.</string>
+    <string name="beacon_status_unknown">Could not read the Beacon on this Host.</string>
+    <string name="beacon_not_installed">The Beacon is not installed. It sends notifications and Calls from this Host.</string>
+    <string name="beacon_install_button">Install Beacon</string>
+    <string name="beacon_reinstall_button">Reinstall</string>
+    <string name="beacon_remove_button">Remove Beacon</string>
+    <string name="beacon_version">Beacon %1$s</string>
+    <string name="beacon_not_running">The Beacon service is not running.</string>
+    <string name="beacon_not_attached">Running, not attached to herdr-core yet.</string>
+    <string name="beacon_attached">Running, attached to herdr-core %1$s.</string>
+    <string name="beacon_out_of_range">This app does not support Beacon %1$s (it needs %2$s). Reinstall the Beacon.</string>
+    <string name="beacon_no_linger">The Beacon only runs while you are logged in to the Host. To keep it running, run on the Host: sudo loginctl enable-linger %1$s</string>
+    <string name="beacon_linger_title">Beacon stops when you log out</string>
+    <string name="beacon_linger_body">The Beacon is installed, but the Host refused to keep your services running after logout (%1$s). Without that the Beacon, and its notifications, stop until you log in again.\n\nOn the Host, run: sudo loginctl enable-linger %2$s</string>
+    <string name="beacon_remove_title">Remove the Beacon?</string>
+    <string name="beacon_remove_body">This stops the Beacon on %1$s and removes its service and program. Call history stays on the Host.</string>
+    <string name="beacon_failed_title">Beacon not installed</string>
+    <string name="beacon_checksum_body">The downloaded Beacon does not match the checksum built into this app, so nothing was installed.\n\nExpected: %1$s\nGot: %2$s</string>
+    <string name="beacon_unsupported_host_body">The Beacon does not support %1$s/%2$s Hosts.</string>
+    <string name="beacon_unavailable_body">This version of Aries has no Beacon for %1$s/%2$s yet.</string>
+    <string name="beacon_download_body">Could not download the Beacon: %1$s</string>
+    <string name="beacon_step_body">Step "%1$s" failed on the Host: %2$s</string>
 </resources>

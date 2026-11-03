@@ -26,6 +26,8 @@ jobs:
         run: cargo test --workspace
       - name: SSH tests (docker sshd)
         run: cargo test -p aries-core --test ssh -- --ignored
+      - name: Beacon install tests (docker systemd Host)
+        run: cargo test -p aries-core --test beacon -- --ignored
 
   android:
     runs-on: ubuntu-latest

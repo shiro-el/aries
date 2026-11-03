@@ -49,7 +49,7 @@ fun AriesApp(model: HostsModel) {
                 is Screen.Connecting -> Connecting(s.host)
                 is Screen.Terminals -> {
                     BackHandler { model.back() }
-                    TerminalListScreen(s.host, s.terminals, onBack = model::back)
+                    TerminalListScreen(s.host, s.terminals, onBack = model::back) { BeaconSection(model.beacon) }
                 }
             }
         }
@@ -142,7 +142,12 @@ private fun Connecting(host: Host) {
 }
 
 @Composable
-private fun TerminalListScreen(host: Host, terminals: List<TerminalInfo>, onBack: () -> Unit) {
+private fun TerminalListScreen(
+    host: Host,
+    terminals: List<TerminalInfo>,
+    onBack: () -> Unit,
+    hostSections: @Composable () -> Unit = {},
+) {
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
             Row {
@@ -151,6 +156,7 @@ private fun TerminalListScreen(host: Host, terminals: List<TerminalInfo>, onBack
             Text(stringResource(R.string.terminals_title, host.name), style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.height(8.dp))
         }
+        item { hostSections() }
         if (terminals.isEmpty()) item { Text(stringResource(R.string.terminals_empty)) }
         items(terminals, key = { it.address }) { t ->
             Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {

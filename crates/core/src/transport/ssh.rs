@@ -65,8 +65,79 @@ impl client::Handler for Checker {
     }
 }
 
+/// What a command run with [`Ssh::exec`] produced.
+pub(crate) struct ExecOutput {
+    /// `None` when the Host did not report an exit status.
+    pub status: Option<u32>,
+    pub stdout: Vec<u8>,
+    pub stderr: Vec<u8>,
+}
+
+impl ExecOutput {
+    pub fn success(&self) -> bool {
+        self.status == Some(0)
+    }
+}
+
 impl Ssh {
+    /// Runs `command` on the Host (no PTY), feeds it `stdin` then EOF, and
+    /// collects its output.
+    pub async fn exec(&self, command: &str, stdin: &[u8]) -> Result<ExecOutput, CoreError> {
+        let session = self.session().await?;
+        let unreachable = |e: russh::Error| CoreError::Unreachable {
+            detail: e.to_string(),
+        };
+        let mut channel = session.channel_open_session().await.map_err(unreachable)?;
+        channel.exec(true, command).await.map_err(unreachable)?;
+        if !stdin.is_empty() {
+            channel.data(stdin).await.map_err(unreachable)?;
+        }
+        channel.eof().await.map_err(unreachable)?;
+        let mut out = ExecOutput {
+            status: None,
+            stdout: Vec::new(),
+            stderr: Vec::new(),
+        };
+        while let Some(msg) = channel.wait().await {
+            match msg {
+                russh::ChannelMsg::Data { data } => out.stdout.extend_from_slice(&data),
+                russh::ChannelMsg::ExtendedData { data, ext: 1 } => {
+                    out.stderr.extend_from_slice(&data)
+                }
+                russh::ChannelMsg::ExitStatus { exit_status } => out.status = Some(exit_status),
+                _ => {}
+            }
+        }
+        let _ = session
+            .disconnect(russh::Disconnect::ByApplication, "", "")
+            .await;
+        Ok(out)
+    }
+
     async fn open_inner(&self) -> Result<Stream, CoreError> {
+        let session = self.session().await?;
+        let channel = session
+            .channel_open_session()
+            .await
+            .map_err(|e| CoreError::Unreachable {
+                detail: e.to_string(),
+            })?;
+        channel
+            .exec(true, REMOTE_COMMAND)
+            .await
+            .map_err(|e| CoreError::Unreachable {
+                detail: e.to_string(),
+            })?;
+        let (reader, writer) = tokio::io::split(channel.into_stream());
+        Ok(Stream {
+            reader: Box::new(reader),
+            writer: Box::new(writer),
+            guard: Box::new(Mutex::new(session)),
+        })
+    }
+
+    /// Connects, checks the Host key and authenticates with the app's key.
+    async fn session(&self) -> Result<client::Handle<Checker>, CoreError> {
         let config = Arc::new(client::Config {
             keepalive_interval: Some(Duration::from_secs(15)),
             keepalive_max: 4,
@@ -112,24 +183,7 @@ impl Ssh {
         if !auth.success() {
             return Err(CoreError::AuthRejected);
         }
-        let channel = session
-            .channel_open_session()
-            .await
-            .map_err(|e| CoreError::Unreachable {
-                detail: e.to_string(),
-            })?;
-        channel
-            .exec(true, REMOTE_COMMAND)
-            .await
-            .map_err(|e| CoreError::Unreachable {
-                detail: e.to_string(),
-            })?;
-        let (reader, writer) = tokio::io::split(channel.into_stream());
-        Ok(Stream {
-            reader: Box::new(reader),
-            writer: Box::new(writer),
-            guard: Box::new(Mutex::new(session)),
-        })
+        Ok(session)
     }
 }
 
