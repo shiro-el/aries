@@ -59,25 +59,28 @@ impl Agent for Codex {
         picks: &[Vec<usize>],
         text: &[Option<String>],
     ) -> Result<Vec<super::answer::AnswerInput>, KeysError> {
-        use super::answer::AnswerInput::{Keys, Text};
+        use super::answer::AnswerInput::Keys;
         if question.questions.iter().any(|q| q.multi) {
             return Err(KeysError::Unsupported("multi-select Codex question".into()));
         }
+        if text.iter().any(Option::is_some) {
+            return Ok(question
+                .questions
+                .iter()
+                .enumerate()
+                .map(|(i, q)| super::answer::AnswerInput::Menu {
+                    prompt: q.text.clone(),
+                    options: q.options.len(),
+                    pick: picks[i].first().copied(),
+                    text: text.get(i).and_then(Clone::clone),
+                })
+                .collect());
+        }
         let mut actions = Vec::new();
-        for (i, q) in question.questions.iter().enumerate() {
-            let value = text.get(i).and_then(Option::as_ref);
-            let n = if value.is_some() {
-                q.options.len()
-            } else {
-                picks[i][0]
-            };
-            let mut keys = vec!["down".into(); n];
+        for picks in picks {
+            let mut keys = vec!["down".into(); picks[0]];
             keys.push("enter".into());
             actions.push(Keys(keys));
-            if let Some(value) = value {
-                actions.push(Text(value.clone()));
-                actions.push(Keys(vec!["enter".into()]));
-            }
         }
         Ok(actions)
     }
@@ -93,7 +96,8 @@ impl Agent for Codex {
                 .into_iter()
                 .flat_map(|action| match action {
                     super::answer::AnswerInput::Keys(keys) => keys,
-                    super::answer::AnswerInput::Text(_) => unreachable!(),
+                    super::answer::AnswerInput::Text(_)
+                    | super::answer::AnswerInput::Menu { .. } => unreachable!(),
                 })
                 .collect()
         })

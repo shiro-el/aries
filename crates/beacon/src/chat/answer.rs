@@ -31,6 +31,13 @@ pub trait TerminalInput {
 pub enum AnswerInput {
     Keys(Vec<String>),
     Text(String),
+    /// A highlighted menu whose current row is read again for each part.
+    Menu {
+        prompt: String,
+        options: usize,
+        pick: Option<usize>,
+        text: Option<String>,
+    },
 }
 
 /// Why an Agent cannot map picks to keys.
@@ -206,7 +213,7 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
             }
         }
     }
-    if has_text {
+    if has_text && agent.name() != "codex" {
         let screen = match link.screen(terminal) {
             Ok(screen) => screen,
             Err(e) => return Ok(reply(AnswerOutcome::Gone, e)),
@@ -228,16 +235,103 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
             return Ok(reply(AnswerOutcome::Gone, "the live menu does not match"));
         }
     }
+
     for action in actions {
         let result = match action {
-            AnswerInput::Keys(keys) => link.keys(terminal, &keys),
-            AnswerInput::Text(text) => link.text(terminal, &text),
+            AnswerInput::Keys(keys) => link
+                .keys(terminal, &keys)
+                .map_err(|e| reply(AnswerOutcome::Failed, e)),
+            AnswerInput::Text(text) => link
+                .text(terminal, &text)
+                .map_err(|e| reply(AnswerOutcome::Failed, e)),
+            AnswerInput::Menu {
+                prompt,
+                options,
+                pick,
+                text,
+            } => menu(link, terminal, &prompt, options, pick, text.as_deref()),
         };
-        if let Err(e) = result {
-            return Ok(reply(AnswerOutcome::Failed, e));
+        if let Err(reply) = result {
+            return Ok(reply);
         }
     }
     Ok(AnswerReply::new(AnswerOutcome::Sent, None))
+}
+
+/// Codex's editor can retain a person's selection on any part. Re-read the
+/// actual menu before each part, including after a preceding Enter advances.
+fn menu<L: TerminalLookup + TerminalInput>(
+    link: &mut L,
+    terminal: &str,
+    prompt: &str,
+    options: usize,
+    pick: Option<usize>,
+    text: Option<&str>,
+) -> Result<(), AnswerReply> {
+    let normalize = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let prompt = normalize(prompt);
+    let mut screen = String::new();
+    for _ in 0..20 {
+        screen = link
+            .screen(terminal)
+            .map_err(|e| reply(AnswerOutcome::Gone, e))?;
+        if normalize(&screen).contains(&prompt) {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    if !normalize(&screen).contains(&prompt) {
+        return Err(reply(
+            AnswerOutcome::Gone,
+            "the next question menu did not appear",
+        ));
+    }
+    let selected = screen.lines().rev().find_map(|line| {
+        let row = line.trim().strip_prefix(['›', '❯'])?.trim();
+        row.split_once('.')?.0.parse::<usize>().ok()?.checked_sub(1)
+    });
+    let Some(selected) = selected.filter(|n| *n < options) else {
+        return Err(reply(
+            AnswerOutcome::Gone,
+            "Codex selection or answer draft changed",
+        ));
+    };
+    if text.is_some() {
+        let row = format!("{}.", options + 1);
+        if !screen.lines().any(|line| {
+            line.contains(&row)
+                && ["Other", "Type something", "None of the above"]
+                    .iter()
+                    .any(|label| line.contains(label))
+        }) {
+            return Err(reply(
+                AnswerOutcome::Unsupported,
+                "this question has no free-text row",
+            ));
+        }
+    }
+    let facts = link
+        .get(terminal)
+        .map_err(|e| reply(AnswerOutcome::NoCore, e))?;
+    if !facts
+        .and_then(|f| f.status)
+        .is_some_and(|s| s.state == "blocked" && s.kind.as_deref() == Some("question"))
+    {
+        return Err(reply(AnswerOutcome::Gone, "the Agent is not asking"));
+    }
+    let target = pick.unwrap_or(options);
+    let direction = if target < selected { "up" } else { "down" };
+    let mut keys = vec![direction.to_owned(); target.abs_diff(selected)];
+    keys.push("enter".into());
+    link.keys(terminal, &keys)
+        .map_err(|e| reply(AnswerOutcome::Failed, e))?;
+    if let Some(text) = text {
+        link.text(terminal, text)
+            .map_err(|e| reply(AnswerOutcome::Failed, e))?;
+        link.keys(terminal, &["enter".into()])
+            .map_err(|e| reply(AnswerOutcome::Failed, e))?;
+    }
+    Ok(())
 }
 
 /// A current transcript, applying the same upsert / remove / reset semantics

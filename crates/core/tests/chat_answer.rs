@@ -352,7 +352,7 @@ async fn codex_queued_requests_are_answered_in_order_with_text_or_options() {
     let result = env.dir.path().join("q1-result");
     std::fs::write(&result, "{\"type\":\"response_item\",\"payload\":{\"type\":\"function_call_output\",\"call_id\":\"q1\",\"output\":\"Purple\"}}\n").unwrap();
     let agent = hc.run_fake_agent("codex", &format!(
-        "hold {}\nsay 2 questions - shift+left to answer\nstatus blocked question\nkeys 6\nsay First color?\nsay 3. Other\nkeys 14\ntranscript {} {}\nsay Second color?\nstatus blocked question\nkeys 4\nstatus working\n",
+        "hold {}\nsay 2 questions - shift+left to answer\nstatus blocked question\nkeys 6\nsay First color?\nsay › 2. Blue\nsay 3. Other\nkeys 11\ntranscript {} {}\nsay Second color?\nstatus blocked question\nkeys 4\nstatus working\n",
         rollout.display(), result.display(), rollout.display(),
     ));
     let mut vars: HashMap<String, String> = hc.env().into_iter().collect();
@@ -408,7 +408,7 @@ async fn codex_queued_requests_are_answered_in_order_with_text_or_options() {
         inputs(&agent, 2).await,
         [
             "keys 1b 5b 31 3b 32 44",
-            "keys 1b 5b 42 1b 5b 42 0d 50 75 72 70 6c 65 0d"
+            "keys 1b 5b 42 0d 50 75 72 70 6c 65 0d"
         ]
     );
     env.core
@@ -416,4 +416,54 @@ async fn codex_queued_requests_are_answered_in_order_with_text_or_options() {
         .await
         .unwrap();
     assert_eq!(inputs(&agent, 3).await[2], "keys 1b 5b 42 0d");
+}
+
+#[tokio::test]
+async fn codex_rechecks_each_part_before_mixing_free_text_and_options() {
+    let env = Env::new();
+    let hc = HcSession::start();
+    let rollout = env
+        .dir
+        .path()
+        .join("sessions/rollout-2026-11-04T00-00-00-01a1a012-3af0-7c01-97e4-7e2adbc2ae4f.jsonl");
+    std::fs::create_dir_all(rollout.parent().unwrap()).unwrap();
+    let part = |id: &str, text: &str| serde_json::json!({"id":id,"header":"Color","question":text,"options":[{"label":"Red","description":"red"},{"label":"Blue","description":"blue"}]});
+    let call = serde_json::json!({"type":"response_item","payload":{"type":"function_call","name":"request_user_input","call_id":"q1","arguments":serde_json::json!({"questions":[part("first", "First color?"),part("second", "Second color?")]}).to_string()}});
+    std::fs::write(&rollout, format!("{call}\n")).unwrap();
+    let agent = hc.run_fake_agent("codex", &format!(
+        "hold {}\nsay First color?\nsay › 2. Blue\nsay 3. Other\nstatus blocked question\nkeys 11\nsay Second color?\nsay › 1. Red\nsay 3. Other\nkeys 1\nstatus working\n", rollout.display(),
+    ));
+    let mut vars: HashMap<String, String> = hc.env().into_iter().collect();
+    vars.insert(
+        "ARIES_BEACON".into(),
+        path(&aries_test_support::beacon_bin()),
+    );
+    vars.insert(
+        "PATH".into(),
+        format!("{}:/usr/bin:/bin", hc.bin().parent().unwrap().display()),
+    );
+    let host = env.host(vars);
+    for _ in 0..100 {
+        if hc
+            .hc(&["get", &agent.address, "--json"])
+            .contains("\"blocked\"")
+        {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    env.core
+        .answer_question_with_text(
+            host,
+            agent.address.clone(),
+            "q1".into(),
+            vec![vec![], vec![0]],
+            vec![Some("Purple".into()), None],
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        inputs(&agent, 2).await,
+        ["keys 1b 5b 42 0d 50 75 72 70 6c 65 0d", "keys 0d"]
+    );
 }
