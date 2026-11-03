@@ -164,6 +164,12 @@
     <string name="files_export_failed">파일을 전송하지 못했습니다. 연결, 파일과 폴더의 접근 권한, 여유 공간을 확인한 뒤 다시 시도하세요.</string>
     <!-- Remote file browser (90) -->
     <string name="files_open_button">파일</string>
+    <string name="files_changed_heading">변경됨</string>
+    <string name="files_folders_heading">폴더</string>
+    <string name="files_diff_button">Diff</string>
+    <string name="files_full_button">전체 파일</string>
+    <string name="files_folder_expanded">펼침</string>
+    <string name="files_folder_collapsed">접힘</string>
     <string name="files_title">Host 파일</string>
     <string name="files_close_button">파일 닫기</string>
     <string name="files_up_button">상위 폴더</string>
@@ -171,7 +177,6 @@
     <string name="files_back_folder_button">폴더로 돌아가기</string>
     <string name="files_send_file_button">Agent에게 파일 보내기</string>
     <string name="files_send_line_label">Agent에게 %1$d행 보내기</string>
-    <string name="files_line_hint">줄을 누르면 Chat 초안에 추가합니다.</string>
     <string name="files_not_text">미리 볼 수 없음: 바이너리 또는 UTF-8이 아닌 파일입니다.</string>
     <string name="files_loading">파일을 불러오는 중…</string>
     <string name="files_failed">폴더 또는 파일을 불러오지 못했습니다. 연결, 경로, 권한을 확인한 뒤 다시 시도하세요.</string>
@@ -192,8 +197,6 @@
     <string name="files_line_unavailable">이 파일에 %1$d줄이 더 이상 없습니다. 처음부터 표시합니다.</string>
     <string name="files_no_folder">이 Terminal의 현재 폴더가 없습니다. 파일의 절대 경로를 사용하세요.</string>
     <!-- Git changes (ticket 89) -->
-    <string name="git_changes_button">변경</string>
-    <string name="git_changes_title">Git 변경 · 읽기 전용</string>
     <string name="git_loading">변경을 읽는 중…</string>
     <string name="git_not_repository">이 폴더는 Git 저장소가 아닙니다.</string>
     <string name="git_clean">변경이 없습니다.</string>
@@ -206,9 +209,7 @@
     <string name="git_empty_diff">이 파일의 텍스트 diff가 없습니다.</string>
     <string name="git_send_file">Agent에게 파일 보내기</string>
     <string name="git_send_selection">Agent에게 선택한 줄 보내기</string>
-    <string name="git_select_hint">줄을 누르고 다른 줄을 누르면 범위를 선택합니다. 참조는 Chat 입력란에 추가됩니다.</string>
     <string name="git_error">Git 변경을 읽지 못했습니다: %1$s</string>
-    <string name="git_retry_button">새로고침</string>
     <string name="git_line_label">이전 %1$s · 새 %2$s: %3$s</string>
 
 
@@ -419,9 +420,6 @@
 
     <string name="chat_empty">아직 메시지가 없습니다.</string>
     <string name="chat_status_connecting">Beacon에 연결하는 중…</string>
-    <string name="chat_status_waiting">Agent가 아직 아무것도 기록하지 않았습니다.</string>
-    <string name="chat_status_no_agent">이 Terminal에서 지원하는 Agent가 실행 중이지 않습니다.</string>
-    <string name="chat_status_ended">Agent가 종료되었습니다. 마지막 Chat입니다.</string>
     <string name="chat_status_reconnecting">연결이 끊겼습니다. 다시 연결하는 중…</string>
     <string name="chat_status_no_terminal">이 Terminal은 더 이상 없습니다.</string>
     <string name="chat_status_no_beacon">Chat을 보려면 이 Host에 Beacon이 있어야 합니다. Host 화면에서 설치하세요.</string>
@@ -777,6 +775,7 @@
     <string name="push_off_host_unreachable">푸시를 껐고 Relay에서 이 페어링을 삭제했습니다. Host에 연결할 수 없어 Host 쪽 페어링 사본은 다음 페어링 때까지 남지만 더는 동작하지 않습니다.</string>
     <string name="push_channel_name">Host 알림</string>
     <!-- Watched Agent progress -->
+    <string name="agent_actions_label">Agent 동작</string>
     <string name="agent_watch_label">진행 상황 지켜보기</string>
     <string name="agent_watch_error">지켜보기를 변경하지 못했습니다: %1$s</string>
     <string name="push_progress_channel">지켜보는 Agent 진행 상황</string>

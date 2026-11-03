@@ -46,6 +46,7 @@ class ChatSearchUiTest {
     }
 
     private fun search(query: String, count: Int = 3) {
+        compose.onNodeWithTag("agent-actions").performClick()
         compose.onNodeWithContentDescription(str(R.string.chat_search_button)).performClick()
         compose.onNodeWithContentDescription(str(R.string.chat_search_hint)).performTextInput(query)
         waitForCount(1, count)

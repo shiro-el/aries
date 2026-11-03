@@ -1,9 +1,5 @@
 package io.github.shiroel.aries.ui
 
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,10 +12,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -169,20 +161,6 @@ internal data class ChatSearchDecoration(
 )
 internal val LocalChatSearch = staticCompositionLocalOf { ChatSearchDecoration(emptyMap(), null) }
 internal val LocalChatSearchEntry = staticCompositionLocalOf { "" }
-
-/** The existing metadata row owns this action, so a closed search consumes no transcript height. */
-@Composable
-internal fun ChatSearchButton(onOpen: () -> Unit) {
-    val label = stringResource(R.string.chat_search_button)
-    val color = MaterialTheme.colorScheme.primary
-    Box(Modifier.size(44.dp).clickable(role = Role.Button, onClick = onOpen)
-        .semantics { contentDescription = label }, contentAlignment = Alignment.Center) {
-        Canvas(Modifier.size(18.dp)) {
-            drawCircle(color, radius = size.width * .30f, center = Offset(size.width * .4f, size.height * .4f), style = Stroke(1.5.dp.toPx()))
-            drawLine(color, Offset(size.width * .63f, size.height * .63f), Offset(size.width * .94f, size.height * .94f), strokeWidth = 1.5.dp.toPx())
-        }
-    }
-}
 
 @Composable
 internal fun ChatSearchBar(

@@ -418,9 +418,9 @@ fun ChatScreen(
     calls: CallsModel? = null,
 ) {
     val readAloud = io.github.shiroel.aries.speech.rememberReadAloud(chat)
-    var showGit by remember(chat) { mutableStateOf(false) }
-    if (showGit) GitChangesDialog(chat.link, chat.terminal, { showGit = false }) { text ->
-        chat.draft = if (chat.draft.isBlank()) text else chat.draft + "\n\n" + text
+    val context = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(readAloud.notice) {
+        readAloud.notice?.let { android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_LONG).show() }
     }
     val snapshot = chat.snapshot
     val entries = snapshot?.entries.orEmpty()
@@ -453,7 +453,7 @@ fun ChatScreen(
     CompositionLocalProvider(LocalChatSearch provides searchDecoration) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))) {
             AgentScreenHeader(chat.terminal, chat.host.name, onBack, AgentView.CHAT, onView,
-                onChanges = { showGit = true }, link = chat.link, onTerminalUpdate = { chat.update(listOf(it)) }, onSearch = { searchOpen = true })
+                link = chat.link, onTerminalUpdate = { chat.update(listOf(it)) }, onSearch = { searchOpen = true })
             ChatSearchBar(searchOpen, query, selectedIndex + 1, matches.size,
                 onQuery = { query = it; selected = null },
                 onMove = { selected = navigateChatSearch(matches, active, it) },
@@ -463,7 +463,7 @@ fun ChatScreen(
             if (snapshot != null && entries.isEmpty() && snapshot.status == ChatStatus.LIVE) {
                 Text(stringResource(R.string.chat_empty))
             }
-            io.github.shiroel.aries.speech.ReadAloudPlayback(readAloud)
+            io.github.shiroel.aries.speech.ReadAloudPlayback(readAloud, showInactiveNotice = false)
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 LazyColumn(Modifier.fillMaxSize().testTag("chat-transcript"), state = scroll.list) {
                     entries.forEach { entry ->
@@ -625,9 +625,9 @@ private fun BlockedNotice(status: AgentStatus.Blocked, refused: Boolean, onOpenT
 private fun statusText(status: ChatStatus): String? = when (status) {
     ChatStatus.LIVE -> null
     ChatStatus.CONNECTING -> stringResource(R.string.chat_status_connecting)
-    ChatStatus.WAITING -> stringResource(R.string.chat_status_waiting)
-    ChatStatus.NO_AGENT -> stringResource(R.string.chat_status_no_agent)
-    ChatStatus.ENDED -> stringResource(R.string.chat_status_ended)
+    ChatStatus.WAITING -> null
+    ChatStatus.NO_AGENT -> null
+    ChatStatus.ENDED -> null
     ChatStatus.RECONNECTING -> stringResource(R.string.chat_status_reconnecting)
     ChatStatus.NO_TERMINAL -> stringResource(R.string.chat_status_no_terminal)
     ChatStatus.NO_BEACON -> stringResource(R.string.chat_status_no_beacon)
