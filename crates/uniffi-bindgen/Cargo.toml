@@ -1,0 +1,11 @@
+[package]
+name = "uniffi-bindgen"
+description = "Generates the Kotlin bindings for aries-core (cargo run -p uniffi-bindgen -- generate ...)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+uniffi = { workspace = true, features = ["cli"] }

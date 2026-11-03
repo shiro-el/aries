@@ -1,0 +1,9 @@
+/target/
+**/build/
+.gradle/
+local.properties
+*.iml
+.idea/
+.kotlin/
+android/app/src/main/jniLibs/
+android/app/src/main/java/uniffi/

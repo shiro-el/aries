@@ -1,0 +1,11 @@
+[package]
+name = "aries-protocol"
+description = "The core <-> Beacon contract shared by the phone core and the Beacon"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true

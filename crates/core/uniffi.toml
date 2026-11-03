@@ -1,0 +1,3 @@
+[bindings.kotlin]
+package_name = "io.github.shiroel.aries.core"
+cdylib_name = "aries_core"
