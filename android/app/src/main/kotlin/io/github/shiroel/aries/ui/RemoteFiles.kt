@@ -220,7 +220,7 @@ fun RemoteFilesScreen(
             notText -> Text(stringResource(R.string.files_not_text))
             missing -> Text(stringResource(R.string.files_missing, file.orEmpty()), color = MaterialTheme.colorScheme.error)
             failed -> Text(stringResource(R.string.files_failed), color = MaterialTheme.colorScheme.error)
-            showingDiff -> GitFileDiff(connection, address, changes!!.cwd, changedFile!!, retry, onDiffSend)
+            showingDiff -> GitFileDiff(connection, address, changes!!.cwd, changedFile, retry, onDiffSend)
             remoteMediaKind(file!!) != null -> key(connection, address, file, retry) {
                 RemoteFilePreview(connection, address, file!!, Modifier.weight(1f))
             }
