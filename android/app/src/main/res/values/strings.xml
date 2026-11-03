@@ -207,17 +207,11 @@
     <string name="agents_elapsed_label">Status changed %1$s ago</string>
     <string name="tree_expanded">Expanded</string>
     <string name="tree_collapsed">Collapsed</string>
-    <string name="agents_view_priority">Priority</string>
-    <string name="agents_view_grouped">Grouped by space</string>
     <string name="agents_needs_you">Needs you</string>
     <string name="agents_pinned_group">Pinned · %1$d</string>
     <string name="agents_priority_group">%1$s · %2$d</string>
-    <string name="agents_space_group">%1$s · %2$s · %3$d</string>
     <string name="agents_expand_children">Expand %1$s, %2$d child Agents</string>
     <string name="agents_collapse_children">Collapse %1$s, %2$d child Agents</string>
-    <string name="agents_child_count">%1$d</string>
-    <string name="agents_fold_closed" translatable="false">▸</string>
-    <string name="agents_fold_open" translatable="false">▾</string>
     <!-- Home widgets (78). -->
     <string name="widget_waiting_title">Aries · Needs you</string>
     <string name="widget_agents_title">Aries · Agents</string>
@@ -357,8 +351,6 @@
     <string name="agents_host_unavailable">Could not reach %1$s</string>
     <string name="agents_host_closed">The connection to %1$s closed. Its Agents may be out of date.</string>
     <string name="agents_host_reconnecting">Reconnecting to %1$s…</string>
-    <string name="agent_pin_button">Pin</string>
-    <string name="agent_unpin_button">Unpin</string>
     <string name="agent_pin_button_label">Pin %1$s on %2$s</string>
     <string name="agent_unpin_button_label">Unpin %1$s on %2$s</string>
 
@@ -505,12 +497,7 @@
     <string name="chat_blocked_question">The Agent asks you a question in the Terminal.</string>
     <string name="chat_blocked_auth">The Agent needs you to sign in, in the Terminal.</string>
     <string name="chat_blocked_other">The Agent waits for you in the Terminal.</string>
-    <string name="space_summary">Tabs: %1$d · Panes: %2$d</string>
-    <string name="space_no_tabs">This Space has no Tabs.</string>
-    <string name="tab_empty">This Tab has no Terminals.</string>
     <string name="pane_terminal_gone">%1$s (ended)</string>
-    <string name="pane_zoom_button">Zoom</string>
-    <string name="pane_unzoom_button">Show all Panes</string>
     <string name="unplaced_title">Other Terminals</string>
     <string name="structure_no_document">No saved herdr-app layout.</string>
     <string name="structure_unreadable">The herdr-app layout on this Host could not be read (%1$s). Terminals are grouped by their Space and Tab labels.</string>
