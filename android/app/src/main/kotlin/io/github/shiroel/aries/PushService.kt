@@ -80,8 +80,17 @@ class PushService : FirebaseMessagingService() {
         fun show(context: Context, notice: PushNotice, canAnswerInBackground: (hostId: String) -> Boolean = { false }) {
             val manager = context.getSystemService(NotificationManager::class.java)
             val content = notice.content
+            if (content is PushContent.Progress) {
+                ProgressNotifications.post(context, notice, content)
+                return
+            }
+            if (content is PushContent.Status && !ProgressNotifications.acceptStatus(context, notice.hostId, content.terminal, content.at)) return
+            // A child explicitly watched by the user can complete its local card.
+            val wasWatched = content is PushContent.Status && manager.activeNotifications.any {
+                it.id == notice.hostId.hashCode() && it.tag == content.terminal && it.notification.flags and Notification.FLAG_ONGOING_EVENT != 0
+            }
             // Sub-agents report to their parent, even if an older Beacon pushes them.
-            if (content is PushContent.Status && !content.topLevel) return
+            if (content is PushContent.Status && !content.topLevel && !wasWatched) return
             if (content is PushContent.Call && !content.topLevel) return
             if (content is PushContent.Call) {
                 val call = CallNotice(notice.hostId, notice.hostName, content)
@@ -108,6 +117,7 @@ class PushService : FirebaseMessagingService() {
                     context.getString(R.string.push_status_title, agent, notice.hostName) to
                         (message?.let { context.getString(R.string.push_status_body, label, it) } ?: label)
                 }
+                is PushContent.Progress -> return // handled above
                 is PushContent.Call -> return // shown by showCall
             }
             val builder = Notification.Builder(context, channel)
@@ -119,6 +129,7 @@ class PushService : FirebaseMessagingService() {
             // One notification per Agent: its newer status replaces the older.
             if (content is PushContent.Status) {
                 QuestionNotifications.decorate(context, notice, content, builder, canAnswerInBackground)
+                ProgressNotifications.completed(context, notice.hostId, content.terminal, content.at)
                 val tag = content.terminal
                 NotificationGroups.decorate(context, builder, notice.hostId, notice.hostName, tag, content.terminal)
                 val status = content.status
