@@ -41,6 +41,7 @@ internal fun FileExportControls(connection: HostConnection?, address: String, pa
 @Composable
 private fun FileExportActions(connection: HostConnection?, address: String, path: String) {
     val context = LocalContext.current
+    val shareTitle by rememberUpdatedState(stringResource(R.string.files_share_title))
     val scope = rememberCoroutineScope()
     var job by remember { mutableStateOf<Job?>(null) }
     var busy by remember { mutableStateOf(false) }
@@ -88,7 +89,7 @@ private fun FileExportActions(connection: HostConnection?, address: String, path
                         clipData = ClipData.newRawUri(name, uri)
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     }
-                    context.startActivity(Intent.createChooser(send, context.getString(R.string.files_share_title))
+                    context.startActivity(Intent.createChooser(send, shareTitle)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     shared = true
                     status = R.string.files_share_ready
