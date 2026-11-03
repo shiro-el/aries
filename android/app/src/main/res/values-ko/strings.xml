@@ -271,6 +271,10 @@
     <string name="agent_view_terminal">term</string>
     <string name="agent_view_chat">chat</string>
     <string name="chat_title">Chat: %1$s</string>
+    <!-- Chat reading position -->
+    <string name="chat_latest_button">최신으로</string>
+    <string name="chat_latest_count_button">최신으로 (%1$d)</string>
+
     <string name="chat_empty">아직 메시지가 없습니다.</string>
     <string name="chat_status_connecting">Beacon에 연결하는 중…</string>
     <string name="chat_status_waiting">Agent가 아직 아무것도 기록하지 않았습니다.</string>

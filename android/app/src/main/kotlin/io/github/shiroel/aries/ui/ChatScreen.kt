@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.foundation.text.BasicTextField
@@ -31,13 +30,13 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.stringResource
@@ -348,12 +347,7 @@ fun ChatScreen(
                 (it.answerable || it.key in model.replying || it.key in model.replyNotes)
         }.sortedBy { it.call.atMs }
     }.orEmpty()
-    val list = rememberLazyListState()
-    // Follow the conversation: keep the newest entry in view.
-    LaunchedEffect(entries.size, agentCalls.size) {
-        val count = entries.size + agentCalls.size
-        if (count > 0) list.scrollToItem(count - 1)
-    }
+    val scroll = rememberChatScrollState(chat, entries, agentCalls.map { "call:${it.key}" })
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))) {
         AgentScreenHeader(chat.terminal, chat.host.name, onBack, AgentView.CHAT, onView,
             onChanges = { showGit = true }, link = chat.link, onTerminalUpdate = { chat.update(listOf(it)) })
@@ -361,20 +355,32 @@ fun ChatScreen(
         if (snapshot != null && entries.isEmpty() && snapshot.status == ChatStatus.LIVE) {
             Text(stringResource(R.string.chat_empty))
         }
-        LazyColumn(Modifier.weight(1f), state = list) {
-            items(entries, key = { "transcript:${it.id}" }) { entry ->
-                val body = entry.body
-                if (body is ChatEntryBody.Question) {
-                    QuestionView(chat, entry.id, body)
-                } else {
-                    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-                        ChatEntryView(entry, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image) { chat.toggle(entry.id) }
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            LazyColumn(Modifier.fillMaxSize().testTag("chat-transcript"), state = scroll.list) {
+                items(entries, key = { "transcript:${it.id}" }) { entry ->
+                    val body = entry.body
+                    if (body is ChatEntryBody.Question) {
+                        QuestionView(chat, entry.id, body)
+                    } else {
+                        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                            ChatEntryView(entry, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image) { chat.toggle(entry.id) }
+                        }
+                        HorizontalDivider()
                     }
-                    HorizontalDivider()
+                }
+                items(agentCalls, key = { "call:${it.key}" }) { entry ->
+                    if (calls != null) ConsoleChatCall(entry, calls)
                 }
             }
-            items(agentCalls, key = { "call:${it.key}" }) { entry ->
-                if (calls != null) ConsoleChatCall(entry, calls)
+            if (!scroll.following && (entries.isNotEmpty() || agentCalls.isNotEmpty())) {
+                TextButton(
+                    onClick = scroll::latest,
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp)
+                        .background(MaterialTheme.colorScheme.surface),
+                ) {
+                    Text(if (scroll.unreadCount == 0) stringResource(R.string.chat_latest_button)
+                        else stringResource(R.string.chat_latest_count_button, scroll.unreadCount))
+                }
             }
         }
         (chat.terminal.agentStatus as? AgentStatus.Blocked)?.let {
