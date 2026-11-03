@@ -11,7 +11,9 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.test.core.app.ApplicationProvider
@@ -64,6 +66,24 @@ class ChatScrollTest {
             }
         }
         push(entries(30))
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithText("Reply 30\nSecond line\nThird line").fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
+    private fun readReply(number: Int) {
+        compose.onNodeWithTag("chat-transcript").performScrollToNode(hasText("Reply $number\nSecond line\nThird line"))
+    }
+
+    private fun awaitText(text: String) {
+        compose.waitUntil(5_000) { compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitForIdle()
+    }
+
+    private fun assertReply(number: Int) {
+        val text = "Reply $number\nSecond line\nThird line"
+        awaitText(text)
+        compose.onNodeWithText(text).assertIsDisplayed()
     }
 
     private fun push(entries: List<ChatEntry>) {
@@ -74,23 +94,23 @@ class ChatScrollTest {
 
     @Test fun newRowsKeepTheReadingPositionAndLatestResumesFollowing() {
         open()
-        compose.onNodeWithText("Reply 30\nSecond line\nThird line").assertIsDisplayed()
-        compose.onNodeWithTag("chat-transcript").performScrollToIndex(5)
-        compose.onNodeWithText("Reply 6\nSecond line\nThird line").assertIsDisplayed()
+        assertReply(30)
+        readReply(6)
+        assertReply(6)
 
         push(entries(32))
 
-        compose.onNodeWithText("Reply 6\nSecond line\nThird line").assertIsDisplayed()
+        assertReply(6)
         compose.onNodeWithText("Latest (2)").assertIsDisplayed().performClick()
-        compose.onNodeWithText("Reply 32\nSecond line\nThird line").assertIsDisplayed()
+        assertReply(32)
         compose.onNodeWithText("Latest (2)").assertDoesNotExist()
         push(entries(33))
-        compose.onNodeWithText("Reply 33\nSecond line\nThird line").assertIsDisplayed()
+        assertReply(33)
     }
 
     @Test fun reopeningRestoresTheEntryAndPixelOffsetAfterAnEmptyInitialSnapshot() {
         open()
-        compose.onNodeWithTag("chat-transcript").performScrollToIndex(5)
+        readReply(6)
         compose.onNodeWithTag("chat-transcript").performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 25f) }
         push(entries(32))
         val before = compose.onNodeWithText("Reply 6\nSecond line\nThird line").fetchSemanticsNode().boundsInRoot.top
@@ -100,7 +120,7 @@ class ChatScrollTest {
         push(emptyList())
         push(entries(33))
 
-        compose.onNodeWithText("Reply 6\nSecond line\nThird line").assertIsDisplayed()
+        assertReply(6)
         val after = compose.onNodeWithText("Reply 6\nSecond line\nThird line").fetchSemanticsNode().boundsInRoot.top
         assertEquals(before, after, 0.5f)
         compose.onNodeWithText("Latest (3)").assertIsDisplayed()
@@ -112,7 +132,7 @@ class ChatScrollTest {
         compose.runOnIdle { generation.value++ }
         push(entries(33))
 
-        compose.onNodeWithText("Reply 30\nSecond line\nThird line").assertIsDisplayed()
+        assertReply(30)
         val after = compose.onNodeWithText("Reply 30\nSecond line\nThird line").fetchSemanticsNode().positionInRoot.y
         assertEquals(before, after, 0.5f)
         compose.onNodeWithText("Latest (3)").assertIsDisplayed()
@@ -124,6 +144,7 @@ class ChatScrollTest {
             ChatEntryBody.Agent((1..lines).joinToString("\n") { "Streaming line $it" }))
         fun assertAtEnd(lines: Int) {
             val text = (streaming(lines).last().body as ChatEntryBody.Agent).text
+            awaitText(text)
             val node = compose.onNodeWithText(text).fetchSemanticsNode()
             val viewport = compose.onNodeWithTag("chat-transcript").fetchSemanticsNode().boundsInRoot
             val bottom = node.positionInRoot.y + node.size.height
@@ -135,50 +156,51 @@ class ChatScrollTest {
         push(streaming(100))
         assertAtEnd(100)
 
-        compose.onNodeWithTag("chat-transcript").performScrollToIndex(5)
+        readReply(6)
         push(streaming(120))
-        compose.onNodeWithText("Reply 6\nSecond line\nThird line").assertIsDisplayed()
+        assertReply(6)
         compose.onNodeWithText("Latest").assertIsDisplayed()
         compose.onNodeWithText("Latest (1)").assertDoesNotExist()
     }
 
     @Test fun prependedHistoryPreservesTheAnchorAndManualReturnToTheBottomClearsTheCount() {
         open()
-        compose.onNodeWithTag("chat-transcript").performScrollToIndex(5)
+        readReply(6)
         val before = compose.onNodeWithText("Reply 6\nSecond line\nThird line").fetchSemanticsNode().positionInRoot.y
         val older = ChatEntry("older", null, ChatEntryBody.Agent("An older reply"))
         push(listOf(older) + entries(32))
         val after = compose.onNodeWithText("Reply 6\nSecond line\nThird line").fetchSemanticsNode().positionInRoot.y
         assertEquals(before, after, 0.5f)
         compose.onNodeWithText("Latest (2)").assertIsDisplayed()
-        compose.onNodeWithTag("chat-transcript").performScrollToIndex(32)
+        readReply(32)
+        compose.onNodeWithTag("chat-transcript").performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 10_000f) }
         compose.onNodeWithText("Latest (2)").assertDoesNotExist()
         push(listOf(older) + entries(33))
-        compose.onNodeWithText("Reply 33\nSecond line\nThird line").assertIsDisplayed()
+        assertReply(33)
     }
 
     @Test fun readingPositionsAreIndependentForEachHostAndTerminal() {
         open()
-        compose.onNodeWithTag("chat-transcript").performScrollToIndex(5)
+        readReply(6)
         compose.runOnIdle { hostNumber.value = 1 }
         push(entries(30))
-        compose.onNodeWithText("Reply 30\nSecond line\nThird line").assertIsDisplayed()
-        compose.onNodeWithTag("chat-transcript").performScrollToIndex(10)
+        assertReply(30)
+        readReply(11)
 
         compose.runOnIdle { hostNumber.value = 0 }
         push(entries(30))
-        compose.onNodeWithText("Reply 6\nSecond line\nThird line").assertIsDisplayed()
+        assertReply(6)
         compose.runOnIdle { terminal.value = agent.copy(address = "remote/t1") }
         push(entries(30))
-        compose.onNodeWithText("Reply 30\nSecond line\nThird line").assertIsDisplayed()
+        assertReply(30)
         compose.runOnIdle { terminal.value = agent }
         push(entries(30))
-        compose.onNodeWithText("Reply 6\nSecond line\nThird line").assertIsDisplayed()
+        assertReply(6)
     }
 
     @Test fun aRemovedAnchorFallsBackWithinTheRemainingConversation() {
         open()
-        compose.onNodeWithTag("chat-transcript").performScrollToIndex(15)
+        readReply(16)
         compose.runOnIdle { generation.value++ }
         push(listOf(ChatEntry("replacement", null, ChatEntryBody.Agent("New conversation"))))
         compose.onNodeWithText("New conversation").assertIsDisplayed()
@@ -191,14 +213,35 @@ class ChatScrollTest {
 
     @Test fun incomingCallsAndTranscriptRowsShareTheLatestCount() {
         open()
-        compose.onNodeWithTag("chat-transcript").performScrollToIndex(5)
+        readReply(6)
         compose.runOnIdle {
             core.sendCall(CallInfo("h1", "call1", 1000uL, "t1", true, "Review?", "Ready.",
                 CallUrgency.CHECK, listOf("Yes", "Later"), null, true))
         }
         push(entries(31))
-        compose.onNodeWithText("Reply 6\nSecond line\nThird line").assertIsDisplayed()
+        assertReply(6)
         compose.onNodeWithText("Latest (2)").assertIsDisplayed().performClick()
         compose.onNodeWithText("Review?").assertIsDisplayed()
+    }
+
+    @Test fun markdownBlocksShareOneMessageCountAndRestoreTheBlockBeingRead() {
+        open()
+        readReply(6)
+        val message = ChatEntry("md31", null, ChatEntryBody.Agent(
+            "# A heading\n\nParagraph to keep reading\n\n```kotlin\n" +
+                (1..80).joinToString("\n") { "val line$it = $it" } + "\n```\n\nEnd of reply",
+        ))
+        push(entries(30) + message)
+        awaitText("Latest (1)")
+        compose.onNodeWithText("Latest (1)").assertIsDisplayed()
+        compose.onNodeWithTag("chat-transcript").performScrollToNode(hasText("Paragraph to keep reading"))
+        val before = compose.onNodeWithText("Paragraph to keep reading").fetchSemanticsNode().positionInRoot.y
+        compose.runOnIdle { generation.value++ }
+        push(entries(30) + message + ChatEntry("a32", null, ChatEntryBody.Agent("Another response")))
+
+        awaitText("Paragraph to keep reading")
+        compose.onNodeWithText("Paragraph to keep reading").assertIsDisplayed()
+        assertEquals(before, compose.onNodeWithText("Paragraph to keep reading").fetchSemanticsNode().positionInRoot.y, 0.5f)
+        compose.onNodeWithText("Latest (2)").assertIsDisplayed()
     }
 }

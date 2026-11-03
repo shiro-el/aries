@@ -52,6 +52,7 @@ kotlin { jvmToolchain(21) }
 licensee {
     allow("Apache-2.0")
     allow("BSD-3-Clause")
+    allow("BSD-2-Clause") // commonmark-java; included in licensee's bundled notices.
     // Firebase Cloud Messaging pulls in Google Play services artifacts, which
     // ship under the Android SDK license. Push (FCM) cannot work without them.
     allowUrl("https://developer.android.com/studio/terms.html") {
@@ -72,6 +73,8 @@ dependencies {
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)
     implementation(libs.androidx.work.runtime)
+    implementation("org.commonmark:commonmark:0.32.0")
+    implementation("org.commonmark:commonmark-ext-gfm-tables:0.32.0")
 
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)

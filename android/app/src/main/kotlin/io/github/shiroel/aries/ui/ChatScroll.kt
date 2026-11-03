@@ -15,6 +15,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalContext
 import io.github.shiroel.aries.core.ChatEntry
+import io.github.shiroel.aries.core.ChatEntryBody
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -30,16 +31,22 @@ internal class ChatScrollState(following: Boolean) {
 }
 
 @Composable
-internal fun rememberChatScrollState(chat: ChatModel, entries: List<ChatEntry>, callKeys: List<String>): ChatScrollState {
+internal fun rememberChatScrollState(
+    chat: ChatModel,
+    entries: List<ChatEntry>,
+    callKeys: List<String>,
+    markdown: Map<String, ChatMarkdownDocument>,
+): ChatScrollState {
     val context = LocalContext.current
     val store = remember(chat, context) { ChatReadingStore(context, chat.host.id, chat.terminal.address) }
     val saved = remember(store) { store.load() }
     val state = remember(chat) { ChatScrollState(saved?.following ?: true) }
-    val currentEntries = rememberUpdatedState(entries)
-    val currentCalls = rememberUpdatedState(callKeys)
+    val content = rememberUpdatedState(ChatScrollContent(entries, callKeys, markdown))
     LaunchedEffect(state) {
         var previousEntries: List<ChatEntry>? = null
         var previousCalls = emptyList<String>()
+        var previousItemKeys = emptyList<String>()
+        var lastViewport: Pair<Any?, Int>? = null
         var pending = emptySet<String>()
         var lastSaved = saved
         var request = state.latestRequest
@@ -47,16 +54,45 @@ internal fun rememberChatScrollState(chat: ChatModel, entries: List<ChatEntry>, 
             // Read layout as well as data: scrolling changes the follow mode;
             // a streaming update can change height without adding any rows.
             Triple(
-                currentEntries.value to currentCalls.value,
+                content.value,
                 state.list.layoutInfo,
                 state.latestRequest,
             )
         }.collect { (data, _, latestRequest) ->
-            val (rows, calls) = data
+            val (rows, calls, documents) = data
             val transcript = rows.map { "transcript:${it.id}" }
-            val keys = transcript + calls
+            val keys = buildList {
+                rows.forEach { entry ->
+                    add("transcript:${entry.id}")
+                    if (entry.body is ChatEntryBody.User || entry.body is ChatEntryBody.Agent) {
+                        // Mirror chatMarkdownItems: a header, lazy blocks, then a footer.
+                        documents[entry.id]?.blocks?.indices?.forEach { add("transcript:${entry.id}:markdown:$it") }
+                        add("transcript:${entry.id}:footer")
+                    }
+                }
+                addAll(calls)
+            }
             if (chat.snapshot == null || keys.isEmpty()) return@collect
-            val changed = previousEntries != rows || previousCalls != calls
+            fun viewport(): Pair<Any?, Int> = state.list.layoutInfo.visibleItemsInfo
+                .firstOrNull { it.index == state.list.firstVisibleItemIndex }?.key to state.list.firstVisibleItemScrollOffset
+            val currentViewport = viewport()
+            // Stable keys distinguish a deliberate scroll from a history
+            // prepend or an asynchronous Markdown remeasure.
+            if (previousEntries != null && lastViewport != currentViewport) {
+                state.following = !state.list.canScrollForward
+            }
+            lastViewport = currentViewport
+            val ready = rows.all { entry ->
+                val text = when (val body = entry.body) {
+                    is ChatEntryBody.User -> body.text
+                    is ChatEntryBody.Agent -> body.text
+                    else -> null
+                }
+                text == null || documents[entry.id]?.source == text
+            }
+            // Never replace a saved block anchor with an incomplete parse.
+            if (!ready) return@collect
+            val changed = previousEntries != rows || previousCalls != calls || previousItemKeys != keys
             val latest = request != latestRequest
             if (changed || latest) {
                 val previous = previousEntries
@@ -82,10 +118,12 @@ internal fun rememberChatScrollState(chat: ChatModel, entries: List<ChatEntry>, 
                 }
                 previousEntries = rows
                 previousCalls = calls
+                previousItemKeys = keys
                 request = latestRequest
-            } else {
-                state.following = !state.list.canScrollForward
+            } else if (state.following && state.list.canScrollForward) {
+                state.list.scrollToLatest(keys.lastIndex)
             }
+            lastViewport = viewport()
             if (state.following) pending = emptySet()
             state.unreadCount = pending.size
 
@@ -108,6 +146,12 @@ internal fun rememberChatScrollState(chat: ChatModel, entries: List<ChatEntry>, 
     }
     return state
 }
+
+private data class ChatScrollContent(
+    val entries: List<ChatEntry>,
+    val calls: List<String>,
+    val markdown: Map<String, ChatMarkdownDocument>,
+)
 
 private fun after(tail: String?, keys: List<String>): List<String> {
     if (tail == null) return keys
