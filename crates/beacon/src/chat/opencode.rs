@@ -244,9 +244,11 @@ impl OpenCodeSource {
     fn holds_session(&mut self) -> bool {
         matches!(self.connect(), Ok(Some(_)))
             && self.db.as_ref().is_some_and(|(c, _)| {
-                c.query_row("SELECT 1 FROM session WHERE id = ?1", [&self.session], |_| {
-                    Ok(())
-                })
+                c.query_row(
+                    "SELECT 1 FROM session WHERE id = ?1",
+                    [&self.session],
+                    |_| Ok(()),
+                )
                 .optional()
                 .ok()
                 .flatten()

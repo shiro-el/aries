@@ -145,5 +145,8 @@ fn children(pid: u32) -> Vec<u32> {
 
 /// Every Agent this Beacon reads, in the order they are tried.
 pub fn agents() -> Vec<Box<dyn Agent>> {
-    vec![Box::new(claude::ClaudeCode::from_env()), Box::new(opencode::OpenCode::from_env())]
+    vec![
+        Box::new(claude::ClaudeCode::from_env()),
+        Box::new(opencode::OpenCode::from_env()),
+    ]
 }

@@ -13,6 +13,9 @@
 //!   as JSON lines (`aries_protocol::chat`).
 //! - `answer <terminal> <question> <picks>...`: answers the question the
 //!   Terminal's Agent shows (`aries_protocol::answer`); one reply line.
+//! - `integrations install|remove`: the files the Beacon manages in Agents'
+//!   configuration (the OpenCode plugin, [`aries_beacon::integrations`]);
+//!   one JSON line of what it did.
 //! - `--version`: `aries-beacon <version> (contract <n>)`.
 
 mod calls;
@@ -46,9 +49,10 @@ fn main() {
         Some("unpair") => exit_on_error(push::unpair_command()),
         Some("chat") => chat(std::env::args().skip(2).collect()),
         Some("answer") => answer(std::env::args().skip(2).collect()),
+        Some("integrations") => integrations(std::env::args().nth(2).as_deref()),
         _ => {
             eprintln!(
-                "usage: aries-beacon --version | status | serve | call ... | calls [--follow] | pair | push-test | unpair | chat TERMINAL [--follow] [--cursor C] | answer TERMINAL QUESTION PICKS..."
+                "usage: aries-beacon --version | status | serve | call ... | calls [--follow] | pair | push-test | unpair | chat TERMINAL [--follow] [--cursor C] | answer TERMINAL QUESTION PICKS... | integrations install|remove"
             );
             std::process::exit(2);
         }
@@ -292,6 +296,32 @@ fn answer(args: Vec<String>) {
     println!("{}", reply.to_json());
     if !reply.outcome.is_sent() {
         std::process::exit(1);
+    }
+}
+
+/// `integrations install`: `{"opencode":"installed"|"updated"|"unchanged"|"kept_user_copy"}`.
+/// `integrations remove`: `{"opencode":"removed"|"kept"}`.
+fn integrations(action: Option<&str>) {
+    use aries_beacon::integrations as i;
+    let home = i::config_home();
+    let result = match action {
+        Some("install") => {
+            i::install_opencode_plugin(&home).map(|o| serde_json::json!({ "opencode": o }))
+        }
+        Some("remove") => i::remove_opencode_plugin(&home).map(
+            |removed| serde_json::json!({ "opencode": if removed { "removed" } else { "kept" } }),
+        ),
+        _ => {
+            eprintln!("usage: aries-beacon integrations install|remove");
+            std::process::exit(2);
+        }
+    };
+    match result {
+        Ok(v) => println!("{v}"),
+        Err(e) => {
+            eprintln!("aries-beacon integrations: {}: {e}", home.display());
+            std::process::exit(1);
+        }
     }
 }
 

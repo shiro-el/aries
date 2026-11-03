@@ -162,8 +162,7 @@ pub fn run(
                     for (event, position) in events {
                         let mut line = ChatLine::new(event);
                         if let Some(p) = position {
-                            line.cursor =
-                                Some(Cursor::format(cur.agent, &cur.located.session, &p));
+                            line.cursor = Some(Cursor::format(cur.agent, &cur.located.session, &p));
                         }
                         emit(out, line)?;
                         wrote = true;

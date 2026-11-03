@@ -52,7 +52,10 @@ impl Source for JsonlSource {
                     // Only the last event of a transcript line is a resume
                     // point, so resuming never skips the rest of the line.
                     .map(|(i, (event, end))| {
-                        (event, (ends.get(i + 1) != Some(&end)).then(|| end.to_string()))
+                        (
+                            event,
+                            (ends.get(i + 1) != Some(&end)).then(|| end.to_string()),
+                        )
                     })
                     .collect();
                 Batch::Events { events, more }

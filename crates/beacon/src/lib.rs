@@ -3,6 +3,7 @@
 
 pub mod chat;
 pub mod core_link;
+pub mod integrations;
 
 use std::path::PathBuf;
 

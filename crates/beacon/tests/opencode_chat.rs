@@ -11,8 +11,8 @@ use std::time::Duration;
 
 use aries_beacon::chat::opencode::{OpenCode, OpenCodeSource, SESSION_LABEL};
 use aries_beacon::chat::{
-    Agent, Batch, KeysError, Options, Source, TerminalFacts, TerminalInput, TerminalLookup,
-    answer, run,
+    Agent, Batch, KeysError, Options, Source, TerminalFacts, TerminalInput, TerminalLookup, answer,
+    run,
 };
 use aries_protocol::agent_status::StatusRecord;
 use aries_protocol::answer::{Answer, AnswerOutcome};
@@ -178,7 +178,10 @@ fn the_question_tool_is_a_question_with_its_options() {
     assert!(!q0.multi);
     let labels: Vec<&str> = q0.options.iter().map(|o| o.label.as_str()).collect();
     assert_eq!(labels, ["Red", "Green", "Blue"]);
-    assert_eq!(q0.options[1].description.as_deref(), Some("The color green"));
+    assert_eq!(
+        q0.options[1].description.as_deref(),
+        Some("The color green")
+    );
     assert!(output.as_deref().unwrap().contains("\"Green\""));
 }
 
@@ -197,7 +200,13 @@ fn an_attached_image_shows_on_the_user_message() {
         panic!()
     };
     assert_eq!(images[0].media_type, "image/png");
-    assert!(images[0].data.as_deref().unwrap().starts_with("iVBORw0KGgo"));
+    assert!(
+        images[0]
+            .data
+            .as_deref()
+            .unwrap()
+            .starts_with("iVBORw0KGgo")
+    );
     assert!(images[0].bytes > 0);
 }
 
@@ -273,7 +282,11 @@ fn rows_rewritten_while_streaming_resend_the_same_item() {
     let reply = row(&f, "messages", "d5rBVR");
     db.message(&reply);
     let text = row(&f, "parts", "D2NCQq");
-    db.part(&bump(&text, 1793686954110, json!({"type": "text", "text": "Gre"})));
+    db.part(&bump(
+        &text,
+        1793686954110,
+        json!({"type": "text", "text": "Gre"}),
+    ));
     chat.drain(&mut source);
     assert_eq!(chat.summary().last().unwrap(), "agent Gre");
     db.part(&text);
@@ -506,7 +519,10 @@ fn new_starts_a_new_chat_and_the_old_one_ends_with_the_program() {
         ["user Say only: fresh. +0img", "agent fresh"]
     );
     let cursor = lines.iter().rev().find_map(|l| l.cursor.clone()).unwrap();
-    assert!(cursor.starts_with(&format!("opencode:{fresh_id}:")), "{cursor}");
+    assert!(
+        cursor.starts_with(&format!("opencode:{fresh_id}:")),
+        "{cursor}"
+    );
 }
 
 #[test]
