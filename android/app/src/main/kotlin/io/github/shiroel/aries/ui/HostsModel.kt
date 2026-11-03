@@ -643,6 +643,7 @@ class HostsModel(
                                 for (input in viewer.inputs) {
                                     when (input) {
                                         is TerminalInput.Text -> view.sendText(input.text)
+                                        is TerminalInput.Paste -> view.pasteText(input.text)
                                         is TerminalInput.Key -> view.sendKey(input.key, input.mods)
                                     }
                                 }
