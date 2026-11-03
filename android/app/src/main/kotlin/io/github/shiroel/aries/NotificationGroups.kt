@@ -2,6 +2,7 @@ package io.github.shiroel.aries
 
 import android.app.Notification
 import android.app.NotificationManager
+import android.app.NotificationChannel
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -20,6 +21,7 @@ object NotificationGroups {
     private const val HOST = "host"
     private const val NAME = "hostName"
     private const val TAG = "tag"
+    private const val FOREGROUND_CHANNEL = "foreground_attention"
 
     fun decorate(context: Context, builder: Notification.Builder, hostId: String, hostName: String, tag: String, terminal: String): Notification.Builder {
         val dismiss = Intent(context, NotificationDismissReceiver::class.java)
@@ -28,7 +30,8 @@ object NotificationGroups {
         val open = PushTarget(hostId, terminal).intent(context)
             .setData(Uri.Builder().scheme("aries-notification-open").authority(hostId).appendPath(tag).build())
             .putExtra(HOST, hostId).putExtra(NAME, hostName).putExtra(TAG, tag)
-        return builder.setGroup(group(hostId)).setContentIntent(PendingIntent.getActivity(
+        return builder.addExtras(android.os.Bundle().apply { putString(NotificationVisibility.TERMINAL, terminal) })
+            .setGroup(group(hostId)).setContentIntent(PendingIntent.getActivity(
             context, 0, open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )).setDeleteIntent(PendingIntent.getBroadcast(
             context, 0, dismiss, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
@@ -38,7 +41,29 @@ object NotificationGroups {
     @Synchronized
     fun post(context: Context, hostId: String, hostName: String, tag: String, notification: Notification) {
         val manager = context.getSystemService(NotificationManager::class.java)
-        manager.notify(tag, hostId.hashCode(), WearNotificationBridge.prepare(context, notification))
+        val visibility = NotificationVisibility.from(context)
+        val foreground = visibility?.foreground == true
+        if (foreground && (notification.extras.getBoolean(NotificationVisibility.PASSIVE) ||
+                visibility.isViewing(hostId, notification.extras.getString(NotificationVisibility.TERMINAL)))) {
+            manager.cancel(tag, hostId.hashCode())
+            refresh(context, manager, hostId, hostName, excludedTag = tag)
+            return
+        }
+        val card = if (foreground) {
+            val localized = AppLanguage.context(context)
+            manager.createNotificationChannel(NotificationChannel(
+                FOREGROUND_CHANNEL, localized.getString(R.string.push_channel_foreground), NotificationManager.IMPORTANCE_LOW,
+            ).apply {
+                setSound(null, null)
+                enableVibration(false)
+            })
+            Notification.Builder.recoverBuilder(context, notification)
+                .setChannelId(FOREGROUND_CHANNEL)
+                // Keep both the child and its GROUP_ALERT_CHILDREN summary silent.
+                .setGroupAlertBehavior(Notification.GROUP_ALERT_SUMMARY)
+                .build()
+        } else notification
+        manager.notify(tag, hostId.hashCode(), WearNotificationBridge.prepare(context, card))
         refresh(context, manager, hostId, hostName)
     }
 

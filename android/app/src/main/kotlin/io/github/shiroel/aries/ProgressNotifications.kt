@@ -47,6 +47,10 @@ internal object ProgressNotifications {
             if (existing?.notification?.channelId == CHANNEL) manager.cancel(p.terminal, notice.hostId.hashCode())
             return
         }
+        if (NotificationVisibility.from(context)?.foreground == true) {
+            if (existing?.notification?.channelId == CHANNEL) manager.cancel(p.terminal, notice.hostId.hashCode())
+            return
+        }
         manager.createNotificationChannel(NotificationChannel(CHANNEL, context.getString(R.string.push_progress_channel), NotificationManager.IMPORTANCE_LOW))
         val builder = Notification.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_aries)

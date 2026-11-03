@@ -1,0 +1,62 @@
+package io.github.shiroel.aries
+
+import android.app.Activity
+import android.app.Application
+import android.content.Context
+import android.os.Bundle
+import androidx.activity.compose.LocalActivity
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.platform.LocalContext
+
+/** Process-local UI presence: FCM cold starts have no resumed Activities. */
+internal class NotificationVisibility : Application.ActivityLifecycleCallbacks {
+    private val resumed = mutableSetOf<Activity>()
+    private val agents = mutableMapOf<Activity, PushTarget>()
+
+    val foreground: Boolean
+        @Synchronized get() = resumed.isNotEmpty()
+
+    @Synchronized
+    fun viewing(activity: Activity, target: PushTarget?) {
+        if (target == null) agents.remove(activity) else agents[activity] = target
+    }
+
+    @Synchronized
+    fun isViewing(hostId: String, terminal: String?): Boolean =
+        terminal != null && resumed.any { agents[it] == PushTarget(hostId, terminal) }
+
+    @Synchronized
+    override fun onActivityResumed(activity: Activity) { resumed.add(activity) }
+
+    @Synchronized
+    override fun onActivityPaused(activity: Activity) { resumed.remove(activity) }
+
+    @Synchronized
+    override fun onActivityDestroyed(activity: Activity) {
+        resumed.remove(activity)
+        agents.remove(activity)
+    }
+
+    override fun onActivityCreated(activity: Activity, state: Bundle?) = Unit
+    override fun onActivityStarted(activity: Activity) = Unit
+    override fun onActivityStopped(activity: Activity) = Unit
+    override fun onActivitySaveInstanceState(activity: Activity, state: Bundle) = Unit
+
+    companion object {
+        const val PASSIVE = "aries.notification.passive"
+        const val TERMINAL = "aries.notification.terminal"
+        fun from(context: Context) = (context.applicationContext as? AriesApplication)?.notificationVisibility
+    }
+}
+
+/** A disposed screen (including the app lock) must never hide an Agent's request. */
+@Composable
+internal fun ObserveNotificationTarget(target: PushTarget?) {
+    val activity = LocalActivity.current ?: return
+    val visibility = NotificationVisibility.from(LocalContext.current) ?: return
+    DisposableEffect(visibility, activity, target) {
+        visibility.viewing(activity, target)
+        onDispose { visibility.viewing(activity, null) }
+    }
+}
