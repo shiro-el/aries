@@ -37,6 +37,7 @@ import io.github.shiroel.aries.core.PushNotice
 import io.github.shiroel.aries.core.PushPairing
 import io.github.shiroel.aries.core.PushPolicy
 import io.github.shiroel.aries.core.PushProgress
+import io.github.shiroel.aries.core.PushVerificationState
 import io.github.shiroel.aries.core.PushStep
 import io.github.shiroel.aries.core.Linger
 import io.github.shiroel.aries.core.JumpHost
@@ -426,7 +427,7 @@ class FakeCore : AriesCoreInterface {
     ): PushPairing {
         signsIn("enablePush")
         pushRelays += relayUrl
-        for (step in listOf(PushStep.REGISTER, PushStep.PAIR, PushStep.TEST)) {
+        for (step in listOf(PushStep.REGISTER, PushStep.VERIFY, PushStep.PAIR, PushStep.TEST)) {
             progress.onStep(step)
             if (step == pushFailAt) {
                 if (step == PushStep.TEST) pushPaired[hostId] = relayUrl
@@ -468,6 +469,17 @@ class FakeCore : AriesCoreInterface {
         pushPolicyFailure?.let { throw it }
         pushPolicies[hostId] = policy
         return policy
+    }
+
+    val pushVerifications = mutableMapOf<String, PushVerificationState>()
+    override fun pushVerificationState(hostId: String): PushVerificationState? = pushVerifications[hostId]
+    val pushConfirmations = mutableListOf<Pair<String, String>>()
+    var pushConfirmationFailure = false
+    var pushConfirmationKnown = true
+    override suspend fun confirmPushToken(verificationId: String, challenge: String, http: HttpClient): Boolean {
+        if (pushConfirmationFailure) throw CoreException.PushFailed(PushStep.VERIFY, "offline")
+        pushConfirmations += verificationId to challenge
+        return pushConfirmationKnown
     }
 
     override suspend fun updatePushToken(device: PushDevice, http: HttpClient) {}

@@ -22,6 +22,7 @@ mod last_known_state;
 mod launch;
 mod layout_edit;
 mod push;
+mod push_ownership;
 mod push_replay;
 mod removal;
 mod send;
@@ -66,6 +67,7 @@ pub use push::{
     HttpClient, HttpRequest, HttpResponse, PushContent, PushDevice, PushDisable, PushNotice,
     PushPairing, PushPolicy, PushProgress, PushQuestion, PushStep,
 };
+pub use push_ownership::PushVerificationState;
 pub use send::{HELD_AFTER, SendListener, SendOutcome};
 pub use settings::{AgentView, AttachMode};
 pub use structure::{HostStructure, PaneInfo, SpaceInfo, StructureProblem, TabInfo};
@@ -959,6 +961,37 @@ impl AriesCore {
         Ok(push::relay_url_of(&self.store, &host_id)?.map(|relay_url| PushPairing { relay_url }))
     }
 
+    /// Pending/failed token proof is visible even when a previous pairing is
+    /// still active (for example while FCM rotates this phone's token).
+    pub fn push_verification_state(
+        &self,
+        host_id: String,
+    ) -> Result<Option<PushVerificationState>, CoreError> {
+        self.saved_host(&host_id)?;
+        push_ownership::state(&self.store, &host_id)
+    }
+
+    /// Handles an FCM pairing_challenge automatically, including while locked.
+    /// Unknown/expired IDs are ignored; FCM cannot choose a callback URL.
+    pub async fn confirm_push_token(
+        &self,
+        verification_id: String,
+        challenge: String,
+        http: Arc<dyn HttpClient>,
+    ) -> Result<bool, CoreError> {
+        let store = self.store.clone();
+        let hosts = self.hosts().into_iter().map(|h| h.id).collect();
+        on_runtime(async move {
+            push_ownership::confirm(store, hosts, verification_id, challenge, http)
+                .await
+                .map_err(|detail| CoreError::PushFailed {
+                    step: PushStep::Verify,
+                    detail,
+                })
+        })
+        .await
+    }
+
     /// Has the paired Beacon send another test notification.
     pub async fn send_test_push(&self, host_id: String) -> Result<(), CoreError> {
         let ssh = self.beacon_ssh(&host_id)?;
@@ -1014,10 +1047,13 @@ impl AriesCore {
             .hosts()
             .into_iter()
             .flat_map(|h| {
-                push::pairings_of(&self.store, self.vault.as_ref(), &h.id).unwrap_or_default()
+                push::pairings_of(&self.store, self.vault.as_ref(), &h.id)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(move |p| (h.id.clone(), p))
             })
             .collect();
-        on_runtime(push::update_token(paired, device, http)).await
+        on_runtime(push::update_token(self.store.clone(), paired, device, http)).await
     }
 
     /// Sends the Relay revocations queued by Host or Beacon removal. Call it

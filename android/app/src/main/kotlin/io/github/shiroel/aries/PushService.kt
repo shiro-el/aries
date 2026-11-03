@@ -33,6 +33,10 @@ class PushService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         val data = message.data
         if (data["v"] != "1") return
+        if (data["kind"] == "pairing_challenge") {
+            PairingChallengeWorker.enqueue(this, data)
+            return
+        }
         val envelope = try {
             Base64.decode(data["e"] ?: return, Base64.DEFAULT)
         } catch (e: IllegalArgumentException) {

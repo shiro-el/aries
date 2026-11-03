@@ -644,6 +644,9 @@
     <string name="push_test_button">Send a test notification</string>
     <string name="push_retry_button">Try again</string>
     <string name="push_step_register">Register this phone with the Relay</string>
+    <string name="push_verification_pending">Waiting for this phone to receive the Relay’s verification push…</string>
+    <string name="push_verification_failed">Push delivery has not been verified. Retry push setup.</string>
+    <string name="push_step_verify">Confirm this phone can receive push</string>
     <string name="push_step_pair">Exchange keys with the Beacon</string>
     <string name="push_step_test">Send a test notification</string>
     <string name="push_step_unpair">Remove the pairing from the Relay</string>

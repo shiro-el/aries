@@ -2,7 +2,7 @@
 
 The Relay delivers push notifications from a Host's Beacon to the phone. It
 only forwards end-to-end encrypted envelopes: it cannot read them, and it
-stores only pairing token hashes, device push tokens and rate limit counters
+stores only pairing/challenge hashes, verification IDs, device push tokens and rate limit counters
 (never an envelope, never a request body in its logs). You can still run your
 own instead of the one your Aries build uses, and choose it per Host in the
 app.
@@ -62,8 +62,7 @@ curl -i -X POST https://<your relay>/v1/pairings -H 'Content-Type: application/j
 ```
 
 An Aries Relay answers `400` with `{"error":"bad_request"}`; `404` means the
-URL is not the Relay. A missing FCM key shows later, when the test
-notification is sent: the Relay answers `503` `{"error":"fcm_not_configured"}`
+URL is not the Relay. A missing FCM key prevents new registrations and token updates: the Relay answers `503` `{"error":"fcm_not_configured"}`
 (set it with `wrangler secret put FCM_SERVICE_ACCOUNT_JSON`).
 
 ## Use it in the app
@@ -85,6 +84,45 @@ pairing is deleted later, when the app next starts.
 The URL must be `https://`. `http://` is accepted only for the device's own
 address (`localhost`, `127.0.0.1`, `[::1]`), for a Relay run with
 `npx wrangler dev` during development.
+
+## Device token ownership
+
+New registrations and token changes require an automatic FCM round trip.
+The app saves a random 43-character base64url `verification_id` and the
+chosen Relay URL before sending `POST /v1/pairings` with that ID,
+`platform: "fcm"`, and `device_token`. The Relay returns HTTP 202 with
+`{token, status: "pending", expires_in: 120}` and sends a data-only FCM
+message to the proposed token:
+
+```json
+{"v":"1","kind":"pairing_challenge","verification_id":"<app-generated ID>","challenge":"<256-bit random proof>"}
+```
+
+The proof never appears in the registration response, database or logs.
+The app handles this message without user interaction. It responds only
+when the ID matches a locally pending request, using that request's saved
+Relay URL, with `POST /v1/pairing/confirm` and JSON
+`{verification_id, challenge}`. No callback URL or pairing bearer is sent
+in FCM. Unknown, superseded, consumed or expired proofs cannot activate a
+pairing. Proofs expire after 120 seconds; expired records are removed on
+subsequent Relay requests.
+
+The app polls `GET /v1/pairing` with its pairing bearer and proceeds to
+Beacon pairing only when `status` is `active` and `verification_id` equals
+its own ID. Pending registrations receive HTTP 403 `verification_pending`
+on `/v1/push`. Token rotation uses `PUT /v1/pairing` with a fresh ID and
+keeps the old verified delivery token until confirmation; an unsuccessful
+rotation leaves that token intact. Rotations allow five challenges per
+pairing per minute, in addition to the existing IP registration limit.
+Pending or failed verification appears in the Host's Push notifications
+settings; setup can be retried after failure.
+
+Migration `0002_token_ownership.sql` keeps already registered pairings
+active. Ship the app that understands challenges before deploying this
+Relay version: older apps retain existing push delivery, but cannot
+complete new registrations or token changes on this Relay. The new app
+also continues to work with an older Relay's immediate registration API.
+Deployment and remote migrations remain separate operator actions.
 
 ## Update or remove it
 
