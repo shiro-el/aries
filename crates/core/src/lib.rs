@@ -29,11 +29,26 @@ use transport::{LocalProcess, Ssh, Transport};
 uniffi::setup_scaffolding!();
 
 /// Seals secrets at rest. On Android this is an AES-GCM key held by the
-/// Android Keystore; tests use a stand-in.
+/// Android Keystore, one Keystore key per [`KeyProtection`]; tests use a
+/// stand-in. Bytes sealed under one protection open only under the same one.
 #[uniffi::export(with_foreign)]
 pub trait KeyVault: Send + Sync {
-    fn seal(&self, plaintext: Vec<u8>) -> Result<Vec<u8>, VaultError>;
-    fn open(&self, sealed: Vec<u8>) -> Result<Vec<u8>, VaultError>;
+    fn seal(&self, plaintext: Vec<u8>, protection: KeyProtection) -> Result<Vec<u8>, VaultError>;
+    /// A [`KeyProtection::Biometric`] open fails with [`VaultError::Locked`]
+    /// unless the user authenticates for this use; it never falls back.
+    fn open(&self, sealed: Vec<u8>, protection: KeyProtection) -> Result<Vec<u8>, VaultError>;
+}
+
+/// The user's choice of how the app's SSH key is unlocked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum KeyProtection {
+    /// Sealed by a Keystore key with no user-authentication binding, so it
+    /// also works on a locked phone: Choice buttons can answer from the
+    /// notification.
+    Plain,
+    /// Every use needs a strong biometric. Unusable in the background, so
+    /// notifications show "Open app" instead of Choice buttons.
+    Biometric,
 }
 
 /// The app's SSH public key, ready to paste into `authorized_keys`.
@@ -131,10 +146,10 @@ impl AriesCore {
 
     /// The app's SSH public key, if one was created.
     pub fn public_key(&self) -> Result<Option<PublicKeyInfo>, CoreError> {
-        let Some((_, public)) = self.store.read_identity()? else {
+        let Some(id) = self.store.read_identity()? else {
             return Ok(None);
         };
-        Ok(Some(public_key_info(&public)?))
+        Ok(Some(public_key_info(&id.public)?))
     }
 
     /// Creates the app's ed25519 SSH key unless one exists, and returns its
@@ -160,9 +175,57 @@ impl AriesCore {
             .map_err(|e| CoreError::Vault {
                 detail: e.to_string(),
             })?;
-        let sealed = self.vault.seal(private.as_bytes().to_vec())?;
-        self.store.write_identity(&sealed, &public)?;
+        let sealed = self
+            .vault
+            .seal(private.as_bytes().to_vec(), KeyProtection::Plain)?;
+        self.store.write_identity(&store::Identity {
+            protection: KeyProtection::Plain,
+            sealed,
+            public: public.clone(),
+        })?;
         public_key_info(&public)
+    }
+
+    /// How the app's SSH key is unlocked, or `None` before it exists.
+    pub fn key_protection(&self) -> Result<Option<KeyProtection>, CoreError> {
+        Ok(self.store.read_identity()?.map(|id| id.protection))
+    }
+
+    /// Re-seals the same SSH key under `protection` (the public key and
+    /// every Host's `authorized_keys` stay valid). Entering or leaving
+    /// [`KeyProtection::Biometric`] asks the user to authenticate, so call it
+    /// from the foreground and off the main thread. On failure the old
+    /// protection stays.
+    pub fn set_key_protection(&self, protection: KeyProtection) -> Result<(), CoreError> {
+        let id = self.store.read_identity()?.ok_or(CoreError::NoKey)?;
+        if id.protection == protection {
+            return Ok(());
+        }
+        let private = self.vault.open(id.sealed, id.protection)?;
+        let sealed = self.vault.seal(private, protection)?;
+        self.store.write_identity(&store::Identity {
+            protection,
+            sealed,
+            public: id.public,
+        })
+    }
+
+    /// Whether a Choice for this Host can be answered from a notification
+    /// without opening the app: signing in to the Host must not need a
+    /// biometric unlock. When `false`, show "Open app" instead of Choices.
+    pub fn can_answer_in_background(&self, host_id: String) -> Result<bool, CoreError> {
+        let endpoint = self
+            .hosts
+            .lock()
+            .expect("hosts lock")
+            .iter()
+            .find(|h| h.id == host_id)
+            .map(|h| h.endpoint.clone())
+            .ok_or(CoreError::UnknownHost { id: host_id })?;
+        Ok(match endpoint {
+            Endpoint::Local { .. } => true,
+            Endpoint::Ssh { .. } => self.key_protection()? == Some(KeyProtection::Plain),
+        })
     }
 
     /// Registers a Host. Connecting is a separate step.
@@ -256,8 +319,8 @@ impl AriesCore {
 
 impl AriesCore {
     fn private_key(&self) -> Result<PrivateKey, CoreError> {
-        let (sealed, _) = self.store.read_identity()?.ok_or(CoreError::NoKey)?;
-        let pem = self.vault.open(sealed)?;
+        let id = self.store.read_identity()?.ok_or(CoreError::NoKey)?;
+        let pem = self.vault.open(id.sealed, id.protection)?;
         let pem = String::from_utf8(pem).map_err(|e| CoreError::Vault {
             detail: e.to_string(),
         })?;
