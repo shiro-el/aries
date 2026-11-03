@@ -671,3 +671,79 @@ async fn installs_the_pinned_release_built_by_the_pipeline() {
         other => panic!("{other:?}"),
     }
 }
+
+const PI_EXT: &str = "/home/aries/.pi/agent/extensions/aries-status.ts";
+
+/// Runs `script` as the Host user (the user's own files, `HOME` set).
+fn user_sh(host: &SystemdHost, script: &str) -> String {
+    host.root(&format!(
+        "runuser -u aries -- env HOME=/home/aries sh -c {}",
+        shell_quote(script)
+    ))
+}
+
+fn shell_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', r"'\''"))
+}
+
+#[tokio::test]
+#[ignore = "needs docker"]
+async fn manages_the_pi_extension_with_the_beacon() {
+    let s = setup();
+    let bytes = std::fs::read(beacon_bin()).unwrap();
+    let version = env!("CARGO_PKG_VERSION");
+    s.core
+        .set_beacon_release(release(version, sha256sum(&bytes)));
+    let fetcher = Fetcher::new(bytes);
+
+    // Installing the Beacon puts the extension in Pi's global dir.
+    s.core
+        .install_beacon(s.id.clone(), fetcher.clone())
+        .await
+        .unwrap();
+    let first = user_sh(&s.host, &format!("head -n 1 {PI_EXT}"));
+    assert!(
+        first.starts_with("// @aries-managed-pi-extension sha256="),
+        "{first}"
+    );
+    assert!(s.host.check(&format!(
+        "grep -q aries.pi.file= {PI_EXT} && [ \"$(stat -c %U {PI_EXT})\" = aries ]"
+    )));
+
+    // An older managed copy is replaced when the Beacon is updated.
+    let old_body = "// old Aries extension\nexport default () => {};\n";
+    let old = format!(
+        "// @aries-managed-pi-extension sha256={}\n{old_body}",
+        sha256sum(old_body.as_bytes())
+    );
+    user_sh(
+        &s.host,
+        &format!("printf '%s' {} > {PI_EXT}", shell_quote(&old)),
+    );
+    s.core
+        .install_beacon(s.id.clone(), fetcher.clone())
+        .await
+        .unwrap();
+    assert!(
+        !s.host
+            .check(&format!("grep -q 'old Aries extension' {PI_EXT}"))
+    );
+    assert!(s.host.check(&format!("grep -q aries.pi.file= {PI_EXT}")));
+
+    // The user edits it: updating keeps the edit, and so does removal.
+    user_sh(&s.host, &format!("echo '// my tweak' >> {PI_EXT}"));
+    s.core
+        .install_beacon(s.id.clone(), fetcher.clone())
+        .await
+        .unwrap();
+    assert!(s.host.check(&format!("grep -q 'my tweak' {PI_EXT}")));
+    s.core.uninstall_beacon(s.id.clone()).await.unwrap();
+    assert!(s.host.check(&format!("grep -q 'my tweak' {PI_EXT}")));
+
+    // Untouched, it goes with the Beacon, along with the dirs it made.
+    user_sh(&s.host, "rm -rf /home/aries/.pi");
+    s.core.install_beacon(s.id.clone(), fetcher).await.unwrap();
+    assert!(s.host.check(&format!("test -f {PI_EXT}")));
+    s.core.uninstall_beacon(s.id.clone()).await.unwrap();
+    assert!(s.host.check("test ! -e /home/aries/.pi"));
+}

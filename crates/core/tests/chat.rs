@@ -348,6 +348,98 @@ async fn follows_a_claude_code_agent_through_the_real_beacon() {
     watch.stop();
 }
 
+/// Pi pairs through the labels its Aries extension sets; `/tree` branches
+/// in the same file replace the abandoned branch's entries.
+#[tokio::test]
+async fn follows_a_pi_agent_and_its_tree_branches_through_the_real_beacon() {
+    let env = Env::new();
+    let hc = HcSession::start();
+    let file = env.dir.path().join("2026_pi1.jsonl");
+    let tree = "pi/synthetic-tree-branches.jsonl";
+    let f = file.display();
+    let script = env.file(
+        "pi-script",
+        &format!(
+            "wait\nlines {tree} 1 7 {f}\nwait\nlines {tree} 8 9 {f}\nwait\nlines {tree} 10 12 {f}\n"
+        ),
+    );
+    let input = env.dir.path().join("pi-input");
+    // Titled `pi`, like Pi's own process.
+    let agent = hc.run_labeled(
+        "pi",
+        &[("aries.pi.session", "pi1"), ("aries.pi.file", &path(&file))],
+        &[
+            "env",
+            &format!("FAKE_AGENT_INPUT={}", input.display()),
+            "bash",
+            "-c",
+            "exec -a pi /bin/sh \"$0\" \"$1\"",
+            &path(&aries_test_support::fake_agent_path()),
+            &script,
+        ],
+    );
+    let bin_dir = hc.bin().parent().unwrap().to_path_buf();
+    let mut vars: HashMap<String, String> = hc.env().into_iter().collect();
+    vars.insert(
+        "ARIES_BEACON".into(),
+        path(&aries_test_support::beacon_bin()),
+    );
+    vars.insert(
+        "PATH".into(),
+        format!("{}:/usr/bin:/bin", bin_dir.display()),
+    );
+    let host = env.host(vars);
+    let watch = env
+        .core
+        .watch_chat_retrying(host, agent.clone(), None, Duration::from_millis(50))
+        .unwrap();
+    wait_for(&watch, "waiting", |s| s.status == ChatStatus::Waiting).await;
+
+    hc.hc(&["send", &agent, "go"]);
+    let s = wait_for(&watch, "branch A", |s| {
+        s.entries.len() == 4 && texts(s)[3] == "tool bash Done"
+    })
+    .await;
+    assert_eq!(texts(&s)[2], "user: branch A question");
+    assert!(s.cursor.as_deref().unwrap().starts_with("pi:pi1:"));
+
+    hc.hc(&["send", &agent, "go"]);
+    let s = wait_for(&watch, "branch B", |s| {
+        texts(s).last().map(String::as_str) == Some("agent: answer B")
+    })
+    .await;
+    assert_eq!(
+        texts(&s),
+        [
+            "user: first question",
+            "agent: first answer",
+            "user: branch B question",
+            "agent: answer B"
+        ]
+    );
+
+    hc.hc(&["send", &agent, "go"]);
+    let s = wait_for(&watch, "back on A", |s| {
+        texts(s).last().map(String::as_str) == Some("agent: answer A again")
+    })
+    .await;
+    assert_eq!(
+        texts(&s),
+        [
+            "user: first question",
+            "agent: first answer",
+            "user: branch A question",
+            "tool bash Done",
+            "user: back on A",
+            "agent: answer A again"
+        ]
+    );
+
+    hc.hc(&["kill", &agent]);
+    wait_for(&watch, "ended", |s| s.status == ChatStatus::Ended).await;
+    watch.stop();
+}
+
 fn path(p: &Path) -> String {
     p.to_string_lossy().into_owned()
 }

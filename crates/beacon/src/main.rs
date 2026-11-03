@@ -19,6 +19,9 @@
 //! - `skill install` / `skill uninstall`: the managed `call-human` skill
 //!   for Agents ([`aries_beacon::skill`]); run by the phone over SSH when it
 //!   installs, updates or removes the Beacon. One `SkillReport` line.
+//! - `pi-extension install|remove`: the managed Pi status extension
+//!   ([`aries_beacon::pi_extension`]); the phone runs `install` after
+//!   installing or updating the Beacon.
 //! - `--version`: `aries-beacon <version> (contract <n>)`.
 
 mod call_push;
@@ -58,9 +61,12 @@ fn main() {
         Some("chat") => chat(std::env::args().skip(2).collect()),
         Some("answer") => answer(std::env::args().skip(2).collect()),
         Some("skill") => exit_on_error(skill(&rest_args())),
+        Some("pi-extension") => {
+            std::process::exit(aries_beacon::pi_extension::command(&rest_args()))
+        }
         _ => {
             eprintln!(
-                "usage: aries-beacon --version | status | serve | call ... | calls [--follow] | reply CALL CHOICE | pair | push-test | unpair | chat TERMINAL [--follow] [--cursor C] | answer TERMINAL QUESTION PICKS... | skill install|uninstall"
+                "usage: aries-beacon --version | status | serve | call ... | calls [--follow] | reply CALL CHOICE | pair | push-test | unpair | chat TERMINAL [--follow] [--cursor C] | answer TERMINAL QUESTION PICKS... | skill install|uninstall | pi-extension install|remove"
             );
             std::process::exit(2);
         }
