@@ -18,8 +18,10 @@ import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performSemanticsAction
@@ -34,6 +36,7 @@ import io.github.shiroel.aries.core.ChatSnapshot
 import io.github.shiroel.aries.core.ChatStatus
 import io.github.shiroel.aries.core.ChatToolStatus
 import io.github.shiroel.aries.core.Endpoint
+import io.github.shiroel.aries.core.RemoteFilePage
 import io.github.shiroel.aries.core.TerminalInfo
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.assertEquals
@@ -146,6 +149,25 @@ class ChatCopySelectionTest {
             compose.onNodeWithText(str(R.string.chat_copy_all)).performClick()
             assertEquals(output ?: input, clipboard())
         }
+    }
+
+    @Test
+    fun aFileReferenceCanBeCopiedWithALongPressAndStillOpenedWithATap() {
+        open()
+        var reads = 0
+        core.connection!!.fileReader = { _, _, offset, _ ->
+            reads++
+            RemoteFilePage("file contents", offset, offset, 20u)
+        }
+        show(ChatEntryBody.Agent("README.md:7"))
+        val reference = compose.onNodeWithText("README.md:7")
+        reference.performTouchInput { longClick() }
+        compose.onNodeWithText(str(R.string.chat_copy_all)).performClick()
+        assertEquals("README.md:7", clipboard())
+        assertEquals(0, reads)
+        reference.performTouchInput { click() }
+        compose.onNodeWithTag("files-line:7").assertExists()
+        assertEquals(1, reads)
     }
 
     @Test

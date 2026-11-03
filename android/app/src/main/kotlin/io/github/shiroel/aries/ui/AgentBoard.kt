@@ -72,6 +72,12 @@ class AgentBoard(val hosts: List<Host>) {
             withAgentSpaces(agentFamily(h, lists[h.id].orEmpty()), structures[h.id]).map { it.copy(hostOrder = index) }
         }, view)
 
+    /** Reuses the existing watches; an empty live list must replace stored Agents. */
+    val quickOpenSources: List<QuickOpenSource>
+        get() = hosts.filter { links[it.id]?.state == LinkState.Up }.map {
+            QuickOpenSource(it, structures[it.id], lists[it.id].orEmpty())
+        }
+
     fun updateStructure(hostId: String, structure: HostStructure) {
         structures[hostId] = structure
     }
