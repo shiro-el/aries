@@ -62,6 +62,15 @@ fn question(s: &ChatSnapshot) -> Option<(&str, ChatToolStatus, Vec<String>)> {
 
 #[tokio::test]
 async fn an_opencode_chat_shows_its_turns_and_answers_its_question() {
+    opencode_answer(false).await;
+}
+
+#[tokio::test]
+async fn opencode_free_text_opens_type_your_own_answer() {
+    opencode_answer(true).await;
+}
+
+async fn opencode_answer(free_text: bool) {
     let dir = tempfile::tempdir().unwrap();
     let core: Arc<AriesCore> = common::core_in(&dir.path().join("app"));
     let hc = HcSession::start();
@@ -92,7 +101,8 @@ async fn an_opencode_chat_shows_its_turns_and_answers_its_question() {
                 "id": "que_1", "sessionID": MAIN,
                 "questions": q["data"]["state"]["input"]["questions"],
             }}),
-            json!({"wait": "key"}),
+            json!({"say": format!("{}\n4. Type your own answer", q["data"]["state"]["input"]["questions"][0]["question"].as_str().unwrap())}),
+            json!({"wait": if free_text { "line" } else { "key" }}),
             json!({"event": "question.replied", "props": {"sessionID": MAIN, "requestID": "que_1"}}),
         ],
     );
@@ -175,16 +185,33 @@ async fn an_opencode_chat_shows_its_turns_and_answers_its_question() {
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
-    core.answer_question(host.clone(), oc.address.clone(), qid.clone(), vec![vec![1]])
+    if free_text {
+        core.answer_question_with_text(
+            host.clone(),
+            oc.address.clone(),
+            qid.clone(),
+            vec![vec![]],
+            vec![Some("Purple".into())],
+        )
         .await
         .unwrap();
+    } else {
+        core.answer_question(host.clone(), oc.address.clone(), qid.clone(), vec![vec![1]])
+            .await
+            .unwrap();
+    }
+    let expected = if free_text {
+        "34 50 75 72 70 6c 65 0d"
+    } else {
+        "32"
+    };
     for _ in 0..200 {
-        if !oc.inputs().is_empty() {
+        if oc.inputs().join(" ") == expected {
             break;
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
-    assert_eq!(oc.inputs(), ["32"]);
+    assert_eq!(oc.inputs().join(" "), expected);
 
     // OpenCode records the answer, then the edit turns with their diff.
     db.part(&q);
@@ -217,6 +244,6 @@ async fn an_opencode_chat_shows_its_turns_and_answers_its_question() {
         ),
         "{again:?}"
     );
-    assert_eq!(oc.inputs(), ["32"]);
+    assert_eq!(oc.inputs().join(" "), expected);
     watch.stop();
 }
