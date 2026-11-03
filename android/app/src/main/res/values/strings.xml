@@ -264,10 +264,8 @@
     <!-- QR Host pairing -->
     <string name="host_pair_scan_button">Scan Host QR</string>
     <string name="host_pair_scan_prompt">Scan the QR shown by aries-beacon pair-qr</string>
-    <string name="host_pair_hint">On the Host, run: aries-beacon pair-qr --address ADDRESS. The QR expires in 5 minutes and registers one phone.</string>
     <string name="host_pair_review_title">Register scanned Host</string>
     <string name="host_pair_fingerprint">Host key: %1$s</string>
-    <string name="host_pair_review_body">Confirm that this QR came from your Host. Registering installs this phone’s public key and trusts the Host key above.</string>
     <string name="host_pair_confirm_button">Register with QR</string>
     <string name="host_pair_busy">Registering…</string>
     <string name="host_pair_invalid">Invalid or expired Host QR. Generate a new QR on the Host.</string>
@@ -600,7 +598,6 @@
     <string name="herdr_install_update">Update Herdr Core</string>
     <string name="herdr_install_refresh">Check Herdr Core again</string>
     <string name="herdr_install_consent_title">Install or update Herdr Core?</string>
-    <string name="herdr_install_consent_body">Download the official herdr-core 0.1.17 release, verify its pinned SHA-256 checksum and install it over SSH into ~/.local/bin on this Host. Existing user installations use the terminal-preserving updater. No administrator access is used.</string>
     <string name="herdr_install_confirm">Approve installation</string>
     <string name="herdr_install_detect">Checking Host platform…</string>
     <string name="herdr_install_download">Downloading release…</string>
@@ -610,7 +607,6 @@
     <string name="herdr_install_connect">Connect to Host</string>
     <string name="herdr_install_checksum">Checksum verification failed. Nothing was installed. Expected: %1$s; got: %2$s</string>
     <string name="herdr_install_failed">Herdr Core failed at %1$s: %2$s</string>
-    <string name="herdr_install_recovery">Check the Host connection, available disk space and download access, then check again and retry.</string>
 
     <string name="beacon_title">Beacon</string>
     <string name="beacon_needs_ssh">The Beacon can only be installed on an SSH Host.</string>
@@ -766,7 +762,6 @@
     <string name="settings_title">Settings</string>
     <!-- Local diagnostics -->
     <string name="diagnostics_title">Diagnostics</string>
-    <string name="diagnostics_retention">Up to 500 local events. Errors use categories; credentials and message contents are excluded. Copy and export include the current filter.</string>
     <string name="diagnostics_all">All</string>
     <string name="diagnostics_all_hosts">All Hosts</string>
     <string name="diagnostics_failures">Failures only</string>
