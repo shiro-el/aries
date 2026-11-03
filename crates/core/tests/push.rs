@@ -12,8 +12,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use aries_core::{
-    AriesCore, BeaconArtifact, BeaconFetcher, BeaconRelease, CoreError, Endpoint, FetchError,
-    HttpClient, HttpRequest, HttpResponse, PushContent, PushDevice, PushProgress, PushStep,
+    AgentStatus, AriesCore, BeaconArtifact, BeaconFetcher, BeaconRelease, BlockedReason, CoreError,
+    Endpoint, FetchError, HttpClient, HttpRequest, HttpResponse, PushContent, PushDevice,
+    PushProgress, PushStep,
 };
 use aries_test_support::{FakeRelay, ReverseTunnel, SystemdHost, beacon_bin, http_request};
 use common::core_in;
@@ -325,7 +326,16 @@ struct Setup {
 
 /// A Host with the Beacon installed and a fake Relay the container reaches.
 async fn setup() -> Setup {
+    setup_with(false).await
+}
+
+/// `lingering`: the user's services keep running after SSH logins end, so
+/// the Beacon's `serve` stays up.
+async fn setup_with(lingering: bool) -> Setup {
     let host = SystemdHost::start();
+    if lingering {
+        host.enable_linger();
+    }
     let data = tempfile::tempdir().unwrap();
     let core = core_in(data.path());
     host.authorize(&core.ensure_key().unwrap().openssh);
@@ -615,4 +625,80 @@ async fn removing_the_host_revokes_the_pairing_on_the_relay() {
     let log = s.relay.log();
     assert!(log.pairings.is_empty());
     assert_eq!(log.deleted, [token]);
+}
+
+// ---- Agent status pushes (ticket 28) ----------------------------------------
+
+/// Runs `script` as the Host user with the user's runtime dir, so it talks to
+/// the same herdr-core session as the Beacon's `serve`.
+fn as_user(host: &SystemdHost, script: &str) -> String {
+    let u = SystemdHost::USER;
+    host.root(&format!(
+        "runuser -u {u} -- env HOME=/home/{u} XDG_RUNTIME_DIR=/run/user/$(id -u {u}) PATH=/usr/local/bin:/usr/bin:/bin sh -c '{script}'"
+    ))
+}
+
+#[tokio::test]
+#[ignore = "needs docker"]
+async fn a_blocked_agent_reaches_the_phone_once() {
+    use base64::Engine;
+    let s = setup_with(true).await;
+    s.enable("dev-1").await;
+    s.relay.wait_pushes(1, Duration::from_secs(10)); // the test push
+
+    // The resident service is attached to the user's herdr-core.
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    while !as_user(&s.host, "~/.local/bin/aries-beacon status").contains("\"core_version\":\"") {
+        assert!(std::time::Instant::now() < deadline, "serve never attached");
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+
+    let agent = std::fs::read(aries_test_support::fake_agent_path()).unwrap();
+    let agent = base64::engine::general_purpose::STANDARD.encode(agent);
+    let script = base64::engine::general_purpose::STANDARD.encode(
+        "status working\nstatus blocked permission Allow Bash?\nsleep 0.3\n\
+         status blocked permission Allow Bash?\nsleep 0.3\nstatus error - marker\nwait\n",
+    );
+    s.host.root(&format!(
+        "echo {agent} | base64 -d > /tmp/fake-agent && echo {script} | base64 -d > /tmp/script && chmod 644 /tmp/fake-agent /tmp/script"
+    ));
+    let run = as_user(
+        &s.host,
+        "herdr-core run --bg --json --no-parent --name claude -- env FAKE_AGENT_INPUT=/tmp/in sh /tmp/fake-agent /tmp/script",
+    );
+    let address = serde_json::from_str::<serde_json::Value>(run.trim()).unwrap()["address"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    // Blocked once (its repeat is suppressed), then the Error marker.
+    let pushes = s.relay.wait_pushes(3, Duration::from_secs(20));
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    assert_eq!(s.relay.log().pushes.len(), 3);
+    let notices: Vec<_> = pushes[1..]
+        .iter()
+        .map(|(_, e)| s.core.open_push(e.clone()).unwrap())
+        .collect();
+    assert_eq!(notices[0].host_id, s.id);
+    assert_eq!(
+        notices[0].content,
+        PushContent::Status {
+            terminal: address.clone(),
+            name: Some("claude".into()),
+            title: None,
+            top_level: true,
+            status: AgentStatus::Blocked {
+                reason: Some(BlockedReason::Permission),
+                message: Some("Allow Bash?".into()),
+            },
+            at: match notices[0].content {
+                PushContent::Status { at, .. } => at,
+                _ => 0,
+            },
+        }
+    );
+    assert!(matches!(
+        &notices[1].content,
+        PushContent::Status { terminal, status: AgentStatus::Error { .. }, .. } if *terminal == address
+    ));
 }

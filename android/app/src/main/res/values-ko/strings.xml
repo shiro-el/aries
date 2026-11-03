@@ -314,5 +314,6 @@
     <string name="push_channel_name">Host 알림</string>
     <string name="push_test_title">%1$s 푸시 동작 확인</string>
     <string name="push_test_body">%1$s의 Beacon이 보낸 테스트 알림입니다. 종단 간 암호화돼 있습니다.</string>
+    <string name="push_status_title">%2$s의 %1$s</string>
     <string name="push_no_firebase">이 빌드에는 Firebase 설정이 없습니다</string>
 </resources>
