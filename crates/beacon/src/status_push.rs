@@ -7,7 +7,9 @@
 //! defaults apply. It is read for each change, so a new file takes effect
 //! at once.
 
+use aries_beacon::progress::{ProgressWatch, WatchedAgent};
 use std::sync::mpsc;
+use std::time::Duration;
 
 use aries_beacon::chat::{self, Agent, TerminalLookup};
 use aries_beacon::core_link::CoreLookup;
@@ -24,41 +26,126 @@ const MESSAGE_CHARS: usize = 400;
 const TITLE_CHARS: usize = 120;
 const EXCERPT_CHARS: usize = 200;
 
-pub struct Sender(mpsc::Sender<(Change, u64)>);
+pub struct Sender(mpsc::Sender<(Vec<Change>, Vec<WatchedAgent>)>);
 
 impl Sender {
     pub fn start() -> Self {
-        let (tx, rx) = mpsc::channel::<(Change, u64)>();
+        let (tx, rx) = mpsc::channel::<(Vec<Change>, Vec<WatchedAgent>)>();
         std::thread::spawn(move || {
             let mut lookup = CoreLookup::default();
-            let agents = chat::agents();
-            for (change, at) in rx {
-                let details = details(&change, &mut lookup, &agents);
-                let message = message(change, at, details);
-                match push::send(&message) {
-                    Ok(()) | Err(SendError::NotPaired) => {}
-                    Err(e) => eprintln!("aries-beacon: status push failed: {e}"),
+            let chat_agents = chat::agents();
+            let mut progress = ProgressWatch::default();
+            let mut agents = Vec::new();
+            let mut pending = std::collections::BTreeMap::new();
+            loop {
+                let mut changes = Vec::new();
+                match rx.recv_timeout(Duration::from_secs(1)) {
+                    Ok((c, a)) => {
+                        changes = c;
+                        agents = a;
+                    }
+                    Err(mpsc::RecvTimeoutError::Timeout) => {}
+                    Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                }
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0);
+                // A queued old completion must not close a later Working turn.
+                for a in &agents {
+                    if a.status == Some(AgentStatus::Working)
+                        && pending.get(&a.terminal).is_some_and(|m| {
+                            !matches!(
+                                m,
+                                PushMessage::Progress {
+                                    cancelled: false,
+                                    ..
+                                }
+                            )
+                        })
+                    {
+                        pending.remove(&a.terminal);
+                    }
+                }
+                let policy = policy();
+                for c in changes {
+                    if policy.allows(&c.status, c.top_level) {
+                        let extra = details(&c, &mut lookup, &chat_agents);
+                        pending.insert(c.terminal.clone(), message(c, now / 1000, extra));
+                    }
+                }
+                for m in progress.update(agents.clone(), now) {
+                    // Forced completion uses the same envelope budget as ordinary statuses.
+                    let m = match m {
+                        PushMessage::Status {
+                            terminal,
+                            name,
+                            title,
+                            top_level,
+                            status,
+                            turn,
+                            at,
+                            ..
+                        } => {
+                            let c = Change {
+                                terminal,
+                                name,
+                                title,
+                                top_level,
+                                status,
+                                turn: turn.unwrap_or(0),
+                            };
+                            let extra = details(&c, &mut lookup, &chat_agents);
+                            message(c, at, extra)
+                        }
+                        m => m,
+                    };
+                    let terminal = match &m {
+                        PushMessage::Status { terminal, .. }
+                        | PushMessage::Progress { terminal, .. } => terminal,
+                        _ => unreachable!(),
+                    };
+                    // Progress cannot overwrite a pending completion/status card.
+                    if !matches!(
+                        m,
+                        PushMessage::Progress {
+                            cancelled: false,
+                            ..
+                        }
+                    ) || !pending
+                        .get(terminal)
+                        .is_some_and(|m| matches!(m, PushMessage::Status { .. }))
+                    {
+                        pending.insert(terminal.clone(), m);
+                    }
+                }
+                // Attention/completion first; progress leaves five slots per minute.
+                let mut outgoing: Vec<_> = std::mem::take(&mut pending).into_iter().collect();
+                outgoing.sort_by_key(|(_, m)| match m {
+                    PushMessage::Progress {
+                        cancelled: false,
+                        at,
+                        ..
+                    } => (true, *at),
+                    _ => (false, 0),
+                });
+                for (terminal, m) in outgoing {
+                    match push::send(&m) {
+                        Ok(()) | Err(SendError::NotPaired) => {}
+                        Err(SendError::RateLimited) => {
+                            pending.insert(terminal, m);
+                        }
+                        Err(e) => eprintln!("aries-beacon: status push failed: {e}"),
+                    }
                 }
             }
         });
         Self(tx)
     }
 
-    /// Queues a push for each change the policy allows.
-    pub fn send(&self, changes: Vec<Change>) {
-        if changes.is_empty() {
-            return;
-        }
-        let policy = policy();
-        let at = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
-        for c in changes {
-            if policy.allows(&c.status, c.top_level) {
-                let _ = self.0.send((c, at));
-            }
-        }
+    /// Also updates the scheduler's latest facts; its timer runs without events.
+    pub fn send(&self, changes: Vec<Change>, agents: Vec<WatchedAgent>) {
+        let _ = self.0.send((changes, agents));
     }
 }
 

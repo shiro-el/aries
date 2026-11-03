@@ -194,7 +194,9 @@ async function push(request: Request, env: Env): Promise<Response> {
     return json(503, { error: "fcm_not_configured" });
   }
   try {
-    await sendFcm(config, pairing.device_token, { v: "1", e: base64(envelope) });
+    // Delivery priority is transport metadata; the Relay still cannot read the envelope.
+    const priority = request.headers.get("x-aries-priority") === "normal" ? "NORMAL" : "HIGH";
+    await sendFcm(config, pairing.device_token, { v: "1", e: base64(envelope) }, priority);
   } catch (e) {
     if (e instanceof FcmError && e.unregistered) {
       await forget(env, hash);
