@@ -247,6 +247,7 @@
     <string name="terminal_back_to_live">Back to live</string>
     <string name="terminal_zoom_reset">Zoom %1$d%% · Reset</string>
     <string name="terminal_copy">Copy</string>
+    <string name="terminal_send_to_agent">Send to Agent</string>
     <string name="terminal_open_link">Open link</string>
     <string name="terminal_copy_link">Copy link</string>
 
@@ -316,6 +317,27 @@
     <string name="chat_thinking">Thinking</string>
     <string name="chat_tool_running">running</string>
     <string name="chat_tool_failed">failed</string>
+    <!-- Chat tool details and response metadata -->
+    <string name="chat_details_expanded">Expanded</string>
+    <string name="chat_details_collapsed">Collapsed</string>
+    <string name="chat_tool_raw_input">Raw input</string>
+    <string name="chat_tool_command">Command: %1$s</string>
+    <string name="chat_tool_cwd">Working directory: %1$s</string>
+    <string name="chat_tool_exit_code">Exit code: %1$s</string>
+    <string name="chat_tool_duration">Duration: %1$s ms</string>
+    <string name="chat_tool_path">Path: %1$s</string>
+    <string name="chat_tool_pattern">Pattern: %1$s</string>
+    <string name="chat_tool_result_count">Results: %1$s</string>
+    <string name="chat_response_model">Model %1$s</string>
+    <string name="chat_response_input_tokens">In %1$s</string>
+    <string name="chat_response_output_tokens">Out %1$s</string>
+    <string name="chat_response_cache_read_tokens">Cache read %1$s</string>
+    <string name="chat_response_cache_write_tokens">Cache write %1$s</string>
+    <string name="chat_response_duration">%1$s ms</string>
+    <string name="chat_response_complete">Complete</string>
+    <string name="chat_response_interrupted">Interrupted</string>
+    <string name="chat_response_error">Error</string>
+
     <string name="chat_tool_input">Input</string>
     <string name="chat_tool_output">Result</string>
     <string name="chat_tool_expand_label">Show the full %1$s call</string>
@@ -332,6 +354,19 @@
     <string name="chat_image_loading">Loading image…</string>
     <string name="chat_image_unreadable">This image cannot be shown.</string>
     <string name="chat_image_too_large">Image too large to show (%1$s MB)</string>
+
+    <!-- Full-screen image viewer (Chat and remote files). -->
+    <string name="image_viewer_title">Image viewer</string>
+    <string name="image_viewer_open">Open full-screen image</string>
+    <string name="image_viewer_save">Save image</string>
+    <string name="image_viewer_share">Share image</string>
+    <string name="image_viewer_zoom">%1$d%% zoom</string>
+    <string name="image_viewer_zoom_in">Zoom in</string>
+    <string name="image_viewer_zoom_out">Zoom out</string>
+    <string name="image_viewer_reset">Fit image to screen</string>
+    <string name="image_viewer_export_failed">Could not save or share this image. Try again.</string>
+    <string name="image_viewer_saved">Image saved</string>
+    <string name="image_viewer_exporting">Preparing image…</string>
     <string name="chat_diff_more">%1$d more lines</string>
     <string name="chat_diff_truncated">The diff is too large; the rest is not shown.</string>
     <string name="chat_question_label">Question</string>

@@ -220,7 +220,7 @@ fn details(c: &Change, lookup: &mut CoreLookup, agents: &[Box<dyn Agent>]) -> De
         }
     } else {
         out.excerpt = items.iter().rev().find_map(|i| match &i.body {
-            ChatBody::Agent { text } => Some(text.clone()),
+            ChatBody::Agent { text, .. } => Some(text.clone()),
             _ => None,
         });
     }

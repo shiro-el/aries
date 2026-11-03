@@ -105,12 +105,12 @@ class RemoteFilesTest {
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("Please review\n'/repo/a'\\''b.kt'")
         assertEquals(emptyList<Pair<String, String>>(), core.connection!!.typed)
 
-        // The same action from Terminal opens Chat with a reviewable draft.
+        // The same action from Terminal keeps the previous Chat draft and appends another reference.
         compose.onNodeWithText(str(R.string.agent_view_terminal)).performClick()
         compose.onNodeWithTag("files-open").performClick()
         compose.onNodeWithText("a'b.kt").performClick()
         compose.onNodeWithText(str(R.string.files_send_file_button)).performClick()
-        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("'/repo/a'\\''b.kt'")
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("Please review\n'/repo/a'\\''b.kt'\n'/repo/a'\\''b.kt'")
         assertEquals(emptyList<Pair<String, String>>(), core.connection!!.typed)
     }
 

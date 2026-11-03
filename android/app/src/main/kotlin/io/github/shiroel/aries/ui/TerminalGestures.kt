@@ -289,7 +289,7 @@ fun Modifier.terminalGestures(look: TerminalLook, viewer: TerminalViewer): Modif
 
 /** What the phone's own view shows above the grid: scrollback position, zoom, selection actions. */
 @Composable
-fun TerminalLookBar(viewer: TerminalViewer, look: TerminalLook) {
+fun TerminalLookBar(viewer: TerminalViewer, look: TerminalLook, onSendToAgent: ((String) -> Unit)? = null) {
     val selection = look.selection
     if (viewer.scrolled == 0 && look.zoom == 1f && selection == null) return
     val context = LocalContext.current
@@ -306,6 +306,13 @@ fun TerminalLookBar(viewer: TerminalViewer, look: TerminalLook) {
         ) {
             if (selection != null) {
                 TextButton(onClick = { copy(selectedText(viewer, selection)) }) { Text(stringResource(R.string.terminal_copy)) }
+                onSendToAgent?.let { send ->
+                    TextButton(onClick = {
+                        val text = selectedText(viewer, selection)
+                        look.selection = null
+                        send(text)
+                    }) { Text(stringResource(R.string.terminal_send_to_agent)) }
+                }
                 selection.link?.let { link ->
                     TextButton(onClick = {
                         look.selection = null
