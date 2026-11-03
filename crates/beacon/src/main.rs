@@ -1,6 +1,7 @@
 //! `aries-beacon`: runs on a Host.
 //!
-//! - `serve`: the resident service (a systemd user service on Linux). Stays
+//! - `serve`: the resident service (a systemd user service on Linux, a
+//!   launchd LaunchAgent on macOS). Stays
 //!   attached to the user's local herdr-core (default session) and records
 //!   that in its service file.
 //! - `status`: prints one [`BeaconStatus`] JSON line.
@@ -74,12 +75,26 @@ fn status() -> BeaconStatus {
     }
 }
 
-/// `pid` is a live `aries-beacon` process (not a reused pid).
+/// `pid` is a live `aries-beacon` process (not a reused pid). Linux reads
+/// `/proc`; macOS, which has none, asks `ps`.
 fn is_beacon(pid: u32) -> bool {
-    std::fs::read(format!("/proc/{pid}/cmdline"))
-        .map(|c| {
-            let argv0 = c.split(|b| *b == 0).next().unwrap_or_default();
-            String::from_utf8_lossy(argv0).ends_with("aries-beacon")
+    if Path::new("/proc/self").exists() {
+        return std::fs::read(format!("/proc/{pid}/cmdline"))
+            .map(|c| {
+                let argv0 = c.split(|b| *b == 0).next().unwrap_or_default();
+                String::from_utf8_lossy(argv0).ends_with("aries-beacon")
+            })
+            .unwrap_or(false);
+    }
+    Command::new("ps")
+        .args(["-p", &pid.to_string(), "-o", "comm="])
+        .stderr(Stdio::null())
+        .output()
+        .map(|o| {
+            o.status.success()
+                && String::from_utf8_lossy(&o.stdout)
+                    .trim()
+                    .ends_with("aries-beacon")
         })
         .unwrap_or(false)
 }

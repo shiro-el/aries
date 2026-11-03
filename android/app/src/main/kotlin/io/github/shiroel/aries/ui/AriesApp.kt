@@ -74,6 +74,9 @@ fun AriesApp(model: HostsModel) {
                         onOpenChat = { model.openChat(s.browser.host, it) },
                         onNewTerminal = { model.newTerminal(s.browser) },
                         onLaunch = { model.launch(s.browser, it) },
+                        onSaveLaunch = { model.saveLaunch(s.browser, it) },
+                        onDeleteLaunch = { form, saved -> model.deleteSavedLaunch(s.browser, form, saved) },
+                        onRunSaved = { model.runSaved(s.browser, it) },
                         hostSections = { BeaconSection(model.beacon) },
                     )
                 }
