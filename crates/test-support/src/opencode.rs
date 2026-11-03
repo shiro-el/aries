@@ -1,14 +1,90 @@
-//! An OpenCode database for tests: the 1.19.5 schema of the tables the
-//! Beacon reads, filled from the ticket-04 row fixtures
-//! (`fixtures/agents/opencode/*.db-rows.json`) the way OpenCode writes
-//! them (WAL, rows rewritten in place).
-
-#![allow(dead_code)]
+//! OpenCode for tests, without OpenCode:
+//! - [`Db`]: its database, the 1.19.5 schema of the tables the Beacon
+//!   reads, filled from the ticket-04 row fixtures
+//!   (`fixtures/agents/opencode/*.db-rows.json`) the way OpenCode writes
+//!   them (WAL, rows rewritten in place).
+//! - [`HcSession::run_opencode`]: a stand-in OpenCode process in a
+//!   Terminal that loads a plugin like OpenCode does and feeds it scripted
+//!   hooks and events (`fixtures/agents/opencode/plugin-harness.mjs`, needs
+//!   `node`).
 
 use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, params};
 use serde_json::Value;
+
+use crate::{HcSession, repo_root};
+
+/// `node` on `PATH`.
+pub fn node() -> PathBuf {
+    let path = std::env::var_os("PATH").unwrap_or_default();
+    std::env::split_paths(&path)
+        .map(|d| d.join("node"))
+        .find(|p| p.is_file())
+        .expect("OpenCode stand-in tests need node on PATH")
+}
+
+/// A stand-in OpenCode running in a Terminal.
+pub struct OpenCodeStandIn {
+    pub address: String,
+    input: PathBuf,
+}
+
+impl OpenCodeStandIn {
+    /// The input chunks that reached it, as hex bytes (`["32"]`).
+    pub fn inputs(&self) -> Vec<String> {
+        std::fs::read_to_string(&self.input)
+            .unwrap_or_default()
+            .lines()
+            .map(str::to_owned)
+            .collect()
+    }
+}
+
+impl HcSession {
+    /// Starts a stand-in OpenCode (its program is named `opencode.mjs`, so
+    /// the Beacon takes it for OpenCode) in a new Terminal labelled
+    /// `labels`. It loads `plugin` and runs `steps` (see the harness file);
+    /// its `XDG_DATA_HOME` is `data_home`, and its `PATH` has no `hc`.
+    /// `dir` holds its files.
+    pub fn run_opencode(
+        &self,
+        dir: &Path,
+        plugin: &Path,
+        data_home: &Path,
+        labels: &[(&str, &str)],
+        steps: &[Value],
+    ) -> OpenCodeStandIn {
+        std::fs::create_dir_all(dir).expect("stand-in dir");
+        let harness = dir.join("opencode.mjs");
+        std::fs::copy(
+            repo_root().join("fixtures/agents/opencode/plugin-harness.mjs"),
+            &harness,
+        )
+        .expect("copy harness");
+        let script = dir.join("steps.jsonl");
+        let text: String = steps.iter().map(|s| format!("{s}\n")).collect();
+        std::fs::write(&script, text).expect("write steps");
+        let input = dir.join("input");
+        let data = format!("XDG_DATA_HOME={}", data_home.display());
+        let input_env = format!("HARNESS_INPUT={}", input.display());
+        let address = self.run_labeled(
+            "opencode",
+            labels,
+            &[
+                "env",
+                &data,
+                &input_env,
+                "PATH=/usr/bin:/bin",
+                &node().to_string_lossy(),
+                &harness.to_string_lossy(),
+                &plugin.to_string_lossy(),
+                &script.to_string_lossy(),
+            ],
+        );
+        OpenCodeStandIn { address, input }
+    }
+}
 
 const SCHEMA: &str = "
 CREATE TABLE `session` (
@@ -38,8 +114,8 @@ INSERT INTO `credential` VALUES ('c1', 'not-for-the-beacon');
 ";
 
 pub fn fixture(name: &str) -> Value {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/agents/opencode")
+    let path = repo_root()
+        .join("fixtures/agents/opencode")
         .join(format!("{name}.db-rows.json"));
     serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
 }

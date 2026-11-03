@@ -213,8 +213,10 @@ pub struct OpenCodeSource {
     session: String,
     db: Option<(Connection, (u64, u64))>,
     chat: OpenCodeChat,
-    /// Last `time_updated` handed to the interpreter, per row id.
-    seen: HashMap<String, i64>,
+    /// What was last handed to the interpreter, per row id:
+    /// `time_updated` and a digest of `data` (two writes can share a
+    /// millisecond).
+    seen: HashMap<String, (i64, u64)>,
     /// Newest `time_updated` read: the resume position.
     newest: i64,
     /// Rows updated before this were sent before (resuming from a cursor):
@@ -376,17 +378,17 @@ impl Source for OpenCodeSource {
         self.complained = false;
 
         let seen = &self.seen;
-        let fresh = |id: &str, t: i64| seen.get(id) != Some(&t);
+        let fresh = |id: &str, t: i64, data: &Value| seen.get(id) != Some(&(t, digest(data)));
         let messages: Vec<MessageRow> = messages
             .into_iter()
-            .filter(|m| fresh(&m.id, m.time_updated))
+            .filter(|m| fresh(&m.id, m.time_updated, &m.data))
             .collect();
         let mut by_id: HashMap<String, PartRow> = std::mem::take(&mut self.orphans)
             .into_iter()
             .map(|p| (p.id.clone(), p))
             .collect();
         for p in parts {
-            if fresh(&p.id, p.time_updated) {
+            if fresh(&p.id, p.time_updated, &p.data) {
                 by_id.insert(p.id.clone(), p);
             }
         }
@@ -420,11 +422,21 @@ impl Source for OpenCodeSource {
 
         let mut events = Vec::new();
         for (_, row) in rows {
-            let (id, t, produced) = match row {
-                Row::Message(m) => (m.id.clone(), m.time_updated, self.chat.message(&m)),
-                Row::Part(p) => (p.id.clone(), p.time_updated, self.chat.part(&p)),
+            let (id, t, d, produced) = match row {
+                Row::Message(m) => (
+                    m.id.clone(),
+                    m.time_updated,
+                    digest(&m.data),
+                    self.chat.message(&m),
+                ),
+                Row::Part(p) => (
+                    p.id.clone(),
+                    p.time_updated,
+                    digest(&p.data),
+                    self.chat.part(&p),
+                ),
             };
-            self.seen.insert(id, t);
+            self.seen.insert(id, (t, d));
             self.newest = self.newest.max(t);
             if self.quiet_before.is_none_or(|q| t >= q) {
                 events.extend(produced.into_iter().map(|e| (e, None)));
@@ -444,6 +456,13 @@ impl Source for OpenCodeSource {
     fn position(&self) -> String {
         self.newest.to_string()
     }
+}
+
+fn digest(data: &Value) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    data.to_string().hash(&mut h);
+    h.finish()
 }
 
 /// Turns `message` and `part` rows into Chat items. A row may arrive again

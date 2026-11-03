@@ -2,8 +2,6 @@
 //! OpenCode source, streamed rows rewritten in place, cursors, `/new`, and
 //! answering its question dock.
 
-mod common;
-
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
@@ -17,7 +15,7 @@ use aries_beacon::chat::{
 use aries_protocol::agent_status::StatusRecord;
 use aries_protocol::answer::{Answer, AnswerOutcome};
 use aries_protocol::chat::{ChatBody, ChatEvent, ChatItem, ChatLine, ChatState, ToolStatus};
-use common::opencode_db::{Db, db_path, fixture, parts_of, row};
+use aries_test_support::opencode::{Db, db_path, fixture, parts_of, row};
 use serde_json::{Value, json};
 
 const MAIN: &str = "ses_e5fed9273ffe3XexHeUg20WxR5";
@@ -648,4 +646,26 @@ fn only_one_single_choice_question_maps_to_keys() {
         agent.answer_keys(&q(false, 12, 1), &[vec![0]]),
         Err(KeysError::Unsupported(_))
     ));
+}
+
+#[test]
+fn a_rewrite_within_the_same_millisecond_is_not_missed() {
+    let f = fixture("tui-new-session-rotation");
+    let id = f["session"]["id"].as_str().unwrap().to_owned();
+    let dir = tempfile::tempdir().unwrap();
+    let db = Db::create(&db_path(dir.path()));
+    db.load(&f);
+    let text = row(&f, "parts", "ONscu4");
+    db.part(&bump(
+        &text,
+        1793687200021,
+        json!({"type": "text", "text": "fre"}),
+    ));
+    let mut source = OpenCodeSource::new(db.path.clone(), id);
+    let mut chat = Chat::default();
+    chat.drain(&mut source);
+    assert_eq!(chat.summary().last().unwrap(), "agent fre");
+    db.part(&text);
+    chat.drain(&mut source);
+    assert_eq!(chat.summary().last().unwrap(), "agent fresh");
 }

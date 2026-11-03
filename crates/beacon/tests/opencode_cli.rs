@@ -5,8 +5,6 @@
 //! label and reads the session from an OpenCode database; `aries-beacon
 //! answer` presses the option's number.
 
-mod common;
-
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -16,19 +14,11 @@ use std::time::{Duration, Instant};
 use aries_protocol::answer::{AnswerOutcome, AnswerReply};
 use aries_protocol::chat::{ChatBody, ChatEvent, ChatLine, ChatState, ToolStatus};
 use aries_test_support::HcSession;
-use common::opencode_db::{Db, db_path, fixture, parts_of, row};
+use aries_test_support::opencode::{Db, OpenCodeStandIn, db_path, fixture, parts_of, row};
 use serde_json::{Value, json};
 
 const BEACON: &str = env!("CARGO_BIN_EXE_aries-beacon");
 const MAIN: &str = "ses_e5fed9273ffe3XexHeUg20WxR5";
-
-fn node() -> PathBuf {
-    let path = std::env::var_os("PATH").unwrap_or_default();
-    std::env::split_paths(&path)
-        .map(|d| d.join("node"))
-        .find(|p| p.is_file())
-        .expect("these tests need node on PATH")
-}
 
 struct Host {
     hc: HcSession,
@@ -70,38 +60,17 @@ impl Host {
         self.path("config/opencode/plugins/aries-agent-state.js")
     }
 
-    /// The stand-in OpenCode (named so, as the Beacon recognises it) with
-    /// the plugin and `steps`, its data in `data/`. Starts labelled with a
-    /// stale session, as a Terminal where OpenCode ran before.
-    fn opencode(&self, plugin: &Path, steps: &[Value]) -> String {
-        let bin = self.path("bin");
-        std::fs::create_dir_all(&bin).unwrap();
-        let harness = bin.join("opencode.mjs");
-        std::fs::copy(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../../fixtures/agents/opencode/plugin-harness.mjs"),
-            &harness,
-        )
-        .unwrap();
-        let script = self.path("steps.jsonl");
-        let text: String = steps.iter().map(|s| format!("{s}\n")).collect();
-        std::fs::write(&script, text).unwrap();
-        let data = format!("XDG_DATA_HOME={}", self.path("data").display());
-        let input = format!("HARNESS_INPUT={}", self.path("input").display());
-        self.hc.run_labeled(
-            "opencode",
+    /// The stand-in OpenCode with the plugin and `steps`, its data in
+    /// `data/`. Starts labelled with a stale session, as a Terminal where
+    /// OpenCode ran before. Its `PATH` has no `hc`: the plugin labels over
+    /// the socket.
+    fn opencode(&self, plugin: &Path, steps: &[Value]) -> OpenCodeStandIn {
+        self.hc.run_opencode(
+            &self.path("bin"),
+            plugin,
+            &self.path("data"),
             &[("aries.opencode.session", "ses_stale")],
-            &[
-                "env",
-                &data,
-                &input,
-                // No `hc` to fall back on: the label goes over the socket.
-                "PATH=/usr/bin:/bin",
-                &node().to_string_lossy(),
-                &harness.to_string_lossy(),
-                &plugin.to_string_lossy(),
-                &script.to_string_lossy(),
-            ],
+            steps,
         )
     }
 
@@ -128,14 +97,6 @@ impl Host {
         let text = String::from_utf8(out.stdout).unwrap();
         AnswerReply::parse(text.lines().last().unwrap_or_default())
             .unwrap_or_else(|e| panic!("{text:?}: {e}"))
-    }
-
-    fn input(&self) -> Vec<String> {
-        std::fs::read_to_string(self.path("input"))
-            .unwrap_or_default()
-            .lines()
-            .map(str::to_owned)
-            .collect()
     }
 }
 
@@ -211,7 +172,7 @@ fn an_opencode_terminal_reports_pairs_shows_its_chat_and_takes_an_answer() {
             .extend(extra.as_object().unwrap().clone());
         props
     };
-    let t = host.opencode(
+    let oc = host.opencode(
         &plugin,
         &[
             json!({"hook": "chat.message", "input": {"sessionID": MAIN}}),
@@ -228,6 +189,7 @@ fn an_opencode_terminal_reports_pairs_shows_its_chat_and_takes_an_answer() {
             json!({"event": "session.idle", "props": session(json!({}))}),
         ],
     );
+    let t = oc.address.clone();
 
     // The plugin replaced the stale label and reports the open question.
     let get = host.wait(&t, "blocked on a question", |g| {
@@ -267,11 +229,11 @@ fn an_opencode_terminal_reports_pairs_shows_its_chat_and_takes_an_answer() {
     let reply = host.answer(&t, &[&qid, "1"]);
     assert_eq!(reply.outcome, AnswerOutcome::Sent, "{reply:?}");
     let deadline = Instant::now() + Duration::from_secs(10);
-    while host.input().is_empty() {
+    while oc.inputs().is_empty() {
         assert!(Instant::now() < deadline, "no keys arrived");
         std::thread::sleep(Duration::from_millis(50));
     }
-    assert_eq!(host.input(), ["32"]);
+    assert_eq!(oc.inputs(), ["32"]);
 
     // OpenCode records the answer and replies.
     db.part(&q);
@@ -341,7 +303,7 @@ fn a_resumed_opencode_pairs_by_its_session_argument_before_the_first_prompt() {
 fn a_new_opencode_clears_the_label_an_earlier_one_left() {
     let host = Host::new();
     let plugin = host.install_plugin();
-    let t = host.opencode(&plugin, &[]);
+    let t = host.opencode(&plugin, &[]).address;
     host.wait(&t, "the stale label gone", |g| {
         g["labels"]["aries.opencode.session"]
             .as_str()
