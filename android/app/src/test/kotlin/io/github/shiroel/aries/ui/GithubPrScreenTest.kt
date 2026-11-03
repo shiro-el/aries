@@ -50,6 +50,7 @@ class GithubPrScreenTest {
             conn.githubPrChecks = GithubPrChecks("c".repeat(40), listOf(GithubPrCheck("Android CI", "completed", "failure", ""), GithubPrCheck("External CI", "pending", null, "Build queued")))
             conn.githubPrReviews = listOf(GithubPrReview(1uL, "reviewer", "CHANGES_REQUESTED", "**Please fix** parser", "2026-11-04"))
         }
+        compose.onNodeWithTag("agent-actions").performClick()
         compose.onNodeWithText(str(R.string.github_button)).performClick()
         compose.onNodeWithText("#42 · PR title").performClick()
         return conn
