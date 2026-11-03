@@ -75,7 +75,7 @@ class HostBrowser(val host: Host) {
     /** Whole-address lookup, preferring the live watch over the Browse structure. */
     fun findTerminal(address: String): TerminalInfo? = live[address] ?: structure?.let { snapshot ->
         (snapshot.unplaced + snapshot.spaces.flatMap { space ->
-            space.tabs.flatMap { tab -> tab.panes.mapNotNull { it.terminal } }
+            space.tabs.flatMap { tab -> tab.panes.flatMap { listOfNotNull(it.terminal) + it.subAgents } }
         }).find { it.address == address }
     }
 
@@ -87,7 +87,7 @@ class HostBrowser(val host: Host) {
 
     /** Latest Agent snapshot for the navigation drawer; no additional watch is opened. */
     val agents: List<AgentEntry>
-        get() = live.values.filter { it.agentStatus != null }.sortedBy { it.address }.map { AgentEntry(host, it) }
+        get() = agentFamily(host, live.values.toList()).sortedBy { it.terminal.address }
 
     /** The "new Terminal" form, while it is open. */
     var launchForm by mutableStateOf<LaunchForm?>(null)
@@ -281,9 +281,11 @@ private fun SpaceList(
                 HorizontalDivider()
                 Text(stringResource(R.string.unplaced_title), Modifier.padding(12.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            items(s.unplaced, key = { "unplaced:" + it.address }) {
-                val t = browser.current(it)
-                ConsoleTerminalRow(t, browser.host.name, { onOpen(t) })
+            items(terminalTree(s.unplaced.map(browser::current)) { it }, key = { "unplaced:" + it.value.address }) { row ->
+                val t = row.value
+                TerminalBranch(row.guide, row.depth) {
+                    ConsoleTerminalRow(t, browser.host.name, { onOpen(t) })
+                }
             }
         }
         item {
@@ -343,19 +345,29 @@ private fun PaneRow(
     val modifier = Modifier.fillMaxWidth().semantics { selected = focused }
         .background(if (focused) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surface)
         .drawBehind { if (focused) drawLine(accent, Offset.Zero, Offset(0f, size.height), 3.dp.toPx()) }
-    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        Text(if (last) "└─" else "├─", Modifier.padding(start = 12.dp).width(24.dp), style = MaterialTheme.typography.bodySmall, // i18n-ok: tree guides
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
-        val t = pane.terminal?.let(browser::current)
-        if (t == null) {
-            Text(stringResource(R.string.pane_terminal_gone, pane.terminalAddress),
-                Modifier.clickable(onClick = onClick).padding(12.dp), style = MaterialTheme.typography.bodySmall)
-        } else {
-            Column(Modifier.weight(1f)) {
-                ConsoleTerminalRow(t, browser.host.name, onClick, trailing = {
-                    val open = if (t.agentStatus != null) R.string.agent_open_button else R.string.terminal_open_button
-                    TextButton(onClick = { onOpen(t) }) { Text(stringResource(open), style = MaterialTheme.typography.bodySmall) }
-                })
+    Column {
+        Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+            Text(if (last) "└─" else "├─", Modifier.padding(start = 12.dp).width(24.dp), style = MaterialTheme.typography.bodySmall, // i18n-ok: tree guides
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            val t = pane.terminal?.let(browser::current)
+            if (t == null) {
+                Text(stringResource(R.string.pane_terminal_gone, pane.terminalAddress),
+                    Modifier.clickable(onClick = onClick).padding(12.dp), style = MaterialTheme.typography.bodySmall)
+            } else {
+                Column(Modifier.weight(1f)) {
+                    ConsoleTerminalRow(t, browser.host.name, onClick, trailing = {
+                        val open = if (t.agentStatus != null) R.string.agent_open_button else R.string.terminal_open_button
+                        TextButton(onClick = { onOpen(t) }) { Text(stringResource(open), style = MaterialTheme.typography.bodySmall) }
+                    })
+                }
+            }
+        }
+        val root = pane.terminal?.let(browser::current)
+        if (root != null) {
+            terminalTree(listOf(root) + pane.subAgents.map(browser::current)) { it }.drop(1).forEach { row ->
+                TerminalBranch(row.guide, row.depth + 1) {
+                    ConsoleTerminalRow(row.value, browser.host.name, { onOpen(row.value) })
+                }
             }
         }
     }

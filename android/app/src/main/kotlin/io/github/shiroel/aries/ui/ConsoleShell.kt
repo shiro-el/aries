@@ -150,7 +150,7 @@ private fun consoleBack(model: HostsModel): (() -> Unit)? = when (val screen = m
 @Composable
 private fun ConsoleDrawer(model: HostsModel, navigate: (() -> Unit) -> Unit) {
     val agents = model.drawerAgents
-    val waiting = agents.count { isWaiting(it.terminal.agentStatus) }
+    val waiting = agents.count { it.terminal.parent == null && isWaiting(it.terminal.agentStatus) }
     val current = model.screen
     val currentAgent = when (current) {
         is Screen.Terminal -> current.viewer.link?.host?.id?.let { AgentKey(it, current.viewer.terminal.address) }
@@ -182,13 +182,14 @@ private fun ConsoleDrawer(model: HostsModel, navigate: (() -> Unit) -> Unit) {
             item(key = "host:${host.id}") {
                 DrawerRow(host.name, hostId == host.id, Modifier.testTag("drawer-host:${host.id}"), onClick = { navigate { model.openHost(host) } })
             }
-            val children = agents.filter { it.host.id == host.id }
-            children.forEachIndexed { index, entry ->
+            val children = terminalTree(agents.filter { it.host.id == host.id }, rootGuides = true) { it.terminal }
+            children.forEach { row ->
+                val entry = row.value
                 item(key = "agent:${entry.key.hostId}\n${entry.key.address}") {
                     DrawerRow(
                         displayName(entry.terminal), currentAgent == entry.key,
                         Modifier.testTag("drawer-agent:${entry.key.hostId}:${entry.key.address}"),
-                        guide = stringResource(if (index == children.lastIndex) R.string.console_tree_last else R.string.console_tree_branch),
+                        guide = row.guide,
                         onClick = { navigate { model.openDrawerAgent(entry) } },
                     ) { DrawerAgentStatus(entry.terminal.agentStatus) }
                 }

@@ -512,3 +512,61 @@ async fn names_use_the_ssh_hosts_home_and_worktree_rather_than_the_phones_paths(
     );
     conn.disconnect().await;
 }
+
+#[tokio::test]
+async fn sub_agents_follow_their_parent_into_its_pane_and_watch_updates() {
+    let hc = HcSession::start();
+    let parent = hc.run_bg("parent", &["sleep", "300"]);
+    hc.set_doc("herdr-app", fixture("normal.json", &[("alpha", &parent)]));
+    let (_data, conn) = connect(&hc).await;
+    let rec = Arc::new(Recorder::default());
+    let watch = conn.watch_structure(rec.clone()).await.unwrap();
+    rec.wait_for("parent without children", |s| {
+        !s.spaces.is_empty() && s.spaces[0].tabs[0].panes[0].sub_agents.is_empty()
+    })
+    .await;
+    let child: Value = serde_json::from_str(&hc.hc(&[
+        "run",
+        "--bg",
+        "--json",
+        "--no-notify",
+        "--parent",
+        &parent,
+        "--name",
+        "child",
+        "--",
+        "sleep",
+        "300",
+    ]))
+    .unwrap();
+    let address = child["address"].as_str().unwrap();
+    let s = conn.structure().await.unwrap();
+    let pane = &s.spaces[0].tabs[0].panes[0];
+    rec.wait_for("child under parent", |s| {
+        !s.spaces[0].tabs[0].panes[0].sub_agents.is_empty()
+    })
+    .await;
+    assert_eq!(pane.sub_agents.len(), 1);
+    assert_eq!(pane.sub_agents[0].address, address);
+    assert_eq!(pane.sub_agents[0].parent.as_deref(), Some(parent.as_str()));
+    assert!(!s.unplaced.iter().any(|t| t.address == address));
+    assert_eq!(
+        conn.terminals()
+            .await
+            .unwrap()
+            .iter()
+            .find(|t| t.address == address)
+            .unwrap()
+            .parent
+            .as_deref(),
+        Some(parent.as_str())
+    );
+    hc.hc(&["kill", address]);
+    hc.hc(&["rm", address]);
+    rec.wait_for("child removed", |s| {
+        s.spaces[0].tabs[0].panes[0].sub_agents.is_empty()
+    })
+    .await;
+    watch.stop();
+    conn.disconnect().await;
+}

@@ -1,0 +1,13 @@
+{
+  "document": {"value": {"spaces": [{"id": "s1", "tabs": [{"id": "tab1", "root": {"id": "p1", "content": {"terminal": "t1"}}}]}]}},
+  "terminals": [
+    {"address": "t3", "parent": "t2", "state": "live"},
+    {"address": "t2", "parent": "t1", "state": "live"},
+    {"address": "t1", "state": "live"},
+    {"address": "t5", "parent": "t4", "state": "live"},
+    {"address": "t4", "state": "live"},
+    {"address": "t6", "parent": "missing", "state": "live"},
+    {"address": "t7", "parent": "t8", "state": "live"},
+    {"address": "t8", "parent": "t7", "state": "live"}
+  ]
+}
