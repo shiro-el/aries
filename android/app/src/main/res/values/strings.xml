@@ -35,6 +35,17 @@
     <string name="terminals_empty">No Terminals are running on this Host.</string>
     <string name="terminal_subtitle">%1$s · %2$s</string>
 
+    <string name="agent_status_working">Working</string>
+    <string name="agent_status_blocked">Blocked</string>
+    <string name="agent_status_blocked_permission">Blocked: permission</string>
+    <string name="agent_status_blocked_question">Blocked: question</string>
+    <string name="agent_status_blocked_auth">Blocked: sign-in</string>
+    <string name="agent_status_error">Error</string>
+    <string name="agent_status_done">Done</string>
+    <string name="agent_status_idle">Idle</string>
+    <string name="agent_attention_label">Needs you</string>
+    <string name="connect_lost">The connection to the Host ended.</string>
+
     <string name="host_key_trust_title">Trust this Host?</string>
     <string name="host_key_trust_body">This is the first connection to %1$s. Check that its Host key fingerprint is:\n\n%2$s\n\nOn the Host, run: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</string>
     <string name="host_key_trust_button">Trust and connect</string>

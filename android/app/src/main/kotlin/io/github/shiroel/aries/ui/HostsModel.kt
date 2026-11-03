@@ -13,7 +13,10 @@ import io.github.shiroel.aries.core.Incompatibility
 import io.github.shiroel.aries.core.PublicKeyInfo
 import io.github.shiroel.aries.core.TerminalInfo
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** A message for the user: a string resource and its format arguments. */
 data class Message(@StringRes val res: Int, val args: List<Any> = emptyList())
@@ -58,15 +61,25 @@ class HostsModel(private val core: AriesCoreInterface, private val scope: Corout
         hosts = core.hosts()
     }
 
+    /** The open Host's connection and live Terminal list; cancelled on [back]. */
+    private var live: Job? = null
+
     fun connect(host: Host) {
         screen = Screen.Connecting(host)
-        scope.launch {
+        live?.cancel()
+        live = scope.launch {
             try {
                 val conn = core.connect(host.id)
                 try {
-                    screen = Screen.Terminals(host, conn.terminals())
+                    val watch = conn.watchTerminals()
+                    try {
+                        // Each change replaces the list: Agent status stays live.
+                        while (true) screen = Screen.Terminals(host, watch.next())
+                    } finally {
+                        watch.stop()
+                    }
                 } finally {
-                    conn.disconnect()
+                    withContext(NonCancellable) { conn.disconnect() }
                 }
             } catch (e: CoreException) {
                 screen = Screen.Hosts
@@ -92,6 +105,8 @@ class HostsModel(private val core: AriesCoreInterface, private val scope: Corout
     }
 
     fun back() {
+        live?.cancel()
+        live = null
         screen = Screen.Hosts
     }
 
@@ -129,6 +144,7 @@ fun problemFor(e: CoreException): Prompt.Problem {
         is CoreException.NoKey -> Prompt.Problem(failed, Message(R.string.connect_no_key))
         is CoreException.Unreachable -> Prompt.Problem(failed, Message(R.string.connect_unreachable, listOf(e.detail)))
         is CoreException.Protocol -> Prompt.Problem(failed, Message(R.string.connect_protocol, listOf(e.detail)))
+        is CoreException.Closed -> Prompt.Problem(failed, Message(R.string.connect_lost))
         else -> Prompt.Problem(failed, Message(R.string.connect_other, listOf(e.message ?: "")))
     }
 }

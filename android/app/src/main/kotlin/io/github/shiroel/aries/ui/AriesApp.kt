@@ -36,6 +36,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
+import io.github.shiroel.aries.core.AgentStatus
+import io.github.shiroel.aries.core.BlockedReason
 import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.Host
 import io.github.shiroel.aries.core.TerminalInfo
@@ -156,6 +158,8 @@ private fun TerminalListScreen(host: Host, terminals: List<TerminalInfo>, onBack
             Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                 Text(t.name ?: t.title.ifBlank { t.argv.joinToString(" ") }, style = MaterialTheme.typography.titleMedium)
                 Text(stringResource(R.string.terminal_subtitle, t.address, t.state), style = MaterialTheme.typography.bodySmall)
+                // A program that does not report status gets no status line.
+                t.agentStatus?.let { AgentStatusLine(it, t.needsAttention) }
             }
         }
     }
@@ -182,3 +186,32 @@ private fun PromptDialog(prompt: Prompt, model: HostsModel) {
 
 @Composable
 private fun text(m: Message): String = stringResource(m.res, *m.args.toTypedArray())
+
+@Composable
+private fun AgentStatusLine(status: AgentStatus, needsAttention: Boolean) {
+    val color = if (needsAttention) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+    val label = when (status) {
+        AgentStatus.Working -> R.string.agent_status_working
+        is AgentStatus.Blocked -> when (status.reason) {
+            BlockedReason.PERMISSION -> R.string.agent_status_blocked_permission
+            BlockedReason.QUESTION -> R.string.agent_status_blocked_question
+            BlockedReason.AUTH -> R.string.agent_status_blocked_auth
+            null -> R.string.agent_status_blocked
+        }
+        is AgentStatus.Error -> R.string.agent_status_error
+        AgentStatus.Done -> R.string.agent_status_done
+        AgentStatus.Idle -> R.string.agent_status_idle
+    }
+    val message = when (status) {
+        is AgentStatus.Blocked -> status.message
+        is AgentStatus.Error -> status.message
+        else -> null
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(stringResource(label), color = color, style = MaterialTheme.typography.labelLarge)
+        if (needsAttention) {
+            Text(stringResource(R.string.agent_attention_label), color = color, style = MaterialTheme.typography.labelLarge)
+        }
+    }
+    message?.let { Text(it, color = color, style = MaterialTheme.typography.bodySmall) }
+}

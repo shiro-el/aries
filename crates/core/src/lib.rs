@@ -7,6 +7,7 @@
 
 mod error;
 mod hc;
+mod host_model;
 mod store;
 mod transport;
 
@@ -20,6 +21,7 @@ use serde::{Deserialize, Serialize};
 
 pub use error::{CoreError, Incompatibility, VaultError};
 pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
+pub use host_model::{AgentStatus, BlockedReason, TerminalWatch};
 
 use hc::HcClient;
 use store::{SavedHost, Store};
@@ -80,6 +82,16 @@ pub struct TerminalInfo {
     pub cwd: Option<String>,
     /// herdr-core's state: `live`, `finished`, ...
     pub state: String,
+    /// What the Agent in it needs from the user; `None` for a program that
+    /// does not report Agent status (it is shown as a plain Terminal).
+    #[uniffi(default = None)]
+    pub agent_status: Option<AgentStatus>,
+    /// Blocked or Error: the Agent needs the user.
+    #[uniffi(default = false)]
+    pub needs_attention: bool,
+    /// herdr-core's `turn` counter (what `herdr.seen` is compared with).
+    #[uniffi(default = 0)]
+    pub turn: u64,
 }
 
 fn runtime() -> &'static tokio::runtime::Runtime {
@@ -281,6 +293,12 @@ impl HostConnection {
         Ok(list.iter().map(terminal_info).collect())
     }
 
+    /// Watches the Host's Terminals and their Agent status live.
+    pub async fn watch_terminals(&self) -> Result<Arc<TerminalWatch>, CoreError> {
+        let client = self.client.clone();
+        on_runtime(async move { TerminalWatch::start(client).await.map(Arc::new) }).await
+    }
+
     pub async fn disconnect(&self) {
         let client = self.client.clone();
         let _ = on_runtime(async move {
@@ -291,8 +309,9 @@ impl HostConnection {
     }
 }
 
-fn terminal_info(v: &serde_json::Value) -> TerminalInfo {
+pub(crate) fn terminal_info(v: &serde_json::Value) -> TerminalInfo {
     let s = |k: &str| v[k].as_str().map(str::to_owned);
+    let (agent_status, needs_attention) = host_model::status_of(v);
     TerminalInfo {
         address: s("address").unwrap_or_default(),
         name: s("name"),
@@ -307,6 +326,9 @@ fn terminal_info(v: &serde_json::Value) -> TerminalInfo {
             .unwrap_or_default(),
         cwd: s("cwd"),
         state: s("state").unwrap_or_default(),
+        agent_status,
+        needs_attention,
+        turn: v["turn"].as_u64().unwrap_or(0),
     }
 }
 

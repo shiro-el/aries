@@ -8,6 +8,8 @@ import io.github.shiroel.aries.core.HostConnection
 import io.github.shiroel.aries.core.NoHandle
 import io.github.shiroel.aries.core.PublicKeyInfo
 import io.github.shiroel.aries.core.TerminalInfo
+import io.github.shiroel.aries.core.TerminalWatch
+import kotlinx.coroutines.channels.Channel
 
 /** In-memory stand-in for the Rust core, for UI tests. */
 class FakeCore : AriesCoreInterface {
@@ -18,6 +20,14 @@ class FakeCore : AriesCoreInterface {
     var failWith: CoreException? = null
 
     var terminals: List<TerminalInfo> = emptyList()
+
+    /** Later Terminal lists a live watch delivers, in order (see [push]). */
+    val updates = Channel<List<TerminalInfo>>(Channel.UNLIMITED)
+
+    /** Sends a changed Terminal list to the open watch. */
+    fun push(list: List<TerminalInfo>) {
+        updates.trySend(list)
+    }
 
     private var key: PublicKeyInfo? = null
     private val hosts = mutableListOf<Host>()
@@ -42,7 +52,7 @@ class FakeCore : AriesCoreInterface {
         failWith?.let { throw it }
         val host = hosts.find { it.id == hostId } ?: throw CoreException.UnknownHost(hostId)
         requireTrust?.let { if (host.hostKey != it) throw CoreException.HostKeyUnknown(it) }
-        return FakeConnection(terminals)
+        return FakeConnection(terminals, updates)
     }
 
     companion object {
@@ -51,12 +61,37 @@ class FakeCore : AriesCoreInterface {
 }
 
 /** A connection that answers from memory; never touches the native handle. */
-class FakeConnection(private val list: List<TerminalInfo>) : HostConnection(NoHandle) {
+class FakeConnection(
+    private val list: List<TerminalInfo>,
+    private val updates: Channel<List<TerminalInfo>> = Channel(),
+) : HostConnection(NoHandle) {
     override fun coreVersion(): String = "0.1.17"
 
     override suspend fun terminals(): List<TerminalInfo> = list
 
+    override suspend fun watchTerminals(): TerminalWatch = FakeWatch(list, updates)
+
     override suspend fun disconnect() {}
+
+    override fun close() {}
+}
+
+/** First the connection's list, then whatever the test pushes. */
+class FakeWatch(
+    private val first: List<TerminalInfo>,
+    private val updates: Channel<List<TerminalInfo>>,
+) : TerminalWatch(NoHandle) {
+    private var started = false
+
+    override suspend fun next(): List<TerminalInfo> {
+        if (!started) {
+            started = true
+            return first
+        }
+        return updates.receive()
+    }
+
+    override fun stop() {}
 
     override fun close() {}
 }

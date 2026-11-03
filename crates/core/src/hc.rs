@@ -12,7 +12,7 @@ use std::time::Duration;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
-use tokio::sync::{Mutex, oneshot};
+use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio::task::JoinHandle;
 
 use crate::error::{CoreError, Incompatibility, protocol};
@@ -46,6 +46,8 @@ const CALL_TIMEOUT: Duration = Duration::from_secs(30);
 const HEADER: usize = 9;
 const MAX_PAYLOAD: usize = 16 << 20;
 const KIND_DATA: u8 = 0;
+const KIND_CREDIT: u8 = 1;
+const KIND_CLOSE: u8 = 2;
 
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct Hello {
@@ -60,10 +62,23 @@ pub(crate) struct Hello {
 type Pending =
     Arc<std::sync::Mutex<Option<HashMap<u64, oneshot::Sender<Result<Value, CoreError>>>>>>;
 
+type Writer = Arc<Mutex<Box<dyn tokio::io::AsyncWrite + Send + Unpin>>>;
+
+/// Frames for channels other than 0, by channel. Frames that arrive before
+/// their channel is opened (the reply naming it is still being handled) are
+/// buffered; herdr-core's credit window bounds that buffer.
+type Channels = Arc<std::sync::Mutex<Option<HashMap<u32, Slot>>>>;
+
+enum Slot {
+    Early(Vec<Vec<u8>>),
+    Open(mpsc::UnboundedSender<Vec<u8>>),
+}
+
 /// One framed connection to a Host's herdr-core.
 pub(crate) struct HcClient {
     hello: Hello,
-    writer: Mutex<Box<dyn tokio::io::AsyncWrite + Send + Unpin>>,
+    writer: Writer,
+    channels: Channels,
     pending: Pending,
     next_id: AtomicU64,
     reader: JoinHandle<()>,
@@ -102,10 +117,12 @@ impl HcClient {
         let hello = check_hello(reply)?;
 
         let pending: Pending = Arc::new(std::sync::Mutex::new(Some(HashMap::new())));
-        let reader = tokio::spawn(read_frames(reader, pending.clone()));
+        let channels: Channels = Arc::new(std::sync::Mutex::new(Some(HashMap::new())));
+        let reader = tokio::spawn(read_frames(reader, pending.clone(), channels.clone()));
         Ok(Self {
             hello,
-            writer: Mutex::new(writer),
+            writer: Arc::new(Mutex::new(writer)),
+            channels,
             pending,
             next_id: AtomicU64::new(1),
             reader,
@@ -150,6 +167,66 @@ impl HcClient {
         }
     }
 
+    /// `events.subscribe` in framed mode. Returns the snapshot reply
+    /// (`{seq, terminals, channel}`) and the notifications that follow on the
+    /// event channel, each a whole JSON-RPC notification (`event`,
+    /// `heartbeat`, `missed`). Credit is returned as notifications are read
+    /// off the wire. The receiver ends when the channel or connection does.
+    pub async fn subscribe_events(
+        &self,
+        params: Value,
+    ) -> Result<(Value, mpsc::UnboundedReceiver<Value>), CoreError> {
+        let snapshot = self.call("events.subscribe", params).await?;
+        let channel = snapshot["channel"]
+            .as_u64()
+            .and_then(|c| u32::try_from(c).ok())
+            .filter(|c| *c != 0)
+            .ok_or_else(|| protocol("events.subscribe returned no channel"))?;
+        let mut frames = self.open_channel(channel)?;
+        let (tx, rx) = mpsc::unbounded_channel();
+        let writer = self.writer.clone();
+        tokio::spawn(async move {
+            let mut buf: Vec<u8> = Vec::new();
+            while let Some(frame) = frames.recv().await {
+                let consumed = frame.len() as u32;
+                buf.extend_from_slice(&frame);
+                while let Some(end) = buf.iter().position(|&b| b == b'\n') {
+                    let line: Vec<u8> = buf.drain(..=end).collect();
+                    if let Ok(msg) = serde_json::from_slice::<Value>(&line)
+                        && tx.send(msg).is_err()
+                    {
+                        return; // nobody listens any more
+                    }
+                }
+                let mut credit = Vec::with_capacity(HEADER + 4);
+                credit.extend_from_slice(&channel.to_le_bytes());
+                credit.push(KIND_CREDIT);
+                credit.extend_from_slice(&4u32.to_le_bytes());
+                credit.extend_from_slice(&consumed.to_le_bytes());
+                let mut w = writer.lock().await;
+                if w.write_all(&credit).await.is_err() || w.flush().await.is_err() {
+                    return;
+                }
+            }
+        });
+        Ok((snapshot, rx))
+    }
+
+    /// Starts receiving `channel`'s DATA payloads, including any that arrived
+    /// before this call.
+    fn open_channel(&self, channel: u32) -> Result<mpsc::UnboundedReceiver<Vec<u8>>, CoreError> {
+        let (tx, rx) = mpsc::unbounded_channel();
+        let mut guard = self.channels.lock().expect("channels lock");
+        let map = guard.as_mut().ok_or(CoreError::Closed)?;
+        if let Some(Slot::Early(frames)) = map.remove(&channel) {
+            for f in frames {
+                let _ = tx.send(f);
+            }
+        }
+        map.insert(channel, Slot::Open(tx));
+        Ok(rx)
+    }
+
     fn forget(&self, id: u64) {
         if let Some(map) = self.pending.lock().expect("pending lock").as_mut() {
             map.remove(&id);
@@ -160,6 +237,7 @@ impl HcClient {
         let _ = self.writer.lock().await.shutdown().await;
         self.reader.abort();
         fail_all(&self.pending);
+        self.channels.lock().expect("channels lock").take();
     }
 }
 
@@ -288,7 +366,11 @@ fn rpc_error(err: &Value) -> CoreError {
     }
 }
 
-async fn read_frames<R: tokio::io::AsyncRead + Unpin>(mut reader: BufReader<R>, pending: Pending) {
+async fn read_frames<R: tokio::io::AsyncRead + Unpin>(
+    mut reader: BufReader<R>,
+    pending: Pending,
+    channels: Channels,
+) {
     let mut header = [0u8; HEADER];
     loop {
         if reader.read_exact(&mut header).await.is_err() {
@@ -304,8 +386,12 @@ async fn read_frames<R: tokio::io::AsyncRead + Unpin>(mut reader: BufReader<R>, 
         if reader.read_exact(&mut payload).await.is_err() {
             break;
         }
-        if channel != 0 || kind != KIND_DATA {
-            continue; // attach and event channels arrive with their tickets
+        if channel != 0 {
+            route(&channels, channel, kind, payload);
+            continue;
+        }
+        if kind != KIND_DATA {
+            continue;
         }
         let Ok(msg) = serde_json::from_slice::<Value>(&payload) else {
             continue;
@@ -327,6 +413,32 @@ async fn read_frames<R: tokio::io::AsyncRead + Unpin>(mut reader: BufReader<R>, 
         }
     }
     fail_all(&pending);
+    // Dropping the senders ends every channel's receiver.
+    channels.lock().expect("channels lock").take();
+}
+
+/// Hands a non-zero channel's frame to whoever opened it. Kinds other than
+/// DATA and CLOSE are not used by any channel yet.
+fn route(channels: &Channels, channel: u32, kind: u8, payload: Vec<u8>) {
+    let mut guard = channels.lock().expect("channels lock");
+    let Some(map) = guard.as_mut() else { return };
+    match kind {
+        KIND_DATA => match map
+            .entry(channel)
+            .or_insert_with(|| Slot::Early(Vec::new()))
+        {
+            Slot::Open(tx) => {
+                if tx.send(payload).is_err() {
+                    map.remove(&channel);
+                }
+            }
+            Slot::Early(frames) => frames.push(payload),
+        },
+        KIND_CLOSE => {
+            map.remove(&channel);
+        }
+        _ => {}
+    }
 }
 
 fn fail_all(pending: &Pending) {
