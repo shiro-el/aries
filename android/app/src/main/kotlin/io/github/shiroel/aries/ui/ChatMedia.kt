@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,6 +17,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -107,7 +110,7 @@ internal fun diffText(diff: ChatDiff, limit: Int, added: Color, removed: Color, 
 private sealed interface Picture {
     data object Loading : Picture
     data object Unreadable : Picture
-    data class Ready(val bitmap: Bitmap) : Picture
+    data class Ready(val bitmap: Bitmap, val bytes: ByteArray) : Picture
 }
 
 /**
@@ -125,18 +128,24 @@ fun ChatImageView(image: ChatImage, load: (String) -> ByteArray?) {
     }
     val picture by produceState<Picture>(Picture.Loading, image.id) {
         value = withContext(Dispatchers.Default) {
-            load(image.id)?.let(::decode)?.let { Picture.Ready(it) } ?: Picture.Unreadable
+            load(image.id)?.let { bytes -> decode(bytes)?.let { Picture.Ready(it, bytes) } } ?: Picture.Unreadable
         }
     }
+    var viewing by remember(image.id) { mutableStateOf(false) }
+    val openLabel = stringResource(R.string.image_viewer_open)
     when (val p = picture) {
         Picture.Loading -> Text(stringResource(R.string.chat_image_loading), style = MaterialTheme.typography.bodySmall, color = muted)
         Picture.Unreadable -> Text(stringResource(R.string.chat_image_unreadable), style = MaterialTheme.typography.bodySmall, color = muted)
-        is Picture.Ready -> Image(
-            p.bitmap.asImageBitmap(),
-            contentDescription = stringResource(R.string.chat_image),
-            modifier = Modifier.heightIn(max = 320.dp).background(MaterialTheme.colorScheme.surface),
-            contentScale = ContentScale.Fit,
-        )
+        is Picture.Ready -> {
+            if (viewing) ImageViewer(p.bytes, onDismiss = { viewing = false })
+            Image(
+                p.bitmap.asImageBitmap(),
+                contentDescription = stringResource(R.string.chat_image),
+                modifier = Modifier.heightIn(max = 320.dp).background(MaterialTheme.colorScheme.surface)
+                    .clickable(onClickLabel = openLabel) { viewing = true },
+                contentScale = ContentScale.Fit,
+            )
+        }
     }
 }
 
