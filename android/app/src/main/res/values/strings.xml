@@ -2,9 +2,10 @@
 <!--
   Key naming: <area>_<thing>[_<role>], lowercase snake_case, shared with iOS.
   See "UI strings" in CONTRIBUTING.md.
+  Add every new string to values-ko/strings.xml too (TranslationsTest checks it).
 -->
 <resources>
-    <string name="app_name">Aries</string>
+    <string name="app_name" translatable="false">Aries</string>
 
     <string name="ok_button">OK</string>
     <string name="cancel_button">Cancel</string>
@@ -20,6 +21,21 @@
     <string name="key_copy_button">Copy public key</string>
     <string name="key_copy_hint">Add it to ~/.ssh/authorized_keys on each Host.</string>
     <string name="key_clip_label">Aries SSH public key</string>
+    <string name="key_qr_button">Show QR code</string>
+    <string name="key_qr_title">Public key QR code</string>
+    <string name="key_qr_description">QR code of this phone\'s SSH public key</string>
+
+    <string name="host_install_key_button">Install key with password</string>
+    <string name="key_install_title">Install the key on %1$s</string>
+    <string name="key_install_body">Sign in once with the password for %1$s. Aries adds this phone\'s public key to ~/.ssh/authorized_keys and uses only the key after that. The password is not saved.</string>
+    <string name="key_install_password">Password</string>
+    <string name="key_install_button">Install key</string>
+    <string name="key_install_done_title">Key installed</string>
+    <string name="key_install_added_body">This phone\'s key was added on %1$s. Aries now connects with the key.</string>
+    <string name="key_install_present_body">%1$s already had this phone\'s key. Nothing was changed.</string>
+    <string name="key_install_failed_title">Could not install the key</string>
+    <string name="key_install_password_rejected">The Host did not accept the user name or password. The Host may also have password login turned off; then add the public key to ~/.ssh/authorized_keys by hand.</string>
+    <string name="key_install_write_failed">Signed in, but could not write ~/.ssh/authorized_keys on the Host: %1$s\n\nCheck that the user owns ~/.ssh and can write to it.</string>
 
     <string name="host_ssh_address">%1$s@%2$s:%3$d</string>
     <string name="host_local_address">Local process</string>
@@ -29,6 +45,11 @@
     <string name="host_add_port">Port</string>
     <string name="host_add_user">User name</string>
     <string name="host_add_button">Add Host</string>
+    <string name="host_remove_button">Remove</string>
+    <string name="host_remove_button_label">Remove %1$s</string>
+    <string name="host_remove_title">Remove %1$s?</string>
+    <string name="host_remove_body">Aries forgets this Host\'s address, its trusted Host key and everything stored for it on this phone. Nothing on the Host itself changes.</string>
+    <string name="host_remove_confirm_button">Remove Host</string>
 
     <string name="connecting">Connecting to %1$s…</string>
     <string name="terminals_title">Terminals on %1$s</string>
@@ -44,7 +65,19 @@
     <string name="agent_status_done">Done</string>
     <string name="agent_status_idle">Idle</string>
     <string name="agent_attention_label">Needs you</string>
-    <string name="connect_lost">The connection to the Host ended.</string>
+    <string name="space_unnamed">Unnamed Space</string>
+    <string name="space_summary">Tabs: %1$d · Panes: %2$d</string>
+    <string name="space_no_tabs">This Space has no Tabs.</string>
+    <string name="tab_unnamed">Unnamed Tab</string>
+    <string name="tab_empty">This Tab has no Terminals.</string>
+    <string name="pane_terminal_gone">%1$s (ended)</string>
+    <string name="pane_zoom_button">Zoom</string>
+    <string name="pane_unzoom_button">Show all Panes</string>
+    <string name="unplaced_title">Other Terminals</string>
+    <string name="structure_no_document">herdr-app has not saved a layout on this Host. Terminals are grouped by their Space and Tab labels.</string>
+    <string name="structure_unreadable">The herdr-app layout on this Host could not be read (%1$s). Terminals are grouped by their Space and Tab labels.</string>
+    <string name="structure_unknown_format">The herdr-app layout on this Host is in a format Aries does not know. Terminals are grouped by their Space and Tab labels. Update Aries.</string>
+    <string name="structure_connection_closed">The connection to the Host closed. What you see may be out of date.</string>
 
     <string name="host_key_trust_title">Trust this Host?</string>
     <string name="host_key_trust_body">This is the first connection to %1$s. Check that its Host key fingerprint is:\n\n%2$s\n\nOn the Host, run: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</string>

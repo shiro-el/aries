@@ -1,0 +1,57 @@
+{
+  "spaces": [
+    {
+      "id": "s-aries",
+      "name": "aries",
+      "folder": "/home/dev/aries",
+      "tabs": [
+        {
+          "id": "tab-build",
+          "name": "build",
+          "root": {
+            "id": "root-1",
+            "type": "row",
+            "children": [
+              { "id": "p-alpha", "type": "block", "content": { "terminal": "$alpha" }, "size": { "weight": 1.0 } },
+              {
+                "id": "col-1",
+                "type": "column",
+                "children": [
+                  { "id": "p-beta", "type": "block", "content": { "terminal": "$beta" } },
+                  { "id": "p-clock", "type": "block", "content": { "mod": "clock", "props": { "terminal": "$gamma" } } }
+                ]
+              }
+            ],
+            "floating": [
+              { "id": "f-gamma", "content": { "terminal": "$gamma" }, "edge": "right", "align": "end" }
+            ]
+          }
+        },
+        {
+          "id": "tab-empty",
+          "name": "",
+          "root": { "id": "", "type": "row", "children": [] }
+        }
+      ]
+    },
+    {
+      "id": "s-notes",
+      "name": "notes",
+      "folder": "",
+      "tabs": [
+        {
+          "id": "tab-gone",
+          "name": "old",
+          "root": {
+            "id": "stack-1",
+            "type": "stack",
+            "active": "p-gone",
+            "children": [
+              { "id": "p-gone", "type": "block", "content": { "terminal": "t999" } }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
