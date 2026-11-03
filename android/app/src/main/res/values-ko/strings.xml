@@ -5,6 +5,26 @@
   Glossary terms: Host = 호스트, Terminal = 터미널, Agent = 에이전트.
 -->
 <resources>
+    <!-- 퀵오픈과 명령 팔레트 -->
+    <string name="quick_open_title">퀵오픈</string>
+    <string name="quick_open_hint">이름 검색, 명령은 &gt; 입력</string>
+    <string name="quick_open_empty">검색 결과가 없습니다.</string>
+    <string name="quick_open_host">Host</string>
+    <string name="quick_open_space">Space</string>
+    <string name="quick_open_tab">Tab</string>
+    <string name="quick_open_agent">Agent</string>
+    <string name="quick_open_result_context">%1$s · %2$s</string>
+    <string name="quick_open_live">실시간</string>
+    <string name="quick_open_unknown">아직 Last-known state가 없습니다</string>
+    <string name="quick_open_age">마지막 확인 · %1$d분 전</string>
+    <string name="quick_open_gone">이 Host에서 %1$s을(를) 더 이상 찾을 수 없습니다.</string>
+    <string name="quick_open_run_agent">Agent 실행</string>
+    <string name="quick_open_choose_host">먼저 Host를 열어 주세요.</string>
+    <string name="quick_open_choose_space">먼저 Space를 열어 주세요.</string>
+    <string name="quick_open_choose_tab">먼저 Tab을 열어 주세요.</string>
+    <string name="quick_open_choose_terminal">먼저 Terminal을 선택해 주세요.</string>
+    <string name="quick_open_busy">작업을 실행하고 있습니다.</string>
+
     <string name="agents_elapsed_less_than_minute">1분 미만</string>
     <string name="agents_elapsed_minutes">%1$d분</string>
     <string name="agents_elapsed_hours">%1$d시간</string>
