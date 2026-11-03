@@ -58,6 +58,7 @@ impl Default for Settings {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct Store {
     dir: PathBuf,
 }
@@ -105,6 +106,11 @@ impl Store {
     pub fn write_identity(&self, id: &Identity) -> Result<(), CoreError> {
         self.write_atomic("identity.pub", format!("{}\n", id.public).as_bytes())?;
         self.write_atomic("identity.sealed", &encode_sealed(id.protection, &id.sealed))
+    }
+
+    /// The data dir itself, for app-wide files of other modules.
+    pub fn root(&self) -> &Path {
+        &self.dir
     }
 
     /// Where per-Host local state (caches, pairing, ...) lives. Not created

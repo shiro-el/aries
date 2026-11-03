@@ -16,7 +16,14 @@ import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.Host
 import io.github.shiroel.aries.core.HostConnection
+import io.github.shiroel.aries.core.HttpClient
 import io.github.shiroel.aries.core.KeyInstall
+import io.github.shiroel.aries.core.PushDevice
+import io.github.shiroel.aries.core.PushDisable
+import io.github.shiroel.aries.core.PushNotice
+import io.github.shiroel.aries.core.PushPairing
+import io.github.shiroel.aries.core.PushProgress
+import io.github.shiroel.aries.core.PushStep
 import io.github.shiroel.aries.core.Linger
 import io.github.shiroel.aries.core.JumpHost
 import io.github.shiroel.aries.core.KeyInfo
@@ -168,6 +175,7 @@ class FakeCore : AriesCoreInterface {
 
     override fun removeHost(hostId: String) {
         if (!hosts.removeIf { it.id == hostId }) throw CoreException.UnknownHost(hostId)
+        pushPaired.remove(hostId) // queued for revocation, like the core
     }
 
     /** When set, `setKeyProtection` fails with it and the policy stays. */
@@ -250,7 +258,56 @@ class FakeCore : AriesCoreInterface {
 
     override suspend fun uninstallBeacon(hostId: String) {
         beacon = BeaconState.NotInstalled
+        pushPaired.remove(hostId)
     }
+
+    /** Push pairings per Host id: the Relay URL. */
+    val pushPaired = mutableMapOf<String, String>()
+
+    /** When set, `enablePush` reports steps up to this one and then fails there. */
+    var pushFailAt: PushStep? = null
+    var pushDisableHostCleared = true
+    var testPushes = 0
+    var revocationFlushes = 0
+
+    override suspend fun enablePush(
+        hostId: String,
+        relayUrl: String,
+        device: PushDevice,
+        http: HttpClient,
+        progress: PushProgress,
+    ): PushPairing {
+        for (step in listOf(PushStep.REGISTER, PushStep.PAIR, PushStep.TEST)) {
+            progress.onStep(step)
+            if (step == pushFailAt) {
+                if (step == PushStep.TEST) pushPaired[hostId] = relayUrl
+                throw CoreException.PushFailed(step, "relay said no")
+            }
+        }
+        pushPaired[hostId] = relayUrl
+        testPushes++
+        return PushPairing(relayUrl)
+    }
+
+    override fun pushPairing(hostId: String): PushPairing? = pushPaired[hostId]?.let { PushPairing(it) }
+
+    override suspend fun sendTestPush(hostId: String) {
+        testPushes++
+    }
+
+    override suspend fun disablePush(hostId: String, http: HttpClient): PushDisable {
+        pushPaired.remove(hostId)
+        return PushDisable(pushDisableHostCleared)
+    }
+
+    override suspend fun updatePushToken(device: PushDevice, http: HttpClient) {}
+
+    override suspend fun flushPushRevocations(http: HttpClient): UInt {
+        revocationFlushes++
+        return 0u
+    }
+
+    override fun openPush(envelope: ByteArray): PushNotice = throw CoreException.PushRejected("fake")
 
     /** Chat snapshots `watchChat` delivers, in order (see [pushChat]). */
     val chat = Channel<ChatSnapshot>(Channel.UNLIMITED)
