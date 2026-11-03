@@ -94,7 +94,11 @@ class ChatScreenTest {
                 ChatStatus.LIVE, "c:1",
             ),
         )
-        compose.waitUntil(5_000) { compose.onAllNodesWithText("Create hello.txt").fetchSemanticsNodes().isNotEmpty() }
+        // Markdown is parsed on Dispatchers.Default, outside Compose's idle tracking.
+        // Wait for the same merged semantics that the assertions below read.
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithText("Create hello.txt").fetchSemanticsNodes().isNotEmpty()
+        }
         compose.onNodeWithText("Create hello.txt").assertExists()
         compose.onNodeWithText(str(R.string.chat_thinking)).assertExists()
         compose.onNodeWithText("Write").assertExists()
@@ -113,10 +117,17 @@ class ChatScreenTest {
                 ChatStatus.LIVE, "c:2",
             ),
         )
-        compose.waitForIdle()
         // Each response now has a reading control; live entries can be outside
         // the small test viewport while remaining available in the lazy transcript.
-        compose.onNodeWithTag("chat-transcript").performScrollToNode(hasText("Done."))
+        // Retry the lazy search until the background Markdown parse is rendered.
+        compose.waitUntil(5_000) {
+            try {
+                compose.onNodeWithTag("chat-transcript").performScrollToNode(hasText("Done."))
+                true
+            } catch (_: AssertionError) {
+                false
+            }
+        }
         compose.onNodeWithText("Done.").assertExists()
         compose.onNodeWithTag("chat-transcript").performScrollToNode(hasText("model not found"))
         compose.onNodeWithText("model not found").assertExists()
@@ -334,7 +345,7 @@ class ChatScreenTest {
         assertEquals(listOf("h2" to "t1"), core.chatsOpened)
         compose.onNodeWithText(str(R.string.console_agent_host_prefix, "server") + "claude").assertExists()
 
-        compose.onNodeWithText(str(R.string.back_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         compose.waitForIdle()
         assertTrue(core.chatStopped)
         compose.onNodeWithText("claude").assertExists()
@@ -433,7 +444,7 @@ class ChatScreenTest {
     fun backLeavesTheChatAndStopsFollowing() {
         val core = FakeCore()
         openChat(core)
-        compose.onNodeWithText(str(R.string.back_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         compose.waitForIdle()
         assertTrue(core.chatStopped)
         compose.onNodeWithText("claude").assertExists()

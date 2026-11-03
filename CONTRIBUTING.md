@@ -115,6 +115,42 @@ checksums come from the Beacon release pipeline (below); tests swap it with
 `AriesCore::set_beacon_release` and serve binaries from
 `aries_test_support::ReleaseServer` (an `nginx:alpine` container).
 
+## Registering a Host with a QR
+
+Run this as the SSH account on the Host (the address must be reachable by the phone):
+
+```sh
+aries-beacon pair-qr --address dev.tailnet --port 22
+```
+
+In the phone's Add Host form, choose **Scan Host QR**, check the endpoint and
+Host key, then register. The phone needs an SSH key first. The QR authorizes
+one phone for five minutes. Keep the QR private. The command runs a temporary
+SSH listener until expiry; Ctrl+C cancels it. It never changes sshd's password
+settings or starts a shell for pairing clients.
+
+By default the listener uses a random port on IPv4 interfaces and reads
+`/etc/ssh/ssh_host_ed25519_key.pub` for the normal sshd fingerprint. For a
+firewall, use `--listen 0.0.0.0:4851` and allow that port temporarily. IPv6
+can use `--listen '[::]:4851'`. `--host-key PATH` selects another sshd public
+key file. When forwarding ports, `--pair-port PORT` advertises the externally
+reachable pairing port; `--port` advertises the externally reachable SSH port.
+`--json` outputs just the `aries-pair:` QR payload for other QR renderers.
+Run the command on the Host; an already installed resident Beacon is optional.
+
+The version 1 QR carries the SSH endpoint and fingerprint, a separate pairing
+port and ephemeral SSH key fingerprint, a 256-bit random token, and a Unix
+expiry. The phone pins both keys before sending the token inside encrypted
+SSH. The listener accepts only a public-key installation command, consumes
+the token once under a lock, and appends a validated OpenSSH public key to
+that account's `~/.ssh/authorized_keys` (directory 0700, file 0600). It rejects
+symlinks and preserves existing entries. No pairing token or listener key is
+written to disk, and only successful registration stores the Host on the phone.
+
+Tests: `cargo test -p aries-protocol --test host_pairing`,
+`cargo test -p aries-core --test host_pairing -- --include-ignored` (Docker),
+and `:app:testDebugUnitTest --tests '*HostPairingTest'`.
+
 ## Push and the Relay
 
 Turning push on (`AriesCore::enable_push`, `crates/core/src/push.rs`)

@@ -275,6 +275,12 @@ fn a_notice_is_not_returned_if_its_replay_id_cannot_be_persisted() {
         core.open_push(bytes.clone()),
         Err(CoreError::Storage { .. })
     ));
+    assert_eq!(
+        core.diagnostics(Some(aries_core::DiagnosticSource::Push), None, true)
+            .unwrap()[0]
+            .error,
+        Some(aries_core::DiagnosticError::Storage)
+    );
     std::fs::remove_dir(&ledger).unwrap();
     core.open_push(bytes.clone()).unwrap();
     assert_rejected(
@@ -287,4 +293,51 @@ fn a_notice_is_not_returned_if_its_replay_id_cannot_be_persisted() {
         core.open_push(bytes),
         Err(CoreError::Storage { .. })
     ));
+}
+
+#[test]
+fn diagnostics_record_authenticated_host_but_exclude_push_content_and_keys() {
+    use aries_core::{DiagnosticError, DiagnosticSource};
+    let data = tempfile::tempdir().unwrap();
+    let (phone, beacon) = paired_phone(data.path());
+    let core = core_in(data.path());
+    let bytes = push::seal(
+        &PushMessage::Call {
+            id: "secret-call-id".into(),
+            terminal: "secret-terminal".into(),
+            top_level: true,
+            title: "secret-title".into(),
+            body: "secret-body".into(),
+            urgency: aries_protocol::calls::Urgency::Check,
+            choices: vec!["secret-choice".into()],
+            at_ms: now_secs() * 1000,
+        },
+        &phone.public,
+        &beacon,
+    )
+    .unwrap();
+    let host_id = core.open_push(bytes.clone()).unwrap().host_id;
+    assert!(core.open_push(bytes).is_err());
+    let history = core
+        .diagnostics(Some(DiagnosticSource::Push), None, false)
+        .unwrap();
+    assert_eq!(history.len(), 2);
+    assert_eq!(history[0].error, Some(DiagnosticError::PushRejected));
+    assert!(history[0].host_id.is_none());
+    assert_eq!(history[1].host_id, Some(host_id));
+    assert!(history[1].error.is_none());
+    let stored = std::fs::read_to_string(data.path().join("diagnostics.json")).unwrap();
+    for secret in [
+        "secret-call-id",
+        "secret-terminal",
+        "secret-title",
+        "secret-body",
+        "secret-choice",
+        &phone.secret_text(),
+        &beacon.public.to_text(),
+        "test-pairing",
+        "relay.invalid",
+    ] {
+        assert!(!stored.contains(secret));
+    }
 }
