@@ -56,7 +56,7 @@ class RemoteMediaTest {
         compose.onNodeWithContentDescription("Image viewer").assertIsDisplayed()
         assertEquals(listOf(0uL, 17uL), synchronized(offsets) { offsets.toList() })
         compose.onNodeWithText("Back").performClick()
-        compose.onNodeWithText("Back to folder").performClick()
+        compose.onNodeWithContentDescription("Back to folder").performClick()
         compose.onNodeWithText("shot.PNG").assertExists()
     }
     @Test fun opensSvgAsAnImageRatherThanXmlSource() {
@@ -110,6 +110,7 @@ class RemoteMediaTest {
         compose.setContent { MaterialTheme { RemoteFilesScreen(conn, "t1", {}, initialLocation = FileLocation("/repo/large.png")) } }
         compose.waitUntil(5_000) { compose.onAllNodesWithText("This file exceeds the 16 MiB preview limit.").fetchSemanticsNodes().isNotEmpty() }
         assertEquals(1, reads)
+        compose.onNodeWithContentDescription(compose.activity.getString(R.string.files_actions_label)).performClick()
         compose.onNodeWithText(compose.activity.getString(R.string.files_save_button)).assertIsEnabled()
         compose.onNodeWithText(compose.activity.getString(R.string.files_share_button)).assertIsEnabled()
         compose.onNodeWithContentDescription("Image viewer").assertDoesNotExist()
@@ -129,7 +130,7 @@ class RemoteMediaTest {
         compose.waitUntil(5_000) { compose.onAllNodesWithText("Could not preview this file. Check the file and connection, then refresh to retry.").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithContentDescription("Image viewer").assertDoesNotExist()
         valid.set(true)
-        compose.onNodeWithText("Refresh").performClick()
+        compose.onNodeWithContentDescription("Refresh").performClick()
         waitForImage()
     }
 
@@ -146,7 +147,7 @@ class RemoteMediaTest {
         }
         compose.setContent { MaterialTheme { RemoteFilesScreen(conn, "t1", {}, initialLocation = FileLocation("/repo/shot.png")) } }
         compose.waitUntil(5_000) { reading.isCompleted }
-        compose.onNodeWithText("Back to folder").performClick()
+        compose.onNodeWithContentDescription("Back to folder").performClick()
         compose.onNodeWithText("This folder is empty.").assertExists()
         compose.waitUntil(5_000) { compose.waitForIdle(); cancelled.isCompleted }
         compose.onNodeWithContentDescription("Image viewer").assertDoesNotExist()

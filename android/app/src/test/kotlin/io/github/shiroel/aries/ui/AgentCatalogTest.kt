@@ -53,6 +53,19 @@ class AgentCatalogTest {
         assertFalse(connection.calls.contains("sendMessage"))
     }
 
+    @Test fun openingAnEmptyCatalogDiscoversNewSkillsWithoutAManualRefresh() {
+        open()
+        compose.runOnIdle {
+            connection.catalogReader = { refresh ->
+                if (refresh) connection.catalog else AgentCatalog(emptyList(), emptyList())
+            }
+        }
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).performTextInput("/test")
+        compose.onNodeWithText("/testing").performClick()
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("/testing ")
+        assertTrue(connection.typed.isEmpty())
+    }
+
     @Test fun failedCollectionKeepsInputEditableAndCanBeRefreshed() {
         open(fail = true)
         val input = compose.onNodeWithContentDescription(str(R.string.chat_input_label))
@@ -60,17 +73,18 @@ class AgentCatalogTest {
         compose.onNodeWithText(str(R.string.chat_catalog_failed)).assertExists()
         input.assertTextEquals("/rev")
         compose.runOnIdle { connection.catalogFailure = null }
-        compose.onNodeWithText(str(R.string.chat_catalog_refresh)).performScrollTo().performClick()
-        compose.onNodeWithText("/review").assertExists()
+        // Opening the picker automatically retries the failed lookup.
+        compose.onNodeWithContentDescription(str(R.string.chat_skills_button)).performClick()
+        compose.onNodeWithText("/testing").assertExists()
         compose.onNodeWithText(str(R.string.chat_catalog_failed)).assertDoesNotExist()
-        assertEquals(listOf(false, true), connection.catalogRequests)
+        assertEquals(listOf(false, false), connection.catalogRequests)
         assertTrue(connection.typed.isEmpty())
     }
 
     @Test fun skillsSearchDescriptionsAndReplaceSelectionWithoutSending() {
         open()
         compose.runOnIdle { chat.input = TextFieldValue("please OLD next", TextRange(7, 10)) }
-        compose.onNodeWithText(str(R.string.chat_skills_button)).performScrollTo().performClick()
+        compose.onNodeWithContentDescription(str(R.string.chat_skills_button)).performScrollTo().performClick()
         compose.onNodeWithContentDescription(str(R.string.chat_skills_search)).performTextInput("regressions")
         compose.onNodeWithText("/testing").performClick()
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("please /testing next")

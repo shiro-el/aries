@@ -1,5 +1,11 @@
 package io.github.shiroel.aries.ui
 
+import androidx.compose.ui.test.hasText
+
+import androidx.compose.ui.test.hasAnyDescendant
+
+import androidx.compose.ui.test.assert
+
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.assertIsNotDisplayed
@@ -46,7 +52,7 @@ class DrawerShellTest {
         compose.onNodeWithText(context.getString(R.string.agents_empty)).assertExists()
         compose.onNodeWithTag("console-menu").performClick()
         compose.onNodeWithTag("drawer-host:h1").performClick()
-        compose.onNodeWithText(context.getString(R.string.terminals_title, "home")).assertExists()
+        compose.onNodeWithTag("console-top-bar").assert(hasAnyDescendant(hasText("home")))
         compose.onNodeWithTag("console-menu").performClick()
         compose.onNodeWithTag("settings-open").performClick()
         compose.onNodeWithText(context.getString(R.string.theme_title)).assertExists()
@@ -128,7 +134,7 @@ class DrawerShellTest {
         compose.openConsoleDrawer()
         compose.runOnIdle { back.onBackPressed() }
         compose.onNodeWithTag("console-drawer").assertIsNotDisplayed()
-        compose.onNodeWithText(context.getString(R.string.terminals_title, "home")).assertExists()
+        compose.onNodeWithTag("console-top-bar").assert(hasAnyDescendant(hasText("home")))
         compose.runOnIdle { org.junit.Assert.assertFalse(core.connection!!.disconnected) }
         compose.runOnIdle { back.onBackPressed() }
         compose.onNodeWithText("me@home.test:22").assertExists()
