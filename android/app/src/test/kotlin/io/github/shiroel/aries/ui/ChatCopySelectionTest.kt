@@ -109,7 +109,7 @@ class ChatCopySelectionTest {
         for ((body, text, rendered) in listOf(
             Triple(ChatEntryBody.User(prompt), prompt, "Fix this:"),
             Triple(ChatEntryBody.Agent(response), response, "Done"),
-            Triple(ChatEntryBody.Thinking(response), response, response),
+            Triple(ChatEntryBody.Thinking(response), response, "Done"),
             Triple(ChatEntryBody.AgentError(response), response, response),
         )) {
             show(body, rendered)
