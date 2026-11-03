@@ -291,7 +291,7 @@ impl SshdHost {
             &self.container,
             "sh",
             "-c",
-            "rm -f /etc/ssh/ssh_host_* && ssh-keygen -A >/dev/null && pkill -x sshd",
+            "rm -f /etc/ssh/ssh_host_* && ssh-keygen -A >/dev/null && kill $(cat /run/sshd.pid)",
         ]);
         std::thread::sleep(Duration::from_millis(300));
         self.wait_ready();
