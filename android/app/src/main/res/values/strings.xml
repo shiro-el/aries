@@ -56,6 +56,15 @@
     <string name="terminals_empty">No Terminals are running on this Host.</string>
     <string name="terminal_subtitle">%1$s · %2$s</string>
 
+    <string name="agent_status_working">Working</string>
+    <string name="agent_status_blocked">Blocked</string>
+    <string name="agent_status_blocked_permission">Blocked: permission</string>
+    <string name="agent_status_blocked_question">Blocked: question</string>
+    <string name="agent_status_blocked_auth">Blocked: sign-in</string>
+    <string name="agent_status_error">Error</string>
+    <string name="agent_status_done">Done</string>
+    <string name="agent_status_idle">Idle</string>
+    <string name="agent_attention_label">Needs you</string>
     <string name="space_unnamed">Unnamed Space</string>
     <string name="space_summary">Tabs: %1$d · Panes: %2$d</string>
     <string name="space_no_tabs">This Space has no Tabs.</string>

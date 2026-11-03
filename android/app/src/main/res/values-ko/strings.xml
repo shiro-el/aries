@@ -54,6 +54,16 @@
     <string name="terminals_empty">이 호스트에서 실행 중인 터미널이 없습니다.</string>
     <string name="terminal_subtitle">%1$s · %2$s</string>
 
+    <string name="agent_status_working">작업 중</string>
+    <string name="agent_status_blocked">막힘</string>
+    <string name="agent_status_blocked_permission">막힘: 권한</string>
+    <string name="agent_status_blocked_question">막힘: 질문</string>
+    <string name="agent_status_blocked_auth">막힘: 로그인</string>
+    <string name="agent_status_error">오류</string>
+    <string name="agent_status_done">완료</string>
+    <string name="agent_status_idle">대기</string>
+    <string name="agent_attention_label">확인 필요</string>
+
     <string name="space_unnamed">이름 없는 스페이스</string>
     <string name="space_summary">탭 %1$d개 · 페인 %2$d개</string>
     <string name="space_no_tabs">이 스페이스에는 탭이 없습니다.</string>

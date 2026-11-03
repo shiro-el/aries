@@ -1,0 +1,71 @@
+#!/bin/sh
+# Fake Agent for seam-1 tests (POSIX sh, runs on Linux and in the alpine sshd image).
+#
+# Usage: fake-agent SCRIPT
+#   Runs SCRIPT one line per step, then keeps reading input until killed.
+#   Every input line it reads is appended, exactly, to $FAKE_AGENT_INPUT
+#   (default ./fake-agent.input), one per line.
+#
+# Steps:
+#   status STATE [KIND|-] [MSG...]  report OSC 7501 (app=$FAKE_AGENT_APP, default "fake");
+#                                   KIND is permission/question/auth, "-" for none
+#   wait                            read one input line (and record it)
+#   transcript SRC DST              append fixture SRC to DST (SRC relative to this
+#                                   script's fixtures/agents dir unless absolute)
+#   sleep SECONDS
+#   say TEXT...                     print TEXT on the screen
+#   exit CODE
+#   # ...                           comment
+set -uf
+
+script=${1:?usage: fake-agent SCRIPT}
+log=${FAKE_AGENT_INPUT:-./fake-agent.input}
+app=${FAKE_AGENT_APP:-fake}
+fixtures=$(cd "$(dirname "$0")/.." && pwd)
+
+report() {
+    state=$1
+    shift
+    kind=-
+    if [ $# -gt 0 ]; then
+        kind=$1
+        shift
+    fi
+    fields="state=$state"
+    [ "$kind" != "-" ] && fields="$fields:kind=$kind"
+    fields="$fields:app=$app"
+    if [ $# -gt 0 ]; then
+        fields="$fields:msg=$(printf '%s' "$*" | base64 | tr -d '\n')"
+    fi
+    printf '\033]7501;%s\033\\' "$fields"
+}
+
+record() {
+    IFS= read -r line || exit 0
+    printf '%s\n' "$line" >>"$log"
+}
+
+: >>"$log"
+while IFS= read -r step <&3 || [ -n "$step" ]; do
+    # shellcheck disable=SC2086
+    set -- $step
+    [ $# -eq 0 ] && continue
+    cmd=$1
+    shift
+    case $cmd in
+    \#*) ;;
+    status) report "$@" ;;
+    wait) record ;;
+    transcript)
+        src=$1
+        case $src in /*) ;; *) src=$fixtures/$src ;; esac
+        cat "$src" >>"$2"
+        ;;
+    sleep) sleep "$1" ;;
+    say) printf '%s\n' "$*" ;;
+    exit) exit "$1" ;;
+    *) printf 'fake-agent: unknown step: %s\n' "$step" >&2 ;;
+    esac
+done 3<"$script"
+
+while :; do record; done

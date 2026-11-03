@@ -18,6 +18,7 @@ import io.github.shiroel.aries.core.StructureListener
 import io.github.shiroel.aries.core.StructureWatch
 import io.github.shiroel.aries.core.QrMatrix
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /** A message for the user: a string resource and its format arguments. */
@@ -100,7 +101,12 @@ class HostsModel(private val core: AriesCoreInterface, private val scope: Corout
                             scope.launch { browser.markClosed() }
                         }
                     })
-                    if (open?.first === conn) open = conn to watch else watch.stop()
+                    if (open?.first === conn) {
+                        open = conn to watch
+                        status = watchStatus(conn, browser)
+                    } else {
+                        watch.stop()
+                    }
                 } catch (e: CoreException) {
                     if (open?.first === conn) open = null
                     conn.disconnect()
@@ -175,8 +181,30 @@ class HostsModel(private val core: AriesCoreInterface, private val scope: Corout
         prompt = null
     }
 
+    /** Live Agent status of the open Host's Terminals; cancelled on [back]. */
+    private var status: Job? = null
+
+    private fun watchStatus(conn: HostConnection, browser: HostBrowser): Job = scope.launch {
+        val watch = try {
+            conn.watchTerminals()
+        } catch (e: CoreException) {
+            browser.markClosed()
+            return@launch
+        }
+        try {
+            // Each change replaces the list, so Agent status stays live.
+            while (true) browser.updateTerminals(watch.next())
+        } catch (e: CoreException) {
+            browser.markClosed()
+        } finally {
+            watch.stop()
+        }
+    }
+
     fun back() {
         screen = Screen.Hosts
+        status?.cancel()
+        status = null
         val (conn, watch) = open ?: return
         open = null
         watch?.stop()
