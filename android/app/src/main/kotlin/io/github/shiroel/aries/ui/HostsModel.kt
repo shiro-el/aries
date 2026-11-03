@@ -189,6 +189,151 @@ class HostsModel(
     /** The open Host's line, which reconnects on its own; see [HostLink]. */
     private var browseLink: HostLink? = null
 
+    var quickOpenVisible by mutableStateOf(false)
+        private set
+    private var quickOpenStates by mutableStateOf<List<io.github.shiroel.aries.core.LastKnownState>>(emptyList())
+    private var quickOpenWatch: Job? = null
+    private var pendingQuickOpen: QuickOpenResult? = null
+
+    private fun quickOpenBase(route: Screen = screen): Screen = when (route) {
+        is Screen.Chat -> quickOpenBase(route.returnTo)
+        is Screen.Terminal -> quickOpenBase(route.returnTo)
+        else -> route
+    }
+
+    val quickOpenBrowser: HostBrowser? get() = (quickOpenBase() as? Screen.Browse)?.browser
+
+    /** No connections are started by search. Existing live watches take precedence per Host. */
+    val quickOpenSources: List<QuickOpenSource>
+        get() {
+            val live = when (val base = quickOpenBase()) {
+                is Screen.Browse -> listOfNotNull(base.browser.takeIf { it.link?.state == LinkState.Up }?.let {
+                    QuickOpenSource(it.host, it.structure, it.agents.map { entry -> entry.terminal })
+                })
+                is Screen.Agents -> base.board.quickOpenSources
+                else -> emptyList()
+            }.associateBy { it.host.id }
+            val stored = quickOpenStates.associateBy { it.hostId }
+            return hosts.map { host ->
+                live[host.id] ?: stored[host.id].let { state ->
+                    QuickOpenSource(host, state?.structure, state?.agents.orEmpty(), state?.fetchedAtMs,
+                        state?.structureFetchedAtMs ?: state?.fetchedAtMs, live = false)
+                }
+            }
+        }
+
+    fun openQuickOpen() {
+        closeCallInbox()
+        guard { quickOpenStates = core.lastKnownStates() }
+        quickOpenVisible = true
+        quickOpenWatch?.cancel()
+        quickOpenWatch = scope.launch {
+            try {
+                io.github.shiroel.aries.LastKnownStates.observe(core).collect { quickOpenStates = it }
+            } catch (_: CoreException) {
+                // Keep the readable stored values if the subscription fails.
+            }
+        }
+    }
+
+    fun closeQuickOpen() {
+        quickOpenVisible = false
+        quickOpenWatch?.cancel()
+        quickOpenWatch = null
+    }
+
+    private fun returnToQuickOpenBase() {
+        while (screen is Screen.Terminal || screen is Screen.Chat) {
+            if (screen is Screen.Terminal) closeTerminal() else closeChat()
+        }
+    }
+
+    fun selectQuickOpen(result: QuickOpenResult) {
+        closeQuickOpen()
+        val browser = quickOpenBrowser
+        if (browser?.host?.id == result.host.id && browser.link?.state == LinkState.Up) {
+            returnToQuickOpenBase()
+            revealQuickOpen(browser, result)
+        } else {
+            back()
+            pendingQuickOpen = result
+            connect(result.host)
+        }
+    }
+
+    /** Revalidate IDs on the new live structure; never fall back to a similarly named target. */
+    private fun revealQuickOpen(browser: HostBrowser, result: QuickOpenResult) {
+        val structure = browser.structure ?: return
+        pendingQuickOpen = null
+        val space = structure.spaces.find { it.id == result.spaceId }
+        val tab = space?.tabs?.find { it.id == result.tabId }
+        val terminal = result.address?.let(browser::findTerminal)?.takeIf { it.state == "live" }
+        val exists = when (result.kind) {
+            QuickOpenKind.HOST -> true
+            QuickOpenKind.SPACE -> space != null
+            QuickOpenKind.TAB -> tab != null
+            QuickOpenKind.AGENT -> terminal != null
+        }
+        if (!exists) {
+            prompt = Prompt.Problem(Message(R.string.quick_open_title), Message(R.string.quick_open_gone, listOf(result.name)))
+            return
+        }
+        browser.closeSpace()
+        if (space != null) browser.openSpace(space.id)
+        if (tab != null) browser.selectTab(tab)
+        if (terminal != null) openTerminal(terminal)
+    }
+
+    private fun quickOpenTerminal(): TerminalInfo? = when (val route = screen) {
+        is Screen.Terminal -> route.viewer.terminal
+        is Screen.Chat -> route.chat.terminal
+        else -> quickOpenBrowser?.let { browser -> browser.tab?.let { tab ->
+            tab.panes.find { it.id == browser.focusedPane(tab) }?.terminal?.let(browser::current)
+        } }
+    }
+
+    @StringRes
+    fun quickOpenCommandReason(command: QuickOpenCommand): Int? {
+        if (command == QuickOpenCommand.SETTINGS) return null
+        val browser = quickOpenBrowser ?: return R.string.quick_open_choose_host
+        if (browser.link?.state != LinkState.Up || browser.structure == null) return R.string.structure_connection_closed
+        val editor = browser.layoutEditor
+        if (editor?.busy == true) return R.string.quick_open_busy
+        when (command) {
+            QuickOpenCommand.NEW_TAB, QuickOpenCommand.RENAME_SPACE, QuickOpenCommand.CLOSE_SPACE ->
+                if (browser.openSpace == null) return R.string.quick_open_choose_space
+            QuickOpenCommand.RENAME_TAB, QuickOpenCommand.CLOSE_TAB ->
+                if (browser.tab == null) return R.string.quick_open_choose_tab
+            QuickOpenCommand.END_TERMINAL -> if (quickOpenTerminal() == null) return R.string.quick_open_choose_terminal
+            else -> Unit
+        }
+        if (command != QuickOpenCommand.RUN_AGENT && command != QuickOpenCommand.END_TERMINAL && editor?.available != true)
+            return R.string.layout_app_unavailable
+        return null
+    }
+
+    fun runQuickOpenCommand(command: QuickOpenCommand) {
+        if (quickOpenCommandReason(command) != null) return
+        closeQuickOpen()
+        if (command == QuickOpenCommand.SETTINGS) { openSettings(); return }
+        val terminal = quickOpenTerminal()
+        returnToQuickOpenBase()
+        val browser = quickOpenBrowser ?: return
+        if (command == QuickOpenCommand.RUN_AGENT) { newTerminal(browser); return }
+        val editor = browser.layoutEditor ?: return
+        val space = browser.openSpace
+        val tab = browser.tab
+        when (command) {
+            QuickOpenCommand.NEW_SPACE -> editor.naming = LayoutNameForm(LayoutNameKind.NEW_SPACE)
+            QuickOpenCommand.NEW_TAB -> editor.naming = LayoutNameForm(LayoutNameKind.NEW_TAB, space!!.id, folder = space.folder.orEmpty())
+            QuickOpenCommand.RENAME_SPACE -> editor.naming = LayoutNameForm(LayoutNameKind.RENAME_SPACE, space!!.id, if (space.named) space.name else "")
+            QuickOpenCommand.RENAME_TAB -> editor.naming = LayoutNameForm(LayoutNameKind.RENAME_TAB, tab!!.id, if (tab.named) tab.name else "")
+            QuickOpenCommand.CLOSE_SPACE -> editor.ending = LayoutEndTarget.Space(space!!.id)
+            QuickOpenCommand.CLOSE_TAB -> editor.ending = LayoutEndTarget.Tab(tab!!.id)
+            QuickOpenCommand.END_TERMINAL -> editor.ending = LayoutEndTarget.Terminal(terminal!!)
+        }
+    }
+
     private fun link(host: Host, conn: HostConnection) = HostLink(
         host, conn, scope,
         connect = { withContext(keyWork) { core.connect(host.id) } },
@@ -415,6 +560,7 @@ class HostsModel(
                     return@launch
                 }
                 val browser = HostBrowser(host)
+                browser.layoutEditor = LayoutEditor(browser, scope)
                 val link = link(host, conn)
                 browser.link = link
                 browseLink = link
@@ -589,6 +735,7 @@ class HostsModel(
     }
 
     fun dismiss() {
+        pendingQuickOpen = null
         prompt = null
     }
 
@@ -638,6 +785,9 @@ class HostsModel(
                                 if (saved != null) runSaved(browser, saved) else savedLaunchMissing()
                             }
                             restoreIfReady()
+                            pendingQuickOpen?.takeIf { it.host.id == browser.host.id }?.let {
+                                if ((screen as? Screen.Browse)?.browser === browser) revealQuickOpen(browser, it)
+                            }
                         }
                     }
 
@@ -1210,6 +1360,8 @@ class HostsModel(
         (screen as? Screen.Terminal)?.viewer?.takeIf { it.link?.host?.id == hostId }
 
     fun back() {
+        closeQuickOpen()
+        pendingQuickOpen = null
         restoring = false
         pendingShare = null
         (screen as? Screen.Chat)?.chat?.stop()

@@ -54,6 +54,7 @@ fun ConsoleTopBar(
         if (showMark) ConsoleMark()
         titleContent()
         actions()
+        QuickOpenButton()
         inbox()
     }
     HorizontalDivider()
@@ -77,7 +78,7 @@ internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit) {
     SeenAgentEffect(
         screen,
         enabled = drawer.isClosed && drawer.targetValue == DrawerValue.Closed &&
-            !model.callInboxOpen && model.prompt == null,
+            !model.callInboxOpen && !model.quickOpenVisible && model.prompt == null,
     )
     val drawerWidth = (LocalConfiguration.current.screenWidthDp.dp * .86f).coerceAtMost(320.dp)
     LaunchedEffect(screen) { drawer.close(); model.closeCallInbox() }
@@ -99,7 +100,9 @@ internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit) {
             }
         },
     ) {
-        CompositionLocalProvider(LocalCallInbox provides CallInboxAction(model.calls, model.callInboxOpen) {
+        CompositionLocalProvider(LocalQuickOpen provides {
+            scope.launch { drawer.close(); model.openQuickOpen() }
+        }, LocalCallInbox provides CallInboxAction(model.calls, model.callInboxOpen) {
             scope.launch {
                 drawer.close()
                 if (model.callInboxOpen) model.closeCallInbox() else model.openCallInbox()
@@ -123,6 +126,7 @@ internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit) {
             }
         }
     }
+    if (model.quickOpenVisible) QuickOpenDialog(model)
     // One owner avoids screen handlers registered later taking precedence over overlays.
     BackHandler(drawer.isOpen || model.callInboxOpen || screen != Screen.Hosts) {
         if (drawer.isOpen) scope.launch { drawer.close() }
