@@ -5,6 +5,19 @@
   Add every new string to values-ko/strings.xml too (TranslationsTest checks it).
 -->
 <resources>
+    <!-- Host file downloads and sharing (112) -->
+    <string name="files_save_button">Save to phone</string>
+    <string name="files_share_button">Share</string>
+    <string name="files_share_title">Share Host file</string>
+    <string name="files_export_limit">Save or share one file, up to 64 MiB.</string>
+    <string name="files_export_starting">Starting download…</string>
+    <string name="files_export_progress">Downloaded %1$d of %2$d bytes</string>
+    <string name="files_export_saving">Saving to the selected folder…</string>
+    <string name="files_saved">Saved to the selected folder.</string>
+    <string name="files_share_ready">File ready to share.</string>
+    <string name="files_export_cancelled">Transfer cancelled.</string>
+    <string name="files_export_too_large">This file exceeds the 64 MiB save and share limit.</string>
+    <string name="files_export_failed">Could not transfer this file. Check the connection, file and folder permissions, and free space, then retry.</string>
     <!-- Remote file browser (90) -->
     <string name="files_open_button">Files</string>
     <string name="files_title">Host files</string>

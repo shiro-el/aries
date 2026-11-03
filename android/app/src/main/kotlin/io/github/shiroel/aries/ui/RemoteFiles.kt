@@ -80,6 +80,7 @@ fun RemoteFilesScreen(
             }
             TextButton(onClick = { retry++ }, enabled = !loading) { Text(stringResource(R.string.files_refresh_button)) }
         }
+        file?.let { FileExportControls(connection, address, it) }
         if (file != null && onSend != null) {
             TextButton(onClick = { onSend(quotedFileReference(file!!)) }) {
                 Text(stringResource(R.string.files_send_file_button))
