@@ -3,6 +3,7 @@
 
 pub mod chat;
 pub mod core_link;
+pub mod host_pairing;
 pub mod opencode_plugin;
 pub mod pi_extension;
 pub mod progress;

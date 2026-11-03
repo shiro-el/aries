@@ -187,6 +187,19 @@
 
     <string name="host_ssh_address">%1$s@%2$s:%3$d</string>
     <string name="host_local_address">로컬 프로세스</string>
+    <!-- QR Host pairing -->
+    <string name="host_pair_scan_button">Host QR 스캔</string>
+    <string name="host_pair_scan_prompt">aries-beacon pair-qr에 표시된 QR을 스캔하세요</string>
+    <string name="host_pair_hint">Host에서 aries-beacon pair-qr --address ADDRESS를 실행하세요. QR은 5분 뒤 만료되며 폰 한 대만 등록할 수 있습니다.</string>
+    <string name="host_pair_review_title">스캔한 Host 등록</string>
+    <string name="host_pair_fingerprint">Host 키: %1$s</string>
+    <string name="host_pair_review_body">내 Host에서 표시한 QR인지 확인하세요. 등록하면 폰의 공개키를 Host에 설치하고 위 Host 키를 신뢰합니다.</string>
+    <string name="host_pair_confirm_button">QR로 등록</string>
+    <string name="host_pair_busy">등록 중…</string>
+    <string name="host_pair_invalid">Host QR이 올바르지 않거나 만료되었습니다. Host에서 새 QR을 만드세요.</string>
+    <string name="host_pair_refused">등록하지 못했습니다. QR이 이미 사용되었거나 만료되었을 수 있습니다. 주소와 페어링 포트를 확인하고 새 QR을 스캔하세요.</string>
+    <string name="host_pair_key_changed">Host 키가 QR과 일치하지 않습니다. Host를 확인하고 새 QR을 만드세요.</string>
+
     <string name="host_add_title">호스트 추가</string>
     <string name="host_add_name">이름 (선택)</string>
     <string name="host_add_address">주소</string>

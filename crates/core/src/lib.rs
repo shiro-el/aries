@@ -17,6 +17,7 @@ mod git_changes;
 mod hc;
 mod host_edit;
 mod host_model;
+mod host_pairing;
 mod last_known_state;
 mod launch;
 mod layout_edit;
@@ -58,6 +59,7 @@ pub use files::{RemoteDirectory, RemoteFileBytes, RemoteFileEntry, RemoteFilePag
 pub use git_changes::*;
 pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
 pub use host_model::{AgentStatus, BlockedReason, TerminalWatch};
+pub use host_pairing::HostPairingDetails;
 pub use last_known_state::{LastKnownState, LastKnownStateWatch};
 pub use launch::{AgentPreset, LaunchRequest, RECENT_CWDS_KEPT, SavedLaunch};
 pub use layout_edit::{ExecOutput, LayoutEdit};

@@ -58,6 +58,11 @@ licensee {
     allowUrl("https://developer.android.com/studio/terms.html") {
         because("Google Play services / Firebase, required for FCM push")
     }
+    // 4.3.0's POM points at COPYING rather than the canonical Apache URL.
+    // Verified: https://github.com/journeyapps/zxing-android-embedded/blob/v4.3.0/COPYING
+    allowUrl("https://github.com/journeyapps/zxing-android-embedded/blob/master/COPYING") {
+        because("ZXing Android Embedded 4.3.0 ships the Apache-2.0 license")
+    }
     bundleAndroidAsset.set(true)
 }
 
@@ -73,6 +78,7 @@ dependencies {
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)
     implementation(libs.androidx.work.runtime)
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("org.commonmark:commonmark:0.32.0")
     implementation("org.commonmark:commonmark-ext-gfm-tables:0.32.0")
 
