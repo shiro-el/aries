@@ -1337,7 +1337,7 @@ impl HostConnection {
             let now = client
                 .call("terminal.get", serde_json::json!({ "terminal": address }))
                 .await?;
-            if host_model::seen_turn(&now) >= turn {
+            if host_model::seen_turn(&now).is_some_and(|seen| seen >= turn) {
                 return Ok(terminal_info(&now));
             }
             let labels =
@@ -1414,6 +1414,39 @@ impl HostConnection {
         let client = self.client.clone();
         on_runtime(async move { send::send(&client, &address, &text, || listener.on_held()).await })
             .await
+    }
+
+    /// Saves an attachment beside this Terminal on its Host, returning the
+    /// Host path. Does not type or submit anything. The raw limit is 8 MiB;
+    /// herdr-core owns filename sanitization, collisions and retention.
+    pub async fn upload_attachment(
+        &self,
+        terminal: String,
+        name: String,
+        bytes: Vec<u8>,
+    ) -> Result<String, CoreError> {
+        use base64::Engine;
+        if bytes.len() > 8 * 1024 * 1024 {
+            return Err(CoreError::Rpc {
+                kind: "attachment_too_large".into(),
+                detail: "attachments must be at most 8 MiB".into(),
+            });
+        }
+        let client = self.client.clone();
+        on_runtime(async move {
+            let data = base64::engine::general_purpose::STANDARD.encode(bytes);
+            let reply = client
+                .call(
+                    "terminal.put",
+                    serde_json::json!({ "terminal": terminal, "name": name, "data": data }),
+                )
+                .await?;
+            reply["path"]
+                .as_str()
+                .map(str::to_owned)
+                .ok_or_else(|| error::protocol("terminal.put returned no path"))
+        })
+        .await
     }
 
     pub async fn disconnect(&self) {
