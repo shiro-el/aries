@@ -217,8 +217,16 @@ fn pairing_path(store: &Store, host_id: &str) -> PathBuf {
     store.host_dir(host_id).join("push.json")
 }
 
+fn pending_path(store: &Store, host_id: &str) -> PathBuf {
+    store.host_dir(host_id).join("push-pending.json")
+}
+
 fn read_stored(store: &Store, host_id: &str) -> Result<Option<Stored>, CoreError> {
-    match std::fs::read(pairing_path(store, host_id)) {
+    read_stored_at(pairing_path(store, host_id))
+}
+
+fn read_stored_at(path: PathBuf) -> Result<Option<Stored>, CoreError> {
+    match std::fs::read(path) {
         Ok(b) => serde_json::from_slice(&b).map(Some).map_err(storage),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(e) => Err(storage(e)),
@@ -244,21 +252,38 @@ pub(crate) fn pairing_of(
     let Some(s) = read_stored(store, host_id)? else {
         return Ok(None);
     };
+    decode_pairing(s, vault).map(Some)
+}
+
+fn decode_pairing(s: Stored, vault: &dyn KeyVault) -> Result<Pairing, CoreError> {
     let secrets = open_secrets(vault, &s.sealed)?;
     let bad = |e: EnvelopeError| storage(format!("push pairing: {e}"));
-    Ok(Some(Pairing {
+    Ok(Pairing {
         phone: KeyPair::from_secret_text(&secrets.phone_secret).map_err(bad)?,
         beacon_key: s.beacon_key.parse().map_err(bad)?,
         relay_url: s.relay_url,
         token: secrets.token,
-    }))
+    })
+}
+
+/// Both keys remain usable across a crash between Host and phone commits.
+pub(crate) fn pairings_of(
+    store: &Store,
+    vault: &dyn KeyVault,
+    host: &str,
+) -> Result<Vec<Pairing>, CoreError> {
+    let mut paired: Vec<_> = pairing_of(store, vault, host)?.into_iter().collect();
+    if let Some(s) = read_stored_at(pending_path(store, host))? {
+        paired.push(decode_pairing(s, vault)?);
+    }
+    Ok(paired)
 }
 
 pub(crate) fn relay_url_of(store: &Store, host_id: &str) -> Result<Option<String>, CoreError> {
     Ok(read_stored(store, host_id)?.map(|s| s.relay_url))
 }
 
-fn save(store: &Store, vault: &dyn KeyVault, host_id: &str, p: &Pairing) -> Result<(), CoreError> {
+fn stage(store: &Store, vault: &dyn KeyVault, host_id: &str, p: &Pairing) -> Result<(), CoreError> {
     let dir = store.host_dir(host_id);
     std::fs::create_dir_all(&dir).map_err(storage)?;
     let stored = Stored {
@@ -272,12 +297,20 @@ fn save(store: &Store, vault: &dyn KeyVault, host_id: &str, p: &Pairing) -> Resu
             },
         )?,
     };
-    let tmp = dir.join(".push.json.tmp");
+    let tmp = dir.join(".push-pending.json.tmp");
     std::fs::write(&tmp, serde_json::to_vec(&stored).map_err(storage)?).map_err(storage)?;
-    std::fs::rename(&tmp, pairing_path(store, host_id)).map_err(storage)
+    std::fs::File::open(&tmp)
+        .and_then(|f| f.sync_all())
+        .map_err(storage)?;
+    std::fs::rename(&tmp, pending_path(store, host_id)).map_err(storage)
 }
 
 fn forget(store: &Store, host_id: &str) -> Result<(), CoreError> {
+    match std::fs::remove_file(pending_path(store, host_id)) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(storage(e)),
+    }
     match std::fs::remove_file(pairing_path(store, host_id)) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -504,6 +537,14 @@ pub(crate) struct Enable {
 pub(crate) async fn enable(e: Enable) -> Result<PushPairing, CoreError> {
     e.progress.on_step(PushStep::Register);
     let relay_url = normalize_relay_url(&e.relay_url).map_err(|d| failed(PushStep::Register, d))?;
+    if complete_pending(&e.store, e.vault.as_ref(), &e.host_id, &e.ssh)
+        .await?
+        .is_some_and(|url| url == relay_url)
+    {
+        flush(e.store.clone(), e.vault.clone(), e.http.clone()).await;
+        test(&e.ssh).await?;
+        return Ok(PushPairing { relay_url });
+    }
     let phone = KeyPair::generate();
     let token = register(&e.http, &relay_url, &e.device)
         .await
@@ -518,7 +559,7 @@ pub(crate) async fn enable(e: Enable) -> Result<PushPairing, CoreError> {
     let paired = async {
         let line = beacon(
             &e.ssh,
-            "pair",
+            "pair-prepare",
             serde_json::to_string(&request).expect("json").as_bytes(),
         )
         .await?;
@@ -537,30 +578,25 @@ pub(crate) async fn enable(e: Enable) -> Result<PushPairing, CoreError> {
             return Err(failed(PushStep::Pair, d));
         }
     };
-    // The Beacon now uses the new pairing (and revoked its old token on the
-    // old Relay, best effort). Revoke the old one from here too; if the old
-    // Relay cannot be reached, the queue retries it.
-    let old = read_stored(&e.store, &e.host_id)?;
-    if let Some(old) = &old {
-        with_queue(&e.store, |queue| {
-            queue.push(Revocation {
-                relay_url: old.relay_url.clone(),
-                sealed: old.sealed.clone(),
-            });
-        })?;
-    }
-    save(
+    // Persist the phone's decryption keys before the Host activates them.
+    let replacing = read_stored(&e.store, &e.host_id)?.is_some();
+    let staged = stage(
         &e.store,
         e.vault.as_ref(),
         &e.host_id,
         &Pairing {
             relay_url: relay_url.clone(),
-            token,
+            token: token.clone(),
             phone,
             beacon_key,
         },
-    )?;
-    if old.is_some() {
+    );
+    if let Err(err) = staged {
+        let _ = revoke(&e.http, &relay_url, &token).await;
+        return Err(err);
+    }
+    complete_pending(&e.store, e.vault.as_ref(), &e.host_id, &e.ssh).await?;
+    if replacing {
         e.progress.on_step(PushStep::Unpair);
         flush(e.store.clone(), e.vault.clone(), e.http.clone()).await;
     }
@@ -568,6 +604,37 @@ pub(crate) async fn enable(e: Enable) -> Result<PushPairing, CoreError> {
     e.progress.on_step(PushStep::Test);
     test(&e.ssh).await?;
     Ok(PushPairing { relay_url })
+}
+
+/// Resumes a prepared change after any interruption, including an unknown
+/// Host commit result. The Host's commit is idempotent for the saved token.
+pub(crate) async fn complete_pending(
+    store: &Store,
+    vault: &dyn KeyVault,
+    host: &str,
+    ssh: &Ssh,
+) -> Result<Option<String>, CoreError> {
+    let Some(pending) = read_stored_at(pending_path(store, host))? else {
+        return Ok(None);
+    };
+    let secrets = open_secrets(vault, &pending.sealed)?;
+    let commit = serde_json::to_vec(
+        &serde_json::json!({"token": secrets.token, "relay_url": pending.relay_url}),
+    )
+    .expect("commit json");
+    beacon(ssh, "pair-commit", &commit)
+        .await
+        .map_err(|d| failed(PushStep::Pair, d))?;
+    if let Some(old) = read_stored(store, host)? {
+        with_queue(store, |q| {
+            q.push(Revocation {
+                relay_url: old.relay_url,
+                sealed: old.sealed,
+            })
+        })?;
+    }
+    std::fs::rename(pending_path(store, host), pairing_path(store, host)).map_err(storage)?;
+    Ok(Some(pending.relay_url))
 }
 
 pub(crate) async fn test(ssh: &Ssh) -> Result<(), CoreError> {
@@ -613,7 +680,7 @@ pub(crate) async fn disable(
     vault: Arc<dyn KeyVault>,
     client: Arc<dyn HttpClient>,
 ) -> Result<PushDisable, CoreError> {
-    if let Some(p) = pairing_of(&store, vault.as_ref(), &host_id)? {
+    for p in pairings_of(&store, vault.as_ref(), &host_id)? {
         revoke(&client, &p.relay_url, &p.token)
             .await
             .map_err(|d| failed(PushStep::Unpair, d))?;
@@ -749,15 +816,16 @@ fn write_queue(store: &Store, queue: &[Revocation]) -> Result<(), CoreError> {
 /// Moves `host_id`'s pairing (if any) to the revocation queue and forgets
 /// it locally. No network and no vault: Host and Beacon removal call this.
 pub(crate) fn queue_revocation(store: &Store, host_id: &str) -> Result<(), CoreError> {
-    let Some(s) = read_stored(store, host_id)? else {
-        return Ok(());
-    };
-    with_queue(store, |queue| {
-        queue.push(Revocation {
-            relay_url: s.relay_url,
-            sealed: s.sealed,
-        })
-    })?;
+    for path in [pairing_path(store, host_id), pending_path(store, host_id)] {
+        if let Some(s) = read_stored_at(path)? {
+            with_queue(store, |queue| {
+                queue.push(Revocation {
+                    relay_url: s.relay_url,
+                    sealed: s.sealed,
+                })
+            })?;
+        }
+    }
     forget(store, host_id)
 }
 

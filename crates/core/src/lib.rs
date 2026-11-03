@@ -783,7 +783,12 @@ impl AriesCore {
     /// Has the paired Beacon send another test notification.
     pub async fn send_test_push(&self, host_id: String) -> Result<(), CoreError> {
         let ssh = self.beacon_ssh(&host_id)?;
-        on_runtime(async move { push::test(&ssh).await }).await
+        let (store, vault) = (self.store.clone(), self.vault.clone());
+        on_runtime(async move {
+            push::complete_pending(&store, vault.as_ref(), &host_id, &ssh).await?;
+            push::test(&ssh).await
+        })
+        .await
     }
 
     /// Which Agent statuses (and subagent Calls) the Host's Beacon pushes.
@@ -829,10 +834,8 @@ impl AriesCore {
         let paired = self
             .hosts()
             .into_iter()
-            .filter_map(|h| {
-                push::pairing_of(&self.store, self.vault.as_ref(), &h.id)
-                    .ok()
-                    .flatten()
+            .flat_map(|h| {
+                push::pairings_of(&self.store, self.vault.as_ref(), &h.id).unwrap_or_default()
             })
             .collect();
         on_runtime(push::update_token(paired, device, http)).await
@@ -853,11 +856,11 @@ impl AriesCore {
     /// Works while the phone is locked. Rejects tampered envelopes, unknown
     /// versions and envelopes from no paired Host.
     pub fn open_push(&self, envelope: Vec<u8>) -> Result<PushNotice, CoreError> {
-        let paired = self.hosts().into_iter().filter_map(|h| {
-            push::pairing_of(&self.store, self.vault.as_ref(), &h.id)
-                .ok()
-                .flatten()
-                .map(|p| (h.id, h.name, p))
+        let paired = self.hosts().into_iter().flat_map(|h| {
+            push::pairings_of(&self.store, self.vault.as_ref(), &h.id)
+                .unwrap_or_default()
+                .into_iter()
+                .map(move |p| (h.id.clone(), h.name.clone(), p))
         });
         push::open(&envelope, paired)
     }
