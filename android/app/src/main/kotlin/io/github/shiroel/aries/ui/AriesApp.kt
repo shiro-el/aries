@@ -124,7 +124,6 @@ private fun AriesContent(model: HostsModel, settings: ThemeSettings) {
                                 onBack = model::back,
                                 onOpen = { model.openAgent(s.board, it) },
                                 onPin = { entry, pinned -> model.pin(s.board, entry, pinned) },
-                                onTerminal = { model.openTerminal(it.terminal) },
                             )
                         }
                         is Screen.Chat -> {

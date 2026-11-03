@@ -142,7 +142,7 @@ private fun consoleBack(model: HostsModel): (() -> Unit)? = when (val screen = m
     Screen.Hosts -> null
     is Screen.Terminal -> model::closeTerminal
     is Screen.Chat -> model::closeChat
-    is Screen.Agents -> if (screen.board.openKey != null) screen.board::closeDetail else null
+    is Screen.Agents -> null
     is Screen.Browse -> if (screen.browser.openSpaceId != null) screen.browser::closeSpace else null
     else -> model::back
 }
@@ -152,6 +152,11 @@ private fun ConsoleDrawer(model: HostsModel, navigate: (() -> Unit) -> Unit) {
     val agents = model.drawerAgents
     val waiting = agents.count { isWaiting(it.terminal.agentStatus) }
     val current = model.screen
+    val currentAgent = when (current) {
+        is Screen.Terminal -> current.viewer.link?.host?.id?.let { AgentKey(it, current.viewer.terminal.address) }
+        is Screen.Chat -> AgentKey(current.chat.host.id, current.chat.terminal.address)
+        else -> null
+    }
     val hostId = when (current) {
         is Screen.Browse -> current.browser.host.id
         is Screen.Connecting -> current.host.id
@@ -165,7 +170,7 @@ private fun ConsoleDrawer(model: HostsModel, navigate: (() -> Unit) -> Unit) {
             }
             HorizontalDivider()
             DrawerRow(
-                stringResource(R.string.agents_button), current is Screen.Agents && current.board.openKey == null,
+                stringResource(R.string.agents_button), current is Screen.Agents,
                 onClick = { navigate(model::openAgents) },
             ) {
                 Text(stringResource(R.string.console_agents_waiting, waiting), fontSize = 12.sp,
@@ -181,7 +186,7 @@ private fun ConsoleDrawer(model: HostsModel, navigate: (() -> Unit) -> Unit) {
             children.forEachIndexed { index, entry ->
                 item(key = "agent:${entry.key.hostId}\n${entry.key.address}") {
                     DrawerRow(
-                        displayName(entry.terminal), (current as? Screen.Agents)?.board?.openKey == entry.key,
+                        displayName(entry.terminal), currentAgent == entry.key,
                         Modifier.testTag("drawer-agent:${entry.key.hostId}:${entry.key.address}"),
                         guide = stringResource(if (index == children.lastIndex) R.string.console_tree_last else R.string.console_tree_branch),
                         onClick = { navigate { model.openDrawerAgent(entry) } },
