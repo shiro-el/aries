@@ -23,6 +23,11 @@ android {
         ndk { abiFilters += rustAbis() }
     }
 
+    buildTypes {
+        // Debug builds install next to a release (or legacy) Aries on the same device.
+        debug { applicationIdSuffix = ".dev" }
+    }
+
     buildFeatures { compose = true }
 
     compileOptions {
