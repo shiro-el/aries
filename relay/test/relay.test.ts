@@ -29,8 +29,9 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function call(method: string, path: string, opts: { token?: string; json?: unknown; body?: Uint8Array; ip?: string } = {}) {
+function call(method: string, path: string, opts: { token?: string; json?: unknown; body?: Uint8Array; ip?: string; priority?: string } = {}) {
   const headers: Record<string, string> = { "cf-connecting-ip": opts.ip ?? "203.0.113.7" };
+  if (opts.priority) headers["x-aries-priority"] = opts.priority;
   if (opts.token) headers.authorization = `Bearer ${opts.token}`;
   let body: BodyInit | undefined;
   if (opts.json !== undefined) {
@@ -117,6 +118,14 @@ describe("pairing", () => {
 });
 
 describe("delivery", () => {
+  it("allows normal priority for encrypted progress without revealing its content", async () => {
+    const token = await pairPhone();
+    expect((await call("POST", "/v1/push", { token, body: envelope(), priority: "normal" })).status).toBe(202);
+    expect(fcm.sent[0].message.android?.priority).toBe("NORMAL");
+    expect((await call("POST", "/v1/push", { token, body: envelope(), priority: "unknown" })).status).toBe(202);
+    expect(fcm.sent[1].message.android?.priority).toBe("HIGH");
+  });
+
   it("forwards the envelope to the paired device as a high-priority FCM data message", async () => {
     const token = await pairPhone("fcm-device-1");
     const e = envelope();

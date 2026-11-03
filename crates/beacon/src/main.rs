@@ -279,7 +279,8 @@ fn attach(
         };
         let version = reply(0)?["version"].as_str().unwrap_or_default().to_owned();
         let snapshot = reply(1)?;
-        pushes.send(watch.snapshot(&snapshot));
+        let changes = watch.snapshot(&snapshot);
+        pushes.send(changes, watch.watched());
         on_attached(&version);
         // Terminals an event does not describe are read on a second link.
         let mut lookup: Option<CoreLink> = None;
@@ -295,7 +296,16 @@ fn attach(
                     watch.replace(&address, got.as_ref())
                 }
             };
-            pushes.send(changes);
+            // Status events omit status_ms. Read the authoritative timestamp
+            // before handing Working facts to the progress scheduler.
+            if msg["method"] == "event"
+                && msg["params"]["type"] == "status"
+                && let Some(address) = msg["params"]["terminal"].as_str()
+                && let Some(got) = refetch(&mut lookup, address)?
+            {
+                watch.refresh_status_time(address, &got);
+            }
+            pushes.send(changes, watch.watched());
         }
         Ok(())
     })();
