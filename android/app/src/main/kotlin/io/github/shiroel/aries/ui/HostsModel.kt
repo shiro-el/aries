@@ -150,6 +150,7 @@ class HostsModel(
     val calls = CallsModel(core, scope, keyWork)
     /** Chat cache retention and per-Host clearing (ticket 44). */
     val chatCache = ChatCacheModel(core, scope, keyWork)
+    val diagnosticHistory = DiagnosticsModel(core, scope, keyWork)
 
     var key by mutableStateOf<PublicKeyInfo?>(null)
         private set
@@ -178,6 +179,8 @@ class HostsModel(
 
     /** Settings subpages share the drawer destination and own all configuration. */
     var settingsHost by mutableStateOf<Host?>(null)
+        private set
+    var settingsDiagnostics by mutableStateOf(false)
         private set
     var settingsKeys by mutableStateOf(false)
         private set
@@ -730,6 +733,7 @@ class HostsModel(
             hostsChanged()
             settingsHost = null
             settingsKeys = false
+            settingsDiagnostics = false
             screen = Screen.Settings
             flushPushRevocations()
         }
@@ -918,6 +922,7 @@ class HostsModel(
     /** Re-attaches with `resumed` on each new line, so the screen comes back after a network change. */
     private fun observe(link: HostLink, terminal: TerminalInfo, returnTo: Screen, chatDraft: String = "") {
         val viewer = TerminalViewer(terminal)
+        viewer.inputHistory = InputHistoryModel(core, link.host.id, terminal.address)
         viewer.link = link
         if (attachMode == AttachMode.INPUT) viewer.startTyping()
         screen = Screen.Terminal(viewer, returnTo, chatDraft)
@@ -959,7 +964,10 @@ class HostsModel(
                                 for (input in viewer.inputs) {
                                     when (input) {
                                         is TerminalInput.Text -> view.sendText(input.text)
-                                        is TerminalInput.Paste -> view.pasteText(input.text)
+                                        is TerminalInput.Paste -> {
+                                            view.pasteText(input.text)
+                                            viewer.inputHistory?.remember(input.text)
+                                        }
                                         is TerminalInput.Key -> view.sendKey(input.key, input.mods)
                                     }
                                 }
@@ -1325,6 +1333,7 @@ class HostsModel(
         back()
         settingsHost = null
         settingsKeys = false
+        settingsDiagnostics = false
         screen = Screen.Settings
     }
 
@@ -1340,12 +1349,18 @@ class HostsModel(
         settingsKeys = true
     }
 
+    fun openDiagnostics() {
+        openSettings()
+        settingsDiagnostics = true
+    }
+
     fun settingsBack() {
         if (screen is Screen.JumpHosts) {
             screen = Screen.Settings
-        } else if (settingsHost != null || settingsKeys) {
+        } else if (settingsHost != null || settingsKeys || settingsDiagnostics) {
             settingsHost = null
             settingsKeys = false
+            settingsDiagnostics = false
         } else {
             back()
         }

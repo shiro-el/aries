@@ -5,7 +5,17 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
+import io.github.shiroel.aries.security.AppLockGate
+import io.github.shiroel.aries.security.AppLockSession
+import io.github.shiroel.aries.security.DeviceAppUnlock
+import io.github.shiroel.aries.security.LocalAppLock
+import io.github.shiroel.aries.security.applyPrivacy
+import io.github.shiroel.aries.security.setAppLockPrivacy
+import io.github.shiroel.aries.ui.AriesTheme
+import io.github.shiroel.aries.ui.ThemeSettings
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import io.github.shiroel.aries.ui.AriesApp
@@ -18,17 +28,29 @@ import io.github.shiroel.aries.core.CoreException
 
 class MainActivity : ComponentActivity() {
     private val app get() = application as AriesApplication
+    private lateinit var appUnlock: DeviceAppUnlock
+    private lateinit var lockSession: AppLockSession
 
+    @Suppress("DEPRECATION") // Bundle.getParcelable is the API 28-compatible saved Intent reader.
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        // Cold start from a notification or share; re-creations have already handled the intent.
+        app.appLock.foregrounded()
+        app.appLock.applyPrivacy(window)
+        appUnlock = DeviceAppUnlock(this)
+        lockSession = AppLockSession(app.appLock, appUnlock, ::resumeUnlockedUi)
+        // Entry targets wait behind the lock and survive recreation until consumed.
         if (savedInstanceState == null) {
             pushTarget = PushTarget.from(intent)
             tileRequested = isTileIntent(intent)
             savedLaunchTarget = SavedLaunchTarget.from(intent)
             shareIntent = intent
             NotificationGroups.opened(this, intent)
+        } else {
+            pushTarget = PushTarget.from(savedInstanceState.getParcelable<Intent>("pending-push-target"))
+            savedLaunchTarget = SavedLaunchTarget.from(savedInstanceState.getParcelable<Intent>("pending-launch-target"))
+            tileRequested = savedInstanceState.getBoolean("pending-tile-target")
+            shareIntent = savedInstanceState.getParcelable("pending-share-intent")
         }
         val core = app.core
         val push = AndroidPushPlatform(this)
@@ -48,9 +70,20 @@ class MainActivity : ComponentActivity() {
                 )
             }
             LaunchedEffect(guidance) { guidance.checkForUpdate() }
-            AriesApp(model, guidance = guidance, allowNotifications = push::allowNotifications)
+            val settings = remember { ThemeSettings.from(this) }
+            val protectPreviews = app.appLock.enabled && app.appLock.hidePreviews
+            SideEffect { window.setAppLockPrivacy(protectPreviews) }
+            CompositionLocalProvider(LocalAppLock provides lockSession) {
+                AriesTheme(settings) {
+                    AppLockGate(lockSession, onLeave = { moveTaskToBack(true) }) {
+                        AriesApp(model, settings = settings, guidance = guidance, allowNotifications = push::allowNotifications)
+                    }
+                }
+            }
         }
-        network = NetworkWatch(this) { model?.networkChanged() }.also { it.start() }
+        network = NetworkWatch(this) {
+            if (!app.appLock.locked) model?.networkChanged()
+        }.also { it.start() }
     }
 
     /** The screens' model, for network and foreground events. */
@@ -69,7 +102,7 @@ class MainActivity : ComponentActivity() {
 
     private fun openShare() {
         val m = model ?: return
-        if (!resumed) return
+        if (!resumed || app.appLock.locked) return
         val incoming = shareIntent ?: return
         shareIntent = null
         m.receiveShare(incoming)
@@ -105,7 +138,7 @@ class MainActivity : ComponentActivity() {
     /** A target is consumed once; configuration changes and Recents do not rerun a launch. */
     private fun openEntryTarget() {
         val m = model ?: return
-        if (!resumed) return
+        if (!resumed || app.appLock.locked) return
         savedLaunchTarget?.let {
             savedLaunchTarget = null
             m.openSavedLaunch(it.hostId, it.launchId)
@@ -123,13 +156,23 @@ class MainActivity : ComponentActivity() {
         m.start(target)
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putParcelable("pending-push-target", pushTarget?.intent(this))
+        outState.putParcelable("pending-launch-target", savedLaunchTarget?.intent(this))
+        outState.putBoolean("pending-tile-target", tileRequested)
+        outState.putParcelable("pending-share-intent", shareIntent)
+        super.onSaveInstanceState(outState)
+    }
+
     override fun onStart() {
+        app.appLock.foregrounded()
+        app.appLock.applyPrivacy(window)
         super.onStart()
         needsForegroundRefresh = true
     }
 
     private fun resumeModel() {
-        if (!resumed) return
+        if (!resumed || app.appLock.locked) return
         val m = model ?: return
         val explicitSurface = savedLaunchTarget != null || tileRequested
         openShare()
@@ -143,15 +186,27 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         network?.stop()
+        appUnlock.dispose()
         super.onDestroy()
     }
 
     override fun onResume() {
         super.onResume()
-        app.vault.authorizer = BiometricUnlock(this)
         resumed = true
+        resumeUnlockedUi()
+    }
+
+    private fun resumeUnlockedUi() {
+        if (!resumed || app.appLock.locked) return
+        app.appLock.applyPrivacy(window)
+        app.vault.authorizer = BiometricUnlock(this)
         refreshLaunchShortcuts()
         resumeModel()
+    }
+
+    override fun onStop() {
+        if (!isChangingConfigurations) app.appLock.backgrounded()
+        super.onStop()
     }
 
     private fun refreshLaunchShortcuts() {

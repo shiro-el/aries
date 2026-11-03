@@ -65,7 +65,7 @@ private fun ConsoleMark() {
     Image(
         painterResource(if (MaterialTheme.colorScheme.background.luminance() < .5f) R.drawable.mark_light else R.drawable.mark_ink),
         contentDescription = null,
-        modifier = Modifier.padding(end = 8.dp).size(22.dp),
+        modifier = Modifier.padding(end = 8.dp).size(26.dp),
     )
 }
 

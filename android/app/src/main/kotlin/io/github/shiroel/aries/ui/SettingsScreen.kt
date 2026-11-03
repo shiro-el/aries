@@ -66,6 +66,10 @@ fun SettingsScreen(
     terminalDisplay: TerminalDisplaySettings = rememberTerminalDisplaySettings(),
     hostEditor: @Composable (Host) -> Unit = {},
 ) {
+    if (model.settingsDiagnostics) {
+        DiagnosticsScreen(model.diagnosticHistory, model.hosts)
+        return
+    }
     val host = model.settingsHost?.let { selected -> model.hosts.find { it.id == selected.id } }
     if (host != null) {
         HostSettingsScreen(model, host, hostEditor)
@@ -82,6 +86,7 @@ fun SettingsScreen(
         }
         return
     }
+    val readAloud = io.github.shiroel.aries.speech.rememberReadAloud(model)
     Column(Modifier.fillMaxSize()) {
         if (showHeader) {
             Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -133,6 +138,11 @@ fun SettingsScreen(
                 }
             }
             item { SettingsField { ChatCacheSettings(model.chatCache) } }
+            item(key = "app-lock") {
+                io.github.shiroel.aries.security.LocalAppLock.current?.let {
+                    SettingsField { io.github.shiroel.aries.security.AppLockSettings(it) }
+                }
+            }
             item(key = "quiet-hours") { SettingsField { QuietHoursSection() } }
             item {
                 SettingsField(R.string.settings_agent_view) {
@@ -151,10 +161,17 @@ fun SettingsScreen(
                 SettingsField(R.string.terminal_display_title) { TerminalDisplaySection(terminalDisplay) }
             }
             item { SettingsField { io.github.shiroel.aries.dictation.DictationSettings() } }
+            item(key = "read-aloud") { SettingsField { io.github.shiroel.aries.speech.ReadAloudSettings(readAloud) } }
             item(key = "app-guidance") {
                 io.github.shiroel.aries.guidance.LocalAppGuidance.current?.let {
                     io.github.shiroel.aries.guidance.AppGuidanceSettings(it)
                 }
+            }
+            item(key = "diagnostics") {
+                Text(stringResource(R.string.diagnostics_title),
+                    Modifier.fillMaxWidth().testTag("settings-diagnostics").clickable(onClick = model::openDiagnostics).padding(16.dp),
+                    color = MaterialTheme.colorScheme.primary)
+                HorizontalDivider()
             }
         }
     }

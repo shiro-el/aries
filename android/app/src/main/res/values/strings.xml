@@ -5,6 +5,86 @@
   Add every new string to values-ko/strings.xml too (TranslationsTest checks it).
 -->
 <resources>
+    <!-- GitHub Issues and PR conversations (113) -->
+    <string name="github_button">GitHub</string>
+    <string name="github_issues">Issues</string>
+    <string name="github_prs">Pull requests</string>
+    <string name="github_open">Open</string>
+    <string name="github_closed">Closed</string>
+    <string name="github_all">All</string>
+    <string name="github_merged">Merged</string>
+    <string name="github_search_hint">Search text in this repository</string>
+    <string name="github_search_button">Search</string>
+    <string name="github_previous">Previous</string>
+    <string name="github_next">Next</string>
+    <string name="github_page">Page %1$d</string>
+    <string name="github_refresh">Refresh</string>
+    <string name="github_loading">Loading GitHub…</string>
+    <string name="github_empty">No matching issues or pull requests.</string>
+    <string name="github_limited">GitHub search is incomplete or limited to 1,000 results. Narrow your search.</string>
+    <string name="github_item_title">#%1$d · %2$s</string>
+    <string name="github_author_date">%1$s · %2$s</string>
+    <string name="github_deleted_author">Deleted user</string>
+    <string name="github_no_body">No description.</string>
+    <string name="github_comments">Comments</string>
+    <string name="github_no_comments">No comments yet.</string>
+    <string name="github_comment_hint">Write a Markdown comment</string>
+    <string name="github_preview">Preview</string>
+    <string name="github_edit">Edit draft</string>
+    <string name="github_send">Post comment</string>
+    <string name="github_sent">Comment posted.</string>
+    <string name="github_close_issue">Close issue</string>
+    <string name="github_reopen_issue">Reopen issue</string>
+    <string name="github_state_updated">Issue updated.</string>
+    <string name="github_missing">Install GitHub CLI (gh) on this Host, then refresh.</string>
+    <string name="github_auth">Sign in on this Host with gh auth login, then refresh.</string>
+    <string name="github_failed">GitHub could not be loaded. Check this repository’s remote, access permissions, and the Host’s connection, then refresh.</string>
+    <string name="github_disconnected">Reconnect to this Host, then refresh.</string>
+    <string name="github_unknown">The request may have completed. Check GitHub before posting again. Your draft is kept.</string>
+    <string name="github_truncated">This GitHub conversation exceeds the Host’s response limit.</string>
+    <string name="github_draft_failed">The draft could not be saved on this phone. Keep this view open and try editing again.</string>
+    <string name="github_draft_limit">Comments can contain at most 64 KiB of text.</string>
+
+    <!-- App lock (117) -->
+    <string name="app_lock_settings_title">App lock</string>
+    <string name="app_lock_enabled_label">Require authentication</string>
+    <string name="app_lock_settings_hint">Protect app content when returning from the background. Notification actions keep working as before.</string>
+    <string name="app_lock_delay_label">Lock after leaving the app</string>
+    <string name="app_lock_delay_immediate">Immediately</string>
+    <string name="app_lock_delay_one_minute">1 minute</string>
+    <string name="app_lock_delay_five_minutes">5 minutes</string>
+    <string name="app_lock_previews_label">Hide app previews</string>
+    <string name="app_lock_previews_hint">Hide Aries in Recents and block screenshots and screen sharing while app lock is enabled.</string>
+    <string name="app_lock_screen_title">Aries is locked</string>
+    <string name="app_lock_screen_body">Authenticate with biometrics or your device lock to continue.</string>
+    <string name="app_lock_unlock_button">Unlock Aries</string>
+    <string name="app_lock_authenticating">Authenticating…</string>
+    <string name="app_lock_cancelled">Authentication cancelled.</string>
+    <string name="app_lock_failed">Authentication failed. Try again.</string>
+    <string name="app_lock_unavailable">Set up a device PIN, pattern or password in Android settings, then try again.</string>
+    <!-- Chat read aloud (105) -->
+    <string name="read_aloud_title">Read aloud</string>
+    <string name="read_aloud_button">Read</string>
+    <string name="read_aloud_stop">Stop reading</string>
+    <string name="read_aloud_loading">Starting system speech…</string>
+    <string name="read_aloud_unavailable">System speech is unavailable. Check the text-to-speech engine in Android settings.</string>
+    <string name="read_aloud_preparing">Preparing to read…</string>
+    <string name="read_aloud_playing">Reading aloud…</string>
+    <string name="read_aloud_empty">There is no text to read after skipping code blocks.</string>
+    <string name="read_aloud_failed">Could not read aloud. Check the speech engine and try again.</string>
+    <string name="read_aloud_language_unavailable">This language is unavailable. Install its voice in Android text-to-speech settings.</string>
+    <string name="read_aloud_speed">Speed · %1$.2f×</string>
+    <string name="read_aloud_speed_label">Reading speed</string>
+    <string name="read_aloud_voice">Voice · %1$s</string>
+    <string name="read_aloud_default_voice">System default</string>
+    <string name="read_aloud_voice_title">Choose a voice</string>
+    <string name="read_aloud_voice_label">%1$s · %2$s · %3$s</string>
+    <string name="read_aloud_voice_network">Network required</string>
+    <string name="read_aloud_voice_local">On device</string>
+    <string name="read_aloud_preview">Preview voice</string>
+    <string name="read_aloud_sample">Hello. Aries can read Agent responses aloud.</string>
+    <string name="read_aloud_hint">Tap Read on a Chat response to hear it with system speech. Code blocks are skipped. Playback stops when you leave the screen. Korean text uses a Korean voice when available. Network voices may send text to the speech provider.</string>
+
     <!-- Quick open and command palette -->
     <string name="quick_open_title">Quick open</string>
     <string name="quick_open_hint">Search names, or &gt; for commands</string>
@@ -93,6 +173,12 @@
     <string name="files_range">Lines %1$d–%2$d of %3$d</string>
     <string name="files_previous_button">Previous page</string>
     <string name="files_next_button">Next page</string>
+    <!-- Remote image and PDF preview (111) -->
+    <string name="files_pdf_title">PDF page</string>
+    <string name="files_pdf_page">Page %1$d of %2$d</string>
+    <string name="files_preview_open">Open preview</string>
+    <string name="files_preview_too_large">This file exceeds the %1$d MiB preview limit.</string>
+    <string name="files_preview_failed">Could not preview this file. Check the file and connection, then refresh to retry.</string>
     <!-- File code view and Chat links (110) -->
     <string name="files_wrap_lines">Wrap lines</string>
     <string name="files_missing">File not found: %1$s</string>
@@ -296,7 +382,22 @@
     <string name="agent_open_button">Open</string>
     <string name="agent_view_terminal">term</string>
     <string name="agent_view_chat">chat</string>
+    <!-- Terminal and Chat input history (108) -->
+    <string name="input_history_title">Input history</string>
+    <string name="input_history_hint">Recent inputs on this phone. Select one to edit before sending.</string>
+    <string name="input_history_empty">No input history yet.</string>
+    <string name="input_history_clear_button">Clear history</string>
+    <string name="input_history_failed">Could not read or save input history.</string>
+
     <string name="chat_title">Chat: %1$s</string>
+    <!-- Chat search -->
+    <string name="chat_search_button">Search Chat</string>
+    <string name="chat_search_hint">Search cached Chat</string>
+    <string name="chat_search_count">%1$d of %2$d matches</string>
+    <string name="chat_search_previous">Previous</string>
+    <string name="chat_search_next">Next</string>
+    <string name="chat_search_close">Close search</string>
+
     <!-- Chat reading position -->
     <string name="chat_latest_button">Latest</string>
     <string name="chat_latest_count_button">Latest (%1$d)</string>
@@ -690,6 +791,56 @@
 
     <!-- Console appearance settings -->
     <string name="settings_title">Settings</string>
+    <!-- Local diagnostics -->
+    <string name="diagnostics_title">Diagnostics</string>
+    <string name="diagnostics_retention">Up to 500 local events. Errors use categories; credentials and message contents are excluded. Copy and export include the current filter.</string>
+    <string name="diagnostics_all">All</string>
+    <string name="diagnostics_all_hosts">All Hosts</string>
+    <string name="diagnostics_failures">Failures only</string>
+    <string name="diagnostics_refresh">Refresh</string>
+    <string name="diagnostics_copy">Copy</string>
+    <string name="diagnostics_export">Export</string>
+    <string name="diagnostics_copied">Copied filtered history.</string>
+    <string name="diagnostics_export_failed">Could not export history.</string>
+    <string name="diagnostics_read_failed">Could not read history. Try refreshing.</string>
+    <string name="diagnostics_empty">No matching events.</string>
+    <string name="diagnostics_unknown_host">Device / unknown Host</string>
+    <string name="diagnostics_success">Success</string>
+    <string name="diagnostics_ssh">SSH</string>
+    <string name="diagnostics_beacon">Beacon</string>
+    <string name="diagnostics_relay">Relay</string>
+    <string name="diagnostics_push">Push</string>
+    <string name="diagnostics_connect">Connect</string>
+    <string name="diagnostics_beacon_install">Install Beacon</string>
+    <string name="diagnostics_beacon_status">Beacon status</string>
+    <string name="diagnostics_beacon_check">Check / update Beacon</string>
+    <string name="diagnostics_beacon_remove">Remove Beacon</string>
+    <string name="diagnostics_push_enable">Enable push</string>
+    <string name="diagnostics_push_disable">Disable push</string>
+    <string name="diagnostics_push_test">Test push</string>
+    <string name="diagnostics_relay_request">Relay request</string>
+    <string name="diagnostics_push_receive">Receive push</string>
+    <string name="diagnostics_error_key">Key unavailable or locked</string>
+    <string name="diagnostics_error_untrusted">Host key needs confirmation</string>
+    <string name="diagnostics_error_changed">Host key changed</string>
+    <string name="diagnostics_error_auth">Authentication rejected</string>
+    <string name="diagnostics_error_unreachable">Connection failed</string>
+    <string name="diagnostics_error_incompatible">Incompatible herdr-core</string>
+    <string name="diagnostics_error_protocol">Protocol / RPC failure</string>
+    <string name="diagnostics_error_closed">Connection closed</string>
+    <string name="diagnostics_error_storage">Local storage failed</string>
+    <string name="diagnostics_error_host">Host unavailable</string>
+    <string name="diagnostics_error_beacon">Beacon unavailable</string>
+    <string name="diagnostics_error_download">Beacon download failed</string>
+    <string name="diagnostics_error_checksum">Beacon checksum mismatch</string>
+    <string name="diagnostics_error_operation">Beacon operation failed</string>
+    <string name="diagnostics_error_register">Relay registration failed</string>
+    <string name="diagnostics_error_revoke">Relay removal failed</string>
+    <string name="diagnostics_error_push">Push rejected</string>
+    <string name="diagnostics_error_http">Relay HTTP failure</string>
+    <string name="diagnostics_http">%1$s · HTTP %2$d</string>
+    <string name="diagnostics_entry">%1$s · %2$s\n%3$s · %4$s · %5$s</string>
+
     <string name="theme_title">Theme</string>
     <string name="theme_system">System</string>
     <string name="theme_light">Light</string>

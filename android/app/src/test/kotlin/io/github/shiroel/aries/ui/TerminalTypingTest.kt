@@ -14,6 +14,8 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToKey
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -78,6 +80,39 @@ class TerminalTypingTest {
 
     private fun desktopFrame(view: FakeTerminalView) =
         view.push(TerminalUpdate.Screen(ScreenFrame(200u, 120u, true, emptyList(), null, null, 0u, 0u)))
+
+    @Test
+    fun composerHistoryRestoresTheDraftWithoutSendingAndIsSharedWithChat() {
+        val core = FakeCore()
+        open(core)
+        val host = core.hosts().single()
+        compose.onNodeWithText(str(R.string.agent_view_chat)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).performTextReplacement("from Chat\n한국어")
+        compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
+        compose.onNodeWithText(str(R.string.agent_view_terminal)).performClick()
+        compose.onNodeWithText(str(R.string.terminal_compose_button)).performClick()
+        compose.onNodeWithText("Input history").performClick()
+        compose.onNodeWithText("from Chat\n한국어").performClick()
+        compose.onNodeWithTag("terminal-composer").performTextReplacement("edited command")
+        compose.runOnIdle { assertTrue(core.connection!!.views.all { it.sent.isEmpty() }) }
+        compose.onNodeWithText(str(R.string.terminal_composer_send_button)).performClick()
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals(listOf("paste:edited command"), core.connection!!.views.last().sent)
+            assertEquals(listOf("edited command", "from Chat\n한국어"), core.inputHistory(host.id, "t1"))
+        }
+        compose.onNodeWithText(str(R.string.agent_view_chat)).performClick()
+        compose.onNodeWithText("Input history").performClick()
+        compose.onNodeWithText("edited command").performClick()
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("edited command")
+        assertEquals(listOf("t1" to "from Chat\n한국어"), core.connection!!.typed)
+        compose.onNodeWithText("Input history").performClick()
+        compose.onNodeWithText("Clear history").performClick()
+        compose.onNodeWithText("No input history yet.").assertExists()
+        compose.onNodeWithText(str(R.string.cancel_button)).performClick()
+        compose.runOnIdle { assertTrue(core.inputHistory(host.id, "t1").isEmpty()) }
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("edited command")
+    }
 
     @Test
     fun focusingTheInputReattachesForTypingAtThePhonesSize() {

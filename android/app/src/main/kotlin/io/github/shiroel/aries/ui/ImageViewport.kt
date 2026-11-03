@@ -21,9 +21,12 @@ import io.github.shiroel.aries.R
 import kotlin.math.roundToInt
 
 @Composable
-internal fun ImageViewport(bitmap: ImageBitmap, modifier: Modifier = Modifier) {
+internal fun ImageViewport(
+    bitmap: ImageBitmap,
+    modifier: Modifier = Modifier,
+    description: String = stringResource(R.string.image_viewer_title),
+) {
     val view = remember(bitmap) { ImageViewportState(bitmap.width, bitmap.height) }
-    val description = stringResource(R.string.image_viewer_title)
     val zoom = stringResource(R.string.image_viewer_zoom, (view.scale * 100).roundToInt())
     val zoomIn = stringResource(R.string.image_viewer_zoom_in)
     val zoomOut = stringResource(R.string.image_viewer_zoom_out)
