@@ -23,6 +23,11 @@
     <string name="files_range">전체 %3$d행 중 %1$d–%2$d행</string>
     <string name="files_previous_button">이전 페이지</string>
     <string name="files_next_button">다음 페이지</string>
+    <!-- File code view and Chat links (110) -->
+    <string name="files_wrap_lines">자동 줄바꿈</string>
+    <string name="files_missing">파일을 찾을 수 없습니다: %1$s</string>
+    <string name="files_line_unavailable">이 파일에 %1$d줄이 더 이상 없습니다. 처음부터 표시합니다.</string>
+    <string name="files_no_folder">이 Terminal의 현재 폴더가 없습니다. 파일의 절대 경로를 사용하세요.</string>
     <!-- Git changes (ticket 89) -->
     <string name="git_changes_button">변경</string>
     <string name="git_changes_title">Git 변경 · 읽기 전용</string>
