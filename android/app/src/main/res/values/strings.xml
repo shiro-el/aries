@@ -462,6 +462,18 @@
     <string name="beacon_macos_login_limit">On macOS the Beacon runs only while you are logged in to the Mac.</string>
 
     <string name="key_default_label">Default key</string>
+    <!-- SSH key import -->
+    <string name="key_import_button">Import existing key</string>
+    <string name="key_import_title">Import SSH private key</string>
+    <string name="key_import_hint">Choose a file or paste an OpenSSH ed25519, RSA or ECDSA private key (up to 64 KiB). Its passphrase is used once and is not saved. The imported key uses the same biometric setting as your other keys. Select additional keys in the Host’s SSH route settings.</string>
+    <string name="key_import_file_button">Choose key file</string>
+    <string name="key_import_private_label">Private key</string>
+    <string name="key_import_passphrase_label">Passphrase (if encrypted)</string>
+    <string name="key_import_busy">Importing…</string>
+    <string name="key_import_invalid">Could not import the key. Check the private key format and passphrase, then try again.</string>
+    <string name="key_import_file_error">Could not read the key file. Choose a readable text file no larger than 64 KiB.</string>
+    <string name="key_import_too_large">The private key must be no larger than 64 KiB.</string>
+
     <string name="keys_title">Other SSH keys</string>
     <string name="key_new_label">Label for a new key</string>
     <string name="key_new_button">Create another key</string>
