@@ -139,6 +139,18 @@ async fn corrupt_host_download_is_refused_and_a_retry_can_install() {
         core.herdr_core_status(id.clone()).await.unwrap(),
         HerdrCoreState::Missing
     );
+    let failures = core
+        .diagnostics(
+            Some(aries_core::DiagnosticSource::Ssh),
+            Some(id.clone()),
+            true,
+        )
+        .unwrap();
+    assert_eq!(failures[0].event, aries_core::DiagnosticEvent::HerdrInstall);
+    assert_eq!(
+        failures[0].error,
+        Some(aries_core::DiagnosticError::HerdrChecksum)
+    );
     let out = std::process::Command::new("docker")
         .args([
             "exec",

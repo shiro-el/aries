@@ -611,6 +611,10 @@
     <string name="connect_protocol">The Host did not speak the herdr-core protocol: %1$s</string>
     <string name="connect_other">%1$s</string>
     <!-- Herdr Core installation -->
+    <string name="herdr_diagnostics_install">Herdr Core installation</string>
+    <string name="herdr_diagnostics_status">Herdr Core status</string>
+    <string name="herdr_diagnostics_failed">Herdr Core installation failed</string>
+    <string name="herdr_diagnostics_checksum">Herdr Core checksum mismatch</string>
     <string name="herdr_install_title">Herdr Core</string>
     <string name="herdr_install_missing">herdr-core is missing on this Host.</string>
     <string name="herdr_install_version">herdr-core %1$s</string>

@@ -907,8 +907,18 @@ impl AriesCore {
 #[uniffi::export]
 impl AriesCore {
     pub async fn herdr_core_status(&self, host_id: String) -> Result<HerdrCoreState, CoreError> {
-        let ssh = self.beacon_ssh(&host_id)?;
-        on_runtime(async move { herdr_install::status(&ssh).await }).await
+        let known_id = self.saved_host(&host_id).ok().map(|host| host.id);
+        let result = async {
+            let ssh = self.beacon_ssh(&host_id)?;
+            on_runtime(async move { herdr_install::status(&ssh).await }).await
+        }
+        .await;
+        self.diagnostics.outcome(
+            known_id.as_deref(),
+            DiagnosticSource::Ssh,
+            DiagnosticEvent::HerdrStatus,
+            result,
+        )
     }
 
     pub async fn install_herdr_core(
@@ -917,10 +927,22 @@ impl AriesCore {
         fetcher: Arc<dyn BeaconFetcher>,
         listener: Arc<dyn HerdrInstallListener>,
     ) -> Result<HerdrCoreState, CoreError> {
-        let ssh = self.beacon_ssh(&host_id)?;
-        let release = self.herdr_release.lock().expect("release lock").clone();
-        on_runtime(async move { herdr_install::install(&ssh, &release, fetcher, listener).await })
+        let known_id = self.saved_host(&host_id).ok().map(|host| host.id);
+        let result = async {
+            let ssh = self.beacon_ssh(&host_id)?;
+            let release = self.herdr_release.lock().expect("release lock").clone();
+            on_runtime(
+                async move { herdr_install::install(&ssh, &release, fetcher, listener).await },
+            )
             .await
+        }
+        .await;
+        self.diagnostics.outcome(
+            known_id.as_deref(),
+            DiagnosticSource::Ssh,
+            DiagnosticEvent::HerdrInstall,
+            result,
+        )
     }
 }
 

@@ -21,6 +21,8 @@ pub enum DiagnosticSource {
 pub enum DiagnosticEvent {
     Connect,
     BeaconInstall,
+    HerdrInstall,
+    HerdrStatus,
     BeaconStatus,
     BeaconCheck,
     BeaconRemove,
@@ -45,6 +47,8 @@ pub enum DiagnosticError {
     HostUnavailable,
     BeaconUnavailable,
     BeaconDownload,
+    HerdrInstall,
+    HerdrChecksum,
     BeaconChecksum,
     BeaconOperation,
     RelayRegistration,
@@ -210,6 +214,8 @@ pub(crate) fn category(error: &CoreError) -> DiagnosticError {
         | C::UnsupportedHost { .. }
         | C::BeaconUnavailable { .. } => D::BeaconUnavailable,
         C::BeaconDownload { .. } => D::BeaconDownload,
+        C::HerdrInstall { .. } => D::HerdrInstall,
+        C::HerdrChecksum { .. } => D::HerdrChecksum,
         C::BeaconChecksum { .. } => D::BeaconChecksum,
         C::BeaconStep { .. } | C::KeyInstallFailed { .. } | C::AnswerRefused { .. } => {
             D::BeaconOperation

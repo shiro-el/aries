@@ -154,6 +154,8 @@ private fun DiagnosticSource.label(): Int = when (this) {
 }
 
 private fun DiagnosticEvent.label(): Int = when (this) {
+    DiagnosticEvent.HERDR_INSTALL -> R.string.herdr_diagnostics_install
+    DiagnosticEvent.HERDR_STATUS -> R.string.herdr_diagnostics_status
     DiagnosticEvent.CONNECT -> R.string.diagnostics_connect
     DiagnosticEvent.BEACON_INSTALL -> R.string.diagnostics_beacon_install
     DiagnosticEvent.BEACON_STATUS -> R.string.diagnostics_beacon_status
@@ -167,6 +169,8 @@ private fun DiagnosticEvent.label(): Int = when (this) {
 }
 
 private fun DiagnosticError.label(): Int = when (this) {
+    DiagnosticError.HERDR_INSTALL -> R.string.herdr_diagnostics_failed
+    DiagnosticError.HERDR_CHECKSUM -> R.string.herdr_diagnostics_checksum
     DiagnosticError.KEY_UNAVAILABLE -> R.string.diagnostics_error_key
     DiagnosticError.HOST_KEY_UNTRUSTED -> R.string.diagnostics_error_untrusted
     DiagnosticError.HOST_KEY_CHANGED -> R.string.diagnostics_error_changed
