@@ -3,7 +3,18 @@ package io.github.shiroel.aries.ui
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.foundation.background
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.sp
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -44,7 +55,7 @@ internal fun ConsoleChoice(selected: Boolean, onClick: () -> Unit, modifier: Mod
         }) { label() }
 }
 
-/** Two-line row: only the name and location flex; metadata keeps fixed columns. */
+/** Parents retain context; descendants read as one compact program/name/status line. */
 @Composable
 internal fun ConsoleTerminalRow(
     terminal: TerminalInfo,
@@ -52,6 +63,9 @@ internal fun ConsoleTerminalRow(
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
     spaceName: String? = null,
+    tabName: String? = null,
+    compact: Boolean = false,
+    selected: Boolean = false,
     onLongClick: (() -> Unit)? = null,
     trailing: @Composable RowScope.() -> Unit = {},
 ) {
@@ -61,25 +75,45 @@ internal fun ConsoleTerminalRow(
     val spokenName = stringResource(R.string.console_agent_accessibility, displayName(terminal), location)
     val description = status?.let { stringResource(agentStatusLabel(it)) } ?: terminal.state
     val folder = stringResource(R.string.console_agent_location, host, terminal.currentCwd ?: terminal.address)
-    val sub = listOfNotNull(spaceName, if (waiting) statusMessage(status)?.takeIf { it.isNotBlank() } ?: description else folder)
-        .joinToString(" · ")
+    val sub = listOfNotNull(spaceName, tabName,
+        if (waiting) statusMessage(status)?.takeIf { it.isNotBlank() } ?: description else folder).joinToString(" · ")
     val density = androidx.compose.ui.platform.LocalDensity.current
     val kindWidth = (48 * density.fontScale).dp
     val ageWidth = (56 * density.fontScale).dp
     val titleHeight = with(density) { MaterialTheme.typography.bodyMedium.lineHeight.toDp() }
     val actionsLabel = stringResource(R.string.terminals_actions_label)
-    Column(modifier.fillMaxWidth().combinedClickable(onClick = onOpen, onLongClick = onLongClick, onLongClickLabel = actionsLabel).semantics {
-        contentDescription = spokenName
-        stateDescription = description
-    }) {
-        Row(verticalAlignment = Alignment.Top) {
+    val interactions = remember { MutableInteractionSource() }
+    val hovered by interactions.collectIsHoveredAsState()
+    val background = when {
+        selected -> MaterialTheme.colorScheme.secondaryContainer
+        hovered -> MaterialTheme.colorScheme.surfaceContainerHigh
+        else -> androidx.compose.ui.graphics.Color.Transparent
+    }
+    val rowModifier = modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(background)
+        .hoverable(interactions).combinedClickable(onClick = onOpen, onLongClick = onLongClick, onLongClickLabel = actionsLabel)
+        .semantics {
+            contentDescription = spokenName
+            stateDescription = description
+            this.selected = selected
+        }
+    if (compact) {
+        Row(rowModifier.heightIn(min = 26.dp).padding(horizontal = 8.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ProgramMark(terminal, Modifier.size(14.dp))
+            Text(displayName(terminal), Modifier.weight(1f), fontSize = 12.5.sp, lineHeight = 18.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            trailing()
+            if (status != null) AgentStatusMark(status, Modifier.size(20.dp)) else TerminalMark()
+        }
+    } else {
+        Row(rowModifier, verticalAlignment = Alignment.Top) {
             Row(
                 Modifier.weight(1f).heightIn(min = 48.dp).padding(start = 8.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.Top,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Box(Modifier.height(titleHeight), contentAlignment = Alignment.Center) {
-                    if (status != null) AgentStatusMark(status) else TerminalMark()
+                    ProgramMark(terminal, Modifier.size(16.dp))
                 }
                 Column(Modifier.weight(1f)) {
                     Text(displayName(terminal), style = MaterialTheme.typography.bodyMedium,
@@ -88,7 +122,7 @@ internal fun ConsoleTerminalRow(
                         Text(sub, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
                             color = if (waiting) statusColor(AgentStatus.Blocked(null, null)) else MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Box(Modifier.width(kindWidth), contentAlignment = Alignment.CenterStart) {
+                        if (tabName == null) Box(Modifier.width(kindWidth), contentAlignment = Alignment.CenterStart) {
                             Text(terminal.currentProgram.orEmpty(), Modifier.testTag("terminal-kind:${terminal.address}"),
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -99,9 +133,11 @@ internal fun ConsoleTerminalRow(
                     }
                 }
             }
-            trailing()
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                trailing()
+                if (status != null) AgentStatusMark(status)
+            }
         }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     }
 }
 
@@ -113,5 +149,25 @@ private fun TerminalMark() {
         val u = size.width / 16f
         drawLine(color, Offset(3*u, 4*u), Offset(7*u, 8*u), 1.75f*u, StrokeCap.Square)
         drawLine(color, Offset(7*u, 8*u), Offset(3*u, 12*u), 1.75f*u, StrokeCap.Square)
+    }
+}
+
+/** Program artwork is decorative: the row already announces its Terminal identity. */
+@Composable
+private fun ProgramMark(terminal: TerminalInfo, modifier: Modifier) {
+    val icon = when (terminal.currentProgram?.lowercase()) {
+        "claude" -> R.drawable.program_claude
+        "codex" -> R.drawable.program_codex
+        else -> null
+    }
+    if (icon != null) Icon(painterResource(icon), contentDescription = null, modifier = modifier,
+        tint = androidx.compose.ui.graphics.Color.Unspecified)
+    else Box(modifier, contentAlignment = Alignment.Center) { TerminalMark() }
+}
+
+@Composable
+internal fun TreeBackButton(onBack: () -> Unit) {
+    IconButton(onClick = onBack) {
+        Icon(painterResource(R.drawable.ic_arrow_left), stringResource(R.string.back_button), Modifier.size(20.dp))
     }
 }

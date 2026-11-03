@@ -332,6 +332,9 @@
 
     <string name="connecting">Connecting to %1$s…</string>
     <string name="terminals_actions_label">Terminal actions</string>
+    <!-- Host Agent list and editing context -->
+    <string name="hosts_layout_context_button">Space and Tab</string>
+    <string name="terminals_plain_group">Terminals (%1$d)</string>
     <string name="terminals_title">Terminals on %1$s</string>
     <string name="terminals_empty">No Terminals are running on this Host.</string>
     <string name="terminal_subtitle">%1$s · %2$s</string>

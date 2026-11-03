@@ -2,8 +2,8 @@ package io.github.shiroel.aries.ui
 
 import android.content.ClipData
 import android.content.ClipboardManager
-import android.content.Context
 import android.content.Intent
+import android.content.res.Resources
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -14,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -62,6 +63,9 @@ class DiagnosticsModel(
 @Composable
 fun DiagnosticsScreen(history: DiagnosticsModel, hosts: List<Host>) {
     val context = LocalContext.current
+    val resources = LocalResources.current
+    val title = stringResource(R.string.diagnostics_title)
+    val exportTitle = stringResource(R.string.diagnostics_export)
     var source by remember { mutableStateOf<DiagnosticSource?>(null) }
     var hostId by remember { mutableStateOf<String?>(null) }
     var failures by remember { mutableStateOf(false) }
@@ -73,10 +77,10 @@ fun DiagnosticsScreen(history: DiagnosticsModel, hosts: List<Host>) {
     }
     val failuresLabel = stringResource(R.string.diagnostics_failures)
     val names = hosts.associate { it.id to it.name }
-    val text = visible.joinToString("\n\n") { diagnosticText(context, it, names) }
+    val text = visible.joinToString("\n\n") { diagnosticText(resources, it, names) }
 
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        Text(stringResource(R.string.diagnostics_title), Modifier.padding(top = 16.dp), style = MaterialTheme.typography.titleMedium)
+        Text(title, Modifier.padding(top = 16.dp), style = MaterialTheme.typography.titleMedium)
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             (listOf(null) + DiagnosticSource.entries).forEach { option ->
                 FilterChip(selected = source == option, onClick = { source = option; notice = 0 },
@@ -107,18 +111,18 @@ fun DiagnosticsScreen(history: DiagnosticsModel, hosts: List<Host>) {
             }
             TextButton(enabled = visible.isNotEmpty(), modifier = Modifier.testTag("diagnostics-copy"), onClick = {
                 context.getSystemService(ClipboardManager::class.java).setPrimaryClip(
-                    ClipData.newPlainText(context.getString(R.string.diagnostics_title), text))
+                    ClipData.newPlainText(title, text))
                 notice = R.string.diagnostics_copied
             }) { Text(stringResource(R.string.diagnostics_copy)) }
             TextButton(enabled = visible.isNotEmpty(), modifier = Modifier.testTag("diagnostics-export"), onClick = {
                 try {
                     val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
-                    context.startActivity(Intent.createChooser(send, context.getString(R.string.diagnostics_export))
+                    context.startActivity(Intent.createChooser(send, exportTitle)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 } catch (_: Exception) {
                     notice = R.string.diagnostics_export_failed
                 }
-            }) { Text(stringResource(R.string.diagnostics_export)) }
+            }) { Text(exportTitle) }
         }
         if (history.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
         if (history.failed) Text(stringResource(R.string.diagnostics_read_failed), color = MaterialTheme.colorScheme.error)
@@ -127,7 +131,7 @@ fun DiagnosticsScreen(history: DiagnosticsModel, hosts: List<Host>) {
         if (visible.isEmpty() && !history.loading) Text(stringResource(R.string.diagnostics_empty), Modifier.padding(vertical = 16.dp))
         LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
             items(visible) { entry ->
-                Text(diagnosticText(context, entry, names), Modifier.fillMaxWidth().testTag("diagnostic-entry").padding(vertical = 12.dp),
+                Text(diagnosticText(resources, entry, names), Modifier.fillMaxWidth().testTag("diagnostic-entry").padding(vertical = 12.dp),
                     style = MaterialTheme.typography.bodySmall)
                 HorizontalDivider()
             }
@@ -135,17 +139,17 @@ fun DiagnosticsScreen(history: DiagnosticsModel, hosts: List<Host>) {
     }
 }
 
-private fun diagnosticText(context: Context, entry: DiagnosticEntry, names: Map<String, String>): String {
+private fun diagnosticText(resources: Resources, entry: DiagnosticEntry, names: Map<String, String>): String {
     val time = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM).withZone(ZoneId.systemDefault())
         .format(Instant.ofEpochMilli(entry.timestampMs.toLong()))
-    val host = entry.hostId?.let { names[it] } ?: context.getString(R.string.diagnostics_unknown_host)
+    val host = entry.hostId?.let { names[it] } ?: resources.getString(R.string.diagnostics_unknown_host)
     val resultLabel = if (entry.event == DiagnosticEvent.PUSH_VERIFICATION && entry.httpStatus == 202.toUShort() && entry.error == null) {
         R.string.push_verification_pending
     } else entry.error?.label() ?: R.string.diagnostics_success
-    val result = context.getString(resultLabel)
-    val outcome = entry.httpStatus?.let { context.getString(R.string.diagnostics_http, result, it.toInt()) } ?: result
-    return context.getString(R.string.diagnostics_entry, time, host, context.getString(entry.source.label()),
-        context.getString(entry.event.label()), outcome)
+    val result = resources.getString(resultLabel)
+    val outcome = entry.httpStatus?.let { resources.getString(R.string.diagnostics_http, result, it.toInt()) } ?: result
+    return resources.getString(R.string.diagnostics_entry, time, host, resources.getString(entry.source.label()),
+        resources.getString(entry.event.label()), outcome)
 }
 
 private fun DiagnosticSource.label(): Int = when (this) {

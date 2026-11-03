@@ -333,6 +333,9 @@
 
     <string name="connecting">%1$s에 연결 중…</string>
     <string name="terminals_actions_label">Terminal 메뉴</string>
+    <!-- Host Agent list and editing context -->
+    <string name="hosts_layout_context_button">Space·Tab</string>
+    <string name="terminals_plain_group">Terminal (%1$d)</string>
     <string name="terminals_title">%1$s의 Terminal</string>
     <string name="terminals_empty">이 Host에서 실행 중인 Terminal이 없어요.</string>
     <string name="terminal_subtitle">%1$s · %2$s</string>
