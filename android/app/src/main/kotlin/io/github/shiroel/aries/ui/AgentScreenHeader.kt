@@ -77,17 +77,8 @@ internal fun AgentScreenHeader(
     HorizontalDivider()
 }
 
-/** Ticket 03 replaces this single temporary renderer with its accessible shared mark. */
+/** Same mark as the Agents list, Browse and drawer. */
 @Composable
 internal fun AgentMetaStatusMark(status: AgentStatus) {
-    val glyph = when (status) {
-        AgentStatus.Working -> ">_"
-        is AgentStatus.Blocked -> "?"
-        is AgentStatus.Error -> "!"
-        AgentStatus.Done -> "✓"
-        AgentStatus.Idle -> "-"
-    }
-    val label = stringResource(agentStatusLabel(status))
-    Text(glyph, Modifier.semantics { contentDescription = label }, color = statusColor(status),
-        fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+    AgentStatusMark(status)
 }
