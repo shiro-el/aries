@@ -125,7 +125,7 @@ class ChatModel(
         val snap = snapshot ?: return QuestionMode.ReadOnly
         if (snap.status != ChatStatus.LIVE) return QuestionMode.ReadOnly
         val entries = snap.entries
-        val pending = entries.drop(entries.indexOfLast { it.body is ChatEntryBody.User } + 1)
+        val pending = entries.drop(entries.indexOfLast { (it.body as? ChatEntryBody.User)?.queued == false } + 1)
             .filter { (it.body as? ChatEntryBody.Question)?.status == ChatToolStatus.RUNNING }
         val blocked = terminal.agentStatus as? AgentStatus.Blocked
         if (blocked?.reason == BlockedReason.QUESTION) {
@@ -136,7 +136,7 @@ class ChatModel(
         }
         if (blocked != null || terminal.state != "live") return QuestionMode.ReadOnly
         val latestIndex = entries.indexOfLast { it.body is ChatEntryBody.Question }
-        if (latestIndex < entries.indexOfLast { it.body is ChatEntryBody.User }) return QuestionMode.ReadOnly
+        if (latestIndex < entries.indexOfLast { (it.body as? ChatEntryBody.User)?.queued == false }) return QuestionMode.ReadOnly
         val latest = entries.getOrNull(latestIndex)
         return if (latest?.id == id && (latest.body as ChatEntryBody.Question).status == ChatToolStatus.RUNNING)
             QuestionMode.History else QuestionMode.ReadOnly
@@ -656,7 +656,7 @@ private fun ChatEntryView(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
-                    stringResource(R.string.chat_you),
+                    stringResource(if (b.queued) R.string.chat_user_queued else R.string.chat_you),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary,
                 )

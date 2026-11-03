@@ -442,6 +442,7 @@
     <string name="chat_status_no_core">The Beacon cannot reach herdr-core on this Host. Retrying…</string>
     <string name="chat_status_incompatible">The Beacon on this Host is newer than this app. Update Aries to read the Chat.</string>
     <string name="chat_you">You</string>
+    <string name="chat_user_queued">You · Waiting</string>
     <!-- Chat Markdown code blocks (94) -->
     <string name="chat_code_label">Code</string>
     <string name="chat_code_copy_button">Copy code</string>

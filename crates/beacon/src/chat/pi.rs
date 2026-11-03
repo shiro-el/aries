@@ -187,7 +187,14 @@ impl PiInterpreter {
                 if text.trim().is_empty() && images.is_empty() {
                     return Vec::new();
                 }
-                vec![item(id.to_owned(), ChatBody::User { text, images })]
+                vec![item(
+                    id.to_owned(),
+                    ChatBody::User {
+                        text,
+                        images,
+                        queued: false,
+                    },
+                )]
             }
             Some("assistant") => self.assistant(id, message, parent, item),
             Some("toolResult") => self
