@@ -25,13 +25,13 @@ class PushNotificationTest {
     private val manager = context.getSystemService(NotificationManager::class.java)
 
     private fun status(terminal: String, name: String?, status: AgentStatus) =
-        PushNotice("h1", "box", PushContent.Status(terminal, name, null, true, status, 1uL))
+        PushNotice("h1", "box", PushContent.Status(terminal, name, null, true, status, 1uL, null, null, null))
 
     private fun shown(): List<Notification> = manager.activeNotifications.map { it.notification }
 
     @Test
     fun subAgentStatusAndCallsNeverNotifyTheHuman() {
-        PushService.show(context, PushNotice("h1", "box", PushContent.Status("t2", "child", null, false, AgentStatus.Error("parent only"), 1uL)))
+        PushService.show(context, PushNotice("h1", "box", PushContent.Status("t2", "child", null, false, AgentStatus.Error("parent only"), 1uL, null, null, null)))
         PushService.show(context, PushNotice("h1", "box", PushContent.Call("child-call", "t2", false, "Report", "", CallUrgency.URGENT, listOf("Continue"), 1uL)))
         assertEquals(0, shown().size)
     }
