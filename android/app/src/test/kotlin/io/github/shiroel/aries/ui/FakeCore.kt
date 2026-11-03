@@ -491,5 +491,10 @@ class FakeTerminalView(val address: String, val options: AttachOptions) : Termin
         updates.close()
     }
 
+    /** Every [scrollTo] the UI made, in order. */
+    val scrolls = mutableListOf<UInt>()
+
+    override fun scrollTo(lines: UInt): UInt = lines.also { scrolls += it }
+
     override fun close() {}
 }

@@ -70,6 +70,12 @@
     <string name="terminal_exited_signal">The program was stopped by signal %1$s.</string>
     <string name="terminal_exited_reason">The program ended (%1$s).</string>
     <string name="terminal_connection_closed">The connection to the Terminal closed. What you see may be out of date.</string>
+    <string name="terminal_scrolled_back">%1$d lines back</string>
+    <string name="terminal_back_to_live">Back to live</string>
+    <string name="terminal_zoom_reset">Zoom %1$d%% · Reset</string>
+    <string name="terminal_copy">Copy</string>
+    <string name="terminal_open_link">Open link</string>
+    <string name="terminal_copy_link">Copy link</string>
 
     <string name="agents_button">All Agents</string>
     <string name="agents_title">Agents</string>

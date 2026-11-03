@@ -445,11 +445,12 @@ class HostsModel(
         screen = Screen.Terminal(viewer, returnTo)
         viewing = scope.launch {
             val view = try {
-                conn.attachTerminal(terminal.address, AttachOptions(observe = true, cols = 80u, rows = 24u, history = 0u))
+                conn.attachTerminal(terminal.address, AttachOptions(observe = true, cols = 80u, rows = 24u, history = SCROLLBACK_LINES))
             } catch (e: CoreException) {
                 viewer.markClosed()
                 return@launch
             }
+            viewer.scroller = view::scrollTo
             try {
                 while (true) {
                     when (val u = view.next()) {
@@ -460,6 +461,7 @@ class HostsModel(
             } catch (e: CoreException) {
                 viewer.markClosed()
             } finally {
+                viewer.scroller = null
                 withContext(NonCancellable) { view.detach() }
                 view.close()
             }
@@ -625,3 +627,6 @@ fun problemFor(e: CoreException): Prompt.Problem {
         else -> Prompt.Problem(failed, Message(R.string.connect_other, listOf(e.message ?: "")))
     }
 }
+
+/** Scrollback asked for when attaching a Terminal (what the desktop app keeps is 2000). */
+const val SCROLLBACK_LINES = 2000u

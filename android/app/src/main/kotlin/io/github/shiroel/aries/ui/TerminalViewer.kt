@@ -7,12 +7,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -20,6 +20,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -35,7 +37,6 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.shiroel.aries.R
@@ -74,6 +75,30 @@ class TerminalViewer(val terminal: TerminalInfo) {
 
     private var lines: Array<ScreenLine?> = emptyArray()
 
+    /** Lines the view is scrolled back into the scrollback; 0 = live. */
+    var scrolled by mutableIntStateOf(0)
+        private set
+
+    /** Scrollback lines above the live screen. */
+    var history by mutableIntStateOf(0)
+        private set
+
+    /** Moves the core's view (`TerminalView.scrollTo`); set while attached. */
+    var scroller: ((UInt) -> UInt)? = null
+
+    /** Reads [lines] further back (negative: towards live), within the scrollback. */
+    fun scrollBack(lines: Int) {
+        val to = (scrolled + lines).coerceIn(0, maxOf(history, scrolled))
+        if (to != scrolled) scrollTo(to)
+    }
+
+    fun scrollToLive() = scrollTo(0)
+
+    private fun scrollTo(to: Int) {
+        val at = scroller?.invoke(to.toUInt()) ?: return
+        scrolled = at.toInt()
+    }
+
     fun apply(frame: ScreenFrame) {
         val c = frame.cols.toInt()
         val r = frame.rows.toInt()
@@ -88,6 +113,8 @@ class TerminalViewer(val terminal: TerminalInfo) {
         }
         cursor = frame.cursor
         title = frame.title
+        scrolled = frame.scrolled.toInt()
+        history = frame.history.toInt()
         version++
     }
 
@@ -114,6 +141,7 @@ class TerminalViewer(val terminal: TerminalInfo) {
 
 private val TerminalBackground = Color(0xFF101214)
 private val TerminalForeground = Color(0xFFD8DADC)
+private val SelectionColor = Color(0x664D8DFF)
 
 @Composable
 fun TerminalScreen(viewer: TerminalViewer, onBack: () -> Unit) {
@@ -130,7 +158,9 @@ fun TerminalScreen(viewer: TerminalViewer, onBack: () -> Unit) {
         }
         viewer.exit?.let { Banner(exitText(it)) }
         if (viewer.closed && viewer.exit == null) Banner(stringResource(R.string.terminal_connection_closed))
-        TerminalCanvas(viewer, Modifier.fillMaxWidth().weight(1f))
+        val look = remember(viewer) { TerminalLook(viewer) }
+        TerminalLookBar(viewer, look)
+        TerminalCanvas(viewer, look, Modifier.fillMaxWidth().weight(1f))
     }
 }
 
@@ -158,7 +188,7 @@ private fun Banner(text: String) {
 private val MaxFont = 13.sp
 
 @Composable
-private fun TerminalCanvas(viewer: TerminalViewer, modifier: Modifier) {
+private fun TerminalCanvas(viewer: TerminalViewer, look: TerminalLook, modifier: Modifier) {
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
     // Advance width and line height of one monospace cell per font px.
@@ -166,22 +196,33 @@ private fun TerminalCanvas(viewer: TerminalViewer, modifier: Modifier) {
         measurer.measure("M", TextStyle(fontFamily = FontFamily.Monospace, fontSize = 100.sp))
     }
     val description = viewer.version.let { viewer.text() }
+    // The selected cells moved away.
+    LaunchedEffect(look, viewer.scrolled, viewer.cols, viewer.rows) { look.selection = null }
     BoxWithConstraints(modifier.background(TerminalBackground)) {
         val cols = viewer.cols.coerceAtLeast(1)
         val widthPx = with(density) { maxWidth.toPx() }
         val per100 = probe.size.width.toFloat().coerceAtLeast(1f)
         val maxPx = with(density) { MaxFont.toPx() }
-        val fontPx = minOf(maxPx, widthPx / cols / per100 * 100f)
-        val cellW = per100 * fontPx / 100f
-        val cellH = probe.size.height * fontPx / 100f
+        val baseFontPx = minOf(maxPx, widthPx / cols / per100 * 100f)
+        look.layout(
+            per100 * baseFontPx / 100f,
+            probe.size.height * baseFontPx / 100f,
+            widthPx,
+            with(density) { maxHeight.toPx() },
+        )
+        // Zoom and pan: the phone's view only, the grid stays the Terminal's.
+        val fontPx = baseFontPx * look.zoom
+        val cellW = look.cellW
+        val cellH = look.cellH
         val fontSize = with(density) { fontPx.toSp() }
-        val height: Dp = with(density) { (cellH * viewer.rows).toDp() }
         Canvas(
-            Modifier.fillMaxWidth().height(height).testTag("terminal-screen")
-                .semantics { contentDescription = description },
+            Modifier.fillMaxSize().clipToBounds().testTag("terminal-screen")
+                .semantics { contentDescription = description }
+                .terminalGestures(look, viewer),
         ) {
             viewer.version // redraw on every frame
             val base = TextStyle(fontFamily = FontFamily.Monospace, fontSize = fontSize, color = TerminalForeground)
+            translate(look.panX, look.panY) {
             for (row in 0 until viewer.rows) {
                 val y = row * cellH
                 for (run in viewer.line(row)?.runs.orEmpty()) {
@@ -214,6 +255,18 @@ private fun TerminalCanvas(viewer: TerminalViewer, modifier: Modifier) {
                     Offset(c.column.toInt() * cellW, c.row.toInt() * cellH),
                     Size(cellW, cellH),
                 )
+            }
+            look.selection?.ordered()?.let { s ->
+                for (row in s.start.row..s.end.row) {
+                    val from = if (row == s.start.row) s.start.col else 0
+                    val to = if (row == s.end.row) s.end.col else viewer.cols - 1
+                    drawRect(
+                        SelectionColor,
+                        Offset(from * cellW, row * cellH),
+                        Size((to - from + 1) * cellW, cellH),
+                    )
+                }
+            }
             }
         }
     }
