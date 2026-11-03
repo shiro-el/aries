@@ -73,6 +73,7 @@ import io.github.shiroel.aries.core.TerminalSearch
  * the Terminal's own size (observe mode): the desktop decides it.
  */
 class TerminalViewer(terminal: TerminalInfo) {
+    var inputHistory: InputHistoryModel? = null
     var terminal by mutableStateOf(terminal)
         private set
 

@@ -918,6 +918,7 @@ class HostsModel(
     /** Re-attaches with `resumed` on each new line, so the screen comes back after a network change. */
     private fun observe(link: HostLink, terminal: TerminalInfo, returnTo: Screen, chatDraft: String = "") {
         val viewer = TerminalViewer(terminal)
+        viewer.inputHistory = InputHistoryModel(core, link.host.id, terminal.address)
         viewer.link = link
         if (attachMode == AttachMode.INPUT) viewer.startTyping()
         screen = Screen.Terminal(viewer, returnTo, chatDraft)
@@ -959,7 +960,10 @@ class HostsModel(
                                 for (input in viewer.inputs) {
                                     when (input) {
                                         is TerminalInput.Text -> view.sendText(input.text)
-                                        is TerminalInput.Paste -> view.pasteText(input.text)
+                                        is TerminalInput.Paste -> {
+                                            view.pasteText(input.text)
+                                            viewer.inputHistory?.remember(input.text)
+                                        }
                                         is TerminalInput.Key -> view.sendKey(input.key, input.mods)
                                     }
                                 }
