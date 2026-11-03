@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Korean. Same keys and format arguments as values/strings.xml; TranslationsTest
+  fails if a key is missing here. See "UI strings" in CONTRIBUTING.md.
+  Glossary terms: Host = 호스트, Terminal = 터미널, Agent = 에이전트.
+-->
+<resources>
+    <string name="ok_button">확인</string>
+    <string name="cancel_button">취소</string>
+    <string name="back_button">뒤로</string>
+
+    <string name="hosts_title">호스트</string>
+    <string name="hosts_empty">아직 호스트가 없습니다. 아래에서 추가하세요.</string>
+
+    <string name="key_missing">Aries가 호스트에 로그인하려면 SSH 키가 필요합니다.</string>
+    <string name="key_create_button">SSH 키 만들기</string>
+    <string name="key_title">이 휴대폰의 SSH 키</string>
+    <string name="key_fingerprint">지문: %1$s</string>
+    <string name="key_copy_button">공개 키 복사</string>
+    <string name="key_copy_hint">각 호스트의 ~/.ssh/authorized_keys에 추가하세요.</string>
+    <string name="key_clip_label">Aries SSH 공개 키</string>
+    <string name="key_qr_button">QR 코드 보기</string>
+    <string name="key_qr_title">공개 키 QR 코드</string>
+    <string name="key_qr_description">이 휴대폰의 SSH 공개 키 QR 코드</string>
+
+    <string name="host_install_key_button">비밀번호로 키 설치</string>
+    <string name="key_install_title">%1$s에 키 설치</string>
+    <string name="key_install_body">%1$s의 비밀번호로 한 번만 로그인하세요. Aries가 이 휴대폰의 공개 키를 ~/.ssh/authorized_keys에 추가하고, 그 뒤로는 키로만 접속합니다. 비밀번호는 저장하지 않습니다.</string>
+    <string name="key_install_password">비밀번호</string>
+    <string name="key_install_button">키 설치</string>
+    <string name="key_install_done_title">키 설치됨</string>
+    <string name="key_install_added_body">%1$s에 이 휴대폰의 키를 추가했습니다. 이제 키로 접속합니다.</string>
+    <string name="key_install_present_body">%1$s에는 이미 이 휴대폰의 키가 있습니다. 아무것도 바꾸지 않았습니다.</string>
+    <string name="key_install_failed_title">키를 설치하지 못했습니다</string>
+    <string name="key_install_password_rejected">호스트가 사용자 이름이나 비밀번호를 받아들이지 않았습니다. 호스트에서 비밀번호 로그인이 꺼져 있을 수도 있습니다. 그렇다면 공개 키를 ~/.ssh/authorized_keys에 직접 추가하세요.</string>
+    <string name="key_install_write_failed">로그인했지만 호스트의 ~/.ssh/authorized_keys에 쓰지 못했습니다: %1$s\n\n사용자가 ~/.ssh를 소유하고 쓸 수 있는지 확인하세요.</string>
+
+    <string name="host_ssh_address">%1$s@%2$s:%3$d</string>
+    <string name="host_local_address">로컬 프로세스</string>
+    <string name="host_add_title">호스트 추가</string>
+    <string name="host_add_name">이름 (선택)</string>
+    <string name="host_add_address">주소</string>
+    <string name="host_add_port">포트</string>
+    <string name="host_add_user">사용자 이름</string>
+    <string name="host_add_button">호스트 추가</string>
+    <string name="host_remove_button">삭제</string>
+    <string name="host_remove_button_label">%1$s 삭제</string>
+    <string name="host_remove_title">%1$s을(를) 삭제할까요?</string>
+    <string name="host_remove_body">이 호스트의 주소, 신뢰한 호스트 키, 이 휴대폰에 저장된 모든 정보를 지웁니다. 호스트 자체는 바뀌지 않습니다.</string>
+    <string name="host_remove_confirm_button">호스트 삭제</string>
+
+    <string name="connecting">%1$s에 연결하는 중…</string>
+    <string name="terminals_title">%1$s의 터미널</string>
+    <string name="terminals_empty">이 호스트에서 실행 중인 터미널이 없습니다.</string>
+    <string name="terminal_subtitle">%1$s · %2$s</string>
+
+    <string name="space_unnamed">이름 없는 스페이스</string>
+    <string name="space_summary">탭 %1$d개 · 페인 %2$d개</string>
+    <string name="space_no_tabs">이 스페이스에는 탭이 없습니다.</string>
+    <string name="tab_unnamed">이름 없는 탭</string>
+    <string name="tab_empty">이 탭에는 터미널이 없습니다.</string>
+    <string name="pane_terminal_gone">%1$s (종료됨)</string>
+    <string name="pane_zoom_button">확대</string>
+    <string name="pane_unzoom_button">모든 페인 보기</string>
+    <string name="unplaced_title">기타 터미널</string>
+    <string name="structure_no_document">이 호스트에 herdr-app이 저장한 레이아웃이 없습니다. 터미널을 스페이스·탭 label로 묶어 보여 줍니다.</string>
+    <string name="structure_unreadable">이 호스트의 herdr-app 레이아웃을 읽지 못했습니다(%1$s). 터미널을 스페이스·탭 label로 묶어 보여 줍니다.</string>
+    <string name="structure_unknown_format">이 호스트의 herdr-app 레이아웃은 Aries가 모르는 형식입니다. 터미널을 스페이스·탭 label로 묶어 보여 줍니다. Aries를 업데이트하세요.</string>
+    <string name="structure_connection_closed">호스트와의 연결이 끊어졌습니다. 보이는 내용이 최신이 아닐 수 있습니다.</string>
+
+    <string name="host_key_trust_title">이 호스트를 신뢰할까요?</string>
+    <string name="host_key_trust_body">%1$s에 처음 연결합니다. 호스트 키 지문이 다음과 같은지 확인하세요:\n\n%2$s\n\n호스트에서 실행: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</string>
+    <string name="host_key_trust_button">신뢰하고 연결</string>
+    <string name="host_key_changed_title">호스트 키가 바뀌었습니다</string>
+    <string name="host_key_changed_body">호스트가 이전과 다른 키를 보내서 Aries가 연결하지 않았습니다. 누군가 연결을 가로채고 있거나 호스트를 다시 설치했을 수 있습니다.\n\n신뢰한 키: %1$s\n현재 키: %2$s</string>
+
+    <string name="incompatible_title">업데이트 필요</string>
+    <string name="incompatible_app_too_old">이 호스트는 더 새로운 herdr-core 프로토콜(세대 %1$d)을 사용합니다. Aries를 업데이트하세요.</string>
+    <string name="incompatible_core_too_old">이 호스트의 herdr-core는 %1$s입니다. Aries에는 %2$s 이상이 필요합니다. 호스트에서 `hc update`를 실행하세요.</string>
+    <string name="incompatible_missing_methods">이 호스트의 herdr-core에 %1$s이(가) 없습니다. 호스트에서 `hc update`를 실행하세요.</string>
+
+    <string name="connect_failed_title">연결할 수 없음</string>
+    <string name="connect_auth_rejected">호스트가 이 휴대폰의 SSH 키를 받아들이지 않았습니다. 호스트의 ~/.ssh/authorized_keys에 공개 키를 추가하세요.</string>
+    <string name="connect_no_key">먼저 SSH 키를 만드세요.</string>
+    <string name="connect_unreachable">호스트에 연결할 수 없습니다: %1$s</string>
+    <string name="connect_protocol">호스트가 herdr-core 프로토콜로 응답하지 않았습니다: %1$s</string>
+    <string name="connect_other">%1$s</string>
+</resources>
