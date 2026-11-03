@@ -68,17 +68,17 @@ object InlineNotifications {
             .firstOrNull { it.id == target.hostId.hashCode() && it.tag == target.tag &&
                 it.notification.extras.getString(GENERATION) == target.generation }?.notification
 
-    internal fun update(context: Context, target: InlineTarget, line: String) {
-        val original = current(context, target) ?: return
+    internal fun update(context: Context, target: InlineTarget, line: String) = synchronized(NotificationGroups) {
+        val original = current(context, target)?.clone()?.apply { actions = null } ?: return@synchronized
         val notification = Notification.Builder.recoverBuilder(context, original)
-            .setActions(*emptyArray<Notification.Action>()).setContentText(line)
+            .setContentText(line)
             .setStyle(Notification.BigTextStyle().bigText(line)).setOnlyAlertOnce(true)
-            .addExtras(Bundle().apply { putBoolean("inline_consumed", true) }).build().apply { actions = null }
+            .addExtras(Bundle().apply { putBoolean("inline_consumed", true) }).build()
         NotificationGroups.post(context, target.hostId, target.hostName, target.tag, notification)
     }
 
-    internal fun dismiss(context: Context, target: InlineTarget) {
-        if (current(context, target) == null) return
+    internal fun dismiss(context: Context, target: InlineTarget) = synchronized(NotificationGroups) {
+        if (current(context, target) == null) return@synchronized
         NotificationGroups.dismissed(context, Intent().putExtra("host", target.hostId)
             .putExtra("hostName", target.hostName).putExtra("tag", target.tag))
     }
@@ -116,8 +116,10 @@ class InlineActionReceiver : BroadcastReceiver() {
             val notification = intent.getParcelableExtra<Notification>(InlineNotifications.NOTIFICATION) ?: return
             val manager = context.getSystemService(android.app.NotificationManager::class.java)
             // A reminder must not replace a newer card for the same Terminal/Call.
-            if (manager.activeNotifications.none { it.id == target.hostId.hashCode() && it.tag == target.tag }) {
-                NotificationGroups.post(context, target.hostId, target.hostName, target.tag, notification)
+            synchronized(NotificationGroups) {
+                if (manager.activeNotifications.none { it.id == target.hostId.hashCode() && it.tag == target.tag }) {
+                    NotificationGroups.post(context, target.hostId, target.hostName, target.tag, notification)
+                }
             }
             return
         }

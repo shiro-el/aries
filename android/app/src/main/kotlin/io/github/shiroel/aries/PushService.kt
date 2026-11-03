@@ -120,7 +120,6 @@ class PushService : FirebaseMessagingService() {
                 .setAutoCancel(true)
             // One notification per Agent: its newer status replaces the older.
             if (content is PushContent.Status) {
-                QuestionNotifications.decorate(context, notice, content, builder, canAnswerInBackground)
                 val tag = content.terminal
                 builder.setStyle(Notification.BigTextStyle().bigText(body))
                 if (content.status == AgentStatus.Done) {
@@ -132,11 +131,13 @@ class PushService : FirebaseMessagingService() {
                 }
                 NotificationGroups.decorate(context, builder, notice.hostId, notice.hostName, tag, content.terminal)
                 val status = content.status
-                if (status == AgentStatus.Done || status is AgentStatus.Error || status is AgentStatus.Blocked) {
+                if (status == AgentStatus.Done || status is AgentStatus.Error ||
+                    (status is AgentStatus.Blocked && status.reason != io.github.shiroel.aries.core.BlockedReason.QUESTION)) {
                     InlineNotifications.add(context, builder, notice.hostId, notice.hostName, content.terminal, tag,
                         reply = status == AgentStatus.Done || status is AgentStatus.Error,
                         turn = content.turn.takeIf { status == AgentStatus.Done })
                 }
+                QuestionNotifications.decorate(context, notice, content, builder, canAnswerInBackground)
                 if ((status == AgentStatus.Done || status is AgentStatus.Blocked || status is AgentStatus.Error) &&
                     QuietHoursSettings.from(context).hours.contains(LocalTime.now())
                 ) {
