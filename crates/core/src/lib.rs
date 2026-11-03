@@ -7,6 +7,7 @@
 
 mod error;
 mod hc;
+mod removal;
 mod store;
 mod structure;
 mod transport;
@@ -202,6 +203,25 @@ impl AriesCore {
         } else {
             Err(CoreError::UnknownHost { id: host_id })
         }
+    }
+
+    /// Removes a Host after the user confirmed it: runs every cleanup step
+    /// (see `removal.rs` for how tickets add theirs), then forgets the
+    /// Host's connection settings and trusted Host key. If a step fails the
+    /// Host stays registered and removal can be retried.
+    pub fn remove_host(&self, host_id: String) -> Result<(), CoreError> {
+        let host = self
+            .hosts
+            .lock()
+            .expect("hosts lock")
+            .iter()
+            .find(|h| h.id == host_id)
+            .cloned()
+            .ok_or_else(|| CoreError::UnknownHost {
+                id: host_id.clone(),
+            })?;
+        removal::run(&host, &self.store)?;
+        self.update_hosts(|hosts| hosts.retain(|h| h.id != host_id))
     }
 
     /// Connects to a Host and checks its herdr-core is compatible.

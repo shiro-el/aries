@@ -32,6 +32,9 @@ sealed interface Prompt {
     /** First connection: ask the user to confirm the Host key. */
     data class TrustHostKey(val host: Host, val fingerprint: String) : Prompt
 
+    /** Ask before removing [host] and everything stored for it. */
+    data class ConfirmRemove(val host: Host) : Prompt
+
     /** Something the user must read; [title] and [body] are resources. */
     data class Problem(val title: Message, val body: Message) : Prompt
 }
@@ -106,6 +109,18 @@ class HostsModel(private val core: AriesCoreInterface, private val scope: Corout
             hosts = core.hosts()
         }
         hosts.find { it.id == prompt.host.id }?.let(::connect)
+    }
+
+    fun askRemove(host: Host) {
+        prompt = Prompt.ConfirmRemove(host)
+    }
+
+    fun remove(prompt: Prompt.ConfirmRemove) {
+        this.prompt = null
+        guard {
+            core.removeHost(prompt.host.id)
+            hosts = core.hosts()
+        }
     }
 
     fun dismiss() {
