@@ -520,13 +520,13 @@ private fun ChatEntryView(
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary,
                 )
-                if (b.text.isNotEmpty()) ChatTextActions(b.text) { ChatFileText(b.text, it) }
+                if (b.text.isNotEmpty()) ChatTextActions(b.text, interceptChildLongPress = true) { ChatFileText(b.text, it) }
                 b.images.forEach { ChatImageView(it, image) }
             }
         }
         is ChatEntryBody.Agent -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(agentName, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            ChatTextActions(b.text) { ChatFileText(b.text, it) }
+            ChatTextActions(b.text, interceptChildLongPress = true) { ChatFileText(b.text, it) }
         }
         is ChatEntryBody.Thinking -> Column {
             Text(
