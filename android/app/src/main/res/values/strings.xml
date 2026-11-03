@@ -338,5 +338,8 @@
     <string name="push_test_body">This test notification came from the Beacon on %1$s, end-to-end encrypted.</string>
     <string name="push_status_title">%1$s on %2$s</string>
     <string name="push_status_body" translatable="false">%1$s: %2$s</string>
+    <string name="push_terminal_gone_title">Agent is gone</string>
+    <string name="push_terminal_gone_body">Terminal %1$s is no longer running on %2$s. Here are the Agents that are.</string>
+    <string name="push_host_gone_body">The Host that sent this notification about %1$s is no longer in Aries.</string>
     <string name="push_no_firebase">this build has no Firebase configuration</string>
 </resources>

@@ -328,5 +328,8 @@
     <string name="push_test_title">%1$s 푸시 동작 확인</string>
     <string name="push_test_body">%1$s의 Beacon이 보낸 테스트 알림입니다. 종단 간 암호화돼 있습니다.</string>
     <string name="push_status_title">%2$s의 %1$s</string>
+    <string name="push_terminal_gone_title">Agent가 없습니다</string>
+    <string name="push_terminal_gone_body">터미널 %1$s이(가) %2$s에서 더 이상 실행 중이 아닙니다. 실행 중인 Agent 목록을 보여 드립니다.</string>
+    <string name="push_host_gone_body">%1$s에 대한 이 알림을 보낸 Host가 더 이상 Aries에 없습니다.</string>
     <string name="push_no_firebase">이 빌드에는 Firebase 설정이 없습니다</string>
 </resources>

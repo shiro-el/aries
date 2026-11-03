@@ -622,10 +622,30 @@ class HostsModel(
     private val agentJobs = mutableListOf<Job>()
 
     /** Connects to every Host and shows all their Agents in one list. */
-    fun openAgents() {
+    fun openAgents() = openAgents(focus = null)
+
+    /**
+     * A tapped Agent notification (warm or cold start): leaves whatever is
+     * open, shows the Agents list and, once [hostId]'s list arrives, opens
+     * that Agent's Terminal (back returns to its detail). A Terminal that is
+     * no longer live, or a Host that was removed, is explained instead.
+     */
+    fun openPushedAgent(hostId: String, address: String) {
+        back()
+        val host = hosts.find { it.id == hostId }
+        openAgents(focus = host?.let { AgentKey(it.id, address) })
+        if (host == null) {
+            prompt = Prompt.Problem(Message(R.string.push_terminal_gone_title), Message(R.string.push_host_gone_body, listOf(address)))
+        }
+    }
+
+    /** [focus]: the Agent whose Terminal to open once its Host's list arrives. */
+    private fun openAgents(focus: AgentKey?) {
         val board = AgentBoard(hosts)
-        screen = Screen.Agents(board)
+        val agents = Screen.Agents(board)
+        screen = agents
         hosts.forEach { host ->
+            var focusing = focus?.takeIf { it.hostId == host.id }
             agentJobs += scope.launch {
                 val conn = try {
                     core.connect(host.id)
@@ -645,6 +665,10 @@ class HostsModel(
                                 val list = watch.next()
                                 board.update(host.id, list)
                                 chatOn(host.id)?.update(list)
+                                focusing?.let { key ->
+                                    focusing = null
+                                    if (screen === agents) focusOn(agents, link, host, key, list)
+                                }
                             }
                         } finally {
                             watch.stop()
@@ -655,6 +679,19 @@ class HostsModel(
                 }
             }
         }
+    }
+
+    private fun focusOn(agents: Screen.Agents, link: HostLink, host: Host, key: AgentKey, list: List<TerminalInfo>) {
+        val terminal = list.find { it.address == key.address && it.state == "live" }
+        if (terminal == null) {
+            prompt = Prompt.Problem(
+                Message(R.string.push_terminal_gone_title),
+                Message(R.string.push_terminal_gone_body, listOf(key.address, host.name)),
+            )
+            return
+        }
+        agents.board.open(key)
+        observe(link, terminal, agents)
     }
 
     /** Opens an Agent's detail; a Done Agent counts as seen there, for every client. */
@@ -780,7 +817,8 @@ class HostsModel(
             calls.stopAll()
             calls.watch(hosts, everyHost = false)
         }
-        if (screen is Screen.Agents) closeAgents()
+        // Also under a Terminal or Chat opened from the Agents list.
+        closeAgents()
         screen = Screen.Hosts
         status?.cancel()
         status = null

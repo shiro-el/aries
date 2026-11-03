@@ -81,12 +81,14 @@ class PushService : FirebaseMessagingService() {
                         (message?.let { context.getString(R.string.push_status_body, label, it) } ?: label)
                 }
             }
-            val notification = Notification.Builder(context, CHANNEL)
+            val builder = Notification.Builder(context, CHANNEL)
                 .setSmallIcon(android.R.drawable.stat_notify_chat)
                 .setContentTitle(title)
                 .setContentText(body)
                 .setAutoCancel(true)
-                .build()
+            // A tap opens that Agent's Terminal.
+            if (content is PushContent.Status) builder.setContentIntent(PushTarget(notice.hostId, content.terminal).pendingIntent(context))
+            val notification = builder.build()
             // One notification per Agent: its newer status replaces the older.
             val tag = when (content) {
                 is PushContent.Test -> null
