@@ -113,7 +113,7 @@ async fn the_app_reads_and_follows_call_history_over_ssh() {
     assert_eq!(calls[0].terminal, None);
 
     let rec = Arc::new(Recorder::default());
-    let watch = core.watch_calls(id.clone(), rec.clone()).unwrap();
+    let watch = core.watch_calls(id.clone(), rec.clone()).await.unwrap();
     wait_until("the first sync", || *rec.live.lock().unwrap()).await;
     call("second");
     wait_until("the second Call", || {

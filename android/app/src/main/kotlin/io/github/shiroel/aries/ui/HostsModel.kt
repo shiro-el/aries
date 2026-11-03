@@ -52,6 +52,9 @@ sealed interface Screen {
 
     /** Every Host's Agents in one list. */
     data class Agents(val board: AgentBoard) : Screen
+
+    /** Every Host's Call history ([HostsModel.calls]). */
+    data object Calls : Screen
 }
 
 sealed interface Prompt {
@@ -101,6 +104,9 @@ class HostsModel(
 ) {
     /** The Beacon section of the connected Host. */
     val beacon = BeaconModel(core, scope, beaconFetcher, keyWork)
+
+    /** Every Host's Calls and the new-Call banner; see [resumeCalls]. */
+    val calls = CallsModel(core, scope, keyWork)
 
     var key by mutableStateOf<PublicKeyInfo?>(null)
         private set
@@ -183,6 +189,7 @@ class HostsModel(
         core.addHost(label, Endpoint.Ssh(address.trim(), port.toUShort(), user.trim()))
         hosts = core.hosts()
         refreshRoutes()
+        hostsChanged()
     }
 
     fun connect(host: Host) {
@@ -320,6 +327,7 @@ class HostsModel(
         guard {
             core.removeHost(prompt.host.id)
             hosts = core.hosts()
+            hostsChanged()
         }
     }
 
@@ -469,9 +477,77 @@ class HostsModel(
         conns.forEach { scope.launch { it.disconnect() } }
     }
 
+    /** The app is in front: follow Calls (banner) until [pauseCalls]. */
+    private var callsActive = false
+
+    fun resumeCalls() {
+        callsActive = true
+        calls.watch(hosts, everyHost = screen == Screen.Calls)
+    }
+
+    fun pauseCalls() {
+        callsActive = false
+        calls.stopAll()
+    }
+
+    private fun hostsChanged() {
+        if (callsActive || screen == Screen.Calls) calls.watch(hosts, everyHost = screen == Screen.Calls)
+    }
+
+    /** Opens Call history for every Host (Hosts whose key needs a biometric unlock too). */
+    fun openCalls() {
+        back()
+        calls.dismissBanner()
+        screen = Screen.Calls
+        calls.watch(hosts, everyHost = true)
+    }
+
+    /** The connection a Call's Terminal is shown over, until Call history is left. */
+    private var callConn: HostConnection? = null
+
+    /** Shows the Terminal that sent [entry]'s Call; back returns to Call history. */
+    fun openCallTerminal(entry: CallEntry) {
+        val address = entry.call.terminal ?: return
+        if (screen != Screen.Calls) return
+        scope.launch {
+            try {
+                val conn = callConn?.takeIf { callConnHost == entry.host.id }
+                    ?: withContext(keyWork) { core.connect(entry.host.id) }.also { fresh ->
+                        callConn?.let { old -> scope.launch { old.disconnect() } }
+                        callConn = fresh
+                        callConnHost = entry.host.id
+                    }
+                val terminal = conn.terminals().find { it.address == address && it.state == "live" }
+                if (terminal == null) {
+                    prompt = Prompt.Problem(
+                        Message(R.string.call_terminal_gone_title),
+                        Message(R.string.call_terminal_gone_body, listOf(address, entry.host.name)),
+                    )
+                    return@launch
+                }
+                if (screen == Screen.Calls) observe(conn, terminal, Screen.Calls)
+            } catch (e: CoreException) {
+                prompt = when (e) {
+                    is CoreException.HostKeyUnknown -> Prompt.TrustHostKey(entry.host, e.fingerprint)
+                    else -> problemFor(e)
+                }
+            }
+        }
+    }
+
+    private var callConnHost: String? = null
+
     fun back() {
         viewing?.cancel()
         viewing = null
+        callConn?.let { scope.launch { it.disconnect() } }
+        callConn = null
+        callConnHost = null
+        if (screen == Screen.Calls && callsActive) {
+            // Leaving Call history: keep only the watches a banner may use.
+            calls.stopAll()
+            calls.watch(hosts, everyHost = false)
+        }
         if (screen is Screen.Agents) closeAgents()
         screen = Screen.Hosts
         status?.cancel()

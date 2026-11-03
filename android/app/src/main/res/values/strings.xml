@@ -186,4 +186,27 @@
     <string name="jump_key_changed_title">Jump host key changed</string>
     <string name="jump_key_changed_body">Jump host %1$d (%2$s) presented a different key than before, so Aries did not connect. Someone may be intercepting the connection, or the jump host was reinstalled.\n\nTrusted: %3$s\nNow: %4$s</string>
     <string name="connect_jump_auth_rejected">Jump host %1$d (%2$s) did not accept the key chosen for it. Add that key\'s public key to ~/.ssh/authorized_keys on the jump host.</string>
+    <string name="calls_button">Calls</string>
+    <string name="calls_title">Calls</string>
+    <string name="calls_empty">No Calls yet. Agents send Calls with aries-beacon call when they need you.</string>
+    <string name="calls_feed_down">%1$s: Calls are not up to date (%2$s). Retrying.</string>
+    <string name="call_meta">%1$s · %2$s · %3$s</string>
+    <string name="call_choices">Choices: %1$s</string>
+    <string name="call_urgency_record">Record</string>
+    <string name="call_urgency_check">Check</string>
+    <string name="call_urgency_urgent">Urgent</string>
+    <string name="call_urgency_emergency">Emergency</string>
+    <string name="call_answer_claimed">Answering: %1$s</string>
+    <string name="call_answer_delivered">Answered: %1$s</string>
+    <string name="call_answer_failed">Answer failed: %1$s</string>
+    <string name="call_answer_unconfirmed">Answer not confirmed: %1$s</string>
+    <string name="call_unconfirmed">The Beacon could not confirm which Terminal sent this Call, so it was only recorded.</string>
+    <string name="call_from_helper">From a helper Agent: only recorded, not pushed.</string>
+    <string name="call_open_terminal">Open Terminal</string>
+    <string name="call_open_terminal_label">Open Terminal %1$s, which sent %2$s</string>
+    <string name="call_terminal_gone_title">Terminal is gone</string>
+    <string name="call_terminal_gone_body">Terminal %1$s, which sent this Call, is no longer running on %2$s.</string>
+    <string name="call_banner_from">New Call from %1$s · %2$s</string>
+    <string name="call_banner_view">View</string>
+    <string name="call_banner_dismiss">Dismiss</string>
 </resources>

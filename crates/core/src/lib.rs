@@ -727,7 +727,9 @@ impl AriesCore {
     /// the first sync and each change, and each Call that arrives while
     /// watching once. Reconnects by itself (reported through `on_state`)
     /// until `stop`. Uses its own SSH connection, not a [`HostConnection`].
-    pub fn watch_calls(
+    /// Opening the Host's key may ask for a biometric unlock, so call it
+    /// off the UI thread.
+    pub async fn watch_calls(
         &self,
         host_id: String,
         listener: Arc<dyn CallListener>,
