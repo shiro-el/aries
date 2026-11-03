@@ -176,19 +176,12 @@ fun LaunchDialog(
                     for (s in form.saved) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(s.name, Modifier.weight(1f))
-                            TextButton(
-                                modifier = Modifier.testTag("saved_edit:" + s.id),
-                                onClick = { form.edit(s) },
-                            ) { Text(stringResource(R.string.launch_saved_edit)) }
-                            TextButton(
-                                modifier = Modifier.testTag("saved_delete:" + s.id),
-                                enabled = !form.busy,
-                                onClick = { onDelete(s) },
-                            ) { Text(stringResource(R.string.launch_saved_delete)) }
-                        }
-                        onPin?.let { pin ->
-                            TextButton(onClick = { pin(s) }, enabled = !form.busy) {
-                                Text(stringResource(R.string.shortcuts_pin_button))
+                            ActionIcon(R.drawable.ic_square_pen, R.string.launch_saved_edit,
+                                { form.edit(s) }, modifier = Modifier.testTag("saved_edit:" + s.id))
+                            ActionIcon(R.drawable.ic_x, R.string.launch_saved_delete,
+                                { onDelete(s) }, enabled = !form.busy, modifier = Modifier.testTag("saved_delete:" + s.id))
+                            onPin?.let { pin ->
+                                ActionIcon(R.drawable.agent_pin, R.string.shortcuts_pin_button, { pin(s) }, enabled = !form.busy)
                             }
                         }
                     }

@@ -305,22 +305,22 @@ fun TerminalLookBar(viewer: TerminalViewer, look: TerminalLook, onSendToAgent: (
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (selection != null) {
-                TextButton(onClick = { copy(selectedText(viewer, selection)) }) { Text(stringResource(R.string.terminal_copy)) }
+                ActionIcon(R.drawable.ic_copy, R.string.terminal_copy, { copy(selectedText(viewer, selection)) })
                 onSendToAgent?.let { send ->
-                    TextButton(onClick = {
+                    ActionIcon(R.drawable.ic_send, R.string.terminal_send_to_agent, {
                         val text = selectedText(viewer, selection)
                         look.selection = null
                         send(text)
-                    }) { Text(stringResource(R.string.terminal_send_to_agent)) }
+                    })
                 }
                 selection.link?.let { link ->
-                    TextButton(onClick = {
+                    ActionIcon(R.drawable.ic_external_link, R.string.terminal_open_link, {
                         look.selection = null
                         uris.openUri(link)
-                    }) { Text(stringResource(R.string.terminal_open_link)) }
-                    TextButton(onClick = { copy(link) }) { Text(stringResource(R.string.terminal_copy_link)) }
+                    })
+                    ActionIcon(R.drawable.ic_link, R.string.terminal_copy_link, { copy(link) })
                 }
-                TextButton(onClick = { look.selection = null }) { Text(stringResource(R.string.cancel_button)) }
+                ActionIcon(R.drawable.ic_x, R.string.cancel_button, { look.selection = null })
             }
             if (look.zoom != 1f) {
                 TextButton(onClick = look::resetZoom) {
@@ -333,7 +333,7 @@ fun TerminalLookBar(viewer: TerminalViewer, look: TerminalLook, onSendToAgent: (
                     Modifier.padding(horizontal = 8.dp),
                     style = MaterialTheme.typography.bodySmall,
                 )
-                TextButton(onClick = viewer::scrollToLive) { Text(stringResource(R.string.terminal_back_to_live)) }
+                ActionIcon(R.drawable.ic_arrow_down_to_line, R.string.terminal_back_to_live, viewer::scrollToLive)
             }
         }
     }

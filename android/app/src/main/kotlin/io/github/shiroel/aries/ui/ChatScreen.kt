@@ -470,11 +470,7 @@ fun ChatScreen(
                 LazyColumn(Modifier.fillMaxSize().testTag("chat-transcript"), state = scroll.list) {
                     entries.forEach { entry ->
                         val body = entry.body
-                        val source = when (body) {
-                            is ChatEntryBody.User -> body.text
-                            is ChatEntryBody.Agent -> body.text
-                            else -> null
-                        }
+                        val source = body.markdownSource()
                         item(key = "transcript:${entry.id}") {
                             CompositionLocalProvider(LocalChatSearchEntry provides entry.id) {
                                 if (body is ChatEntryBody.Question) {
@@ -489,7 +485,7 @@ fun ChatScreen(
                         }
                         if (source != null) {
                             // Keep the last complete document visible until the background parse swaps it.
-                            chatMarkdownItems(entry.id, markdown[entry.id])
+                            chatMarkdownItems(entry.id, markdown[entry.id], thinking = body is ChatEntryBody.Thinking)
                             item(key = "transcript:${entry.id}:footer") {
                                 if (body is ChatEntryBody.User && body.images.isNotEmpty()) {
                                     Column(Modifier.padding(horizontal = 16.dp)) {
@@ -679,11 +675,6 @@ private fun ChatEntryView(
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            b.text?.let {
-                ChatTextActions(it) { modifier ->
-                    SearchableChatText(it, "thinking", modifier, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
         }
         is ChatEntryBody.Tool -> ToolView(b, expanded, image, onToggle)
         is ChatEntryBody.AgentError -> Column(

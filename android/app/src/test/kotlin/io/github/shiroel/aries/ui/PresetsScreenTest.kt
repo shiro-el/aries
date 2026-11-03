@@ -1,5 +1,7 @@
 package io.github.shiroel.aries.ui
 
+import androidx.compose.ui.test.onNodeWithContentDescription
+
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -60,7 +62,10 @@ class PresetsScreenTest {
         compose.waitForIdle()
     }
 
-    private fun openForm() = compose.onNodeWithText(str(R.string.launch_open_button)).performClick()
+    private fun openForm() {
+        compose.onNodeWithContentDescription(str(R.string.hosts_actions_label)).performClick()
+        compose.onNodeWithText(str(R.string.launch_open_button)).performClick()
+    }
 
     private fun click(id: Int) = compose.onNodeWithText(str(id)).performClick()
 

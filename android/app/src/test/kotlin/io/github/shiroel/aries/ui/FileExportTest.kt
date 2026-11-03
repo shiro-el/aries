@@ -58,6 +58,7 @@ class FileExportTest {
             }
         }
         openFile(conn, "한글 'report.zip")
+        compose.onNodeWithContentDescription(str(R.string.files_actions_label)).performClick()
         compose.onNodeWithText(str(R.string.files_share_button)).performClick()
         compose.waitUntil(5_000) { shadowOf(compose.activity).peekNextStartedActivity() != null }
         val chooser = shadowOf(compose.activity).nextStartedActivity
@@ -100,6 +101,7 @@ class FileExportTest {
             writePermission = "android.permission.MANAGE_DOCUMENTS"
         })
         ShadowContentResolver.registerProviderInternal("exports.test", provider)
+        compose.onNodeWithContentDescription(str(R.string.files_actions_label)).performClick()
         compose.onNodeWithText(str(R.string.files_save_button)).performClick()
         val request = shadowOf(compose.activity).nextStartedActivityForResult
         assertEquals(Intent.ACTION_OPEN_DOCUMENT_TREE, request.intent.action)
@@ -125,7 +127,9 @@ class FileExportTest {
         compose.waitUntil(5_000) {
             compose.onAllNodesWithText(compose.activity.getString(R.string.files_export_progress, 2L, 4L)).fetchSemanticsNodes().isNotEmpty()
         }
+        compose.onNodeWithContentDescription(str(R.string.files_actions_label)).performClick()
         compose.onNodeWithText(str(R.string.files_share_button)).assertIsNotEnabled()
+        compose.onNodeWithContentDescription(str(R.string.files_actions_label)).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
         compose.runOnIdle { next.complete(Unit) }
         waitForStatus(R.string.files_saved)
         assertEquals(listOf(0uL, 2uL), offsets)
@@ -155,6 +159,7 @@ class FileExportTest {
             }
         }
         openFile(conn)
+        compose.onNodeWithContentDescription(str(R.string.files_actions_label)).performClick()
         compose.onNodeWithText(str(R.string.files_share_button)).performClick()
         waitFor { entered.isCompleted }
         compose.onNodeWithText(str(R.string.cancel_button)).performClick()
@@ -162,7 +167,9 @@ class FileExportTest {
         assertTrue(cancelled.isCompleted)
         assertEquals(2, reads.get())
         assertNoExportOrChooser()
+        compose.onNodeWithContentDescription(str(R.string.files_actions_label)).performClick()
         compose.onNodeWithText(str(R.string.files_share_button)).assertIsEnabled()
+        compose.onNodeWithContentDescription(str(R.string.files_actions_label)).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
     }
 
     @Test fun rejectsFilesOver64MiBBeforeReadingTheRestOrSharing() {
@@ -174,6 +181,7 @@ class FileExportTest {
             }
         }
         openFile(conn)
+        compose.onNodeWithContentDescription(str(R.string.files_actions_label)).performClick()
         compose.onNodeWithText(str(R.string.files_share_button)).performClick()
         waitForStatus(R.string.files_export_too_large)
         assertEquals(1, reads.get())
@@ -187,6 +195,7 @@ class FileExportTest {
                 else RemoteFileBytes(byteArrayOf(2, 3, 4), 2u, 5u, true)
         }
         openFile(conn)
+        compose.onNodeWithContentDescription(str(R.string.files_actions_label)).performClick()
         compose.onNodeWithText(str(R.string.files_share_button)).performClick()
         waitForStatus(R.string.files_export_failed)
         assertNoExportOrChooser()
@@ -232,10 +241,13 @@ class FileExportTest {
             }
         }
         openFile(conn)
+        compose.onNodeWithContentDescription(str(R.string.files_actions_label)).performClick()
         compose.onNodeWithText(str(R.string.files_save_button)).performClick()
         val request = shadowOf(compose.activity).nextStartedActivityForResult
         compose.runOnIdle { shadowOf(compose.activity).receiveResult(request.intent, Activity.RESULT_CANCELED, Intent()) }
+        compose.onNodeWithContentDescription(str(R.string.files_actions_label)).performClick()
         compose.onNodeWithText(str(R.string.files_share_button)).assertIsEnabled()
+        compose.onNodeWithContentDescription(str(R.string.files_actions_label)).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
         assertEquals(0, reads.get())
         assertNoExportOrChooser()
     }
@@ -250,9 +262,10 @@ class FileExportTest {
             }
         }
         openFile(conn)
+        compose.onNodeWithContentDescription(str(R.string.files_actions_label)).performClick()
         compose.onNodeWithText(str(R.string.files_share_button)).performClick()
         waitFor { entered.isCompleted }
-        compose.onNodeWithText(str(R.string.files_back_folder_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.files_back_folder_button)).performClick()
         waitFor { cancelled.isCompleted && File(compose.activity.cacheDir, "file-exports").listFiles().orEmpty().isEmpty() }
         assertNoExportOrChooser()
     }

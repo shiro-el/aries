@@ -201,6 +201,8 @@
     <string name="files_full_button">Full file</string>
     <string name="files_folder_expanded">Expanded</string>
     <string name="files_folder_collapsed">Collapsed</string>
+    <string name="files_actions_label">File actions</string>
+    <string name="files_open_folder_label">Open folder %1$s</string>
     <string name="files_title">Host files</string>
     <string name="files_close_button">Close files</string>
     <string name="files_up_button">Parent folder</string>
@@ -333,6 +335,7 @@
     <string name="connecting">Connecting to %1$s…</string>
     <string name="terminals_actions_label">Terminal actions</string>
     <!-- Host Agent list and editing context -->
+    <string name="hosts_actions_label">Host actions</string>
     <string name="hosts_layout_context_button">Space and Tab</string>
     <string name="terminals_plain_group">Terminals (%1$d)</string>
     <string name="terminals_title">Terminals on %1$s</string>
@@ -365,7 +368,7 @@
     <string name="key_left">←</string>
     <string name="key_right">→</string>
     <string name="key_interrupt">^C</string>
-    <string name="attach_input_label">Open Terminals ready to type</string>
+    <string name="attach_input_label">Type as soon as a Terminal opens</string>
     <string name="terminal_exited_code">The program exited with code %1$d.</string>
     <string name="terminal_exited_signal">The program was stopped by signal %1$s.</string>
     <string name="terminal_exited_reason">The program ended (%1$s).</string>
@@ -532,7 +535,7 @@
     <string name="chat_skills_search">Search skills</string>
     <string name="chat_catalog_refresh">Refresh catalog</string>
     <string name="chat_catalog_empty">No matches</string>
-    <string name="chat_catalog_failed">Could not read the Host catalog. Refresh to retry.</string>
+    <string name="chat_catalog_failed">Could not read the Host catalog.</string>
     <string name="chat_catalog_builtin">Built-in command</string>
 
     <string name="chat_input_label">Message to the Agent</string>
@@ -673,7 +676,7 @@
     <string name="beacon_unsupported_host_body">The Beacon does not support %1$s/%2$s Hosts.</string>
     <string name="beacon_unavailable_body">This version of Aries has no Beacon for %1$s/%2$s yet.</string>
     <string name="beacon_download_body">Could not download the Beacon: %1$s</string>
-    <string name="beacon_step_body">Step "%1$s" failed on the Host: %2$s</string>
+    <string name="beacon_step_body">Step \"%1$s\" failed on the Host: %2$s</string>
     <string name="beacon_updated">Updated the Beacon from %1$s to %2$s.</string>
     <string name="beacon_update_needed">The Beacon needs an update (%1$s to %2$s). Automatic updates are off, so nothing was installed.</string>
     <string name="beacon_update_button">Update Beacon</string>
