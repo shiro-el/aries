@@ -5,6 +5,46 @@
   Glossary terms: Host = 호스트, Terminal = 터미널, Agent = 에이전트.
 -->
 <resources>
+    <!-- GitHub Issues and PR conversations (113) -->
+    <string name="github_button">GitHub</string>
+    <string name="github_issues">이슈</string>
+    <string name="github_prs">풀 리퀘스트</string>
+    <string name="github_open">열림</string>
+    <string name="github_closed">닫힘</string>
+    <string name="github_all">전체</string>
+    <string name="github_merged">병합됨</string>
+    <string name="github_search_hint">이 저장소에서 텍스트 검색</string>
+    <string name="github_search_button">검색</string>
+    <string name="github_previous">이전</string>
+    <string name="github_next">다음</string>
+    <string name="github_page">%1$d페이지</string>
+    <string name="github_refresh">새로고침</string>
+    <string name="github_loading">GitHub 불러오는 중…</string>
+    <string name="github_empty">일치하는 이슈나 풀 리퀘스트가 없습니다.</string>
+    <string name="github_limited">GitHub 검색이 불완전하거나 결과가 1,000개로 제한됩니다. 검색 범위를 좁혀 주세요.</string>
+    <string name="github_item_title">#%1$d · %2$s</string>
+    <string name="github_author_date">%1$s · %2$s</string>
+    <string name="github_deleted_author">삭제된 사용자</string>
+    <string name="github_no_body">설명이 없습니다.</string>
+    <string name="github_comments">댓글</string>
+    <string name="github_no_comments">아직 댓글이 없습니다.</string>
+    <string name="github_comment_hint">Markdown 댓글 작성</string>
+    <string name="github_preview">미리보기</string>
+    <string name="github_edit">초안 편집</string>
+    <string name="github_send">댓글 게시</string>
+    <string name="github_sent">댓글을 게시했습니다.</string>
+    <string name="github_close_issue">이슈 닫기</string>
+    <string name="github_reopen_issue">이슈 다시 열기</string>
+    <string name="github_state_updated">이슈를 변경했습니다.</string>
+    <string name="github_missing">이 Host에 GitHub CLI(gh)를 설치한 뒤 새로고침하세요.</string>
+    <string name="github_auth">이 Host에서 gh auth login으로 로그인한 뒤 새로고침하세요.</string>
+    <string name="github_failed">GitHub를 불러오지 못했습니다. 저장소의 원격 주소, 접근 권한, Host 연결을 확인한 뒤 새로고침하세요.</string>
+    <string name="github_disconnected">이 Host에 다시 연결한 뒤 새로고침하세요.</string>
+    <string name="github_unknown">요청이 완료되었을 수 있습니다. 다시 게시하기 전에 GitHub를 확인하세요. 초안은 유지됩니다.</string>
+    <string name="github_truncated">이 GitHub 대화가 Host의 응답 크기 제한을 초과합니다.</string>
+    <string name="github_draft_failed">이 폰에 초안을 저장하지 못했습니다. 이 화면을 열어 둔 채 다시 편집해 주세요.</string>
+    <string name="github_draft_limit">댓글 텍스트는 최대 64 KiB까지 입력할 수 있습니다.</string>
+
     <!-- App lock (117) -->
     <string name="app_lock_settings_title">앱 잠금</string>
     <string name="app_lock_enabled_label">인증 요구</string>
@@ -342,6 +382,14 @@
     <string name="input_history_failed">입력 이력을 읽거나 저장하지 못했습니다.</string>
 
     <string name="chat_title">Chat: %1$s</string>
+    <!-- Chat search -->
+    <string name="chat_search_button">Chat 검색</string>
+    <string name="chat_search_hint">저장된 Chat 검색</string>
+    <string name="chat_search_count">%2$d개 중 %1$d번째 일치</string>
+    <string name="chat_search_previous">이전</string>
+    <string name="chat_search_next">다음</string>
+    <string name="chat_search_close">검색 닫기</string>
+
     <!-- Chat reading position -->
     <string name="chat_latest_button">최신으로</string>
     <string name="chat_latest_count_button">최신으로 (%1$d)</string>

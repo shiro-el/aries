@@ -25,14 +25,17 @@ import io.github.shiroel.aries.core.ChatToolDetails
 @Composable
 internal fun ChatRawInput(input: String) {
     var showRaw by remember { mutableStateOf(false) }
-    val disclosureState = stringResource(if (showRaw) R.string.chat_details_expanded else R.string.chat_details_collapsed)
+    val active = LocalChatSearch.current.active
+    val searchExpanded = active?.field?.entryId == LocalChatSearchEntry.current && active?.field?.key == "tool-input"
+    val visible = showRaw || searchExpanded
+    val disclosureState = stringResource(if (visible) R.string.chat_details_expanded else R.string.chat_details_collapsed)
     TextButton(
         onClick = { showRaw = !showRaw },
         modifier = Modifier.semantics { stateDescription = disclosureState },
     ) { Text(stringResource(R.string.chat_tool_raw_input)) }
-    if (showRaw) {
+    if (visible) {
         ChatTextActions(input) { modifier ->
-            Text(input, modifier, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+            SearchableChatText(input, "tool-input", modifier, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
         }
     }
 }

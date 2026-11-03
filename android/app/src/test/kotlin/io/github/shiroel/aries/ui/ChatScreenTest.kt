@@ -94,7 +94,7 @@ class ChatScreenTest {
                 ChatStatus.LIVE, "c:1",
             ),
         )
-        compose.waitForIdle()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Create hello.txt").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Create hello.txt").assertExists()
         compose.onNodeWithText(str(R.string.chat_thinking)).assertExists()
         compose.onNodeWithText("Write").assertExists()
