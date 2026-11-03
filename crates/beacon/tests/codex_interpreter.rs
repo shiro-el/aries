@@ -305,7 +305,7 @@ fn an_updated_file_shows_its_unified_diff() {
 }
 
 #[test]
-fn one_single_choice_question_is_answered_with_down_and_enter() {
+fn single_choice_questions_advance_in_order_with_down_and_enter() {
     let q = |n: usize, multi: bool| ChatQuestion {
         questions: (0..n)
             .map(|_| Question {
@@ -329,11 +329,12 @@ fn one_single_choice_question_is_answered_with_down_and_enter() {
         Codex.answer_keys(&q(1, false), &[vec![2]]).unwrap(),
         ["down", "down", "enter"]
     );
-    // Not verified with a real Codex: refused rather than guessed.
-    assert!(matches!(
-        Codex.answer_keys(&q(2, false), &[vec![0], vec![1]]),
-        Err(KeysError::Unsupported(_))
-    ));
+    assert_eq!(
+        Codex
+            .answer_keys(&q(2, false), &[vec![0], vec![1]])
+            .unwrap(),
+        ["enter", "down", "enter"]
+    );
     assert!(matches!(
         Codex.answer_keys(&q(1, true), &[vec![0, 1]]),
         Err(KeysError::Unsupported(_))
