@@ -1,0 +1,190 @@
+package io.github.shiroel.aries.ui
+
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
+import androidx.test.core.app.ApplicationProvider
+import io.github.shiroel.aries.R
+import io.github.shiroel.aries.core.AgentStatus
+import io.github.shiroel.aries.core.AgentView
+import io.github.shiroel.aries.core.CallAnswer
+import io.github.shiroel.aries.core.CallAnswerState
+import io.github.shiroel.aries.core.CallInfo
+import io.github.shiroel.aries.core.CallReply
+import io.github.shiroel.aries.core.CallReplyOutcome
+import io.github.shiroel.aries.core.CallUrgency
+import io.github.shiroel.aries.core.CoreException
+import io.github.shiroel.aries.core.Endpoint
+import io.github.shiroel.aries.core.TerminalInfo
+import kotlinx.coroutines.CompletableDeferred
+import org.junit.Assert.assertEquals
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+
+/** Chat/inbox behavior at the UI/core seam, including live replies made elsewhere. */
+@RunWith(RobolectricTestRunner::class)
+@Config(qualifiers = "h2000dp")
+class ChatCallsTest {
+    @get:Rule val compose = createComposeRule()
+    private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+    private fun str(id: Int, vararg args: Any) = context.getString(id, *args)
+    private val agent = TerminalInfo("t1", "claude", "", listOf("claude"), "/repo", "live", AgentStatus.Working, false, 0uL)
+    private val call = CallInfo("h1", "call-secret-123", 1_000uL, "t1", true, "Merge?", "Tests pass.",
+        CallUrgency.CHECK, listOf("Merge", "Wait"), null, true)
+
+    private fun answer(state: CallAnswerState) = CallAnswer(1u, "Wait", state, 2_000uL, "reply detail")
+
+    private fun core(entries: List<CallInfo> = listOf(call)) = FakeCore().apply {
+        terminals = listOf(agent)
+        savedView = AgentView.CHAT
+        addHost("home", Endpoint.Ssh("10.0.0.2", 22u, "me"))
+        ensureKey()
+        callsOf["h1"] = entries
+    }
+
+    private fun openChat(core: FakeCore) {
+        compose.setContent {
+            val scope = rememberCoroutineScope()
+            val model = remember { HostsModel(core, scope) }
+            AriesApp(model)
+        }
+        compose.onNodeWithText("home").performClick()
+        compose.onNodeWithText("claude").performClick()
+    }
+
+    private fun chooseWait() = compose.onNodeWithContentDescription(
+        str(R.string.call_answer_choice_label, call.title, "Wait"),
+    ).performClick()
+
+    private fun openInboxFromChat() {
+        compose.onNodeWithText(str(R.string.back_button)).performClick()
+        compose.onNodeWithTag("console-inbox").performClick()
+    }
+
+    private fun assertNoCallId() {
+        compose.onAllNodes(
+            hasText("call-secret-", substring = true) or hasContentDescription("call-secret-", substring = true),
+            useUnmergedTree = true,
+        ).assertCountEquals(0)
+    }
+
+    @Test
+    fun chatOmitsPastCallsButInboxKeepsTheirHistory() {
+        val past = CallAnswerState.entries.mapIndexed { index, state ->
+            call.copy(id = "call-secret-$index", title = "Past $state", atMs = index.toULong(), answer = answer(state))
+        } + call.copy(id = "call-secret-record", title = "Record only", choices = emptyList())
+        openChat(core(past + call))
+        compose.onNodeWithText(call.title).assertExists()
+        past.forEach { compose.onNodeWithText(it.title).assertDoesNotExist() }
+        compose.onNodeWithTag("call-inbox-past").assertDoesNotExist()
+        openInboxFromChat()
+        compose.onNodeWithTag("call-inbox-past").assertExists()
+        past.forEach {
+            compose.onNodeWithTag("call-inbox-list").performScrollToNode(hasText(it.title))
+            compose.onNodeWithText(it.title).assertExists()
+            assertNoCallId()
+        }
+        assertNoCallId()
+    }
+
+    @Test
+    fun chatAndInboxDoNotExposeCallIdsInTextOrAccessibilityLabels() {
+        openChat(core())
+        compose.onNodeWithText(call.title).assertExists()
+        assertNoCallId()
+        compose.onNodeWithText(str(R.string.console_chat_call_label)).assertExists()
+        openInboxFromChat()
+        assertNoCallId()
+    }
+
+    @Test
+    fun aReplyMadeElsewhereDisappearsOnTheLiveFeedUpdate() {
+        val core = core()
+        openChat(core)
+        compose.onNodeWithText(call.title).assertExists()
+        compose.runOnIdle { core.callListeners.getValue("h1").onCalls(listOf(call.copy(answer = answer(CallAnswerState.DELIVERED)))) }
+        compose.onNodeWithText(call.title).assertDoesNotExist()
+        assertEquals(emptyList<Triple<String, String, UInt>>(), core.replies)
+        openInboxFromChat()
+        compose.onNodeWithText(call.title).assertExists()
+        compose.onNodeWithText(str(R.string.call_answer_delivered, "Wait")).assertExists()
+    }
+
+    @Test
+    fun aCallThatBecomesUnanswerableDisappearsOnTheLiveFeedUpdate() {
+        val core = core()
+        openChat(core)
+        compose.onNodeWithText(call.title).assertExists()
+        compose.runOnIdle { core.callListeners.getValue("h1").onCalls(listOf(call.copy(choices = emptyList()))) }
+        compose.onNodeWithText(call.title).assertDoesNotExist()
+    }
+
+    @Test
+    fun anInFlightReplyStaysVisibleEvenWhenTheFeedAlreadyShowsAnAnswer() {
+        val hold = CompletableDeferred<Unit>()
+        val core = core().apply {
+            replyHold = hold
+            replyResult = CallReply(CallReplyOutcome.DELIVERED, answer(CallAnswerState.DELIVERED), null)
+        }
+        openChat(core)
+        chooseWait()
+        compose.runOnIdle { core.callListeners.getValue("h1").onCalls(listOf(call.copy(answer = answer(CallAnswerState.CLAIMED)))) }
+        compose.onNodeWithText(call.title).assertExists()
+        compose.onNodeWithText(str(R.string.call_answer_sending)).assertExists()
+        hold.complete(Unit)
+        compose.waitForIdle()
+        compose.onNodeWithText(call.title).assertDoesNotExist()
+        assertEquals(listOf(Triple("h1", call.id, 1u)), core.replies)
+    }
+
+    @Test
+    fun aReplyThatNeverStartedShowsItsErrorAndCanBeRetried() {
+        val failure = CoreException.Unreachable("no route")
+        val core = core().apply { replyFailure = failure }
+        openChat(core)
+        chooseWait()
+        compose.onNodeWithText(str(R.string.call_reply_not_sent, failure.message.orEmpty())).assertExists()
+        core.replyResult = CallReply(CallReplyOutcome.DELIVERED, answer(CallAnswerState.DELIVERED), null)
+        chooseWait()
+        compose.onNodeWithText(call.title).assertDoesNotExist()
+        assertEquals(2, core.replies.size)
+    }
+
+    @Test
+    fun aFailedLocalReplyKeepsItsRecordedErrorVisible() {
+        openChat(core().apply { replyResult = CallReply(CallReplyOutcome.FAILED, answer(CallAnswerState.FAILED), "reply detail") })
+        chooseWait()
+        compose.onNodeWithText(call.title).assertExists()
+        compose.onNodeWithText(str(R.string.call_answer_failed, "Wait")).assertExists()
+        compose.onNodeWithText("reply detail").assertExists()
+        compose.onNodeWithText(str(R.string.call_reply_unknown)).assertDoesNotExist()
+    }
+
+    @Test
+    fun anUnconfirmedLocalReplyKeepsItsRecordedResultVisible() {
+        openChat(core().apply { replyResult = CallReply(CallReplyOutcome.UNCONFIRMED, answer(CallAnswerState.UNCONFIRMED), "reply detail") })
+        chooseWait()
+        compose.onNodeWithText(str(R.string.call_answer_unconfirmed, "Wait")).assertExists()
+        compose.onNodeWithText("reply detail").assertExists()
+        compose.onNodeWithText(str(R.string.call_reply_unknown)).assertDoesNotExist()
+    }
+
+    @Test
+    fun aReplyRaceKeepsTheOutcomeVisibleAlongsideTheEarlierAnswer() {
+        openChat(core().apply { replyResult = CallReply(CallReplyOutcome.ANSWERED, answer(CallAnswerState.DELIVERED), null) })
+        chooseWait()
+        compose.onNodeWithText(str(R.string.call_reply_answered)).assertExists()
+        compose.onNodeWithText(str(R.string.call_answer_delivered, "Wait")).assertExists()
+    }
+}

@@ -49,8 +49,8 @@ class JumpHostsScreenTest {
         val core = FakeCore().apply { ensureKey() }
         show(core)
 
-        // The host list is lazy: bring the extra keys section into composition first.
-        compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(str(R.string.key_new_button)))
+        compose.openKeyDetails()
+        compose.onNodeWithText(str(R.string.key_new_button)).performScrollTo()
         field(R.string.key_new_label).onFirst().performScrollTo().performTextInput("bastion")
         compose.onNodeWithText(str(R.string.key_new_button)).performScrollTo().performClick()
 

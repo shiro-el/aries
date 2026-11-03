@@ -72,7 +72,7 @@ internal fun CallInboxOverlay(model: HostsModel, modifier: Modifier = Modifier) 
             .background(MaterialTheme.colorScheme.surface).testTag("call-inbox-panel")
             .semantics { paneTitle = title }) {
             CallInboxPanel(model.calls, model::openCallChat, callerName = model::callCallerName,
-                onInstallBeacon = { model.openHost(it, showBeaconFirst = true) })
+                onInstallBeacon = model::openHostSettings)
         }
     }
 }

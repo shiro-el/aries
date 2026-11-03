@@ -79,6 +79,9 @@ class PushService : FirebaseMessagingService() {
         fun show(context: Context, notice: PushNotice, canAnswerInBackground: (hostId: String) -> Boolean = { false }) {
             val manager = context.getSystemService(NotificationManager::class.java)
             val content = notice.content
+            // Sub-agents report to their parent, even if an older Beacon pushes them.
+            if (content is PushContent.Status && !content.topLevel) return
+            if (content is PushContent.Call && !content.topLevel) return
             if (content is PushContent.Call) {
                 val call = CallNotice(notice.hostId, notice.hostName, content)
                 val view = when {

@@ -30,6 +30,13 @@ class PushNotificationTest {
     private fun shown(): List<Notification> = manager.activeNotifications.map { it.notification }
 
     @Test
+    fun subAgentStatusAndCallsNeverNotifyTheHuman() {
+        PushService.show(context, PushNotice("h1", "box", PushContent.Status("t2", "child", null, false, AgentStatus.Error("parent only"), 1uL)))
+        PushService.show(context, PushNotice("h1", "box", PushContent.Call("child-call", "t2", false, "Report", "", CallUrgency.URGENT, listOf("Continue"), 1uL)))
+        assertEquals(0, shown().size)
+    }
+
+    @Test
     fun statusAndCallNotificationsUseTheBrandMarkAndSavedAccentEvenWithoutAnActivity() {
         ThemeSettings.from(context).setAccent("#3FB68B")
         PushService.show(context, status("t3", "claude", AgentStatus.Done))

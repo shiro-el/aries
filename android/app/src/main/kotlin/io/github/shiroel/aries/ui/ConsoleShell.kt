@@ -140,9 +140,10 @@ private fun consoleTitle(screen: Screen): String = when (screen) {
 
 private fun consoleBack(model: HostsModel): (() -> Unit)? = when (val screen = model.screen) {
     Screen.Hosts -> null
+    Screen.Settings, is Screen.JumpHosts -> model::settingsBack
     is Screen.Terminal -> model::closeTerminal
     is Screen.Chat -> model::closeChat
-    is Screen.Agents -> if (screen.board.openKey != null) screen.board::closeDetail else null
+    is Screen.Agents -> null
     is Screen.Browse -> if (screen.browser.openSpaceId != null) screen.browser::closeSpace else null
     else -> model::back
 }
@@ -150,8 +151,13 @@ private fun consoleBack(model: HostsModel): (() -> Unit)? = when (val screen = m
 @Composable
 private fun ConsoleDrawer(model: HostsModel, navigate: (() -> Unit) -> Unit) {
     val agents = model.drawerAgents
-    val waiting = agents.count { isWaiting(it.terminal.agentStatus) }
+    val waiting = agents.count { it.terminal.parent == null && isWaiting(it.terminal.agentStatus) }
     val current = model.screen
+    val currentAgent = when (current) {
+        is Screen.Terminal -> current.viewer.link?.host?.id?.let { AgentKey(it, current.viewer.terminal.address) }
+        is Screen.Chat -> AgentKey(current.chat.host.id, current.chat.terminal.address)
+        else -> null
+    }
     val hostId = when (current) {
         is Screen.Browse -> current.browser.host.id
         is Screen.Connecting -> current.host.id
@@ -165,7 +171,7 @@ private fun ConsoleDrawer(model: HostsModel, navigate: (() -> Unit) -> Unit) {
             }
             HorizontalDivider()
             DrawerRow(
-                stringResource(R.string.agents_button), current is Screen.Agents && current.board.openKey == null,
+                stringResource(R.string.agents_button), current is Screen.Agents,
                 onClick = { navigate(model::openAgents) },
             ) {
                 Text(stringResource(R.string.console_agents_waiting, waiting), fontSize = 12.sp,
@@ -177,13 +183,14 @@ private fun ConsoleDrawer(model: HostsModel, navigate: (() -> Unit) -> Unit) {
             item(key = "host:${host.id}") {
                 DrawerRow(host.name, hostId == host.id, Modifier.testTag("drawer-host:${host.id}"), onClick = { navigate { model.openHost(host) } })
             }
-            val children = agents.filter { it.host.id == host.id }
-            children.forEachIndexed { index, entry ->
+            val children = terminalTree(agents.filter { it.host.id == host.id }, rootGuides = true) { it.terminal }
+            children.forEach { row ->
+                val entry = row.value
                 item(key = "agent:${entry.key.hostId}\n${entry.key.address}") {
                     DrawerRow(
-                        displayName(entry.terminal), (current as? Screen.Agents)?.board?.openKey == entry.key,
+                        displayName(entry.terminal), currentAgent == entry.key,
                         Modifier.testTag("drawer-agent:${entry.key.hostId}:${entry.key.address}"),
-                        guide = stringResource(if (index == children.lastIndex) R.string.console_tree_last else R.string.console_tree_branch),
+                        guide = row.guide,
                         onClick = { navigate { model.openDrawerAgent(entry) } },
                     ) { DrawerAgentStatus(entry.terminal.agentStatus) }
                 }

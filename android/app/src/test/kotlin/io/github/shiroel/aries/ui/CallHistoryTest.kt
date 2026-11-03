@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
@@ -85,7 +86,7 @@ class CallHistoryTest {
     }
 
     @Test
-    fun missingBeaconLinksToThatHostsExistingInstallFlow() {
+    fun missingBeaconLinksToThatHostsInstallInSettings() {
         val core = twoHosts().apply {
             terminalsOf["h2"] = (1..40).map { agent.copy(address = "t$it", name = "Agent $it") }
         }
@@ -111,8 +112,8 @@ class CallHistoryTest {
         }
         compose.onNodeWithText(str(R.string.call_inbox_install_beacon, "server")).performClick()
         compose.onNodeWithTag("call-inbox-panel").assertDoesNotExist()
-        compose.onNodeWithText(str(R.string.terminals_title, "server")).assertExists()
-        compose.onNodeWithText(str(R.string.beacon_install_button)).assertIsDisplayed().performClick()
+        compose.onNodeWithTag("host-actions:h2").assertExists()
+        compose.onNodeWithText(str(R.string.beacon_install_button)).performScrollTo().assertIsDisplayed().performClick()
         compose.onNodeWithText(str(R.string.beacon_version, "0.1.0")).assertExists()
         assertEquals(listOf("h2"), installs)
     }
@@ -149,6 +150,18 @@ class CallHistoryTest {
             core.callListeners.getValue("h1").onState(io.github.shiroel.aries.core.CallFeedState.Live)
         }
         compose.onNodeWithText(install).assertDoesNotExist()
+    }
+
+    @Test
+    fun helperChoicesStayInHistoryWithoutAnInboxCountOrHumanAnswerButtons() {
+        val core = twoHosts().apply {
+            callsOf["h1"] = listOf(call("h1", "child", "Helper report", 1uL, topLevel = false, choices = listOf("Continue")))
+        }
+        show(core)
+        compose.onNodeWithTag("console-inbox-count", useUnmergedTree = true).assertDoesNotExist()
+        openCalls()
+        compose.onNodeWithText("Helper report").assertExists()
+        compose.onNodeWithContentDescription(str(R.string.call_answer_choice_label, "Helper report", "Continue")).assertDoesNotExist()
     }
 
     @Test

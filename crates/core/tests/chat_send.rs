@@ -171,3 +171,79 @@ async fn a_message_waits_while_a_person_types_then_goes_in() {
     // The person's keys come first, then the message.
     assert_eq!(inputs_after(&agent, 1), vec!["abcdafter you"]);
 }
+
+/// The supported TUIs enable bracketed paste. Capture the bytes at a real
+/// Terminal boundary: LF must stay inside one paste, with exactly one final
+/// Enter. A second send also catches stray submissions from the first draft.
+#[tokio::test]
+async fn multiline_messages_are_one_paste_and_one_submit_for_each_agent() {
+    let hc = HcSession::start();
+    let data = tempfile::tempdir().unwrap();
+    let script = data.path().join("capture.py");
+    std::fs::write(
+        &script,
+        r#"import json, os, sys, tty
+
+tty.setraw(0)
+os.write(1, b'\x1b[?2004h\x1b]7501;state=idle:app=' + sys.argv[2].encode() + b'\x1b\\')
+raw = b''
+while True:
+    byte = os.read(0, 1)
+    if not byte:
+        break
+    raw += byte
+    if byte == b'\r':
+        with open(sys.argv[1], 'a') as log:
+            log.write(json.dumps(list(raw)) + '\n')
+        raw = b''
+"#,
+    )
+    .unwrap();
+    let conn = connect(&hc, &data).await;
+    let message = "첫 줄\n\nsecond line\n";
+    for app in ["claude-code", "codex", "opencode", "pi"] {
+        let log = data.path().join(format!("{app}.jsonl"));
+        let address = hc.run_bg(
+            app,
+            &[
+                "python3",
+                &script.to_string_lossy(),
+                &log.to_string_lossy(),
+                app,
+            ],
+        );
+        wait_state(&hc, &address, "idle");
+        for text in [message, "next"] {
+            assert_eq!(
+                conn.send_message(address.clone(), text.into(), Arc::new(Held::default()))
+                    .await
+                    .unwrap(),
+                SendOutcome::Sent,
+            );
+        }
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let received = loop {
+            let lines: Vec<Vec<u8>> = std::fs::read_to_string(&log)
+                .unwrap_or_default()
+                .lines()
+                .map(|l| serde_json::from_str(l).unwrap())
+                .collect();
+            if lines.len() >= 2 {
+                break lines;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "{app}: no submitted messages: {lines:?}"
+            );
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        };
+        let expected: Vec<Vec<u8>> = [message, "next"]
+            .into_iter()
+            .map(|text| format!("\x1b[200~{text}\x1b[201~\r").into_bytes())
+            .collect();
+        assert_eq!(
+            received, expected,
+            "{app}: LF stays in the paste until one final Enter"
+        );
+    }
+}

@@ -115,20 +115,26 @@ enum class AfterTrust { Connect, InstallKey }
 class HostsModel(
     private val core: AriesCoreInterface,
     private val scope: CoroutineScope,
-    beaconFetcher: BeaconFetcher = HttpBeaconFetcher(),
+    private val beaconFetcher: BeaconFetcher = HttpBeaconFetcher(),
     private val keyWork: CoroutineContext = EmptyCoroutineContext,
-    pushPlatform: PushPlatform = NoPush,
+    private val pushPlatform: PushPlatform = NoPush,
     private val http: HttpClient = HttpRelayClient(),
 ) {
-    /** The Beacon section of the connected Host. */
-    val beacon = BeaconModel(core, scope, beaconFetcher, onRemoved = { onBeaconRemoved() }, keyWork = keyWork)
+    /** Current Host's settings models; a previous Host's pending work keeps its own state. */
+    var beacon by mutableStateOf(BeaconModel(core, scope, beaconFetcher, keyWork = keyWork))
+        private set
+    var push by mutableStateOf(PushModel(core, scope, pushPlatform, http, keyWork))
+        private set
 
-    /** The push section of the connected Host. */
-    val push = PushModel(core, scope, pushPlatform, http, keyWork)
-
-    private fun onBeaconRemoved() {
-        flushPushRevocations()
-        beacon.host?.let(push::load)
+    private fun loadHostSettings(host: Host) {
+        val hostPush = PushModel(core, scope, pushPlatform, http, keyWork)
+        push = hostPush
+        beacon = BeaconModel(core, scope, beaconFetcher, onRemoved = {
+            flushPushRevocations()
+            hostPush.load(host)
+        }, keyWork = keyWork)
+        beacon.load(host)
+        hostPush.load(host)
     }
 
     /** Sends the Relay revocations that Host or Beacon removal queued. */
@@ -164,6 +170,14 @@ class HostsModel(
 
     /** How an Agent opens: the view last picked with the Terminal/Chat toggle (Terminal by default). */
     var agentView by mutableStateOf(AgentView.TERMINAL)
+        private set
+
+    /** Settings subpages share the drawer destination and own all configuration. */
+    var settingsHost by mutableStateOf<Host?>(null)
+        private set
+    var settingsKeys by mutableStateOf(false)
+        private set
+    var missingKeyHostId by mutableStateOf<String?>(null)
         private set
 
     /** The open Host's connection and structure watch, while [Screen.Browse] shows (the latest line after a reconnect). */
@@ -253,7 +267,7 @@ class HostsModel(
         core.setJumpHosts(host.id, jumps)
         core.setHostSshKey(host.id, hostKeyId)
         refreshRoutes()
-        screen = Screen.Hosts
+        screen = Screen.Settings
     }
 
     private fun refreshRoutes() {
@@ -269,7 +283,8 @@ class HostsModel(
         hostsChanged()
     }
 
-    fun connect(host: Host, showBeaconFirst: Boolean = false) {
+    fun connect(host: Host) {
+        missingKeyHostId = null
         val connecting = Screen.Connecting(host)
         screen = connecting
         scope.launch {
@@ -279,19 +294,22 @@ class HostsModel(
                     conn.disconnect()
                     return@launch
                 }
-                val browser = HostBrowser(host, showBeaconFirst)
+                val browser = HostBrowser(host)
                 val link = link(host, conn)
                 browser.link = link
                 browseLink = link
                 browser.savedLaunches = conn.savedLaunches()
                 open = conn to null
                 screen = Screen.Browse(browser)
-                beacon.load(host)
-                push.load(host)
+                loadHostSettings(host)
                 status = watchBrowse(link, browser)
             } catch (e: CoreException) {
                 if (screen !== connecting) return@launch
                 screen = Screen.Hosts
+                if (e is CoreException.NoKey && key == null) {
+                    missingKeyHostId = host.id
+                    return@launch
+                }
                 prompt = when (e) {
                     is CoreException.HostKeyUnknown -> Prompt.TrustHostKey(host, e.fingerprint)
                     is CoreException.JumpHostKeyUnknown -> Prompt.TrustJumpHostKey(host, e.hop, e.address, e.fingerprint)
@@ -438,6 +456,9 @@ class HostsModel(
             core.removeHost(prompt.host.id)
             hosts = core.hosts()
             hostsChanged()
+            settingsHost = null
+            settingsKeys = false
+            screen = Screen.Settings
             flushPushRevocations()
         }
     }
@@ -490,22 +511,15 @@ class HostsModel(
     /**
      * Opens [terminal]: an Agent in the saved [agentView], any other
      * Terminal as a Terminal in observe mode (the desktop keeps its size and
-     * the screen follows the Terminal's grid). Entry point for every list
-     * that shows Terminals or Agents: from Browse it is a Terminal of the
-     * open Host; from [Screen.Agents] it is the Terminal of the Agent whose
-     * detail is open. Leaving it returns to where it was opened.
+     * the screen follows the Terminal's grid). From Browse it is a Terminal
+     * of the open Host. Agents lists use [openAgent] to retain the whole Host/address
+     * identity. Leaving a Terminal returns to where it was opened.
      */
     fun openTerminal(terminal: TerminalInfo) {
         when (val s = screen) {
             is Screen.Browse -> {
                 val link = browseLink ?: return
                 show(link, s.browser.current(terminal), s)
-            }
-            is Screen.Agents -> {
-                val key = s.board.openKey ?: return
-                if (key.address != terminal.address) return
-                val link = agentLinks[key.hostId] ?: return
-                show(link, s.board.find(key)?.terminal ?: terminal, s)
             }
             // From a Chat (a Blocked Agent): back returns to the still-live Chat.
             is Screen.Chat -> {
@@ -696,7 +710,7 @@ class HostsModel(
     /**
      * A tapped Agent notification (warm or cold start): leaves whatever is
      * open, shows the Agents list and, once [hostId]'s list arrives, opens
-     * that Agent's Terminal (back returns to its detail). A Terminal that is
+     * that Agent in its saved view (back returns to the list). A Terminal that is
      * no longer live, or a Host that was removed, is explained instead.
      */
     fun openPushedAgent(hostId: String, address: String) {
@@ -737,7 +751,7 @@ class HostsModel(
                                 terminalOn(host.id)?.update(list)
                                 focusing?.let { key ->
                                     focusing = null
-                                    if (screen === agents) focusOn(agents, link, host, key, list)
+                                    if (screen === agents) focusOn(agents, host, key, list)
                                 }
                             }
                         } finally {
@@ -751,7 +765,7 @@ class HostsModel(
         }
     }
 
-    private fun focusOn(agents: Screen.Agents, link: HostLink, host: Host, key: AgentKey, list: List<TerminalInfo>) {
+    private fun focusOn(agents: Screen.Agents, host: Host, key: AgentKey, list: List<TerminalInfo>) {
         val terminal = list.find { it.address == key.address && it.state == "live" }
         if (terminal == null) {
             prompt = Prompt.Problem(
@@ -760,16 +774,20 @@ class HostsModel(
             )
             return
         }
-        agents.board.open(key)
-        show(link, terminal, agents)
+        openAgent(agents.board, AgentEntry(host, terminal))
     }
 
-    /** Opens an Agent's detail; a Done Agent counts as seen there, for every client. */
+    /** Opens an Agent in its saved view over the list; a Done Agent counts as seen for every client. */
     fun openAgent(board: AgentBoard, entry: AgentEntry) {
-        board.open(entry.key)
-        val t = entry.terminal
-        if (t.agentStatus != AgentStatus.Done) return
-        labelWrite(board, entry) { it.markSeen(t.address, t.turn) }
+        val agents = screen as? Screen.Agents ?: return
+        if (agents.board !== board) return
+        val current = board.find(entry.key) ?: return
+        val link = agentLinks[current.host.id] ?: return
+        val t = current.terminal
+        show(link, t, agents)
+        if (t.agentStatus == AgentStatus.Done) {
+            labelWrite(board, current) { it.markSeen(t.address, t.turn) }
+        }
     }
 
     /** Pins or unpins an Agent for every client. */
@@ -857,9 +875,9 @@ class HostsModel(
         return find(screen)?.let(::displayName)?.takeIf { it.isNotBlank() }
     }
 
-    fun openHost(host: Host, showBeaconFirst: Boolean = false) {
+    fun openHost(host: Host) {
         back()
-        connect(host, showBeaconFirst)
+        connect(host)
     }
 
     /** Uses whole Host/address identity and the existing saved-view/notification route. */
@@ -867,7 +885,6 @@ class HostsModel(
         val board = (screen as? Screen.Agents)?.board
         if (board != null) {
             openAgent(board, entry)
-            openTerminal(entry.terminal)
         } else {
             openPushedAgent(entry.host.id, entry.terminal.address)
         }
@@ -876,7 +893,37 @@ class HostsModel(
     /** Settings is a drawer destination. */
     fun openSettings() {
         back()
+        settingsHost = null
+        settingsKeys = false
         screen = Screen.Settings
+    }
+
+    /** Shared destination for Host menus, Browse guidance and inbox install links (ticket 51). */
+    fun openHostSettings(host: Host) {
+        openSettings()
+        settingsHost = host
+        loadHostSettings(host)
+    }
+
+    fun openKeySettings() {
+        openSettings()
+        settingsKeys = true
+    }
+
+    fun settingsBack() {
+        if (screen is Screen.JumpHosts) {
+            screen = Screen.Settings
+        } else if (settingsHost != null || settingsKeys) {
+            settingsHost = null
+            settingsKeys = false
+        } else {
+            back()
+        }
+    }
+
+    fun setDefaultAgentView(view: AgentView) = guard {
+        core.setAgentView(view)
+        agentView = core.agentView()
     }
 
     /** The connection owned by a Chat opened from the inbox. */

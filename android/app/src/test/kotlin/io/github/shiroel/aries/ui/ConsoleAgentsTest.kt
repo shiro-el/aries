@@ -53,9 +53,8 @@ class ConsoleAgentsTest {
         compose.waitForIdle()
         assertEquals(listOf("h1 t2 pinned=true"), core.labelWrites)
         compose.onNodeWithContentDescription(str(R.string.agent_unpin_button_label, "review", "home")).assertExists()
+        assertTrue("Pinning keeps the list open", core.connectionsOf.getValue("h1").views.isEmpty())
         compose.onNodeWithText("review").performClick()
-        compose.onNodeWithText(str(R.string.agent_detail_address, "t2")).assertExists()
-        compose.onNodeWithText(str(R.string.agent_open_button)).performClick()
         compose.waitForIdle()
         assertEquals("t2", core.connectionsOf.getValue("h1").views.single().address)
     }

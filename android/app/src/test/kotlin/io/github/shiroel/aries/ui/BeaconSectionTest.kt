@@ -42,7 +42,7 @@ class BeaconSectionTest {
             val model = remember { HostsModel(core, scope, noDownload) }
             MaterialTheme { AriesApp(model) }
         }
-        compose.onNodeWithText("box").performClick()
+        compose.openHostActions("h1")
         compose.waitForIdle()
     }
 

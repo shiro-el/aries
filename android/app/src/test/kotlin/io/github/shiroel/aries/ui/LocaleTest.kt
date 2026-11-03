@@ -29,6 +29,7 @@ class LocaleTest {
     fun koreanDeviceShowsKorean() {
         show()
         compose.onNodeWithText("호스트").assertExists()
+        compose.openKeyDetails()
         compose.onNodeWithText("SSH 키 만들기").assertExists()
     }
 
@@ -37,6 +38,7 @@ class LocaleTest {
     fun englishDeviceShowsEnglish() {
         show()
         compose.onNodeWithText("Hosts").assertExists()
+        compose.openKeyDetails()
         compose.onNodeWithText("Create SSH key").assertExists()
     }
 
@@ -45,6 +47,7 @@ class LocaleTest {
     fun untranslatedLanguageFallsBackToEnglish() {
         show()
         compose.onNodeWithText("Hosts").assertExists()
+        compose.openKeyDetails()
         compose.onNodeWithText("Create SSH key").assertExists()
     }
 }
