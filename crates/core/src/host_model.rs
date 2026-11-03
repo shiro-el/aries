@@ -17,7 +17,7 @@ use crate::hc::HcClient;
 use crate::{TerminalInfo, terminal_info};
 
 /// Why a Blocked Agent waits, when it said.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, uniffi::Enum)]
 pub enum BlockedReason {
     Permission,
     Question,
@@ -25,7 +25,7 @@ pub enum BlockedReason {
 }
 
 /// What an Agent needs from the user.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, uniffi::Enum)]
 pub enum AgentStatus {
     Working,
     Blocked {
@@ -88,9 +88,11 @@ pub(crate) fn pinned(terminal: &Value) -> bool {
     rule::is_pinned(&labels_of(terminal))
 }
 
-/// The `herdr.seen` turn of this Terminal.
-pub(crate) fn seen_turn(terminal: &Value) -> u64 {
-    rule::seen_turn(&labels_of(terminal))
+/// The shared seen turn, preserving absence so viewing turn zero can join it.
+pub(crate) fn seen_turn(terminal: &Value) -> Option<u64> {
+    terminal["labels"][rule::SEEN_LABEL]
+        .as_str()
+        .and_then(|value| value.trim().parse().ok())
 }
 
 /// What applying one notification asks of the caller.
@@ -230,9 +232,14 @@ pub struct TerminalWatch {
 }
 
 impl TerminalWatch {
-    pub(crate) async fn start(client: Arc<HcClient>) -> Result<Self, CoreError> {
+    pub(crate) async fn start(
+        client: Arc<HcClient>,
+        states: crate::last_known_state::States,
+        host_id: String,
+    ) -> Result<Self, CoreError> {
         let (snapshot, mut events) = client.subscribe_events(json!({})).await?;
         let mut model = Terminals::from_snapshot(&snapshot);
+        states.save(&host_id, model.infos())?;
         let (tx, mut rx) = watch::channel(Latest::List(model.infos()));
         rx.mark_changed();
         let task = tokio::spawn(async move {
@@ -254,8 +261,11 @@ impl TerminalWatch {
                         true
                     }
                 };
-                if changed && tx.send(Latest::List(model.infos())).is_err() {
-                    return;
+                if changed
+                    && (states.save(&host_id, model.infos()).is_err()
+                        || tx.send(Latest::List(model.infos())).is_err())
+                {
+                    break;
                 }
             }
             let _ = tx.send(Latest::Ended);

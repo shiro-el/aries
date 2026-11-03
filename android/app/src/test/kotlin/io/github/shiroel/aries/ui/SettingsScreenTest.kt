@@ -6,10 +6,12 @@ import android.content.Context
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.hasScrollToKeyAction
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollToKey
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
@@ -99,7 +101,8 @@ class SettingsScreenTest {
 
         compose.onNodeWithText(str(R.string.chat_cache_days, 7)).performScrollTo().performClick()
         compose.runOnIdle { assertEquals(7u, core.retentionDays) }
-        compose.onNodeWithText(str(R.string.attach_input_label)).performScrollTo().performClick()
+        compose.onNode(hasScrollToKeyAction()).performScrollToKey("attach-mode")
+        compose.onNodeWithText(str(R.string.attach_input_label)).performClick()
         compose.runOnIdle { assertEquals(AttachMode.INPUT, core.attachMode()) }
 
         compose.onNodeWithText(str(R.string.back_button)).performClick()

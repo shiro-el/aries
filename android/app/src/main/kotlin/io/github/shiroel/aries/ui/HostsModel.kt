@@ -210,6 +210,24 @@ class HostsModel(
     fun foregrounded() {
         links.forEach { it.check() }
         liveChat?.retryNow()
+        // Live connections publish their lists in the core. Other Hosts
+        // get a short pull while the foreground biometric prompt is available.
+        hosts.filter { host -> links.none { it.host.id == host.id && it.connection != null } }
+            .forEach { refreshLastKnownState(it.id) }
+    }
+
+    /** Foreground refresh, including biometric Hosts; surfaces use WorkManager instead. */
+    fun refreshLastKnownState(hostId: String) {
+        scope.launch {
+            try {
+                val connection = links.firstOrNull { it.host.id == hostId }?.connection
+                withContext(keyWork) {
+                    if (connection != null) connection.terminals() else core.snapshot(hostId)
+                }
+            } catch (_: CoreException) {
+                // Keep the previous value and its age on a failed pull.
+            }
+        }
     }
 
     /** The Chat that is open, or still running under the Terminal opened from it. */
@@ -721,6 +739,20 @@ class HostsModel(
         get() = agentLinks.mapNotNull { (id, link) -> link.connection?.let { id to it } }.toMap()
     private val agentJobs = mutableListOf<Job>()
 
+    /** Shared content awaiting an explicit Agent selection. */
+    var pendingShare by mutableStateOf<SharedContent?>(null)
+        private set
+
+    /** Both cold and warm ACTION_SEND routes use the existing multi-Host Agent list. */
+    fun receiveShare(intent: android.content.Intent): Boolean {
+        val content = SharedContent.from(intent) ?: return false
+        openAgents()
+        pendingShare = content
+        return true
+    }
+
+    fun cancelShare() { pendingShare = null }
+
     /** Connects to every Host and shows all their Agents in one list. */
     fun openAgents() {
         back()
@@ -808,17 +840,20 @@ class HostsModel(
         openAgent(agents.board, AgentEntry(host, terminal))
     }
 
-    /** Opens an Agent in its saved view over the list; a Done Agent counts as seen for every client. */
+    /** Opens an Agent in its saved view over the list; the visible screen owns seen sync. */
     fun openAgent(board: AgentBoard, entry: AgentEntry) {
         val agents = screen as? Screen.Agents ?: return
         if (agents.board !== board) return
         val current = board.find(entry.key) ?: return
         val link = agentLinks[current.host.id] ?: return
         val t = current.terminal
-        show(link, t, agents)
-        if (t.agentStatus == AgentStatus.Done) {
-            labelWrite(board, current) { it.markSeen(t.address, t.turn) }
-        }
+        val shared = pendingShare
+        if (shared != null) {
+            if (t.agentStatus == null || t.state != "live") return
+            chat(link, t, agents)
+            (screen as Screen.Chat).chat.pendingShare = shared
+            pendingShare = null
+        } else show(link, t, agents)
     }
 
     /** Pins or unpins an Agent for every client. */
@@ -1027,6 +1062,7 @@ class HostsModel(
         (screen as? Screen.Terminal)?.viewer?.takeIf { it.link?.host?.id == hostId }
 
     fun back() {
+        pendingShare = null
         (screen as? Screen.Chat)?.chat?.stop()
         ((screen as? Screen.Terminal)?.returnTo as? Screen.Chat)?.chat?.stop()
         viewing?.cancel()

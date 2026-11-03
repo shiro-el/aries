@@ -10,7 +10,7 @@ use aries_core::{CoreError, Incompatibility};
 use aries_test_support::HcSession;
 use common::{core_in, local_endpoint, script_endpoint};
 
-const ALL_METHODS: &str = r#""hello","terminal.run","terminal.list","terminal.get","terminal.kill","terminal.label","terminal.read","terminal.attach","terminal.send","terminal.keys","terminal.interrupt","doc.get","doc.set","events.subscribe""#;
+const ALL_METHODS: &str = r#""hello","terminal.run","terminal.list","terminal.get","terminal.kill","terminal.label","terminal.read","terminal.attach","terminal.send","terminal.put","terminal.keys","terminal.interrupt","doc.get","doc.set","events.subscribe""#;
 
 #[tokio::test]
 async fn local_connections_ignore_inherited_core_routes() {
