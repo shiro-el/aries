@@ -5,6 +5,20 @@
   Glossary terms: Host = 호스트, Terminal = 터미널, Agent = 에이전트.
 -->
 <resources>
+    <string name="agents_elapsed_less_than_minute">1분 미만</string>
+    <string name="agents_elapsed_minutes">%1$d분</string>
+    <string name="agents_elapsed_hours">%1$d시간</string>
+    <string name="agents_elapsed_days">%1$d일</string>
+    <string name="agents_elapsed_label">%1$s 전에 상태 변경</string>
+    <string name="agents_view_priority">우선순위</string>
+    <string name="agents_view_grouped">Space별 그룹</string>
+    <string name="agents_needs_you">확인 필요</string>
+    <string name="agents_pinned_group">고정 · %1$d</string>
+    <string name="agents_priority_group">%1$s · %2$d</string>
+    <string name="agents_space_group">%1$s · %2$s · %3$d</string>
+    <string name="agents_expand_children">%1$s 펼치기, 하위 Agent %2$d개</string>
+    <string name="agents_collapse_children">%1$s 접기, 하위 Agent %2$d개</string>
+    <string name="agents_child_count">%1$d</string>
     <string name="ok_button">확인</string>
     <string name="cancel_button">취소</string>
     <string name="back_button">뒤로</string>

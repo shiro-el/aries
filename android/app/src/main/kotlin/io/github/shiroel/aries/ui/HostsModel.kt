@@ -761,20 +761,31 @@ class HostsModel(
                 try {
                     // A new line starts from its snapshot, so what changed while away shows.
                     link.keep { c, _ ->
-                        val watch = c.watchTerminals()
+                        val structure = c.watchStructure(object : StructureListener {
+                            override fun onStructure(structure: HostStructure) {
+                                scope.launch { board.updateStructure(host.id, structure) }
+                            }
+
+                            override fun onClosed() { scope.launch { link.lost(c) } }
+                        })
                         try {
-                            while (true) {
-                                val list = watch.next()
-                                board.update(host.id, list)
-                                chatOn(host.id)?.update(list)
-                                terminalOn(host.id)?.update(list)
-                                focusing?.let { key ->
-                                    focusing = null
-                                    if (screen === agents) focusOn(agents, host, key, list)
+                            val watch = c.watchTerminals()
+                            try {
+                                while (true) {
+                                    val list = watch.next()
+                                    board.update(host.id, list)
+                                    chatOn(host.id)?.update(list)
+                                    terminalOn(host.id)?.update(list)
+                                    focusing?.let { key ->
+                                        focusing = null
+                                        if (screen === agents) focusOn(agents, host, key, list)
+                                    }
                                 }
+                            } finally {
+                                watch.stop()
                             }
                         } finally {
-                            watch.stop()
+                            structure.stop()
                         }
                     }
                 } catch (e: CoreException) {

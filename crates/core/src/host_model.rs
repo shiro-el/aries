@@ -192,6 +192,9 @@ impl Terminals {
                 t["status"] = data["status"].clone();
                 t["records"] = data.get("records").cloned().unwrap_or(json!({}));
                 t["reported"] = data.get("reported").cloned().unwrap_or(json!(true));
+                // The event omits status_ms. Only the Terminal record has the
+                // authoritative timestamp (also for an unchanged status word).
+                return Applied::Refetch(address.to_owned());
             }
             "turn" => t["turn"] = data["turn"].clone(),
             "title" => t["title"] = data["title"].clone(),
@@ -348,7 +351,7 @@ mod tests {
             "status",
             json!({"status": {"state": "error", "msg": "boom"}}),
         );
-        assert_eq!(m.apply(&next), Applied::Changed);
+        assert_eq!(m.apply(&next), Applied::Refetch("t2".into()));
         assert_eq!(
             status(&m, "t2"),
             Some(AgentStatus::Error {
