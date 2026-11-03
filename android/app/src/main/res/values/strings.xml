@@ -329,6 +329,10 @@
     <string name="chat_question_label">Question</string>
     <string name="chat_question_option_label">Answer %1$s</string>
     <string name="chat_question_multi_hint">Choose one or more.</string>
+    <string name="chat_question_text_label">Write an answer to %1$s</string>
+    <string name="chat_question_text_hint">Write your own answer</string>
+    <string name="chat_question_queued">Queued · answer the question above first.</string>
+    <string name="chat_question_history">Past question · replies are sent as messages.</string>
     <string name="chat_question_send">Send answer</string>
     <string name="chat_question_sending">Sending…</string>
     <string name="chat_question_sent">Answer sent.</string>

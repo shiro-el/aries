@@ -324,6 +324,10 @@
     <string name="chat_question_label">질문</string>
     <string name="chat_question_option_label">%1$s(으)로 답하기</string>
     <string name="chat_question_multi_hint">하나 이상 고르세요.</string>
+    <string name="chat_question_text_label">%1$s에 직접 답 쓰기</string>
+    <string name="chat_question_text_hint">직접 답 쓰기</string>
+    <string name="chat_question_queued">대기 중 · 위의 질문부터 답하세요.</string>
+    <string name="chat_question_history">지난 질문 · 답은 일반 메시지로 보냅니다.</string>
     <string name="chat_question_send">답 보내기</string>
     <string name="chat_question_sending">보내는 중…</string>
     <string name="chat_question_sent">답을 보냈습니다.</string>
