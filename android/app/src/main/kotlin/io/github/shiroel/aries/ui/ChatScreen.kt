@@ -1359,7 +1359,7 @@ fun ChatScreen(
                     // Scrollable clearance, rather than a footer that shrinks the viewport.
                     val transcriptPadding = PaddingValues(bottom = if (scroll.following || searchOpen) 0.dp else 64.dp)
                     val transcriptModifier = Modifier.fillMaxSize().chatImeAnchor(scroll.list)
-                        .then(if (scroll.positioned) Modifier else Modifier.graphicsLayer { alpha = 0f }.clearAndSetSemantics { })
+                        .then(if (scroll.positioned || entries.isEmpty()) Modifier else Modifier.graphicsLayer { alpha = 0f }.clearAndSetSemantics { })
                         .testTag("chat-transcript")
                     val historyContent = remember(chat, transcript, readAloud, agentCalls, calls, toggleTool) {
                         chatHistoryContent(transcript, chat, readAloud, agentCalls, calls, toggleTool)
@@ -1371,7 +1371,7 @@ fun ChatScreen(
                     // A stable row provider preserves image/diagram compositions when
                     // a follower starts reading history or returns to the bottom.
                     if (chat.showInitialLoading || !scroll.positioned && entries.isNotEmpty()) {
-                        val loadingText = if (thread != null) statusText(snapshot?.status ?: ChatStatus.LIVE) else null
+                        val loadingText = if (thread != null && chat.showInitialLoading) statusText(snapshot?.status ?: ChatStatus.LIVE) else null
                         ScreenLoading(loadingText ?: stringResource(R.string.chat_loading), onRetry = {
                             chat.link?.retryNow()
                             chat.retryConnection()
