@@ -56,7 +56,7 @@ class TerminalSearchTest {
     fun searchesNavigatesChangesOptionsAndClosesWithoutTyping() {
         val view = open()
         compose.onNodeWithTag("agent-actions").performClick()
-        compose.onNodeWithText(str(R.string.terminal_search_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.terminal_search_button)).performClick()
         compose.onNodeWithTag("terminal-search-query").performTextInput("error")
         compose.waitUntil(5000) { view.searches.any { it.first == "error" } }
         assertEquals(Triple("error", false, false), view.searches.last())
@@ -85,7 +85,7 @@ class TerminalSearchTest {
     fun invalidRegexExplainsTheErrorAndNoMatchesDisablesNavigation() {
         val view = open()
         compose.onNodeWithTag("agent-actions").performClick()
-        compose.onNodeWithText(str(R.string.terminal_search_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.terminal_search_button)).performClick()
         compose.onNodeWithText(str(R.string.terminal_search_regex)).performClick()
         compose.onNodeWithTag("terminal-search-query").performTextInput("[")
         compose.waitUntil(5000) {
@@ -110,7 +110,7 @@ class TerminalSearchTest {
         view.push(TerminalUpdate.Exited(TerminalExit("exited", 0, null)))
         compose.waitForIdle()
         compose.onNodeWithTag("agent-actions").performClick()
-        compose.onNodeWithText(str(R.string.terminal_search_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.terminal_search_button)).performClick()
         compose.onNodeWithTag("terminal-search-query").performTextInput("error")
         compose.waitUntil(5000) { view.searches.any { it.first == "error" } }
         results(view, 0u, 180u)

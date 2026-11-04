@@ -49,7 +49,7 @@ class GitChangesTest {
     @Test fun selectedDiffIsAppendedToChatDraftWithoutSending() {
         val (core, model) = openAgent()
         compose.onNodeWithTag("agent-actions").performClick()
-        compose.onNodeWithText(str(R.string.files_open_button)).performClick()
+        compose.onNodeWithTag("files-open").performClick()
         compose.onNodeWithText("x").performClick()
         compose.onNodeWithText("+hello").performClick()
         compose.onNodeWithContentDescription(str(R.string.git_send_selection)).performClick()
@@ -66,7 +66,7 @@ class GitChangesTest {
             (model.screen as Screen.Chat).chat.draft = "Review this"
         }
         compose.onNodeWithTag("agent-actions").performClick()
-        compose.onNodeWithText(str(R.string.files_open_button)).performClick()
+        compose.onNodeWithTag("files-open").performClick()
         compose.onNodeWithText("x").performClick()
         compose.onNodeWithContentDescription(str(R.string.git_send_file)).performClick()
         compose.runOnIdle {
@@ -79,7 +79,7 @@ class GitChangesTest {
         val (core, _) = openAgent()
         compose.runOnIdle { core.connection!!.gitFiles = GitChanges("/outside", emptyList(), false, true) }
         compose.onNodeWithTag("agent-actions").performClick()
-        compose.onNodeWithText(str(R.string.files_open_button)).performClick()
+        compose.onNodeWithTag("files-open").performClick()
         compose.onNodeWithText(str(R.string.git_not_repository)).assertExists()
         compose.runOnIdle { core.connection!!.gitFiles = GitChanges("/repo", emptyList(), false, false) }
         compose.onNodeWithContentDescription(str(R.string.files_refresh_button)).performClick()
@@ -92,7 +92,7 @@ class GitChangesTest {
             core.connection!!.gitPatch = GitDiff((1..205).map { GitDiffLine("+line $it", null, it.toUInt()) }, false, true)
         }
         compose.onNodeWithTag("agent-actions").performClick()
-        compose.onNodeWithText(str(R.string.files_open_button)).performClick()
+        compose.onNodeWithTag("files-open").performClick()
         compose.onNodeWithText("x").performClick()
         compose.onNodeWithText(str(R.string.git_truncated)).assertExists()
         compose.onNodeWithText("+line 205").assertDoesNotExist()
