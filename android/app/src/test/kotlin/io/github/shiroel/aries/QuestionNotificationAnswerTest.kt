@@ -65,13 +65,25 @@ class QuestionNotificationAnswerTest {
     private fun show() = PushService.show(context, push()) { core.canAnswerInBackground(it) }
     private fun notice(): QuestionNotice {
         show()
-        return QuestionNotice.fromJson(shadowOf(shown().actions[1].actionIntent).savedIntent
-            .getStringExtra(QuestionChoiceReceiver.EXTRA_NOTICE)!!)!!
+        return QuestionNotice.fromJson(NotificationPayloads.open(context, shadowOf(shown().actions[1].actionIntent).savedIntent
+            .getStringExtra(QuestionChoiceReceiver.EXTRA_NOTICE))!!)!!
     }
     private fun runWorker(choice: Int = 1): ListenableWorker.Result = runBlocking {
         val notice = notice()
         TestListenableWorkerBuilder<QuestionReplyWorker>(context)
-            .setInputData(QuestionReplyWorker.input(notice, choice)).build().doWork()
+            .setInputData(QuestionReplyWorker.input(context, notice, choice)).build().doWork()
+    }
+
+    @Test
+    fun questionTextAndOptionsAreSealedInWorkAndPendingIntents() {
+        val notice = notice()
+        val input = QuestionReplyWorker.input(context, notice, 0).toByteArray().toString(Charsets.ISO_8859_1)
+        val extra = shadowOf(shown().actions.first().actionIntent).savedIntent
+            .getStringExtra(QuestionChoiceReceiver.EXTRA_NOTICE)!!
+        for (secret in listOf("Which color?", "Green")) {
+            assertFalse(input.contains(secret))
+            assertFalse(extra.contains(secret))
+        }
     }
 
     @Test

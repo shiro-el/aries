@@ -47,7 +47,11 @@ class InlineActionWorker(context: Context, params: WorkerParameters) : Coroutine
             withTimeout(90_000) {
                 when (action) {
                     InlineNotifications.REPLY -> {
-                        val text = inputData.getString(TEXT)?.takeIf { it.isNotBlank() } ?: return@withTimeout
+                        val text = NotificationPayloads.open(applicationContext, inputData.getString(TEXT))?.takeIf { it.isNotBlank() }
+                        if (text == null) {
+                            show(R.string.notification_action_failed)
+                            return@withTimeout
+                        }
                         val outcome = core.sendMessageBackground(target.hostId, target.terminal, text, object : SendListener {
                             override fun onHeld() { show(R.string.chat_send_held) }
                         })
@@ -85,12 +89,12 @@ class InlineActionWorker(context: Context, params: WorkerParameters) : Coroutine
         private const val ACTION = "action"
         private const val TEXT = "text"
         private const val CREATED = "created"
-        internal fun input(target: String, action: String, text: String? = null, created: Long = System.currentTimeMillis()) =
-            workDataOf(TARGET to target, ACTION to action, TEXT to text, CREATED to created)
+        internal fun input(context: Context, target: String, action: String, text: String? = null, created: Long = System.currentTimeMillis()) =
+            workDataOf(TARGET to target, ACTION to action, TEXT to text?.let { NotificationPayloads.seal(context, it) }, CREATED to created)
 
         internal fun enqueue(context: Context, target: InlineTarget, action: String, text: String? = null) {
             val work = OneTimeWorkRequestBuilder<InlineActionWorker>()
-                .setInputData(input(target.toJson(), action, text))
+                .setInputData(input(context, target.toJson(), action, text))
                 .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
                 .build()
             WorkManager.getInstance(context).enqueueUniqueWork("inline:${target.generation}", ExistingWorkPolicy.KEEP, work)

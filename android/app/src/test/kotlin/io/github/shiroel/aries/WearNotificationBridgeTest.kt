@@ -20,7 +20,7 @@ import org.robolectric.Shadows.shadowOf
 
 /** The notifications handed to Android, including the actions sent to a paired watch. */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [32])
+@Config(application = FakeCoreApp::class, sdk = [32])
 class WearNotificationBridgeTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val manager = context.getSystemService(NotificationManager::class.java)

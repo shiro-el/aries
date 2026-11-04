@@ -26,6 +26,7 @@ mod input_history;
 mod last_known_state;
 mod launch;
 mod layout_edit;
+mod private_content;
 mod push;
 mod push_ownership;
 mod push_replay;
@@ -297,6 +298,9 @@ impl AriesCore {
     pub fn new(data_dir: String, vault: Arc<dyn KeyVault>) -> Result<Arc<Self>, CoreError> {
         let store = Store::open(&PathBuf::from(data_dir))?;
         let saved = store.load()?;
+        for host in &saved.hosts {
+            private_content::upgrade(&store.host_dir(&host.id), vault.as_ref())?;
+        }
         let chat_cache = chat_cache::ChatCache::new(
             store.root(),
             vault.clone(),
@@ -495,7 +499,8 @@ impl AriesCore {
         if !hosts.iter().any(|host| host.id == host_id) {
             return Err(CoreError::UnknownHost { id: host_id });
         }
-        input_history::InputHistory::new(self.store.host_dir(&host_id)).list(&terminal)
+        input_history::InputHistory::new(self.store.host_dir(&host_id), self.vault.as_ref())
+            .list(&terminal)
     }
 
     /// Records one composer submission verbatim. Call after sending succeeds.
@@ -510,7 +515,8 @@ impl AriesCore {
         if !hosts.iter().any(|host| host.id == host_id) {
             return Err(CoreError::UnknownHost { id: host_id });
         }
-        input_history::InputHistory::new(self.store.host_dir(&host_id)).remember(terminal, text)
+        input_history::InputHistory::new(self.store.host_dir(&host_id), self.vault.as_ref())
+            .remember(terminal, text)
     }
 
     /// Deletes only this Terminal's phone-local composer history.
@@ -519,7 +525,8 @@ impl AriesCore {
         if !hosts.iter().any(|host| host.id == host_id) {
             return Err(CoreError::UnknownHost { id: host_id });
         }
-        input_history::InputHistory::new(self.store.host_dir(&host_id)).clear(&terminal)
+        input_history::InputHistory::new(self.store.host_dir(&host_id), self.vault.as_ref())
+            .clear(&terminal)
     }
 
     /// Trusts `fingerprint` as `host_id`'s Host key, after the user compared
@@ -796,6 +803,7 @@ impl AriesCore {
                 return Err(CoreError::Closed);
             }
             Ok(Arc::new(HostConnection {
+                vault: self.vault.clone(),
                 last_known: self.last_known.clone(),
                 host_id: host_id.clone(),
                 client,
@@ -1643,6 +1651,7 @@ fn ssh_for_saved_host(
 /// A live connection to one Host's herdr-core.
 #[derive(uniffi::Object)]
 pub struct HostConnection {
+    vault: Arc<dyn KeyVault>,
     last_known: last_known_state::States,
     host_id: String,
     client: Arc<HcClient>,

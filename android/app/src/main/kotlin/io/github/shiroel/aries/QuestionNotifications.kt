@@ -100,7 +100,7 @@ object QuestionNotifications {
             .setAction(QuestionChoiceReceiver.ACTION)
             .setData(Uri.Builder().scheme("aries-question").authority(notice.hostId).appendPath(notice.terminal)
                 .appendPath(notice.question.id).appendPath(choice.toString()).build())
-            .putExtra(QuestionChoiceReceiver.EXTRA_NOTICE, notice.toJson())
+            .putExtra(QuestionChoiceReceiver.EXTRA_NOTICE, NotificationPayloads.seal(context, notice.toJson()))
             .putExtra(QuestionChoiceReceiver.EXTRA_CHOICE, choice)
         return PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }
