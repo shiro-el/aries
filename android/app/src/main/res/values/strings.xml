@@ -243,11 +243,14 @@
     <string name="app_update_failed">Could not check for updates. Check the URL and connection, then retry.</string>
 
     <string name="app_update_available">Aries %1$s is available</string>
+    <string name="app_update_url_hint">Leave blank to turn off update checks.</string>
+    <string name="whats_new_0_1_0_body">Host setup now explains field errors, reconnects after installing your SSH key, and stays up to date when you leave a form. The getting started guide follows the Host you added. Update reminders can be dismissed.</string>
+    <string name="app_update_dismiss_button">Dismiss</string>
     <string name="app_update_download_button">Open APK download</string>
     <string name="app_update_browser_failed">Could not open a browser. Try again after installing a browser.</string>
 
     <string name="whats_new_title">What’s New · %1$s</string>
-    <string name="whats_new_body">This release adds a three-step getting started guide, bundled release notes and an app update banner. Find the guide, release notes and update feed in Settings.</string>
+    <string name="whats_new_body">No release notes are bundled with this build.</string>
 
     <!-- First connection guide (195) -->
     <string name="onboarding_welcome_title">Connect your first Host</string>
@@ -414,6 +417,7 @@
 
     <string name="host_install_key_button">Install key with password</string>
     <string name="key_install_title">Install the key on %1$s</string>
+    <string name="key_install_busy">Installing the SSH key…</string>
     <string name="key_install_password">Password</string>
     <string name="key_install_button">Install key</string>
     <string name="key_install_done_title">Key installed</string>
@@ -573,7 +577,7 @@
     <string name="chat_input_agent_ended">The Agent has ended or is no longer in this Terminal. Chat input is disabled. Your draft is kept. Open Terminal to continue.</string>
     <string name="chat_status_reconnecting">Connection lost. Reconnecting…</string>
     <string name="chat_status_no_terminal">This Terminal no longer exists.</string>
-    <string name="chat_status_no_beacon">The Chat needs the Beacon on this Host. Install it from the Host screen.</string>
+    <string name="chat_status_no_beacon">Chat needs Beacon on this Host. Install it in Host settings to read the conversation.</string>
     <string name="chat_status_no_core">The Beacon cannot reach herdr-core on this Host. Retrying…</string>
     <string name="chat_status_incompatible">The Beacon on this Host is newer than this app. Update Aries to read the Chat.</string>
     <string name="chat_you">You</string>
@@ -1212,6 +1216,10 @@
     <string name="host_edit_title">Edit Host</string>
     <string name="host_edit_save_button">Save</string>
     <string name="host_edit_invalid_body">Use a unique Host name, a valid address and user, and a port from 1 to 65535.</string>
+    <string name="host_input_port_error">Enter a port from 1 to 65535.</string>
+    <string name="host_input_user_error">Enter an SSH user without spaces or control characters.</string>
+    <string name="host_input_address_error">Enter an address without spaces or control characters.</string>
+    <string name="host_input_name_error">Use a unique Host name without control characters.</string>
 
     <string name="attachments_choose_agent">Choose an Agent for the shared content</string>
     <string name="attachments_uploading">Uploading attachment…</string>
