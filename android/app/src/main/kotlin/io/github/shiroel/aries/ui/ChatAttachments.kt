@@ -78,9 +78,8 @@ internal fun DraftAttachments(chat: ChatModel) {
 
 /** Both the following and reading-history renderers use this same header. */
 @Composable
-internal fun ChatAttachmentCards(text: String, chat: ChatModel) {
-    val attachments = remember(text) { chatAttachments(text) }
-    if (attachments.paths.isEmpty()) return
+internal fun ChatAttachmentCards(attachments: ChatAttachments?, chat: ChatModel) {
+    if (attachments == null || attachments.paths.isEmpty()) return
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         attachments.paths.forEach { path -> key(path) { RemoteAttachmentCard(path, chat) } }
     }

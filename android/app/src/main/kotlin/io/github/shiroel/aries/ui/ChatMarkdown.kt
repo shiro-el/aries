@@ -62,7 +62,16 @@ import org.commonmark.node.*
 import org.commonmark.parser.Parser
 
 /** A message is flattened into the transcript's own lazy items, never a nested vertical scroller. */
-internal data class ChatMarkdownDocument(val source: String, val blocks: List<ChatMarkdownBlock>)
+internal data class ChatMarkdownDocument(
+    val source: String,
+    val blocks: List<ChatMarkdownBlock>,
+    val attachments: ChatAttachments? = null,
+) {
+    val displaySource: String get() = attachments?.text ?: source
+
+    fun matches(body: ChatEntryBody): Boolean = source == body.markdownSource() &&
+        (attachments != null) == (body is ChatEntryBody.User)
+}
 
 internal sealed interface ChatMarkdownBlock {
     data class Prose(
@@ -91,7 +100,9 @@ internal class MarkdownCode(val source: String, val language: String) {
 
 /** Visible prose from Agent histories shares one rendering, search and scrolling path. */
 internal fun ChatEntryBody.markdownSource(): String? = when (this) {
-    is ChatEntryBody.User -> chatAttachments(text).text
+    // Source inspection also runs for every history row during scroll/layout.
+    // Keep it constant-time; attachment extraction belongs in the cached parser below.
+    is ChatEntryBody.User -> text
     is ChatEntryBody.Agent -> text
     is ChatEntryBody.Thinking -> text
     else -> null
@@ -102,15 +113,19 @@ internal fun ChatEntryBody.markdownSource(): String? = when (this) {
 internal fun rememberChatMarkdown(entries: List<ChatEntry>): State<Map<String, ChatMarkdownDocument>> {
     val sources = remember(entries) {
         entries.mapNotNull { entry ->
-            entry.body.markdownSource()?.let { entry.id to it }
+            entry.body.markdownSource()?.let { Triple(entry.id, it, entry.body is ChatEntryBody.User) }
         }
     }
     return produceState(emptyMap(), sources) {
         val previous = value
         value = withContext(Dispatchers.Default) {
-            sources.associate { (id, source) ->
+            sources.associate { (id, source, user) ->
                 ensureActive()
-                id to (previous[id]?.takeIf { it.source == source } ?: parseChatMarkdown(source))
+                id to (previous[id]?.takeIf { it.source == source && (it.attachments != null) == user }
+                    ?: if (user) {
+                        val attachments = chatAttachments(source)
+                        parseChatMarkdown(attachments.text).copy(source = source, attachments = attachments)
+                    } else parseChatMarkdown(source))
             }
         }
     }
@@ -125,7 +140,7 @@ internal fun LazyListScope.chatMarkdownItems(id: String, document: ChatMarkdownD
         CompositionLocalProvider(LocalChatSearchEntry provides id) {
             if (block is ChatMarkdownBlock.Diagram) {
                 ChatMarkdownBlockView(block, Modifier, "markdown:$index", thinking)
-            } else ChatTextActions(document?.source.orEmpty(), interceptChildLongPress = true) { actions ->
+            } else ChatTextActions(document?.displaySource.orEmpty(), interceptChildLongPress = true) { actions ->
                 ChatMarkdownBlockView(block, actions, "markdown:$index", thinking)
             }
         }

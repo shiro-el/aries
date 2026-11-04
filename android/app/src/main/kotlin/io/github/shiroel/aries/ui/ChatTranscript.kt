@@ -23,8 +23,8 @@ internal class ChatRenderedEntries {
             val previous = byId[entry.id]
             val source = entry.body.markdownSource()
             when {
-                previous != null && source != null && markdown[entry.id]?.source != source &&
-                    previous.body::class == entry.body::class -> previous
+                previous != null && source != null && markdown[entry.id]?.matches(entry.body) != true &&
+                    previous.body.markdownSource() != null -> previous
                 previous == entry -> previous!!
                 else -> entry
             }
@@ -83,11 +83,11 @@ internal class ChatTranscript(
                 }
                 val body = entry.body
                 val key = "transcript:${entry.id}"
-                row(key, body::class, ChatTranscriptContent.Header(entry))
+                row(key, body::class, ChatTranscriptContent.Header(entry, document?.attachments))
                 if (body.markdownSource() != null) {
                     document?.blocks?.forEachIndexed { index, block ->
                         row("$key:markdown:$index", block::class,
-                            ChatTranscriptContent.Markdown(document.source, block, index, body is ChatEntryBody.Thinking))
+                            ChatTranscriptContent.Markdown(document.displaySource, block, index, body is ChatEntryBody.Thinking))
                     }
                     row("$key:footer", ChatTranscriptContent.Footer::class,
                         ChatTranscriptContent.Footer(
@@ -115,7 +115,7 @@ internal class ChatTranscriptRow(
 }
 
 internal sealed interface ChatTranscriptContent {
-    data class Header(val entry: ChatEntry) : ChatTranscriptContent
+    data class Header(val entry: ChatEntry, val attachments: ChatAttachments?) : ChatTranscriptContent
     data class Markdown(val source: String, val block: ChatMarkdownBlock, val index: Int, val thinking: Boolean) : ChatTranscriptContent
     data class Footer(val images: List<ChatImage>, val metadata: ChatResponseMetadata?) : ChatTranscriptContent
 }

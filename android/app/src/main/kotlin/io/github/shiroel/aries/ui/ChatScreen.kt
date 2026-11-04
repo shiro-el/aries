@@ -508,7 +508,7 @@ fun ChatScreen(
                                         QuestionView(chat, entry.id, body)
                                     } else {
                                         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (body is ChatEntryBody.Agent) 0.dp else 12.dp)) {
-                                            ChatEntryView(entry, chat, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image, readAloud) { chat.toggle(entry.id) }
+                                            ChatEntryView(entry, markdown[entry.id]?.attachments, chat, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image, readAloud) { chat.toggle(entry.id) }
                                         }
                                         if (source == null) HorizontalDivider()
                                     }
@@ -607,7 +607,7 @@ private fun ChatTranscriptRowView(
 ) {
     CompositionLocalProvider(LocalChatSearchEntry provides row.entryId) {
         when (val content = row.content) {
-            is ChatTranscriptContent.Header -> ChatEntryHeader(content.entry, chat, readAloud)
+            is ChatTranscriptContent.Header -> ChatEntryHeader(content.entry, content.attachments, chat, readAloud)
             is ChatTranscriptContent.Markdown -> ChatMarkdownItem(content.source, content.block, content.index, content.thinking)
             is ChatTranscriptContent.Footer -> ChatEntryFooter(content.images, content.metadata, chat)
         }
@@ -615,13 +615,13 @@ private fun ChatTranscriptRowView(
 }
 
 @Composable
-private fun ChatEntryHeader(entry: ChatEntry, chat: ChatModel, readAloud: io.github.shiroel.aries.speech.ReadAloudState) {
+private fun ChatEntryHeader(entry: ChatEntry, attachments: ChatAttachments?, chat: ChatModel, readAloud: io.github.shiroel.aries.speech.ReadAloudState) {
     val body = entry.body
     if (body is ChatEntryBody.Question) {
         QuestionView(chat, entry.id, body)
     } else {
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (body is ChatEntryBody.Agent) 0.dp else 12.dp)) {
-            ChatEntryView(entry, chat, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image, readAloud) { chat.toggle(entry.id) }
+            ChatEntryView(entry, attachments, chat, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image, readAloud) { chat.toggle(entry.id) }
         }
         if (body.markdownSource() == null) HorizontalDivider()
     }
@@ -744,6 +744,7 @@ private fun ChatNotice(text: String) {
 @Composable
 private fun ChatEntryView(
     entry: ChatEntry,
+    attachments: ChatAttachments?,
     chat: ChatModel,
     agentName: String,
     expanded: Boolean,
@@ -761,7 +762,7 @@ private fun ChatEntryView(
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary,
                 )
-                ChatAttachmentCards(b.text, chat)
+                ChatAttachmentCards(attachments, chat)
             }
         }
         is ChatEntryBody.Agent -> Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
