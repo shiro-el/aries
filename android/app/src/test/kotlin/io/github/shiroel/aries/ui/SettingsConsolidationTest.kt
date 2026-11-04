@@ -126,6 +126,7 @@ class SettingsConsolidationTest {
         compose.openHostActions("h1")
         compose.onNodeWithTag("console-back").performClick()
         compose.onNodeWithTag("settings-host:h2").performScrollTo().performClick()
+        compose.onNodeWithTag("beacon-advanced").performScrollTo().performClick()
         compose.onNodeWithText(context.getString(R.string.beacon_version, "0.1.0")).performScrollTo().assertExists()
         compose.runOnIdle {
             slow.complete(BeaconCheck(
