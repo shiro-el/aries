@@ -87,7 +87,7 @@ internal fun AgentScreenHeader(
                 if (current == AgentView.CHAT) {
                     val usageLabel = stringResource(R.string.usage_menu_label,
                         stringResource(R.string.usage_title), contextRemaining(usage?.context))
-                    ActionMenuItem(usageLabel, R.drawable.ic_terminal_view,
+                    ActionMenuItem(usageLabel, R.drawable.ic_history,
                         onClick = { menu = false; showUsage = true },
                         modifier = Modifier.semantics { contentDescription = usageLabel })
                 }
