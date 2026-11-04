@@ -8,6 +8,9 @@
   Error, Done, Idle. Everything else follows standard Android / One UI Korean.
 -->
 <resources>
+    <!-- Tablet and foldable list/detail layout. -->
+    <string name="adaptive_choose_detail">목록에서 Host, Agent 또는 Terminal을 선택하세요.</string>
+
     <!-- Host localhost preview -->
     <string name="preview_auto_refresh">Agent 변경 후 자동 새로고침</string>
     <string name="preview_title">미리보기</string>

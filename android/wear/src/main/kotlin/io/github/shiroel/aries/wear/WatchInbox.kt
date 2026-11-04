@@ -165,7 +165,7 @@ private fun InboxChip(label: String, enabled: Boolean, onClick: () -> Unit) {
 @Composable
 fun WatchDetailActionPlaceholders(agent: WatchAgent) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        if (agent.status.equals("blocked", true)) InboxChip(stringResource(R.string.wear_inbox_answer), false, {})
+        // Answer actions are provided by WatchAnswerActions.
         WatchInterruptAction(agent)
         InboxChip(stringResource(R.string.wear_inbox_watch), false, {})
     }

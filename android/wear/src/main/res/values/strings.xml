@@ -1,4 +1,16 @@
 <resources>
+    <!-- Watch answers and system voice replies -->
+    <string name="wear_answer_hold_allow">Hold to allow</string>
+    <string name="wear_answer_deny">Deny</string>
+    <string name="wear_answer_phone">Confirm on phone</string>
+    <string name="wear_answer_reply">Reply</string>
+    <string name="wear_answer_send">Send</string>
+    <string name="wear_answer_discard">Discard</string>
+    <string name="wear_answer_sending">Sending…</string>
+    <string name="wear_answer_sent">Sent</string>
+    <string name="wear_answer_changed">Changed on Host. Refresh before answering.</string>
+    <string name="wear_answer_failed">Could not send. Check your phone.</string>
+    <string name="wear_answer_unknown">Result unknown. Check your phone before trying again.</string>
     <!-- Watch interrupt -->
     <string name="wear_interrupt_confirm_body">Stop %1$s? Your phone will check that this Agent is still Working.</string>
     <string name="wear_interrupt_confirm">Confirm stop</string>

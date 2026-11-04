@@ -124,6 +124,7 @@ fun AgentsScreen(
     onOpen: (AgentEntry) -> Unit,
     onPin: (AgentEntry, Boolean) -> Unit,
     showHeader: Boolean = true,
+    current: AgentKey? = null,
     onAddHost: (() -> Unit)? = null,
     onOpenHosts: (() -> Unit)? = null,
 ) {
@@ -158,7 +159,7 @@ fun AgentsScreen(
                     TextButton(onClick = open) { Text(stringResource(R.string.agents_empty_hosts_button)) }
                 }
             }
-            agentTreeItems(agents, folds, onOpen, onPin)
+            agentTreeItems(agents, folds, onOpen, onPin, current = current)
         }
     }
 }
