@@ -1,4 +1,5 @@
 import com.android.build.api.dsl.ApplicationExtension
+import com.android.build.api.variant.ApplicationAndroidComponentsExtension
 import java.io.File
 import java.util.Properties
 
@@ -13,7 +14,7 @@ plugins {
 }
 
 // Both APKs must have the same final applicationId and signing certificate.
-// Keep the default shared ~/.android/debug.keystore for both debug variants.
+// Keep the shared ~/.android/debug.keystore for debug and dogfood variants.
 subprojects {
     pluginManager.withPlugin("com.android.application") {
         extensions.configure<ApplicationExtension> {
@@ -39,6 +40,25 @@ subprojects {
                 getByName("debug") { applicationIdSuffix = ".dev" }
                 // Without an upload key the release APK is left unsigned.
                 getByName("release") { signingConfigs.findByName("upload")?.let { signingConfig = it } }
+                create("dogfood") {
+                    initWith(getByName("release"))
+                    isDebuggable = false
+                    isMinifyEnabled = true
+                    isShrinkResources = true
+                    signingConfig = signingConfigs.getByName("debug")
+                    applicationIdSuffix = null
+                    matchingFallbacks += "release"
+                    proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+                }
+            }
+        }
+        extensions.configure<ApplicationAndroidComponentsExtension> {
+            onVariants { variant ->
+                if (variant.buildType in setOf("dogfood", "baselineCapture")) {
+                    // The already-published debug APK is .dev. Set its complete ID,
+                    // without a build-type suffix, so dogfood upgrades it in place.
+                    variant.applicationId.set("io.github.shiroel.aries.dev")
+                }
             }
         }
     }
