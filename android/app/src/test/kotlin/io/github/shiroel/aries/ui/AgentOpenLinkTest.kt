@@ -8,6 +8,8 @@ import android.graphics.Bitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import java.io.File
 import kotlinx.coroutines.CompletableDeferred
 import org.robolectric.annotation.GraphicsMode
@@ -100,6 +102,8 @@ class AgentOpenLinkTest {
         core.requireTrust = "SHA256:new"
         compose.runOnIdle { model.openCallInbox(); model.openCallChat(caller()) }
         compose.waitForIdle()
+        // Verifying a fingerprint may take longer than the network opening budget.
+        compose.mainClock.advanceTimeBy(21_000)
         compose.runOnIdle { model.trust(model.prompt as Prompt.TrustHostKey) }
         compose.waitForIdle()
         compose.runOnIdle {
@@ -225,6 +229,110 @@ class AgentOpenLinkTest {
             assertTrue(model.screen is Screen.Chat)
             assertFalse(model.callInboxOpen)
         }
+    }
+
+    // D81: an unreachable drawer target must expose cancellation and finish with an error, retaining the current detail.
+    @Test fun unreachableAgentOpenIsVisibleCancellableAndBounded() {
+        val core = core()
+        show(core)
+        compose.runOnIdle { model.connect(model.hosts[0]) }
+        compose.waitForIdle()
+        compose.runOnIdle { model.openTerminal(agent) }
+        compose.waitForIdle()
+        val detail = model.screen
+        core.failFor["h2"] = CoreException.Unreachable("offline")
+        compose.runOnIdle { model.openPushedAgent("h2", agent.address) }
+        compose.waitForIdle()
+        compose.onNodeWithText("Opening box/t1…").assertExists()
+        compose.onNodeWithText("Cancel").performClick()
+        compose.runOnIdle { assertSame(detail, model.screen) }
+        compose.mainClock.advanceTimeBy(21_000)
+        compose.runOnIdle { assertNull(model.prompt) }
+
+        compose.runOnIdle { model.openPushedAgent("h2", agent.address) }
+        compose.mainClock.advanceTimeBy(21_000)
+        compose.runOnIdle {
+            assertSame(detail, model.screen)
+            assertTrue(model.prompt is Prompt.Problem)
+        }
+        compose.onNodeWithText("Opening box/t1…").assertDoesNotExist()
+    }
+
+    // D81: a cold notification must stop focusing after its deadline even if the retained Host watch later recovers.
+    @Test fun coldNotificationOpenTimesOutWithoutLateNavigation() {
+        val core = core().apply { failFor["h2"] = CoreException.Unreachable("offline") }
+        show(core)
+        compose.runOnIdle { model.openPushedAgent("h2", agent.address, openChat = true) }
+        compose.waitForIdle()
+        compose.onNodeWithText("Opening box/t1…").assertExists()
+        compose.mainClock.advanceTimeBy(21_000)
+        compose.runOnIdle {
+            assertTrue(model.prompt is Prompt.Problem)
+            model.dismiss()
+            core.failFor.remove("h2")
+            model.networkChanged()
+        }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertTrue(model.screen is Screen.Agents)
+            assertTrue(core.chatsOpened.isEmpty())
+        }
+    }
+
+    // D82: opening another Chat from Settings must retire the old Chat and make the new one own lifecycle events.
+    @Test fun anotherAgentOpenedFromSettingsOwnsPauseAndReconnect() {
+        val core = core()
+        show(core)
+        compose.runOnIdle { model.connect(model.hosts[0]) }
+        compose.waitForIdle()
+        compose.runOnIdle { model.openPushedAgent("h1", agent.address, openChat = true) }
+        compose.waitForIdle()
+        val previous = (model.screen as Screen.Chat).chat
+        compose.runOnIdle { model.openSettings(); model.openPushedAgent("h2", agent.address, openChat = true) }
+        compose.waitForIdle()
+        val current = (model.screen as Screen.Chat).chat
+        compose.runOnIdle { model.networkChanged() }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertFalse(model.isViewedChat(previous))
+            assertTrue(model.isViewedChat(current))
+            assertEquals(1, core.chatReconnects)
+            model.backgrounded(retainConnections = false)
+        }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertTrue(core.chatPaused)
+            model.resumeScreens()
+        }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertFalse(core.chatPaused)
+            model.closeChat()
+            assertTrue(model.screen is Screen.Browse)
+            assertEquals(LinkState.Closed, current.link?.state)
+        }
+    }
+
+    // D84: selecting a refreshing row from the tablet list must keep the current detail until the target resolves.
+    @Test fun refreshingRowKeepsCurrentDetailUntilItsHostRecovers() {
+        val core = core()
+        show(core)
+        compose.runOnIdle { model.openAgents() }
+        compose.waitForIdle()
+        val board = (model.screen as Screen.Agents).board
+        compose.runOnIdle { model.openAgent(board, board.agents.first { it.host.id == "h1" }) }
+        compose.waitForIdle()
+        val detail = model.screen
+        core.failFor["h2"] = CoreException.Unreachable("offline")
+        compose.runOnIdle { board.links.getValue("h2").networkChanged() }
+        compose.waitForIdle()
+        compose.runOnIdle { model.selectListedAgent(board, board.agents.first { it.host.id == "h2" }) }
+        compose.waitForIdle()
+        compose.runOnIdle { assertSame(detail, model.screen) }
+        core.failFor.remove("h2")
+        compose.runOnIdle { model.networkChanged() }
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals(AgentKey("h2", agent.address), model.currentAgentKey) }
     }
 
 }

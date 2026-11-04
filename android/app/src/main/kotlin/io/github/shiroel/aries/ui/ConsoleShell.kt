@@ -131,7 +131,7 @@ internal fun ConsoleShell(
     LaunchedEffect(screen) { drawer.close(); model.closeCallInbox() }
     LaunchedEffect(model.callInboxOpen) { if (model.callInboxOpen) drawer.close() }
     val navigate: (() -> Unit) -> Unit = { action ->
-        scope.launch { drawer.close(); action() }
+        scope.launch { try { drawer.close() } finally { action() } }
     }
     ModalNavigationDrawer(
         drawerState = drawer,
@@ -156,12 +156,9 @@ internal fun ConsoleShell(
         }
         CompositionLocalProvider(LocalCallAttentionEnabled provides (drawer.isClosed && drawer.targetValue == DrawerValue.Closed),
             LocalConsoleHeaderMeasured provides { measuredHeaderHeight = it }, LocalConsoleMenu provides openDrawer, LocalQuickOpen provides {
-            scope.launch { drawer.close(); model.openQuickOpen() }
+            navigate(model::openQuickOpen)
         }, LocalCallInbox provides CallInboxAction(model.calls, model.callInboxOpen) {
-            scope.launch {
-                drawer.close()
-                if (model.callInboxOpen) model.closeCallInbox() else model.openCallInbox()
-            }
+            navigate { if (model.callInboxOpen) model.closeCallInbox() else model.openCallInbox() }
         }, LocalNextWaitingAgent provides model.nextWaitingAgent?.let { NextWaitingAction(it, model::openNextWaitingAgent) }) {
             BoxWithConstraints(Modifier.fillMaxSize().systemGestureExclusion { coordinates ->
                 Rect(0f, 0f, edgeWidth, minOf(coordinates.size.height.toFloat(), terminalHeaderHeight))

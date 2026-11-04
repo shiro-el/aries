@@ -156,7 +156,9 @@ impl HcClient {
     pub async fn handshake(stream: Stream) -> Result<Self, CoreError> {
         tokio::time::timeout(HELLO_TIMEOUT, Self::handshake_inner(stream))
             .await
-            .map_err(|_| protocol("hello timed out"))?
+            .map_err(|_| CoreError::Unreachable {
+                detail: "hello timed out".into(),
+            })?
     }
 
     async fn handshake_inner(stream: Stream) -> Result<Self, CoreError> {
@@ -177,16 +179,19 @@ impl HcClient {
         writer
             .write_all(&line)
             .await
-            .map_err(|e| protocol(format!("send hello: {e}")))?;
-        writer
-            .flush()
-            .await
-            .map_err(|e| protocol(format!("send hello: {e}")))?;
+            .map_err(|e| CoreError::Unreachable {
+                detail: format!("send hello: {e}"),
+            })?;
+        writer.flush().await.map_err(|e| CoreError::Unreachable {
+            detail: format!("send hello: {e}"),
+        })?;
 
         let mut reader = BufReader::new(reader);
         let reply = tokio::time::timeout(HELLO_TIMEOUT, read_hello_reply(&mut reader))
             .await
-            .map_err(|_| protocol("herdr-core did not answer hello in time"))??;
+            .map_err(|_| CoreError::Unreachable {
+                detail: "herdr-core did not answer hello in time".into(),
+            })??;
         let hello = check_hello(reply)?;
 
         let pending: Pending = Arc::new(std::sync::Mutex::new(Some(HashMap::new())));
@@ -365,7 +370,9 @@ async fn read_hello_reply<R: tokio::io::AsyncRead + Unpin>(
             .take(budget)
             .read_until(b'\n', &mut line)
             .await
-            .map_err(|e| protocol(format!("read hello reply: {e}")))?;
+            .map_err(|e| CoreError::Unreachable {
+                detail: format!("read hello reply: {e}"),
+            })?;
         if n == 0 {
             let hint = if noise.is_empty() {
                 String::new()
@@ -375,9 +382,11 @@ async fn read_hello_reply<R: tokio::io::AsyncRead + Unpin>(
                     noise.chars().take(200).collect::<String>()
                 )
             };
-            return Err(protocol(format!(
-                "herdr-core connect ended before answering hello; is herdr-core installed on the Host?{hint}"
-            )));
+            return Err(CoreError::Unreachable {
+                detail: format!(
+                    "herdr-core connect ended before answering hello; is herdr-core installed on the Host?{hint}"
+                ),
+            });
         }
         if let Some(start) = line.iter().position(|&b| b == b'{')
             && let Ok(v) = serde_json::from_slice::<Value>(&line[start..])
