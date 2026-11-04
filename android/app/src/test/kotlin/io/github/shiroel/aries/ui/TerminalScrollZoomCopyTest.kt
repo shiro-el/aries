@@ -114,9 +114,12 @@ class TerminalScrollZoomCopyTest {
         compose.waitForIdle()
         compose.onNodeWithText(str(R.string.terminal_scrolled_back, back.toInt())).assertExists()
 
+        val beforeLatest = view.scrolls.size
         compose.onNodeWithContentDescription(str(R.string.terminal_back_to_live)).performClick()
         compose.waitForIdle()
         assertEquals(0u, view.scrolls.last())
+        assertTrue("return to live moves through scrollback instead of jumping",
+            view.scrolls.drop(beforeLatest).any { it > 0u && it < back })
 
         // Swiping up from the live screen does not scroll below it.
         view.push(text("$ make", "done"))

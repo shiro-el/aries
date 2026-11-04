@@ -3,6 +3,7 @@ package io.github.shiroel.aries.ui
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.lazy.LazyListState
@@ -22,6 +23,9 @@ import androidx.compose.ui.platform.LocalContext
 import io.github.shiroel.aries.core.ChatEntry
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 
 /** The viewport is independent of the Agent's `herdr.seen` turn. */
 internal class ChatScrollState(following: Boolean) {
@@ -127,7 +131,8 @@ internal fun rememberChatScrollState(
             if (!ready) return@collect
             val changed = previousEntries != rows || previousCalls != calls || previousItemKeys != keys
             val latest = request != latestRequest
-            val alignBottom = calls.isEmpty() && rows.lastOrNull()?.body?.markdownSource() != null
+            // Keep a tool's expand/collapse control reachable on arrival.
+            val alignBottom = calls.isNotEmpty() || rows.lastOrNull()?.body !is io.github.shiroel.aries.core.ChatEntryBody.Tool
             if (changed || latest) {
                 val previous = previousEntries
                 if (previous != null) {
@@ -154,7 +159,13 @@ internal fun rememberChatScrollState(
                     // bottom; forcing a jump here also measures the old height.
                     val tailMoved = previousItemKeys.lastOrNull() != keys.lastOrNull()
                     if (latest || previous == null || tailMoved || state.list.canScrollForward) {
-                        state.list.scrollToLatest(keys.lastIndex, alignBottom)
+                        try {
+                            state.list.scrollToLatest(keys.lastIndex, alignBottom || latest, animate = latest)
+                        } catch (e: CancellationException) {
+                            // A user drag may interrupt the animation. Keep observing
+                            // the viewport so a later Latest tap still works.
+                            currentCoroutineContext().ensureActive()
+                        }
                         state.following = !state.list.canScrollForward
                     }
                 }
@@ -248,14 +259,14 @@ private fun addedTail(previous: List<String>, current: List<String>): List<Strin
     return if (lastKnown < 0) emptyList() else current.drop(lastKnown + 1).filterNot { it in known }
 }
 
-private suspend fun LazyListState.scrollToLatest(lastIndex: Int, alignBottom: Boolean) {
-    scrollToItem(lastIndex)
-    // Keep a tall question/Call's heading and first Choices reachable, as in
-    // the existing Chat. Text responses instead follow their newest lines.
+private suspend fun LazyListState.scrollToLatest(lastIndex: Int, alignBottom: Boolean, animate: Boolean = false) {
+    if (animate) animateScrollToItem(lastIndex) else scrollToItem(lastIndex)
     if (!alignBottom) return
-    // scrollToItem aligns the top of an oversized final row. Align its bottom
-    // too, so a long streaming response really stays at its newest text.
+    // A tall question/Call is one lazy item: reaching its heading is not
+    // reaching the end. Include the scrollable clearance below its choices.
     val layout = layoutInfo
     val last = layout.visibleItemsInfo.lastOrNull() ?: return
-    scrollBy((last.offset + last.size - layout.viewportEndOffset).coerceAtLeast(0).toFloat())
+    val distance = (last.offset + last.size + layout.afterContentPadding - layout.viewportEndOffset)
+        .coerceAtLeast(0).toFloat()
+    if (animate) animateScrollBy(distance) else scrollBy(distance)
 }
