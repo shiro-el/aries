@@ -71,7 +71,7 @@ class ShareOwnershipTest {
         core.pushChat(ChatSnapshot(if (panel == "question") listOf(question) else emptyList(), ChatStatus.LIVE, null))
         compose.waitForIdle()
         if (panel != null) compose.onNodeWithTag("thread-${if (panel == "question") "answer" else "call"}-panel").assertExists()
-        compose.waitUntil(5_000) { chat.attachments.isNotEmpty() }
+        compose.waitUntil(5_000) { compose.runOnIdle { chat.attachments.isNotEmpty() && !chat.uploading } }
         assertEquals(1, core.connection!!.uploads.size)
         assertArrayEquals(byteArrayOf(2, 6, 1), core.connection!!.uploads.single().third)
         assertNull(chat.pendingShare)
@@ -83,7 +83,7 @@ class ShareOwnershipTest {
             core.push(listOf(terminal))
         }
         val send = context.getString(R.string.chat_send_button)
-        if (panel != "question") compose.onNodeWithText(send).assertIsEnabled().performClick()
+        if (panel == null) compose.onNodeWithText(send).assertIsEnabled().performClick()
         else compose.onNodeWithContentDescription(send).assertIsEnabled().performClick()
         compose.waitForIdle()
         assertEquals(1, core.connection!!.typed.size)

@@ -139,6 +139,9 @@ class ChatQuestionTest {
         core.connection!!.sendFailWith = CoreException.Closed()
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).performTextInput("Check these results")
         compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithText(str(R.string.chat_delivery_retry_button)).fetchSemanticsNodes().isNotEmpty()
+        }
         compose.onNodeWithText(str(R.string.chat_delivery_retry_button)).performClick()
         compose.onNode(isDialog()).assertExists()
         restoration.emulateSavedInstanceStateRestore()
