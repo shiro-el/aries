@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -419,6 +420,14 @@ class TerminalViewer(terminal: TerminalInfo, private val composer: TerminalCompo
         composing = ""
     }
 
+    /** An IME clipboard commit is one paste; it never presses Enter for its lines. */
+    fun paste(text: String) {
+        if (!readyForInput() || text.isEmpty()) return
+        startTyping()
+        interruptComposition()
+        send(TerminalInput.Paste(text))
+    }
+
     /** The keyboard finished composing: what it composed stays as is. */
     fun finishComposing() {
         if (readyForInput()) commit(echoed + composing)
@@ -599,10 +608,12 @@ fun TerminalScreen(
             } else {
                 val look = viewer.look
                 val scope = rememberCoroutineScope()
+                var controlsHeight by remember(viewer) { mutableIntStateOf(0) }
                 Box(Modifier.fillMaxWidth().weight(1f)) {
-                    TerminalCanvas(viewer, look, displaySettings, Modifier.fillMaxSize())
+                    TerminalCanvas(viewer, look, displaySettings, Modifier.fillMaxSize(), controlsHeight.toFloat())
                     // Transient controls must not change the Host's grid or move a selection.
-                    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
+                    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)
+                        .onSizeChanged { controlsHeight = it.height }) {
                         TerminalSearchBar(viewer, searching, onClose = { searching = false })
                         viewer.exit?.let { Banner(exitText(it)) }
                         val line = viewer.link?.state
@@ -683,7 +694,7 @@ private fun Banner(text: String) {
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
-private fun TerminalCanvas(viewer: TerminalViewer, look: TerminalLook, settings: TerminalDisplaySettings, modifier: Modifier) {
+private fun TerminalCanvas(viewer: TerminalViewer, look: TerminalLook, settings: TerminalDisplaySettings, modifier: Modifier, topInset: Float) {
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
     val family = settings.font.family
@@ -720,9 +731,10 @@ private fun TerminalCanvas(viewer: TerminalViewer, look: TerminalLook, settings:
                 viewer.phoneGrid = grid
             }
         }
-        look.layout(baseCellW, baseCellH, widthPx, heightPx)
+        // Insets affect only the local pan; transient controls never resize the Host's grid.
+        look.layout(baseCellW, baseCellH, widthPx, heightPx, topInset)
         if (WindowInsets.ime.getBottom(density) > 0) look.revealCursor()
-        LaunchedEffect(viewer.search, look.selection, look.cellW, look.cellH, heightPx) { look.revealSearchMatch() }
+        LaunchedEffect(viewer.search, look.selection, look.cellW, look.cellH, heightPx, topInset) { look.revealSearchMatch() }
         // Zoom and pan: the phone's view only, the grid stays the Terminal's.
         val fontPx = baseFontPx * look.zoom
         val cellW = look.cellW
