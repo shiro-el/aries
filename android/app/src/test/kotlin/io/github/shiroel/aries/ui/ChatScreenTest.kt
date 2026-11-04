@@ -3,6 +3,8 @@ package io.github.shiroel.aries.ui
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.onNodeWithTag
@@ -84,7 +86,7 @@ class ChatScreenTest {
         val core = FakeCore()
         openChat(core)
         assertEquals(listOf("h1" to "t1"), core.chatsOpened)
-        compose.onNodeWithText(str(R.string.console_agent_host_prefix, "home") + "claude").assertExists()
+        compose.onNode(hasTestTag("console-top-bar") and hasAnyDescendant(hasText("claude"))).assertExists()
         compose.onNodeWithText(str(R.string.chat_status_connecting)).assertExists()
 
         core.pushChat(
@@ -251,11 +253,13 @@ class ChatScreenTest {
     )
 
     @Test
-    fun anEditShowsAsItsDiffWithoutExpanding() {
+    fun anEditShowsItsDiffWhenExpanded() {
         val core = FakeCore()
         openChat(core)
         core.pushChat(ChatSnapshot(listOf(edit(listOf(" keep", "-hi", "+hello"))), ChatStatus.LIVE, null))
         compose.waitForIdle()
+        compose.onNodeWithText("-hi", substring = true).assertDoesNotExist()
+        compose.onNodeWithContentDescription(str(R.string.chat_tool_expand_label, "Edit")).performClick()
         compose.onNodeWithText("-hi", substring = true).assertExists()
         compose.onNodeWithText("+hello", substring = true).assertExists()
         compose.onNodeWithText("@@ -1 +1 @@", substring = true).assertExists()
@@ -264,15 +268,14 @@ class ChatScreenTest {
     }
 
     @Test
-    fun aHugeDiffShowsAPreviewUntilTapped() {
+    fun aHugeDiffKeepsAllRecordedLinesAvailableWhenExpanded() {
         val core = FakeCore()
         openChat(core)
         val lines = (1..2000).map { "+line $it" }
         core.pushChat(ChatSnapshot(listOf(edit(lines, truncated = true)), ChatStatus.LIVE, null))
         compose.waitForIdle()
-        compose.onNodeWithText("+line 1\n", substring = true).assertExists()
+        compose.onNodeWithText("+line 1\n", substring = true).assertDoesNotExist()
         compose.onNodeWithText("+line 2000", substring = true).assertDoesNotExist()
-        compose.onNodeWithText(str(R.string.chat_diff_more, 2000 - 12)).assertExists()
 
         compose.onNodeWithContentDescription(str(R.string.chat_tool_expand_label, "Edit")).performClick()
         compose.waitForIdle()
@@ -363,7 +366,7 @@ class ChatScreenTest {
         compose.onNodeWithContentDescription(str(R.string.agent_switch_chat_label)).performClick()
         compose.waitForIdle()
         assertEquals(listOf("h2" to "t1"), core.chatsOpened)
-        compose.onNodeWithText(str(R.string.console_agent_host_prefix, "server") + "claude").assertExists()
+        compose.onNode(hasTestTag("console-top-bar") and hasAnyDescendant(hasText("claude"))).assertExists()
 
         compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         compose.waitForIdle()
@@ -468,7 +471,7 @@ class ChatScreenTest {
         compose.waitForIdle()
         assertTrue(core.chatStopped)
         compose.onNodeWithText("claude").assertExists()
-        compose.onNodeWithText(str(R.string.console_agent_host_prefix, "home") + "claude").assertDoesNotExist()
+        compose.onNode(hasTestTag("console-top-bar") and hasAnyDescendant(hasText("claude"))).assertDoesNotExist()
     }
 
     private companion object {

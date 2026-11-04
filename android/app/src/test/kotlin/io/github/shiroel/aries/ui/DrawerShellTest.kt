@@ -86,7 +86,7 @@ class DrawerShellTest {
         org.junit.Assert.assertEquals(listOf("h2 t1 pinned=true"), core.labelWrites)
         compose.onNode(hasTestTag("agent-pin:h2:t1") and hasAnyAncestor(hasTestTag("console-drawer"))).assertIsSelected()
         compose.onNodeWithTag("drawer-agent:h2:t1").performClick()
-        compose.onNodeWithText(context.getString(R.string.console_agent_host_prefix, "work") + "work-agent").assertExists()
+        compose.onNode(hasTestTag("console-top-bar") and hasAnyDescendant(hasText("work-agent"))).assertExists()
         compose.onNodeWithContentDescription(context.getString(R.string.back_button)).performClick()
         compose.onNodeWithTag("agent-row:h2:t1").assertExists()
         compose.onNodeWithTag("agent-row:h1:t1").assertExists()

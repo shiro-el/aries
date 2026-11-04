@@ -4,12 +4,15 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
@@ -52,12 +55,14 @@ internal data class NextWaitingAction(val entry: AgentEntry, val open: () -> Uni
 internal val LocalNextWaitingAgent = staticCompositionLocalOf<NextWaitingAction?> { null }
 
 @Composable
-internal fun NextWaitingAgentButton() {
+internal fun NextWaitingAgentMenuItem(onNavigate: () -> Unit) {
     val next = LocalNextWaitingAgent.current ?: return
-    TextButton(onClick = next.open, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-        next.entry.terminal.agentStatus?.let { AgentStatusMark(it, modifier = Modifier.size(12.dp)) }
-        Spacer(Modifier.width(8.dp))
-        Text(stringResource(R.string.agents_next_waiting, displayName(next.entry.terminal), next.entry.host.name),
-            maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
-    }
+    val label = stringResource(R.string.agents_next_waiting, displayName(next.entry.terminal), next.entry.host.name)
+    DropdownMenuItem(
+        text = { Text(label, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+        leadingIcon = { next.entry.terminal.agentStatus?.let { AgentStatusMark(it, modifier = Modifier.size(20.dp)) } },
+        onClick = { onNavigate(); next.open() },
+        modifier = Modifier.widthIn(min = 240.dp, max = 320.dp).testTag("next-waiting-agent")
+            .semantics { contentDescription = label },
+    )
 }

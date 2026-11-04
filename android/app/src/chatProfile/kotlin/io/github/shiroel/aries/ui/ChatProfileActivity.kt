@@ -30,7 +30,7 @@ import kotlinx.coroutines.launch
 @OptIn(InternalComposeTracingApi::class)
 class ChatProfileActivity : ComponentActivity() {
     private val updates = Channel<ChatSnapshot>(Channel.UNLIMITED)
-    private val history by lazy { (0 until 300).map { index ->
+    private val history by lazy { if (intent.getBooleanExtra("tool-boxes", false)) toolBoxes() else (0 until 300).map { index ->
         val body = when (index % 10) {
             0 -> ChatEntryBody.User("Please review change $index and explain the result." +
                 "\n\nCheck `src/change$index.kt`, preserve the existing behavior, and explain the tests before editing."
@@ -44,6 +44,18 @@ class ChatProfileActivity : ComponentActivity() {
         }
         ChatEntry("entry-$index", null, body)
     } }
+    /** Small disclosure workload for comparing tool taps and nested output scrolling. */
+    private fun toolBoxes(): List<ChatEntry> = listOf(
+        ChatEntry("request", null, ChatEntryBody.User("Review the tool results.")),
+        ChatEntry("read", null, ChatEntryBody.Tool("Read", "/repo/src/ChatScreen.kt", "{\"path\":\"src/ChatScreen.kt\"}",
+            ChatToolStatus.DONE, "Read 120 lines.", details = ChatToolDetails(path = "/repo/src/ChatScreen.kt"))),
+        ChatEntry("failed", null, ChatEntryBody.Tool("Bash", "git diff --check", "{}",
+            ChatToolStatus.FAILED, "Trailing whitespace at src/ChatScreen.kt:12", details = ChatToolDetails(command = "git diff --check", exitCode = 2L))),
+        ChatEntry("running", null, ChatEntryBody.Tool("Grep", "TODO", "{}", ChatToolStatus.RUNNING, null)),
+        ChatEntry("output", null, ChatEntryBody.Tool("Bash", "./gradlew :app:lintDebug", "{\"command\":\"./gradlew :app:lintDebug\"}",
+            ChatToolStatus.DONE, (1..120).joinToString("\n") { "Output line $it: checking source" },
+            details = ChatToolDetails(command = "./gradlew :app:lintDebug", cwd = "/repo", exitCode = 0L, durationMs = 1200uL))),
+    )
     private val tail = ChatEntry("stream", null, ChatEntryBody.Agent("Streaming response"))
     // The native watch shares unchanged bodies and sends only changed wrappers.
     private fun freshHistory() = history.map { entry ->
@@ -123,10 +135,13 @@ class ChatProfileActivity : ComponentActivity() {
         chat = ChatModel(core, Host("profile", "Profile", Endpoint.Ssh("unused", 22u, "unused"), null),
             TerminalInfo("profile", "claude", "", listOf("claude"), "/repo", "live", AgentStatus.Working, false, 0uL))
         chat.start(lifecycleScope)
-        updates.trySend(ChatSnapshot(history + tail, ChatStatus.LIVE, null))
+        updates.trySend(ChatSnapshot(if (intent.getBooleanExtra("tool-boxes", false)) history else history + tail, ChatStatus.LIVE, null))
         if (android.os.Build.VERSION.SDK_INT >= 33) registerReceiver(commands, IntentFilter("$packageName.PROFILE"), RECEIVER_EXPORTED)
         else @Suppress("UnspecifiedRegisterReceiverFlag") registerReceiver(commands, IntentFilter("$packageName.PROFILE"))
         val appearance = ThemeSettings.from(this)
+        intent.getStringExtra("theme")?.let { mode ->
+            ThemeMode.entries.find { it.name.equals(mode, ignoreCase = true) }?.let(appearance::chooseMode)
+        }
         setContent {
             AriesTheme(appearance) {
                 Scaffold { padding -> Box(Modifier.padding(padding)) { ChatScreen(chat, onBack = {}) } }

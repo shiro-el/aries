@@ -9,6 +9,9 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
@@ -250,7 +253,7 @@ class ChatSendTest {
         // Back from the Terminal is the Chat, still live.
         compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.console_agent_host_prefix, "home") + "claude").assertExists()
+        compose.onNode(hasTestTag("console-top-bar") and hasAnyDescendant(hasText("claude"))).assertExists()
         compose.onNodeWithText("go on").assertExists()
     }
 
@@ -265,7 +268,7 @@ class ChatSendTest {
 
         compose.onNodeWithContentDescription(str(R.string.agent_switch_chat_label)).performClick()
         compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.console_agent_host_prefix, "home") + "claude").assertExists()
+        compose.onNode(hasTestTag("console-top-bar") and hasAnyDescendant(hasText("claude"))).assertExists()
         assertEquals("the Chat stayed live, not reopened", 1, core.chatsOpened.size)
         assertEquals(true, conn.views.single().detached)
 
@@ -273,7 +276,7 @@ class ChatSendTest {
         compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         compose.waitForIdle()
         compose.onNodeWithText("claude").assertExists()
-        compose.onNodeWithText(str(R.string.console_agent_host_prefix, "home") + "claude").assertDoesNotExist()
+        compose.onNode(hasTestTag("console-top-bar") and hasAnyDescendant(hasText("claude"))).assertDoesNotExist()
     }
 
     @Test
