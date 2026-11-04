@@ -3,8 +3,9 @@
 # The profile APK uses a fake core and needs no Rust JNI library. It is R8-optimized/non-debuggable.
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
-out=${1:?Usage: measure-chat-jank.sh OUTPUT_DIRECTORY [DEVICE]}
+out=${1:?Usage: measure-chat-jank.sh OUTPUT_DIRECTORY [DEVICE] [APK]}
 device=${2:-emulator-5556}
+apk=${3:-$root/android/app/build/outputs/apk/chatProfile/app-chatProfile.apk}
 mkdir -p "$out"
 out=$(cd "$out" && pwd)
 adb=${ANDROID_HOME:-$HOME/Android/Sdk}/platform-tools/adb
@@ -15,7 +16,7 @@ flock 9
 call() { "$adb" -s "$device" "$@"; }
 cleanup() { call shell am force-stop "$package" >/dev/null; }
 trap cleanup EXIT
-call install -r "$root/android/app/build/outputs/apk/chatProfile/app-chatProfile.apk" > "$out/install.txt"
+call install -r "$apk" > "$out/install.txt"
 call shell dumpsys package "$package" > "$out/package.txt"
 call shell getprop ro.build.fingerprint > "$out/device.txt"
 call shell wm size >> "$out/device.txt"

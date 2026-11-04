@@ -123,12 +123,17 @@ internal fun LazyListScope.chatMarkdownItems(id: String, document: ChatMarkdownD
         contentType = { _, block -> block::class },
     ) { index, block ->
         CompositionLocalProvider(LocalChatSearchEntry provides id) {
-            if (block is ChatMarkdownBlock.Diagram) {
-                ChatMarkdownBlockView(block, Modifier, "markdown:$index", thinking)
-            } else ChatTextActions(document?.source.orEmpty(), interceptChildLongPress = true) { actions ->
-                ChatMarkdownBlockView(block, actions, "markdown:$index", thinking)
-            }
+            ChatMarkdownItem(document?.source.orEmpty(), block, index, thinking)
         }
+    }
+}
+
+@Composable
+internal fun ChatMarkdownItem(source: String, block: ChatMarkdownBlock, index: Int, thinking: Boolean) {
+    if (block is ChatMarkdownBlock.Diagram) {
+        ChatMarkdownBlockView(block, Modifier, "markdown:$index", thinking)
+    } else ChatTextActions(source, interceptChildLongPress = true) { actions ->
+        ChatMarkdownBlockView(block, actions, "markdown:$index", thinking)
     }
 }
 
