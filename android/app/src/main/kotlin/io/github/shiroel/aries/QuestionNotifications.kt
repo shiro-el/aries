@@ -74,7 +74,7 @@ object QuestionNotifications {
             }
             builder.setStyle(Notification.BigTextStyle().bigText(NotificationMarkdown.render(question.text).expanded))
         } else {
-            builder.addAction(openAction(context, notice.hostId, status.terminal))
+            builder.addAction(openAction(context, notice.hostId, notice.hostName, status.terminal, builder.extras.getString(NotificationGroups.GENERATION)))
         }
     }
 
@@ -89,7 +89,13 @@ object QuestionNotifications {
             if (current == null || current.notification.extras.getString(QUESTION_ID) != notice.question.id) return
             // Clear the recovered Notification's action array as well: an empty
             // builder action list can otherwise retain the original buttons.
-            val previous = current.notification.clone().apply { actions = null }
+            val previous = current.notification.clone().apply {
+                actions = null
+                extras = android.os.Bundle(extras).apply {
+                    putBoolean(CONSUMED, true)
+                    putBoolean(InlineNotifications.ACTION_UPDATE, true)
+                }
+            }
             val builder = Notification.Builder.recoverBuilder(context, previous)
                 .setOnlyAlertOnce(true)
             val line = when (view) {
@@ -100,15 +106,22 @@ object QuestionNotifications {
             builder.setContentText(display.plain)
                 .setStyle(Notification.BigTextStyle().bigText(TextUtils.concat(
                     NotificationMarkdown.render(notice.question.text).expanded, "\n", display.expanded)))
-            if (view is QuestionView.Done && view.openApp) builder.addAction(openAction(context, notice.hostId, notice.terminal))
+            if (view is QuestionView.Done && view.openApp) builder.addAction(openAction(context, notice.hostId, notice.hostName, notice.terminal, previous.extras.getString(NotificationGroups.GENERATION)))
             NotificationGroups.post(context, notice.hostId, notice.hostName, notice.terminal, builder.build())
         }
     }
 
     private const val QUESTION_ID = "aries.question.id"
+    internal const val CONSUMED = "aries.question.consumed"
 
-    private fun openAction(context: Context, hostId: String, terminal: String) = Notification.Action.Builder(
-        null, context.getString(R.string.question_notify_open_app), PushTarget(hostId, terminal, chat = true).pendingIntent(context),
+    internal fun accepts(context: Context, notice: QuestionNotice): Boolean =
+        context.getSystemService(NotificationManager::class.java).activeNotifications.any {
+            it.id == notice.hostId.hashCode() && it.tag == notice.terminal &&
+                it.notification.extras.getString(QUESTION_ID) == notice.question.id && !it.notification.extras.getBoolean(CONSUMED)
+        }
+
+    private fun openAction(context: Context, hostId: String, hostName: String, terminal: String, generation: String?) = Notification.Action.Builder(
+        null, context.getString(R.string.question_notify_open_app), NotificationGroups.openApp(context, hostId, hostName, terminal, terminal, chat = true, generation = generation),
     ).build()
 
     private fun choiceIntent(context: Context, notice: QuestionNotice, choice: Int): PendingIntent {

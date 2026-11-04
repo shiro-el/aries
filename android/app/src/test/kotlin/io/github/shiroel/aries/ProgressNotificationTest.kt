@@ -21,8 +21,10 @@ class ProgressNotificationTest {
         PushContent.Progress("t1", "Builder", 125uL, 3u, at, cancelled))
     private fun card() = manager.activeNotifications.single { it.tag == "t1" }.notification
 
-    @Test @Config(sdk = [35])
+    @Test @Config(sdk = [35], application = FakeCoreApp::class)
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
     fun olderAndroidShowsQuietOngoingProgressAndDoneReplacesTheSameTag() {
+        androidx.work.testing.WorkManagerTestInitHelper.initializeTestWorkManager(context)
         PushService.show(context, progress())
         val n = card()
         assertTrue(n.flags and Notification.FLAG_ONGOING_EVENT != 0)
@@ -36,6 +38,10 @@ class ProgressNotificationTest {
         // Normal priority progress can arrive after a high priority completion.
         PushService.show(context, progress())
         assertEquals(0, card().flags and Notification.FLAG_ONGOING_EVENT)
+        (context as FakeCoreApp).core.storedStates["h1"] = io.github.shiroel.aries.core.LastKnownState("h1",
+            listOf(io.github.shiroel.aries.core.TerminalInfo("t2", null, "Fix login", emptyList(), null, "live")), 1uL)
+        PushService.show(context, PushNotice("h1", "box", PushContent.Progress("t2", null, 125uL, 0u, 20uL, false)))
+        renderNotification(context, manager.activeNotifications.single { it.tag == "t2" }.notification, "progress-no-children")
     }
 
     @Test @Config(sdk = [36])

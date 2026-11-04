@@ -1045,6 +1045,7 @@
     <string name="agent_watch_label">진행 알림</string>
     <string name="agent_watch_error">진행 상황 알림을 바꾸지 못했어요: %1$s</string>
     <string name="push_progress_channel">Agent 진행 상황</string>
+    <string name="push_progress_elapsed">%1$d분 경과</string>
     <string name="push_progress_body">%1$d분 경과 · 하위 Agent %2$d개</string>
 
     <string name="push_test_title">%1$s 푸시 알림 테스트</string>
@@ -1058,6 +1059,7 @@
     <string name="push_call_channel_emergency">비상 Call</string>
     <string name="push_no_firebase">이 빌드에는 Firebase 설정이 없어요</string>
     <!-- Inline notification actions -->
+    <string name="notification_updates_channel">답장 결과</string>
     <string name="notification_reply_button">답장</string>
     <string name="notification_reply_hint">Agent에게 메시지</string>
     <string name="notification_seen_button">확인함</string>

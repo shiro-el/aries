@@ -147,6 +147,7 @@ class HostsModel(
     private val http: HttpClient = HttpRelayClient(),
     private val onSavedLaunchesChanged: () -> Unit = {},
     private val locationStore: LastLocationStore? = null,
+    private val onCallAnswered: (Host, String) -> Unit = { _, _ -> },
 ) {
     internal val pairingReview = QrPairingReview()
     /** Current Host's settings models; a previous Host's pending work keeps its own state. */
@@ -191,7 +192,7 @@ class HostsModel(
     }
 
     /** Every Host's Calls for the inbox; see [resumeCalls]. */
-    val calls = CallsModel(core, scope, keyWork)
+    val calls = CallsModel(core, scope, keyWork, onCallAnswered)
     /** Chat cache retention and per-Host clearing (ticket 44). */
     val chatCache = ChatCacheModel(core, scope, keyWork)
     val diagnosticHistory = DiagnosticsModel(core, scope, keyWork)
@@ -557,14 +558,14 @@ class HostsModel(
     /** Called after the activity resumes and installs its biometric authorizer. */
     fun start(target: PushTarget? = null) {
         if (started) {
-            target?.let { openPushedAgent(it.hostId, it.terminal, openChat = it.chat) }
+            target?.let(::openNotificationTarget)
             return
         }
         started = true
         val saved = locationStore?.load()
         if (target != null) {
             startupHostId = target.hostId
-            openPushedAgent(target.hostId, target.terminal, openChat = target.chat)
+            openNotificationTarget(target)
         } else if (!explicitSurfaceEntry && screen == Screen.Hosts) {
             hosts.find { it.id == saved?.hostId }?.let {
                 startupHostId = it.id
@@ -1694,6 +1695,14 @@ class HostsModel(
         back()
         suppressLocationSave = false
         openAgents(focus = null)
+    }
+
+    private fun openNotificationTarget(target: PushTarget) {
+        if (target.agents) {
+            explicitSurfaceEntry = true
+            back()
+            openAgents(focus = null, selectedHosts = hosts.filter { it.id == target.hostId })
+        } else openPushedAgent(target.hostId, target.terminal, openChat = target.chat)
     }
 
     /** Resolve QS taps from the latest persisted pull, including the whole machine address. */
