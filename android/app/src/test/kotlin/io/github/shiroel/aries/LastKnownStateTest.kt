@@ -234,6 +234,11 @@ class LastKnownStateTest {
         TestListenableWorkerBuilder<LastKnownStateWorker>(context).build().doWork()
         assertNotNull(core.lastKnownState(other.id))
         assertEquals(old, core.lastKnownState(first.id))
+        // Regression: recall's additional cache read must preserve the worker's
+        // existing storage-failure behavior instead of failing the whole refresh.
+        core.lastKnownStatesFailure = io.github.shiroel.aries.core.CoreException.Storage("unreadable cache")
+        assertEquals(ListenableWorker.Result.success(), worker.doWork())
+        assertEquals(old, core.lastKnownState(first.id))
     }
 
     @Test fun biometricHostsCanRefreshWhileTheAppIsInFront() = runTest {
