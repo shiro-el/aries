@@ -940,6 +940,13 @@
     <string name="attachments_file_button">파일 첨부</string>
     <string name="attachments_camera_button">사진 찍기</string>
     <string name="attachments_resize_label">이미지를 2048px로 줄이기</string>
+
+    <!-- Camera access: shared by Chat capture and Host QR scanning. -->
+    <string name="camera_permission_title">카메라 권한</string>
+    <string name="camera_permission_denied_body">사진을 찍거나 Host QR 코드를 스캔하려면 카메라 권한을 허용해 주세요.</string>
+    <string name="camera_permission_settings_body">사진을 찍거나 Host QR 코드를 스캔하려면 앱 설정에서 카메라 권한을 허용해 주세요.</string>
+    <string name="camera_permission_settings_button">설정 열기</string>
+
     <string name="layout_new_space_button">새 Space</string>
     <string name="layout_app_unavailable">Space와 Tab을 편집하려면 이 Host에서 herdr-app을 열어 주세요.</string>
     <string name="layout_kill_button">종료</string>

@@ -945,6 +945,13 @@
     <string name="attachments_file_button">Attach files</string>
     <string name="attachments_camera_button">Take a photo</string>
     <string name="attachments_resize_label">Resize images to 2048 px</string>
+
+    <!-- Camera access: shared by Chat capture and Host QR scanning. -->
+    <string name="camera_permission_title">Camera access</string>
+    <string name="camera_permission_denied_body">Allow camera access to take photos or scan Host QR codes.</string>
+    <string name="camera_permission_settings_body">Enable camera access in app settings to take photos or scan Host QR codes.</string>
+    <string name="camera_permission_settings_button">Open settings</string>
+
     <string name="layout_new_space_button">New Space</string>
     <string name="layout_app_unavailable">Open herdr-app on this Host to edit Spaces and Tabs.</string>
     <string name="layout_kill_button">End</string>
