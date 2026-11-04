@@ -20,6 +20,7 @@ import io.github.shiroel.aries.core.CallUrgency
 import io.github.shiroel.aries.core.PushContent
 import io.github.shiroel.aries.core.PushNotice
 import kotlinx.coroutines.*
+import io.github.shiroel.aries.ui.encode
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -113,6 +114,40 @@ class InlineNotificationTest {
         }
         assertEquals(listOf(Triple("h1", "t1", "from the shade")), app.core.backgroundMessages)
         assertEquals(listOf("h1 t1 seen=7"), app.core.labelWrites)
+    }
+
+    // D06 lifetime boundary: a retained empty composer without a Host line must not park a background reply.
+    @Test fun anEmptyInactiveComposerStillAllowsAnImmediateBackgroundReply() = runBlocking {
+        online()
+        val host = core.addHost("box", io.github.shiroel.aries.core.Endpoint.Ssh("box", 22u, "me"))
+        val owner = io.github.shiroel.aries.ui.ChatModel(core, host,
+            io.github.shiroel.aries.core.TerminalInfo("t1", "Agent", "", emptyList(), null, "live", AgentStatus.Done))
+        owner.draft = "keep this draft"
+        PushService.show(context, status())
+        val accepted = target()
+        val result = async(Dispatchers.Default) { work(accepted) }
+        withTimeout(5_000) {
+            while (!result.isCompleted) { shadowOf(Looper.getMainLooper()).idle(); delay(10) }
+        }
+        result.await()
+        assertEquals(listOf(Triple("h1", "t1", "run tests")), core.backgroundMessages)
+        assertTrue(owner.queuedMessages.isEmpty())
+        assertEquals("keep this draft", owner.draft)
+    }
+
+    // D06: a reply from the shade cannot jump a dormant FIFO even without a Chat owner.
+    @Test fun replyJoinsThePersistedFifoBehindUnresolvedInput() = runBlocking {
+        online()
+        val first = io.github.shiroel.aries.ui.QueuedChatMessage(draft = "old", text = "old",
+            attachments = emptyList(), before = emptySet(), phase = io.github.shiroel.aries.ui.QueuedMessagePhase.Uncertain)
+        core.saveChatOutbox("h1", "t1", io.github.shiroel.aries.ui.ChatOutboxState("draft", emptyList(), listOf(first)).encode())
+        PushService.show(context, status())
+        work(target())
+        assertTrue(core.backgroundMessages.isEmpty())
+        val saved = io.github.shiroel.aries.ui.decodeChatOutbox(core.chatOutbox("h1", "t1")!!)
+        assertEquals(listOf("old", "run tests"), saved.messages.map { it.text })
+        assertEquals("draft", saved.draft)
+        assertEquals(io.github.shiroel.aries.ui.QueuedMessagePhase.Waiting, saved.messages.last().phase)
     }
 
     @Test
@@ -235,6 +270,9 @@ class InlineNotificationTest {
         work(target())
         assertEquals(context.getString(R.string.notification_action_failed), text())
         assertEquals("run tests", shown().actions.single { !it.remoteInputs.isNullOrEmpty() }.remoteInputs.single().choices.single())
+        // This is an independent key-lock failure, after explicitly clearing
+        // the previous ambiguous delivery that now correctly blocks the FIFO.
+        core.discardChatOutbox("h1")
         PushService.show(context, status())
         core.backgroundFailure = io.github.shiroel.aries.core.CoreException.KeyLocked()
         work(target())
@@ -320,8 +358,6 @@ class InlineNotificationTest {
             override fun dispatch(context: kotlin.coroutines.CoroutineContext, block: Runnable) { journalWrites.add(block) }
         }
         fun flushJournalIo() { while (true) (journalWrites.poll() ?: break).run() }
-        val owner = io.github.shiroel.aries.ui.ChatModel(core, host, terminal, journalWork = journalDispatcher)
-        owner.draft = "a different draft"
         PushService.show(context, status())
         val accepted = target()
         val hold = CompletableDeferred<Unit>()
@@ -331,6 +367,9 @@ class InlineNotificationTest {
         withTimeout(5_000) {
             while (text() != context.getString(R.string.chat_send_held)) delay(10)
         }
+        // The reply is already in flight when Chat acquires its owner.
+        val owner = io.github.shiroel.aries.ui.ChatModel(core, host, terminal, journalWork = journalDispatcher)
+        owner.draft = "a different draft"
         NotificationGroups.viewing(context, PushTarget(host.id, "t1"))
         assertTrue(manager.activeNotifications.isEmpty())
         hold.complete(Unit)

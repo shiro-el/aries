@@ -43,6 +43,40 @@ internal object ChatReplyRecovery {
         withContext(Dispatchers.Main.immediate) { owner.recoverReply(message)?.join() }
     }
 
+    private data class QueuedReply(val owner: ChatModel?, val queued: Boolean)
+
+    /** Reserve the same FIFO before a background sender may open its own line.
+     * A disconnected journal still owns Waiting/ambiguous input; replies append
+     * there instead of overtaking it. Failed rows are explicitly not barriers.
+     */
+    @Synchronized private fun enqueueOrOwner(core: AriesCoreInterface, key: AgentKey, message: QueuedChatMessage): QueuedReply {
+        owners[core]?.get(key)?.get()?.let { return QueuedReply(it, true) }
+        val previous = core.chatOutbox(key.hostId, key.address)?.let(::decodeChatOutbox)
+            ?: return QueuedReply(null, false)
+        if (previous.messages.none { it.phase != QueuedMessagePhase.Failed }) return QueuedReply(null, false)
+        if (previous.messages.none { it.id == message.id }) {
+            core.saveChatOutbox(key.hostId, key.address, previous.copy(messages = previous.messages + message).encode())
+        }
+        return QueuedReply(null, true)
+    }
+
+    /** True means durably queued; false permits one immediate background attempt. */
+    suspend fun enqueueFromWorker(core: AriesCoreInterface, key: AgentKey, generation: String, text: String): Boolean {
+        val message = QueuedChatMessage(id = "notification:$generation", draft = text,
+            attachments = emptyList(), text = text, before = emptySet())
+        val decision = enqueueOrOwner(core, key, message)
+        return decision.owner?.let { owner ->
+            withContext(Dispatchers.Main.immediate) {
+                if (!owner.ownsReplyFifo) false
+                else {
+                    owner.recoverReply(message)?.join()
+                    check(owner.journalError == null) { "Reply journal could not be saved" }
+                    true
+                }
+            }
+        } ?: decision.queued
+    }
+
     fun message(generation: String, text: String, line: String, uncertain: Boolean) = QueuedChatMessage(
         id = "notification:$generation", draft = text, attachments = emptyList(), text = text, before = emptySet(),
         phase = if (uncertain) QueuedMessagePhase.Uncertain else QueuedMessagePhase.Failed, error = line,

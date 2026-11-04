@@ -208,7 +208,7 @@ class ChatQuestionTest {
         compose.waitForIdle()
         compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue")).performClick()
         compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.chat_question_sending)).assertExists()
+        compose.onNodeWithText(str(R.string.chat_sending)).assertExists()
         assertEquals(listOf("t1" to "Blue"), core.connection!!.typed)
         response.complete(Unit)
         compose.waitForIdle()

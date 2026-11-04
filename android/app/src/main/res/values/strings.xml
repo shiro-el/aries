@@ -851,6 +851,11 @@
     <string name="chat_delivery_restore_button">Restore to input</string>
     <string name="chat_delivery_resend_title">Resend message?</string>
     <!-- Phone-local Chat queue -->
+    <string name="chat_queue_count">Queued %1$d</string>
+    <string name="chat_queue_blocked">Check the earlier message before sending</string>
+    <string name="chat_queue_returned_ended">The Agent ended. Copy the returned message below.</string>
+    <string name="chat_queue_copy_returned_button">Copy returned message</string>
+    <string name="notification_message_queued">Reply queued · open Chat to review</string>
     <string name="chat_queue_waiting">Queued</string>
     <string name="chat_queue_agent">Passed to Agent · waiting for its turn</string>
     <string name="chat_queue_uncertain">Delivery unconfirmed · Check the messages before sending again</string>

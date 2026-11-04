@@ -74,7 +74,8 @@ fun AriesApp(
     terminalDisplay: TerminalDisplaySettings = rememberTerminalDisplaySettings(),
 ) {
     AriesTheme(settings) {
-        androidx.compose.runtime.CompositionLocalProvider(LocalLayoutScreens provides layoutScreensFor(settings.layout)) {
+        androidx.compose.runtime.CompositionLocalProvider(LocalLayoutScreens provides layoutScreensFor(settings.layout),
+            LocalChatQueueCounts provides model::queuedCount) {
             NewTaskAccess(model) {
                 if (guidance == null) AriesContent(model, settings, terminalDisplay)
                 else io.github.shiroel.aries.guidance.AppGuidance(guidance) { AriesContent(model, settings, terminalDisplay, guidance, allowNotifications) }

@@ -189,6 +189,7 @@ internal fun TasksTaskRow(entry: AgentEntry, transcript: ChatSnapshot? = null, s
                 entry.space?.name?.takeIf { showSpace }, entry.host.name.takeIf { showHost }).filter { it.isNotBlank() }.joinToString(" · ")
             Text(meta, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
+            ChatQueueCount(LocalChatQueueCounts.current(entry.key))
             if (entry.live && entry.terminal.statusMs != null) AgentElapsedTime(entry.terminal.statusMs)
             else if (!entry.live) entry.lastUpdatedMs?.let { Text(agentLastSeen(it), style = MaterialTheme.typography.bodySmall) }
         }, summary = summary, mono = blocked?.reason == BlockedReason.PERMISSION, onLongClick = onLongClick,

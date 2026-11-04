@@ -236,6 +236,7 @@ private fun ThreadConversationRow(model: HostsModel, entry: AgentEntry, urgent: 
         verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(model.threadTitle(entry), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium,
             maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
+        ChatQueueCount(model.queuedCount(entry.key))
         val metadata = threadMetadata(entry).joinToString(" · ")
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             entry.terminal.agentStatus?.let { AgentStatusMark(it, modifier = Modifier.size(12.dp), live = entry.live) }

@@ -57,7 +57,7 @@ class ChatInterruptTest {
     }
 
     @Test
-    fun emptyWorkingComposerInterruptsButTypingSwitchesTheSameActionToQueue() {
+    fun workingComposerKeepsStopAvailableAlongsideDraftSubmission() {
         val conn = open(FakeCore())
         val input = compose.onNodeWithContentDescription(str(R.string.chat_input_label))
         compose.onNodeWithContentDescription(str(R.string.chat_interrupt_confirm_button)).assertIsEnabled()
@@ -65,7 +65,7 @@ class ChatInterruptTest {
         screenshot("composer-empty-stop")
 
         input.performTextInput(" ")
-        compose.onNodeWithContentDescription(str(R.string.chat_interrupt_confirm_button)).assertDoesNotExist()
+        compose.onNodeWithContentDescription(str(R.string.chat_interrupt_confirm_button)).assertIsEnabled()
         compose.onNodeWithText(str(R.string.chat_send_button)).assertIsNotEnabled()
         input.performTextReplacement("x")
         screenshot("composer-typed-send")
@@ -96,7 +96,7 @@ class ChatInterruptTest {
             compose.waitForIdle()
             compose.onNodeWithContentDescription(str(R.string.chat_input_label))
                 .assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
-            compose.onNodeWithContentDescription(str(R.string.chat_interrupt_confirm_button)).assertDoesNotExist()
+            compose.onNodeWithContentDescription(str(R.string.chat_interrupt_confirm_button)).assertIsEnabled()
             screenshot("composer-attachment-send")
             compose.onNodeWithText(str(R.string.chat_send_button)).assertIsEnabled().performClick()
             compose.waitForIdle()
