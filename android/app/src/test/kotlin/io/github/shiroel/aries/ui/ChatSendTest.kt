@@ -93,7 +93,8 @@ class ChatSendTest {
     @Config(qualifiers = "h400dp")
     fun compactToolsHistoryRestoresADraftForEditingWithoutSendingIt() {
         // Regression: history selection inside compact tools must update the same composer draft.
-        val conn = openChat(FakeCore())
+        val core = FakeCore()
+        val conn = openChat(core)
         type("previous input")
         compose.onNodeWithContentDescription(str(R.string.chat_input_tools_button)).performClick()
         compose.onNodeWithContentDescription(str(R.string.input_history_title)).performClick()
@@ -104,13 +105,19 @@ class ChatSendTest {
         assertEquals(listOf("t1" to "previous input"), conn.typed)
         input.performTextReplacement("edited input")
         compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
+        // A new instruction waits for the preceding Agent turn, including
+        // instructions restored from input history.
+        core.push(listOf(claude.copy(agentStatus = AgentStatus.Working)))
+        compose.waitForIdle()
+        core.push(listOf(claude.copy(turn = 1uL)))
         compose.waitUntil(5_000) { conn.typed.size == 2 }
         assertEquals(listOf("t1" to "previous input", "t1" to "edited input"), conn.typed)
     }
 
     @Test
     fun sentMessagesCanBeSelectedEditedAndClearedFromInputHistory() {
-        val conn = openChat(FakeCore())
+        val core = FakeCore()
+        val conn = openChat(core)
         val input = compose.onNodeWithContentDescription(str(R.string.chat_input_label))
         input.performTextInput("first\n한국어")
         compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
@@ -120,6 +127,11 @@ class ChatSendTest {
         assertEquals(listOf("t1" to "first\n한국어"), conn.typed)
         input.performTextReplacement("edited message")
         compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
+        // A new instruction waits for the preceding Agent turn, including
+        // instructions restored from input history.
+        core.push(listOf(claude.copy(agentStatus = AgentStatus.Working)))
+        compose.waitForIdle()
+        core.push(listOf(claude.copy(turn = 1uL)))
         compose.waitUntil(5_000) { conn.typed.size == 2 }
         assertEquals(listOf("t1" to "first\n한국어", "t1" to "edited message"), conn.typed)
         compose.onNodeWithContentDescription("Input history").performClick()

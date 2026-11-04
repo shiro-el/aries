@@ -514,7 +514,7 @@ class HostsModel(
             return
         }
         links.forEach { it.networkChanged() }
-        liveChat?.reconnect()
+        activeConversations().forEach { it.reconnect() }
     }
 
     /** Retain warm screen streams briefly; App Lock can request immediate release. */
@@ -535,8 +535,7 @@ class HostsModel(
 
     private fun releaseScreenConnections() {
         // Give submitted Chat messages to the core before retiring their SSH line.
-        liveChat?.pause()
-        taskQuestionOwner?.takeUnless(::isViewedChat)?.pause()
+        activeConversations().forEach { it.pause() }
         links.forEach { it.pause() }
     }
 
@@ -546,8 +545,7 @@ class HostsModel(
         screensPaused = false
         screensActive.value = true
         links.forEach { it.resume() }
-        if (screen != Screen.Settings) liveChat?.resume()
-        taskQuestionOwner?.takeUnless(::isViewedChat)?.resume()
+        activeConversations().forEach { it.resume() }
         if (pendingNetworkChange) {
             pendingNetworkChange = false
             networkChanged()
@@ -563,8 +561,10 @@ class HostsModel(
                     link.state == LinkState.Reconnecting && !core.canAnswerInBackground(link.host.id))) link.retryNow()
             else link.check()
         }
-        if (screen != Screen.Settings) liveChat?.let { chat ->
-            if (chat.connectionError is CoreException.KeyLocked) chat.retryConnection() else chat.retryNow()
+        activeConversations().forEach { chat ->
+            if (screen != Screen.Settings && chat === liveChat && chat.connectionError is CoreException.KeyLocked)
+                chat.retryConnection()
+            else if (chat.link?.state == LinkState.Up) chat.retryNow()
         }
         startupHostId = null
         // Live connections publish their lists in the core. Other Hosts
@@ -1095,11 +1095,11 @@ class HostsModel(
     /** New tasks always open Chat, independently of the user's last view preference. */
     internal fun openTaskChat(link: HostLink, terminal: TerminalInfo, draft: String) {
         val origin = when (val current = screen) {
-            is Screen.Chat -> { current.chat.stop(); current.returnTo }
+            is Screen.Chat -> { current.chat.leave(); current.returnTo }
             is Screen.Terminal -> {
                 viewing?.cancel()
                 viewing = null
-                (current.returnTo as? Screen.Chat)?.let { it.chat.stop(); it.returnTo } ?: current.returnTo
+                (current.returnTo as? Screen.Chat)?.let { it.chat.leave(); it.returnTo } ?: current.returnTo
             }
             else -> current
         }
@@ -1495,6 +1495,8 @@ class HostsModel(
             if (settingsReturnTo != null) back()
             hostSettings.remove(prompt.host.id)
             conversations.keys.removeAll { it.hostId == prompt.host.id }
+            chatQueues.keys.removeAll { it.hostId == prompt.host.id }
+            queueRecoveryLines.keys.removeAll { it.hostId == prompt.host.id }
             taskChanges.keys.removeAll { it.hostId == prompt.host.id }
             hosts = core.hosts()
             hostsChanged()
@@ -1680,10 +1682,17 @@ class HostsModel(
 
     /** One owner per full Host/Terminal identity, independent of navigation and SSH lines. */
     private val conversations = mutableStateMapOf<AgentKey, ChatModel>()
+    /** Queue/scheduler lifetime belongs to the Host, independent of its visible route. */
+    private val chatQueues = mutableStateMapOf<AgentKey, HostChatQueue>()
+    private val queueRecoveryLines = mutableMapOf<AgentKey, java.lang.ref.WeakReference<HostConnection>>()
+    private fun activeConversations() = conversations.values.filter { it.active && it.link?.state != LinkState.Closed }
+
+    internal fun queuedCount(key: AgentKey): Int = chatQueues[key]?.waitingCount ?: 0
 
     private fun conversation(link: HostLink, terminal: TerminalInfo): ChatModel =
         conversations.getOrPut(AgentKey(link.host.id, terminal.address)) {
-            ChatModel(core, link.host, terminal, link, keyWork)
+            val queue = chatQueues.getOrPut(AgentKey(link.host.id, terminal.address)) { HostChatQueue() }
+            ChatModel(core, link.host, terminal, link, keyWork, delivery = queue)
         }.also { it.bind(link, terminal) }
 
     /** Needs sheets reuse the same answer/outbox owner as Chat, without changing navigation. */
@@ -1705,7 +1714,7 @@ class HostsModel(
     }
 
     internal fun stopTaskQuestion() {
-        taskQuestionOwner?.takeUnless(::isViewedChat)?.stop()
+        taskQuestionOwner?.takeUnless(::isViewedChat)?.leave()
         taskQuestionOwner = null
     }
 
@@ -1743,7 +1752,7 @@ class HostsModel(
         viewing?.cancel()
         viewing = null
         val chat = conversation(line, terminal)
-        liveChat?.takeUnless { it === chat }?.stop()
+        liveChat?.takeUnless { it === chat }?.leave()
         // Drafts/answers belong to the cached conversation; the viewport belongs to this visit.
         if (!preserveReadingPosition) chat.readingSession = ChatReadingSession()
         if (draft.isNotEmpty()) chat.appendDraft(draft)
@@ -1774,7 +1783,7 @@ class HostsModel(
             is Screen.Chat -> {
                 if (view != AgentView.TERMINAL) return
                 val link = s.chat.link ?: return
-                s.chat.stop()
+                s.chat.leave()
                 observe(link, s.chat.terminal, s.returnTo, fromChatToggle = true)
             }
             else -> return
@@ -1824,7 +1833,7 @@ class HostsModel(
     /** Re-attaches with `resumed` on each new line, so the screen comes back after a network change. */
     private fun observe(link: HostLink, terminal: TerminalInfo, returnTo: Screen, fromChatToggle: Boolean = false) {
         viewing?.cancel()
-        if (returnTo !is Screen.Chat) liveChat?.stop()
+        if (returnTo !is Screen.Chat) liveChat?.leave()
         val owner = conversation(link, terminal)
         val viewer = TerminalViewer(terminal, owner.terminalComposer)
         viewer.inputHistory = owner.inputHistory
@@ -2399,9 +2408,9 @@ class HostsModel(
         return conversation(line, entry.terminal)
     }
 
-    /** Retire the sheet's watch before navigation starts this same conversation owner again. */
+    /** Leaving a sheet releases its presentation; the Host still owns submitted input. */
     internal fun releaseWaitingChat(key: AgentKey) {
-        conversations[key]?.takeIf { it !== liveChat }?.stop()
+        conversations[key]?.takeIf { it !== liveChat }?.leave()
     }
 
     /** Switch in place over the original list, using the same entry path as drawer and inbox. */
@@ -2811,7 +2820,7 @@ class HostsModel(
     fun closeChat() {
         userNavigation()
         val s = screen as? Screen.Chat ?: return
-        s.chat.stop()
+        s.chat.leave()
         if (s.chat.link === callLink) {
             ownCallLink(null)
         }
@@ -2820,7 +2829,30 @@ class HostsModel(
 
     /** Hidden composers and Changes share the Host's status feed without another watch. */
     private fun updateConversations(hostId: String, terminals: List<TerminalInfo>) {
-        conversations.filterKeys { it.hostId == hostId }.values.forEach { it.update(terminals) }
+        val line = links.firstOrNull { it.host.id == hostId && it.state == LinkState.Up }
+        // Process recreation can leave a Waiting FIFO without a visible Chat.
+        // Only journals with pending input start a per-Agent transcript watch.
+        val connection = line?.connection
+        if (line != null && connection != null) {
+            terminals.forEach { terminal ->
+                val key = AgentKey(hostId, terminal.address)
+                if (key !in conversations && queueRecoveryLines[key]?.get() !== connection) {
+                    queueRecoveryLines[key] = java.lang.ref.WeakReference(connection)
+                    val pending = try {
+                        core.chatOutbox(hostId, terminal.address)?.let(::decodeChatOutbox)?.messages?.any { it.phase != QueuedMessagePhase.Failed } == true
+                    } catch (_: Exception) { false }
+                    if (pending) conversation(line, terminal).start(scope, paused = screensPaused)
+                }
+            }
+        }
+        conversations.filterKeys { it.hostId == hostId }.values.forEach { chat ->
+            val terminal = terminals.firstOrNull { it.address == chat.terminal.address }
+            if (line != null && terminal != null && chat.link?.state == LinkState.Closed) {
+                chat.bind(line, terminal)
+                if (chat.queuedMessages.isNotEmpty()) chat.start(scope, paused = screensPaused)
+            }
+            chat.update(terminals)
+        }
         terminals.forEach { terminal -> taskChanges[AgentKey(hostId, terminal.address)]?.updateTerminal(terminal) }
     }
 

@@ -54,6 +54,9 @@ object WatchActions {
                     if (current.status !in listOf("done", "error") || command.choice != -1) return@connected WatchResult.CHANGED
                     if (command.text.length > 4096) return@connected WatchResult.FAILED
                     if (hidden(context) || !core.canAnswerInBackground(target.hostId)) return@connected WatchResult.LOCKED
+                    if (io.github.shiroel.aries.ui.ChatReplyRecovery.enqueueFromWorker(core,
+                            io.github.shiroel.aries.ui.AgentKey(target.hostId, target.terminal),
+                            "watch:${java.util.UUID.randomUUID()}", command.text)) return@connected WatchResult.PHONE
                     dispatched = true
                     return@connected if (connection.sendMessage(target.terminal, command.text,
                             object : SendListener { override fun onHeld() {} }) == SendOutcome.Sent)

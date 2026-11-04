@@ -75,6 +75,7 @@ internal fun ConsoleTerminalRow(
     selected: Boolean = false,
     live: Boolean = true,
     lastUpdatedMs: Long? = null,
+    queuedCount: Int = 0,
     onLongClick: (() -> Unit)? = null,
     trailing: @Composable RowScope.() -> Unit = {},
 ) {
@@ -117,6 +118,7 @@ internal fun ConsoleTerminalRow(
             Text(displayName(terminal), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
             if (lastSeen != null) Text(lastSeen, style = MaterialTheme.typography.labelSmall)
+            ChatQueueCount(queuedCount)
             trailing()
             if (status != null) AgentStatusMark(status, Modifier.size(20.dp), live = live) else TerminalMark()
         }
@@ -137,6 +139,7 @@ internal fun ConsoleTerminalRow(
                         if (terminal.pinned) Icon(painterResource(R.drawable.agent_pin), null,
                             Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                    ChatQueueCount(queuedCount)
                     if (largeText) {
                         Text(sub, style = MaterialTheme.typography.bodySmall,
                             color = if (waiting) statusColor(AgentStatus.Blocked(null, null)) else MaterialTheme.colorScheme.onSurfaceVariant)

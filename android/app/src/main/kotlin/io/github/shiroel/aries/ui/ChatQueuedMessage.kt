@@ -13,6 +13,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
@@ -86,7 +89,7 @@ internal fun QueuedMessageBubble(message: QueuedChatMessage, chat: ChatModel) {
             }), contentDescription = null, modifier = Modifier.padding(end = 8.dp).size(16.dp))
             Text(
                 stringResource(if (message.heldForTyping) R.string.chat_send_held else when (message.phase) {
-                    QueuedMessagePhase.Waiting -> R.string.chat_queue_waiting
+                    QueuedMessagePhase.Waiting -> if (chat.queueBlocked) R.string.chat_queue_blocked else R.string.chat_queue_waiting
                     QueuedMessagePhase.Agent -> if (message.confirmed) R.string.chat_delivery_entered else R.string.chat_sending
                     QueuedMessagePhase.Uncertain -> R.string.chat_queue_uncertain
                     QueuedMessagePhase.Failed -> R.string.chat_delivery_failed
@@ -227,4 +230,37 @@ internal fun decodeChatOutbox(content: String): ChatOutboxState {
         answers = value.optJSONObject("answers")?.let { answers ->
             answers.keys().asSequence().associateWith { answers.getString(it) }
         }.orEmpty(), waitingReturned = value.optBoolean("waitingReturned"))
+}
+
+/** Recovery remains usable when the ended Agent has disabled its composer. */
+@Composable
+internal fun ReturnedChatDraft(chat: ChatModel) {
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    Surface(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = MaterialTheme.shapes.medium) {
+        Column(Modifier.padding(12.dp)) {
+            androidx.compose.foundation.text.selection.SelectionContainer {
+                Column(Modifier.heightIn(max = 180.dp).verticalScroll(rememberScrollState())) {
+                    Text(chat.draft, style = MaterialTheme.typography.bodyLarge)
+                    chat.attachments.forEach { Text(it.name, style = MaterialTheme.typography.bodySmall) }
+                }
+            }
+            TextButton(onClick = {
+                val text = (listOf(chat.draft) + chat.attachments.map { shellQuote(it.path) }).filter(String::isNotEmpty).joinToString("\n")
+                clipboard.setText(androidx.compose.ui.text.AnnotatedString(text))
+            }) { Text(stringResource(R.string.chat_queue_copy_returned_button)) }
+        }
+    }
+}
+
+/** Every layout reads the same phone-local queue count; no extra Host watch. */
+internal val LocalChatQueueCounts = androidx.compose.runtime.staticCompositionLocalOf<(AgentKey) -> Int> { { 0 } }
+
+@Composable
+internal fun ChatQueueCount(count: Int) {
+    if (count > 0) Text(
+        stringResource(R.string.chat_queue_count, count),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.primary,
+    )
 }

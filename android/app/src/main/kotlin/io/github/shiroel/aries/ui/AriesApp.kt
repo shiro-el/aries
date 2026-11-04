@@ -79,7 +79,10 @@ fun AriesApp(
     val settingsLayout by rememberSaveable(inSettings) { mutableStateOf(settings.layout) }
     val presentation = if (inSettings) settingsLayout else settings.layout
     AriesTheme(settings) {
-        androidx.compose.runtime.CompositionLocalProvider(LocalLayoutScreens provides layoutScreensFor(presentation)) {
+        androidx.compose.runtime.CompositionLocalProvider(
+            LocalLayoutScreens provides layoutScreensFor(presentation),
+            LocalChatQueueCounts provides model::queuedCount,
+        ) {
             NewTaskAccess(model) {
                 if (guidance == null) AriesContent(model, settings, terminalDisplay)
                 else io.github.shiroel.aries.guidance.AppGuidance(guidance) { AriesContent(model, settings, terminalDisplay, guidance, allowNotifications) }

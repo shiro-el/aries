@@ -43,6 +43,7 @@ internal fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question
     val permission = q.name == PERMISSION_TOOL
     val mode = chat.questionMode(id)
     val state = chat.answers[id]
+    val queuedAnswer = chat.queuedMessages.any { it.id == "history:$id" }
     val cancelled = q.status == ChatToolStatus.FAILED
     val unconfirmed = state == AnswerState.Unconfirmed && q.status == ChatToolStatus.RUNNING
     val submitted = state == AnswerState.Sent || state == AnswerState.Unconfirmed
@@ -163,15 +164,15 @@ internal fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question
                 Text(stringResource(R.string.chat_question_send))
             }
         }
-        if (unconfirmed) {
+        if (unconfirmed && !queuedAnswer) {
             Text(stringResource(R.string.chat_queue_uncertain), style = MaterialTheme.typography.bodySmall, color = colors.error)
             if (mode == ChatModel.QuestionMode.History) {
                 TextButton(onClick = { confirmingRetry = true }) { Text(stringResource(R.string.chat_delivery_retry_button)) }
             }
         }
         when {
-            state == AnswerState.Held -> Text(stringResource(R.string.chat_send_held), style = MaterialTheme.typography.bodySmall)
-            state == AnswerState.Sending -> Text(stringResource(R.string.chat_question_sending), style = MaterialTheme.typography.bodySmall)
+            state == AnswerState.Held && !queuedAnswer -> Text(stringResource(R.string.chat_send_held), style = MaterialTheme.typography.bodySmall)
+            state == AnswerState.Sending && !queuedAnswer -> Text(stringResource(R.string.chat_question_sending), style = MaterialTheme.typography.bodySmall)
             state is AnswerState.Failed -> Text(messageText(state.why),
                 style = MaterialTheme.typography.bodySmall, color = colors.error)
         }
