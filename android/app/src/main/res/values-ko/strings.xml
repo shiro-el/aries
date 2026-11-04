@@ -199,6 +199,8 @@
     <!-- Remote file browser (90) -->
     <string name="files_open_button">파일</string>
     <string name="files_changed_heading">변경된 파일</string>
+    <string name="files_parent_folder_entry">..</string>
+    <string name="files_parent_folder_button">상위 폴더</string>
     <string name="files_folders_heading">폴더</string>
     <string name="files_diff_button">Diff</string>
     <string name="files_full_button">전체 파일</string>

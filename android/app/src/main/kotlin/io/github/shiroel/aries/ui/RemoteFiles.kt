@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
@@ -34,8 +35,10 @@ fun RemoteFilesScreen(
     initialLocation: FileLocation? = null,
     onDiffSend: ((String) -> Unit)? = onSend,
 ) {
-    var folder by remember(address, initialLocation) { mutableStateOf(initialLocation?.path?.substringBeforeLast('/')?.ifEmpty { "/" }) }
-    var directory by remember(address) { mutableStateOf<RemoteDirectory?>(null) }
+    val initialFolder = initialLocation?.path?.substringBeforeLast('/')?.ifEmpty { "/" }
+    var folder by remember(address, initialLocation) { mutableStateOf(initialFolder) }
+    var startingFolder by remember(address, initialLocation) { mutableStateOf(initialFolder) }
+    var directory by remember(address, initialLocation) { mutableStateOf<RemoteDirectory?>(null) }
     var file by remember(address, initialLocation) { mutableStateOf(initialLocation?.path) }
     var wrap by remember(address) { mutableStateOf(false) }
     var retry by remember { mutableIntStateOf(0) }
@@ -59,6 +62,9 @@ fun RemoteFilesScreen(
     var treeLoading by remember(address, directory?.path, retry) { mutableStateOf<Set<String>>(emptySet()) }
     var treeFailed by remember(address, directory?.path, retry) { mutableStateOf<Set<String>>(emptySet()) }
     val tree = directory?.let { flattenFileTree(it, subfolders, expanded) }.orEmpty()
+    val currentFolder = directory?.path ?: folder
+    val parentFolder = currentFolder?.takeUnless { it == "/" }?.substringBeforeLast('/')?.ifEmpty { "/" }
+    val canGoUp = currentFolder != startingFolder && parentFolder != null
     fun toggleFolder(path: String) {
         if (path in treeLoading) return
         if (path in expanded) { expanded = expanded - path; return }
@@ -83,13 +89,27 @@ fun RemoteFilesScreen(
         finally { loadedRevision = requestedRevision }
     }
     fun backToFolder() { file = null }
-    BackHandler(enabled = file != null, onBack = ::backToFolder)
+    fun navigateBack() {
+        when {
+            file != null -> backToFolder()
+            canGoUp -> folder = parentFolder
+            else -> onClose()
+        }
+    }
+    BackHandler(onBack = ::navigateBack)
     LaunchedEffect(connection, address, folder, file, retry, changesLoaded) {
         if (!changesLoaded) return@LaunchedEffect
         loading = true
         failed = false
         try {
-            if (file == null) directory = checkNotNull(connection).listFiles(address, folder)
+            if (file == null) {
+                // Failed navigation must use the requested path, never a stale listing.
+                directory = null
+                val result = checkNotNull(connection).listFiles(address, folder ?: startingFolder)
+                // Keep the exit anchor stable while navigating; accept the Host's canonical path.
+                if (startingFolder == null || startingFolder == folder) startingFolder = result.path
+                directory = result
+            }
         } catch (e: CancellationException) { throw e }
         catch (_: Exception) { failed = true }
         finally { loading = false }
@@ -97,8 +117,8 @@ fun RemoteFilesScreen(
     Column(Modifier.fillMaxSize().safeDrawingPadding().padding(12.dp)) {
         val header: @Composable ((() -> Unit)?, (() -> Unit)?, Boolean) -> Unit = { save, share, exportEnabled ->
             FilesHeader(
-                path = file ?: directory?.path.orEmpty(), isFile = file != null,
-                onBack = { if (file != null) backToFolder() else onClose() }, onClose = onClose,
+                path = file ?: currentFolder.orEmpty(), isFile = file != null, canGoUp = canGoUp,
+                onBack = ::navigateBack, onClose = onClose,
                 onFolder = { path -> folder = path; backToFolder() },
                 onRefresh = { retry++ }, refreshing = loading || !changesLoaded,
                 diffAvailable = changedFile != null && !mediaFile, fullFile = fullFile, onFullFile = { fullFile = !fullFile },
@@ -117,7 +137,20 @@ fun RemoteFilesScreen(
             !changesLoaded || loading -> Text(stringResource(R.string.files_loading))
             file == null -> {
                 val entries = directory?.entries.orEmpty()
+                val parentLabel = stringResource(R.string.files_parent_folder_button)
                 LazyColumn(Modifier.weight(1f).testTag("files-tree")) {
+                    parentFolder?.let { parent ->
+                        item(key = "parent") {
+                            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                .clickable(role = Role.Button) { folder = parent }
+                                .semantics { contentDescription = parentLabel }
+                                .padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(painterResource(R.drawable.ic_arrow_left), null, Modifier.padding(end = 8.dp).size(20.dp))
+                                Text(stringResource(R.string.files_parent_folder_entry), fontFamily = FontFamily.Monospace)
+                            }
+                            HorizontalDivider()
+                        }
+                    }
                     item {
                         gitError?.let { Text(stringResource(R.string.git_error, it), color = MaterialTheme.colorScheme.error) }
                         when {
