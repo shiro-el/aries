@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,8 +26,9 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.foundation.text.BasicTextField
@@ -45,7 +48,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
@@ -589,6 +594,9 @@ fun ChatScreen(
         }.sortedBy { it.call.atMs }
     }.orEmpty()
     val scroll = rememberChatScrollState(chat, entries, agentCalls.map { "call:${it.key}" }, markdown, followEnabled = !searchOpen)
+    val toggleTool = remember(chat, scroll) {
+        { id: String -> scroll.readTool(); chat.toggle(id) }
+    }
     LaunchedEffect(active) {
         if (active != null) {
             val body = entries.find { it.id == active.field.entryId }?.body
@@ -642,49 +650,54 @@ fun ChatScreen(
                     // Scrollable clearance, rather than a footer that shrinks the viewport.
                     val transcriptPadding = PaddingValues(bottom = if (scroll.following || searchOpen) 0.dp else 64.dp)
                     val transcriptModifier = Modifier.fillMaxSize().chatImeAnchor(scroll.list).testTag("chat-transcript")
-                    if (scroll.following) {
+                    val historyContent = remember(chat, transcript, readAloud, agentCalls, calls, toggleTool) {
+                        chatHistoryContent(transcript, chat, readAloud, agentCalls, calls, toggleTool)
+                    }
+                    // One LazyColumn owns both providers. Changing follow mode must
+                    // keep the same list instance and item keys when reading details.
+                    val followingContent: LazyListScope.() -> Unit = {
                         // Keep main's follow renderer inline: its lazy provider and
                         // forced scroll measure must consume the same content update.
-                        LazyColumn(transcriptModifier, state = scroll.list, contentPadding = transcriptPadding) {
-                            entries.forEach { entry ->
-                                val body = entry.body
-                                val source = body.markdownSource()
-                                item(key = "transcript:${entry.id}") {
-                                    CompositionLocalProvider(LocalChatSearchEntry provides entry.id) {
-                                        if (body is ChatEntryBody.Question) {
-                                            QuestionView(chat, entry.id, body)
-                                        } else {
-                                            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (body is ChatEntryBody.Agent) 0.dp else 12.dp)) {
-                                                ChatEntryView(entry, markdown[entry.id]?.attachments, chat, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image, readAloud) { chat.toggle(entry.id) }
-                                            }
-                                            if (source == null) HorizontalDivider()
+                        entries.forEach { entry ->
+                            val body = entry.body
+                            val source = body.markdownSource()
+                            item(key = "transcript:${entry.id}", contentType = body::class) {
+                                CompositionLocalProvider(LocalChatSearchEntry provides entry.id) {
+                                    if (body is ChatEntryBody.Question) {
+                                        QuestionView(chat, entry.id, body)
+                                    } else {
+                                        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (body is ChatEntryBody.Agent || body is ChatEntryBody.Tool) 0.dp else 12.dp)) {
+                                            ChatEntryView(entry, markdown[entry.id]?.attachments, chat, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image, readAloud) { toggleTool(entry.id) }
                                         }
-                                    }
-                                }
-                                if (source != null) {
-                                    chatMarkdownItems(entry.id, markdown[entry.id], thinking = body is ChatEntryBody.Thinking)
-                                    item(key = "transcript:${entry.id}:footer") {
-                                        if (body is ChatEntryBody.User && body.images.isNotEmpty()) {
-                                            Column(Modifier.padding(horizontal = 16.dp)) {
-                                                body.images.forEach { ChatImageView(it, chat::image) }
-                                            }
-                                        }
-                                        if (body is ChatEntryBody.Agent) body.metadata?.let { metadata ->
-                                            Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                                                ChatResponseMetadataView(metadata)
-                                            }
-                                        }
-                                        HorizontalDivider(Modifier.padding(top = 8.dp))
+                                        if (source == null && body !is ChatEntryBody.Tool) HorizontalDivider()
                                     }
                                 }
                             }
-                            items(agentCalls, key = { "call:${it.key}" }) { entry ->
-                                if (calls != null) ConsoleChatCall(entry, calls)
+                            if (source != null) {
+                                chatMarkdownItems(entry.id, markdown[entry.id], thinking = body is ChatEntryBody.Thinking)
+                                item(key = "transcript:${entry.id}:footer", contentType = ChatTranscriptContent.Footer::class) {
+                                    if (body is ChatEntryBody.User && body.images.isNotEmpty()) {
+                                        Column(Modifier.padding(horizontal = 16.dp)) {
+                                            body.images.forEach { ChatImageView(it, chat::image) }
+                                        }
+                                    }
+                                    if (body is ChatEntryBody.Agent) body.metadata?.let { metadata ->
+                                        Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                                            ChatResponseMetadataView(metadata)
+                                        }
+                                    }
+                                    HorizontalDivider(Modifier.padding(top = 8.dp))
+                                }
                             }
                         }
-                    } else {
-                        ChatHistoryTranscript(transcriptModifier, scroll.list, transcript, chat, readAloud, agentCalls, calls, transcriptPadding)
+                        items(agentCalls, key = { "call:${it.key}" }, contentType = { "call" }) { entry ->
+                            if (calls != null) ConsoleChatCall(entry, calls)
+                        }
                     }
+                    LazyColumn(
+                        transcriptModifier, state = scroll.list, contentPadding = transcriptPadding,
+                        content = if (scroll.following) followingContent else historyContent,
+                    )
                     if (!searchOpen && !scroll.following && (entries.isNotEmpty() || agentCalls.isNotEmpty())) {
                         LatestButton(
                             description = if (scroll.unreadCount == 0) stringResource(R.string.chat_latest_button)
@@ -733,25 +746,20 @@ fun ChatScreen(
     }
 }
 
-/** The provider changes only with row keys/types; payloads are derived per visible row. */
-@Composable
-private fun ChatHistoryTranscript(
-    modifier: Modifier,
-    list: LazyListState,
+/** A remembered provider changes only with row keys/types; payloads are derived per visible row. */
+private fun chatHistoryContent(
     transcript: ChatTranscript,
     chat: ChatModel,
     readAloud: io.github.shiroel.aries.speech.ReadAloudState,
     agentCalls: List<CallEntry>,
     calls: CallsModel?,
-    contentPadding: PaddingValues,
-) {
-    LazyColumn(modifier, state = list, contentPadding = contentPadding) {
-        items(transcript.rows, key = { it.key }, contentType = { it.contentType }) { row ->
-            ChatTranscriptRowView(row, chat, readAloud)
-        }
-        items(agentCalls, key = { "call:${it.key}" }, contentType = { "call" }) { entry ->
-            if (calls != null) ConsoleChatCall(entry, calls)
-        }
+    toggleTool: (String) -> Unit,
+): LazyListScope.() -> Unit = {
+    items(transcript.rows, key = { it.key }, contentType = { it.contentType }) { row ->
+        ChatTranscriptRowView(row, chat, readAloud, toggleTool)
+    }
+    items(agentCalls, key = { "call:${it.key}" }, contentType = { "call" }) { entry ->
+        if (calls != null) ConsoleChatCall(entry, calls)
     }
 }
 
@@ -760,10 +768,11 @@ private fun ChatTranscriptRowView(
     row: ChatTranscriptRow,
     chat: ChatModel,
     readAloud: io.github.shiroel.aries.speech.ReadAloudState,
+    toggleTool: (String) -> Unit,
 ) {
     CompositionLocalProvider(LocalChatSearchEntry provides row.entryId) {
         when (val content = row.content) {
-            is ChatTranscriptContent.Header -> ChatEntryHeader(content.entry, content.attachments, chat, readAloud)
+            is ChatTranscriptContent.Header -> ChatEntryHeader(content.entry, content.attachments, chat, readAloud, toggleTool)
             is ChatTranscriptContent.Markdown -> ChatMarkdownItem(content.source, content.block, content.index, content.thinking)
             is ChatTranscriptContent.Footer -> ChatEntryFooter(content.images, content.metadata, chat)
         }
@@ -771,15 +780,15 @@ private fun ChatTranscriptRowView(
 }
 
 @Composable
-private fun ChatEntryHeader(entry: ChatEntry, attachments: ChatAttachments?, chat: ChatModel, readAloud: io.github.shiroel.aries.speech.ReadAloudState) {
+private fun ChatEntryHeader(entry: ChatEntry, attachments: ChatAttachments?, chat: ChatModel, readAloud: io.github.shiroel.aries.speech.ReadAloudState, toggleTool: (String) -> Unit) {
     val body = entry.body
     if (body is ChatEntryBody.Question) {
         QuestionView(chat, entry.id, body)
     } else {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (body is ChatEntryBody.Agent) 0.dp else 12.dp)) {
-            ChatEntryView(entry, attachments, chat, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image, readAloud) { chat.toggle(entry.id) }
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (body is ChatEntryBody.Agent || body is ChatEntryBody.Tool) 0.dp else 12.dp)) {
+            ChatEntryView(entry, attachments, chat, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image, readAloud) { toggleTool(entry.id) }
         }
-        if (body.markdownSource() == null) HorizontalDivider()
+        if (body.markdownSource() == null && body !is ChatEntryBody.Tool) HorizontalDivider()
     }
 }
 
@@ -1001,55 +1010,62 @@ private fun ToolContent(
     onToggleRawInput: () -> Unit,
 ) {
     val label = stringResource(R.string.chat_tool_expand_label, tool.name)
+    val disclosure = stringResource(if (expanded) R.string.chat_details_expanded else R.string.chat_details_collapsed)
     val failed = tool.status == ChatToolStatus.FAILED
+    val status = stringResource(when (tool.status) {
+        ChatToolStatus.RUNNING -> R.string.chat_tool_running
+        ChatToolStatus.FAILED -> R.string.chat_tool_failed
+        ChatToolStatus.DONE -> R.string.chat_tool_done
+    })
+    // Keep the full title's search offsets and links; layout clips it to one line.
     val open = LocalOpenRemoteFile.current
     val color = MaterialTheme.colorScheme.primary
     val title = remember(tool.title, tool.details?.path, open, color) {
         annotateChatFileLinks(chatToolPathText(tool.title, tool.details?.path), open, color)
     }
-    ChatTextActions(tool.output?.takeIf { it.isNotEmpty() } ?: tool.input, onClick = onToggle) { actions ->
-        Column(
-            Modifier.fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-                .padding(8.dp),
-        ) {
+    Column(Modifier.fillMaxWidth()) {
+        ChatTextActions(tool.output?.takeIf { it.isNotEmpty() } ?: tool.input, onClick = onToggle,
+            showIndication = false) { actions ->
             Row(
-                Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                    .then(actions)
-                    .semantics { contentDescription = label },
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                Modifier.fillMaxWidth().heightIn(min = 36.dp).then(actions)
+                    .semantics { contentDescription = label; stateDescription = disclosure },
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                SearchableChatText(tool.name, "tool-name", style = MaterialTheme.typography.labelLarge)
-                tool.details?.path?.let { FileTypeIcon(it) }
-                SearchableChatText(
-                    title, "tool-title",
-                    Modifier.weight(1f, fill = false),
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 1,
-                    fontFamily = FontFamily.Monospace,
+                Icon(
+                    painterResource(if (expanded) R.drawable.ic_chevron_down else R.drawable.ic_chevron_right),
+                    contentDescription = null, modifier = Modifier.size(14.dp),
+                    tint = MaterialTheme.colorScheme.primary,
                 )
-                when (tool.status) {
-                    ChatToolStatus.RUNNING -> Text(
-                        stringResource(R.string.chat_tool_running),
-                        style = MaterialTheme.typography.labelSmall,
-                    )
-                    ChatToolStatus.FAILED -> Text(
-                        stringResource(R.string.chat_tool_failed),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                    ChatToolStatus.DONE -> {}
-                }
+                SearchableChatText(tool.name, "tool-name", Modifier.widthIn(max = 120.dp), style = MaterialTheme.typography.labelMedium,
+                    fontFamily = FontFamily.Monospace, maxLines = 1)
+                SearchableChatText(
+                    title, "tool-title", Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1, fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    status, style = MaterialTheme.typography.labelSmall,
+                    color = when (tool.status) {
+                        ChatToolStatus.FAILED -> MaterialTheme.colorScheme.error
+                        ChatToolStatus.RUNNING -> MaterialTheme.colorScheme.primary
+                        ChatToolStatus.DONE -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    maxLines = 1,
+                )
             }
-            tool.diff?.let { DiffView(it, expanded) }
-            tool.images.forEach { ChatImageView(it, image) }
-            if (expanded) {
+        }
+        if (expanded) {
+            ChatToolDetailsPane {
                 tool.details?.let { ChatToolDetailsView(it) }
                 if (tool.input.isNotBlank()) ChatRawInput(tool.input, rawInputExpanded, onToggleRawInput)
+                tool.diff?.let { DiffView(it, expanded = true) }
+                tool.images.forEach { ChatImageView(it, image) }
                 tool.output?.let {
-                    Text(stringResource(R.string.chat_tool_output), style = MaterialTheme.typography.labelMedium)
-                    ChatTextActions(it, onClick = onToggle) { modifier ->
+                    Text(stringResource(R.string.chat_tool_output), style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    ChatTextActions(it) { modifier ->
                         SearchableChatText(
                             it, "tool-output", modifier,
                             fontFamily = FontFamily.Monospace,

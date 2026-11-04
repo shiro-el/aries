@@ -2,6 +2,7 @@ package io.github.shiroel.aries.ui
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -47,6 +48,8 @@ internal fun ChatTextActions(
     onClick: () -> Unit = {},
     /** Observe long presses before clickable spans consume their pointer input. */
     interceptChildLongPress: Boolean = false,
+    /** Disclosure headers stay quiet while preserving their long-press text actions. */
+    showIndication: Boolean = true,
     content: @Composable (Modifier) -> Unit,
 ) {
     var menu by remember { mutableStateOf(false) }
@@ -60,6 +63,8 @@ internal fun ChatTextActions(
             Modifier.childLongPress { menu = true }
         } else Modifier
         content(gestures.combinedClickable(
+            interactionSource = null,
+            indication = if (showIndication) LocalIndication.current else null,
             onClick = onClick,
             onLongClickLabel = actionsLabel,
             onLongClick = if (text.isEmpty()) null else { { menu = true } },
