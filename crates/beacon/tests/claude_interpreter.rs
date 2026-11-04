@@ -85,6 +85,90 @@ fn short(body: &ChatBody) -> String {
 }
 
 #[test]
+fn rewinding_keeps_only_the_latest_branch_including_hidden_parent_links() {
+    // Regression: append-only replay leaves the old user, answer, reasoning
+    // and completed tool visible after their branch was abandoned.
+    let chat = Chat::feed(&fixture("rewind-branch.jsonl"));
+    assert_eq!(
+        chat.summary(),
+        [
+            "user: Start here",
+            "user: Try another way",
+            "agent: New answer"
+        ]
+    );
+}
+
+#[test]
+fn rewinding_restores_a_shared_questions_state_before_reading_its_new_result() {
+    // Regression: keeping only a set of active IDs leaks an abandoned tool
+    // result/answer, and cannot restore a previously abandoned branch.
+    let mut interp = ClaudeInterpreter::default();
+    let mut chat = Chat::default();
+    for record in [
+        json!({"type":"assistant","uuid":"ask","parentUuid":null,"message":{"content":[
+            {"type":"tool_use","id":"q","name":"AskUserQuestion","input":{"questions":[
+                {"question":"Color?","options":[{"label":"Blue"},{"label":"Red"}]}]}}
+        ]}}),
+        json!({"type":"user","uuid":"old-result","parentUuid":"ask","message":{"content":[
+            {"type":"tool_result","tool_use_id":"q","content":"Blue"}]},"toolUseResult":{"answers":{"Color?":"Blue"}}}),
+        json!({"type":"assistant","uuid":"old-answer","parentUuid":"old-result","message":{"content":[{"type":"text","text":"Blue answer"}]}}),
+        json!({"type":"assistant","uuid":"new-answer","parentUuid":"ask","message":{"content":[{"type":"text","text":"Try again"}]}}),
+    ] {
+        chat.apply(interp.line(&record.to_string()));
+    }
+    let (_, status, question) = question_of(&chat);
+    assert_eq!(status, ToolStatus::Running);
+    assert!(question.questions[0].answer.is_none());
+    // Returning to the old result restores its answer and drops the new reply.
+    chat.apply(
+        interp.line(
+            &json!({"type":"assistant","uuid":"restored-answer","parentUuid":"old-result",
+        "message":{"content":[{"type":"text","text":"Blue again"}]}})
+            .to_string(),
+        ),
+    );
+    let (_, status, question) = question_of(&chat);
+    assert_eq!(status, ToolStatus::Done);
+    assert_eq!(
+        serde_json::to_value(&question.questions[0].answer).unwrap(),
+        json!({"choices":[0]})
+    );
+    assert_eq!(
+        chat.summary(),
+        ["tool AskUserQuestion Done: Color?", "agent: Blue again"]
+    );
+}
+
+#[test]
+fn compaction_keeps_earlier_chat_when_the_physical_parent_is_null() {
+    // Regression: treating a compact boundary as a rewind erases the entire
+    // pre-compact conversation, including when older records omit logicalParentUuid.
+    for logical_parent in [None, Some("reply")] {
+        let mut interp = ClaudeInterpreter::default();
+        let mut chat = Chat::default();
+        for record in [
+            json!({"type":"user","uuid":"user","parentUuid":null,"message":{"content":"Before compact"}}),
+            json!({"type":"assistant","uuid":"reply","parentUuid":"user","message":{"content":[{"type":"text","text":"Earlier reply"}]}}),
+            json!({"type":"system","subtype":"compact_boundary","uuid":"compact","parentUuid":null,"logicalParentUuid":logical_parent}),
+            json!({"type":"user","uuid":"summary","parentUuid":"compact","message":{"content":"Compact summary"}}),
+            json!({"type":"assistant","uuid":"after","parentUuid":"summary","message":{"content":[{"type":"text","text":"Continued reply"}]}}),
+        ] {
+            chat.apply(interp.line(&record.to_string()));
+        }
+        assert_eq!(
+            chat.summary(),
+            [
+                "user: Before compact",
+                "agent: Earlier reply",
+                "user: Compact summary",
+                "agent: Continued reply"
+            ]
+        );
+    }
+}
+
+#[test]
 fn main_session_reads_as_the_conversation_the_user_had() {
     let chat = Chat::feed(&fixture("main-session.jsonl"));
     assert_eq!(
@@ -466,10 +550,12 @@ fn a_pasted_image_shows_on_the_user_message() {
 #[test]
 fn unknown_and_broken_lines_are_ignored() {
     let mut interp = ClaudeInterpreter::default();
+    assert_eq!(interp.line(r#"{"type":"user","uuid":"known","parentUuid":null,"message":{"content":"Keep me"}}"#).len(), 1);
     for line in [
         "",
         "not json",
         r#"{"type":"brand-new-record","x":1}"#,
+        r#"{"type":"brand-new-record","uuid":"unknown","parentUuid":null}"#,
         r#"{"type":"assistant","message":{"content":"weird"}}"#,
         r#"{"type":"user"}"#,
         r#"[1,2,3]"#,
