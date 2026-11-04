@@ -517,8 +517,8 @@ sealed interface TerminalInput {
 /** Input belongs to the line on which it was typed, including before the typing attach. */
 internal data class PendingTerminalInput(val connection: HostConnection?, val input: TerminalInput)
 
-private val TerminalBackground = Color(0xFF101214)
-private val TerminalForeground = Color(0xFFD8DADC)
+private val TerminalBackground = TerminalColors.background
+private val TerminalForeground = TerminalColors.foreground
 private val SelectionColor = Color(0x664D8DFF)
 
 @Composable

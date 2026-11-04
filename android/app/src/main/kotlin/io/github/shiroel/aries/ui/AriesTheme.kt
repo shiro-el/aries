@@ -22,7 +22,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import io.github.shiroel.aries.core.AgentStatus
 
@@ -69,7 +68,28 @@ fun hueShift(c: Color, degrees: Float): Color {
     return Color(android.graphics.Color.HSVToColor(hsv))
 }
 
-fun schemeFor(accent: Color, dark: Boolean): ColorScheme {
+fun schemeFor(accent: Color, dark: Boolean, layout: AppLayout = AppLayout.CONSOLE): ColorScheme {
+    val base = consoleSchemeFor(accent, dark)
+    if (layout == AppLayout.CONSOLE) return base
+    val tokens = tokensFor(layout)
+    val p = if (dark) tokens.dark else tokens.light
+    return base.copy(
+        background = p.background, onBackground = p.foreground,
+        surface = p.background, onSurface = p.foreground,
+        surfaceVariant = p.raisedSurface, onSurfaceVariant = p.muted,
+        surfaceContainerLowest = if (dark) mix(p.background, Color.Black, .25f) else Color.White,
+        surfaceContainerLow = mix(p.background, p.surface, .5f),
+        surfaceContainer = p.surface, surfaceContainerHigh = mix(p.surface, p.raisedSurface, .5f),
+        surfaceContainerHighest = p.raisedSurface,
+        surfaceBright = if (dark) p.raisedSurface else p.background,
+        surfaceDim = if (dark) p.background else mix(p.raisedSurface, Color.Black, .05f),
+        outline = p.outline, outlineVariant = p.divider,
+        primaryContainer = mix(accent, p.background, if (dark) .72f else .2f),
+        secondaryContainer = mix(accent, p.background, .84f), onSecondaryContainer = p.foreground,
+    )
+}
+
+private fun consoleSchemeFor(accent: Color, dark: Boolean): ColorScheme {
     val tertiarySeed = hueShift(accent, 165f)
     return if (dark) {
         val bg = Brand.Night
@@ -133,14 +153,13 @@ fun AriesTheme(settings: ThemeSettings, content: @Composable () -> Unit) {
             isAppearanceLightNavigationBars = !dark
         }
     }
-    CompositionLocalProvider(LocalAccentColor provides Color(settings.accentArgb)) {
+    val tokens = tokensFor(settings.layout)
+    val corner = RoundedCornerShape(tokens.cornerRadius)
+    CompositionLocalProvider(LocalAccentColor provides Color(settings.accentArgb), LocalLayoutTokens provides tokens) {
         MaterialTheme(
-            colorScheme = schemeFor(Color(settings.accentArgb), dark),
-            typography = ConsoleTypography,
-            shapes = Shapes(
-                extraSmall = RoundedCornerShape(0.dp), small = RoundedCornerShape(0.dp),
-                medium = RoundedCornerShape(0.dp), large = RoundedCornerShape(0.dp), extraLarge = RoundedCornerShape(0.dp),
-            ),
+            colorScheme = schemeFor(Color(settings.accentArgb), dark, settings.layout),
+            typography = typographyFor(tokens),
+            shapes = Shapes(extraSmall = corner, small = corner, medium = corner, large = corner, extraLarge = corner),
             content = content,
         )
     }
@@ -173,3 +192,19 @@ private val ConsoleTypography = Typography(
     bodyLarge = mono(14, 18), bodyMedium = mono(14, 18), bodySmall = mono(12, 16),
     labelLarge = mono(12, 16, FontWeight.Medium), labelMedium = mono(12, 16), labelSmall = mono(11, 16),
 )
+
+/** Keep code and Terminal fonts explicit; ordinary app text follows the selected layout. */
+private fun typographyFor(tokens: LayoutTokens): Typography {
+    if (tokens.bodyFont == FontFamily.Monospace) return ConsoleTypography
+    fun TextStyle.sans() = copy(fontFamily = tokens.bodyFont)
+    val body = TextStyle(fontFamily = tokens.bodyFont, fontSize = tokens.bodySize, lineHeight = tokens.bodyLineHeight)
+    return Typography(
+        displayLarge = ConsoleTypography.displayLarge.sans(), displayMedium = ConsoleTypography.displayMedium.sans(),
+        displaySmall = ConsoleTypography.displaySmall.sans(), headlineLarge = ConsoleTypography.headlineLarge.sans(),
+        headlineMedium = ConsoleTypography.headlineMedium.sans(), headlineSmall = ConsoleTypography.headlineSmall.sans(),
+        titleLarge = ConsoleTypography.titleLarge.sans(), titleMedium = ConsoleTypography.titleMedium.sans(),
+        titleSmall = ConsoleTypography.titleSmall.sans(), bodyLarge = body, bodyMedium = body,
+        bodySmall = ConsoleTypography.bodySmall.sans(), labelLarge = ConsoleTypography.labelLarge.sans(),
+        labelMedium = ConsoleTypography.labelMedium.sans(), labelSmall = ConsoleTypography.labelSmall.sans(),
+    )
+}

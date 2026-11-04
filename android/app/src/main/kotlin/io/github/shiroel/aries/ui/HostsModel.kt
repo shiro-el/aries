@@ -220,6 +220,10 @@ class HostsModel(
     var agentView by mutableStateOf(AgentView.TERMINAL)
         private set
 
+    // Settings overlays the route owner, so appearance changes never retire a connection or draft.
+    private var settingsReturnTo by mutableStateOf<Screen?>(null)
+    private val ownedScreen: Screen get() = settingsReturnTo ?: screen
+
     /** Settings subpages share the drawer destination and own all configuration. */
     var settingsHost by mutableStateOf<Host?>(null)
         private set
@@ -529,7 +533,7 @@ class HostsModel(
 
     /** The Chat that is open, or still running under the Terminal opened from it. */
     private val liveChat: ChatModel?
-        get() = (screen as? Screen.Chat ?: (screen as? Screen.Terminal)?.returnTo as? Screen.Chat)?.chat
+        get() = (ownedScreen as? Screen.Chat ?: (ownedScreen as? Screen.Terminal)?.returnTo as? Screen.Chat)?.chat
 
     private var started = false
     private var explicitSurfaceEntry = false
@@ -559,7 +563,7 @@ class HostsModel(
         }
     }
 
-    private fun lastLocation(): LastLocation? = when (val s = screen) {
+    private fun lastLocation(): LastLocation? = when (val s = ownedScreen) {
         Screen.Hosts -> LastLocation()
         is Screen.Browse -> LastLocation(s.browser.host.id, s.browser.openSpaceId, s.browser.tab?.id)
         is Screen.Terminal -> s.viewer.link?.host?.let { host ->
@@ -758,14 +762,15 @@ class HostsModel(
         screen = connecting
         status = scope.launch {
             link.keep { conn, _ ->
-                if (screen !== connecting) return@keep
+                if (ownedScreen !== connecting) return@keep
 
                 val browser = cachedBrowser ?: HostBrowser(host)
                 browser.layoutEditor = LayoutEditor(browser, scope)
                 browser.link = link
                 browser.savedLaunches = conn.savedLaunches()
                 open = conn to null
-                screen = Screen.Browse(browser)
+                val next = Screen.Browse(browser)
+                if (settingsReturnTo === connecting) settingsReturnTo = next else screen = next
                 loadHostSettings(host)
                 status = watchBrowse(link, browser, restore, savedLaunchId, confirmSavedLaunch)
             }
@@ -1222,6 +1227,7 @@ class HostsModel(
         guard {
             conversations.filterKeys { it.hostId == prompt.host.id }.values.forEach { it.stop() }
             core.removeHost(prompt.host.id)
+            if (settingsReturnTo != null) back()
             hostSettings.remove(prompt.host.id)
             conversations.keys.removeAll { it.hostId == prompt.host.id }
             hosts = core.hosts()
@@ -1975,9 +1981,12 @@ class HostsModel(
         }
     }
 
-    /** Settings is a drawer destination. */
+    /** Keep the route and its live owners while changing app or Host settings. */
     fun openSettings() {
-        back()
+        if (screen != Screen.Settings && screen !is Screen.JumpHosts) settingsReturnTo = screen
+        closeQuickOpen()
+        pendingQuickOpen = null
+        closeCallInbox()
         settingsHost = null
         settingsKeys = false
         recoveringKeys = false
@@ -2014,7 +2023,9 @@ class HostsModel(
             settingsKeys = false
             settingsDiagnostics = false
         } else {
-            back()
+            val origin = settingsReturnTo
+            settingsReturnTo = null
+            if (origin != null) screen = origin else back()
         }
     }
 
@@ -2096,9 +2107,12 @@ class HostsModel(
     }
 
     private fun terminalOn(hostId: String): TerminalViewer? =
-        (screen as? Screen.Terminal)?.viewer?.takeIf { it.link?.host?.id == hostId }
+        (ownedScreen as? Screen.Terminal)?.viewer?.takeIf { it.link?.host?.id == hostId }
 
     fun back() {
+        // Leaving Settings for a different destination releases its retained route normally.
+        settingsReturnTo?.let { screen = it }
+        settingsReturnTo = null
         newTaskHostId = null
         if (prompt is Prompt.ConfirmSavedLaunch) prompt = null
         closeQuickOpen()
