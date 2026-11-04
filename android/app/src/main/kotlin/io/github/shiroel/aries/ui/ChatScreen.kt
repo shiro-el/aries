@@ -71,6 +71,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -875,12 +876,12 @@ class ChatModel(
             if (e is CoreException.Rpc && e.kind in setOf("no_agent", "status_mismatch")) {
                 delivery.rejected(message.id)
                 queuedMessages = queuedMessages.map {
-                    if (it.id == message.id) it.copy(phase = QueuedMessagePhase.Failed, heldForTyping = false, error = e.message) else it
+                    if (it.id == message.id) it.copy(phase = QueuedMessagePhase.Failed, heldForTyping = false, error = queuedMessageError(e)) else it
                 }
                 if (e.kind == "no_agent") terminal = terminal.copy(agentStatus = null)
             } else {
                 queuedMessages = queuedMessages.map {
-                    if (it.id == message.id) it.copy(phase = QueuedMessagePhase.Uncertain, heldForTyping = false, error = e.message) else it
+                    if (it.id == message.id) it.copy(phase = QueuedMessagePhase.Uncertain, heldForTyping = false, error = queuedMessageError(e)) else it
                 }
             }
             return false
@@ -1904,9 +1905,9 @@ private fun ToolContent(
                     )
                 }
                 Text(
-                    if (LocalTasksDetail.current != null && patchStats != null)
+                    if (LocalTasksDetail.current != null && patchStats != null && tool.status == ChatToolStatus.DONE)
                         tasksChangeText(patchStats) else AnnotatedString(status),
-                    modifier = Modifier.clearAndSetSemantics {}, style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.semantics { hideFromAccessibility() }, style = MaterialTheme.typography.labelSmall,
                     color = when (tool.status) {
                         ChatToolStatus.FAILED -> MaterialTheme.colorScheme.error
                         ChatToolStatus.RUNNING -> MaterialTheme.colorScheme.primary

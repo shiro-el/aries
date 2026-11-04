@@ -189,6 +189,8 @@ internal fun ThreadUserBubble(top: Boolean = true, bottom: Boolean = true,
 private fun ThreadToolSummary(group: ThreadToolGroup, chat: ChatModel, scroll: ChatScrollState,
     toggle: (String) -> Unit, transcript: ChatTranscript) {
     val scope = rememberCoroutineScope()
+    val expanded = group.key in chat.expanded
+    val visibleFiles = if (expanded) group.modifiedFiles.entries.toList() else group.modifiedFiles.entries.take(3)
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         val fileCounts = buildList {
             if (group.readFiles > 0) add(pluralStringResource(R.plurals.thread_tools_read, group.readFiles, group.readFiles))
@@ -206,14 +208,21 @@ private fun ThreadToolSummary(group: ThreadToolGroup, chat: ChatModel, scroll: C
             Text(summary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            group.modifiedFiles.forEach { (path, entry) ->
+            visibleFiles.forEach { (path, entry) ->
                 AssistChip(onClick = {
                     scroll.readTool()
                     if (group.key !in chat.expanded) chat.toggle(group.key)
                     if (entry.id !in chat.expanded) chat.toggle(entry.id)
                     scope.launch { scroll.list.scrollToItem(transcript.rows.indexOfFirst { it.entryId == entry.id }.coerceAtLeast(0)) }
-                }, label = { Text(group.modifiedFileLabels.getValue(path), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                }, label = { Text(group.modifiedFileLabels.getValue(path), Modifier.widthIn(max = 200.dp), maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     modifier = Modifier.testTag("thread-diff:${entry.id}"))
+            }
+            val remaining = group.modifiedFiles.size - visibleFiles.size
+            if (remaining > 0) {
+                val moreLabel = stringResource(R.string.thread_tools_more_files_label, remaining)
+                AssistChip(onClick = { toggle(group.key) },
+                    label = { Text(stringResource(R.string.thread_tools_more_files, remaining)) },
+                    modifier = Modifier.semantics { contentDescription = moreLabel })
             }
         }
         if (group.tools.any { (it.body as ChatEntryBody.Tool).status == ChatToolStatus.FAILED }) {
