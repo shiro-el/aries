@@ -128,7 +128,11 @@ internal fun ConsoleShell(
     var measuredHeaderHeight by remember { mutableIntStateOf(0) }
     val terminalHeaderHeight = measuredHeaderHeight.toFloat().takeIf { it > 0 } ?: with(density) { ConsoleBarHeight.toPx() }
     val swipeThreshold = with(density) { 48.dp.toPx() }
-    LaunchedEffect(screen) { drawer.close(); model.closeCallInbox() }
+    LaunchedEffect(screen) {
+        drawer.close()
+        // Restoring Settings' base route is part of the pending caller action.
+        if (model.openingCall == null) model.closeCallInbox()
+    }
     LaunchedEffect(model.callInboxOpen) { if (model.callInboxOpen) drawer.close() }
     val navigate: (() -> Unit) -> Unit = { action ->
         scope.launch { try { drawer.close() } finally { action() } }

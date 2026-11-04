@@ -313,6 +313,33 @@ class AgentOpenLinkTest {
         }
     }
 
+    // D82: restoring Settings' base route must not dismiss the inbox and cancel the caller currently opening.
+    @Test fun openingACallerFromSettingsSurvivesTheBaseScreenChange() {
+        val hold = CompletableDeferred<Unit>()
+        val core = core()
+        val delayed = object : AriesCoreInterface by core {
+            override suspend fun connect(hostId: String): HostConnection {
+                if (hostId == "h2") hold.await()
+                return core.connect(hostId)
+            }
+        }
+        show(delayed)
+        compose.runOnIdle { model.connect(model.hosts[0]) }
+        compose.waitForIdle()
+        compose.runOnIdle { model.openSettings() }
+        compose.waitForIdle()
+        compose.runOnIdle { model.openCallInbox() }
+        compose.waitForIdle()
+        compose.runOnIdle { model.openCallChat(caller()) }
+        compose.waitForIdle()
+        compose.runOnIdle { hold.complete(Unit) }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertTrue(model.screen is Screen.Chat)
+            assertEquals(AgentKey("h2", agent.address), model.currentAgentKey)
+        }
+    }
+
     // D84: selecting a refreshing row from the tablet list must keep the current detail until the target resolves.
     @Test fun refreshingRowKeepsCurrentDetailUntilItsHostRecovers() {
         val core = core()

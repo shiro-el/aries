@@ -74,6 +74,9 @@ class ShareAttachmentTest {
         assertArrayEquals(byteArrayOf(3), connection.uploads[1].third)
         assertTrue(connection.typed.isEmpty())
         assertTrue(core.connectionsOf.getValue("h1").uploads.isEmpty())
+        // Dispatch waits for a fresh live transcript, including on the shared-input route.
+        core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, "share-ready"))
+        compose.waitForIdle()
         captureAttachmentScreenshot(compose, "files-draft")
         connection.sendFailWith = CoreException.Closed()
         compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
