@@ -36,7 +36,7 @@ class AgentTileTest {
         assertEquals(Tile.STATE_ACTIVE, service.qsTile.state)
         core.lastKnownStatesFailure = CoreException.Storage("unreadable state")
         service.refreshTile(nowMs = 300_000L)
-        assertEquals("Aries · Waiting 1", service.qsTile.label.toString())
+        assertEquals("Aries · Needs you 1", service.qsTile.label.toString())
         assertEquals("3 min ago", service.qsTile.subtitle.toString())
         core.lastKnownStatesFailure = null
         assertEquals(PushTarget(host.id, "box/t7"), AgentSurfaces.attention(core))
