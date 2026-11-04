@@ -168,3 +168,124 @@ async fn editing_address_disconnects_old_host_and_rechecks_key_at_new_host() {
     connected.terminals().await.unwrap();
     connected.disconnect().await;
 }
+
+/// SSH can authenticate successfully yet forbid opening a command channel.
+/// That is a configuration/permission failure, not a network retry.
+#[tokio::test]
+async fn a_denied_ssh_channel_preserves_its_permission_error() {
+    struct Denied;
+    impl russh::server::Handler for Denied {
+        type Error = russh::Error;
+
+        async fn auth_publickey(
+            &mut self,
+            _: &str,
+            _: russh::server::VerifiedPublicKey<'_>,
+        ) -> Result<russh::server::Auth, Self::Error> {
+            Ok(russh::server::Auth::Accept)
+        }
+
+        async fn channel_open_session(
+            &mut self,
+            _: russh::Channel<russh::server::Msg>,
+            reply: russh::server::ChannelOpenHandle,
+            _: &mut russh::server::Session,
+        ) -> Result<(), Self::Error> {
+            reply
+                .reject(russh::ChannelOpenFailure::AdministrativelyProhibited)
+                .await;
+            Ok(())
+        }
+    }
+    let key =
+        russh::keys::PrivateKey::random(&mut rand::rng(), russh::keys::Algorithm::Ed25519).unwrap();
+    let fingerprint = key
+        .public_key()
+        .fingerprint(russh::keys::HashAlg::Sha256)
+        .to_string();
+    let config = std::sync::Arc::new(russh::server::Config {
+        keys: vec![key],
+        ..Default::default()
+    });
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let attempts = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let accepted = attempts.clone();
+    let server = tokio::spawn(async move {
+        let mut sessions = tokio::task::JoinSet::new();
+        loop {
+            let (socket, _) = listener.accept().await.unwrap();
+            accepted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let config = config.clone();
+            sessions.spawn(async move {
+                if let Ok(session) = russh::server::run_stream(config, socket, Denied).await {
+                    let _ = session.await;
+                }
+            });
+        }
+    });
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    core.ensure_key().unwrap();
+    let host = core
+        .add_host(
+            "denied".into(),
+            Endpoint::Ssh {
+                address: "127.0.0.1".into(),
+                port,
+                user: "me".into(),
+            },
+        )
+        .unwrap();
+    core.trust_host_key(host.id.clone(), fingerprint).unwrap();
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        core.connect(host.id.clone()),
+    )
+    .await;
+    let error = result.unwrap().err().expect("channel must be refused");
+    assert!(
+        matches!(error, CoreError::Rpc { ref kind, .. } if kind == "permission_denied"),
+        "{error:?}"
+    );
+
+    let watch = core
+        .watch_chat_retrying(
+            host.id,
+            "t1".into(),
+            None,
+            std::time::Duration::from_millis(25),
+        )
+        .unwrap();
+    let next_error = || async {
+        tokio::time::timeout(std::time::Duration::from_secs(1), async {
+            loop {
+                if let Err(error) = watch.next().await {
+                    return error;
+                }
+            }
+        })
+        .await
+        .expect("Chat must expose the typed connection failure")
+    };
+    let error = next_error().await;
+    assert!(matches!(error, CoreError::Rpc { ref kind, .. } if kind == "permission_denied"));
+    let paused = attempts.load(std::sync::atomic::Ordering::SeqCst);
+    watch.pause();
+    watch.resume(); // Foregrounding must not undo a permanent-error pause.
+    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+    assert_eq!(
+        attempts.load(std::sync::atomic::Ordering::SeqCst),
+        paused,
+        "permanent Chat errors must not retry on a timer"
+    );
+    watch.reconnect(); // Explicit retry keeps the original watch and cursor.
+    let _ = next_error().await;
+    assert_eq!(
+        attempts.load(std::sync::atomic::Ordering::SeqCst),
+        paused + 1
+    );
+    watch.stop();
+    server.abort();
+    let _ = server.await;
+}

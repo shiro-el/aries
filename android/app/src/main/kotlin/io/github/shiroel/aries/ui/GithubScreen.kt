@@ -158,6 +158,7 @@ private fun GithubConversation(
     var busy by remember { mutableStateOf(false) }
     var revision by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
+    val startTask = LocalStartTask.current
     LaunchedEffect(connection, repo, selected.number) {
         draftReady = false
         try {
@@ -246,6 +247,13 @@ private fun GithubConversation(
                         { actions = false; write(false) }, enabled = detail != null && !busy && connection != null)
                 }
             }
+        }
+        if (selected.kind == GithubKind.ISSUE && startTask != null) {
+            TextButton(onClick = { detail?.item?.let { startTask(TaskIssue(repo, it)) } },
+                enabled = detail != null && connection != null && !busy && repo.on == null) {
+                Text(stringResource(R.string.new_task_from_issue))
+            }
+            if (repo.on != null) Text(stringResource(R.string.new_task_nested_host), Modifier.padding(horizontal = 16.dp))
         }
         if (selected.kind == GithubKind.PULL_REQUEST) {
             SecondaryScrollableTabRow(selectedTabIndex = tab.ordinal, edgePadding = 0.dp) {

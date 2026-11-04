@@ -81,6 +81,7 @@ impl client::Handler for Checker {
 enum HopFailure {
     Check(HostKeyCheck),
     AuthRejected,
+    Denied(String),
     Unreachable(String),
 }
 
@@ -95,6 +96,10 @@ impl HopFailure {
     fn into_error(self, role: Role, address: &str) -> CoreError {
         let address = address.to_owned();
         match (role, self) {
+            (_, HopFailure::Denied(detail)) => CoreError::Rpc {
+                kind: "permission_denied".into(),
+                detail: format!("{address}: {detail}"),
+            },
             (Role::Host, HopFailure::Check(HostKeyCheck::Unknown { fingerprint })) => {
                 CoreError::HostKeyUnknown { fingerprint }
             }
@@ -198,8 +203,18 @@ async fn handshake_hop(
         trusted,
         outcome: outcome.clone(),
     };
-    let unreachable = |e: russh::Error| HopFailure::Unreachable(e.to_string());
+    let unreachable = |e: russh::Error| {
+        if matches!(
+            e,
+            russh::Error::ChannelOpenFailure(russh::ChannelOpenFailure::AdministrativelyProhibited)
+        ) {
+            HopFailure::Denied(e.to_string())
+        } else {
+            HopFailure::Unreachable(e.to_string())
+        }
+    };
     let mut socket = None;
+
     let connected = match via {
         None => {
             tokio::time::timeout(CONNECT_TIMEOUT, async {
@@ -324,6 +339,22 @@ pub(super) fn unreachable_err(e: impl std::fmt::Display) -> CoreError {
     }
 }
 
+/// A reachable SSH peer may forbid command channels or forwarding. Preserve
+/// that denial across UniFFI using the existing typed RPC error contract.
+fn ssh_error(error: russh::Error) -> CoreError {
+    if matches!(
+        error,
+        russh::Error::ChannelOpenFailure(russh::ChannelOpenFailure::AdministrativelyProhibited)
+    ) {
+        CoreError::Rpc {
+            kind: "permission_denied".into(),
+            detail: error.to_string(),
+        }
+    } else {
+        unreachable_err(error)
+    }
+}
+
 /// What a command run with [`Ssh::exec`] produced.
 pub(crate) struct ExecOutput {
     /// `None` when the Host did not report an exit status.
@@ -375,15 +406,12 @@ impl Ssh {
 
     async fn exec_unbounded(&self, command: &str, stdin: &[u8]) -> Result<ExecOutput, CoreError> {
         let (_jumps, session) = self.session().await?;
-        let mut channel = session
-            .channel_open_session()
-            .await
-            .map_err(unreachable_err)?;
-        channel.exec(true, command).await.map_err(unreachable_err)?;
+        let mut channel = session.channel_open_session().await.map_err(ssh_error)?;
+        channel.exec(true, command).await.map_err(ssh_error)?;
         if !stdin.is_empty() {
-            channel.data(stdin).await.map_err(unreachable_err)?;
+            channel.data(stdin).await.map_err(ssh_error)?;
         }
-        channel.eof().await.map_err(unreachable_err)?;
+        channel.eof().await.map_err(ssh_error)?;
         let mut out = ExecOutput {
             status: None,
             stdout: Vec::new(),
@@ -443,10 +471,7 @@ impl Ssh {
         command: &str,
         submitted: &mut bool,
     ) -> Result<Stream, CoreError> {
-        let mut channel = session
-            .channel_open_session()
-            .await
-            .map_err(unreachable_err)?;
+        let mut channel = session.channel_open_session().await.map_err(ssh_error)?;
         *submitted = true;
         channel
             .exec(true, command)
@@ -460,7 +485,10 @@ impl Ssh {
                 Some(russh::ChannelMsg::Success) => break Vec::new(),
                 Some(russh::ChannelMsg::Data { data }) => break data.to_vec(),
                 Some(russh::ChannelMsg::Failure) => {
-                    return Err(unreachable_err("SSH exec was refused"));
+                    return Err(CoreError::Rpc {
+                        kind: "permission_denied".into(),
+                        detail: "SSH exec was refused".into(),
+                    });
                 }
                 Some(russh::ChannelMsg::Close) | None => {
                     return Err(crate::error::protocol(
@@ -470,6 +498,7 @@ impl Ssh {
                 _ => {}
             }
         };
+
         sessions.push(session);
         let (reader, writer) = tokio::io::split(channel.into_stream());
         use tokio::io::AsyncReadExt;
