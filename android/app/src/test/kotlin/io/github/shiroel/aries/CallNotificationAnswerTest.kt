@@ -172,6 +172,11 @@ class CallNotificationAnswerTest {
         assertEquals(1, manager.activeNotifications.count { it.notification.flags and Notification.FLAG_GROUP_SUMMARY == 0 })
         assertEquals(str(R.string.call_answer_delivered, "Wait"), text(n))
         assertEquals(emptyList<String>(), buttons(n))
+        // Regression: an outcome must not reuse the urgent channel and ring again.
+        val channel = manager.getNotificationChannel(n.channelId)
+        assertEquals(NotificationManager.IMPORTANCE_LOW, channel.importance)
+        assertNull(channel.sound)
+        assertFalse(channel.shouldVibrate())
     }
 
     @Test
