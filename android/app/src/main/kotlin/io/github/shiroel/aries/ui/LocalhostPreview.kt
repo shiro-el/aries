@@ -79,17 +79,20 @@ internal fun rememberLocalhostPreview(
     }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(preview, enabled, connection, preview.selected != null, lifecycle, preview.discoveryRevision) {
-        preview.discovery = PreviewDiscovery.SEARCHING
+        preview.discovery = if (enabled && connection != null) PreviewDiscovery.SEARCHING else PreviewDiscovery.DISCONNECTED
         if (enabled && connection != null) lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             do {
                 // A successful scan replaces stale hints, including stopped servers.
-                // Missing machine.exec/tools leaves transcript-derived candidates available.
+                // Failed scans leave transcript-derived candidates available.
                 preview.discovery = PreviewDiscovery.SEARCHING
                 try {
                     preview.ports = connection.previewListeningPorts().distinct().take(24)
                     preview.discovery = PreviewDiscovery.READY
                 } catch (e: kotlinx.coroutines.CancellationException) { throw e }
-                catch (_: io.github.shiroel.aries.core.CoreException) { preview.discovery = PreviewDiscovery.FAILED }
+                catch (e: io.github.shiroel.aries.core.CoreException) {
+                    preview.discovery = if (e.retryableConnection()) PreviewDiscovery.DISCONNECTED else PreviewDiscovery.FAILED
+                    if (e.retryableConnection()) link.lost(connection)
+                }
                 delay(30_000)
             } while (true)
         }
@@ -97,7 +100,7 @@ internal fun rememberLocalhostPreview(
     return preview
 }
 
-internal enum class PreviewDiscovery { SEARCHING, READY, FAILED }
+internal enum class PreviewDiscovery { SEARCHING, READY, FAILED, DISCONNECTED }
 
 /** Empty means no server only after discovery succeeds; connection failures stay recoverable. */
 @Composable
@@ -111,7 +114,7 @@ internal fun PreviewDiscoveryNotice(preview: LocalhostPreview, onRetry: () -> Un
                 }
             }
             PreviewDiscovery.READY -> if (preview.ports.isEmpty()) Text(stringResource(R.string.preview_no_servers))
-            PreviewDiscovery.FAILED -> {
+            PreviewDiscovery.FAILED, PreviewDiscovery.DISCONNECTED -> {
                 Text(stringResource(R.string.error_connection), color = MaterialTheme.colorScheme.error)
                 TextButton(onClick = onRetry) { Text(stringResource(R.string.preview_retry)) }
             }

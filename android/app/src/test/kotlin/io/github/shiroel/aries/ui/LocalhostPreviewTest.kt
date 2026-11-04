@@ -58,12 +58,49 @@ class LocalhostPreviewTest {
         compose.onNodeWithTag("tasks-host-preview").performClick()
         val empty = compose.activity.getString(R.string.preview_no_servers)
         compose.onNodeWithText(empty).assertDoesNotExist()
-        compose.runOnIdle { scan.completeExceptionally(CoreException.Closed()) }
+        compose.runOnIdle { scan.completeExceptionally(CoreException.Rpc("preview_discovery", "tools unavailable")) }
         compose.onNodeWithText(compose.activity.getString(R.string.error_connection)).assertExists()
         compose.onNodeWithText(empty).assertDoesNotExist()
         compose.onNodeWithText(compose.activity.getString(R.string.preview_retry)).performClick()
         compose.onNodeWithText(empty).assertExists()
         compose.runOnIdle { assertEquals(2, scans) }
+        scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
+    }
+
+    // D54: losing the connection during a delayed scan must cancel it and
+    // replace the searching indicator with a disconnected state until reconnect.
+    @Test fun connectionLossCancelsDiscoveryAndReconnectScansAgain() {
+        val pending = kotlinx.coroutines.CompletableDeferred<List<UShort>>()
+        val replacement = kotlinx.coroutines.CompletableDeferred<HostConnection>()
+        var cancelled = false
+        val first = object : HostConnection(NoHandle) {
+            override suspend fun disconnect() {}
+            override suspend fun previewListeningPorts(): List<UShort> = try { pending.await() }
+                finally { cancelled = true }
+        }
+        val next = object : HostConnection(NoHandle) {
+            override suspend fun previewListeningPorts() = listOf<UShort>(5173u)
+        }
+        val host = Host("h1", "home", Endpoint.Ssh("home.test", 22u, "me"), null)
+        val scope = CoroutineScope(Dispatchers.Main)
+        val link = HostLink(host, first, scope, { replacement.await() })
+        lateinit var preview: LocalhostPreview
+        compose.setContent { MaterialTheme {
+            preview = rememberLocalhostPreview(link, "", "t1")
+            PreviewDiscoveryNotice(preview) { link.retryNow(); preview.retryDiscovery() }
+        } }
+        compose.onNodeWithText(compose.activity.getString(R.string.preview_searching)).assertExists()
+        compose.runOnIdle { link.lost(first) }
+        compose.onNodeWithText(compose.activity.getString(R.string.preview_searching)).assertDoesNotExist()
+        compose.onNodeWithText(compose.activity.getString(R.string.error_connection)).assertExists()
+        compose.runOnIdle {
+            assertTrue(cancelled)
+            pending.complete(listOf(3000u))
+            assertTrue(preview.ports.isEmpty())
+            replacement.complete(next)
+        }
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals(listOf<UShort>(5173u), preview.ports) }
         scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
     }
 

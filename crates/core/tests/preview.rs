@@ -18,6 +18,43 @@ use aries_test_support::SshdHost;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+// D50: unavailable discovery tools must fail, and fixing them must allow an
+// immediate Retry rather than reusing a cached empty result.
+#[tokio::test]
+async fn discovery_failure_is_distinct_from_no_servers_and_can_be_retried() {
+    use std::os::unix::fs::PermissionsExt;
+    let tools = tempfile::tempdir().unwrap();
+    for name in ["ss", "lsof"] {
+        let path = tools.path().join(name);
+        std::fs::write(&path, "#!/bin/sh\nexit 2\n").unwrap();
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let hc =
+        aries_test_support::HcSession::start_with_env(&[("PATH", tools.path().to_str().unwrap())]);
+    let data = tempfile::tempdir().unwrap();
+    let core = common::core_in(data.path());
+    let host = core
+        .add_host("preview".into(), common::local_endpoint(&hc))
+        .unwrap();
+    let connection = core.connect(host.id).await.unwrap();
+    assert!(connection.preview_listening_ports().await.is_err());
+    // macOS has no ss; lsof reports no matching listeners with exit 1.
+    std::fs::remove_file(tools.path().join("ss")).unwrap();
+    std::fs::write(tools.path().join("lsof"), "#!/bin/sh\nexit 1\n").unwrap();
+    assert!(
+        connection
+            .preview_listening_ports()
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    connection.disconnect().await;
+    assert!(matches!(
+        connection.preview_listening_ports().await,
+        Err(aries_core::CoreError::Closed)
+    ));
+}
+
 // Regression: a shared Host's sshd/database listeners must not advertise previews.
 #[tokio::test]
 #[ignore = "needs docker"]
@@ -46,14 +83,20 @@ chmod +x /usr/local/bin/ss
     core.trust_host_key(host.id.clone(), sshd.host_key_fingerprint())
         .unwrap();
     let connection = core.connect(host.id).await.unwrap();
-    assert_eq!(connection.preview_listening_ports().await, vec![5173]);
+    assert_eq!(
+        connection.preview_listening_ports().await.unwrap(),
+        vec![5173]
+    );
     // Discovery is cached for the live connection, including negative probes.
     let remove = std::process::Command::new("docker")
         .args(["exec", sshd.network_name(), "rm", "/usr/local/bin/ss"])
         .status()
         .unwrap();
     assert!(remove.success());
-    assert_eq!(connection.preview_listening_ports().await, vec![5173]);
+    assert_eq!(
+        connection.preview_listening_ports().await.unwrap(),
+        vec![5173]
+    );
     connection.disconnect().await;
 }
 
