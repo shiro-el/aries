@@ -181,10 +181,10 @@ class ChatSearchUiTest {
         compose.waitUntil(5_000) { compose.onAllNodesWithText("result").fetchSemanticsNodes().isNotEmpty() }
         search("needle", 1)
         compose.onNodeWithText("needle first").assertIsDisplayed()
-        compose.onNodeWithContentDescription(str(R.string.chat_tool_expand_label, "Read")).performClick()
+        compose.onNode(hasToolAction(str(R.string.chat_tool_expand_label, "Read"))).performClick()
         core.pushChat(ChatSnapshot(listOf(tool("needle first second")), ChatStatus.LIVE, "two"))
         compose.waitForIdle()
-        compose.onNodeWithContentDescription(str(R.string.chat_tool_expand_label, "Read")).assertExists()
+        compose.onNode(hasToolAction(str(R.string.chat_tool_expand_label, "Read"))).assertExists()
         compose.onNodeWithText("needle first second").assertDoesNotExist()
         compose.onNodeWithContentDescription(str(R.string.chat_search_next)).performClick()
         compose.onNodeWithText("needle first second").assertIsDisplayed()

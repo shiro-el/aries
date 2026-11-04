@@ -95,7 +95,7 @@ class ChatToolMediaTest {
             images = listOf(ChatImage("read#0", "image/png", png.size.toULong(), 160u, 120u, true)))
         val (core, _) = openChat(body)
         compose.runOnIdle { core.chatImages.clear() }
-        compose.onNodeWithContentDescription(compose.activity.getString(R.string.chat_tool_expand_label, "Read"))
+        compose.onNode(hasToolAction(compose.activity.getString(R.string.chat_tool_expand_label, "Read")))
             .performTouchInput { click(topLeft + androidx.compose.ui.geometry.Offset(4f, 4f)) }
         compose.waitUntil(5_000) { compose.onAllNodesWithText(compose.activity.getString(R.string.chat_image_unavailable)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(compose.activity.getString(R.string.chat_image_unreadable)).assertDoesNotExist()
