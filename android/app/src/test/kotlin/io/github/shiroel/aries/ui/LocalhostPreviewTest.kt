@@ -59,7 +59,8 @@ class LocalhostPreviewTest {
         val empty = compose.activity.getString(R.string.preview_no_servers)
         compose.onNodeWithText(empty).assertDoesNotExist()
         compose.runOnIdle { scan.completeExceptionally(CoreException.Rpc("preview_discovery", "tools unavailable")) }
-        compose.onNodeWithText(compose.activity.getString(R.string.error_connection)).assertExists()
+        compose.onNodeWithText(compose.activity.getString(R.string.preview_discovery_failed)).assertExists()
+        compose.onNodeWithText(compose.activity.getString(R.string.error_connection)).assertDoesNotExist()
         compose.onNodeWithText(empty).assertDoesNotExist()
         compose.onNodeWithText(compose.activity.getString(R.string.preview_retry)).performClick()
         compose.onNodeWithText(empty).assertExists()

@@ -115,7 +115,8 @@ internal fun PreviewDiscoveryNotice(preview: LocalhostPreview, onRetry: () -> Un
             }
             PreviewDiscovery.READY -> if (preview.ports.isEmpty()) Text(stringResource(R.string.preview_no_servers))
             PreviewDiscovery.FAILED, PreviewDiscovery.DISCONNECTED -> {
-                Text(stringResource(R.string.error_connection), color = MaterialTheme.colorScheme.error)
+                Text(stringResource(if (preview.discovery == PreviewDiscovery.FAILED)
+                    R.string.preview_discovery_failed else R.string.error_connection), color = MaterialTheme.colorScheme.error)
                 TextButton(onClick = onRetry) { Text(stringResource(R.string.preview_retry)) }
             }
         }
