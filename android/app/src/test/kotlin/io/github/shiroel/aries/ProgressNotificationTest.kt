@@ -29,7 +29,7 @@ class ProgressNotificationTest {
         val n = card()
         assertTrue(n.flags and Notification.FLAG_ONGOING_EVENT != 0)
         assertTrue(n.flags and Notification.FLAG_LOCAL_ONLY != 0)
-        assertEquals("2 min elapsed · 3 subagents", n.extras.getCharSequence(Notification.EXTRA_TEXT).toString())
+        assertEquals("2 min elapsed · Child Agents: 3", n.extras.getCharSequence(Notification.EXTRA_TEXT).toString())
         assertEquals(NotificationManager.IMPORTANCE_LOW, manager.getNotificationChannel(n.channelId).importance)
         assertNull(n.extras.getString(Notification.EXTRA_TEMPLATE))
         PushService.show(context, PushNotice("h1", "box", PushContent.Status("t1", "Builder", null, true, AgentStatus.Done, 11uL, null, null, null)))
