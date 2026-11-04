@@ -63,7 +63,7 @@ class AgentTileService : TileService() {
         val oldest = states.filter { state -> hosts.any { it.id == state.hostId } }.minOfOrNull { it.fetchedAtMs }
         val complete = hosts.isNotEmpty() && hosts.all { host -> states.any { it.hostId == host.id } }
         val age = if (!complete || oldest == null) context.getString(R.string.surfaces_age_unknown)
-            else context.getString(R.string.surfaces_age_minutes, ((nowMs.coerceAtLeast(0).toULong().coerceAtLeast(oldest) - oldest) / 60_000uL).toLong())
+            else io.github.shiroel.aries.ui.relativeAge(context, oldest, nowMs)
         tile.label = context.getString(R.string.qs_waiting_label, count)
         // API 28 has no subtitle: retain the age in its visible label.
         if (Build.VERSION.SDK_INT >= 29) tile.subtitle = age

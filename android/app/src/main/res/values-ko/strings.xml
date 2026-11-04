@@ -20,16 +20,16 @@
     <string name="preview_mobile">모바일 보기</string>
     <string name="preview_desktop">데스크톱 보기</string>
     <string name="preview_close">미리보기 닫기</string>
-    <string name="preview_failed">미리보기를 열 수 없습니다. Host 연결과 개발 서버를 확인해 주세요.</string>
+    <string name="preview_failed">미리보기를 열 수 없어요. Host 연결과 개발 서버를 확인해 주세요.</string>
     <string name="preview_loading">미리보기 불러오는 중…</string>
-    <string name="preview_page_failed">서버가 웹 페이지를 반환하지 않았습니다. HTTP 서버인지, 실행 중인지 확인해 주세요.</string>
-    <string name="preview_timeout">미리보기가 10초 안에 응답하지 않았습니다. 개발 서버를 확인하고 다시 시도해 주세요.</string>
-    <string name="preview_http_failed">서버가 HTTP %1$d 오류를 반환했습니다. 개발 서버를 확인하고 다시 시도해 주세요.</string>
+    <string name="preview_page_failed">서버가 웹 페이지를 반환하지 않았어요. HTTP 서버인지, 실행 중인지 확인해 주세요.</string>
+    <string name="preview_timeout">미리보기가 10초 안에 응답하지 않았어요. 개발 서버를 확인하고 다시 시도해 주세요.</string>
+    <string name="preview_http_failed">서버가 HTTP %1$d 오류를 반환했어요. 개발 서버를 확인하고 다시 시도해 주세요.</string>
     <string name="preview_retry">다시 시도</string>
 
     <!-- Preview capture and annotation -->
     <string name="preview_capture_button">캡처</string>
-    <string name="preview_capture_title">미리보기에 표시</string>
+    <string name="preview_capture_title">미리보기 캡처</string>
     <string name="preview_capture_canvas">캡처한 미리보기. 선택한 도구로 끌어서 표시하세요.</string>
     <string name="preview_capture_pen">펜</string>
     <string name="preview_capture_rectangle">사각형</string>
@@ -37,12 +37,12 @@
     <string name="preview_capture_note">짧은 메모</string>
     <string name="preview_capture_attach">Agent Chat에 추가</string>
     <string name="preview_capture_preparing">준비 중…</string>
-    <string name="preview_capture_failed">미리보기를 캡처하지 못했습니다. 페이지가 로드된 후 다시 시도하세요.</string>
-    <string name="preview_capture_attach_failed">캡처를 추가하지 못했습니다. Agent 연결을 확인한 후 다시 시도하세요.</string>
+    <string name="preview_capture_failed">미리보기를 캡처하지 못했어요. 페이지가 로드된 후 다시 시도하세요.</string>
+    <string name="preview_capture_attach_failed">캡처를 추가하지 못했어요. Agent 연결을 확인한 후 다시 시도하세요.</string>
     <string name="preview_capture_context">미리보기: %1$s\n보기 모드: %2$s</string>
 
     <!-- Agent header details (203) -->
-    <string name="agent_details_host">호스트 · %1$s</string>
+    <string name="agent_details_host">Host · %1$s</string>
     <string name="agent_details_folder">폴더 · %1$s</string>
 
     <!-- Host creation and context sheets -->
@@ -58,12 +58,12 @@
     <string name="host_create_worktree_no_folder">먼저 폴더가 있는 Space를 선택하세요</string>
     <string name="host_create_saved_detail">저장된 Agent 옵션으로 실행</string>
     <string name="host_context_edit_hint">Space 또는 Tab을 길게 눌러 이름을 바꾸거나 닫으세요.</string>
-    <string name="host_context_empty">아직 Space가 없습니다. +를 눌러 만드세요.</string>
+    <string name="host_context_empty">아직 Space가 없어요. +를 눌러 만드세요.</string>
 
     <!-- Action menus -->
     <string name="menu_switch">위치 선택</string>
     <string name="menu_current">현재</string>
-    <string name="menu_switch_context">위치 선택</string>
+    <string name="menu_switch_context">Space·Tab 선택</string>
     <string name="menu_state_on">켜짐</string>
     <string name="menu_state_off">꺼짐</string>
     <string name="menu_program_label">프로그램</string>
@@ -122,7 +122,7 @@
     <string name="github_draft_failed">이 휴대전화에 초안을 저장하지 못했어요. 작성한 내용은 메모리에 있어요. 저장을 다시 시도해 주세요.</string>
     <string name="github_draft_read_failed">이 휴대전화에 저장된 초안을 읽지 못했어요. 다시 불러온 뒤 편집해 주세요.</string>
     <string name="github_draft_retry">초안 다시 시도</string>
-    <string name="github_draft_limit">댓글은 64KiB까지 쓸 수 있어요.</string>
+    <string name="github_draft_limit">댓글은 %1$d KiB 이하로 작성해 주세요.</string>
 
     <!-- GitHub PR resources (114) -->
     <string name="github_pr_truncated">PR 응답이 Host 크기 제한을 넘어 일부 내용을 표시할 수 없어요.</string>
@@ -189,14 +189,14 @@
     <!-- Chat read aloud (105) -->
     <string name="read_aloud_title">소리 내어 읽기</string>
     <string name="read_aloud_button">읽기</string>
-    <string name="read_aloud_stop">읽기 중지</string>
+    <string name="read_aloud_stop">읽기 중단</string>
     <string name="read_aloud_loading">음성 엔진 준비 중…</string>
-    <string name="read_aloud_unavailable">음성 엔진을 쓸 수 없어요. Android 설정에서 TTS 엔진을 확인해 주세요.</string>
+    <string name="read_aloud_unavailable">음성 엔진을 쓸 수 없어요. Android 설정에서 텍스트 음성 변환을 확인해 주세요.</string>
     <string name="read_aloud_preparing">읽을 준비 중…</string>
     <string name="read_aloud_playing">읽는 중…</string>
     <string name="read_aloud_empty">코드 블록을 빼면 읽을 내용이 없어요.</string>
     <string name="read_aloud_failed">읽지 못했어요. 음성 엔진을 확인하고 다시 시도해 주세요.</string>
-    <string name="read_aloud_language_unavailable">이 언어를 지원하지 않아요. Android TTS 설정에서 음성 데이터를 설치해 주세요.</string>
+    <string name="read_aloud_language_unavailable">이 언어를 지원하지 않아요. Android의 텍스트 음성 변환 설정에서 음성 데이터를 설치해 주세요.</string>
     <string name="read_aloud_speed">속도 · %1$.2f배</string>
     <string name="read_aloud_speed_label">읽기 속도</string>
     <string name="read_aloud_voice">음성 · %1$s</string>
@@ -219,7 +219,7 @@
     <string name="quick_open_result_context">%1$s · %2$s</string>
     <string name="quick_open_live">실시간</string>
     <string name="quick_open_unknown">상태 정보 없음</string>
-    <string name="quick_open_age">%1$d분 전 상태</string>
+    <string name="quick_open_age">마지막 확인 · %1$s</string>
     <string name="quick_open_gone">이 Host에 더 이상 없어요: %1$s</string>
     <string name="quick_open_run_agent">Agent 실행</string>
     <string name="quick_open_choose_host">Host를 먼저 열어 주세요.</string>
@@ -265,7 +265,7 @@
     <string name="onboarding_qr_body">Host에서 aries-beacon pair-qr --address ADDRESS를 실행하세요. 휴대폰에서 접근할 수 있는 주소를 넣고 QR을 스캔하면 공개 키 설치와 Host 등록을 함께 진행해요.</string>
     <string name="onboarding_manual_key_body">연결하기 전에 이 공개 키를 Host의 ~/.ssh/authorized_keys에 추가하세요. 아래에서 Host를 등록한 뒤 일회용 비밀번호로 키를 설치할 수도 있어요.</string>
     <string name="onboarding_connected">%1$s에 연결했어요</string>
-    <string name="onboarding_beacon_body">이 Host에서 Chat, Call, push 알림을 사용하려면 Beacon이 필요해요. 여기서 설치한 뒤 알림을 허용하고 push를 켜면 테스트 알림을 보낼 수 있어요. 지금 마치고 Host 설정에서 이어가도 돼요.</string>
+    <string name="onboarding_beacon_body">이 Host에서 Chat, Call, 푸시 알림을 사용하려면 Beacon이 필요해요. 여기서 설치한 뒤 알림을 허용하고 푸시를 켜면 테스트 알림을 보낼 수 있어요. 지금 마치고 Host 설정에서 이어가도 돼요.</string>
     <string name="onboarding_hosts_button">저장한 Host 선택</string>
     <string name="onboarding_continue_button">Host에 연결</string>
     <string name="agents_empty_hosts_button">Host를 열어 Agent 시작</string>
@@ -285,12 +285,15 @@
     <string name="files_share_button">공유</string>
     <string name="files_share_title">Host 파일 공유</string>
     <string name="files_export_starting">다운로드 시작 중…</string>
-    <string name="files_export_progress">%1$d/%2$d바이트 받음</string>
+    <string name="files_export_progress">%2$s 중 %1$s 다운로드</string>
+    <string name="files_size_bytes">%1$d B</string>
+    <string name="files_size_kib">%1$s KiB</string>
+    <string name="files_size_mib">%1$s MiB</string>
     <string name="files_export_saving">선택한 폴더에 저장 중…</string>
     <string name="files_saved">선택한 폴더에 저장했어요.</string>
     <string name="files_share_ready">공유할 준비가 됐어요.</string>
     <string name="files_export_cancelled">전송을 취소했어요.</string>
-    <string name="files_export_too_large">64MiB가 넘는 파일은 저장하거나 공유할 수 없어요.</string>
+    <string name="files_export_too_large">저장·공유 한도인 %1$d MiB를 넘는 파일이에요.</string>
     <string name="files_export_failed">파일을 전송하지 못했어요. 연결, 파일·폴더 권한, 저장 공간을 확인하고 다시 시도해 주세요.</string>
     <!-- Remote file browser (90) -->
     <string name="files_open_button">파일</string>
@@ -313,7 +316,7 @@
     <string name="files_send_line_label">%1$d번째 줄을 Agent에게 보내기</string>
     <string name="files_not_text">바이너리 파일이거나 UTF-8 텍스트가 아니라서 미리 볼 수 없어요.</string>
     <!-- Continuous file and diff reader (152) -->
-    <string name="files_large_warning">2 MiB 이상인 파일입니다. 열기와 검색에 시간이 걸릴 수 있습니다.</string>
+    <string name="files_large_warning">%1$d MiB 이상인 파일이에요. 열기와 검색에 시간이 걸릴 수 있어요.</string>
     <string name="files_large_open">파일 열기</string>
     <string name="files_find_hint">파일에서 찾기</string>
     <string name="files_find_previous">이전 일치 줄</string>
@@ -373,9 +376,8 @@
     <string name="widget_agents_title">Aries · Agent</string>
     <string name="widget_waiting_description">모든 Host에서 확인이 필요한 Agent</string>
     <string name="widget_agents_description">모든 Host의 주요 Agent 3개</string>
-    <string name="widget_waiting_count">확인 필요 %1$d</string>
-    <string name="widget_waiting_unknown">확인 필요 —</string>
-    <string name="widget_age_minutes">%1$d분 전</string>
+    <string name="widget_waiting_count">확인 필요 · %1$d</string>
+    <string name="widget_waiting_unknown">확인 필요 · —</string>
     <string name="widget_no_saved_state">Host 상태를 기다리는 중</string>
     <string name="widget_refresh_button">새로고침</string>
     <string name="widget_agents_empty">저장된 Agent 없음</string>
@@ -396,14 +398,14 @@
     <string name="key_copy_button">공개 키 복사</string>
     <string name="key_clip_label">Aries SSH 공개 키</string>
     <!-- SSH key invalidation recovery -->
-    <string name="key_invalidated_body">생체정보나 화면 잠금이 변경되어 SSH 키가 영구적으로 잠겼을 수 있습니다. 영향을 받은 키를 교체한 뒤 Host에 공개키를 다시 등록하세요.</string>
+    <string name="key_invalidated_body">생체정보나 화면 잠금이 변경되어 SSH 키가 영구적으로 잠겼을 수 있어요. 영향을 받은 키를 교체한 뒤 Host에 공개 키를 다시 등록하세요.</string>
     <string name="key_recover_button">SSH 키 복구</string>
     <string name="key_recover_title">SSH 키 복구</string>
-    <string name="key_recover_body">생체인증 SSH 키는 하나의 암호화 키를 공유합니다. 영향을 받은 키마다 새 키를 생성하거나 백업을 가져오세요. Host 설정과 키 연결은 유지됩니다. 생체인증 보호도 유지되므로 필요한 경우 먼저 생체정보를 다시 등록하세요.</string>
-    <string name="key_recover_generate_button">교체할 새 키 생성</string>
+    <string name="key_recover_body">영향을 받은 SSH 키마다 새 키를 만들거나 백업을 가져와 교체해 주세요. Host 설정과 키 연결은 유지해요. 생체 인증 보호도 유지하므로 필요한 경우 먼저 생체정보를 다시 등록해 주세요.</string>
+    <string name="key_recover_generate_button">교체할 새 키 만들기</string>
     <string name="key_recover_replace_button">키 교체</string>
-    <string name="key_recover_replace_body">이 휴대폰에 저장된 선택한 비밀키를 교체합니다. 기존 공개키를 유지하려면 해당 키의 백업을 가져오세요. 새 키를 생성한 뒤에는 이 키를 사용하는 모든 Host와 점프 Host에 공개키를 등록하고, 접속을 확인한 후 이전 공개키를 제거하세요.</string>
-    <string name="key_recover_register_body">위에서 복구한 공개키를 복사해 Host와 점프 Host의 authorized_keys에 추가하세요. Host가 비밀번호 로그인을 허용하면 아래 등록 버튼으로 해당 Host에 연결된 키를 등록할 수 있습니다. 다시 접속해 확인하세요. 기존 Host 키 신뢰 정보는 유지됩니다.</string>
+    <string name="key_recover_replace_body">이 휴대폰에 저장된 선택한 개인 키를 교체해요. 기존 공개 키를 유지하려면 해당 키의 백업을 가져와 주세요. 새 키를 만든 뒤에는 이 키를 사용하는 모든 Host와 점프 Host에 공개 키를 등록하고, 접속을 확인한 후 이전 공개 키를 삭제해 주세요.</string>
+    <string name="key_recover_register_body">위에서 복구한 공개 키를 복사해 Host와 점프 Host의 authorized_keys에 추가해 주세요. Host가 비밀번호 로그인을 허용하면 아래 등록 버튼으로 해당 Host에 연결된 키를 등록할 수 있어요. 다시 접속해 확인해 주세요. 기존 Host 키 신뢰 정보는 유지해요.</string>
 
     <string name="key_biometric_label">SSH 키를 쓸 때 생체 인증</string>
     <string name="key_biometric_prompt_title">SSH 키 잠금 해제</string>
@@ -426,7 +428,7 @@
     <string name="key_install_present_body">%1$s에 이미 등록된 SSH 키예요.</string>
     <string name="key_install_failed_title">키를 등록하지 못했어요</string>
     <string name="key_install_password_rejected">사용자 이름이나 비밀번호가 맞지 않아요. Host에서 비밀번호 로그인을 꺼 두었을 수도 있어요. 그럴 땐 ~/.ssh/authorized_keys에 공개 키를 직접 추가해 주세요.</string>
-    <string name="key_install_write_failed">로그인은 됐지만 Host의 ~/.ssh/authorized_keys에 쓰지 못했어요: %1$s\n\n~/.ssh 소유자와 쓰기 권한을 확인해 주세요.</string>
+    <string name="key_install_write_failed">로그인했지만 Host의 ~/.ssh/authorized_keys에 쓰지 못했어요. 사용자가 ~/.ssh의 소유자인지, 쓰기 권한이 있는지 확인한 뒤 다시 시도해 주세요.</string>
 
     <string name="host_ssh_address">%1$s@%2$s:%3$d</string>
     <string name="host_ssh_default_address">%1$s@%2$s</string>
@@ -474,7 +476,7 @@
     <string name="terminal_observing">%1$s · 보기 전용 · %2$d×%3$d</string>
     <string name="terminal_typing">%1$s · 입력 중 · %2$d×%3$d</string>
     <string name="terminal_input_hint">Terminal에 입력</string>
-    <string name="terminal_input_offline">입력 일시 중지 — Terminal 연결이 끊겼어요</string>
+    <string name="terminal_input_offline">입력 일시 중단 — Terminal 연결이 끊겼어요</string>
     <string name="terminal_input_ended">프로그램 종료 — 출력을 읽을 수만 있어요</string>
     <string name="terminal_input_typing">Terminal에 입력 중</string>
     <!-- Terminal extra-key rows -->
@@ -499,9 +501,9 @@
     <string name="key_interrupt">^C</string>
     <string name="attach_input_label">Terminal을 열면 바로 입력</string>
     <string name="terminal_exited_code">프로그램이 종료됐어요(종료 코드 %1$d).</string>
-    <string name="terminal_exited_signal">프로그램이 중지됐어요(시그널 %1$s).</string>
+    <string name="terminal_exited_signal">프로그램이 중단됐어요(시그널 %1$s).</string>
     <string name="terminal_exited_reason">프로그램이 종료됐어요(%1$s).</string>
-    <string name="terminal_accessibility_summary">터미널, %1$d열, %2$d행</string>
+    <string name="terminal_accessibility_summary">Terminal, %1$d열, %2$d행</string>
     <string name="terminal_accessibility_cursor">커서 줄 %1$d: %2$s</string>
     <string name="terminal_connection_closed">Terminal 연결이 끊겼어요. 화면이 최신이 아닐 수 있어요.</string>
     <string name="terminal_scrolled_back">%1$d줄 위</string>
@@ -528,14 +530,14 @@
     <!-- Waiting Agent flow (194). -->
     <string name="agents_loading_hosts">Host %1$d곳 연결 중…</string>
     <string name="agents_waiting_unknown">확인 필요 · —</string>
-    <string name="agents_waiting_partial">확인 필요 %1$d+</string>
-    <string name="agents_next_waiting">다음 대기 Agent: %1$s · %2$s</string>
+    <string name="agents_waiting_partial">확인 필요 · %1$d+</string>
+    <string name="agents_next_waiting">다음 확인 필요 Agent: %1$s · %2$s</string>
 
     <!-- Agent list liveness -->
     <string name="agents_watch_stopped">%1$s · 멈춤: %2$s</string>
     <string name="agents_host_offline">%1$s · 오프라인</string>
     <string name="agents_last_known_group">마지막 확인 상태 · %1$d</string>
-    <string name="agents_last_seen">%1$d분 전 마지막 확인</string>
+    <string name="agents_last_seen">마지막 확인 %1$s</string>
     <string name="agents_last_seen_unknown">마지막 확인 시각 없음</string>
     <string name="agents_title">Agent</string>
     <string name="agents_empty">Host에서 실행 중인 Agent가 없어요.</string>
@@ -556,8 +558,8 @@
     <string name="agent_status_idle">Idle</string>
     <string name="agent_attention_label">확인 필요</string>
     <string name="agent_open_button">열기</string>
-    <string name="agent_view_terminal">term</string>
-    <string name="agent_view_chat">chat</string>
+    <string name="agent_view_terminal">Terminal</string>
+    <string name="agent_view_chat">Chat</string>
     <string name="agent_switch_terminal_label">Terminal로 전환</string>
     <string name="agent_switch_chat_label">Chat으로 전환</string>
     <!-- Terminal and Chat input history (108) -->
@@ -580,7 +582,7 @@
 
     <string name="chat_empty">아직 메시지가 없어요.</string>
     <string name="chat_status_connecting">Beacon에 연결 중…</string>
-    <string name="chat_input_agent_ended">Agent가 종료됐거나 이 Terminal에서 실행 중이 아니에요. Chat 입력은 사용할 수 없어요. 작성 중인 내용은 보관돼요. 계속하려면 Terminal을 여세요.</string>
+    <string name="chat_input_agent_ended">Agent가 종료됐거나 이 Terminal에서 실행 중이 아니에요. Chat 입력은 사용할 수 없어요. 작성 중인 내용은 보관해요. 계속하려면 Terminal을 여세요.</string>
     <string name="chat_status_reconnecting">연결이 끊겨 다시 연결하는 중…</string>
     <string name="chat_status_no_terminal">이 Terminal은 이제 없어요.</string>
     <string name="chat_status_no_beacon">Chat을 보려면 이 Host에 Beacon이 필요해요. Host 설정에서 설치해 주세요.</string>
@@ -594,16 +596,16 @@
     <!-- Chat Mermaid diagrams (141) -->
     <string name="chat_mermaid_label">Mermaid 다이어그램</string>
 
-    <string name="chat_user_queued">나 · 대기 중</string>
+    <string name="chat_user_queued">나 · 전송 대기</string>
     <!-- Chat Markdown code blocks (94) -->
     <string name="chat_code_label">코드</string>
     <string name="chat_code_copy_button">코드 복사</string>
     <string name="chat_code_copied">복사됨</string>
     <!-- Chat links -->
-    <string name="chat_link_share_failed">링크를 공유할 수 없습니다.</string>
+    <string name="chat_link_share_failed">링크를 공유할 수 없어요.</string>
     <string name="chat_link_copy">링크 복사 · %1$s</string>
     <string name="chat_link_share">링크 공유 · %1$s</string>
-    <string name="chat_link_open_failed">링크를 열 수 없습니다.</string>
+    <string name="chat_link_open_failed">링크를 열 수 없어요.</string>
 
     <!-- Chat text selection and clipboard actions. -->
     <string name="chat_text_actions">텍스트 메뉴</string>
@@ -616,24 +618,28 @@
     <!-- Agent usage and context (193) -->
     <string name="usage_menu_label">%1$s · %2$s</string>
     <string name="usage_title">사용량 및 한도</string>
-    <string name="usage_source">이 Agent에 기록된 마지막 수치입니다. 다른 Agent와 계정 한도를 공유할 수 있습니다. 이전 수치일 수 있으며, 시각은 기기의 시간대로 표시됩니다.</string>
+    <string name="usage_source">이 Agent에 기록된 마지막 수치예요. 다른 Agent와 계정 한도를 공유할 수 있어요. 이전 수치일 수 있고, 시각은 기기의 시간대로 표시해요.</string>
     <string name="usage_context_title">마지막 컨텍스트 기록</string>
     <string name="usage_context_unavailable">컨텍스트: 데이터 없음</string>
     <string name="usage_context_remaining">컨텍스트: %1$s%% 남음</string>
+    <string name="usage_context_age">%1$s · %2$s</string>
     <string name="usage_context_tokens">컨텍스트 토큰 %1$s / %2$s 사용</string>
     <string name="usage_account_title">계정 한도</string>
     <string name="usage_limits_unavailable">계정 한도: 데이터 없음</string>
     <string name="usage_unavailable">데이터 없음</string>
     <string name="usage_used">%1$s%% 사용</string>
     <string name="usage_used_unknown">사용량: 데이터 없음</string>
-    <string name="usage_resets">리셋: %1$s</string>
+    <string name="usage_resets">초기화: %1$s</string>
+    <string name="usage_reset_reading">초기화됨 · 마지막 기록 %1$s%% 사용</string>
+    <string name="usage_reset_unknown">초기화됨 · 마지막 기록이 없어요</string>
     <string name="usage_updated">기록: %1$s</string>
     <string name="usage_five_hours">5시간 한도</string>
     <string name="usage_seven_days">7일 한도</string>
     <string name="usage_week_opus">Opus · 7일 한도</string>
     <string name="usage_week_sonnet">Sonnet · 7일 한도</string>
     <string name="usage_window">%1$s분 한도</string>
-    <string name="usage_window_unknown">한도 기간: 데이터 없음</string>
+    <string name="usage_window_unknown">한도 %1$d · 기간 정보가 없어요</string>
+    <string name="usage_window_named">한도: %1$s</string>
     <string name="usage_close">닫기</string>
 
     <!-- Chat tool details and response metadata -->
@@ -673,7 +679,7 @@
     <string name="chat_image">이미지</string>
     <string name="chat_image_loading">이미지 불러오는 중…</string>
     <string name="chat_image_unreadable">표시할 수 없는 이미지예요.</string>
-    <string name="chat_image_too_large">이미지가 너무 커서 표시하지 않았어요(%1$s MB)</string>
+    <string name="chat_image_too_large">이미지가 너무 커서 표시할 수 없어요(%1$s MiB)</string>
 
     <!-- Full-screen image viewer (Chat and remote files). -->
     <string name="image_viewer_title">이미지 뷰어</string>
@@ -731,12 +737,12 @@
 
     <string name="chat_input_label">Agent에게 보낼 메시지</string>
     <string name="chat_send_button">보내기</string>
-    <string name="chat_sent">메시지를 보냈습니다</string>
+    <string name="chat_sent">메시지를 보냈어요</string>
     <string name="chat_sending">보내는 중…</string>
     <!-- Shared first load and Chat activity -->
     <string name="chat_loading">대화 불러오는 중…</string>
     <string name="hosts_loading">Host 불러오는 중…</string>
-    <string name="loading_slow">불러오기가 오래 걸리고 있습니다. Host 연결을 확인한 뒤 다시 시도해 주세요.</string>
+    <string name="loading_slow">불러오기가 오래 걸리고 있어요. Host 연결을 확인한 뒤 다시 시도해 주세요.</string>
     <string name="chat_working">작업 중</string>
     <!-- Chat delivery status -->
     <string name="chat_delivery_entered">Terminal에 입력됨</string>
@@ -746,7 +752,7 @@
     <string name="chat_delivery_restore_button">입력창으로 되돌리기</string>
     <string name="chat_delivery_resend_title">메시지를 다시 보낼까요?</string>
     <!-- Phone-local Chat queue -->
-    <string name="chat_queue_waiting">대기 중</string>
+    <string name="chat_queue_waiting">전송 대기</string>
     <string name="chat_queue_agent">Agent에 전달됨 · 차례 대기 중</string>
     <string name="chat_queue_uncertain">전달 여부 미확인 · 다시 보내기 전에 대화를 확인하세요</string>
     <string name="chat_queue_cancel_button">대기 메시지 취소</string>
@@ -766,7 +772,7 @@
     <string name="chat_interrupt_still_working">중단 키를 보냈지만 Agent가 아직 작업 중이에요.</string>
     <string name="chat_interrupt_unknown">중단 키를 보냈어요. 중단되었는지 Terminal에서 확인하세요.</string>
     <string name="chat_interrupt_not_working">Agent가 더 이상 작업 중이 아니므로 중단 키를 보내지 않았어요.</string>
-    <string name="chat_interrupt_failed">중단 여부를 확인하지 못했어요: %1$s. 다시 시도하기 전에 Terminal을 확인하세요.</string>
+    <string name="chat_interrupt_failed">중단 여부를 확인하지 못했어요. %1$s 다시 시도하기 전에 Terminal을 확인해 주세요.</string>
     <string name="chat_blocked_permission">Agent가 권한을 요청하고 있어요. Terminal에서 허용하거나 거부해 주세요.</string>
     <string name="chat_blocked_question">Agent가 Terminal에서 질문하고 있어요.</string>
     <string name="chat_blocked_auth">Agent가 로그인을 기다리고 있어요. Terminal에서 로그인해 주세요.</string>
@@ -782,6 +788,9 @@
     <string name="qs_waiting_label">Aries · 확인 필요 %1$d</string>
     <string name="qs_label_with_age">%1$s · %2$s</string>
     <string name="surfaces_age_minutes">%1$d분 전</string>
+    <string name="surfaces_age_just_now">방금</string>
+    <string name="surfaces_age_hours">%1$d시간 전</string>
+    <string name="surfaces_age_days">%1$d일 전</string>
     <string name="surfaces_age_unknown">아직 갱신 안 됨</string>
     <string name="shortcuts_host_label">%1$s · %2$s</string>
     <string name="shortcuts_missing_title">실행 설정을 찾을 수 없음</string>
@@ -811,18 +820,18 @@
     <string name="new_task_on_host">%1$s에서 새 작업</string>
     <string name="new_task_prompt">첫 프롬프트</string>
     <string name="new_task_start">Agent 시작</string>
-    <string name="new_task_from_issue">이 Issue로 Agent 시작</string>
-    <string name="new_task_issue_prompt">%1$s #%2$d 작업: %3$s\n%4$s\n\nIssue 요약:\n%5$s</string>
+    <string name="new_task_from_issue">이 이슈로 Agent 시작</string>
+    <string name="new_task_issue_prompt">%1$s #%2$d 작업: %3$s\n%4$s\n\n이슈 요약:\n%5$s</string>
     <string name="new_task_browse">폴더 탐색</string>
     <string name="new_task_use_folder">이 폴더 선택</string>
     <string name="new_task_options">실행 옵션</string>
     <string name="new_task_waiting">Agent가 준비되기를 기다리는 중…</string>
-    <string name="new_task_not_ready">Agent가 아직 준비되지 않았습니다. 프롬프트는 보관됩니다. Terminal을 확인하거나 다시 기다려 주세요.</string>
-    <string name="new_task_delivery_unknown">전송 여부를 확인하지 못했습니다. 프롬프트는 보관됩니다. 다시 보내기 전에 Chat을 확인해 주세요.</string>
-    <string name="new_task_launch_unknown">시작 여부를 확인하지 못했습니다. 다시 시작하기 전에 Host의 Agent 목록을 확인해 주세요. 프롬프트는 보관됩니다.</string>
+    <string name="new_task_not_ready">Agent가 아직 준비되지 않았어요. 프롬프트는 보관해요. Terminal을 확인하거나 다시 기다려 주세요.</string>
+    <string name="new_task_delivery_unknown">전송 여부를 확인하지 못했어요. 프롬프트는 보관해요. 다시 보내기 전에 Chat을 확인해 주세요.</string>
+    <string name="new_task_launch_unknown">시작 여부를 확인하지 못했어요. 다시 시작하기 전에 Host의 Agent 목록을 확인해 주세요. 프롬프트는 보관해요.</string>
     <string name="new_task_open_chat">Agent Chat 열기</string>
     <string name="new_task_wait_again">Agent 준비 기다리기</string>
-    <string name="new_task_nested_host">이 machine을 Host로 추가하면 Agent를 시작할 수 있습니다.</string>
+    <string name="new_task_nested_host">이 컴퓨터를 Host로 추가하면 Agent를 시작할 수 있어요.</string>
 
     <string name="launch_starting">Terminal을 시작하는 중…</string>
     <string name="launch_unknown_title">다시 실행하기 전에 확인</string>
@@ -873,9 +882,9 @@
     <string name="host_key_changed_body">Host가 이전과 다른 키를 보내서 연결하지 않았어요. 누군가 연결을 가로채고 있거나 Host를 다시 설치했을 수 있어요.\n\n신뢰한 키: %1$s\n현재 키: %2$s</string>
 
     <string name="incompatible_title">업데이트 필요</string>
-    <string name="incompatible_app_too_old">이 Host는 더 새로운 herdr-core 프로토콜(세대 %1$d)을 써요. Aries를 업데이트해 주세요.</string>
-    <string name="incompatible_core_too_old">이 Host의 herdr-core 버전은 %1$s이고, Aries에는 %2$s 이상이 필요해요. Host에서 `hc update`를 실행해 주세요.</string>
-    <string name="incompatible_missing_methods">이 Host의 herdr-core에 필요한 기능이 없어요: %1$s. Host에서 `hc update`를 실행해 주세요.</string>
+    <string name="incompatible_app_too_old">이 Host는 더 새로운 herdr-core 프로토콜을 사용해요. Aries를 업데이트해 주세요.</string>
+    <string name="incompatible_core_too_old">이 Host의 herdr-core 버전은 %1$s이고, Aries에는 %2$s 이상이 필요해요. Host에서 hc update를 실행해 주세요.</string>
+    <string name="incompatible_missing_methods">이 Host의 herdr-core에 필요한 기능이 없어요: %1$s. Host에서 hc update를 실행해 주세요.</string>
 
     <!-- Host connection status and recovery -->
     <string name="reconnecting">연결 중…</string>
@@ -891,6 +900,13 @@
     <string name="connect_unreachable">Host에 연결할 수 없어요: %1$s</string>
     <string name="connect_protocol">Host가 herdr-core 프로토콜로 응답하지 않았어요: %1$s</string>
     <string name="connect_other">%1$s</string>
+    <string name="error_failed_title">작업을 마치지 못했어요</string>
+    <string name="error_retry">작업을 마치지 못했어요. 다시 시도하고, 계속되면 Host에 다시 연결해 주세요.</string>
+    <string name="error_permission">접근 권한이 없어요. Host의 권한을 확인한 뒤 다시 시도해 주세요.</string>
+    <string name="error_missing">더 이상 사용할 수 없는 항목이에요. 목록을 새로고침한 뒤 다시 선택해 주세요.</string>
+    <string name="error_connection">Host 연결이 끊겼어요. 다시 연결한 뒤 시도해 주세요.</string>
+    <string name="error_protocol">Host 응답을 읽을 수 없어요. 다시 연결하고, 계속되면 업데이트를 확인해 주세요.</string>
+    <string name="error_storage">휴대폰에 저장하지 못했어요. 저장 공간을 확인한 뒤 다시 시도해 주세요.</string>
     <!-- Herdr Core installation -->
     <string name="herdr_diagnostics_install">Herdr Core 설치</string>
     <string name="herdr_diagnostics_status">Herdr Core 상태</string>
@@ -904,7 +920,7 @@
     <string name="herdr_install_title">Herdr Core</string>
     <string name="herdr_install_missing">이 Host에 herdr-core가 없어요.</string>
     <string name="herdr_install_version">herdr-core %1$s</string>
-    <string name="herdr_install_old">Aries에는 herdr-core 0.1.17 이상이 필요해요.</string>
+    <string name="herdr_install_old">herdr-core %1$s 이상이 필요해요.</string>
     <string name="herdr_install_button">Herdr Core 설치</string>
     <string name="herdr_install_update">Herdr Core 업데이트</string>
     <string name="herdr_install_refresh">다시 확인</string>
@@ -927,7 +943,7 @@
     <string name="beacon_not_installed">Beacon이 설치되지 않았어요.</string>
     <string name="beacon_install_button">Beacon 설치</string>
     <string name="beacon_reinstall_button">다시 설치</string>
-    <string name="beacon_remove_button">Beacon 제거</string>
+    <string name="beacon_remove_button">Beacon 삭제</string>
     <string name="beacon_version">Beacon %1$s</string>
     <string name="beacon_not_running">Beacon 서비스가 실행되고 있지 않아요.</string>
     <string name="beacon_not_attached">실행 중이지만 아직 herdr-core에 연결되지 않았어요.</string>
@@ -935,7 +951,7 @@
     <string name="beacon_out_of_range">이 앱은 Beacon %1$s 버전을 지원하지 않아요(%2$s 필요). Beacon을 다시 설치해 주세요.</string>
     <string name="beacon_linger_title">로그아웃하면 Beacon이 멈춰요</string>
     <string name="beacon_linger_body">Beacon은 설치했지만, Host가 로그아웃 후에도 서비스를 계속 실행하도록 허용하지 않았어요(%1$s). 이대로면 다시 로그인할 때까지 Beacon과 알림이 멈춰요.\n\nHost에서 실행할 명령어: sudo loginctl enable-linger %2$s</string>
-    <string name="beacon_remove_title">%1$s에서 Beacon을 제거할까요?</string>
+    <string name="beacon_remove_title">%1$s에서 Beacon을 삭제할까요?</string>
     <string name="beacon_failed_title">Beacon 작업을 완료하지 못했어요</string>
     <string name="beacon_checksum_body">다운로드한 Beacon의 체크섬이 앱에 들어 있는 값과 달라서 아무것도 설치하지 않았어요.\n\n예상: %1$s\n실제: %2$s</string>
     <string name="beacon_unsupported_host_body">Beacon은 %1$s/%2$s Host를 지원하지 않아요.</string>
@@ -956,34 +972,34 @@
     <string name="key_import_passphrase_label">암호 (암호화된 키만)</string>
     <string name="key_import_busy">가져오는 중…</string>
     <string name="key_import_invalid">키를 가져오지 못했어요. 개인 키 형식과 암호를 확인해 주세요.</string>
-    <string name="key_import_file_error">키 파일을 읽지 못했어요. 64KiB 이하의 텍스트 파일을 골라 주세요.</string>
-    <string name="key_import_too_large">개인 키는 64KiB 이하여야 해요.</string>
+    <string name="key_import_file_error">키 파일을 읽지 못했어요. %1$d KiB 이하의 읽을 수 있는 텍스트 파일을 선택해 주세요.</string>
+    <string name="key_import_too_large">개인 키는 %1$d KiB 이하여야 해요.</string>
 
     <string name="keys_title">다른 SSH 키</string>
     <string name="key_new_label">새 키 이름</string>
     <string name="key_new_button">새 키 만들기</string>
 
-    <string name="host_jumps_button">점프 호스트</string>
+    <string name="host_jumps_button">점프 Host</string>
     <string name="host_jumps_summary">%1$s 경유</string>
     <string name="jumps_title">%1$s 연결 경로</string>
-    <string name="jumps_empty">점프 호스트 없이 Host에 바로 연결해요.</string>
-    <string name="jumps_hop_title">점프 호스트 %1$d</string>
-    <string name="jumps_add_button">점프 호스트 추가</string>
+    <string name="jumps_empty">점프 Host 없이 Host에 바로 연결해요.</string>
+    <string name="jumps_hop_title">점프 Host %1$d</string>
+    <string name="jumps_add_button">점프 Host 추가</string>
     <string name="jumps_remove_button">삭제</string>
     <string name="jumps_key_label">키: %1$s</string>
     <string name="jumps_host_key_label">Host용 키: %1$s</string>
     <string name="jumps_save_button">저장</string>
-    <string name="jump_key_trust_title">이 점프 호스트를 신뢰할까요?</string>
-    <string name="jump_key_trust_body">%3$s 연결 경로에 있는 점프 호스트 %1$d(%2$s)에 처음 연결해요. 호스트 키 지문이 아래와 같은지 확인해 주세요.\n\n%4$s\n\n점프 호스트에서 확인하는 명령어: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</string>
-    <string name="jump_key_changed_title">점프 호스트 키가 바뀌었어요</string>
-    <string name="jump_key_changed_body">점프 호스트 %1$d(%2$s)가 이전과 다른 키를 보내서 연결하지 않았어요. 누군가 연결을 가로채고 있거나 점프 호스트를 다시 설치했을 수 있어요.\n\n신뢰한 키: %3$s\n현재 키: %4$s</string>
-    <string name="connect_jump_auth_rejected">점프 호스트 %1$d(%2$s)가 지정한 키를 거부했어요. 점프 호스트의 ~/.ssh/authorized_keys에 그 키의 공개 키를 추가해 주세요.</string>
+    <string name="jump_key_trust_title">이 점프 Host를 신뢰할까요?</string>
+    <string name="jump_key_trust_body">%3$s 연결 경로에 있는 점프 Host %1$d(%2$s)에 처음 연결해요. Host 키 지문이 아래와 같은지 확인해 주세요.\n\n%4$s\n\n점프 Host에서 확인하는 명령어: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</string>
+    <string name="jump_key_changed_title">점프 Host 키가 바뀌었어요</string>
+    <string name="jump_key_changed_body">점프 Host %1$d(%2$s)가 이전과 다른 키를 보내서 연결하지 않았어요. 누군가 연결을 가로채고 있거나 점프 Host를 다시 설치했을 수 있어요.\n\n신뢰한 키: %3$s\n현재 키: %4$s</string>
+    <string name="connect_jump_auth_rejected">점프 Host %1$d(%2$s)가 지정한 키를 거부했어요. 점프 Host의 ~/.ssh/authorized_keys에 그 키의 공개 키를 추가해 주세요.</string>
     <string name="calls_title">Call 기록</string>
     <string name="calls_feed_down">%1$s: Call을 최신 상태로 확인하지 못했어요. %2$s</string>
     <string name="call_meta">%1$s · %2$s · %3$s</string>
     <string name="call_choices">Choice: %1$s</string>
     <string name="call_urgency_record">기록</string>
-    <string name="call_urgency_check">확인</string>
+    <string name="call_urgency_check">검토</string>
     <string name="call_urgency_urgent">긴급</string>
     <string name="call_urgency_emergency">비상</string>
     <string name="call_answer_claimed">답하는 중: %1$s</string>
@@ -1031,13 +1047,13 @@
     <string name="push_relay_label">Relay URL</string>
     <string name="push_change_relay_button">Relay 변경</string>
     <string name="push_use_relay_button">이 Relay 사용</string>
-    <string name="push_unavailable">이 휴대폰에서는 푸시 알림을 쓸 수 없어요: %1$s</string>
+    <string name="push_unavailable">푸시 알림을 쓸 수 없어요. 네트워크와 Google Play 서비스를 확인한 뒤 다시 시도해 주세요.</string>
     <string name="push_permission_denied">Aries 알림이 꺼져 있어요. Android 설정에서 허용한 다음 푸시를 다시 켜 주세요.</string>
     <string name="push_off_host_unreachable">푸시를 끄고 Relay에서 페어링을 삭제했어요. Host에 연결할 수 없어서 Host 쪽 페어링 정보는 다음 페어링 때까지 남지만, 더는 쓰이지 않아요.</string>
     <!-- Watched Agent progress -->
     <string name="agent_actions_label">Agent 메뉴</string>
     <string name="agent_watch_label">진행 알림</string>
-    <string name="agent_watch_error">진행 상황 알림을 바꾸지 못했어요: %1$s</string>
+    <string name="agent_watch_error">진행 알림 설정을 바꾸지 못했어요: %1$s</string>
     <string name="push_progress_channel">Agent 진행 상황</string>
     <string name="push_progress_body">%1$d분 경과 · 하위 Agent %2$d개</string>
 
@@ -1054,13 +1070,13 @@
     <!-- Inline notification actions -->
     <string name="notification_reply_button">답장</string>
     <string name="notification_reply_hint">Agent에게 메시지</string>
-    <string name="notification_seen_button">확인함</string>
-    <string name="notification_snooze_button">1시간 후</string>
+    <string name="notification_seen_button">봤음</string>
+    <string name="notification_snooze_button">1시간 뒤 다시</string>
     <string name="notification_message_sent">메시지를 보냈어요</string>
     <string name="notification_action_failed">처리됐는지 확인하지 못했어요. 다시 시도하기 전에 Terminal에서 확인해 주세요.</string>
-    <string name="notification_action_offline">네트워크에 연결되지 않아 보내지 못했어요. Aries를 열어 다시 시도해 주세요.</string>
+    <string name="notification_action_offline">네트워크가 없어 보내지 못했어요. 다시 연결한 뒤 답장을 눌러 다시 보내 주세요.</string>
     <string name="notification_action_key_locked">보내지 못했어요. Aries를 열어 이 Host의 SSH 키 잠금을 해제해 주세요.</string>
-    <string name="notification_marking_seen">확인함으로 표시 중…</string>
+    <string name="notification_marking_seen">봤음으로 표시 중…</string>
 
     <string name="call_notify_open_app">앱 열기</string>
     <string name="call_notify_try_again">다시 시도</string>
@@ -1107,7 +1123,7 @@
     <string name="diagnostics_beacon_install">Beacon 설치</string>
     <string name="diagnostics_beacon_status">Beacon 상태 확인</string>
     <string name="diagnostics_beacon_check">Beacon 확인·업데이트</string>
-    <string name="diagnostics_beacon_remove">Beacon 제거</string>
+    <string name="diagnostics_beacon_remove">Beacon 삭제</string>
     <string name="diagnostics_push_enable">푸시 켜기</string>
     <string name="diagnostics_push_disable">푸시 끄기</string>
     <string name="diagnostics_push_verification">푸시 토큰 확인</string>
@@ -1154,7 +1170,7 @@
     <string name="accent_saturation">채도</string>
     <string name="accent_brightness">밝기</string>
     <string name="console_open_drawer">Host와 Agent 목록 열기</string>
-    <string name="console_agents_waiting">확인 필요 %1$d</string>
+    <string name="console_agents_waiting">확인 필요 · %1$d</string>
     <string name="console_all_hosts">Host</string>
     <!-- i18n-ok: decorative tree guides, shared across languages. -->
     <string name="console_add_host">+ Host 추가</string>
@@ -1165,7 +1181,7 @@
     <string name="console_host_menu">%1$s 메뉴</string>
 
     <!-- Call inbox -->
-    <string name="call_inbox_label">대기 중인 Call %1$d개</string>
+    <string name="call_inbox_label">Call · 확인 필요 %1$d</string>
     <string name="call_inbox_expanded">펼침</string>
     <string name="call_inbox_collapsed">접힘</string>
     <string name="call_inbox_past">지난 Call</string>
@@ -1224,14 +1240,14 @@
 
     <string name="attachments_choose_agent">공유할 Agent 선택</string>
     <string name="attachments_uploading">첨부 파일 올리는 중…</string>
-    <string name="attachments_too_large">8MiB가 넘는 파일은 첨부할 수 없어요. 더 작은 파일을 고르거나 이미지 크기 줄이기를 켜 주세요.</string>
+    <string name="attachments_too_large">첨부 파일이 %1$d MiB를 넘어요. 더 작은 파일을 고르거나 이미지 크기 줄이기를 켜 주세요.</string>
     <string name="attachments_failed">파일을 첨부하지 못했어요. 다시 선택해 주세요. 계속 실패하면 Host에 다시 연결한 뒤 시도해 주세요.</string>
     <string name="attachments_connection_failed">Host에 연결되어 있지 않아 첨부하지 못했어요. Host에 다시 연결한 뒤 파일을 다시 선택해 주세요.</string>
     <string name="attachments_read_failed">파일을 읽지 못했어요. 다시 선택하거나, 폰에 사본을 저장한 뒤 그 사본을 첨부해 주세요.</string>
     <string name="attachments_file_button">파일 첨부</string>
     <string name="attachments_camera_button">사진 찍기</string>
-    <string name="attachments_remove_button">첨부 파일 제거: %1$s</string>
-    <string name="attachments_resize_label">이미지를 2048px로 줄이기</string>
+    <string name="attachments_remove_button">첨부 파일 삭제: %1$s</string>
+    <string name="attachments_resize_label">이미지를 %1$d px로 줄이기</string>
 
     <!-- Camera access: shared by Chat capture and Host QR scanning. -->
     <string name="camera_permission_title">카메라 권한</string>
@@ -1245,8 +1261,8 @@
     <string name="layout_kill_label">Terminal %1$s 종료</string>
     <string name="layout_confirm_title">%1$s 종료할까요?</string>
     <string name="layout_impact">Terminal %1$d개 · Agent %2$d개</string>
-    <string name="layout_confirm_button">확인</string>
-    <string name="layout_working_warning">Working 상태인 Agent가 중지돼요. 저장하지 않은 작업은 사라질 수 있어요.</string>
+    <string name="layout_confirm_button">끝내기</string>
+    <string name="layout_working_warning">Working 상태인 Agent가 중단돼요. 저장하지 않은 작업은 사라질 수 있어요.</string>
     <string name="layout_hold_button">2초 동안 길게 눌러 확인</string>
     <string name="layout_new_tab_button">새 Tab</string>
     <string name="layout_actions_button">편집</string>
@@ -1270,11 +1286,14 @@
     <string name="terminal_paste_sending">보내는 중… 전송이 성공할 때까지 초안을 보관해요.</string>
     <string name="terminal_paste_uncertain">붙여넣기 전송을 확인하지 못했어요. 초안을 보관했어요. 다시 보내기 전에 Terminal을 확인하세요.</string>
     <string name="terminal_enter_button">Enter</string>
-    <string name="push_channel_done">Done</string>
-    <string name="push_channel_attention">Blocked 및 Error</string>
+    <string name="push_channel_done">Agent 응답 완료</string>
+    <string name="push_channel_attention">Agent 확인 필요</string>
     <string name="push_channel_foreground">Aries 사용 중</string>
     <string name="push_host_summary">%1$s: 알림 %2$d개</string>
     <string name="quiet_hours_title">조용한 시간</string>
     <string name="quiet_hours_start">시작</string>
     <string name="quiet_hours_end">종료</string>
+    <string name="quiet_hours_body">Done, Blocked, Error 알림은 소리와 진동 없이 도착해요. Call 알림은 평소대로 울려요.</string>
+    <string name="quiet_hours_all_day">하루 종일 · 시작과 끝이 같아요</string>
+    <string name="quiet_hours_range">매일 %1$s – %2$s</string>
 </resources>

@@ -20,7 +20,7 @@ internal fun WatchAgentMenuItem(terminal: TerminalInfo, link: HostLink?, onChang
     val watchLabel = stringResource(R.string.agent_watch_label)
     val scope = rememberCoroutineScope()
     var saving by remember(terminal.address) { mutableStateOf(false) }
-    var error by remember(terminal.address) { mutableStateOf<String?>(null) }
+    var error by remember(terminal.address) { mutableStateOf<Message?>(null) }
     fun changeWatch() {
         val conn = link?.connection ?: return
         if (saving) return
@@ -28,7 +28,7 @@ internal fun WatchAgentMenuItem(terminal: TerminalInfo, link: HostLink?, onChang
         error = null
         scope.launch {
             try { onChanged(conn.setWatched(terminal.address, !terminal.watched)) }
-            catch (e: CoreException) { error = e.message ?: e.toString() }
+            catch (e: CoreException) { error = errorMessage(e) }
             finally { saving = false }
         }
     }
@@ -40,5 +40,5 @@ internal fun WatchAgentMenuItem(terminal: TerminalInfo, link: HostLink?, onChang
         onClick = ::changeWatch,
         modifier = Modifier.testTag("agent-watch"),
     )
-    error?.let { Text(stringResource(R.string.agent_watch_error, it), Modifier.padding(12.dp), color = MaterialTheme.colorScheme.error) }
+    error?.let { Text(stringResource(R.string.agent_watch_error, messageText(it)), Modifier.padding(12.dp), color = MaterialTheme.colorScheme.error) }
 }

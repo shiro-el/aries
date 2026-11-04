@@ -12,6 +12,8 @@ import kotlinx.coroutines.sync.withLock
 
 internal data class GithubQuery(val kind: GithubKind, val state: GithubState, val search: String, val page: Int)
 
+internal const val GITHUB_DRAFT_BYTES = 64 * 1024
+
 /** Owned by the Host link, so an Activity recreation cannot discard unsaved text. */
 internal class GithubModel(
     private val scope: CoroutineScope,
@@ -122,7 +124,7 @@ internal class GithubConversationModel(
     }
 
     fun changeDraft(text: String) {
-        if (text.toByteArray(Charsets.UTF_8).size > 65536) {
+        if (text.toByteArray(Charsets.UTF_8).size > GITHUB_DRAFT_BYTES) {
             draftError = R.string.github_draft_limit
             return
         }

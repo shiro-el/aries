@@ -74,6 +74,7 @@ pub use git_changes::*;
 pub use github::*;
 pub use github_pr::*;
 pub use hc::{GENERATION, MIN_CORE_VERSION, REQUIRED_METHODS};
+
 pub use herdr_install::*;
 pub use host_model::{AgentStatus, BlockedReason, TerminalWatch};
 pub use host_pairing::HostPairingDetails;
@@ -305,6 +306,11 @@ pub struct AriesCore {
 
 #[uniffi::export]
 impl AriesCore {
+    /// Minimum Host version required by this app, also used by localized install guidance.
+    pub fn minimum_core_version(&self) -> String {
+        MIN_CORE_VERSION.to_owned()
+    }
+
     /// Opens the core over `data_dir` (the app's private files dir).
     #[uniffi::constructor]
     pub fn new(data_dir: String, vault: Arc<dyn KeyVault>) -> Result<Arc<Self>, CoreError> {

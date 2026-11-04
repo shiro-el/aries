@@ -44,7 +44,7 @@ internal fun WaitingSummary(
         Text(label, style = MaterialTheme.typography.labelMedium, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis,
             color = if (count > 0) statusColor(AgentStatus.Blocked(null, null)) else MaterialTheme.colorScheme.onSurfaceVariant)
         if (oldest != null) Text(
-            stringResource(R.string.surfaces_age_minutes, ((now.toULong().coerceAtLeast(oldest) - oldest) / 60_000uL).toLong()),
+            relativeAge(androidx.compose.ui.platform.LocalContext.current, oldest, now),
             style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis,
         )

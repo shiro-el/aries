@@ -60,7 +60,7 @@
     <!-- Action menus -->
     <string name="menu_switch">Switch</string>
     <string name="menu_current">Current</string>
-    <string name="menu_switch_context">Switch context</string>
+    <string name="menu_switch_context">Space and Tab</string>
     <string name="menu_state_on">On</string>
     <string name="menu_state_off">Off</string>
     <string name="menu_program_label">Program</string>
@@ -119,7 +119,7 @@
     <string name="github_draft_failed">The draft could not be saved on this phone. Your draft is kept in memory. Retry saving it.</string>
     <string name="github_draft_read_failed">The saved draft could not be read on this phone. Retry loading it to continue editing.</string>
     <string name="github_draft_retry">Retry draft</string>
-    <string name="github_draft_limit">Comments can contain at most 64 KiB of text.</string>
+    <string name="github_draft_limit">Comments can contain at most %1$d KiB of text.</string>
 
     <!-- GitHub PR resources (114) -->
     <string name="github_pr_truncated">This PR response exceeds the Host’s size limit. Some details cannot be displayed.</string>
@@ -150,7 +150,7 @@
     <string name="github_pr_success">Passed</string>
     <string name="github_pr_failure">Failed</string>
     <string name="github_pr_neutral">Neutral</string>
-    <string name="github_pr_cancelled">Cancelled</string>
+    <string name="github_pr_cancelled">Canceled</string>
     <string name="github_pr_skipped">Skipped</string>
     <string name="github_pr_timed_out">Timed out</string>
     <string name="github_pr_action_required">Action required</string>
@@ -180,7 +180,7 @@
     <string name="app_lock_screen_title">Aries is locked</string>
     <string name="app_lock_unlock_button">Unlock Aries</string>
     <string name="app_lock_authenticating">Authenticating…</string>
-    <string name="app_lock_cancelled">Authentication cancelled.</string>
+    <string name="app_lock_cancelled">Authentication canceled.</string>
     <string name="app_lock_failed">Authentication failed. Try again.</string>
     <string name="app_lock_unavailable">Set up a device PIN, pattern or password in Android settings, then try again.</string>
     <!-- Chat read aloud (105) -->
@@ -216,7 +216,7 @@
     <string name="quick_open_result_context">%1$s · %2$s</string>
     <string name="quick_open_live">Live</string>
     <string name="quick_open_unknown">No Last-known state yet</string>
-    <string name="quick_open_age">Last known · %1$d min ago</string>
+    <string name="quick_open_age">Last-known · %1$s</string>
     <string name="quick_open_gone">%1$s is no longer available on this Host.</string>
     <string name="quick_open_run_agent">Run Agent</string>
     <string name="quick_open_choose_host">Open a Host first.</string>
@@ -282,12 +282,15 @@
     <string name="files_share_button">Share</string>
     <string name="files_share_title">Share Host file</string>
     <string name="files_export_starting">Starting download…</string>
-    <string name="files_export_progress">Downloaded %1$d of %2$d bytes</string>
+    <string name="files_export_progress">Downloaded %1$s of %2$s</string>
+    <string name="files_size_bytes">%1$d B</string>
+    <string name="files_size_kib">%1$s KiB</string>
+    <string name="files_size_mib">%1$s MiB</string>
     <string name="files_export_saving">Saving to the selected folder…</string>
     <string name="files_saved">Saved to the selected folder.</string>
     <string name="files_share_ready">File ready to share.</string>
-    <string name="files_export_cancelled">Transfer cancelled.</string>
-    <string name="files_export_too_large">This file exceeds the 64 MiB save and share limit.</string>
+    <string name="files_export_cancelled">Transfer canceled.</string>
+    <string name="files_export_too_large">This file exceeds the %1$d MiB save and share limit.</string>
     <string name="files_export_failed">Could not transfer this file. Check the connection, file and folder permissions, and free space, then retry.</string>
     <!-- Remote file browser (90) -->
     <string name="files_open_button">Files</string>
@@ -310,7 +313,7 @@
     <string name="files_send_line_label">Send line %1$d to Agent</string>
     <string name="files_not_text">Cannot preview this file: binary or non-UTF-8 text.</string>
     <!-- Continuous file and diff reader (152) -->
-    <string name="files_large_warning">This file is at least 2 MiB. Opening and searching may take longer.</string>
+    <string name="files_large_warning">This file is at least %1$d MiB. Opening and searching may take longer.</string>
     <string name="files_large_open">Open file</string>
     <string name="files_find_hint">Find in file</string>
     <string name="files_find_previous">Previous matching line</string>
@@ -363,16 +366,15 @@
     <string name="agents_needs_you">Needs you</string>
     <string name="agents_pinned_group">Pinned · %1$d</string>
     <string name="agents_priority_group">%1$s · %2$d</string>
-    <string name="agents_expand_children">Expand %1$s, %2$d child Agents</string>
-    <string name="agents_collapse_children">Collapse %1$s, %2$d child Agents</string>
+    <string name="agents_expand_children">Expand %1$s · Child Agents: %2$d</string>
+    <string name="agents_collapse_children">Collapse %1$s · Child Agents: %2$d</string>
     <!-- Home widgets (78). -->
     <string name="widget_waiting_title">Aries · Needs you</string>
     <string name="widget_agents_title">Aries · Agents</string>
     <string name="widget_waiting_description">Agents needing you across all Hosts</string>
     <string name="widget_agents_description">Top three Agents across all Hosts</string>
-    <string name="widget_waiting_count">%1$d need you</string>
-    <string name="widget_waiting_unknown">— need you</string>
-    <string name="widget_age_minutes">%1$dm ago</string>
+    <string name="widget_waiting_count">Needs you · %1$d</string>
+    <string name="widget_waiting_unknown">Needs you · —</string>
     <string name="widget_no_saved_state">Awaiting Host state</string>
     <string name="widget_refresh_button">Refresh</string>
     <string name="widget_agents_empty">No saved Agents</string>
@@ -398,7 +400,7 @@
     <string name="key_invalidated_body">The SSH key is permanently locked, often after a change to biometrics or the screen lock. Replace the affected keys, then register their public keys on your Hosts again.</string>
     <string name="key_recover_button">Recover SSH keys</string>
     <string name="key_recover_title">Recover SSH keys</string>
-    <string name="key_recover_body">Biometric SSH keys share a wrapping key. Recover each affected key by generating a replacement or importing a backup. Host settings and key assignments are kept. Biometric protection stays on; enroll a biometric again first if needed.</string>
+    <string name="key_recover_body">Replace each affected SSH key by generating a new key or importing a backup. Host settings and key assignments are kept. Biometric protection stays on; enroll a biometric again first if needed.</string>
     <string name="key_recover_generate_button">Generate replacement</string>
     <string name="key_recover_replace_button">Replace key</string>
     <string name="key_recover_replace_body">This replaces the selected private key on this phone. To keep the same public key, import its backup instead. After generating a new key, register its public key on every Host and jump Host that uses it, and remove the old public key when access works.</string>
@@ -425,7 +427,7 @@
     <string name="key_install_present_body">SSH key already installed on %1$s.</string>
     <string name="key_install_failed_title">Could not install the key</string>
     <string name="key_install_password_rejected">The Host did not accept the user name or password. The Host may also have password login turned off; then add the public key to ~/.ssh/authorized_keys by hand.</string>
-    <string name="key_install_write_failed">Signed in, but could not write ~/.ssh/authorized_keys on the Host: %1$s\n\nCheck that the user owns ~/.ssh and can write to it.</string>
+    <string name="key_install_write_failed">Signed in, but could not write ~/.ssh/authorized_keys on the Host. Check that the user owns ~/.ssh and can write to it, then retry.</string>
 
     <string name="host_ssh_address">%1$s@%2$s:%3$d</string>
     <string name="host_ssh_default_address">%1$s@%2$s</string>
@@ -526,16 +528,16 @@
 
     <string name="agents_button">All Agents</string>
     <!-- Waiting Agent flow (194). -->
-    <string name="agents_loading_hosts">Connecting to %1$d Hosts…</string>
-    <string name="agents_waiting_unknown">Waiting · —</string>
-    <string name="agents_waiting_partial">%1$d+ waiting</string>
-    <string name="agents_next_waiting">Next waiting Agent: %1$s · %2$s</string>
+    <string name="agents_loading_hosts">Connecting… · Hosts: %1$d</string>
+    <string name="agents_waiting_unknown">Needs you · —</string>
+    <string name="agents_waiting_partial">Needs you · %1$d+</string>
+    <string name="agents_next_waiting">Next Agent that needs you: %1$s · %2$s</string>
 
     <!-- Agent list liveness -->
     <string name="agents_watch_stopped">%1$s · Stopped: %2$s</string>
     <string name="agents_host_offline">%1$s · Offline</string>
     <string name="agents_last_known_group">Last-known · %1$d</string>
-    <string name="agents_last_seen">Last seen %1$d min ago</string>
+    <string name="agents_last_seen">Last seen %1$s</string>
     <string name="agents_last_seen_unknown">Last seen: unknown</string>
     <string name="agents_title">Agents</string>
     <string name="agents_empty">No Agents are running on your Hosts.</string>
@@ -556,8 +558,8 @@
     <string name="agent_status_idle">Idle</string>
     <string name="agent_attention_label">Needs you</string>
     <string name="agent_open_button">Open</string>
-    <string name="agent_view_terminal">term</string>
-    <string name="agent_view_chat">chat</string>
+    <string name="agent_view_terminal">Terminal</string>
+    <string name="agent_view_chat">Chat</string>
     <string name="agent_switch_terminal_label">Switch to Terminal</string>
     <string name="agent_switch_chat_label">Switch to Chat</string>
     <!-- Terminal and Chat input history (108) -->
@@ -594,7 +596,7 @@
     <!-- Chat Mermaid diagrams (141) -->
     <string name="chat_mermaid_label">Mermaid diagram</string>
 
-    <string name="chat_user_queued">You · Waiting</string>
+    <string name="chat_user_queued">You · Queued</string>
     <!-- Chat Markdown code blocks (94) -->
     <string name="chat_code_label">Code</string>
     <string name="chat_code_copy_button">Copy code</string>
@@ -620,6 +622,7 @@
     <string name="usage_context_title">Last recorded context</string>
     <string name="usage_context_unavailable">Context: Data unavailable</string>
     <string name="usage_context_remaining">Context: %1$s%% left</string>
+    <string name="usage_context_age">%1$s · %2$s</string>
     <string name="usage_context_tokens">%1$s / %2$s context tokens used</string>
     <string name="usage_account_title">Account limits</string>
     <string name="usage_limits_unavailable">Account limits: Data unavailable</string>
@@ -627,13 +630,16 @@
     <string name="usage_used">%1$s%% used</string>
     <string name="usage_used_unknown">Used: Data unavailable</string>
     <string name="usage_resets">Resets: %1$s</string>
+    <string name="usage_reset_reading">Reset · last reading %1$s%% used</string>
+    <string name="usage_reset_unknown">Reset · last reading unavailable</string>
     <string name="usage_updated">Recorded: %1$s</string>
     <string name="usage_five_hours">5-hour limit</string>
     <string name="usage_seven_days">7-day limit</string>
     <string name="usage_week_opus">Opus · 7-day limit</string>
     <string name="usage_week_sonnet">Sonnet · 7-day limit</string>
     <string name="usage_window">%1$s-minute limit</string>
-    <string name="usage_window_unknown">Window: Data unavailable</string>
+    <string name="usage_window_unknown">Limit %1$d · window unavailable</string>
+    <string name="usage_window_named">Limit: %1$s</string>
     <string name="usage_close">Close</string>
 
     <!-- Chat tool details and response metadata -->
@@ -665,7 +671,7 @@
     <string name="chat_agent_error">Agent error</string>
     <string name="chat_unsupported">This entry needs a newer version of Aries.</string>
     <string name="chat_cache_title">Chat retention</string>
-    <string name="chat_cache_days">%1$d days</string>
+    <string name="chat_cache_days">Days: %1$d</string>
     <string name="chat_cache_clear_button">Clear Chat cache</string>
     <string name="chat_cache_clear_label">Clear the cached Chats of %1$s</string>
     <string name="chat_cache_cleared">Cached Chats of %1$s deleted.</string>
@@ -673,7 +679,7 @@
     <string name="chat_image">Image</string>
     <string name="chat_image_loading">Loading image…</string>
     <string name="chat_image_unreadable">This image cannot be shown.</string>
-    <string name="chat_image_too_large">Image too large to show (%1$s MB)</string>
+    <string name="chat_image_too_large">Image too large to show (%1$s MiB)</string>
 
     <!-- Full-screen image viewer (Chat and remote files). -->
     <string name="image_viewer_title">Image viewer</string>
@@ -704,7 +710,7 @@
     <string name="chat_question_send">Send answer</string>
     <string name="chat_question_sending">Sending…</string>
     <string name="chat_question_sent">Answered</string>
-    <string name="chat_question_cancelled">Cancelled</string>
+    <string name="chat_question_cancelled">Canceled</string>
     <string name="chat_question_expired">Expired</string>
     <string name="chat_question_other">Other</string>
     <string name="chat_question_notes">Notes</string>
@@ -746,7 +752,7 @@
     <string name="chat_delivery_restore_button">Restore to input</string>
     <string name="chat_delivery_resend_title">Resend message?</string>
     <!-- Phone-local Chat queue -->
-    <string name="chat_queue_waiting">Waiting</string>
+    <string name="chat_queue_waiting">Queued</string>
     <string name="chat_queue_agent">Passed to Agent · waiting for its turn</string>
     <string name="chat_queue_uncertain">Delivery unconfirmed · check the conversation before resending</string>
     <string name="chat_queue_cancel_button">Cancel queued message</string>
@@ -766,7 +772,7 @@
     <string name="chat_interrupt_still_working">The stop key was sent, but the Agent is still working.</string>
     <string name="chat_interrupt_unknown">The stop key was sent. Check the Terminal to see whether the Agent stopped.</string>
     <string name="chat_interrupt_not_working">The Agent is no longer working. No stop key was sent.</string>
-    <string name="chat_interrupt_failed">Could not confirm interruption: %1$s. Check the Terminal before trying again.</string>
+    <string name="chat_interrupt_failed">Could not confirm interruption. %1$s Check the Terminal before trying again.</string>
     <string name="chat_blocked_permission">The Agent asks for permission. Approve or deny it in the Terminal.</string>
     <string name="chat_blocked_question">The Agent asks you a question in the Terminal.</string>
     <string name="chat_blocked_auth">The Agent needs you to sign in, in the Terminal.</string>
@@ -778,9 +784,12 @@
     <string name="structure_unknown_format">The herdr-app layout on this Host is in a format Aries does not know. Terminals are grouped by their Space and Tab labels. Update Aries.</string>
     <string name="structure_connection_closed">The connection to the Host closed. What you see may be out of date.</string>
     <!-- Phone surfaces: QS tile and saved launch shortcuts. -->
-    <string name="qs_waiting_label">Aries · Waiting %1$d</string>
+    <string name="qs_waiting_label">Aries · Needs you %1$d</string>
     <string name="qs_label_with_age">%1$s · %2$s</string>
     <string name="surfaces_age_minutes">%1$d min ago</string>
+    <string name="surfaces_age_just_now">just now</string>
+    <string name="surfaces_age_hours">%1$d h ago</string>
+    <string name="surfaces_age_days">%1$d d ago</string>
     <string name="surfaces_age_unknown">Not refreshed</string>
     <string name="shortcuts_host_label">%1$s · %2$s</string>
     <string name="shortcuts_missing_title">Saved launch unavailable</string>
@@ -821,7 +830,7 @@
     <string name="new_task_launch_unknown">The launch could not be confirmed. Check the Host’s Agents before starting again. Your prompt is kept.</string>
     <string name="new_task_open_chat">Open Agent Chat</string>
     <string name="new_task_wait_again">Wait for Agent</string>
-    <string name="new_task_nested_host">Add this machine as a Host to start an Agent there.</string>
+    <string name="new_task_nested_host">Add this computer as a Host to start an Agent there.</string>
 
     <string name="launch_starting">Starting Terminal…</string>
     <string name="launch_unknown_title">Check before launching again</string>
@@ -876,9 +885,9 @@
     <string name="host_key_changed_body">The Host presented a different key than before, so Aries did not connect. Someone may be intercepting the connection, or the Host was reinstalled.\n\nTrusted: %1$s\nNow: %2$s</string>
 
     <string name="incompatible_title">Update needed</string>
-    <string name="incompatible_app_too_old">This Host runs a newer herdr-core protocol (generation %1$d). Update Aries.</string>
-    <string name="incompatible_core_too_old">This Host runs herdr-core %1$s. Aries needs %2$s or newer: run `hc update` on the Host.</string>
-    <string name="incompatible_missing_methods">This Host\'s herdr-core lacks %1$s. Run `hc update` on the Host.</string>
+    <string name="incompatible_app_too_old">This Host uses a newer herdr-core protocol. Update Aries.</string>
+    <string name="incompatible_core_too_old">This Host runs herdr-core %1$s. Aries needs %2$s or newer: run hc update on the Host.</string>
+    <string name="incompatible_missing_methods">This Host\'s herdr-core lacks %1$s. Run hc update on the Host.</string>
 
     <!-- Host connection status and recovery -->
     <string name="reconnecting">Connecting…</string>
@@ -894,6 +903,13 @@
     <string name="connect_unreachable">Could not reach the Host: %1$s</string>
     <string name="connect_protocol">The Host did not speak the herdr-core protocol: %1$s</string>
     <string name="connect_other">%1$s</string>
+    <string name="error_failed_title">Could not complete the action</string>
+    <string name="error_retry">The action failed. Retry, or reconnect to the Host if this continues.</string>
+    <string name="error_permission">Access was denied. Check permissions on the Host, then retry.</string>
+    <string name="error_missing">This item is no longer available. Refresh the list and choose it again.</string>
+    <string name="error_connection">The Host connection was lost. Reconnect, then retry.</string>
+    <string name="error_protocol">The Host sent an unreadable response. Reconnect, and check for updates if this continues.</string>
+    <string name="error_storage">Could not save on this phone. Check available storage, then retry.</string>
     <!-- Herdr Core installation -->
     <string name="herdr_diagnostics_install">Herdr Core installation</string>
     <string name="herdr_diagnostics_status">Herdr Core status</string>
@@ -907,7 +923,7 @@
     <string name="herdr_install_title">Herdr Core</string>
     <string name="herdr_install_missing">herdr-core is missing on this Host.</string>
     <string name="herdr_install_version">herdr-core %1$s</string>
-    <string name="herdr_install_old">Aries needs herdr-core 0.1.17 or newer.</string>
+    <string name="herdr_install_old">Aries needs herdr-core %1$s or newer.</string>
     <string name="herdr_install_button">Install Herdr Core</string>
     <string name="herdr_install_update">Update Herdr Core</string>
     <string name="herdr_install_refresh">Check Herdr Core again</string>
@@ -959,8 +975,8 @@
     <string name="key_import_passphrase_label">Passphrase (if encrypted)</string>
     <string name="key_import_busy">Importing…</string>
     <string name="key_import_invalid">Could not import the key. Check the private key format and passphrase, then try again.</string>
-    <string name="key_import_file_error">Could not read the key file. Choose a readable text file no larger than 64 KiB.</string>
-    <string name="key_import_too_large">The private key must be no larger than 64 KiB.</string>
+    <string name="key_import_file_error">Could not read the key file. Choose a readable text file no larger than %1$d KiB.</string>
+    <string name="key_import_too_large">The private key must be no larger than %1$d KiB.</string>
 
     <string name="keys_title">Other SSH keys</string>
     <string name="key_new_label">Label for a new key</string>
@@ -1010,7 +1026,7 @@
     <string name="push_test_timeout">The test took too long. Check the Host connection and try again.</string>
     <string name="push_disable_title">Turn off push for %1$s?</string>
     <string name="push_disable_body">Agent alerts and Calls from this Host will no longer notify this phone. You can turn push on again here.</string>
-    <string name="push_cancelled">Push setup was cancelled. Try again when you are ready.</string>
+    <string name="push_cancelled">Push setup was canceled. Try again when you are ready.</string>
     <string name="push_checking_beacon">Checking Beacon…</string>
     <string name="push_title">Push notifications</string>
     <string name="push_needs_beacon">Install the Beacon to turn on push notifications for this Host.</string>
@@ -1035,15 +1051,15 @@
     <string name="push_relay_placeholder" translatable="false">https://relay.example.com</string>
     <string name="push_change_relay_button">Change Relay</string>
     <string name="push_use_relay_button">Use this Relay</string>
-    <string name="push_unavailable">Push notifications are not available on this phone: %1$s</string>
+    <string name="push_unavailable">Push notifications are unavailable. Check your network and Google Play services, then retry.</string>
     <string name="push_permission_denied">Notifications are not allowed for Aries. Allow them in Android settings, then turn on push again.</string>
     <string name="push_off_host_unreachable">Push is off and the Relay deleted this pairing. The Host could not be reached, so its copy of the pairing stays until the next pairing; it no longer works.</string>
     <!-- Watched Agent progress -->
     <string name="agent_actions_label">Agent actions</string>
     <string name="agent_watch_label">Watch progress</string>
-    <string name="agent_watch_error">Could not update watching: %1$s</string>
+    <string name="agent_watch_error">Could not change progress notifications: %1$s</string>
     <string name="push_progress_channel">Watched Agent progress</string>
-    <string name="push_progress_body">%1$d min elapsed · %2$d subagents</string>
+    <string name="push_progress_body">%1$d min elapsed · Child Agents: %2$d</string>
 
     <string name="push_test_title">Push works for %1$s</string>
     <string name="push_test_body">Test notification from %1$s.</string>
@@ -1060,10 +1076,10 @@
     <string name="notification_reply_button">Reply</string>
     <string name="notification_reply_hint">Message the Agent</string>
     <string name="notification_seen_button">Seen</string>
-    <string name="notification_snooze_button">In 1 hour</string>
+    <string name="notification_snooze_button">Snooze 1 h</string>
     <string name="notification_message_sent">Message sent</string>
     <string name="notification_action_failed">Could not confirm the action. Open the Terminal to check before trying again.</string>
-    <string name="notification_action_offline">Not sent: no network. Open Aries to try again.</string>
+    <string name="notification_action_offline">Not sent: no network. Reconnect, then tap Reply to try again.</string>
     <string name="notification_action_key_locked">Not sent: open Aries to unlock this Host’s SSH key.</string>
     <string name="notification_marking_seen">Marking seen…</string>
 
@@ -1082,7 +1098,7 @@
     <string name="push_policy_blocked">An Agent is blocked</string>
     <string name="push_policy_error">An Agent reports an error</string>
     <string name="push_policy_done">An Agent finishes a turn</string>
-    <string name="push_policy_child_agents">Include subagents</string>
+    <string name="push_policy_child_agents">Include child Agents</string>
     <string name="push_policy_failed">Could not read or change the notification options on the Host: %1$s</string>
     <string name="push_policy_retry">Load the options again</string>
 
@@ -1145,21 +1161,21 @@
     <string name="theme_system">System</string>
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
-    <string name="accent_title">Accent colour</string>
+    <string name="accent_title">Accent color</string>
     <string name="accent_saffron">Saffron</string>
     <string name="accent_ember">Ember</string>
     <string name="accent_jade">Jade</string>
     <string name="accent_lagoon">Lagoon</string>
     <string name="accent_iris">Iris</string>
     <string name="accent_rose">Rose</string>
-    <string name="accent_custom">Custom colour</string>
+    <string name="accent_custom">Custom color</string>
     <string name="accent_hex">Hex</string>
     <string name="accent_hex_invalid">Enter six hex digits, for example #F4B73A.</string>
     <string name="accent_hue">Hue</string>
     <string name="accent_saturation">Saturation</string>
     <string name="accent_brightness">Brightness</string>
     <string name="console_open_drawer">Open Hosts and Agents</string>
-    <string name="console_agents_waiting">%1$d waiting</string>
+    <string name="console_agents_waiting">Needs you · %1$d</string>
     <string name="console_all_hosts">Hosts</string>
     <!-- i18n-ok: decorative tree guides, shared across languages. -->
     <string name="console_add_host">+ Add Host</string>
@@ -1170,7 +1186,7 @@
     <string name="console_host_menu">Actions for %1$s</string>
 
     <!-- Call inbox -->
-    <string name="call_inbox_label">Calls, %1$d waiting</string>
+    <string name="call_inbox_label">Calls · Needs you %1$d</string>
     <string name="call_inbox_expanded">Expanded</string>
     <string name="call_inbox_collapsed">Collapsed</string>
     <string name="call_inbox_past">Past Calls</string>
@@ -1229,14 +1245,14 @@
 
     <string name="attachments_choose_agent">Choose an Agent for the shared content</string>
     <string name="attachments_uploading">Uploading attachment…</string>
-    <string name="attachments_too_large">Attachment exceeds 8 MiB. Choose a smaller file or enable image resizing.</string>
+    <string name="attachments_too_large">Attachment exceeds %1$d MiB. Choose a smaller file or enable image resizing.</string>
     <string name="attachments_failed">Could not attach the file. Choose it again. If this keeps happening, reconnect to the Host and try again.</string>
     <string name="attachments_connection_failed">Could not attach because the Host connection is unavailable. Reconnect to the Host, then choose the file again.</string>
     <string name="attachments_read_failed">Could not read the file. Choose it again, or save a copy on your phone and attach that copy.</string>
     <string name="attachments_file_button">Attach files</string>
     <string name="attachments_camera_button">Take a photo</string>
     <string name="attachments_remove_button">Remove attachment: %1$s</string>
-    <string name="attachments_resize_label">Resize images to 2048 px</string>
+    <string name="attachments_resize_label">Resize images to %1$d px</string>
 
     <!-- Camera access: shared by Chat capture and Host QR scanning. -->
     <string name="camera_permission_title">Camera access</string>
@@ -1249,7 +1265,7 @@
     <string name="layout_kill_button">End</string>
     <string name="layout_kill_label">End Terminal %1$s</string>
     <string name="layout_confirm_title">End %1$s?</string>
-    <string name="layout_impact">%1$d Terminals · %2$d Agents</string>
+    <string name="layout_impact">Terminals: %1$d · Agents: %2$d</string>
     <string name="layout_confirm_button">Confirm</string>
     <string name="layout_working_warning">A Working Agent will be stopped. Unsaved work may be lost.</string>
     <string name="layout_hold_button">Hold for 2 seconds to confirm</string>
@@ -1278,8 +1294,11 @@
     <string name="push_channel_done">Done</string>
     <string name="push_channel_attention">Blocked and Error</string>
     <string name="push_channel_foreground">While using Aries</string>
-    <string name="push_host_summary">%1$s: %2$d waiting</string>
+    <string name="push_host_summary">%1$s · Notifications: %2$d</string>
     <string name="quiet_hours_title">Quiet hours</string>
     <string name="quiet_hours_start">Start</string>
     <string name="quiet_hours_end">End</string>
+    <string name="quiet_hours_body">Done, Blocked and Error notifications arrive without sound or vibration. Calls keep their normal alerts.</string>
+    <string name="quiet_hours_all_day">All day · Start and end are the same</string>
+    <string name="quiet_hours_range">%1$s – %2$s daily</string>
 </resources>

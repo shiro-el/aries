@@ -170,7 +170,7 @@ class WaitingAgentFlowTest {
         screenshot("drawer-counts")
         compose.onNodeWithTag("drawer-host:h1").performClick()
         compose.openConsoleDrawer()
-        compose.onNodeWithText(context.getString(R.string.console_agents_waiting, 1)).assertExists()
+        compose.onNode(hasText(context.getString(R.string.agents_button)) and hasText(context.getString(R.string.console_agents_waiting, 1))).assertExists()
         compose.onNodeWithTag("drawer-agent:h1:t2").assertDoesNotExist()
         compose.onNodeWithTag("drawer-agent:h2:t3").assertExists()
     }

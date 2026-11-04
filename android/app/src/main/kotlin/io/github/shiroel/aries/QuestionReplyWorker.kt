@@ -18,6 +18,7 @@ import io.github.shiroel.aries.core.AnswerProblem
 import io.github.shiroel.aries.core.AriesCoreInterface
 import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.ui.answerProblem
+import io.github.shiroel.aries.ui.resolve
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withContext
@@ -117,8 +118,8 @@ object QuestionReplies {
                 is CoreException.JumpHostKeyUnknown, is CoreException.JumpHostKeyChanged -> context.getString(R.string.call_notify_host_key)
                 is CoreException.AnswerRefused -> if (e.reason == AnswerProblem.FAILED)
                     context.getString(R.string.question_notify_unknown)
-                else answerProblem(e).let { context.getString(it.res, *it.args.toTypedArray()) }
-                else -> answerProblem(e).let { context.getString(it.res, *it.args.toTypedArray()) }
+                else answerProblem(e).resolve(context)
+                else -> answerProblem(e).resolve(context)
             }
             QuestionView.Done(line)
         }

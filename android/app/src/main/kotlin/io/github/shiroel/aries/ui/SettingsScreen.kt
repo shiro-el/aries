@@ -136,7 +136,7 @@ fun SettingsScreen(
                 val context = androidx.compose.ui.platform.LocalContext.current
                 val attachments = remember(context) { AttachmentSettings.from(context) }
                 SettingsField {
-                    OptionToggle(R.string.attachments_resize_label,
+                    OptionToggle(stringResource(R.string.attachments_resize_label, ATTACHMENT_IMAGE_SIDE),
                         attachments.resizeImages, attachments::chooseResizeImages)
                 }
             }

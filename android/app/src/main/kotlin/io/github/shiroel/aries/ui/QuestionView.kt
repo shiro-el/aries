@@ -146,7 +146,7 @@ internal fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question
         }
         when {
             state == AnswerState.Sending -> AnnouncedText(stringResource(R.string.chat_question_sending), style = MaterialTheme.typography.bodySmall)
-            state is AnswerState.Failed -> AnnouncedText(stringResource(state.why.res, *state.why.args.toTypedArray()),
+            state is AnswerState.Failed -> AnnouncedText(messageText(state.why),
                 style = MaterialTheme.typography.bodySmall, color = colors.error)
         }
     }

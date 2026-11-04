@@ -33,7 +33,7 @@ internal fun GitDiffView(
     wrap: Boolean = false,
 ) {
     var approved by remember(patch) { mutableStateOf(false) }
-    val large = remember(patch) { patch.lines.sumOf { it.text.toByteArray(Charsets.UTF_8).size.toLong() } >= 2 * 1024 * 1024 }
+    val large = remember(patch) { patch.lines.sumOf { it.text.toByteArray(Charsets.UTF_8).size.toLong() } >= LARGE_FILE_BYTES }
     Column(modifier.fillMaxWidth()) {
         if (large && !approved) {
             LargeFileNotice { approved = true }
