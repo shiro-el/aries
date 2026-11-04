@@ -15,6 +15,7 @@ internal fun errorMessage(error: Throwable): Message = Message(when (error) {
         else -> R.string.error_retry
     }
     is SecurityException -> R.string.error_permission
+    is CoreException.HerdrCoreMissing -> R.string.herdr_install_connect_reason
     is CoreException.Protocol -> R.string.error_protocol
     is CoreException.Storage -> R.string.error_storage
     is CoreException.AuthRejected -> R.string.connect_auth_rejected

@@ -28,12 +28,13 @@ internal fun ThreadNewTaskEntry(model: HostsModel, board: AgentBoard) {
         ?: board.hosts.firstOrNull { board.links[it.id]?.state == LinkState.Up }
         ?: board.hosts.firstOrNull()
     val link = board.links[host?.id]
-    LaunchedEffect(host, link, link?.state) {
+    LaunchedEffect(host, link, link?.state, model.task) {
         if (link != null && link.state == LinkState.Up && (model.task == null || model.task?.link !== link))
             model.prepareTask(link, showDialog = false)
     }
     val task = model.task?.takeIf { it.link.host.id == host?.id }
-    if (task != null) ThreadTaskForm(task, model, model::startInlineTask, model::openCreatedTask)
+    if (task != null) ThreadTaskForm(task, model, model::startInlineTask, model::openCreatedTask,
+        showFolderBrowser = !model.taskVisible)
     else Column(Modifier.fillMaxWidth().padding(16.dp)) {
         ConsoleButton(onClick = { if (host == null) model.startAddingHost() else model.beginThreadTask(host) },
             modifier = Modifier.fillMaxWidth()) {
@@ -68,10 +69,10 @@ internal fun ThreadNewTaskScreen(task: NewTask, onStart: () -> Unit, onOpenChat:
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ThreadTaskForm(task: NewTask, model: HostsModel?, onStart: () -> Unit, onOpenChat: () -> Unit) {
+private fun ThreadTaskForm(task: NewTask, model: HostsModel?, onStart: () -> Unit, onOpenChat: () -> Unit,
+    showFolderBrowser: Boolean = true) {
     val form = task.form
     var picker by remember(task) { mutableStateOf<String?>(null) }
-    var browsing by remember(task) { mutableStateOf(false) }
     var options by remember(task) { mutableStateOf(false) }
     val editable = !form.busy && task.terminal == null && !task.launchUnknown && !task.deliveryUnknown
     Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -111,7 +112,7 @@ private fun ThreadTaskForm(task: NewTask, model: HostsModel?, onStart: () -> Uni
             OutlinedTextField(form.command, { form.command = it }, enabled = editable,
                 label = { Text(stringResource(R.string.launch_preset_args)) }, modifier = Modifier.fillMaxWidth())
         }
-        NewTaskStatus(task)
+        NewTaskRecovery(task, model)
         val starting = stringResource(R.string.new_task_starting)
         if (form.busy) LinearProgressIndicator(Modifier.fillMaxWidth().semantics { contentDescription = starting })
         if (task.terminal != null && !form.busy) TextButton(onClick = onOpenChat) { Text(stringResource(LocalLayoutScreens.current.openTaskLabel)) }
@@ -129,7 +130,7 @@ private fun ThreadTaskForm(task: NewTask, model: HostsModel?, onStart: () -> Uni
                     (form.spaces.mapNotNull { it.folder } + form.recentCwds).distinct().forEach { path ->
                         TextButton(onClick = { form.cwd = path; picker = null }) { Text(path) }
                     }
-                    TextButton(onClick = { picker = null; browsing = true }) { Text(stringResource(R.string.new_task_browse)) }
+                    TextButton(onClick = { picker = null; task.browsingPath = form.cwd.ifBlank { "/" } }) { Text(stringResource(R.string.new_task_browse)) }
                 }
                 "agent" -> listOf(AgentPreset.CLAUDE_CODE, AgentPreset.CODEX).forEach { preset ->
                     TextButton(onClick = { form.preset = preset; picker = null }) { Text(stringResource(preset.label)) }
@@ -140,6 +141,5 @@ private fun ThreadTaskForm(task: NewTask, model: HostsModel?, onStart: () -> Uni
             }
         }
     }
-    if (browsing) TaskFolderDialog(task.link.connection, form.cwd.ifBlank { "/" },
-        onSelect = { form.cwd = it; browsing = false }, onDismiss = { browsing = false })
+    if (showFolderBrowser) NewTaskFolderBrowser(task)
 }
