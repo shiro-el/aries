@@ -567,24 +567,7 @@ impl AriesCore {
         private_key: String,
         passphrase: String,
     ) -> Result<KeyInfo, CoreError> {
-        if private_key.len() > 64 * 1024 {
-            return Err(CoreError::InvalidPrivateKey);
-        }
-        let key = russh::keys::decode_secret_key(private_key.trim(), Some(&passphrase))
-            .map_err(|_| CoreError::InvalidPrivateKey)?;
-        if !matches!(
-            key.algorithm(),
-            Algorithm::Ed25519 | Algorithm::Rsa { .. } | Algorithm::Ecdsa { .. }
-        ) {
-            return Err(CoreError::InvalidPrivateKey);
-        }
-        let private = key
-            .to_openssh(LineEnding::LF)
-            .map_err(|_| CoreError::InvalidPrivateKey)?;
-        let public = key
-            .public_key()
-            .to_openssh()
-            .map_err(|_| CoreError::InvalidPrivateKey)?;
+        let (private, public) = decode_imported_key(&private_key, &passphrase)?;
         let current = self.key_protection()?;
         let protection = current.unwrap_or(KeyProtection::Plain);
         let sealed = self.vault.seal(private.as_bytes().to_vec(), protection)?;
@@ -609,6 +592,48 @@ impl AriesCore {
             })?;
         } else {
             self.store.add_key(&saved, protection, &sealed)?;
+        }
+        key_info(&saved)
+    }
+
+    /// Explicitly replaces one unreadable SSH key, without opening its old
+    /// private half. `None` generates a new key; `Some` imports a backup.
+    /// Keeps its ID, label, protection and all Host/jump assignments. The caller
+    /// must confirm replacement and register the returned public key on Hosts.
+    pub fn recover_key(
+        &self,
+        key_id: String,
+        private_key: Option<String>,
+        passphrase: String,
+    ) -> Result<KeyInfo, CoreError> {
+        let previous = self
+            .keys()?
+            .into_iter()
+            .find(|key| key.id == key_id)
+            .ok_or_else(|| CoreError::UnknownKey { id: key_id.clone() })?;
+        let (protection, _) = self.sealed_key(Some(&key_id))?;
+        let (private, public) = match private_key {
+            Some(private) => decode_imported_key(&private, &passphrase)?,
+            None => generate_key("aries")?,
+        };
+        let sealed = self.vault.seal(private.as_bytes().to_vec(), protection)?;
+        let saved = SavedKey {
+            id: key_id.clone(),
+            label: previous.label,
+            public,
+        };
+        if key_id == DEFAULT_KEY_ID {
+            let old = self.store.read_identity()?.ok_or(CoreError::NoKey)?;
+            if let Err(error) = self.store.write_identity(&store::Identity {
+                protection,
+                sealed,
+                public: saved.public.clone(),
+            }) {
+                let _ = self.store.write_identity(&old);
+                return Err(error);
+            }
+        } else {
+            self.store.replace_key(&saved, protection, &sealed)?;
         }
         key_info(&saved)
     }
@@ -2020,6 +2045,28 @@ fn generate_key(comment: &str) -> Result<(String, String), CoreError> {
     key.set_comment(comment);
     let private = key.to_openssh(LineEnding::LF).map_err(vault)?;
     let public = key.public_key().to_openssh().map_err(vault)?;
+    Ok((private.to_string(), public))
+}
+
+fn decode_imported_key(private_key: &str, passphrase: &str) -> Result<(String, String), CoreError> {
+    if private_key.len() > 64 * 1024 {
+        return Err(CoreError::InvalidPrivateKey);
+    }
+    let key = russh::keys::decode_secret_key(private_key.trim(), Some(passphrase))
+        .map_err(|_| CoreError::InvalidPrivateKey)?;
+    if !matches!(
+        key.algorithm(),
+        Algorithm::Ed25519 | Algorithm::Rsa { .. } | Algorithm::Ecdsa { .. }
+    ) {
+        return Err(CoreError::InvalidPrivateKey);
+    }
+    let private = key
+        .to_openssh(LineEnding::LF)
+        .map_err(|_| CoreError::InvalidPrivateKey)?;
+    let public = key
+        .public_key()
+        .to_openssh()
+        .map_err(|_| CoreError::InvalidPrivateKey)?;
     Ok((private.to_string(), public))
 }
 
