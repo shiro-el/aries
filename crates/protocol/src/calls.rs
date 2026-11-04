@@ -109,8 +109,8 @@ pub struct Answer {
     pub detail: Option<String>,
 }
 
-/// Delivery of an [`Answer`]. A claim is durable: once a Call has an answer
-/// in any state, no other answer is delivered.
+/// Delivery of an [`Answer`]. A claim is durable: only a proven [`AnswerState::Failed`]
+/// delivery may be claimed again by an explicit retry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AnswerState {
@@ -197,10 +197,10 @@ pub const REPLY_FORMAT: u32 = 1;
 /// exits 0.
 ///
 /// The Beacon claims the Call in its log (an [`AnswerState::Claimed`]
-/// answer) before it types anything, so no second answer is ever typed: a
-/// retry of the same reply, or a racing reply from another phone, gets
-/// [`ReplyOutcome::Answered`]. That also makes a retry safe after the phone
-/// lost the connection mid-reply.
+/// answer) before it types anything. A retry or racing reply gets
+/// [`ReplyOutcome::Answered`] unless the previous attempt certainly failed
+/// before delivery. Uncertain delivery keeps the claim, so losing the
+/// connection mid-reply cannot cause duplicate input.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReplyOutcome {

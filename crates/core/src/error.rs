@@ -13,7 +13,7 @@ pub enum Incompatibility {
 }
 
 /// Why an answer to an Agent's question was not pressed (or may not have
-/// been: `Failed`).
+/// been: `Unconfirmed`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum AnswerProblem {
     /// Someone already answered it (in the Terminal or on another phone).
@@ -28,8 +28,10 @@ pub enum AnswerProblem {
     NoBeacon,
     /// The Beacon cannot reach the Host's herdr-core.
     NoCore,
-    /// The key presses failed or the Beacon did not reply.
+    /// The Beacon reported a key-press failure.
     Failed,
+    /// Execution started but delivery was not confirmed. Do not press again.
+    Unconfirmed,
 }
 
 #[derive(Debug, Clone, thiserror::Error, uniffi::Error)]

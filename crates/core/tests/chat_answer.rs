@@ -479,3 +479,31 @@ async fn codex_rechecks_each_part_before_mixing_free_text_and_options() {
         ["keys 1b 5b 42 0d 50 75 72 70 6c 65 0d", "keys 0d"]
     );
 }
+
+// D24: once answer execution starts, missing/unknown receipts cannot re-enable key presses.
+#[tokio::test]
+async fn lost_live_answer_receipts_are_unconfirmed() {
+    use std::os::unix::fs::PermissionsExt;
+    for body in [
+        "printf '%s\\n' '{\"v\":1,\"outcome\":\"unknown\"}'",
+        "exit 0",
+        "sleep 31",
+    ] {
+        let env = Env::new();
+        let script = env.dir.path().join("answer-beacon");
+        std::fs::write(&script, format!("#!/bin/sh\n{body}\n")).unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let host = env.host(HashMap::from([("ARIES_BEACON".into(), path(&script))]));
+        let result = env
+            .core
+            .answer_question(host, "t1".into(), "q".into(), vec![vec![0]])
+            .await
+            .unwrap_err();
+        match result {
+            CoreError::AnswerRefused { reason, .. } => {
+                assert_eq!(reason, AnswerProblem::Unconfirmed)
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+}

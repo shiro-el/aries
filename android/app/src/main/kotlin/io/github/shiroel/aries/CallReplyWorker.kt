@@ -69,10 +69,11 @@ class CallReplyWorker(context: Context, params: WorkerParameters) : CoroutineWor
         val notice = NotificationPayloads.open(applicationContext, inputData.getString(KEY_NOTICE))?.let { CallNotice.fromJson(it) } ?: return Result.failure()
         val choice = inputData.getInt(KEY_CHOICE, -1)
         val core = (applicationContext as? HasCore)?.core ?: return Result.failure()
-        val view = CallReplies.answer(applicationContext, core, notice, choice, online(applicationContext))
+        val view = if (runAttemptCount > 0) CallReplies.refresh(applicationContext, core, notice, choice, runAttemptCount)
+            else CallReplies.answer(applicationContext, core, notice, choice, online(applicationContext))
         CallNotifications.post(applicationContext, notice, view)
         LastKnownStates.requestRefresh(applicationContext, notice.hostId)
-        return Result.success()
+        return if (view.pending) Result.retry() else Result.success()
     }
 
     /** Only below Android 12, where expedited work runs as a foreground service. */
@@ -153,6 +154,35 @@ object CallReplies {
         return outcome(context, reply, choiceText, choice)
     }
 
+    /** A retry of a pending claim only observes it; it must never submit another answer. */
+    suspend fun refresh(context: Context, core: AriesCoreInterface, notice: CallNotice, choice: Int, attempt: Int): CallView.Done {
+        val context = AppLanguage.context(context)
+        val text = notice.call.choices.getOrElse(choice) { "" }
+        fun waiting() = if (attempt >= 3) unconfirmed(context, text) else pending(context, text)
+        val call = try {
+            withTimeout(OVERALL_MS) { withContext(Dispatchers.IO) {
+                if (!core.canAnswerInBackground(notice.hostId)) throw CoreException.KeyLocked()
+                core.calls(notice.hostId).firstOrNull { it.id == notice.call.id }
+            } }
+        } catch (_: TimeoutCancellationException) {
+            return waiting()
+        } catch (e: CoreException) {
+            return if (e is CoreException.KeyLocked) unconfirmed(context, text) else waiting()
+        } ?: return CallView.Done(context.getString(R.string.call_reply_no_call), openApp = true)
+        val answer = call.answer ?: return unknown(context, choice, null)
+        if (answer.state == CallAnswerState.CLAIMED && attempt >= 3) return unconfirmed(context, answer.text)
+        return outcome(context, CallReply(CallReplyOutcome.ANSWERED, answer, answer.detail), answer.text, choice)
+    }
+
+    /** A crashed sender may never finish its claim. Stop observing without releasing that claim. */
+    private fun unconfirmed(context: Context, text: String) = CallView.Done(
+        context.getString(R.string.call_answer_unconfirmed, text),
+        context.getString(R.string.call_reply_terminal_guidance), openApp = true,
+    )
+
+    private fun pending(context: Context, text: String) =
+        CallView.Done(context.getString(R.string.call_answer_elsewhere, text), pending = true)
+
     private fun unknown(context: Context, choice: Int, detail: String?) =
         CallView.Done(context.getString(R.string.call_notify_unknown), detail, retry = choice, openApp = true)
 
@@ -179,7 +209,8 @@ object CallReplies {
                 CallView.Done(context.getString(R.string.call_answer_unconfirmed, text), reply.detail, openApp = true)
             CallReplyOutcome.ANSWERED -> CallView.Done(
                 reply.answer?.let { answerLine(context, it) } ?: context.getString(R.string.call_reply_answered),
-                openApp = true,
+                openApp = reply.answer?.state != CallAnswerState.CLAIMED,
+                pending = reply.answer?.state == CallAnswerState.CLAIMED,
             )
             CallReplyOutcome.NO_CALL -> CallView.Done(context.getString(R.string.call_reply_no_call), openApp = true)
             CallReplyOutcome.NO_CHOICE -> CallView.Done(context.getString(R.string.call_reply_no_choice), openApp = true)
@@ -192,7 +223,7 @@ object CallReplies {
     /** The answer the Host already has (another phone, or an earlier run of this one). */
     private fun answerLine(context: Context, a: CallAnswer) = context.getString(
         when (a.state) {
-            CallAnswerState.CLAIMED -> R.string.call_answer_claimed
+            CallAnswerState.CLAIMED -> R.string.call_answer_elsewhere
             CallAnswerState.DELIVERED -> R.string.call_answer_delivered
             CallAnswerState.FAILED -> R.string.call_answer_failed
             CallAnswerState.UNCONFIRMED -> R.string.call_answer_unconfirmed

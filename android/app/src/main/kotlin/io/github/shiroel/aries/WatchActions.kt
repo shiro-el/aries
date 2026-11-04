@@ -85,7 +85,7 @@ object WatchActions {
         catch (error: CoreException) {
             return when (error) {
                 is CoreException.KeyLocked, is CoreException.KeyInvalidated, is CoreException.BiometricUnavailable -> WatchResult.LOCKED
-                is CoreException.AnswerRefused -> if (error.reason == AnswerProblem.FAILED) WatchResult.UNKNOWN else WatchResult.CHANGED
+                is CoreException.AnswerRefused -> if (error.reason in setOf(AnswerProblem.FAILED, AnswerProblem.UNCONFIRMED)) WatchResult.UNKNOWN else WatchResult.CHANGED
                 else -> if (dispatched) WatchResult.UNKNOWN else WatchResult.FAILED
             }
         } catch (_: Exception) { return if (dispatched) WatchResult.UNKNOWN else WatchResult.FAILED }

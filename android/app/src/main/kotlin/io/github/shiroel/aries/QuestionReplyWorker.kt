@@ -123,7 +123,7 @@ object QuestionReplies {
                 is CoreException.AuthRejected, is CoreException.JumpAuthRejected -> context.getString(R.string.call_notify_key_rejected)
                 is CoreException.HostKeyUnknown, is CoreException.HostKeyChanged,
                 is CoreException.JumpHostKeyUnknown, is CoreException.JumpHostKeyChanged -> context.getString(R.string.call_notify_host_key)
-                is CoreException.AnswerRefused -> if (e.reason == AnswerProblem.FAILED)
+                is CoreException.AnswerRefused -> if (e.reason in setOf(AnswerProblem.FAILED, AnswerProblem.UNCONFIRMED))
                     context.getString(R.string.question_notify_unknown)
                 else answerProblem(e).resolve(context)
                 else -> answerProblem(e).resolve(context)
