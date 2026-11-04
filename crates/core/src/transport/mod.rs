@@ -5,7 +5,7 @@
 
 mod bootstrap;
 mod local;
-mod ssh;
+pub(crate) mod ssh;
 pub(crate) use ssh::handshake;
 
 use std::future::Future;
@@ -25,6 +25,7 @@ pub(crate) struct Stream {
     pub reader: Box<dyn AsyncRead + Send + Unpin>,
     pub writer: Box<dyn AsyncWrite + Send + Unpin>,
     pub guard: Box<dyn Send + Sync>,
+    pub ssh: Option<std::sync::Arc<ssh::Session>>,
 }
 
 pub(crate) type OpenFuture<'a> =

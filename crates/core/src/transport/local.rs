@@ -49,6 +49,7 @@ impl Transport for LocalProcess {
                 reader: Box::new(stdout),
                 writer: Box::new(stdin),
                 guard: Box::new(std::sync::Mutex::new(child)),
+                ssh: None,
             })
         })
     }

@@ -148,6 +148,7 @@ pub(crate) struct HcClient {
     pending: Pending,
     channels: SharedChannels,
     next_id: AtomicU64,
+    pub(crate) ssh: Option<std::sync::Weak<crate::transport::ssh::Session>>,
 }
 
 impl HcClient {
@@ -163,6 +164,7 @@ impl HcClient {
             reader,
             mut writer,
             guard,
+            ssh,
         } = stream;
         let hello = json!({
             "jsonrpc": "2.0",
@@ -189,12 +191,18 @@ impl HcClient {
 
         let pending: Pending = Arc::new(std::sync::Mutex::new(Some(HashMap::new())));
         let channels = SharedChannels::default();
-        let reader = tokio::spawn(read_frames(reader, pending.clone(), channels.clone()));
+        let (closed, _) = watch::channel(false);
+        let ended = closed.clone();
+        let frames = read_frames(reader, pending.clone(), channels.clone());
+        let reader = tokio::spawn(async move {
+            frames.await;
+            ended.send_replace(true);
+        });
         Ok(Self {
             hello,
             writer: Arc::new(FramedWriter {
                 io: Mutex::new(Some(writer)),
-                closed: watch::channel(false).0,
+                closed,
                 pending: pending.clone(),
                 channels: channels.clone(),
                 reader: reader.abort_handle(),
@@ -203,7 +211,13 @@ impl HcClient {
             pending,
             channels,
             next_id: AtomicU64::new(1),
+            ssh: ssh.as_ref().map(Arc::downgrade),
         })
+    }
+
+    /// Preview shares the same revocation signal as partial writes and disconnect.
+    pub(crate) fn preview_closed(&self) -> watch::Receiver<bool> {
+        self.writer.closed.subscribe()
     }
 
     pub fn core_version(&self) -> &str {
