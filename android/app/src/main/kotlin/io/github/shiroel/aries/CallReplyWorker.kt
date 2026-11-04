@@ -167,7 +167,7 @@ object CallReplies {
         } catch (_: TimeoutCancellationException) {
             return waiting()
         } catch (e: CoreException) {
-            return if (e is CoreException.KeyLocked) notSent(context, e, choice) else waiting()
+            return if (e is CoreException.KeyLocked) unconfirmed(context, text) else waiting()
         } ?: return CallView.Done(context.getString(R.string.call_reply_no_call), openApp = true)
         val answer = call.answer ?: return unknown(context, choice, null)
         if (answer.state == CallAnswerState.CLAIMED && attempt >= 3) return unconfirmed(context, answer.text)

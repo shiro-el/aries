@@ -253,6 +253,17 @@ class CallNotificationAnswerTest {
         assertTrue(core.replies.isEmpty())
     }
 
+    // D25: losing permission to observe a claim cannot prove the other device did not deliver it.
+    @Test
+    fun aLockedRefreshKeepsDeliveryUncertainAndNeverSubmitsAnAnswer() {
+        showWithBackgroundKey()
+        core.setKeyProtection(KeyProtection.BIOMETRIC)
+        assertEquals(ListenableWorker.Result.success(), runWorker(0, attempt = 1))
+        assertEquals(str(R.string.call_answer_unconfirmed, "Merge"), text(shown()))
+        assertEquals(listOf(str(R.string.call_notify_open_app)), buttons(shown()))
+        assertTrue(core.replies.isEmpty())
+    }
+
     @Test
     fun aRetryAfterTheFirstGotThroughShowsTheRecordedAnswer() {
         core.replyResult = CallReply(CallReplyOutcome.ANSWERED, CallAnswer(0u, "Merge", CallAnswerState.DELIVERED, 2uL, null), null)
