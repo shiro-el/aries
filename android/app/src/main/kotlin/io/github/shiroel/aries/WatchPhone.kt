@@ -33,6 +33,7 @@ object WatchPhone {
 
     /** Watches local storage only; the existing pull schedule owns all SSH activity. */
     fun start(context: Context, core: AriesCoreInterface, scope: CoroutineScope) = scope.launch(Dispatchers.IO) {
+        WatchProgressPhone.enqueue(context)
         val privacy = context.getSharedPreferences("app_lock", Context.MODE_PRIVATE)
         val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> languageChanged() }
         privacy.registerOnSharedPreferenceChangeListener(listener)
