@@ -101,7 +101,10 @@ class SubAgentsTest {
         assertUnder("grandchild", "child")
         compose.openConsoleDrawer()
         // A child with Error still needs attention, even under a Working parent.
-        compose.onNodeWithText(context.getString(R.string.console_agents_waiting, 1)).assertExists()
+        // The global total and each priority section can share the same count label.
+        compose.onNode(hasText(context.getString(R.string.agents_button)) and
+            hasText(context.getString(R.string.console_agents_waiting, 1)) and
+            hasAnyAncestor(hasTestTag("console-drawer"))).assertExists()
         val root = compose.onNodeWithTag("drawer-agent:h1:t1").fetchSemanticsNode().boundsInRoot
         val sub = compose.onNodeWithTag("drawer-agent:h1:t2").fetchSemanticsNode().boundsInRoot
         assertTrue(root.top < sub.top)
