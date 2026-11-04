@@ -149,7 +149,8 @@ object InlineNotifications {
         val operation = PendingIntent.getBroadcast(context, 0, intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         // A window starting in one hour: no exact-alarm permission or Doze exemption.
-        context.getSystemService(android.app.AlarmManager::class.java).setWindow(
+        // Scheduling is application-wide; locale wrappers are only needed for card text.
+        context.applicationContext.getSystemService(android.app.AlarmManager::class.java).setWindow(
             android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP,
             android.os.SystemClock.elapsedRealtime() + 3_600_000, 15 * 60_000L, operation)
         dismiss(context, target, snoozed = true)

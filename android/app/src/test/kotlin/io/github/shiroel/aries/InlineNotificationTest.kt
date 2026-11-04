@@ -344,7 +344,20 @@ class InlineNotificationTest {
     }
 
     @Test
-    fun snoozeUsesAnInexactOneHourAlarmAndRepostsTheSamePrivateCard() {
+    fun snoozeAfterChoosingTheAppLanguageStillRepostsThePrivateCard() {
+        // Regression: a locale wrapper must not hide the reminder from the application alarm service.
+        AppLanguage.choose(context, "en")
+        try {
+            checkOneHourReminder()
+        } finally {
+            AppLanguage.choose(context, "")
+        }
+    }
+
+    @Test
+    fun snoozeUsesAnInexactOneHourAlarmAndRepostsTheSamePrivateCard() = checkOneHourReminder()
+
+    private fun checkOneHourReminder() {
         PushService.show(context, status()) { true }
         val original = shown()
         val before = SystemClock.elapsedRealtime()
