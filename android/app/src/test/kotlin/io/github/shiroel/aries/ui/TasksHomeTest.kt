@@ -309,14 +309,15 @@ class TasksHomeTest {
         val core = FakeCore().apply {
             addHost("home", Endpoint.Ssh("home.test", 22u, "me")); ensureKey()
             terminals = listOf(terminal)
-            callsOf["h1"] = listOf(call("review", "t1", CallUrgency.CHECK).copy(choices = emptyList()))
         }
         show(core)
+        compose.runOnIdle { core.sendCall(call("review", "t1", CallUrgency.CHECK).copy(choices = emptyList())) }
         compose.onNodeWithTag("task-call:h1/review").assertExists()
         compose.onNodeWithTag("task-call:h1/review").performClick()
         compose.runOnIdle { core.push(listOf(terminal.copy(agentStatus = AgentStatus.Done, statusMs = callTime + 1uL))) }
         compose.onNodeWithTag("task-call:h1/review").assertDoesNotExist()
         compose.onNodeWithTag("tasks-needs-sheet").assertDoesNotExist()
+        compose.onNodeWithTag("call_banner").assertDoesNotExist()
         compose.onNodeWithTag("tasks-filter-needs").assertTextEquals(context.getString(R.string.tasks_filter_count,
             context.getString(R.string.tasks_filter_needs), 0))
     }

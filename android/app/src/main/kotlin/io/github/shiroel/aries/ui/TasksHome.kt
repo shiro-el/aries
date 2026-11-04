@@ -46,9 +46,11 @@ internal fun TasksHome(model: HostsModel, board: AgentBoard) {
     var queue by board::needsQueue
     val agents = board.agents
     val hostIds = board.hosts.mapTo(mutableSetOf()) { it.id }
-    val needs = taskNeeds(agents, model.calls.calls.filter { it.host.id in hostIds }, model::taskTranscript) { call ->
+    val callWaiting: (CallEntry) -> Boolean = { call ->
         model.calls.isTaskWaiting(call, call.call.terminal?.let { board.find(AgentKey(call.host.id, it)) })
     }
+    val needs = taskNeeds(agents, model.calls.calls.filter { it.host.id in hostIds }, model::taskTranscript, callWaiting)
+    val banner = model.calls.banner?.takeIf { it.host.id in hostIds && callWaiting(it) }
     SideEffect { queue?.append(needs) }
     val calls = needs.filterIsInstance<TaskNeed.Call>().map { it.entry }
     val visible = agents.filter {
@@ -65,7 +67,7 @@ internal fun TasksHome(model: HostsModel, board: AgentBoard) {
     val folds = rememberTreeFolds("tasks-hosts")
     Column(Modifier.fillMaxSize().testTag("tasks-home")) {
         AgentHomeScope(model, board)
-        if (queue == null && model.screen is Screen.Agents && model.calls.banner?.host?.id in hostIds) CallAttentionSlot(onOpen = { entry ->
+        if (queue == null && model.screen is Screen.Agents && banner != null) CallAttentionSlot(onOpen = { entry ->
             val need = needs.firstOrNull { it is TaskNeed.Call && it.entry.key == entry.key }
             if (need == null) model.openCallInbox()
             else { openNeed(need); model.calls.dismissBanner() }
