@@ -157,6 +157,7 @@ class HostsModel(
     private val onSavedLaunchesChanged: () -> Unit = {},
     private val locationStore: LastLocationStore? = null,
     private val onCallAnswered: (Host, String, CallAnswerState) -> Unit = { _, _, _ -> },
+    private val elapsedRealtime: () -> Long = android.os.SystemClock::elapsedRealtime,
 ) {
     internal val pairingReview = QrPairingReview()
     /** Current Host's settings models; a previous Host's pending work keeps its own state. */
@@ -485,7 +486,16 @@ class HostsModel(
 
 
     /** Every line the screens use now: the open Host's and the Agent list's. */
-    private val links: List<HostLink> get() = listOfNotNull(browseLink, callLink, agentOpeningLink) + agentLinks.values
+    private val links: List<HostLink> get() = (listOfNotNull(browseLink, callLink, agentOpeningLink) + agentLinks.values).distinct()
+
+    /** Prefer a usable line over an earlier owner waiting for recovery. */
+    private fun upLink(hostId: String): HostLink? = links.firstOrNull {
+        it.host.id == hostId && it.state == LinkState.Up && it.connection != null
+    }
+
+    private fun preferredLink(hostId: String): HostLink? = upLink(hostId)
+        ?: links.firstOrNull { it.host.id == hostId && it.state == LinkState.Reconnecting }
+        ?: links.firstOrNull { it.host.id == hostId && it.state is LinkState.Down }
 
     internal fun hasHostLink(hostId: String): Boolean = links.any { it.host.id == hostId }
 
@@ -505,7 +515,7 @@ class HostsModel(
     }
 
     /** Retain warm screen streams briefly; App Lock can request immediate release. */
-    fun backgrounded(retainConnections: Boolean = true) {
+    fun backgrounded(retainConnections: Boolean = true, connectionGraceMs: Long = SCREEN_CONNECTION_GRACE_MS) {
         if (screensPaused && retainConnections) return
         screensPaused = true
         screensActive.value = false
@@ -514,7 +524,7 @@ class HostsModel(
         backgroundRelease?.cancel()
         if (retainConnections) {
             backgroundRelease = scope.launch {
-                delay(SCREEN_CONNECTION_GRACE_MS)
+                delay(connectionGraceMs)
                 releaseScreenConnections()
             }
         } else releaseScreenConnections()
@@ -896,7 +906,7 @@ class HostsModel(
         suppressLocationSave = false
         restoring = restore != null
         missingKeyHostId = null
-        val link = link(host, null) { error ->
+        val link = upLink(host.id) ?: link(host, null) { error ->
             scope.launch { initialConnectionProblem(host, error, restore != null) }
         }
         browseLink = link
@@ -1065,14 +1075,14 @@ class HostsModel(
             missingKeyHostId = host.id
             return
         }
-        val canNeedCore = error is CoreException.Protocol ||
+        val canNeedCore = error is CoreException.HerdrCoreMissing || error is CoreException.Protocol ||
             (error is CoreException.Incompatible && error.reason is Incompatibility.CoreTooOld)
-        val needsCore = host.endpoint is Endpoint.Ssh && canNeedCore && try {
+        val needsCore = host.endpoint is Endpoint.Ssh && (error is CoreException.HerdrCoreMissing || canNeedCore && try {
             when (val state = withContext(keyWork) { core.herdrCoreStatus(host.id) }) {
                 HerdrCoreState.Missing -> true
                 is HerdrCoreState.Installed -> state.needsUpdate
             }
-        } catch (_: CoreException) { false }
+        } catch (_: CoreException) { false })
         if (screen !== connecting) return
         if (needsCore) {
             openHostSettings(host, Message(R.string.herdr_install_connect_reason))
@@ -1325,6 +1335,7 @@ class HostsModel(
     }
 
     fun trust(prompt: Prompt.TrustHostKey) {
+        if (this.prompt !== prompt) return
         this.prompt = null
         guard {
             core.trustHostKey(prompt.host.id, prompt.fingerprint)
@@ -1392,6 +1403,7 @@ class HostsModel(
     }
 
     fun trust(prompt: Prompt.TrustJumpHostKey) {
+        if (this.prompt !== prompt) return
         this.prompt = null
         guard {
             core.trustJumpHostKey(prompt.host.id, prompt.hop, prompt.fingerprint)
@@ -1490,25 +1502,44 @@ class HostsModel(
                 } else observe(link, terminal, origin)
             }
         }
+        fun updateStructure(structure: HostStructure) {
+            browser.update(structure)
+            val id = pendingLaunch
+            pendingLaunch = null
+            if (id != null && (screen as? Screen.Browse)?.browser === browser) {
+                val saved = browser.savedLaunches.find { it.id == id }
+                if (saved == null) savedLaunchMissing()
+                else if (confirmSavedLaunch) prompt = Prompt.ConfirmSavedLaunch(browser, saved)
+                else runSaved(browser, saved)
+            }
+            restoreIfReady()
+            pendingQuickOpen?.takeIf { it.host.id == browser.host.id }?.let {
+                if ((screen as? Screen.Browse)?.browser === browser) revealQuickOpen(browser, it)
+            }
+        }
+        val sharedBoard = agentHome?.board?.takeIf { it.links[link.host.id] === link }
+        if (sharedBoard != null) {
+            // The board keeps the only SSH line and subscriptions; Browse is a view of that feed.
+            snapshotFlow {
+                sharedBoard.quickOpenSources.firstOrNull { it.host.id == link.host.id } to sharedBoard.watchErrors[link.host.id]
+            }.collect { (source, error) ->
+                browser.watchError = error
+                if (source == null) {
+                    if (error == null) browser.startingWatch()
+                } else {
+                    source.structure?.let(::updateStructure)
+                    browser.updateTerminals(source.terminals)
+                    terminals = source.terminals
+                    restoreIfReady()
+                }
+            }
+            return@launch
+        }
         try {
             link.keepWatching(onFailure = { browser.watchError = it }, onStart = browser::startingWatch) { conn, _ ->
                 val structure = conn.watchStructure(object : StructureListener {
                     override fun onStructure(structure: HostStructure) {
-                        scope.launch {
-                            browser.update(structure)
-                            val id = pendingLaunch
-                            pendingLaunch = null
-                            if (id != null && (screen as? Screen.Browse)?.browser === browser) {
-                                val saved = browser.savedLaunches.find { it.id == id }
-                                if (saved == null) savedLaunchMissing()
-                                else if (confirmSavedLaunch) prompt = Prompt.ConfirmSavedLaunch(browser, saved)
-                                else runSaved(browser, saved)
-                            }
-                            restoreIfReady()
-                            pendingQuickOpen?.takeIf { it.host.id == browser.host.id }?.let {
-                                if ((screen as? Screen.Browse)?.browser === browser) revealQuickOpen(browser, it)
-                            }
-                        }
+                        scope.launch { updateStructure(structure) }
                     }
 
                     override fun onClosed() {
@@ -2130,8 +2161,7 @@ class HostsModel(
     /** Pin from any shared row, using the connection already owned by that surface. */
     fun canPin(entry: AgentEntry): Boolean = pinLink(entry)?.let { it.state == LinkState.Up && it.connection != null } == true
 
-    private fun pinLink(entry: AgentEntry): HostLink? =
-        agentLinks[entry.host.id] ?: browseLink?.takeIf { it.host.id == entry.host.id }
+    private fun pinLink(entry: AgentEntry): HostLink? = upLink(entry.host.id)
 
     fun pin(entry: AgentEntry, pinned: Boolean) {
         if (!canPin(entry)) return
@@ -2159,7 +2189,7 @@ class HostsModel(
         labelWrite(board, entry) { it.setPinned(entry.terminal.address, pinned) }
 
     private fun labelWrite(board: AgentBoard, entry: AgentEntry, write: suspend (HostConnection) -> TerminalInfo) {
-        val conn = agentConns[entry.host.id] ?: return
+        val conn = upLink(entry.host.id)?.connection ?: return
         scope.launch {
             try {
                 board.replace(entry.host.id, write(conn))
@@ -2499,7 +2529,16 @@ class HostsModel(
         private set
     private var agentOpeningHostId: String? = null
 
+    private var agentOpenPrompt: Prompt? = null
+
+    private fun setAgentOpenPrompt(value: Prompt) {
+        agentOpenPrompt = value
+        prompt = value
+    }
+
     fun cancelAgentOpen() {
+        if (prompt === agentOpenPrompt) prompt = null
+        agentOpenPrompt = null
         agentOpenRequest++
         agentOpeningJob?.cancel()
         agentOpeningJob = null
@@ -2527,12 +2566,12 @@ class HostsModel(
         val version = navigationVersion
         val request = agentOpenRequest
         fun current() = navigationVersion == version && request == agentOpenRequest && (!fromInbox || callInboxOpen)
-        val existing = links.firstOrNull { it.host.id == host.id && it.state != LinkState.Closed }
+        val existing = preferredLink(host.id)
         val target = existing ?: link(host, null)
         val board = agentHome?.board?.takeIf { it.links[host.id] === target }
         val name = board?.find(AgentKey(host.id, address))?.terminal?.let(::displayName)
             ?: drawerAgents.firstOrNull { it.key == AgentKey(host.id, address) }?.terminal?.let(::displayName) ?: address
-        agentOpening = Message(R.string.agent_opening, listOf(name))
+        agentOpening = if (target.state == LinkState.Up) null else Message(R.string.agent_opening, listOf(name))
         agentOpeningHostId = host.id
         agentOpeningFromInbox = fromInbox
         if (existing == null) agentOpeningLink = target
@@ -2542,17 +2581,26 @@ class HostsModel(
                 val terminal = coroutineScope {
                     // Trust is an explicit decision, so its time does not consume the connection budget.
                     val deadline = launch {
-                        snapshotFlow { (target.state as? LinkState.Down)?.error }.collectLatest { error ->
-                            when (error) {
-                                is CoreException.HostKeyUnknown -> prompt = Prompt.TrustHostKey(host, error.fingerprint)
-                                is CoreException.JumpHostKeyUnknown -> prompt = Prompt.TrustJumpHostKey(host, error.hop, error.address, error.fingerprint)
-                                null -> {
-                                    delay(20_000L)
-                                    throw CoreException.Unreachable(host.name)
+                        var remaining = 20_000L
+                        kotlinx.coroutines.flow.combine(screensActive,
+                            snapshotFlow { (target.state as? LinkState.Down)?.error }) { active, error -> active to error }
+                            .collectLatest { (active, error) ->
+                                if (!active) return@collectLatest
+                                when (error) {
+                                    is CoreException.HostKeyUnknown -> setAgentOpenPrompt(Prompt.TrustHostKey(host, error.fingerprint))
+                                    is CoreException.JumpHostKeyUnknown -> setAgentOpenPrompt(Prompt.TrustJumpHostKey(host, error.hop, error.address, error.fingerprint))
+                                    null -> {
+                                        val began = elapsedRealtime()
+                                        try {
+                                            delay(remaining.coerceAtLeast(0))
+                                            throw CoreException.Unreachable(host.name)
+                                        } finally {
+                                            remaining -= (elapsedRealtime() - began).coerceAtLeast(0)
+                                        }
+                                    }
+                                    else -> throw error
                                 }
-                                else -> throw error
                             }
-                        }
                     }
                     try {
                         if (target.state !is LinkState.Down) target.retryNow()
@@ -2675,7 +2723,7 @@ class HostsModel(
         screen = Screen.Hosts
         status?.cancel()
         status = null
-        browseLink?.close()
+        browseLink?.takeUnless { it in agentLinks.values }?.close()
         browseLink = null
         val (_, watch) = open ?: return
         open = null

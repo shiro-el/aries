@@ -166,9 +166,11 @@ class FakeCore : AriesCoreInterface {
     /** Delays a Terminal-list RPC independently of the existing live watch. */
     val terminalListHolds = mutableMapOf<String, kotlinx.coroutines.Deferred<Unit>>()
 
+    val terminalWatchStarts = mutableMapOf<String, Int>()
     internal fun watchTerminals(hostId: String, gone: kotlinx.coroutines.Deferred<Unit>): TerminalWatch {
         watchFailures[hostId]?.let { throw it }
         val channel = Channel<List<TerminalInfo>>(Channel.UNLIMITED)
+        terminalWatchStarts[hostId] = terminalWatchStarts.getOrDefault(hostId, 0) + 1
         val watchers = terminalWatchers.getOrPut(hostId) { mutableSetOf() }
         watchers += channel
         return FakeWatch(terminalsOf[hostId] ?: terminals, channel, gone, firstTerminalListHolds[hostId]) { watchers -= channel }
