@@ -93,6 +93,7 @@ internal fun rememberChatScrollState(
         var previousCalls = emptyList<String>()
         var previousItemKeys = emptyList<String>()
         var lastViewport: Pair<Any?, Int>? = null
+        var readingAnchor: Pair<String, Int>? = null
         var pending = emptySet<String>()
         var lastSaved = saved
         var request = state.latestRequest
@@ -150,6 +151,15 @@ internal fun rememberChatScrollState(
                 if (previous != null) {
                     pending = (pending + addedTail(previous.map { "transcript:${it.id}" }, transcript) +
                         addedTail(previousCalls, calls)).intersect(keys.toSet())
+                    if (!state.following && !latest && rows.indexOfFirst { it.id == previous.firstOrNull()?.id } > 0) {
+                        // A prepend can move the turn's read-aloud control to an
+                        // older entry and collapse the old first header. Keep
+                        // the measured body block in place, rather than that header.
+                        readingAnchor?.let { (key, offset) ->
+                            val index = keys.indexOf(key)
+                            if (index >= 0) state.list.scrollToItem(index, -offset)
+                        }
+                    }
                 } else if (saved != null) {
                     pending = (saved.pending + after(saved.transcriptTail, transcript) + after(saved.callTail, calls))
                         .intersect(keys.toSet())
@@ -199,6 +209,15 @@ internal fun rememberChatScrollState(
             val first = layout.visibleItemsInfo.firstOrNull { it.index == state.list.firstVisibleItemIndex }
             val anchor = first?.key as? String
             if (layout.totalItemsCount == keys.size && anchor in keys) {
+                val visible = layout.visibleItemsInfo.firstOrNull {
+                    it.size > 0 && it.offset + it.size > layout.viewportStartOffset
+                }
+                val body = visible?.let { item ->
+                    layout.visibleItemsInfo.firstOrNull {
+                        it.size > 0 && (it.key as? String)?.startsWith("${item.key}:markdown:") == true
+                    } ?: item
+                }
+                readingAnchor = (body?.key as? String)?.let { it to body.offset }
                 val position = ChatReadingPosition(
                     anchor!!, keys.indexOf(anchor), state.list.firstVisibleItemScrollOffset,
                     state.following, pending, transcript.lastOrNull(), calls.lastOrNull(),
