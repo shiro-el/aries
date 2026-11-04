@@ -889,6 +889,8 @@ class ChatModel(
         }
     }
 
+    internal val isRunning get() = !stopped && job?.isActive == true
+
     fun start(scope: CoroutineScope, paused: Boolean = this.paused) {
         if (!stopped && connectionJob?.isActive == true) return
         this.paused = paused
@@ -1138,6 +1140,9 @@ class ChatModel(
     fun resume() {
         if (!paused) return
         paused = false
+        // A biometric Host resumes only after its explicit unlock. The Up
+        // observer starts a fresh watch; an offscreen FIFO must not prompt first.
+        if (link != null && link?.state != LinkState.Up) return
         if (watch == null && connectionError?.retryableConnection() != false) restartWatchOrStart()
         else watch?.resume()
     }
