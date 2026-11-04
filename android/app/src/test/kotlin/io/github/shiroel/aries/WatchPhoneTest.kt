@@ -44,6 +44,42 @@ class WatchPhoneTest {
         assertEquals(0L, WatchPhone.summary(emptyList(), states).fetchedAtMs)
     }
 
+    @Test fun inboxShowsAllAgentsWithPendingRequestsFirstAndExtractsOnlyTheLatestResponse() = runBlocking {
+        val core = FakeCore()
+        val host = core.addHost("Host", Endpoint.Ssh("one", 22u, "me"))
+        val summary = WatchPhone.summary(core.hosts(), listOf(LastKnownState(host.id, listOf(
+            agent("t1", AgentStatus.Working), agent("t2", AgentStatus.Idle, pinned = true),
+            agent("t3", AgentStatus.Done), agent("t4", AgentStatus.Blocked(BlockedReason.PERMISSION, "Run tests?")),
+        ), 123u)))
+        assertEquals("t4", summary.inbox.first().terminal)
+        assertEquals(4, summary.inbox.size)
+        core.cachedChats[host.id to "t4"] = ChatSnapshot(listOf(
+            ChatEntry("a", null, ChatEntryBody.Agent("Earlier response")),
+            ChatEntry("b", null, ChatEntryBody.User("User secret")),
+            ChatEntry("c", null, ChatEntryBody.Agent("Latest result")),
+        ), ChatStatus.LIVE, null)
+        val detailed = WatchPhone.withCachedDetails(core, summary, false).inbox.first()
+        assertEquals("Run tests?", detailed.requestBody)
+        assertEquals("Latest result", detailed.conversationSummary)
+        val hidden = WatchPhone.withCachedDetails(core, summary, true).inbox.first()
+        assertTrue(hidden.contentHidden)
+        assertEquals("", hidden.requestBody)
+        assertEquals("", hidden.conversationSummary)
+    }
+
+    @Test fun refreshFromTheWatchSchedulesAPullWithoutAcknowledgingMalformedCommands() {
+        androidx.work.testing.WorkManagerTestInitHelper.initializeTestWorkManager(context)
+        val controller = Robolectric.buildService(WatchPhoneService::class.java).create()
+        val service = controller.get()
+        val manager = androidx.work.WorkManager.getInstance(context)
+        val name = "last-known-state:refresh:all"
+        assertTrue(service.onRequest("watch", WatchSummary.REFRESH_PATH, byteArrayOf(9))!!.result.isEmpty())
+        assertTrue(manager.getWorkInfosForUniqueWork(name).get().isEmpty())
+        assertArrayEquals(byteArrayOf(1), service.onRequest("watch", WatchSummary.REFRESH_PATH, byteArrayOf())!!.result)
+        assertEquals(1, manager.getWorkInfosForUniqueWork(name).get().size)
+        controller.destroy()
+    }
+
     @Test fun watchOpenLinkReusesNotificationRoutingAndPreservesWholeAddress() {
         val command = OpenWatchAgent("h1", "remote/t7")
         val intent = command.remoteIntent(context.packageName)
