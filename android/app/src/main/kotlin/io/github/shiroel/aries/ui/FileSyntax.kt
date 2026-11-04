@@ -5,7 +5,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 
-/** Lightweight, page-local highlighting. Unknown formats remain plain text. */
+/** Lightweight code highlighting. Unknown formats remain plain text. */
 internal fun highlightFileCode(text: String, path: String, colors: ColorScheme): AnnotatedString {
     val extension = path.substringAfterLast('.', "").lowercase()
     val hashComments = extension in setOf("py", "sh", "bash", "rb", "yaml", "yml", "toml")
@@ -20,8 +20,7 @@ internal fun highlightFileCode(text: String, path: String, colors: ColorScheme):
     val tokens = Regex("(?<comment>$comment)|(?<string>\"(?:\\\\.|[^\"\\\\]++)*\"|'(?:\\\\.|[^'\\\\\\n]++)*')|(?<number>\\b[0-9]+(?:\\.[0-9]+)?\\b)|(?<word>[A-Za-z_][A-Za-z_0-9]*)")
     return buildAnnotatedString {
         append(text)
-        // Bound styling work even when a single Host line approaches the response budget.
-        for (token in tokens.findAll(text.take(200_000))) {
+        for (token in tokens.findAll(text)) {
             val color = when {
                 token.groups["comment"] != null -> colors.onSurfaceVariant
                 token.groups["string"] != null -> colors.tertiary
