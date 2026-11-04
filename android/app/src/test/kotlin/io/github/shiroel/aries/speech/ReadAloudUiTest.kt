@@ -43,7 +43,7 @@ class ReadAloudUiTest {
         openApp()
         compose.onNodeWithText("home").performClick()
         compose.onNodeWithText("claude").performClick()
-        compose.onNodeWithText(str(R.string.agent_view_chat)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.agent_switch_chat_label)).performClick()
     }
 
     @Test fun responseOnlyReadsWhenTappedAndStopSurvivesLateCallbacksAndStreaming() {
@@ -69,7 +69,7 @@ class ReadAloudUiTest {
         assertTrue(engine.stops > 0)
         compose.onNodeWithTag("read-aloud:reply").performScrollTo().performClick()
         assertEquals("Hello updated", engine.spoken.last())
-        compose.onNodeWithText(str(R.string.agent_view_terminal)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.agent_switch_terminal_label)).performClick()
         compose.runOnIdle { assertTrue(engine.closed) }
     }
     @Test

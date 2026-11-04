@@ -416,6 +416,8 @@
     <string name="agent_open_button">Open</string>
     <string name="agent_view_terminal">term</string>
     <string name="agent_view_chat">chat</string>
+    <string name="agent_switch_terminal_label">Switch to Terminal</string>
+    <string name="agent_switch_chat_label">Switch to Chat</string>
     <!-- Terminal and Chat input history (108) -->
     <string name="input_history_title">Input history</string>
     <string name="input_history_empty">No input history yet.</string>
