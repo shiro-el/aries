@@ -143,13 +143,21 @@ private fun ScreenContent(model: HostsModel, settings: ThemeSettings, terminalDi
                 hostEditor = { host -> if (host.endpoint is Endpoint.Ssh) HostEditSection(model, host) },
             )
         }
-        is Screen.Connecting -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            ConnectionNotice(s.link)
-            if ((s.link.state as? LinkState.Down)?.error is io.github.shiroel.aries.core.CoreException.AuthRejected &&
-                s.host.endpoint is Endpoint.Ssh) {
-                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    HostKeyAuthorization(model, s.host)
+        is Screen.Connecting -> {
+            val authorization: @Composable () -> Unit = {
+                if ((s.link.state as? LinkState.Down)?.error is io.github.shiroel.aries.core.CoreException.AuthRejected &&
+                    s.host.endpoint is Endpoint.Ssh) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        HostKeyAuthorization(model, s.host)
+                    }
                 }
+            }
+            val cached = s.cachedBrowser
+            if (cached != null) {
+                BrowseScreen(cached, onBack = model::back, showHeader = false, hostSections = authorization)
+            } else Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                ConnectionNotice(s.link)
+                authorization()
             }
         }
         is Screen.Browse -> {

@@ -320,6 +320,27 @@ class ReconnectTest {
     }
 
     @Test
+    fun reopeningAHostShowsStoredStructureUntilTheFirstFreshSnapshot() {
+        val core = FakeCore().apply { failWith = CoreException.Unreachable("no route") }
+        val host = core.addHost("home", Endpoint.Ssh("home", 22u, "me"))
+        core.storedStates[host.id] = io.github.shiroel.aries.core.LastKnownState(
+            host.id, emptyList(), 1uL,
+            io.github.shiroel.aries.core.HostStructure(emptyList(), listOf(build), null), 1uL,
+        )
+        start(core)
+        compose.onNodeWithText("home").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("build").assertExists()
+
+        core.terminals = listOf(agent)
+        core.failWith = null
+        compose.runOnIdle { model.foregrounded() }
+        compose.waitForIdle()
+        compose.onNodeWithText("build").assertDoesNotExist()
+        compose.onNodeWithText("claude").assertExists()
+    }
+
+    @Test
     fun comingBackToTheAppReconnectsALineThatDiedInTheBackground() {
         val core = FakeCore().apply { terminals = listOf(build) }
         openBuild(core)

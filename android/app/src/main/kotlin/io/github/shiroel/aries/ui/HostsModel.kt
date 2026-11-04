@@ -66,7 +66,7 @@ data class Message(@StringRes val res: Int, val args: List<Any> = emptyList())
 sealed interface Screen {
     data object Hosts : Screen
     data object Settings : Screen
-    data class Connecting(val host: Host, val link: HostLink) : Screen
+    data class Connecting(val host: Host, val link: HostLink, val cachedBrowser: HostBrowser? = null) : Screen
 
     /** Editing the jump hosts on the way to [host] and the key for each hop. */
     data class JumpHosts(val host: Host, val jumps: List<JumpHost>, val hostKeyId: String?) : Screen
@@ -697,13 +697,21 @@ class HostsModel(
             scope.launch { initialConnectionProblem(host, error, restore != null) }
         }
         browseLink = link
-        val connecting = Screen.Connecting(host, link)
+        val stored = try { core.lastKnownState(host.id) } catch (_: CoreException) { null }
+        val cachedBrowser = stored?.structure?.let { structure ->
+            HostBrowser(host).also { browser ->
+                browser.link = link
+                browser.update(structure)
+                stored.agents.forEach(browser::replaceTerminal)
+            }
+        }
+        val connecting = Screen.Connecting(host, link, cachedBrowser)
         screen = connecting
         status = scope.launch {
             link.keep { conn, _ ->
                 if (screen !== connecting) return@keep
 
-                val browser = HostBrowser(host)
+                val browser = cachedBrowser ?: HostBrowser(host)
                 browser.layoutEditor = LayoutEditor(browser, scope)
                 browser.link = link
                 browser.savedLaunches = conn.savedLaunches()
