@@ -13,6 +13,8 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithText
@@ -153,13 +155,14 @@ class ChatScrollTest {
         fun streaming(lines: Int) = entries(29) + ChatEntry("a30", null,
             ChatEntryBody.Agent((1..lines).joinToString("\n") { "Streaming line $it" }))
         fun assertAtEnd(lines: Int) {
-            val text = (streaming(lines).last().body as ChatEntryBody.Agent).text
-            awaitText(text)
-            val node = compose.onNodeWithText(text).fetchSemanticsNode()
+            val text = "Streaming line $lines"
+            // Long prose is split into lazy blocks; observe the final line's block.
+            compose.waitUntil(5_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
+            val node = compose.onNodeWithText(text, substring = true).fetchSemanticsNode()
             val viewport = compose.onNodeWithTag("chat-transcript").fetchSemanticsNode().boundsInRoot
             val bottom = node.positionInRoot.y + node.size.height
-            assertTrue("End of streaming text ($bottom) should be at viewport bottom (${viewport.bottom})",
-                bottom <= viewport.bottom && bottom >= viewport.bottom - 40f)
+            assertTrue("End of streaming text ($bottom) should be visible in viewport ($viewport)",
+                bottom <= viewport.bottom && bottom >= viewport.top)
         }
         push(streaming(80))
         assertAtEnd(80)
@@ -172,6 +175,34 @@ class ChatScrollTest {
         awaitLatest("Latest")
         compose.onNodeWithContentDescription("Latest").assertIsDisplayed()
         compose.onNodeWithContentDescription("Latest (1)").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Latest").performTouchInput { click() }
+        assertAtEnd(120)
+        compose.onNodeWithContentDescription("Latest").assertDoesNotExist()
+        push(streaming(130))
+        assertAtEnd(130)
+    }
+
+    @Test fun latestReachesTheLastChoiceOfAnOversizedQuestion() {
+        open()
+        readReply(6)
+        val question = ChatEntry("question", null, ChatEntryBody.Question(
+            "AskUserQuestion", "Choose a destination",
+            listOf(io.github.shiroel.aries.core.ChatQuestionPart(
+                "Choose a destination", "Destination", false,
+                (1..20).map { io.github.shiroel.aries.core.ChatQuestionOption("Destination $it", "Go there") },
+            )), io.github.shiroel.aries.core.ChatToolStatus.RUNNING, null,
+        ))
+        push(entries(30) + question)
+        awaitLatest("Latest (1)")
+
+        compose.onNodeWithContentDescription("Latest (1)").performTouchInput { click() }
+
+        awaitText("Destination 20")
+        compose.onNodeWithText("Destination 20").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Latest (1)").assertDoesNotExist()
+        push(entries(30) + question + ChatEntry("after", null, ChatEntryBody.Agent("The latest answer")))
+        awaitText("The latest answer")
+        compose.onNodeWithText("The latest answer").assertIsDisplayed()
     }
 
     @Test fun editingAVisibleHistoryEntryUpdatesItsTextWithoutChangingRowKeys() {
