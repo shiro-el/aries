@@ -14,6 +14,7 @@ import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.*
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -30,6 +31,7 @@ class TasksHomeTest {
     }
     @get:Rule val compose = createComposeRule()
     private val context = ApplicationProvider.getApplicationContext<Context>()
+    private lateinit var model: HostsModel
 
     private val callTime = System.currentTimeMillis().toULong() - 60_000uL
 
@@ -45,7 +47,7 @@ class TasksHomeTest {
         }
         compose.setContent {
             val scope = rememberCoroutineScope()
-            val model = remember { HostsModel(core, scope).apply { start() } }
+            model = remember { HostsModel(core, scope).apply { start() } }
             AriesApp(model, settings)
         }
         compose.waitForIdle()
@@ -85,6 +87,52 @@ class TasksHomeTest {
         compose.onNodeWithTag("task-call:h1/review").assertDoesNotExist()
         compose.onNodeWithTag("tasks-filter-needs").assertTextEquals(context.getString(R.string.tasks_filter_count,
             context.getString(R.string.tasks_filter_needs), 0))
+    }
+
+    // D86: a list-only outage must not stop/reopen the sheet's independent Chat stream or lose its question.
+    @Test fun listFreshnessChangesKeepTheOpenQuestionStreamAlive() {
+        val core = FakeCore().apply {
+            addHost("home", Endpoint.Ssh("home.test", 22u, "me"))
+            terminals = listOf(TerminalInfo("t1", "Question task", "", listOf("codex"), "/repo", "live",
+                AgentStatus.Blocked(BlockedReason.QUESTION, "Color?")))
+            storedStates["h1"] = LastKnownState("h1", terminals, 1_000uL)
+            watchFailures["h1"] = CoreException.Rpc("list_failed", "List failed")
+        }
+        show(core)
+        compose.onNodeWithTag("tasks-filter-needs").performClick()
+        compose.runOnIdle {
+            assertEquals(emptyList<Pair<String, String>>(), core.chatsOpened)
+            core.watchFailures.remove("h1")
+            (model.screen as Screen.Agents).board.links.getValue("h1").retryNow()
+        }
+        compose.waitUntil { core.chatsOpened.isNotEmpty() }
+        val question = ChatEntry("q1", null, ChatEntryBody.Question("request_user_input", "Color?",
+            listOf(ChatQuestionPart("Color?", null, false, listOf(ChatQuestionOption("Blue", null)))), ChatToolStatus.RUNNING, null))
+        compose.runOnIdle { core.pushChat(ChatSnapshot(listOf(question), ChatStatus.LIVE, null)) }
+        compose.onNodeWithContentDescription(context.getString(R.string.chat_question_option_label, "Blue")).assertExists()
+        compose.runOnIdle { core.failTerminalWatch("h1", CoreException.Rpc("list_failed", "List failed")) }
+        compose.waitUntil { (model.screen as Screen.Agents).board.watchErrors.containsKey("h1") }
+        compose.waitForIdle()
+        compose.runOnIdle { assertFalse("The Chat stream survives a Terminal list failure", core.chatStopped) }
+        compose.runOnIdle { (model.screen as Screen.Agents).board.links.getValue("h1").retryNow() }
+        compose.waitUntil { (model.screen as Screen.Agents).board.agents.single().live }
+        compose.runOnIdle {
+            core.failWith = CoreException.Unreachable("offline")
+            (model.screen as Screen.Agents).board.links.getValue("h1").networkChanged()
+        }
+        compose.waitUntil { (model.screen as Screen.Agents).board.links.getValue("h1").state == LinkState.Reconnecting }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertFalse("The Chat stream survives an SSH replacement", core.chatStopped)
+            core.failWith = null
+            (model.screen as Screen.Agents).board.links.getValue("h1").retryNow()
+        }
+        compose.waitUntil { (model.screen as Screen.Agents).board.agents.single().live }
+        compose.onNodeWithContentDescription(context.getString(R.string.chat_question_option_label, "Blue")).performClick()
+        compose.runOnIdle {
+            assertEquals(listOf("h1" to "t1"), core.chatsOpened)
+            assertEquals(listOf(Triple("t1", "q1", listOf(listOf(0u)))), core.answers)
+        }
     }
 
     // D22: a key receipt is not resolution; the same Blocked question must expose Unconfirmed,

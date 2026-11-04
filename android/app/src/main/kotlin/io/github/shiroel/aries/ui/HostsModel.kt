@@ -2206,7 +2206,7 @@ class HostsModel(
     val drawerAgents: List<AgentEntry>
         get() = orderAgents(quickOpenSources.flatMapIndexed { index, source ->
             withAgentSpaces(agentFamily(source.host, source.terminals.filter { it.state == "live" }), source.structure)
-                .map { it.copy(hostOrder = index) }
+                .map { it.copy(hostOrder = index, live = source.live, lastUpdatedMs = source.fetchedAtMs?.toLong()) }
         })
 
     val currentAgentKey: AgentKey?

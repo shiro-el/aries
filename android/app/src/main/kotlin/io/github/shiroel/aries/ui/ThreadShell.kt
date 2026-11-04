@@ -11,6 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -119,8 +120,8 @@ private fun ThreadDrawer(model: HostsModel, navigate: (() -> Unit) -> Unit) {
     val today = LocalDate.now()
     val sections = agents.groupBy { entry ->
         when {
-            entry.key in needs || isWaiting(entry.terminal.agentStatus) -> R.string.thread_section_needs
-            entry.terminal.agentStatus == AgentStatus.Working -> R.string.thread_section_working
+            entry.live && (entry.key in needs || isWaiting(entry.terminal.agentStatus)) -> R.string.thread_section_needs
+            entry.live && entry.terminal.agentStatus == AgentStatus.Working -> R.string.thread_section_working
             entry.terminal.statusMs?.toLong()?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate() == today } == true -> R.string.thread_section_today
             else -> R.string.thread_section_earlier
         }
@@ -200,7 +201,7 @@ private fun ThreadConversationRow(model: HostsModel, entry: AgentEntry, urgent: 
         current -> MaterialTheme.colorScheme.surfaceContainerHighest
         else -> Color.Transparent
     }
-    Column(Modifier.fillMaxWidth().background(tone).semantics { selected = current }
+    Column(Modifier.alpha(if (entry.live) 1f else 0.55f).fillMaxWidth().background(tone).semantics { selected = current }
         .testTag("thread-agent:${entry.host.id}:${entry.terminal.address}")
         .clickable(role = Role.Button, onClick = onOpen).padding(horizontal = 16.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -209,12 +210,12 @@ private fun ThreadConversationRow(model: HostsModel, entry: AgentEntry, urgent: 
         val metadata = listOfNotNull(entry.terminal.currentProgram ?: entry.terminal.argv.firstOrNull()?.substringAfterLast('/'),
             entry.space?.name ?: entry.terminal.cwd.orEmpty().substringAfterLast('/').takeIf { it.isNotBlank() }, entry.host.name).joinToString(" · ")
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            entry.terminal.agentStatus?.let { AgentStatusMark(it, modifier = Modifier.size(12.dp)) }
+            entry.terminal.agentStatus?.let { AgentStatusMark(it, modifier = Modifier.size(12.dp), live = entry.live) }
             Text(metadata, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
         }
-        model.quickOpenSources.firstOrNull { it.host.id == entry.host.id && !it.live }?.let { source ->
-            Text(agentLastSeen(source.fetchedAtMs?.toLong()), style = MaterialTheme.typography.labelSmall,
+        if (!entry.live) {
+            Text(agentLastSeen(entry.lastUpdatedMs), style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (entry.terminal.agentStatus is AgentStatus.Error) Text(stringResource(R.string.agents_waiting_error),
