@@ -196,6 +196,8 @@
     <!-- Remote file browser (90) -->
     <string name="files_open_button">Files</string>
     <string name="files_changed_heading">Changed</string>
+    <string name="files_parent_folder_entry">..</string>
+    <string name="files_parent_folder_button">Parent folder</string>
     <string name="files_folders_heading">Folders</string>
     <string name="files_diff_button">Diff</string>
     <string name="files_full_button">Full file</string>
