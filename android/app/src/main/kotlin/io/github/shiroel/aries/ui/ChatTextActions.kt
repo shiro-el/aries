@@ -51,6 +51,7 @@ import io.github.shiroel.aries.R
 internal fun ChatTextActions(
     text: String,
     onClick: () -> Unit = {},
+    onClickLabel: String? = null,
     /** Observe long presses before clickable spans consume their pointer input. */
     interceptChildLongPress: Boolean = true,
     /** Disclosure headers stay quiet while preserving their long-press text actions. */
@@ -72,6 +73,7 @@ internal fun ChatTextActions(
             interactionSource = null,
             indication = if (showIndication) LocalIndication.current else null,
             onClick = onClick,
+            onClickLabel = onClickLabel,
             onLongClickLabel = actionsLabel,
             onLongClick = if (text.isEmpty()) null else { { menu = true } },
         ))

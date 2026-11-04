@@ -181,8 +181,8 @@ class ChatMarkdownTest {
             core.pushChat(ChatSnapshot(listOf(entry("link", body)), ChatStatus.LIVE, null))
             if (body is ChatEntryBody.Tool) {
                 val expand = str(R.string.chat_tool_expand_label, body.name)
-                compose.waitUntil(5_000) { compose.onAllNodesWithContentDescription(expand).fetchSemanticsNodes().isNotEmpty() }
-                compose.onNodeWithContentDescription(expand).performClick()
+                compose.waitUntil(5_000) { compose.onAllNodes(hasToolAction(expand)).fetchSemanticsNodes().isNotEmpty() }
+                compose.onNode(hasToolAction(expand)).performClick()
             }
             compose.waitUntil(5_000) { compose.onAllNodesWithText(displayed).fetchSemanticsNodes().isNotEmpty() }
             val node = compose.onNodeWithText(displayed)
