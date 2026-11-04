@@ -1,5 +1,6 @@
 package io.github.shiroel.aries.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,6 +18,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
 import io.github.shiroel.aries.R
 import java.util.UUID
 
@@ -60,8 +62,10 @@ internal fun QueuedMessageBubble(message: QueuedChatMessage, chat: ChatModel) {
             if (message.draft.isNotEmpty()) Text(message.draft, style = MaterialTheme.typography.bodyLarge)
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 message.attachments.forEach { attachment ->
-                    Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.surfaceVariant) {
-                        Text(attachment.name, Modifier.padding(8.dp), style = MaterialTheme.typography.labelLarge)
+                    Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.surfaceVariant,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+                        Text(attachment.name, Modifier.padding(8.dp), style = MaterialTheme.typography.labelLarge,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }

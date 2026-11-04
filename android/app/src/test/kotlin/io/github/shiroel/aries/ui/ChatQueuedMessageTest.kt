@@ -65,8 +65,9 @@ class ChatQueuedMessageTest {
         send("review the patch")
         compose.onNodeWithText("review the patch").assertIsDisplayed()
         screenshot("waiting")
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).performTextInput("keep the newer draft")
         compose.onNodeWithContentDescription("Cancel queued message").performClick()
-        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("review the patch")
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("review the patch\n\nkeep the newer draft")
         core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
         compose.waitForIdle()
         assertEquals(emptyList<Pair<String, String>>(), connection.typed)
@@ -75,7 +76,7 @@ class ChatQueuedMessageTest {
         // Editing and explicitly sending the recovered draft includes its file once.
         compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
         compose.waitForIdle()
-        assertEquals(listOf("t1" to "review the patch '/host/it'\"'\"'s file.jpg'"), connection.typed)
+        assertEquals(listOf("t1" to "review the patch\n\nkeep the newer draft '/host/it'\"'\"'s file.jpg'"), connection.typed)
     }
 
     @Test fun deliveredMessagesReplaceTheirBubblesOnceEvenWhenTheTextIsRepeated() {
