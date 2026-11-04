@@ -416,7 +416,8 @@ class ChatScreenTest {
         compose.onNodeWithText("Choose Blue").assertExists()
         compose.onNodeWithText("2").assertExists()
 
-        val blue = compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue"))
+        // Accessibility names include the option description after the answer label.
+        val blue = compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue"), substring = true)
         // The header and composer can put the second option below the viewport.
         // Bring it into view before injecting the single tap, just as a user would.
         blue.performScrollTo().assertIsDisplayed().performClick()
@@ -429,7 +430,7 @@ class ChatScreenTest {
             ChatSnapshot(listOf(color(ChatToolStatus.DONE, "\"Which color do you prefer?\"=\"Blue\"")), ChatStatus.LIVE, null),
         )
         compose.waitForIdle()
-        compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue")).assertDoesNotExist()
+        compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue"), substring = true).assertDoesNotExist()
         compose.onNode(hasText("Blue") and isSelected()).assertExists()
     }
 
@@ -457,7 +458,7 @@ class ChatScreenTest {
         assertTrue("nothing is sent before every question has a pick", core.answers.isEmpty())
 
         for (label in listOf("M", "Cheese", "Ham", "Olive", "Ham")) {
-            compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, label)).performClick()
+            compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, label), substring = true).performClick()
         }
         compose.waitForIdle()
         assertTrue(core.answers.isEmpty())
@@ -473,12 +474,12 @@ class ChatScreenTest {
         core.pushChat(ChatSnapshot(listOf(color(ChatToolStatus.RUNNING)), ChatStatus.LIVE, null))
         compose.waitForIdle()
         core.answerFailure = CoreException.AnswerRefused(AnswerProblem.ANSWERED, "")
-        compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Red")).performScrollTo().assertIsDisplayed().performClick()
+        compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Red"), substring = true).performScrollTo().assertIsDisplayed().performClick()
         compose.waitForIdle()
         compose.onNodeWithText(str(R.string.chat_answer_answered)).assertExists()
 
         core.answerFailure = CoreException.AnswerRefused(AnswerProblem.GONE, "")
-        compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Red")).performScrollTo().assertIsDisplayed().performClick()
+        compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Red"), substring = true).performScrollTo().assertIsDisplayed().performClick()
         compose.waitForIdle()
         compose.onNodeWithText(str(R.string.chat_answer_gone)).assertExists()
     }
