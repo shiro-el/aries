@@ -4,6 +4,7 @@ import io.github.shiroel.aries.core.CallAnswerState
 import io.github.shiroel.aries.core.HerdrCoreState
 import androidx.annotation.StringRes
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github.shiroel.aries.HttpBeaconFetcher
@@ -1541,7 +1542,7 @@ class HostsModel(
     }
 
     /** One owner per full Host/Terminal identity, independent of navigation and SSH lines. */
-    private val conversations = mutableMapOf<AgentKey, ChatModel>()
+    private val conversations = mutableStateMapOf<AgentKey, ChatModel>()
 
     private fun conversation(link: HostLink, terminal: TerminalInfo): ChatModel =
         conversations.getOrPut(AgentKey(link.host.id, terminal.address)) {

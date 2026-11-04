@@ -2,7 +2,6 @@ package io.github.shiroel.aries.ui
 
 import android.content.Context
 import androidx.compose.runtime.*
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.core.app.ApplicationProvider
@@ -181,6 +180,42 @@ class ThreadWaitingTest {
         compose.onNode(hasText("Next request") and hasAnyAncestor(isDialog())).assertExists()
         compose.onNodeWithText(context.getString(R.string.thread_open_conversation)).performClick()
         compose.runOnIdle { assertEquals("t3", (model.screen as Screen.Chat).chat.terminal.address) }
+    }
+
+    // Regression D68: the first transcript fetched by a waiting preview must update
+    // the sheet/pill title and stay consistent when that conversation is opened.
+    @Test fun firstWaitingPreviewUpdatesTheConversationTitleAcrossThreadSurfaces() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val core = FakeCore().apply {
+            addHost("home", Endpoint.Ssh("home.test", 22u, "me"))
+            savedView = AgentView.CHAT
+            terminals = listOf(
+                TerminalInfo("t1", "Current", "", listOf("claude"), "/repo", "live", AgentStatus.Working),
+                TerminalInfo("t2", "Terminal title", "", listOf("claude"), "/repo", "live", AgentStatus.Blocked(BlockedReason.QUESTION, "Scope?")))
+        }
+        val previewCore = FakeCore()
+        val delayedCore = object : AriesCoreInterface by core {
+            override fun watchChat(hostId: String, terminal: String, cursor: String?): ChatWatch =
+                if (terminal == "t2") previewCore.watchChat(hostId, terminal, cursor) else core.watchChat(hostId, terminal, cursor)
+        }
+        val settings = ThemeSettings(context.getSharedPreferences("thread-preview-title", Context.MODE_PRIVATE)).apply {
+            chooseLayout(AppLayout.THREAD)
+        }
+        compose.setContent {
+            val scope = rememberCoroutineScope()
+            val model = remember { HostsModel(delayedCore, scope) }
+            AriesApp(model, settings)
+        }
+        compose.onNodeWithText("home").performClick()
+        compose.onNodeWithText("Current").performClick()
+        compose.onNodeWithTag("thread-waiting-pill").performClick()
+        compose.runOnIdle { previewCore.pushChat(ChatSnapshot(listOf(ChatEntry("first-message", null,
+            ChatEntryBody.User("Investigate the reconnect failure"))), ChatStatus.LIVE, null)) }
+        compose.onNode(hasText("Investigate the reconnect failure") and hasAnyAncestor(isDialog())).assertExists()
+        compose.onNodeWithText(context.getString(R.string.thread_open_conversation)).performClick()
+        compose.onNode(hasText("Investigate the reconnect failure") and hasClickAction()).assertExists()
+        compose.openConsoleDrawer()
+        compose.onNodeWithTag("thread-agent:h1:t2").assertTextContains("Investigate the reconnect failure")
     }
 
 }
