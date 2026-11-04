@@ -1,5 +1,10 @@
 package io.github.shiroel.aries.ui
 
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.test.captureToImage
+import android.graphics.Bitmap
+import java.io.File
+import org.robolectric.annotation.GraphicsMode
 import androidx.compose.ui.test.onNodeWithContentDescription
 
 import androidx.compose.material3.MaterialTheme
@@ -15,6 +20,7 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -66,6 +72,9 @@ class PresetsScreenTest {
     }
 
     private fun openForm() {
+        if (compose.onAllNodesWithTag("terminal-screen").fetchSemanticsNodes().isNotEmpty()) {
+            compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
+        }
         compose.onNodeWithContentDescription(str(R.string.host_create_title)).performClick()
         compose.onNode(hasText(str(R.string.launch_open_button)) and hasAnyAncestor(hasTestTag("host-create-sheet"))).performClick()
     }
@@ -169,6 +178,7 @@ class PresetsScreenTest {
         assertEquals(LaunchRequest("-m gpt-5", null, null, null, AgentPreset.CODEX), core.connection!!.launched.last())
     }
 
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Test
     fun savesEditsAndDeletesALaunchThatRunsInOneTap() {
         val core = FakeCore().apply { structure = desktop }
@@ -196,6 +206,7 @@ class PresetsScreenTest {
         assertEquals(listOf(request), core.connection!!.launched)
 
         // Edit: same id, new name and arguments.
+        compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         openForm()
         compose.onNodeWithTag("saved_edit:${saved.id}").performClick()
         compose.onNodeWithTag("launch_command").performTextClearance()
@@ -212,6 +223,15 @@ class PresetsScreenTest {
         compose.onNodeWithTag("saved_delete:${saved.id}").performClick()
         compose.waitForIdle()
         assertEquals(emptyList<SavedLaunch>(), core.savedLaunches)
+        System.getenv("ARIES_TASK_RENDER_DIR")?.let { directory ->
+            File(directory, "saved-launch-undo.png").outputStream().use {
+                compose.onNodeWithTag("launch-dialog").captureToImage().asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it)
+            }
+        }
+        // Undo must restore the same id so an existing pinned shortcut still resolves.
+        click(R.string.launch_undo_button)
+        assertEquals(listOf(SavedLaunch(saved.id, "Claude opus", request.copy(command = "--model opus"))), core.savedLaunches)
+        compose.onNodeWithTag("saved_delete:${saved.id}").performClick()
         click(R.string.cancel_button)
         compose.onNodeWithTag("saved_run:${saved.id}").assertDoesNotExist()
     }

@@ -51,17 +51,22 @@ internal class LocalhostPreview {
 internal fun rememberLocalhostPreview(link: HostLink?, output: String, address: String): LocalhostPreview {
     val preview = remember(link, address) { LocalhostPreview() }
     val enabled = link?.host?.endpoint is Endpoint.Ssh && !address.contains('/')
-    val connection = link?.connection
+    val connection = link?.connections?.collectAsState()?.value
     LaunchedEffect(preview, enabled, connection, output) {
         if (enabled && connection != null && output.isNotEmpty()) {
             preview.ports = (connection.previewPorts(output) + preview.ports).distinct().take(24)
         }
     }
-    LaunchedEffect(preview, enabled, connection) {
-        if (enabled && connection != null) {
-            // Missing tools and Hosts which forbid machine.exec quietly skip this source.
-            try { preview.ports = (preview.ports + connection.previewListeningPorts()).distinct().take(24) }
-            catch (_: io.github.shiroel.aries.core.CoreException) { }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(preview, enabled, connection, preview.selected != null, lifecycle) {
+        if (enabled && connection != null) lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            do {
+                // A successful scan replaces stale hints, including stopped servers.
+                // Missing machine.exec/tools leaves transcript-derived candidates available.
+                try { preview.ports = connection.previewListeningPorts().distinct().take(24) }
+                catch (_: io.github.shiroel.aries.core.CoreException) { }
+                delay(30_000)
+            } while (true)
         }
     }
     return preview
@@ -72,7 +77,7 @@ internal fun rememberLocalhostPreview(link: HostLink?, output: String, address: 
 internal fun rememberChatLocalhostPreview(link: HostLink?, entries: List<ChatEntry>, address: String): LocalhostPreview {
     val preview = rememberLocalhostPreview(link, "", address)
     val parsed = remember(preview) { mutableMapOf<String, String>() }
-    val connection = link?.connection
+    val connection = link?.connections?.collectAsState()?.value
     val latestEntries by rememberUpdatedState(entries)
     LaunchedEffect(preview, connection, address) {
         if (link?.host?.endpoint !is Endpoint.Ssh || address.contains('/') || connection == null) return@LaunchedEffect
@@ -107,7 +112,7 @@ internal fun PreviewChips(preview: LocalhostPreview) {
     }
 }
 
-/** The browser only exists while STARTED; disposal waits for tunnel cancellation. */
+/** The tunnel follows STARTED; the browser and frozen capture live until the preview closes. */
 @Composable
 internal fun LocalhostPreviewBrowser(
     preview: LocalhostPreview,
@@ -126,12 +131,13 @@ internal fun LocalhostPreviewBrowser(
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }
     }
-    var forward by remember(port, link?.connection) { mutableStateOf<PreviewForward?>(null) }
-    var failed by remember(port, link?.connection) { mutableStateOf(false) }
+    val connection = link?.connections?.collectAsState()?.value
+    var forward by remember(port, connection) { mutableStateOf<PreviewForward?>(null) }
+    var failed by remember(port, connection) { mutableStateOf(false) }
     var retry by remember { mutableIntStateOf(0) }
-    val connection = link?.connection
-    var capture by remember(port, connection) { mutableStateOf<PreviewCapture?>(null) }
-    var captureFailed by remember(port, connection) { mutableStateOf(false) }
+    var capture by remember(port) { mutableStateOf<PreviewCapture?>(null) }
+    var captureFailed by remember(port) { mutableStateOf(false) }
+    var origin by remember(port) { mutableStateOf<String?>(null) }
     LaunchedEffect(lifecycle, port, connection, retry) {
         if (connection == null) return@LaunchedEffect
         // Cancel directly on STOP; a stopped Activity may no longer recompose.
@@ -140,6 +146,7 @@ internal fun LocalhostPreviewBrowser(
             var opened: PreviewForward? = null
             try {
                 opened = withTimeout(10_000) { connection.openPreview(port) }
+                origin = opened.url()
                 forward = opened
                 kotlinx.coroutines.awaitCancellation()
             } catch (_: TimeoutCancellationException) {
@@ -197,15 +204,18 @@ internal fun LocalhostPreviewBrowser(
             Text(stringResource(R.string.preview_auto_refresh), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
             Switch(checked = preview.autoRefresh, onCheckedChange = { preview.autoRefresh = it })
         }
-        val tunnel = forward
-        if (started && tunnel != null) {
-            key(tunnel) {
-                RestrictedPreviewWebView(tunnel.url(), preview.desktop, Modifier.fillMaxWidth().weight(1f)) { webView = it }
+        val currentOrigin = origin
+        if (currentOrigin != null) {
+            key(port) {
+                RestrictedPreviewWebView(currentOrigin, preview.desktop, Modifier.fillMaxWidth().weight(1f),
+                    active = started && forward != null, forward = forward,
+                    onReconnect = { retry++ }, onView = { webView = it })
             }
-        } else if (failed || connection == null) {
+        }
+        if (failed && connection != null) {
             Text(stringResource(R.string.preview_failed), Modifier.padding(12.dp))
-            TextButton(onClick = { link?.retryNow(); retry++ }) { Text(stringResource(R.string.preview_retry)) }
-        } else if (started) {
+            TextButton(onClick = { link.retryNow(); retry++ }) { Text(stringResource(R.string.preview_retry)) }
+        } else if (started && forward == null && connection != null) {
             Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 CircularProgressIndicator()
                 Text(stringResource(R.string.preview_loading), Modifier.padding(top = 12.dp))
@@ -225,19 +235,35 @@ internal fun previewOriginAllows(origin: String, candidate: String): Boolean = t
 } catch (_: Exception) { false }
 
 @Composable
-private fun RestrictedPreviewWebView(origin: String, desktop: Boolean, modifier: Modifier, onView: (WebView?) -> Unit) {
+private fun RestrictedPreviewWebView(
+    origin: String, desktop: Boolean, modifier: Modifier, active: Boolean, forward: PreviewForward?,
+    onReconnect: () -> Unit, onView: (WebView?) -> Unit,
+) {
     val context = LocalContext.current
     val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
-    var state by remember(origin) { mutableStateOf(PreviewPageState.LOADING) }
-    var status by remember(origin) { mutableStateOf<Int?>(null) }
-    var navigation by remember(origin) { mutableIntStateOf(0) }
-    var currentView by remember(origin) { mutableStateOf<WebView?>(null) }
+    var state by remember { mutableStateOf(PreviewPageState.LOADING) }
+    var status by remember { mutableStateOf<Int?>(null) }
+    var navigation by remember { mutableIntStateOf(0) }
+    var currentView by remember { mutableStateOf<WebView?>(null) }
+    val currentOrigin by rememberUpdatedState(origin)
+    val reconnect by rememberUpdatedState(onReconnect)
+    val isActive by rememberUpdatedState(active)
+    var loadedOrigin by remember { mutableStateOf(origin) }
+    var reconnectAttempted by remember { mutableStateOf(false) }
+    var restoreScroll by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     fun loading() { status = null; state = PreviewPageState.LOADING; navigation++ }
-    LaunchedEffect(origin, state, navigation) {
-        if (state == PreviewPageState.LOADING) {
+    LaunchedEffect(origin, state, navigation, active) {
+        if (active && state == PreviewPageState.LOADING) {
             delay(10_000)
             state = PreviewPageState.TIMEOUT
             currentView?.stopLoading()
+        }
+    }
+    LaunchedEffect(forward) {
+        // A reopened tunnel can reuse its address; recover the retained error page too.
+        if (forward != null && state in setOf(PreviewPageState.FAILED, PreviewPageState.TIMEOUT)) {
+            loading()
+            currentView?.reload()
         }
     }
     // Native WebView drawing must stay below the preview title and close button.
@@ -258,14 +284,20 @@ private fun RestrictedPreviewWebView(origin: String, desktop: Boolean, modifier:
                 webViewClient = object : WebViewClient() {
                     override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) { loading() }
                     override fun onPageCommitVisible(view: WebView, url: String?) {
-                        if (state == PreviewPageState.LOADING) state = PreviewPageState.READY
+                        if (state == PreviewPageState.LOADING) { state = PreviewPageState.READY; reconnectAttempted = false }
                     }
                     override fun onPageFinished(view: WebView, url: String?) {
                         if (state == PreviewPageState.LOADING) state = PreviewPageState.READY
+                        restoreScroll?.let { (x, y) -> view.scrollTo(x, y); restoreScroll = null }
                     }
                     override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
                         if (request.isForMainFrame) {
+                            if (!isActive) return
                             state = if (error.errorCode == ERROR_TIMEOUT) PreviewPageState.TIMEOUT else PreviewPageState.FAILED
+                            if (!reconnectAttempted && error.errorCode in listOf(ERROR_CONNECT, ERROR_IO)) {
+                                reconnectAttempted = true
+                                reconnect()
+                            }
                         }
                     }
                     override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: WebResourceResponse) {
@@ -273,20 +305,28 @@ private fun RestrictedPreviewWebView(origin: String, desktop: Boolean, modifier:
                     }
                     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                         val url = request.url.toString()
-                        if (previewOriginAllows(origin, url)) return false
+                        if (previewOriginAllows(currentOrigin, url)) return false
                         if (request.isForMainFrame && request.hasGesture() && request.url.scheme in listOf("http", "https")) {
                             uriHandler.openUri(url)
                         }
                         return true
                     }
                     override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
-                        if (previewOriginAllows(origin, request.url.toString())) null
+                        if (previewOriginAllows(currentOrigin, request.url.toString())) null
                         else WebResourceResponse("text/plain", "utf-8", 403, "Blocked", emptyMap(), ByteArrayInputStream(byteArrayOf()))
                 }
                 loadUrl(origin)
                 onView(this)
             }
         }, update = { view ->
+            if (loadedOrigin != origin) {
+                val previous = view.url
+                val suffix = previous?.takeIf { previewOriginAllows(loadedOrigin, it) }?.removePrefix(loadedOrigin.trimEnd('/')) ?: "/"
+                restoreScroll = view.scrollX to view.scrollY
+                loadedOrigin = origin
+                loading()
+                view.loadUrl(origin.trimEnd('/') + suffix)
+            }
             val default = WebSettings.getDefaultUserAgent(context)
             val agent = if (desktop) default.replace("; wv", "").replace("Mobile", "").replace("Android", "X11; Linux x86_64") else default
             if (view.settings.userAgentString != agent) {
@@ -302,7 +342,7 @@ private fun RestrictedPreviewWebView(origin: String, desktop: Boolean, modifier:
             view.webViewClient = WebViewClient()
             view.destroy()
         })
-        if (state != PreviewPageState.READY) {
+        if (active && state != PreviewPageState.READY) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surfaceVariant) {
                 Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally) {
@@ -316,7 +356,7 @@ private fun RestrictedPreviewWebView(origin: String, desktop: Boolean, modifier:
                             else -> stringResource(R.string.preview_page_failed)
                         }
                         Text(message)
-                        TextButton(onClick = { loading(); currentView?.reload() }) { Text(stringResource(R.string.preview_retry)) }
+                        TextButton(onClick = { reconnectAttempted = false; loading(); currentView?.reload(); reconnect() }) { Text(stringResource(R.string.preview_retry)) }
                     }
                 }
             }

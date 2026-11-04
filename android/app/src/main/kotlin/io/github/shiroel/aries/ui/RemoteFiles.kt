@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -24,7 +25,22 @@ import io.github.shiroel.aries.core.GitFile
 import io.github.shiroel.aries.core.HostConnection
 import io.github.shiroel.aries.core.RemoteDirectory
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+
+/** A visited folder owns its listing, expansion and reading position until Files closes. */
+private class FolderView {
+    var directory by mutableStateOf<RemoteDirectory?>(null)
+    var loading by mutableStateOf(true)
+    var failed by mutableStateOf(false)
+    var subfolders by mutableStateOf<Map<String, RemoteDirectory>>(emptyMap())
+    var expanded by mutableStateOf<Set<String>>(emptySet())
+    var treeLoading by mutableStateOf<Set<String>>(emptySet())
+    var treeFailed by mutableStateOf<Set<String>>(emptySet())
+    var connection: HostConnection? = null
+    var revision = -1
+    val scroll = LazyListState()
+}
 
 /** Read-only files and changes on the current Terminal’s Host. */
 @Composable
@@ -38,14 +54,16 @@ fun RemoteFilesScreen(
 ) {
     val initialFolder = initialLocation?.path?.substringBeforeLast('/')?.ifEmpty { "/" }
     var folder by remember(address, initialLocation) { mutableStateOf(initialFolder) }
-    var startingFolder by remember(address, initialLocation) { mutableStateOf(initialFolder) }
-    var directory by remember(address, initialLocation) { mutableStateOf<RemoteDirectory?>(null) }
+    val folders = remember(address, initialLocation) { mutableMapOf<String?, FolderView>() }
+    val view = folders.getOrPut(folder) { FolderView() }
+    var directory by view::directory
+    var loading by view::loading
+    var failed by view::failed
+    var history by remember(address, initialLocation) { mutableStateOf<List<String?>>(emptyList()) }
     var file by remember(address, initialLocation) { mutableStateOf(initialLocation?.path) }
     val viewerSettings = rememberFileViewerSettings()
     val wrap = viewerSettings.wrap
     var retry by remember { mutableIntStateOf(0) }
-    var loading by remember { mutableStateOf(true) }
-    var failed by remember { mutableStateOf(false) }
     var changes by remember(connection, address) { mutableStateOf<GitChanges?>(null) }
     var loadedRevision by remember(connection, address) { mutableIntStateOf(-1) }
     val requestedRevision = retry
@@ -59,23 +77,32 @@ fun RemoteFilesScreen(
     val showingDiff = changedFile != null && !fullFile && !mediaFile
     val showingMarkup = markupFile && preview && !showingDiff
     val scope = rememberCoroutineScope()
-    var subfolders by remember(address, directory?.path, retry) { mutableStateOf<Map<String, RemoteDirectory>>(emptyMap()) }
-    var expanded by remember(address, directory?.path, retry) { mutableStateOf<Set<String>>(emptySet()) }
-    var treeLoading by remember(address, directory?.path, retry) { mutableStateOf<Set<String>>(emptySet()) }
-    var treeFailed by remember(address, directory?.path, retry) { mutableStateOf<Set<String>>(emptySet()) }
+    var subfolders by view::subfolders
+    var expanded by view::expanded
+    var treeLoading by view::treeLoading
+    var treeFailed by view::treeFailed
     val tree = directory?.let { flattenFileTree(it, subfolders, expanded) }.orEmpty()
     val currentFolder = directory?.path ?: folder
     val parentFolder = currentFolder?.takeUnless { it == "/" }?.substringBeforeLast('/')?.ifEmpty { "/" }
-    val canGoUp = currentFolder != startingFolder && parentFolder != null
+    val canGoUp = history.isNotEmpty()
+    fun navigateFolder(path: String) {
+        if (path != currentFolder) { history = history + listOf(folder); folder = path }
+        file = null
+    }
+    val treeJobs = remember(view) { mutableListOf<Job>() }
+    DisposableEffect(connection, view, retry) {
+        onDispose { treeJobs.forEach { it.cancel() }; treeJobs.clear() }
+    }
     fun toggleFolder(path: String) {
+        val conn = connection ?: return
         if (path in treeLoading) return
         if (path in expanded) { expanded = expanded - path; return }
         if (path in subfolders) { expanded = expanded + path; return }
         treeLoading = treeLoading + path
         treeFailed = treeFailed - path
-        scope.launch {
+        treeJobs += scope.launch {
             try {
-                val child = checkNotNull(connection).listFiles(address, path)
+                val child = conn.listFiles(address, path)
                 subfolders = subfolders + (path to child)
                 expanded = expanded + path
             } catch (e: CancellationException) { throw e }
@@ -84,8 +111,9 @@ fun RemoteFilesScreen(
         }
     }
     LaunchedEffect(connection, address, requestedRevision) {
+        if (connection == null) return@LaunchedEffect
         gitError = null
-        try { changes = checkNotNull(connection).gitChanges(address) }
+        try { changes = connection.gitChanges(address) }
         catch (e: CancellationException) { throw e }
         catch (e: Exception) { changes = null; gitError = e.message ?: e.toString() }
         finally { loadedRevision = requestedRevision }
@@ -94,24 +122,24 @@ fun RemoteFilesScreen(
     fun navigateBack() {
         when {
             file != null -> backToFolder()
-            canGoUp -> folder = parentFolder
+            canGoUp -> { folder = history.last(); history = history.dropLast(1) }
             else -> onClose()
         }
     }
     BackHandler(onBack = ::navigateBack)
-    LaunchedEffect(connection, address, folder, file, retry, changesLoaded) {
-        if (!changesLoaded) return@LaunchedEffect
+    LaunchedEffect(connection, address, folder, retry) {
+        if (connection == null || view.connection === connection && view.revision == retry) return@LaunchedEffect
         loading = true
         failed = false
         try {
-            if (file == null) {
-                // Failed navigation must use the requested path, never a stale listing.
-                directory = null
-                val result = checkNotNull(connection).listFiles(address, folder ?: startingFolder)
-                // Keep the exit anchor stable while navigating; accept the Host's canonical path.
-                if (startingFolder == null || startingFolder == folder) startingFolder = result.path
-                directory = result
-            }
+            val result = connection.listFiles(address, folder)
+            directory = result
+            // Refresh children on a new connection/revision; Back alone keeps the tree intact.
+            subfolders = emptyMap()
+            expanded = emptySet()
+            treeFailed = emptySet()
+            view.connection = connection
+            view.revision = retry
         } catch (e: CancellationException) { throw e }
         catch (_: Exception) { failed = true }
         finally { loading = false }
@@ -121,8 +149,8 @@ fun RemoteFilesScreen(
             FilesHeader(
                 path = file ?: currentFolder.orEmpty(), isFile = file != null, canGoUp = canGoUp,
                 onBack = ::navigateBack, onClose = onClose,
-                onFolder = { path -> folder = path; backToFolder() },
-                onRefresh = { retry++ }, refreshing = loading || !changesLoaded,
+                onFolder = ::navigateFolder,
+                onRefresh = { retry++ }, refreshing = connection == null || file == null && loading,
                 diffAvailable = changedFile != null && !mediaFile, fullFile = fullFile, onFullFile = { fullFile = !fullFile },
                 wrap = wrap, onWrap = if (file != null && !showingMarkup && !mediaFile) ({ viewerSettings.chooseWrap(!wrap) }) else null,
                 onSend = if (file != null && !showingDiff && onSend != null) ({ onSend(quotedFileReference(file!!)) }) else null,
@@ -136,12 +164,13 @@ fun RemoteFilesScreen(
             SingleChoiceChip(selected = !preview, onClick = { preview = false }, label = { Text(stringResource(R.string.files_markup_source)) })
         }
         when {
-            !changesLoaded || loading -> Text(stringResource(R.string.files_loading))
+            connection == null || file == null && loading && directory == null -> Text(stringResource(R.string.files_loading))
             file == null -> {
                 val entries = directory?.entries.orEmpty()
                 val parentLabel = stringResource(R.string.files_parent_folder_button)
-                LazyColumn(Modifier.weight(1f).testTag("files-tree")) {
+                LazyColumn(Modifier.weight(1f).testTag("files-tree"), state = view.scroll) {
                     item {
+                        if (!changesLoaded) Text(stringResource(R.string.files_loading))
                         gitError?.let { Text(stringResource(R.string.git_error, it), color = MaterialTheme.colorScheme.error) }
                         when {
                             changes?.notRepository == true -> Text(stringResource(R.string.git_not_repository))
@@ -176,7 +205,7 @@ fun RemoteFilesScreen(
                             FileTreeRow(
                                 name = stringResource(R.string.files_parent_folder_entry),
                                 folderIcon = R.drawable.ic_folder_up,
-                                modifier = Modifier.clickable(role = Role.Button) { folder = parent }
+                                modifier = Modifier.clickable(role = Role.Button) { navigateFolder(parent) }
                                     .semantics { contentDescription = parentLabel },
                             )
                             HorizontalDivider()
@@ -205,7 +234,6 @@ fun RemoteFilesScreen(
                     }
                 }
             }
-            failed -> Text(stringResource(R.string.files_failed), color = MaterialTheme.colorScheme.error)
             showingDiff -> GitFileDiff(connection, address, changes!!.cwd, changedFile, retry, wrap, onDiffSend)
             showingMarkup -> key(connection, address, file, retry) {
                 RemoteMarkdownPreview(connection, address, file!!, Modifier.weight(1f))
@@ -216,7 +244,7 @@ fun RemoteFilesScreen(
             }
             else -> key(connection, address, file, retry) {
                 RemoteTextFile(connection, address, file!!,
-                    initialLocation?.takeIf { it.path == file }?.line ?: 1uL, wrap, onSend)
+                    initialLocation?.takeIf { it.path == file }?.line ?: 1uL, wrap, onSend, onRefresh = { retry++ })
             }
         }
     }
@@ -272,8 +300,7 @@ internal fun RemoteFilesAccess(model: HostsModel, content: @Composable () -> Uni
         if (model.screen === screen) {
             model.switchView(io.github.shiroel.aries.core.AgentView.CHAT)
             (model.screen as? Screen.Chat)?.chat?.let { chat ->
-                chat.draft = if (diff && chat.draft.isNotBlank()) chat.draft + "\n\n" + reference
-                    else appendFileReference(chat.draft, reference)
+                chat.appendDraft(reference, separator = if (diff && chat.draft.isNotBlank()) "\n\n" else "\n")
             }
         }
         open = false
@@ -294,17 +321,18 @@ internal fun RemoteFilesAccess(model: HostsModel, content: @Composable () -> Uni
             if (noFolder) Column(Modifier.padding(16.dp)) {
                 Text(stringResource(R.string.files_no_folder))
                 ActionIcon(R.drawable.ic_x, R.string.files_close_button, onClick = { open = false })
-            } else RemoteFilesScreen(link.connection, terminal.address, { open = false },
-                initialLocation = location,
-                onSend = if (terminal.agentStatus == null) null else { reference -> sendReference(reference, false) },
-                onDiffSend = if (terminal.agentStatus == null) null else { reference -> sendReference(reference, true) },
-            )
+            } else Column(Modifier.fillMaxSize()) {
+                val connection by link.connections.collectAsState()
+                ConnectionNotice(link)
+                RemoteFilesScreen(connection, terminal.address, { open = false },
+                    initialLocation = location,
+                    onSend = if (terminal.agentStatus == null) null else { reference -> sendReference(reference, false) },
+                    onDiffSend = if (terminal.agentStatus == null) null else { reference -> sendReference(reference, true) },
+                )
+            }
         }
     }
 }
-
-internal fun appendFileReference(draft: String, reference: String): String =
-    if (draft.isEmpty()) reference else "$draft\n$reference"
 
 internal val LocalOpenFiles = staticCompositionLocalOf<(() -> Unit)?> { null }
 

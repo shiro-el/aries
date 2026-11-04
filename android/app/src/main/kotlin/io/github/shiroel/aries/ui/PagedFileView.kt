@@ -31,7 +31,7 @@ import kotlinx.coroutines.withContext
 @Composable
 internal fun ColumnScope.RemoteTextFile(
     connection: HostConnection?, address: String, path: String, initialLine: ULong,
-    wrap: Boolean, onSend: ((String) -> Unit)?,
+    wrap: Boolean, onSend: ((String) -> Unit)?, onRefresh: () -> Unit,
 ) {
     var first by remember { mutableStateOf<RemoteFilePage?>(null) }
     var error by remember { mutableStateOf<Int?>(null) }
@@ -77,7 +77,7 @@ internal fun ColumnScope.RemoteTextFile(
         first == null -> Text(stringResource(R.string.files_loading))
         else -> {
             unavailable?.let { Text(stringResource(R.string.files_line_unavailable, it.toLong())) }
-            PagedFileLines(first!!, path, wrap, onSend) { offset -> checkNotNull(connection).readFilePage(address, path, offset, 200u) }
+            PagedFileLines(first!!, path, wrap, onSend, onRefresh) { offset -> checkNotNull(connection).readFilePage(address, path, offset, 200u) }
         }
     }
 }
@@ -88,13 +88,15 @@ internal fun LargeFileNotice(onOpen: () -> Unit) {
     TextButton(onClick = onOpen) { Text(stringResource(R.string.files_large_open)) }
 }
 
-private data class TextPage(val first: Int, val lines: List<String>, val starts: List<Int>, val code: AnnotatedString) {
+private data class SearchPage(val first: Int, val last: Int, val matches: List<Int>)
+
+private data class TextPage(val first: Int, val lines: List<String>, val starts: List<Int>, val code: AnnotatedString, val nextLexer: FileLexerState?) {
     val last get() = first + lines.size - 1
     val chars get() = lines.sumOf { it.length }
     operator fun contains(line: Int) = line in first..last
 }
 
-private suspend fun textPage(page: RemoteFilePage, path: String, colors: ColorScheme): TextPage = withContext(Dispatchers.Default) {
+private suspend fun textPage(page: RemoteFilePage, path: String, colors: ColorScheme, lexer: FileLexerState?): TextPage = withContext(Dispatchers.Default) {
     check(page.first <= Int.MAX_VALUE.toULong() && page.lines <= Int.MAX_VALUE.toULong())
     if ('\u0000' in page.text) throw CoreException.Rpc("not_text", "Binary file")
     val lines = if (page.text.isEmpty()) emptyList() else page.text.split('\n').let {
@@ -103,25 +105,32 @@ private suspend fun textPage(page: RemoteFilePage, path: String, colors: ColorSc
     check(page.last + 1uL == page.first + lines.size.toULong())
     var offset = 0
     val starts = lines.map { line -> offset.also { offset += line.length + 1 } }
-    TextPage(page.first.toInt(), lines, starts, highlightFileCode(page.text, path, colors))
+    // Without a known prefix, plain text is safer than guessing we start outside a comment/string.
+    val highlighted = lexer?.let { highlightFilePage(page.text, path, colors, it) }
+    TextPage(page.first.toInt(), lines, starts, highlighted?.code ?: AnnotatedString(page.text), highlighted?.next)
 }
 
 @Composable
 private fun ColumnScope.PagedFileLines(
-    first: RemoteFilePage, path: String, wrap: Boolean, onSend: ((String) -> Unit)?,
+    first: RemoteFilePage, path: String, wrap: Boolean, onSend: ((String) -> Unit)?, onRefresh: () -> Unit,
     read: suspend (ULong) -> RemoteFilePage,
 ) {
     val colors = MaterialTheme.colorScheme
     var pages by remember(colors) { mutableStateOf<List<TextPage>>(emptyList()) }
     var failed by remember { mutableStateOf(false) }
     var notText by remember { mutableStateOf(false) }
-    var retry by remember { mutableIntStateOf(0) }
     val count = first.lines.coerceAtMost(Int.MAX_VALUE.toULong()).toInt()
     val state = rememberLazyListState((first.first.toInt() - 1).coerceAtLeast(0))
     val currentRead by rememberUpdatedState(read)
     var ready by remember { mutableStateOf(false) }
+    val lexerStates = remember(first, colors) { mutableMapOf(1 to FileLexerState()) }
     LaunchedEffect(first, colors) {
-        try { pages = listOf(textPage(first, path, colors)); ready = true }
+        try {
+            val page = textPage(first, path, colors, lexerStates[first.first.toInt()])
+            page.nextLexer?.let { lexerStates[page.last + 1] = it }
+            pages = listOf(page)
+            ready = true
+        }
         catch (e: CancellationException) { throw e }
         catch (e: Exception) {
             if (e is CoreException.Rpc && e.kind == "not_text") notText = true else failed = true
@@ -142,11 +151,12 @@ private fun ColumnScope.PagedFileLines(
         pages.find { line in it }?.let { return it }
         val result = currentRead(line.toULong())
         check(result.lines == first.lines && result.first == line.toULong()) // Refresh instead of joining inconsistent versions.
-        val page = textPage(result, path, colors)
+        val page = textPage(result, path, colors, lexerStates[result.first.toInt()])
+        page.nextLexer?.let { lexerStates[page.last + 1] = it }
         check(page.lines.isNotEmpty())
         return page
     }
-    LaunchedEffect(ready, retry, colors) {
+    LaunchedEffect(ready, colors) {
         if (!ready) return@LaunchedEffect
         snapshotFlow { state.layoutInfo.visibleItemsInfo.map { it.index + 1 } }.collectLatest { visible ->
             if (visible.isEmpty()) return@collectLatest
@@ -168,33 +178,60 @@ private fun ColumnScope.PagedFileLines(
     var match by remember { mutableStateOf<Int?>(null) }
     var searching by remember { mutableStateOf(false) }
     var noMatch by remember { mutableStateOf(false) }
-    LaunchedEffect(query, step, ready, retry) {
+    val searchIndex = remember(first) { mutableListOf<SearchPage>() }
+    var indexedQuery by remember(first) { mutableStateOf("") }
+    LaunchedEffect(query, step, ready) {
         if (!ready || query.isEmpty()) { match = null; noMatch = false; searching = false; return@LaunchedEffect }
+        if (indexedQuery != query) {
+            // A more specific literal cannot match a range where its earlier query was absent.
+            if (indexedQuery.isEmpty() || !query.contains(indexedQuery, ignoreCase = true)) searchIndex.clear()
+            else searchIndex.removeAll { it.matches.isNotEmpty() }
+            indexedQuery = query
+        }
         searching = true
         noMatch = false
         if (step == 0) delay(250)
-        val anchor = if (step == 0) 0 else match ?: 0
+        val visibleLine = state.firstVisibleItemIndex + 1
+        // A scroll away from the last result makes the viewport the next search anchor.
+        val matchVisible = state.layoutInfo.visibleItemsInfo.any { it.index + 1 == match }
+        val anchor = if (step == 0 || !matchVisible) visibleLine else match ?: visibleLine
         try {
-            // Scan bounded pages without accumulating the file or a list of all matches.
-            val result = withContext(Dispatchers.Default) {
-                var offset = 1
-                var fallback: Pair<Int, TextPage>? = null
-                var previous: Pair<Int, TextPage>? = null
-                while (offset <= count) {
+            suspend fun scan(low: Int, high: Int): Pair<Int, TextPage>? {
+                var cursor = if (backwards) high else low
+                while (cursor in low..high) {
                     ensureActive()
-                    val page = load(offset)
-                    for ((index, line) in page.lines.withIndex()) {
-                        val number = page.first + index
-                        if (!line.contains(query, ignoreCase = true)) continue
-                        val hit = number to page
-                        if (!backwards && number > anchor) return@withContext hit
-                        if (backwards && number < anchor) previous = hit
-                        if (backwards || fallback == null) fallback = hit
+                    var indexed = searchIndex.find { cursor in it.first..it.last }
+                    if (indexed == null) {
+                        var offset = if (backwards) maxOf(low, cursor - 199) else cursor
+                        // Byte limits can shorten a page: cover the whole reverse window before picking its last hit.
+                        while (indexed == null) {
+                            val known = searchIndex.find { offset in it.first..it.last }
+                            val range = if (known != null) known else {
+                                val page = load(offset)
+                                val hits = withContext(Dispatchers.Default) {
+                                    page.lines.mapIndexedNotNull { i, line ->
+                                        (page.first + i).takeIf { line.contains(query, ignoreCase = true) }
+                                    }
+                                }
+                                SearchPage(page.first, page.last, hits).also {
+                                    searchIndex.add(it)
+                                    retain(page, visibleLine..visibleLine)
+                                }
+                            }
+                            if (cursor in range.first..range.last) indexed = range
+                            else offset = range.last + 1
+                        }
                     }
-                    offset = page.last + 1
+                    val hit = if (backwards) indexed.matches.lastOrNull { it in low..cursor }
+                        else indexed.matches.firstOrNull { it in cursor..high }
+                    if (hit != null) return hit to load(hit)
+                    cursor = if (backwards) indexed.first - 1 else indexed.last + 1
                 }
-                previous ?: fallback
+                return null
             }
+            // Cache only line numbers and covered ranges, not the whole file's text.
+            val result = if (backwards) scan(1, anchor - 1) ?: scan(anchor, count)
+                else scan(if (step == 0) anchor else anchor + 1, count) ?: scan(1, if (step == 0) anchor - 1 else anchor)
             match = result?.first
             noMatch = result == null
             result?.let { (line, page) -> retain(page, line..line); state.scrollToItem(line - 1) }
@@ -214,8 +251,8 @@ private fun ColumnScope.PagedFileLines(
             (visible.lastOrNull() ?: first.last.toInt()).toLong(), count.toLong()))
     }
     if (failed) Row {
-        Text(stringResource(R.string.files_failed), color = MaterialTheme.colorScheme.error)
-        TextButton(onClick = { retry++ }) { Text(stringResource(R.string.files_refresh_button)) }
+        Text(stringResource(R.string.files_failed), Modifier.weight(1f), color = MaterialTheme.colorScheme.error)
+        TextButton(onClick = onRefresh) { Text(stringResource(R.string.files_refresh_button)) }
     }
     val horizontal = rememberScrollState()
     LazyColumn(Modifier.weight(1f).testTag("files-lines")

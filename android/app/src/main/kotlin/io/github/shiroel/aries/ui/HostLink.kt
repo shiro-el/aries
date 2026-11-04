@@ -17,6 +17,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -68,6 +69,8 @@ class HostLink(
         private set
 
     private val current = MutableStateFlow<HostConnection?>(first)
+    /** Observable connection identity, including the reconnecting gap. */
+    val connections = current.asStateFlow()
     private val poke = Channel<Unit>(Channel.CONFLATED)
     private var reconnecting: Job? = null
     private var closed = false
