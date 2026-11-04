@@ -1920,6 +1920,8 @@ class HostsModel(
         val link = links.firstOrNull { it.host.id == host.id && it.state == LinkState.Up && it.connection != null }
         if (resetFolder) task?.let { threadTaskSelection = ThreadTaskSelection(host.id, it.input, showDialog) }
         if (link == null) {
+            // Connecting leaves the inline home for Browse. Resume in its task dialog there.
+            threadTaskSelection = threadTaskSelection?.copy(showDialog = true)
             taskVisible = false
             newTask(host)
         } else prepareTask(link, showDialog = showDialog)

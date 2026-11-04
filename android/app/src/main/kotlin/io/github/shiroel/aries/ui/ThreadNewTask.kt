@@ -22,14 +22,15 @@ import io.github.shiroel.aries.core.*
 /** The empty conversation uses the same retained NewTask launch/readiness/send owner as every entry. */
 @Composable
 internal fun ThreadNewTaskEntry(model: HostsModel, board: AgentBoard) {
-    val host = model.task?.link?.host?.takeIf { it in board.hosts }
+    val host = board.hosts.firstOrNull { it.id == model.task?.link?.host?.id }
         ?: board.hosts.firstOrNull { board.links[it.id]?.state == LinkState.Up }
         ?: board.hosts.firstOrNull()
-    LaunchedEffect(host, board.links[host?.id]?.state) {
-        if (host != null && model.task == null && board.links[host.id]?.state == LinkState.Up)
-            model.beginThreadTask(host, showDialog = false)
+    val link = board.links[host?.id]
+    LaunchedEffect(host, link, link?.state) {
+        if (link != null && link.state == LinkState.Up && (model.task == null || model.task?.link !== link))
+            model.prepareTask(link, showDialog = false)
     }
-    val task = model.task?.takeIf { it.link.host == host }
+    val task = model.task?.takeIf { it.link.host.id == host?.id }
     if (task != null) ThreadTaskForm(task, model, model::startInlineTask, model::openCreatedTask)
     else Column(Modifier.fillMaxWidth().padding(16.dp)) {
         ConsoleButton(onClick = { if (host == null) model.startAddingHost() else model.beginThreadTask(host) },
