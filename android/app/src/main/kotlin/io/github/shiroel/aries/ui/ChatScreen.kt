@@ -445,8 +445,8 @@ class ChatModel(
             questionText = saved.questionText
             picks = saved.picks
             answers = saved.answers.mapValues { (_, state) ->
-                if (state == "sent") AnswerState.Unconfirmed
-                else AnswerState.Failed(Message(R.string.chat_queue_uncertain))
+                if (state == "failed") AnswerState.Failed(Message(R.string.chat_queue_uncertain))
+                else AnswerState.Unconfirmed
             }
             saved.messages.asReversed().filter { it.phase == QueuedMessagePhase.Waiting }.forEach(::restoreMessage)
             queuedMessages = saved.messages.filter { it.phase != QueuedMessagePhase.Waiting }
@@ -860,6 +860,13 @@ class ChatModel(
         answer(id, question, question.questions.indices.map { picks[id]?.getOrNull(it).orEmpty().sorted() })
     }
 
+    /** Called only after the user confirms a possibly duplicate historical message. */
+    fun retryHistoryAnswer(id: String, question: ChatEntryBody.Question) {
+        if (answers[id] != AnswerState.Unconfirmed || questionMode(id) != QuestionMode.History || !complete(id, question)) return
+        answers = answers - id
+        send(id, question)
+    }
+
     private fun answer(id: String, question: ChatEntryBody.Question, chosen: List<List<Int>>) {
         val scope = scope ?: return
         if (answers[id] == AnswerState.Sending || answers[id] == AnswerState.Held || answers[id] == AnswerState.Sent || answers[id] == AnswerState.Unconfirmed) return
@@ -871,8 +878,12 @@ class ChatModel(
         picks = picks + (id to chosen.map { it.toSet() })
         answers = answers + (id to AnswerState.Sending)
         clearNotices()
-        saveOutbox()
+        if (!saveOutbox()) {
+            answers = answers + (id to AnswerState.Failed(Message(R.string.chat_queue_uncertain)))
+            return
+        }
         scope.launch {
+            var historyDispatched = false
             val state = try {
                 withContext(keyWork) {
                     if (mode == QuestionMode.History) {
@@ -881,14 +892,18 @@ class ChatModel(
                             texts[i] ?: chosen[i].joinToString(", ") { part.options[it].label }
                         }
                         val text = if (parts.size == 1) parts[0] else parts.mapIndexed { i, part -> "${question.questions[i].text}: $part" }.joinToString("\n")
-                        when (val outcome = connection.sendMessage(terminal.address, text, object : SendListener {
-                            override fun onHeld() {
-                                if (answers[id] == AnswerState.Sending) {
-                                    answers = answers + (id to AnswerState.Held)
-                                    saveOutbox()
+                        historyDispatched = true
+                        val outcome = withTimeout(25_000L) {
+                            connection.sendMessage(terminal.address, text, object : SendListener {
+                                override fun onHeld() {
+                                    if (answers[id] == AnswerState.Sending) {
+                                        answers = answers + (id to AnswerState.Held)
+                                        saveOutbox()
+                                    }
                                 }
-                            }
-                        })) {
+                            })
+                        }
+                        when (outcome) {
                             SendOutcome.Sent -> {}
                             is SendOutcome.Blocked -> {
                                 terminal = terminal.copy(agentStatus = AgentStatus.Blocked(outcome.reason, outcome.message))
@@ -902,8 +917,16 @@ class ChatModel(
                     }
                 }
                 AnswerState.Sent
+            } catch (e: TimeoutCancellationException) {
+                AnswerState.Unconfirmed
+            } catch (e: CancellationException) {
+                answers = answers + (id to AnswerState.Unconfirmed)
+                saveOutbox()
+                throw e
             } catch (e: CoreException) {
-                AnswerState.Failed(if (mode == QuestionMode.History && e is CoreException.AnswerRefused &&
+                if (historyDispatched && e !is CoreException.AnswerRefused &&
+                    !(e is CoreException.Rpc && e.kind in setOf("no_agent", "status_mismatch"))) AnswerState.Unconfirmed
+                else AnswerState.Failed(if (mode == QuestionMode.History && e is CoreException.AnswerRefused &&
                     e.reason == AnswerProblem.GONE &&
                     (terminal.agentStatus as? AgentStatus.Blocked)?.reason == BlockedReason.QUESTION)
                     Message(R.string.chat_question_asking_now) else answerProblem(e))
@@ -980,7 +1003,7 @@ sealed interface AnswerState {
     data object Held : AnswerState
     /** The keys reached the Agent; the Chat shows the result when it has it. */
     data object Sent : AnswerState
-    /** No transcript acknowledgement after the grace period; never resend automatically. */
+    /** Delivery or transcript acknowledgement is uncertain; never resend automatically. */
     data object Unconfirmed : AnswerState
     data class Failed(val why: Message) : AnswerState
 }

@@ -1,5 +1,6 @@
 package io.github.shiroel.aries.ui
 
+import io.github.shiroel.aries.core.CallAnswerState
 import io.github.shiroel.aries.core.HerdrCoreState
 import androidx.annotation.StringRes
 import androidx.compose.runtime.getValue
@@ -153,7 +154,7 @@ class HostsModel(
     private val http: HttpClient = HttpRelayClient(),
     private val onSavedLaunchesChanged: () -> Unit = {},
     private val locationStore: LastLocationStore? = null,
-    private val onCallAnswered: (Host, String) -> Unit = { _, _ -> },
+    private val onCallAnswered: (Host, String, CallAnswerState) -> Unit = { _, _, _ -> },
 ) {
     internal val pairingReview = QrPairingReview()
     /** Current Host's settings models; a previous Host's pending work keeps its own state. */
