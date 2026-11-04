@@ -102,6 +102,30 @@ fn texts(s: &ChatSnapshot) -> Vec<String> {
         .collect()
 }
 
+// Regression: Retry must not skip history when its cursor outlives the durable cache.
+#[tokio::test]
+async fn a_recreated_watch_without_a_cached_snapshot_requests_full_history() {
+    let env = Env::new();
+    let full = env.file("full", concat!(
+        "{\"v\":1,\"type\":\"reset\",\"agent\":\"claude-code\",\"session\":\"s\"}\n",
+        "{\"v\":1,\"type\":\"item\",\"item\":{\"id\":\"old\",\"kind\":\"user\",\"text\":\"keep me\"},\"cursor\":\"cc:s:10\"}\n",
+    ));
+    let tail = env.file("tail", concat!(
+        "{\"v\":1,\"type\":\"item\",\"item\":{\"id\":\"new\",\"kind\":\"agent\",\"text\":\"new reply\"},\"cursor\":\"cc:s:20\"}\n",
+        "{\"v\":1,\"type\":\"state\",\"state\":\"live\"}\n",
+    ));
+    let host = env.fake_beacon(&format!(
+        "case \"$*\" in *--cursor*) ;; *) cat {full} ;; esac\ncat {tail}; sleep 30"
+    ));
+    let watch = env
+        .core
+        .watch_chat(host, "t1".into(), Some("cc:s:10".into()))
+        .unwrap();
+    let snapshot = wait_for(&watch, "live history", |s| s.status == ChatStatus::Live).await;
+    watch.stop();
+    assert_eq!(texts(&snapshot), ["user: keep me", "agent: new reply"]);
+}
+
 #[tokio::test]
 async fn a_newer_beacon_of_the_same_format_still_shows_the_chat() {
     // Only the Beacon's interpreter changed: extra fields everywhere, an

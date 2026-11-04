@@ -21,13 +21,13 @@ internal class ChatRenderedEntries {
     fun update(entries: List<ChatEntry>, markdown: Map<String, ChatMarkdownDocument>): List<ChatEntry> {
         val next = entries.map { entry ->
             val previous = byId[entry.id]
-            val source = entry.body.markdownSource()
-            when {
-                previous != null && source != null && markdown[entry.id]?.matches(entry.body) != true &&
-                    previous.body.markdownSource() != null -> previous
-                previous == entry -> previous!!
-                else -> entry
-            }
+            val document = markdown[entry.id]
+            val coherent = if (entry.body.markdownSource() != null && document?.matches(entry.body) != true) {
+                // A finished conflated parse must remain visible even if raw input
+                // is already ahead. Keep header actions on that same parsed entry.
+                document?.entry ?: previous?.takeIf { it.body.markdownSource() != null } ?: entry
+            } else entry
+            if (previous == coherent) previous else coherent
         }
         if (next.size == current.size && next.indices.all { next[it] === current[it] }) return current
         current = next
