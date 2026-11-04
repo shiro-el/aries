@@ -97,6 +97,12 @@ pub trait Agent {
 /// understand: transcript formats are private and change.
 pub trait Interpreter {
     fn line(&mut self, line: &str) -> Vec<ChatEvent>;
+    /// Version the projected Chat when the same bytes now mean different
+    /// items. A new tag forces older caches to replay instead of resuming.
+    /// Must be constant for this interpreter and contain no `:`.
+    fn cursor_tag(&self) -> &'static str {
+        ""
+    }
 }
 
 /// Where an Agent's current transcript is. The file may not exist yet.
