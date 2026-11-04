@@ -4,6 +4,7 @@ import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
 import io.github.shiroel.aries.R
+import io.github.shiroel.aries.core.CallAnswer
 import io.github.shiroel.aries.core.CallAnswerState
 import io.github.shiroel.aries.core.CallReplyOutcome
 
@@ -26,11 +27,13 @@ internal fun CallReplyOutcome.labelResource(): Int = when (this) {
 }
 
 @Composable
-internal fun replyNoteText(note: ReplyNote): String? = when (note) {
+internal fun replyNoteText(note: ReplyNote, answer: CallAnswer? = null): String? = when (note) {
     is ReplyNote.NotSent -> stringResource(R.string.call_reply_not_sent, note.detail)
     is ReplyNote.Outcome -> when (note.outcome) {
-        // The recorded answer already supplies the result and its detail.
-        CallReplyOutcome.FAILED, CallReplyOutcome.UNCONFIRMED -> null
+        CallReplyOutcome.FAILED -> if (answer?.state == CallAnswerState.FAILED) null
+            else stringResource(R.string.call_notify_not_sent, note.detail.orEmpty())
+        CallReplyOutcome.UNCONFIRMED -> if (answer?.state == CallAnswerState.UNCONFIRMED) null
+            else listOfNotNull(stringResource(R.string.call_reply_unknown), note.detail).joinToString("\n")
         else -> stringResource(note.outcome.labelResource())
     }
 }

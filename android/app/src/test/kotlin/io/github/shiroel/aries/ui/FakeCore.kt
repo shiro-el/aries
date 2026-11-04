@@ -1075,6 +1075,9 @@ class FakeConnection(
     /** How `sendMessage` ends: typed in ([SendOutcome.Sent]), refused, or this error. */
     var sendOutcome: SendOutcome = SendOutcome.Sent
     var sendFailWith: CoreException? = null
+    /** Input landed, but the caller lost only the RPC response. */
+    var sendAfterTypingFailure: CoreException? = null
+    var sendAfterTypingReply: CompletableDeferred<Unit>? = null
 
     /** When set, `sendMessage` is held (someone types at the Host) until it completes. */
     var sendHold: CompletableDeferred<Unit>? = null
@@ -1089,6 +1092,8 @@ class FakeConnection(
         sendReply?.await()
         sendFailWith?.let { throw it }
         if (sendOutcome == SendOutcome.Sent) typed += address to text
+        sendAfterTypingReply?.await()
+        sendAfterTypingFailure?.let { throw it }
         return sendOutcome
     }
 

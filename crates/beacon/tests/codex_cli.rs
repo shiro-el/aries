@@ -229,3 +229,90 @@ fn a_codex_question_is_answered_with_down_and_enter_and_only_once() {
         (ToolStatus::Done, Some("Blue"))
     );
 }
+
+// D27: opening a collapsed menu must not consume the one durable answer attempt.
+#[test]
+fn a_delayed_collapsed_menu_can_be_retried_without_claim_rejection() {
+    use aries_beacon::chat::{TerminalFacts, TerminalInput, TerminalLookup, codex::Codex};
+    struct TestCodex(PathBuf);
+    impl aries_beacon::chat::Agent for TestCodex {
+        fn name(&self) -> &'static str {
+            "codex"
+        }
+        fn locate(&self, _: &TerminalFacts) -> Option<aries_beacon::chat::Located> {
+            Some(aries_beacon::chat::Located {
+                session: THREAD.into(),
+                path: self.0.clone(),
+            })
+        }
+        fn interpreter(&self) -> Box<dyn aries_beacon::chat::Interpreter> {
+            aries_beacon::chat::Agent::interpreter(&Codex)
+        }
+        fn answer_input(
+            &self,
+            q: &aries_protocol::chat::ChatQuestion,
+            picks: &[Vec<usize>],
+            texts: &[Option<String>],
+        ) -> Result<Vec<aries_beacon::chat::answer::AnswerInput>, aries_beacon::chat::KeysError>
+        {
+            aries_beacon::chat::Agent::answer_input(&Codex, q, picks, texts)
+        }
+    }
+    struct Link {
+        facts: TerminalFacts,
+        opened: bool,
+        inputs: Vec<Vec<String>>,
+    }
+    impl TerminalLookup for Link {
+        fn get(&mut self, _: &str) -> Result<Option<TerminalFacts>, String> {
+            Ok(Some(self.facts.clone()))
+        }
+        fn screen(&mut self, _: &str) -> Result<String, String> {
+            Ok(if self.opened {
+                "Which color do you prefer?\n› 1. Red\n  2. Blue"
+            } else {
+                "shift+left to answer"
+            }
+            .into())
+        }
+    }
+    impl TerminalInput for Link {
+        fn keys(&mut self, _: &str, keys: &[String]) -> Result<(), String> {
+            self.inputs.push(keys.to_vec());
+            Ok(())
+        }
+    }
+    let host = Host::new();
+    let agent = host.codex(&format!(
+        "lines {FIXTURE} 1 14 $T\nstatus blocked question\nwait\n"
+    ));
+    host.wait_status(&agent, "blocked");
+    let mut link = Link {
+        facts: TerminalFacts::from_json(&host.hc.rpc(
+            "terminal.get",
+            serde_json::json!({"terminal": agent.address}),
+        )),
+        opened: false,
+        inputs: vec![],
+    };
+    let agents: Vec<Box<dyn aries_beacon::chat::Agent>> =
+        vec![Box::new(TestCodex(host.rollout.clone()))];
+    let state = host.home.path().join("answers-test");
+    let request =
+        aries_protocol::answer::Answer::from_args(&[QUESTION.into(), "1".into()]).unwrap();
+    let first =
+        aries_beacon::chat::answer::answer(&state, &agent.address, &request, &mut link, &agents)
+            .unwrap();
+    assert_eq!(first.outcome, AnswerOutcome::Gone, "{first:?}");
+    link.opened = true;
+    let second =
+        aries_beacon::chat::answer::answer(&state, &agent.address, &request, &mut link, &agents)
+            .unwrap();
+    assert_eq!(second.outcome, AnswerOutcome::Sent, "{second:?}");
+    assert_eq!(link.inputs, vec![vec!["shift+left"], vec!["down", "enter"]]);
+    let third =
+        aries_beacon::chat::answer::answer(&state, &agent.address, &request, &mut link, &agents)
+            .unwrap();
+    assert_eq!(third.outcome, AnswerOutcome::Failed);
+    assert_eq!(link.inputs.len(), 2);
+}
