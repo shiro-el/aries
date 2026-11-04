@@ -1,5 +1,6 @@
 [workspace]
 resolver = "3"
+exclude = ["crates/vendor/ssh-key"]
 members = [
     "crates/core",
     "crates/protocol",
@@ -30,3 +31,8 @@ tempfile = "3"
 lto = "thin"
 codegen-units = 1
 strip = true
+
+# ssh-key rc.11 rejects valid OpenSSH P-256 scalars encoded in <32 bytes.
+# Keep russh's exact dependency version and patch only that decoder check.
+[patch.crates-io]
+ssh-key = { path = "crates/vendor/ssh-key" }
