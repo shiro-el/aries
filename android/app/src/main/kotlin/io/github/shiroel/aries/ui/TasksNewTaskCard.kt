@@ -29,7 +29,7 @@ internal fun TasksNewTaskCard(model: HostsModel, board: AgentBoard) {
         ?: board.hosts.firstOrNull()
     val task = model.task?.takeIf { it.link.host.id == host?.id }
     val link = host?.let { board.links[it.id] }
-    LaunchedEffect(expanded, host?.id, link?.state) {
+    LaunchedEffect(expanded, host?.id, link?.state, task) {
         if (expanded && task == null) host?.let { board.links[it.id] }?.let { model.prepareTask(it, showDialog = false) }
     }
     val editable = task == null || (!task.form.busy && task.terminal == null && !task.launchUnknown && !task.deliveryUnknown)
@@ -100,7 +100,7 @@ internal fun TasksNewTaskCard(model: HostsModel, board: AgentBoard) {
                     OutlinedTextField(task.input, { task.input = it }, enabled = !task.form.busy && !task.sent,
                         placeholder = { Text(stringResource(R.string.tasks_prompt_hint)) }, minLines = 1, maxLines = 4,
                         modifier = Modifier.fillMaxWidth().testTag("tasks-new-prompt"))
-                    NewTaskStatus(task)
+                    NewTaskRecovery(task, model)
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         val starting = stringResource(R.string.new_task_starting)
                         if (task.form.busy) LinearProgressIndicator(Modifier.weight(1f).semantics { contentDescription = starting })

@@ -127,7 +127,7 @@ class HerdrInstallSectionTest {
     @Test fun aMissingCoreConnectionOpensSettingsWithoutAutomaticallyInstalling() {
         val core = FakeCore().apply {
             herdrState = HerdrCoreState.Missing
-            failWith = CoreException.Protocol("herdr-core connect ended before answering hello")
+            failWith = CoreException.HerdrCoreMissing()
         }
         core.addHost("box", Endpoint.Ssh("10.0.0.2", 22u, "me"))
         compose.setContent {

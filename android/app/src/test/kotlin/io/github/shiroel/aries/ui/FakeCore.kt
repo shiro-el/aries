@@ -166,9 +166,11 @@ class FakeCore : AriesCoreInterface {
     /** Delays a Terminal-list RPC independently of the existing live watch. */
     val terminalListHolds = mutableMapOf<String, kotlinx.coroutines.Deferred<Unit>>()
 
+    val terminalWatchStarts = mutableMapOf<String, Int>()
     internal fun watchTerminals(hostId: String, gone: kotlinx.coroutines.Deferred<Unit>): TerminalWatch {
         watchFailures[hostId]?.let { throw it }
         val channel = Channel<List<TerminalInfo>>(Channel.UNLIMITED)
+        terminalWatchStarts[hostId] = terminalWatchStarts.getOrDefault(hostId, 0) + 1
         val watchers = terminalWatchers.getOrPut(hostId) { mutableSetOf() }
         watchers += channel
         return FakeWatch(terminalsOf[hostId] ?: terminals, channel, gone, firstTerminalListHolds[hostId]) { watchers -= channel }
@@ -886,10 +888,11 @@ class FakeConnection(
         io.github.shiroel.aries.core.ExecOutput(0, null, "/home/me".toByteArray(), byteArrayOf(), false, false)
 
     var fileDirectory = io.github.shiroel.aries.core.RemoteDirectory("/repo", emptyList())
+    var fileDirectoryReader: ((String, String?) -> io.github.shiroel.aries.core.RemoteDirectory)? = null
     val fileListings = mutableListOf<Pair<String, String?>>()
     override suspend fun listFiles(address: String, path: String?): io.github.shiroel.aries.core.RemoteDirectory {
         fileListings += address to path
-        return fileDirectory
+        return fileDirectoryReader?.invoke(address, path) ?: fileDirectory
     }
     var fileReader: (String, String, ULong, UInt) -> io.github.shiroel.aries.core.RemoteFilePage = { _, _, _, _ ->
         io.github.shiroel.aries.core.RemoteFilePage("", 1u, 0u, 0u)

@@ -72,6 +72,9 @@ pub enum CoreError {
     /// lock screen or no enrolled biometric).
     #[error("biometric unlock is not available: {detail}")]
     BiometricUnavailable { detail: String },
+    /// The SSH command ended because herdr-core is not installed.
+    #[error("herdr-core is not installed on the Host")]
+    HerdrCoreMissing,
     #[error("could not reach the Host: {detail}")]
     Unreachable { detail: String },
     /// First connection: the user must confirm `fingerprint` with

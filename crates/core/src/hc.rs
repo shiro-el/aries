@@ -167,6 +167,7 @@ impl HcClient {
             mut writer,
             guard,
             ssh,
+            command_exit,
         } = stream;
         let hello = json!({
             "jsonrpc": "2.0",
@@ -176,22 +177,33 @@ impl HcClient {
         });
         let mut line = serde_json::to_vec(&hello).map_err(|e| protocol(e.to_string()))?;
         line.push(b'\n');
-        writer
-            .write_all(&line)
-            .await
-            .map_err(|e| CoreError::Unreachable {
+        let mut reader = BufReader::new(reader);
+        let reply = async {
+            writer
+                .write_all(&line)
+                .await
+                .map_err(|e| CoreError::Unreachable {
+                    detail: format!("send hello: {e}"),
+                })?;
+            writer.flush().await.map_err(|e| CoreError::Unreachable {
                 detail: format!("send hello: {e}"),
             })?;
-        writer.flush().await.map_err(|e| CoreError::Unreachable {
-            detail: format!("send hello: {e}"),
-        })?;
-
-        let mut reader = BufReader::new(reader);
-        let reply = tokio::time::timeout(HELLO_TIMEOUT, read_hello_reply(&mut reader))
-            .await
-            .map_err(|_| CoreError::Unreachable {
-                detail: "herdr-core did not answer hello in time".into(),
-            })??;
+            read_hello_reply(&mut reader).await
+        }
+        .await;
+        let reply = match reply {
+            Err(error @ CoreError::Unreachable { .. }) => {
+                if let Some(exit) = command_exit
+                    && let Ok(Ok(exit)) =
+                        tokio::time::timeout(Duration::from_millis(250), exit).await
+                    && exit.missing_core()
+                {
+                    return Err(CoreError::HerdrCoreMissing);
+                }
+                return Err(error);
+            }
+            other => other?,
+        };
         let hello = check_hello(reply)?;
 
         let pending: Pending = Arc::new(std::sync::Mutex::new(Some(HashMap::new())));
@@ -356,7 +368,7 @@ impl Drop for HcClient {
 /// Reads lines until the reply to `hello` (id 0). Lines that are not
 /// JSON-RPC, and any junk before a `{` on the reply line, are skipped, so a
 /// login shell that prints a banner does not break the protocol. Too much
-/// junk or an early end is a clear [`CoreError::Protocol`].
+/// junk is a protocol failure; early EOF is retryable unless command diagnostics identify a missing core.
 async fn read_hello_reply<R: tokio::io::AsyncRead + Unpin>(
     reader: &mut BufReader<R>,
 ) -> Result<Value, CoreError> {

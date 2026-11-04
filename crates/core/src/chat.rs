@@ -740,6 +740,7 @@ fn open_local(env: &HashMap<String, String>, command: &str) -> Result<Stream, Co
     let stdin = child.stdin.take().expect("piped stdin");
     let stdout = child.stdout.take().expect("piped stdout");
     Ok(Stream {
+        command_exit: None,
         ssh: None,
         reader: Box::new(stdout),
         writer: Box::new(stdin),
