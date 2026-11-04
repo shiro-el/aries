@@ -84,16 +84,43 @@ private fun Detail(@StringRes label: Int, value: String, filePath: Boolean = fal
     }
 }
 
-/** A compact, scrollable line keeps every recorded value accessible on a phone. */
+/** Recorded details are opt-in; interruptions and errors remain visible. */
 @Composable
-internal fun ChatResponseMetadataView(metadata: ChatResponseMetadata) {
+internal fun ChatResponseMetadataView(metadata: ChatResponseMetadata, expanded: Boolean, onToggle: () -> Unit) {
+    val completion = metadata.completion?.let {
+        when (it) {
+            ChatResponseCompletion.COMPLETE -> R.string.chat_response_complete
+            ChatResponseCompletion.INTERRUPTED -> R.string.chat_response_interrupted
+            ChatResponseCompletion.ERROR -> R.string.chat_response_error
+        }
+    }
+    Column {
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            if (metadata.completion == ChatResponseCompletion.INTERRUPTED || metadata.completion == ChatResponseCompletion.ERROR) {
+                Text(stringResource(completion!!), style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error)
+            }
+            val state = stringResource(if (expanded) R.string.chat_details_expanded else R.string.chat_details_collapsed)
+            TextButton(onClick = onToggle, modifier = Modifier.semantics { stateDescription = state }) {
+                Text(stringResource(R.string.chat_response_details_button), style = MaterialTheme.typography.labelSmall)
+            }
+        }
+        if (expanded) ChatResponseMetadataDetails(metadata)
+    }
+}
+
+@Composable
+private fun ChatResponseMetadataDetails(metadata: ChatResponseMetadata) {
+    val locale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
     val parts = buildList {
         metadata.model?.let { add(stringResource(R.string.chat_response_model, it)) }
         metadata.inputTokens?.let { add(stringResource(R.string.chat_response_input_tokens, it.toString())) }
         metadata.outputTokens?.let { add(stringResource(R.string.chat_response_output_tokens, it.toString())) }
         metadata.cacheReadTokens?.let { add(stringResource(R.string.chat_response_cache_read_tokens, it.toString())) }
         metadata.cacheWriteTokens?.let { add(stringResource(R.string.chat_response_cache_write_tokens, it.toString())) }
-        metadata.durationMs?.let { add(stringResource(R.string.chat_response_duration, it.toString())) }
+        metadata.durationMs?.let {
+            add(stringResource(R.string.chat_response_duration_seconds, String.format(locale, "%.1f", it.toDouble() / 1000)))
+        }
         metadata.completion?.let {
             add(stringResource(when (it) {
                 ChatResponseCompletion.COMPLETE -> R.string.chat_response_complete

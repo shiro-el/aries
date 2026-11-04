@@ -156,16 +156,32 @@ class HostsModel(
     var push by mutableStateOf(PushModel(core, scope, pushPlatform, http, keyWork))
         private set
 
+    private data class HostSettings(
+        val beacon: BeaconModel,
+        val herdr: HerdrInstallModel,
+        val push: PushModel,
+    )
+    private val hostSettings = mutableMapOf<String, HostSettings>()
+
     private fun loadHostSettings(host: Host) {
-        herdrInstall = HerdrInstallModel(core, scope, beaconFetcher, keyWork).also { it.load(host) }
-        val hostPush = PushModel(core, scope, pushPlatform, http, keyWork)
-        push = hostPush
-        beacon = BeaconModel(core, scope, beaconFetcher, onRemoved = {
-            flushPushRevocations()
-            hostPush.load(host)
-        }, keyWork = keyWork)
+        val settings = hostSettings.getOrPut(host.id) {
+            val hostPush = PushModel(core, scope, pushPlatform, http, keyWork)
+            HostSettings(
+                BeaconModel(core, scope, beaconFetcher, onRemoved = {
+                    flushPushRevocations()
+                    hostPush.load(host)
+                }, keyWork = keyWork),
+                HerdrInstallModel(core, scope, beaconFetcher, keyWork),
+                hostPush,
+            )
+        }
+        beacon = settings.beacon
+        herdrInstall = settings.herdr
+        push = settings.push
+        // Each model rejects refresh/re-entry while its operation owns the Host.
+        herdrInstall.load(host)
         beacon.load(host)
-        hostPush.load(host)
+        push.load(host)
     }
 
     /** Sends the Relay revocations that Host or Beacon removal queued. */
@@ -851,7 +867,7 @@ class HostsModel(
         } catch (_: CoreException) { false }
         if (screen !== connecting) return
         if (needsCore) {
-            openHostSettings(host)
+            openHostSettings(host, Message(R.string.herdr_install_connect_reason))
             return
         }
         when (error) {
@@ -1175,6 +1191,7 @@ class HostsModel(
         guard {
             conversations.filterKeys { it.hostId == prompt.host.id }.values.forEach { it.stop() }
             core.removeHost(prompt.host.id)
+            hostSettings.remove(prompt.host.id)
             conversations.keys.removeAll { it.hostId == prompt.host.id }
             hosts = core.hosts()
             hostsChanged()
@@ -1732,8 +1749,14 @@ class HostsModel(
     }
 
     /** Pin from any shared row, using the connection already owned by that surface. */
+    fun canPin(entry: AgentEntry): Boolean = pinLink(entry)?.let { it.state == LinkState.Up && it.connection != null } == true
+
+    private fun pinLink(entry: AgentEntry): HostLink? =
+        agentLinks[entry.host.id] ?: browseLink?.takeIf { it.host.id == entry.host.id }
+
     fun pin(entry: AgentEntry, pinned: Boolean) {
-        val link = agentLinks[entry.host.id] ?: browseLink?.takeIf { it.host.id == entry.host.id } ?: return
+        if (!canPin(entry)) return
+        val link = pinLink(entry) ?: return
         val conn = link.connection ?: return
         scope.launch {
             try {
@@ -1931,9 +1954,13 @@ class HostsModel(
         screen = Screen.Settings
     }
 
+    var settingsReason by mutableStateOf<Message?>(null)
+        private set
+
     /** Shared destination for Host menus, Browse guidance and inbox install links (ticket 51). */
-    fun openHostSettings(host: Host) {
+    fun openHostSettings(host: Host, reason: Message? = null) {
         openSettings()
+        settingsReason = reason
         settingsHost = host
         loadHostSettings(host)
     }

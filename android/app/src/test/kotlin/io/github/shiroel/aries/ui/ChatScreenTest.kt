@@ -216,9 +216,10 @@ class ChatScreenTest {
             str(R.string.chat_response_input_tokens, "5"),
             str(R.string.chat_response_output_tokens, "2"),
             str(R.string.chat_response_cache_read_tokens, "0"),
-            str(R.string.chat_response_duration, "1234"),
+            str(R.string.chat_response_duration_seconds, "1.2"),
             str(R.string.chat_response_interrupted),
         ).joinToString(" · ")
+        compose.onNodeWithText(str(R.string.chat_response_details_button)).performClick()
         compose.onNodeWithText(metadata).assertExists()
         compose.onNodeWithText(str(R.string.chat_response_cache_write_tokens, "0"), substring = true).assertDoesNotExist()
     }

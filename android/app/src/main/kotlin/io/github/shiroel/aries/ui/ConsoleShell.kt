@@ -42,6 +42,7 @@ fun ConsoleTopBar(
     actions: @Composable RowScope.() -> Unit = {},
     inbox: @Composable RowScope.() -> Unit = { ConsoleInboxAction() },
     showMark: Boolean = true,
+    showNavigationActions: Boolean = true,
     titleContent: @Composable RowScope.() -> Unit = {
         ConsoleTitle(title, Modifier.weight(1f))
     },
@@ -62,8 +63,10 @@ fun ConsoleTopBar(
         if (showMark) ConsoleMark()
         titleContent()
         actions()
-        QuickOpenButton()
-        inbox()
+        if (showNavigationActions) {
+            QuickOpenButton()
+            inbox()
+        }
     }
     HorizontalDivider()
 }
@@ -155,7 +158,7 @@ internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit) {
                         }, onBack = consoleBack(model), actions = {
                             if (screen is Screen.Agents) AgentActions(screen.board)
                             if (screen is Screen.Browse) HostActions(screen.browser, onRunSaved = { model.runSaved(screen.browser, it) }) { model.newTerminal(screen.browser) }
-                        }, titleContent = {
+                        }, showNavigationActions = screen != Screen.Settings && screen !is Screen.JumpHosts, titleContent = {
                             if (screen is Screen.Browse) HostContextTitle(screen.browser, Modifier.weight(1f))
                             else ConsoleTitle(consoleTitle(screen), Modifier.weight(1f))
                         })
@@ -229,6 +232,8 @@ private fun ConsoleDrawer(model: HostsModel, navigate: (() -> Unit) -> Unit) {
             ) {
                 WaitingSummary(model.quickOpenSources, agents)
             }
+            DrawerRow(stringResource(R.string.calls_title), model.callInboxOpen, Modifier.testTag("drawer-calls"),
+                onClick = { navigate(model::openCallInbox) })
             Text(stringResource(R.string.hosts_title), Modifier.padding(horizontal = 12.dp, vertical = 8.dp), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         model.hosts.forEach { host ->
@@ -238,7 +243,8 @@ private fun ConsoleDrawer(model: HostsModel, navigate: (() -> Unit) -> Unit) {
             val hostAgents = agents.filter { it.host.id == host.id }
             agentTreeItems(hostAgents, folds,
                 onOpen = { entry -> navigate { model.openDrawerAgent(entry) } },
-                onPin = model::pin, tag = "drawer-agent", current = currentAgent, sectionNamespace = host.id)
+                onPin = model::pin, tag = "drawer-agent", current = currentAgent, sectionNamespace = host.id,
+                showHost = false, canPin = model::canPin)
         }
         item {
             DrawerRow(stringResource(R.string.console_all_hosts), current == Screen.Hosts, Modifier.testTag("drawer-hosts"), onClick = { navigate(model::back) })

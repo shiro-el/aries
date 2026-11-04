@@ -126,12 +126,29 @@ class ChatModel(
     /** Typed failures survive initial watch creation and later SSH reconnects. */
     var connectionError by mutableStateOf<CoreException?>(null)
         private set
-    /** Ids of tool entries the user expanded. */
+    /** Tool entry IDs and response:<entry ID> disclosures the user expanded. */
     var expanded by mutableStateOf<Set<String>>(emptySet())
         private set
     /** Disclosure state survives switching between following and history renderers. */
     var rawInputsExpanded by mutableStateOf<Set<String>>(emptySet())
         private set
+
+    /** One read-aloud control per turn, even when tools split the Agent's text. */
+    val readAloudTurns: Map<String, String> by derivedStateOf {
+        buildMap {
+            var firstId: String? = null
+            snapshot?.entries.orEmpty().forEach { entry ->
+                when (val body = entry.body) {
+                    is ChatEntryBody.User -> firstId = null
+                    is ChatEntryBody.Agent -> if (body.text.isNotBlank()) {
+                        val id = firstId ?: entry.id.also { firstId = it }
+                        put(id, get(id)?.let { "$it\n\n${body.text}" } ?: body.text)
+                    }
+                    else -> Unit
+                }
+            }
+        }
+    }
 
     /** Options the user picked per open question: entry id -> picks per part. */
     var picks by mutableStateOf<Map<String, List<Set<Int>>>>(emptyMap())
@@ -1040,7 +1057,7 @@ fun ChatScreen(
                                         QuestionView(chat, entry.id, body)
                                     } else {
                                         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (body is ChatEntryBody.Agent || body is ChatEntryBody.Tool) 0.dp else 12.dp)) {
-                                            ChatEntryView(entry, markdown[entry.id]?.attachments, chat, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image, readAloud) { toggleTool(entry.id) }
+                                            ChatEntryView(entry, markdown[entry.id]?.attachments, chat, expanded = entry.id in chat.expanded, chat::image, readAloud) { toggleTool(entry.id) }
                                         }
                                         if (source == null && body !is ChatEntryBody.Tool) HorizontalDivider()
                                     }
@@ -1056,7 +1073,8 @@ fun ChatScreen(
                                     }
                                     if (body is ChatEntryBody.Agent) body.metadata?.let { metadata ->
                                         Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                                            ChatResponseMetadataView(metadata)
+                                            val key = "response:${entry.id}"
+                                            ChatResponseMetadataView(metadata, key in chat.expanded) { toggleTool(key) }
                                         }
                                     }
                                     HorizontalDivider(Modifier.padding(top = 8.dp))
@@ -1167,7 +1185,7 @@ private fun ChatTranscriptRowView(
         when (val content = row.content) {
             is ChatTranscriptContent.Header -> ChatEntryHeader(content.entry, content.attachments, chat, readAloud, toggleTool)
             is ChatTranscriptContent.Markdown -> ChatMarkdownItem(content.source, content.block, content.index, content.thinking)
-            is ChatTranscriptContent.Footer -> ChatEntryFooter(content.images, content.metadata, chat)
+            is ChatTranscriptContent.Footer -> ChatEntryFooter(content.images, content.metadata, chat, row.entryId, toggleTool)
         }
     }
 }
@@ -1179,14 +1197,14 @@ private fun ChatEntryHeader(entry: ChatEntry, attachments: ChatAttachments?, cha
         QuestionView(chat, entry.id, body)
     } else {
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (body is ChatEntryBody.Agent || body is ChatEntryBody.Tool) 0.dp else 12.dp)) {
-            ChatEntryView(entry, attachments, chat, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image, readAloud) { toggleTool(entry.id) }
+            ChatEntryView(entry, attachments, chat, expanded = entry.id in chat.expanded, chat::image, readAloud) { toggleTool(entry.id) }
         }
         if (body.markdownSource() == null && body !is ChatEntryBody.Tool) HorizontalDivider()
     }
 }
 
 @Composable
-private fun ChatEntryFooter(images: List<ChatImage>, metadata: ChatResponseMetadata?, chat: ChatModel) {
+private fun ChatEntryFooter(images: List<ChatImage>, metadata: ChatResponseMetadata?, chat: ChatModel, entryId: String, toggleDetails: (String) -> Unit) {
     if (images.isNotEmpty()) {
         Column(Modifier.padding(horizontal = 16.dp)) {
             images.forEach { ChatImageView(it, chat::image) }
@@ -1194,7 +1212,8 @@ private fun ChatEntryFooter(images: List<ChatImage>, metadata: ChatResponseMetad
     }
     metadata?.let {
         Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-            ChatResponseMetadataView(it)
+            val key = "response:$entryId"
+            ChatResponseMetadataView(it, key in chat.expanded) { toggleDetails(key) }
         }
     }
     HorizontalDivider(Modifier.padding(top = 8.dp))
@@ -1305,7 +1324,6 @@ private fun ChatEntryView(
     entry: ChatEntry,
     attachments: ChatAttachments?,
     chat: ChatModel,
-    agentName: String,
     expanded: Boolean,
     image: (String) -> ByteArray?,
     readAloud: io.github.shiroel.aries.speech.ReadAloudState,
@@ -1329,9 +1347,10 @@ private fun ChatEntryView(
                 ChatAttachmentCards(attachments, chat)
             }
         }
-        is ChatEntryBody.Agent -> Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(agentName, Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            io.github.shiroel.aries.speech.ReadAloudButton(readAloud, entry.id, b.text)
+        is ChatEntryBody.Agent -> chat.readAloudTurns[entry.id]?.let { turnText ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                io.github.shiroel.aries.speech.ReadAloudButton(readAloud, entry.id, turnText)
+            }
         }
         is ChatEntryBody.Thinking -> Column {
             Text(

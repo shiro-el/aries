@@ -158,7 +158,8 @@ fun AgentsScreen(
                     TextButton(onClick = open) { Text(stringResource(R.string.agents_empty_hosts_button)) }
                 }
             }
-            agentTreeItems(agents, folds, onOpen, onPin, current = current)
+            agentTreeItems(agents, folds, onOpen, onPin, current = current,
+                canPin = { board.links[it.host.id]?.let { link -> link.state == LinkState.Up && link.connection != null } == true })
         }
     }
 }

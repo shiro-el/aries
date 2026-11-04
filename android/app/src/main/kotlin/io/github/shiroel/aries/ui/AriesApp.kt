@@ -3,8 +3,6 @@ package io.github.shiroel.aries.ui
 import android.content.ClipData
 import android.content.ClipboardManager
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.border
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Box
@@ -254,7 +252,9 @@ private fun ConsoleHostRow(model: HostsModel, host: Host) {
         Column(Modifier.weight(1f).heightIn(min = 48.dp).clickable(onClickLabel = connectLabel, role = Role.Button) { model.openHost(host) }.padding(horizontal = 12.dp, vertical = 6.dp)) {
             Text(host.name, fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
             val where = when (val endpoint = host.endpoint) {
-                is Endpoint.Ssh -> stringResource(R.string.host_ssh_address, endpoint.user, endpoint.address, endpoint.port.toInt())
+                is Endpoint.Ssh -> if (endpoint.port.toInt() == 22) {
+                    stringResource(R.string.host_ssh_default_address, endpoint.user, endpoint.address)
+                } else stringResource(R.string.host_ssh_address, endpoint.user, endpoint.address, endpoint.port.toInt())
                 is Endpoint.Local -> stringResource(R.string.host_local_address)
             }
             Text(where, fontSize = 12.sp, lineHeight = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
@@ -262,11 +262,6 @@ private fun ConsoleHostRow(model: HostsModel, host: Host) {
         WaitingSummary(model.quickOpenSources.filter { it.host.id == host.id },
             model.drawerAgents.filter { it.host.id == host.id }, Modifier.testTag("host-waiting:${host.id}"),
             onClick = { model.openHostWaiting(host) })
-        Text(
-            stringResource(if (host.endpoint is Endpoint.Ssh) R.string.console_ssh else R.string.console_local),
-            Modifier.border(1.dp, color.copy(alpha = .7f), RoundedCornerShape(3.dp)).padding(horizontal = 5.dp, vertical = 1.dp),
-            fontSize = 11.sp, lineHeight = 15.sp, color = color,
-        )
         val taskLabel = stringResource(R.string.new_task_on_host, host.name)
         ActionIcon(R.drawable.ic_plus, R.string.new_task_title, { model.back(); model.newTask(host) },
             modifier = Modifier.testTag("host-new-task").semantics {
