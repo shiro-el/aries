@@ -268,6 +268,89 @@ async fn each_preset_starts_its_agent_with_the_settings_it_needs() {
 }
 
 #[tokio::test]
+async fn concurrent_saved_launches_from_independent_connections_are_both_kept() {
+    let hc = HcSession::start();
+    let data = tempfile::tempdir().unwrap();
+    let first = core_in(data.path());
+    let host = first.add_host("dev".into(), local_endpoint(&hc)).unwrap();
+    let second = core_in(data.path());
+    let connections = [
+        connect(&first, &host.id).await,
+        connect(&second, &host.id).await,
+    ];
+    let start = std::sync::Barrier::new(2);
+    let mut expected = Vec::new();
+    for round in 0..32 {
+        std::thread::scope(|threads| {
+            let jobs: Vec<_> = connections
+                .iter()
+                .enumerate()
+                .map(|(writer, conn)| {
+                    let start = &start;
+                    threads.spawn(move || {
+                        start.wait();
+                        conn.save_launch(SavedLaunch {
+                            id: String::new(),
+                            name: format!("{round}-{writer}"),
+                            request: preset_request(AgentPreset::Codex, "", Path::new("/tmp")),
+                        })
+                    })
+                })
+                .collect();
+            for job in jobs {
+                expected.push(job.join().unwrap().unwrap());
+            }
+        });
+        let mut saved = core_in(data.path())
+            .saved_launches(host.id.clone())
+            .unwrap();
+        saved.sort_by(|a, b| a.name.cmp(&b.name));
+        expected.sort_by(|a, b| a.name.cmp(&b.name));
+        assert_eq!(saved, expected);
+    }
+    for conn in connections {
+        conn.disconnect().await;
+    }
+}
+
+#[tokio::test]
+async fn damaged_saved_launches_are_not_replaced_by_a_save_or_delete() {
+    let hc = HcSession::start();
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    let host = core.add_host("dev".into(), local_endpoint(&hc)).unwrap();
+    let conn = connect(&core, &host.id).await;
+    let launch = conn
+        .save_launch(SavedLaunch {
+            id: String::new(),
+            name: "Codex".into(),
+            request: preset_request(AgentPreset::Codex, "", Path::new("/tmp")),
+        })
+        .unwrap();
+    let path = data
+        .path()
+        .join("hosts")
+        .join(&host.id)
+        .join("saved-launches.json");
+    let damaged = b"[broken launch";
+    std::fs::write(&path, damaged).unwrap();
+    assert!(matches!(
+        core.saved_launches(host.id),
+        Err(aries_core::CoreError::Storage { .. })
+    ));
+    assert!(matches!(
+        conn.save_launch(launch.clone()),
+        Err(aries_core::CoreError::Storage { .. })
+    ));
+    assert!(matches!(
+        conn.delete_saved_launch(launch.id),
+        Err(aries_core::CoreError::Storage { .. })
+    ));
+    assert_eq!(std::fs::read(&path).unwrap(), damaged);
+    conn.disconnect().await;
+}
+
+#[tokio::test]
 async fn saved_launches_are_kept_per_host_and_relaunch_in_one_call() {
     let tmp = tempfile::tempdir().unwrap();
     let hc = session(tmp.path());

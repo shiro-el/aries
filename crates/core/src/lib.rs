@@ -300,7 +300,7 @@ impl AriesCore {
         let chat_cache = chat_cache::ChatCache::new(
             store.root(),
             vault.clone(),
-            store.read_settings().chat_cache_days,
+            store.read_settings()?.chat_cache_days,
         );
         let hosts = Arc::new(Mutex::new(saved.hosts));
         let last_known = last_known_state::States {
@@ -482,7 +482,7 @@ impl AriesCore {
     /// Saved launch configs for launcher shortcuts, without connecting or opening a key.
     pub fn saved_launches(&self, host_id: String) -> Result<Vec<SavedLaunch>, CoreError> {
         let host = self.saved_host(&host_id)?;
-        Ok(launch::SavedLaunches::in_host_dir(self.store.host_dir(&host.id)).list())
+        launch::SavedLaunches::in_host_dir(self.store.host_dir(&host.id)).list()
     }
 
     /// Composer inputs on this phone, newest first. Never contacts the Host.
@@ -1267,13 +1267,15 @@ impl AriesCore {
 
     /// Whether connecting updates an out-of-date Beacon by itself (default on).
     pub fn beacon_auto_update(&self) -> bool {
-        self.store.read_settings().beacon_auto_update
+        self.store
+            .read_settings()
+            .unwrap_or_default()
+            .beacon_auto_update
     }
 
     pub fn set_beacon_auto_update(&self, on: bool) -> Result<(), CoreError> {
-        let mut settings = self.store.read_settings();
-        settings.beacon_auto_update = on;
-        self.store.write_settings(&settings)
+        self.store
+            .update_settings(|settings| settings.beacon_auto_update = on, |_| {})
     }
 }
 
@@ -1340,11 +1342,10 @@ impl AriesCore {
     /// deleted on the next cache use.
     pub fn set_chat_cache_retention_days(&self, days: u32) -> Result<(), CoreError> {
         let days = days.max(1);
-        let mut settings = self.store.read_settings();
-        settings.chat_cache_days = days;
-        self.store.write_settings(&settings)?;
-        self.chat_cache.set_retention_days(days);
-        Ok(())
+        self.store.update_settings(
+            |settings| settings.chat_cache_days = days,
+            |settings| self.chat_cache.set_retention_days(settings.chat_cache_days),
+        )
     }
 
     /// Answers the open question `question_id` (a
@@ -1821,7 +1822,9 @@ impl HostConnection {
     /// phone, per Host; run one with [`HostConnection::launch`] on its
     /// `request`.
     pub fn saved_launches(&self) -> Vec<SavedLaunch> {
-        self.saved.list()
+        // Preserve this infallible FFI getter; repository updates and the
+        // fallible offline listing API still report unreadable presets.
+        self.saved.list().unwrap_or_default()
     }
 
     /// Saves `launch` under its (trimmed) name: a new one when its `id` is
