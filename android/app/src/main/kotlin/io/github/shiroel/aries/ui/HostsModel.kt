@@ -147,6 +147,7 @@ class HostsModel(
     private val http: HttpClient = HttpRelayClient(),
     private val onSavedLaunchesChanged: () -> Unit = {},
     private val locationStore: LastLocationStore? = null,
+    private val onCallAnswered: (Host, String) -> Unit = { _, _ -> },
 ) {
     /** Current Host's settings models; a previous Host's pending work keeps its own state. */
     var beacon by mutableStateOf(BeaconModel(core, scope, beaconFetcher, keyWork = keyWork))
@@ -190,7 +191,7 @@ class HostsModel(
     }
 
     /** Every Host's Calls for the inbox; see [resumeCalls]. */
-    val calls = CallsModel(core, scope, keyWork)
+    val calls = CallsModel(core, scope, keyWork, onCallAnswered)
     /** Chat cache retention and per-Host clearing (ticket 44). */
     val chatCache = ChatCacheModel(core, scope, keyWork)
     val diagnosticHistory = DiagnosticsModel(core, scope, keyWork)
@@ -532,14 +533,14 @@ class HostsModel(
     /** Called after the activity resumes and installs its biometric authorizer. */
     fun start(target: PushTarget? = null) {
         if (started) {
-            target?.let { openPushedAgent(it.hostId, it.terminal, openChat = it.chat) }
+            target?.let(::openNotificationTarget)
             return
         }
         started = true
         val saved = locationStore?.load()
         if (target != null) {
             startupHostId = target.hostId
-            openPushedAgent(target.hostId, target.terminal, openChat = target.chat)
+            openNotificationTarget(target)
         } else if (!explicitSurfaceEntry && screen == Screen.Hosts) {
             hosts.find { it.id == saved?.hostId }?.let {
                 startupHostId = it.id
@@ -1623,6 +1624,14 @@ class HostsModel(
         openAgents(focus = null)
     }
 
+    private fun openNotificationTarget(target: PushTarget) {
+        if (target.agents) {
+            explicitSurfaceEntry = true
+            back()
+            openAgents(focus = null, hostId = target.hostId)
+        } else openPushedAgent(target.hostId, target.terminal, openChat = target.chat)
+    }
+
     /** Resolve QS taps from the latest persisted pull, including the whole machine address. */
     fun openTile() {
         explicitSurfaceEntry = true
@@ -1671,11 +1680,12 @@ class HostsModel(
     }
 
     /** [focus]: the Agent whose Terminal to open once its Host's list arrives. */
-    private fun openAgents(focus: AgentKey?, openChat: Boolean = false) {
-        val board = AgentBoard(hosts)
+    private fun openAgents(focus: AgentKey?, openChat: Boolean = false, hostId: String? = null) {
+        val selectedHosts = hosts.filter { hostId == null || it.id == hostId }
+        val board = AgentBoard(selectedHosts)
         val agents = Screen.Agents(board)
         screen = agents
-        hosts.forEach { host ->
+        selectedHosts.forEach { host ->
             var focusing = focus?.takeIf { it.hostId == host.id }
             agentJobs += scope.launch {
                 val link = link(host, null)

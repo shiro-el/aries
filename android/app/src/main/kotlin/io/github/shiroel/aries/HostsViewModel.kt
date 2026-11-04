@@ -17,6 +17,7 @@ class HostsViewModel(application: Application) : AndroidViewModel(application) {
         core, viewModelScope, keyWork = Dispatchers.IO, pushPlatform = push,
         locationStore = LastLocationStore.from(application),
         onSavedLaunchesChanged = ::refreshLaunchShortcuts,
+        onCallAnswered = { host, callId -> NotificationGroups.answeredCall(application, host.id, host.name, callId) },
     )
 
     fun refreshLaunchShortcuts() {

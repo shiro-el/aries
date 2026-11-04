@@ -88,6 +88,7 @@ class CallNotificationAnswerTest {
 
     /** Runs the worker as WorkManager would after [ChoiceReceiver]. */
     private fun runWorker(choice: Int): ListenableWorker.Result = runBlocking {
+        if (manager.activeNotifications.none { it.tag == "call:c1" }) showWithBackgroundKey()
         TestListenableWorkerBuilder<CallReplyWorker>(context)
             .setInputData(CallReplyWorker.input(context, notice(), choice))
             .build()

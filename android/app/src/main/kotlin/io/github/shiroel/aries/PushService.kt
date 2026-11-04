@@ -154,7 +154,8 @@ class PushService : FirebaseMessagingService() {
                             .setContentText(context.getString(R.string.agent_status_done))
                             .build())
                 }
-                NotificationGroups.decorate(context, builder, notice.hostId, notice.hostName, tag, content.terminal)
+                NotificationGroups.decorate(context, builder, notice.hostId, notice.hostName, tag, content.terminal,
+                    generation = "${content.at}/${content.turn}/${content.status.javaClass.simpleName}/${(content.status as? AgentStatus.Blocked)?.reason}/${content.question?.id}")
                 val status = content.status
                 if (status == AgentStatus.Done || status is AgentStatus.Error) {
                     InlineNotifications.add(context, builder, notice.hostId, notice.hostName, content.terminal, tag,
@@ -214,12 +215,12 @@ class PushService : FirebaseMessagingService() {
                 .setColor(ThemeSettings.from(context).accentArgb)
                 .setContentTitle(NotificationMarkdown.render(call.title).plain)
                 .setContentText(text.plain)
-                .setSubText(hostName)
+                .setSubText(context.getString(R.string.push_status_title, NotificationAgentName.resolve(context, hostId, call.terminal), hostName))
                 .setStyle(Notification.BigTextStyle().bigText(big))
                 .setWhen(call.atMs.toLong())
                 .setShowWhen(true)
                 .setAutoCancel(true)
-            NotificationGroups.decorate(context, builder, hostId, hostName, "call:${call.id}", call.terminal)
+            NotificationGroups.decorate(context, builder, hostId, hostName, "call:${call.id}", call.terminal, generation = call.id)
             if (call.urgency == CallUrgency.EMERGENCY) builder.setCategory(Notification.CATEGORY_ALARM)
             return builder
         }
