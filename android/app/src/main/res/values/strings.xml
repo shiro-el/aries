@@ -1415,8 +1415,8 @@
     <string name="settings_keys_open">Phone SSH keys</string>
     <string name="settings_hosts_title">Host settings</string>
     <string name="settings_agent_view">Default Agent view</string>
-    <string name="settings_conversation_view">Default conversation view</string>
-    <string name="settings_task_view">Default task view</string>
+    <string name="settings_conversation_view">Thread: default conversation view</string>
+    <string name="settings_task_view">Tasks: default task view</string>
     <string name="thread_view_conversation">Conversation</string>
     <string name="settings_beacon_missing">Beacon not installed · Host settings</string>
 

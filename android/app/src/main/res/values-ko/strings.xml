@@ -1329,11 +1329,11 @@
     <!-- App layout / appearance -->
     <string name="layout_title">앱 레이아웃</string>
     <string name="layout_console">Console</string>
-    <string name="layout_thread">대화</string>
-    <string name="layout_tasks">작업</string>
+    <string name="layout_thread">Thread</string>
+    <string name="layout_tasks">Tasks</string>
     <string name="layout_console_description">Console: Host, Agent, Terminal을 둘러봐요.</string>
-    <string name="layout_thread_description">대화: 메시지를 읽고 답해요.</string>
-    <string name="layout_tasks_description">작업: 진행 상황과 확인이 필요한 일을 살펴봐요.</string>
+    <string name="layout_thread_description">Thread: 대화를 읽고 답해요.</string>
+    <string name="layout_tasks_description">Tasks: 작업 진행 상황과 확인이 필요한 일을 살펴봐요.</string>
     <string name="theme_title">테마</string>
     <string name="theme_system">시스템 설정</string>
     <string name="theme_light">라이트</string>
@@ -1410,8 +1410,8 @@
     <string name="settings_keys_open">휴대폰 SSH 키</string>
     <string name="settings_hosts_title">Host 설정</string>
     <string name="settings_agent_view">기본 Agent 화면</string>
-    <string name="settings_conversation_view">대화 기본 보기</string>
-    <string name="settings_task_view">작업 기본 보기</string>
+    <string name="settings_conversation_view">Thread: 대화 기본 보기</string>
+    <string name="settings_task_view">Tasks: 작업 기본 보기</string>
     <string name="thread_view_conversation">대화</string>
     <string name="settings_beacon_missing">Beacon 미설치 · Host 설정</string>
 
