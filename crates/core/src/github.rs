@@ -252,10 +252,9 @@ impl HostConnection {
             });
         }
         let path = self.github_draft_path(&repo, number)?;
-        match std::fs::read_to_string(path) {
-            Ok(body) => Ok(body),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
-            Err(e) => Err(storage(e)),
+        match crate::private_content::read(&path, self.vault.as_ref())? {
+            Some(body) => String::from_utf8(body).map_err(storage),
+            None => Ok(String::new()),
         }
     }
 
@@ -282,10 +281,7 @@ impl HostConnection {
                 Err(e) => Err(storage(e)),
             };
         }
-        std::fs::create_dir_all(path.parent().expect("draft parent")).map_err(storage)?;
-        let temp = path.with_extension("tmp");
-        std::fs::write(&temp, body).map_err(storage)?;
-        std::fs::rename(temp, path).map_err(storage)
+        crate::private_content::write(&path, body.into_bytes(), self.vault.as_ref())
     }
 
     /// Pin foreground cwd and forwarded machine once, so later navigation/writes

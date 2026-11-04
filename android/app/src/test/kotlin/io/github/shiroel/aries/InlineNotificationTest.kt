@@ -49,8 +49,26 @@ class InlineNotificationTest {
     }
     private suspend fun work(target: String, action: String = InlineNotifications.REPLY, attempt: Int = 0,
         created: Long = System.currentTimeMillis()) = TestListenableWorkerBuilder<InlineActionWorker>(context)
-        .setRunAttemptCount(attempt).setInputData(InlineActionWorker.input(target, action, "run tests", created))
+        .setRunAttemptCount(attempt).setInputData(InlineActionWorker.input(context, target, action, "run tests", created))
         .build().doWork()
+
+    @Test
+    fun anUnreadableReplyShowsFailureWithoutSendingOrFallingBackToPlaintext() = runBlocking {
+        online()
+        PushService.show(context, status())
+        val data = androidx.work.workDataOf("target" to target(), "action" to InlineNotifications.REPLY,
+            "text" to "legacy-plaintext-reply", "created" to System.currentTimeMillis())
+        TestListenableWorkerBuilder<InlineActionWorker>(context).setRunAttemptCount(0).setInputData(data).build().doWork()
+        assertEquals(context.getString(R.string.notification_action_failed), text())
+        assertTrue(core.backgroundMessages.isEmpty())
+    }
+
+    @Test
+    fun replyWorkDataDoesNotPersistTheReplyInPlaintext() {
+        PushService.show(context, status())
+        val data = InlineActionWorker.input(context, target(), InlineNotifications.REPLY, "secret-reply-180")
+        assertFalse(data.toByteArray().toString(Charsets.ISO_8859_1).contains("secret-reply-180"))
+    }
 
     @Test
     fun anOversizedReplyReportsFailureInsteadOfLeavingSending() {
@@ -199,6 +217,10 @@ class InlineNotificationTest {
         assertEquals(AlarmManager.ELAPSED_REALTIME_WAKEUP, alarm!!.type)
         assertEquals(before + 3_600_000, alarm.triggerAtTime)
         assertTrue("inexact window", alarm.windowLengthMs > 0)
+        @Suppress("DEPRECATION")
+        val stored = shadowOf(alarm.operation!!).savedIntent
+            .getParcelableExtra<Notification>(InlineNotifications.NOTIFICATION)!!
+        assertFalse("alarm extras retain the message", stored.extras.toString().contains("All tests passed."))
         alarm.operation!!.send()
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals("All tests passed.", shown().extras.getCharSequence(Notification.EXTRA_TEXT).toString())

@@ -157,6 +157,20 @@ async fn drafts_survive_reopening_and_are_scoped_to_host_machine_repo_and_number
     let repo = conn.github_repository(address).await.unwrap();
     conn.github_save_draft(repo.clone(), 42, "**unfinished** 한글".into())
         .unwrap();
+    // Storage regression: the draft must survive a reconnect without a cleartext copy.
+    let draft_dir = data
+        .path()
+        .join("hosts")
+        .join(&host.id)
+        .join("github-drafts");
+    for file in std::fs::read_dir(draft_dir).unwrap() {
+        let bytes = std::fs::read(file.unwrap().path()).unwrap();
+        assert!(
+            !bytes
+                .windows(b"**unfinished**".len())
+                .any(|w| w == b"**unfinished**")
+        );
+    }
     assert_eq!(conn.github_load_draft(repo.clone(), 43).unwrap(), "");
     let mut other = repo.clone();
     other.on = Some("remote".into());
