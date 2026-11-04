@@ -25,7 +25,8 @@ class TasksPlanTest {
             TaskPlanItem("Run checks", TaskPlanStatus.IN_PROGRESS), TaskPlanItem("Review patch", TaskPlanStatus.PENDING)), taskPlan(listOf(first)))
         assertEquals(listOf(TaskPlanItem("Run checks", TaskPlanStatus.COMPLETED)),
             taskPlan(listOf(first, tool("update_plan", """{"plan":[{"step":"Run checks","status":"completed"}]}"""))))
-        assertEquals(taskPlan(listOf(first)), codexTaskPlan(listOf(first)))
+        assertEquals(listOf(TaskPlanItem("Inspect source", TaskPlanStatus.COMPLETED),
+            TaskPlanItem("Run checks", TaskPlanStatus.IN_PROGRESS), TaskPlanItem("Review patch", TaskPlanStatus.PENDING)), codexTaskPlan(listOf(first)))
     }
 
     @Test fun absentFailedAndMalformedPlansNeverInventChecklistItems() {
