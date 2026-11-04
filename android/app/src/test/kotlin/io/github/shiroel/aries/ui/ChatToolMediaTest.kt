@@ -58,13 +58,21 @@ class ChatToolMediaTest {
             "Read", "/repo/shot.png", "{}", ChatToolStatus.DONE, "[image image/png]",
             images = listOf(ChatImage("read#0", "image/png", png.size.toULong(), 160u, 120u, true)),
         ))
+        val header = compose.onNodeWithContentDescription(compose.activity.getString(R.string.chat_tool_expand_label, "Read"))
+        compose.onNodeWithContentDescription("Image").assertDoesNotExist()
+        header.performTouchInput { click(topLeft + androidx.compose.ui.geometry.Offset(4f, 4f)) }
+        assertEquals(setOf("read"), chat.expanded)
+        compose.onNodeWithContentDescription("Image viewer").assertDoesNotExist()
         compose.waitUntil(5_000) { compose.onAllNodesWithContentDescription("Image").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithContentDescription("Image").performTouchInput { click() }
         compose.waitUntil(5_000) { compose.onAllNodesWithContentDescription("Image viewer").fetchSemanticsNodes().isNotEmpty() }
-        assertEquals(emptySet<String>(), chat.expanded)
+        assertEquals(setOf("read"), chat.expanded)
         compose.onNodeWithText(compose.activity.getString(R.string.back_button)).performClick()
-        compose.onNodeWithContentDescription(compose.activity.getString(R.string.chat_tool_expand_label, "Read"))
-            .performTouchInput { click(topLeft + androidx.compose.ui.geometry.Offset(4f, 4f)) }
+        header.performTouchInput { click(topLeft + androidx.compose.ui.geometry.Offset(4f, 4f)) }
+        assertEquals(emptySet<String>(), chat.expanded)
+        compose.onNodeWithContentDescription("Image").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Image viewer").assertDoesNotExist()
+        header.performTouchInput { click(topLeft + androidx.compose.ui.geometry.Offset(4f, 4f)) }
         assertEquals(setOf("read"), chat.expanded)
         compose.onNodeWithContentDescription("Image").performTouchInput { click() }
         compose.waitUntil(5_000) { compose.onAllNodesWithContentDescription("Image viewer").fetchSemanticsNodes().isNotEmpty() }
