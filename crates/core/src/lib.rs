@@ -37,6 +37,7 @@ mod store;
 mod structure;
 mod terminal;
 mod transport;
+mod usage;
 mod worktrees;
 
 use std::collections::HashMap;
@@ -90,6 +91,7 @@ pub use terminal::{
     TerminalExit, TerminalKey, TerminalSearch, TerminalSearchHighlight, TerminalUpdate,
     TerminalView, ViewStats,
 };
+pub use usage::{AgentUsage, ContextUsage, UsageLimit};
 pub use worktrees::{WorktreeInfo, WorktreeOpen};
 
 use hc::HcClient;

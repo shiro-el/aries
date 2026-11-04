@@ -341,7 +341,7 @@ class ChatModel(
             } catch (e: CoreException) {
                 // Still show what the cache holds (ticket 44).
                 val cached = try { core.cachedChat(host.id, terminal.address) } catch (e: CoreException) { null }
-                snapshot = ChatSnapshot(cached?.entries.orEmpty(), ChatStatus.NO_BEACON, cached?.cursor)
+                snapshot = ChatSnapshot(cached?.entries.orEmpty(), ChatStatus.NO_BEACON, cached?.cursor, cached?.usage)
                 return@launch
             }
             watch = w
@@ -529,6 +529,7 @@ fun ChatScreen(
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))) {
             AgentScreenHeader(chat.terminal, chat.host.name, onBack, AgentView.CHAT, onView,
                 link = chat.link, onTerminalUpdate = { chat.update(listOf(it)) }, onSearch = { searchOpen = true })
+            AgentUsageHeader(snapshot?.usage)
             ChatSearchBar(searchOpen, query, selectedIndex + 1, matches.size,
                 onQuery = { query = it; selected = null },
                 onMove = { selected = navigateChatSearch(matches, active, it) },
