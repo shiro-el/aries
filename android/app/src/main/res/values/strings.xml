@@ -35,6 +35,8 @@
     <string name="preview_capture_context">Preview: %1$s\nView mode: %2$s</string>
 
     <!-- Host creation and context sheets -->
+    <string name="creation_host_label">Host</string>
+    <string name="creation_host_disconnected">Connect to %1$s to create an Agent.</string>
     <string name="host_create_title">Create new</string>
     <string name="host_create_task_detail">Choose an Agent and write its first prompt</string>
     <string name="host_create_terminal_detail">Run a command on this Host</string>

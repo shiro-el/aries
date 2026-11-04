@@ -30,8 +30,7 @@ internal fun rememberLayoutEditor(browser: HostBrowser): LayoutEditor {
 private fun hostControlsEnabled(browser: HostBrowser, editor: LayoutEditor) =
     browser.structure != null && !browser.closed && browser.link?.state == LinkState.Up && !editor.busy
 
-/** Creation has one destination; layout navigation and editing live in the title's sheet. */
-@OptIn(ExperimentalMaterial3Api::class)
+/** Host-specific creation entries extend the same sheet used by the Agent list. */
 @Composable
 internal fun HostActions(
     browser: HostBrowser,
@@ -39,55 +38,37 @@ internal fun HostActions(
     onNewTerminal: (() -> Unit)? = null,
 ) {
     val startTask = LocalStartTask.current
+    val history = LocalCreationHostHistory.current ?: rememberCreationHostHistory()
     val editor = rememberLayoutEditor(browser)
-    var create by remember(browser) { mutableStateOf(false) }
     val enabled = hostControlsEnabled(browser, editor)
     val space = browser.openSpace
-    LaunchedEffect(enabled) { if (!enabled) create = false }
-    ActionIcon(R.drawable.ic_plus, R.string.host_create_title, { create = true }, enabled = enabled)
     // Keep the controller outside the sheet so its worktree dialog survives sheet dismissal.
     WorktreeControls(browser, action = { worktreesEnabled, openWorktrees ->
-        if (create) ModalBottomSheet(onDismissRequest = { create = false },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-            LazyColumn(Modifier.fillMaxWidth().testTag("host-create-sheet"), contentPadding = PaddingValues(bottom = 24.dp)) {
-                item { HostSheetHeading(stringResource(R.string.host_create_title)) }
-                startTask?.let { start -> item {
-                    HostSheetAction(stringResource(R.string.new_task_title), R.drawable.ic_plus,
-                        stringResource(R.string.host_create_task_detail), enabled) { create = false; start(null) }
-                } }
-                onNewTerminal?.let { launch -> item {
-                    HostSheetAction(stringResource(R.string.launch_open_button), R.drawable.ic_terminal_view,
-                        stringResource(R.string.host_create_terminal_detail), enabled) { create = false; launch() }
-                } }
-                item {
-                    HostSheetAction(stringResource(R.string.layout_new_space_button), R.drawable.ic_folder,
-                        stringResource(R.string.host_create_space_detail), enabled) {
-                        create = false
-                        if (editor.requireAvailable()) editor.naming = LayoutNameForm(LayoutNameKind.NEW_SPACE)
-                    }
-                    HostSheetAction(stringResource(R.string.layout_new_tab_button), R.drawable.ic_panels,
-                        space?.let { stringResource(R.string.host_create_tab_detail, it.name) }
-                            ?: stringResource(R.string.host_create_tab_no_space), enabled && space != null) {
-                        create = false
-                        if (space != null && editor.requireAvailable()) editor.naming = LayoutNameForm(
-                            LayoutNameKind.NEW_TAB, space.id, folder = space.folder.orEmpty())
-                    }
-                    HostSheetAction(stringResource(R.string.worktrees_button), R.drawable.ic_folder_open,
-                        stringResource(if (worktreesEnabled) R.string.host_create_worktree_detail else R.string.host_create_worktree_no_folder),
-                        enabled && worktreesEnabled) { create = false; openWorktrees() }
+        CreateActions(buttonEnabled = enabled, creationEnabled = enabled,
+            savedLaunches = browser.savedLaunches, sheetTag = "host-create-sheet", dismissWhenDisabled = true,
+            onNewTask = startTask?.let { start -> { history.used(browser.host.id); start(null) } },
+            onRunSaved = { history.used(browser.host.id); onRunSaved(it) },
+        ) { dismiss ->
+            onNewTerminal?.let { launch -> item {
+                HostSheetAction(stringResource(R.string.launch_open_button), R.drawable.ic_terminal_view,
+                    stringResource(R.string.host_create_terminal_detail), enabled) { dismiss(); launch() }
+            } }
+            item {
+                HostSheetAction(stringResource(R.string.layout_new_space_button), R.drawable.ic_folder,
+                    stringResource(R.string.host_create_space_detail), enabled) {
+                    dismiss()
+                    if (editor.requireAvailable()) editor.naming = LayoutNameForm(LayoutNameKind.NEW_SPACE)
                 }
-                if (browser.savedLaunches.isNotEmpty()) {
-                    item {
-                        HorizontalDivider(Modifier.padding(horizontal = 24.dp, vertical = 12.dp))
-                        HostSheetHeading(stringResource(R.string.launch_saved))
-                    }
-                    items(browser.savedLaunches, key = { it.id }) { saved ->
-                        HostSheetAction(saved.name, R.drawable.ic_terminal_view,
-                            saved.request.command.takeIf { it.isNotBlank() }
-                                ?: stringResource(R.string.host_create_saved_detail), enabled,
-                            Modifier.testTag("saved_run:${saved.id}")) { create = false; onRunSaved(saved) }
-                    }
+                HostSheetAction(stringResource(R.string.layout_new_tab_button), R.drawable.ic_panels,
+                    space?.let { stringResource(R.string.host_create_tab_detail, it.name) }
+                        ?: stringResource(R.string.host_create_tab_no_space), enabled && space != null) {
+                    dismiss()
+                    if (space != null && editor.requireAvailable()) editor.naming = LayoutNameForm(
+                        LayoutNameKind.NEW_TAB, space.id, folder = space.folder.orEmpty())
                 }
+                HostSheetAction(stringResource(R.string.worktrees_button), R.drawable.ic_folder_open,
+                    stringResource(if (worktreesEnabled) R.string.host_create_worktree_detail else R.string.host_create_worktree_no_folder),
+                    enabled && worktreesEnabled) { dismiss(); openWorktrees() }
             }
         }
     })
@@ -188,12 +169,12 @@ private fun HostContextRow(
 }
 
 @Composable
-private fun HostSheetHeading(title: String) {
+internal fun HostSheetHeading(title: String) {
     Text(title, Modifier.padding(horizontal = 24.dp, vertical = 8.dp), style = MaterialTheme.typography.titleLarge)
 }
 
 @Composable
-private fun HostSheetAction(
+internal fun HostSheetAction(
     title: String, @DrawableRes icon: Int, detail: String, enabled: Boolean,
     modifier: Modifier = Modifier, onClick: () -> Unit,
 ) {
