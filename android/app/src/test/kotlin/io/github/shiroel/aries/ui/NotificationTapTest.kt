@@ -88,11 +88,13 @@ class NotificationTapTest {
         show(twoHosts())
         val manager = context.getSystemService(NotificationManager::class.java)
         val question = PushQuestion("q1", "Which color?", listOf("Red", "Blue"))
+        var pushedAt = 10uL
+        var callId = "c1"
         fun ask(host: String = "h1") = PushService.show(context, PushNotice(host, "box",
             PushContent.Status("t1", "claude", null, true,
-                AgentStatus.Blocked(BlockedReason.QUESTION, question.text), 10uL, 1uL, question, null))) { true }
+                AgentStatus.Blocked(BlockedReason.QUESTION, question.text), ++pushedAt, 1uL, question, null))) { true }
         fun call() = PushService.show(context, PushNotice("h1", "box",
-            PushContent.Call("c1", "t1", true, "Review", "Ready", CallUrgency.URGENT, listOf("Continue", "Stop"), 10uL))) { true }
+            PushContent.Call(callId, "t1", true, "Review", "Ready", CallUrgency.URGENT, listOf("Continue", "Stop"), 10uL))) { true }
         fun quietCard(host: String, tag: String): Notification {
             val notification = manager.activeNotifications.single { it.id == host.hashCode() && it.tag == tag }.notification
             val channel = manager.getNotificationChannel(notification.channelId)
@@ -107,7 +109,7 @@ class NotificationTapTest {
 
         compose.runOnIdle { ask(); call() }
         quietCard("h1", "t1")
-        quietCard("h1", "call:c1")
+        quietCard("h1", "call:$callId")
 
         tap("h1", "t1") // Terminal view of the requesting Agent.
         compose.runOnIdle { ask(); call(); ask("h2") }
@@ -116,9 +118,9 @@ class NotificationTapTest {
 
         compose.runOnIdle { model.openQuickOpen() }
         compose.waitForIdle()
-        compose.runOnIdle { ask(); call() }
+        compose.runOnIdle { callId = "c2"; ask(); call() }
         quietCard("h1", "t1") // A covered Agent is not the screen the user is viewing.
-        quietCard("h1", "call:c1")
+        quietCard("h1", "call:$callId")
         compose.runOnIdle { model.closeQuickOpen() }
         compose.waitForIdle()
 
@@ -128,7 +130,7 @@ class NotificationTapTest {
             ask()
             // Local Call updates share the same gate as the FCM entry point.
             CallNotifications.post(context,
-                CallNotice("h1", "box", PushContent.Call("c1", "t1", true,
+                CallNotice("h1", "box", PushContent.Call(callId, "t1", true,
                     "Review", "Ready", CallUrgency.URGENT, listOf("Continue", "Stop"), 10uL)),
                 CallView.Choices)
         }
@@ -136,9 +138,9 @@ class NotificationTapTest {
 
         compose.runOnIdle { model.closeChat() }
         compose.waitForIdle()
-        compose.runOnIdle { ask(); call() }
+        compose.runOnIdle { callId = "c3"; ask(); call() }
         quietCard("h1", "t1")
-        quietCard("h1", "call:c1")
+        quietCard("h1", "call:$callId")
     }
 
     @Test

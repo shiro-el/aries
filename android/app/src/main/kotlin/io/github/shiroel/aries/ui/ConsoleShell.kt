@@ -90,7 +90,7 @@ private fun ConsoleMark() {
 
 /** Modal drawer owns navigation only; entering a destination goes through model cleanup. */
 @Composable
-internal fun ConsoleShell(model: HostsModel, content: @Composable (onMenu: () -> Unit) -> Unit) {
+internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit) {
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val screen = model.screen
@@ -156,7 +156,7 @@ internal fun ConsoleShell(model: HostsModel, content: @Composable (onMenu: () ->
                     }
                 }
             }) {
-                content(openDrawer)
+                content()
                 if (model.callInboxOpen && drawer.isClosed && drawer.targetValue == DrawerValue.Closed) {
                     CallInboxOverlay(model, Modifier.padding(top = 57.dp))
                 }

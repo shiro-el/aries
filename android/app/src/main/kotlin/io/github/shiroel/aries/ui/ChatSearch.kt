@@ -33,6 +33,7 @@ import io.github.shiroel.aries.core.ChatEntry
 import io.github.shiroel.aries.core.ChatEntryBody
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.first
 
 /** A searchable piece of the cached Chat, with its position in the transcript's lazy list. */
 internal data class ChatSearchField(
@@ -159,13 +160,21 @@ internal fun chatSearchFields(entries: List<ChatEntry>, markdown: Map<String, Ch
 @Composable
 internal fun rememberChatSearch(
     entries: List<ChatEntry>, markdown: Map<String, ChatMarkdownDocument>, query: String,
-): State<List<ChatSearchMatch>> = produceState(emptyList(), entries, markdown, query) {
-    value = emptyList()
-    if (query.isNotEmpty()) value = withContext(Dispatchers.Default) { searchChat(chatSearchFields(entries, markdown), query) }
+): State<List<ChatSearchMatch>> = key(query) {
+    produceState(emptyList(), entries, markdown) {
+        if (query.isNotEmpty()) value = withContext(Dispatchers.Default) { searchChat(chatSearchFields(entries, markdown), query) }
+    }
+}
+
+/** One explicit query/navigation action; each visible field reveals its glyph at most once. */
+internal class ChatSearchNavigation {
+    var target by mutableStateOf<ChatSearchMatch?>(null)
+    val revealed = mutableSetOf<Pair<String, String>>()
 }
 
 internal data class ChatSearchDecoration(
     val ranges: Map<Pair<String, String>, List<ChatSearchRange>>, val active: ChatSearchMatch?,
+    val navigation: ChatSearchNavigation? = null,
 )
 internal val LocalChatSearch = staticCompositionLocalOf { ChatSearchDecoration(emptyMap(), null) }
 internal val LocalChatSearchEntry = staticCompositionLocalOf { "" }
@@ -219,10 +228,13 @@ internal fun SearchableChatText(
     style: TextStyle = androidx.compose.material3.LocalTextStyle.current,
 ) {
     val decoration = LocalChatSearch.current
+    val navigation = decoration.navigation
     val entry = LocalChatSearchEntry.current
     val matches = decoration.ranges[entry to key].orEmpty()
     val active = decoration.active?.ranges?.firstOrNull { it.field.entryId == entry && it.field.key == key }
-    val target = decoration.active?.takeIf { it.field.entryId == entry && it.field.key == key }
+    val target = decoration.active?.takeIf {
+        it.field.entryId == entry && it.field.key == key && navigation?.target?.sameOccurrence(it) == true
+    }
     val palette = MaterialTheme.colorScheme
     val highlighted = remember(text, matches, active, palette) {
         AnnotatedString.Builder(annotateChatWebLinks(text, palette.primary)).apply {
@@ -246,9 +258,11 @@ internal fun SearchableChatText(
         textAlign = textAlign, maxLines = if (matches.isEmpty()) maxLines else Int.MAX_VALUE,
         softWrap = softWrap, style = style, onTextLayout = { layout = it },
     )
-    LaunchedEffect(target, layout) {
-        val result = layout
-        if (target != null && result != null && target.start < result.layoutInput.text.length) {
+    LaunchedEffect(navigation, target != null) {
+        val field = entry to key
+        if (target != null && navigation != null && field !in navigation.revealed) {
+            val result = snapshotFlow { layout }.first { it != null && target.start < it.layoutInput.text.length }!!
+            navigation.revealed += field
             requester.bringIntoView(result.getBoundingBox(target.start))
         }
     }

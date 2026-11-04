@@ -59,6 +59,29 @@ class WearNotificationBridgeTest {
         assertEquals(PushTarget("h1", "t1", chat = true), PushTarget.from(shadowOf(open.actionIntent).savedIntent))
     }
 
+    // Regression: an Always grant must never execute on a watch or bypass the
+    // phone card's confirmation through a background notification receiver.
+    @Test
+    fun alwaysAllowOpensThePhoneCardAndOnlyAllowAndDenyReachTheWatch() {
+        val question = PushQuestion("permission:current", "Allow Write?", listOf("Allow", "Allow always", "Deny"))
+        val status = status(AgentStatus.Blocked(BlockedReason.PERMISSION, null))
+        PushService.show(context, status.copy(content = (status.content as PushContent.Status).copy(question = question))) { true }
+        val notification = shown("t1")
+        assertEquals(listOf("Allow", "Deny"), wearable(notification).map { it.title.toString() })
+        val always = notification.actions[1]
+        assertEquals(PushTarget("h1", "t1", chat = true), PushTarget.from(shadowOf(always.actionIntent).savedIntent))
+        assertTrue(shadowOf(always.actionIntent).isActivity)
+        assertEquals(listOf(notification.actions[0].actionIntent, notification.actions[2].actionIntent),
+            wearable(notification).map { it.actionIntent })
+        NotificationGroups.opened(context, shadowOf(always.actionIntent).savedIntent)
+        assertTrue(manager.activeNotifications.none { it.tag == "t1" })
+        // An ordinary answer with the same text must remain available on the watch.
+        val ordinary = status(AgentStatus.Blocked(BlockedReason.QUESTION, null))
+        PushService.show(context, ordinary.copy(content = (ordinary.content as PushContent.Status).copy(
+            question = question.copy(id = "q1")))) { true }
+        assertEquals(question.options, wearable(shown("t1")).map { it.title.toString() })
+    }
+
     @Test
     fun watchKeepsThePhonesOpenAppFallbackForLockedKeysAndOversizedChoices() {
         for ((choices, canAnswer) in listOf(listOf("Yes", "No") to false, listOf("a", "b", "c", "d") to true)) {
@@ -88,7 +111,8 @@ class WearNotificationBridgeTest {
         val actions = wearable(shown())
         assertEquals(listOf(context.getString(R.string.call_notify_try_again), context.getString(R.string.call_notify_open_app)),
             actions.map { it.title.toString() })
-        assertEquals(original, actions.first().actionIntent)
+        // A retry is a new accepted attempt; the previous watch action must stay consumed.
+        assertNotEquals(original, actions.first().actionIntent)
         CallNotifications.post(context, notice, CallView.Done("Sent"))
         assertTrue(wearable(shown()).isEmpty())
     }

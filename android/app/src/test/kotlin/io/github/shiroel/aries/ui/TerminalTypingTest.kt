@@ -72,12 +72,20 @@ class TerminalTypingTest {
         return find(compose.activity.window.decorView) ?: error("no Terminal input on screen")
     }
 
-    /** Taps the input field and returns the connection the keyboard would use. */
-    private fun focusInput(): InputConnection {
+    /** Opens the keyboard; typing tests start with a real key before exercising the key bar. */
+    private fun focusInput(typeFirstKey: Boolean = true): InputConnection {
         val view = inputView()
         compose.runOnUiThread { view.performClick() }
         compose.waitForIdle()
-        return view.onCreateInputConnection(EditorInfo())!!
+        val ic = view.onCreateInputConnection(EditorInfo())!!
+        if (typeFirstKey) {
+            ic.commitText("x", 1)
+            compose.waitForIdle()
+            compose.mainClock.advanceTimeBy(300)
+            compose.waitForIdle()
+            (view.viewer.link!!.connection as FakeConnection).views.last().sent.clear()
+        }
+        return ic
     }
 
     private fun desktopFrame(view: FakeTerminalView) =
@@ -101,6 +109,8 @@ class TerminalTypingTest {
         compose.runOnIdle { assertTrue(core.connection!!.views.all { it.sent.isEmpty() }) }
         compose.onNodeWithContentDescription(str(R.string.terminal_composer_send_button)).performClick()
         compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(300)
+        compose.waitForIdle()
         compose.runOnIdle {
             assertEquals(listOf("paste:edited command"), core.connection!!.views.last().sent)
             assertEquals(listOf("edited command", "from Chat\n한국어"), core.inputHistory(host.id, "t1"))
@@ -119,16 +129,20 @@ class TerminalTypingTest {
     }
 
     @Test
-    fun focusingTheInputReattachesForTypingAtThePhonesSize() {
+    fun focusingKeepsTheDesktopSizeUntilTheFirstKeyReattachesForTyping() {
         val core = FakeCore()
         open(core)
         val watcher = core.connection!!.views.single()
         assertTrue(watcher.options.observe)
         desktopFrame(watcher)
         compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.terminal_observing, "t1", 200, 120)).assertExists()
-
-        focusInput()
+        val ic = focusInput(typeFirstKey = false)
+        assertEquals("opening the keyboard alone preserves the desktop attachment", 1, core.connection!!.views.size)
+        assertFalse(watcher.detached)
+        ic.commitText("x", 1)
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(300)
+        compose.waitForIdle()
         val views = core.connection!!.views
         assertEquals(2, views.size)
         assertTrue("the observer is let go", watcher.detached)
@@ -141,7 +155,7 @@ class TerminalTypingTest {
         assertTrue("the phone's grid, not the desktop's: ${cols}x$rows", cols != 200 && rows in 5..119)
         typing.push(TerminalUpdate.Screen(ScreenFrame(cols.toUShort(), rows.toUShort(), true, emptyList(), null, null, 0u, 0u)))
         compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.terminal_typing, "t1", cols, rows)).assertExists()
+        assertEquals(listOf("text:x"), typing.sent)
     }
 
 
@@ -164,6 +178,8 @@ class TerminalTypingTest {
         compose.onNodeWithContentDescription(str(R.string.terminal_compose_button)).performClick()
         compose.onNodeWithText("edited\n한국어\ntext").assertExists()
         compose.onNodeWithContentDescription(str(R.string.terminal_composer_send_button)).performClick()
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(300)
         compose.waitForIdle()
         val typing = core.connection!!.views.last()
         assertFalse(typing.options.observe)
@@ -363,6 +379,8 @@ class TerminalTypingTest {
         core.terminals = listOf(agent)
         compose.onNodeWithText("other").performClick()
         compose.onNodeWithText("claude").performClick()
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(300)
         compose.waitForIdle()
         val view = core.connection!!.views.single()
         assertFalse("no observe step first", view.options.observe)

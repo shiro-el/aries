@@ -40,7 +40,7 @@ data class Cell(val row: Int, val col: Int)
  * Selected cells, in reading order from [start] to [end] (both included).
  * [link] is the link under the long press, if there was one.
  */
-data class TerminalSelection(val start: Cell, val end: Cell, val link: String? = null) {
+data class TerminalSelection(val start: Cell, val end: Cell, val link: String? = null, val snapshot: TerminalSnapshot? = null) {
     fun ordered(): TerminalSelection =
         if (end.row < start.row || (end.row == start.row && end.col < start.col)) copy(start = end, end = start) else this
 
@@ -95,37 +95,40 @@ private fun urlAt(cells: Array<String>, col: Int): Pair<IntRange, String>? {
 }
 
 /** What a long press on [cell] selects: the link there, else the word. */
-fun selectAt(viewer: TerminalViewer, cell: Cell): TerminalSelection {
-    val line = viewer.line(cell.row)
-    val cells = rowCells(line, viewer.cols)
-    val col = cell.col.coerceIn(0, (viewer.cols - 1).coerceAtLeast(0))
+fun selectAt(viewer: TerminalViewer, cell: Cell): TerminalSelection = selectAt(viewer.snapshot(), cell)
+
+private fun selectAt(snapshot: TerminalSnapshot, cell: Cell): TerminalSelection {
+    val line = snapshot.line(cell.row)
+    val cells = rowCells(line, snapshot.cols)
+    val col = cell.col.coerceIn(0, (snapshot.cols - 1).coerceAtLeast(0))
     hyperlinkAt(line, col)?.let { uri ->
         val runs = line!!.runs.filter { it.link == uri }
         val first = runs.minOf { it.column.toInt() }
         val last = runs.maxOf { it.column.toInt() + it.width.toInt() } - 1
-        return TerminalSelection(Cell(cell.row, first), Cell(cell.row, last), uri)
+        return TerminalSelection(Cell(cell.row, first), Cell(cell.row, last), uri, snapshot)
     }
     urlAt(cells, col)?.let { (range, url) ->
-        return TerminalSelection(Cell(cell.row, range.first), Cell(cell.row, range.last), url)
+        return TerminalSelection(Cell(cell.row, range.first), Cell(cell.row, range.last), url, snapshot)
     }
     // A wide character's right half ("") belongs to the word.
     val inWord = { c: Int -> c in cells.indices && (cells[c].isEmpty() || cells[c].isNotBlank()) }
-    if (!inWord(col)) return TerminalSelection(Cell(cell.row, col), Cell(cell.row, col))
+    if (!inWord(col)) return TerminalSelection(Cell(cell.row, col), Cell(cell.row, col), snapshot = snapshot)
     var a = col
     var b = col
     while (inWord(a - 1)) a--
     while (inWord(b + 1)) b++
-    return TerminalSelection(Cell(cell.row, a), Cell(cell.row, b))
+    return TerminalSelection(Cell(cell.row, a), Cell(cell.row, b), snapshot = snapshot)
 }
 
 /** The selected text; each row's trailing blanks are dropped. */
 fun selectedText(viewer: TerminalViewer, selection: TerminalSelection): String {
     val s = selection.ordered()
+    val snapshot = s.snapshot ?: viewer.snapshot()
     return (s.start.row..s.end.row).joinToString("\n") { row ->
-        val cells = rowCells(viewer.line(row), viewer.cols)
+        val cells = rowCells(snapshot.line(row), snapshot.cols)
         val from = if (row == s.start.row) s.start.col else 0
-        val to = if (row == s.end.row) s.end.col else viewer.cols - 1
-        (from.coerceAtLeast(0)..to.coerceAtMost(viewer.cols - 1)).joinToString("") { cells[it] }.trimEnd()
+        val to = if (row == s.end.row) s.end.col else snapshot.cols - 1
+        (from.coerceAtLeast(0)..to.coerceAtMost(snapshot.cols - 1)).joinToString("") { cells[it] }.trimEnd()
     }
 }
 
@@ -143,6 +146,9 @@ class TerminalLook(private val viewer: TerminalViewer) {
     var panY by mutableFloatStateOf(0f)
         private set
     var selection by mutableStateOf<TerminalSelection?>(null)
+
+    private val cols get() = selection?.snapshot?.cols ?: viewer.cols
+    private val rows get() = selection?.snapshot?.rows ?: viewer.rows
 
     /** Cell size at zoom 1 and the viewport, from the last layout. */
     private var baseW = 1f
@@ -172,7 +178,7 @@ class TerminalLook(private val viewer: TerminalViewer) {
 
     /** Keep live input visible while the Host's resized grid is still in flight. */
     fun revealCursor() {
-        if (!viewer.typing || viewer.scrolled != 0 || viewer.search != null) return
+        if (selection != null || !viewer.typing || viewer.scrolled != 0 || viewer.search != null) return
         val cursor = viewer.cursor ?: return
         val y = cursor.row.toInt() * cellH
         if (y + panY < 0) panY = -y
@@ -182,6 +188,7 @@ class TerminalLook(private val viewer: TerminalViewer) {
 
     /** Bring the selected search cells into the phone's visible part of the grid. */
     fun revealSearchMatch() {
+        if (selection != null) return
         val match = viewer.search?.highlights?.firstOrNull { it.current } ?: return
         val x = match.column.toInt() * cellW
         val y = match.row.toInt() * cellH
@@ -189,13 +196,12 @@ class TerminalLook(private val viewer: TerminalViewer) {
         else if (x + cellW + panX > viewW) panX = viewW - x - cellW
         if (y + panY < 0) panY = -y
         else if (y + cellH + panY > viewH) panY = viewH - y - cellH
-        selection = null
         clamp()
     }
 
     fun cellAt(p: Offset): Cell = Cell(
-        ((p.y - panY) / cellH).toInt().coerceIn(0, (viewer.rows - 1).coerceAtLeast(0)),
-        ((p.x - panX) / cellW).toInt().coerceIn(0, (viewer.cols - 1).coerceAtLeast(0)),
+        ((p.y - panY) / cellH).toInt().coerceIn(0, (rows - 1).coerceAtLeast(0)),
+        ((p.x - panX) / cellW).toInt().coerceIn(0, (cols - 1).coerceAtLeast(0)),
     )
 
     /** A pinch around [centroid] by [zoomBy], and a drag by [pan]. */
@@ -238,8 +244,8 @@ class TerminalLook(private val viewer: TerminalViewer) {
     }
 
     private fun clamp() {
-        val minX = minOf(0f, viewW - cellW * viewer.cols)
-        val minY = minOf(0f, viewH - cellH * viewer.rows)
+        val minX = minOf(0f, viewW - cellW * cols)
+        val minY = minOf(0f, viewH - cellH * rows)
         panX = panX.coerceIn(minX, 0f)
         panY = panY.coerceIn(minY, 0f)
     }
@@ -273,14 +279,14 @@ fun Modifier.terminalGestures(look: TerminalLook, viewer: TerminalViewer): Modif
         when (moved) {
             null -> {
                 val at = look.cellAt(down.position)
-                val picked = selectAt(viewer, at)
+                val picked = selectAt(look.selection?.snapshot ?: viewer.snapshot(), at)
                 look.selection = picked
                 while (true) {
                     val ev = awaitPointerEvent()
                     val c = ev.changes.firstOrNull { it.id == down.id } ?: break
                     if (!c.pressed) break
                     val to = look.cellAt(c.position)
-                    if (to != at) look.selection = TerminalSelection(picked.start, to)
+                    if (to != at) look.selection = picked.copy(end = to, link = null)
                     c.consume()
                 }
             }

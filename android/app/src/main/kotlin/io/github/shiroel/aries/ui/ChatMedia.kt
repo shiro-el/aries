@@ -17,8 +17,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -109,6 +107,7 @@ internal fun diffText(diff: ChatDiff, limit: Int, added: Color, removed: Color, 
 
 private sealed interface Picture {
     data object Loading : Picture
+    data object Unavailable : Picture
     data object Unreadable : Picture
     data class Ready(val bitmap: Bitmap, val bytes: ByteArray) : Picture
 }
@@ -126,27 +125,31 @@ fun ChatImageView(image: ChatImage, load: (String) -> ByteArray?) {
         Text(stringResource(R.string.chat_image_too_large, mb), style = MaterialTheme.typography.bodySmall, color = muted)
         return
     }
-    val picture by produceState<Picture>(Picture.Loading, image.id) {
+    val revision = LocalChatImageRevision.current
+    val picture by produceState<Picture>(Picture.Loading, image.id, revision) {
         value = withContext(Dispatchers.Default) {
-            load(image.id)?.let { bytes -> decode(bytes)?.let { Picture.Ready(it, bytes) } } ?: Picture.Unreadable
+            val bytes = load(image.id)
+            if (bytes == null) Picture.Unavailable else decode(bytes)?.let { Picture.Ready(it, bytes) } ?: Picture.Unreadable
         }
     }
-    var viewing by remember(image.id) { mutableStateOf(false) }
+    val sharedDialogs = LocalChatDialogs.current
+    val dialogs = sharedDialogs ?: remember { ChatDialogState() }
     val openLabel = stringResource(R.string.image_viewer_open)
     when (val p = picture) {
         Picture.Loading -> Text(stringResource(R.string.chat_image_loading), style = MaterialTheme.typography.bodySmall, color = muted)
+        Picture.Unavailable -> Text(stringResource(R.string.chat_image_unavailable), style = MaterialTheme.typography.bodySmall, color = muted)
         Picture.Unreadable -> Text(stringResource(R.string.chat_image_unreadable), style = MaterialTheme.typography.bodySmall, color = muted)
         is Picture.Ready -> {
-            if (viewing) ImageViewer(p.bytes, onDismiss = { viewing = false })
             Image(
                 p.bitmap.asImageBitmap(),
                 contentDescription = stringResource(R.string.chat_image),
                 modifier = Modifier.heightIn(max = 320.dp).background(MaterialTheme.colorScheme.surface)
-                    .clickable(onClickLabel = openLabel) { viewing = true },
+                    .clickable(onClickLabel = openLabel) { dialogs.image = p.bytes },
                 contentScale = ContentScale.Fit,
             )
         }
     }
+    if (sharedDialogs == null) ChatDialogs(dialogs)
 }
 
 /** Decodes at most [IMAGE_MAX_PIXELS] on the longest side. */

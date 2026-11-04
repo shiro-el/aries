@@ -4,7 +4,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -66,7 +66,7 @@ class TerminalScreenTest {
     }
 
     private fun screenShows(text: String) =
-        compose.onNode(hasContentDescription(text, substring = true)).assertExists()
+        compose.onNode(hasText(text, substring = true)).assertExists()
 
     @Test
     fun opensAnAgentsPaneInObserveModeAndDrawsLiveOutput() {
@@ -89,7 +89,7 @@ class TerminalScreenTest {
         view.push(frame(120, 3, true, 0 to "$ claude", 1 to "Thinking..."))
         compose.waitForIdle()
         screenShows("Thinking...")
-        compose.onNodeWithText(str(R.string.terminal_observing, "t1", 120, 3)).assertExists()
+        screenShows(str(R.string.terminal_accessibility_summary, 120, 3))
 
         // A partial frame updates the cursor line without reading the other rows.
         view.push(frame(120, 3, false, 1 to "Done."))
@@ -99,26 +99,32 @@ class TerminalScreenTest {
         // The desktop resized the Terminal: the phone follows.
         view.push(frame(80, 2, true, 0 to "resized"))
         compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.terminal_observing, "t1", 80, 2)).assertExists()
+        screenShows(str(R.string.terminal_accessibility_summary, 80, 2))
         screenShows("resized")
     }
 
+    // Catches output changing away from the cursor being inaccessible, including partial frames.
     @Test
-    fun terminalAnnouncementStaysBoundedAndReadsOnlyTheCursorLine() {
+    fun terminalReadingExposesRecentOutputAndUpdatesWithoutMovingTheCursor() {
         val core = FakeCore().apply { terminals = listOf(build) }
         open(core)
         compose.onNodeWithText("build").performClick()
         val view = core.connection!!.views.single()
         val lines = (0 until 80).map { row ->
-            ScreenLine(row.toUShort(), listOf(run(0, if (row == 40) "cursor prompt " + "x".repeat(2000) else "unrelated output $row")))
+            ScreenLine(row.toUShort(), listOf(run(0, if (row == 79) "recent result" else "output $row " + "x".repeat(2000))))
         }
-        view.push(TerminalUpdate.Screen(ScreenFrame(4096u, 80u, true, lines, CursorPos(40u, 0u), null)))
+        view.push(TerminalUpdate.Screen(ScreenFrame(4096u, 80u, true, lines, CursorPos(79u, 0u), null)))
         compose.waitForIdle()
-        val spoken = compose.onNodeWithTag("terminal-screen").fetchSemanticsNode()
-            .config[SemanticsProperties.ContentDescription].joinToString()
-        assertTrue("bounded regardless of grid and line lengths", spoken.length <= 512)
-        assertTrue("cursor context remains available", spoken.contains("cursor prompt"))
-        assertTrue("other screen rows are not read automatically", !spoken.contains("unrelated output"))
+        fun spoken() = compose.onNodeWithTag("terminal-screen").fetchSemanticsNode()
+            .config[SemanticsProperties.Text].joinToString { it.text }
+        assertTrue("recent output is available", spoken().contains("recent result"))
+        assertTrue("only a bounded tail is exposed", !spoken().contains("output 0 "))
+        assertTrue("bounds apply to oversized grids too", spoken().length <= 8192)
+        view.push(TerminalUpdate.Screen(ScreenFrame(4096u, 80u, false,
+            listOf(ScreenLine(78u, listOf(run(0, "background task finished")))), CursorPos(79u, 0u), null)))
+        compose.waitForIdle()
+        assertTrue("output away from the cursor is readable", spoken().contains("background task finished"))
+        assertTrue("unchanged rows survive partial frames", spoken().contains("recent result"))
     }
 
     @Test

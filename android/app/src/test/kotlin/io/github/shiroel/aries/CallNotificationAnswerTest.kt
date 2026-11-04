@@ -88,6 +88,7 @@ class CallNotificationAnswerTest {
 
     /** Runs the worker as WorkManager would after [ChoiceReceiver]. */
     private fun runWorker(choice: Int): ListenableWorker.Result = runBlocking {
+        if (manager.activeNotifications.none { it.tag == "call:c1" }) showWithBackgroundKey()
         TestListenableWorkerBuilder<CallReplyWorker>(context)
             .setInputData(CallReplyWorker.input(context, notice(), choice))
             .build()
@@ -171,6 +172,11 @@ class CallNotificationAnswerTest {
         assertEquals(1, manager.activeNotifications.count { it.notification.flags and Notification.FLAG_GROUP_SUMMARY == 0 })
         assertEquals(str(R.string.call_answer_delivered, "Wait"), text(n))
         assertEquals(emptyList<String>(), buttons(n))
+        // Regression: an outcome must not reuse the urgent channel and ring again.
+        val channel = manager.getNotificationChannel(n.channelId)
+        assertEquals(NotificationManager.IMPORTANCE_LOW, channel.importance)
+        assertNull(channel.sound)
+        assertFalse(channel.shouldVibrate())
     }
 
     @Test

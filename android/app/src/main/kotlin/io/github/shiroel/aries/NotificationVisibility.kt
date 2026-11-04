@@ -7,6 +7,11 @@ import android.os.Bundle
 import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.awaitCancellation
 import androidx.compose.ui.platform.LocalContext
 
 /** Process-local UI presence: FCM cold starts have no resumed Activities. */
@@ -54,7 +59,15 @@ internal class NotificationVisibility : Application.ActivityLifecycleCallbacks {
 @Composable
 internal fun ObserveNotificationTarget(target: PushTarget?) {
     val activity = LocalActivity.current ?: return
-    val visibility = NotificationVisibility.from(LocalContext.current) ?: return
+    val context = LocalContext.current
+    val visibility = NotificationVisibility.from(context) ?: return
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(context, target, lifecycle) {
+        if (target != null) lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            NotificationGroups.viewing(context, target)
+            awaitCancellation()
+        }
+    }
     DisposableEffect(visibility, activity, target) {
         visibility.viewing(activity, target)
         onDispose { visibility.viewing(activity, null) }

@@ -10,6 +10,8 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -35,7 +37,8 @@ import org.json.JSONObject
 @Composable
 internal fun MermaidDiagram(source: String, modifier: Modifier = Modifier, fallback: @Composable () -> Unit) {
     var failed by remember(source) { mutableStateOf(false) }
-    var expanded by remember(source) { mutableStateOf(false) }
+    val sharedDialogs = LocalChatDialogs.current
+    val dialogs = sharedDialogs ?: remember { ChatDialogState() }
     if (failed) { fallback(); return }
     val context = LocalContext.current
     val label = stringResource(R.string.chat_mermaid_label)
@@ -43,17 +46,31 @@ internal fun MermaidDiagram(source: String, modifier: Modifier = Modifier, fallb
         context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText(label, source))
         Unit
     }
-    MermaidSurface(source, false, { expanded = true }, copy, { failed = true },
+    MermaidSurface(source, false, { dialogs.diagram = source }, copy, { failed = true },
         modifier.semantics {
             contentDescription = label
-            onClick { expanded = true; true }
+            onClick { dialogs.diagram = source; true }
             onLongClick { copy(); true }
         })
-    if (expanded) Dialog(onDismissRequest = { expanded = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    if (sharedDialogs == null) ChatDialogs(dialogs)
+}
+
+@Composable
+internal fun MermaidDialog(source: String, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val label = stringResource(R.string.chat_mermaid_label)
+    var failed by remember(source) { mutableStateOf(false) }
+    val copy = {
+        context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText(label, source))
+        Unit
+    }
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().safeDrawingPadding()) {
-                TextButton(onClick = { expanded = false }) { Text(stringResource(R.string.back_button)) }
-                MermaidSurface(source, true, {}, copy, { failed = true }, Modifier.fillMaxWidth().weight(1f))
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.back_button)) }
+                if (failed) androidx.compose.foundation.text.selection.SelectionContainer {
+                    Text(source, Modifier.verticalScroll(rememberScrollState()).padding(16.dp))
+                } else MermaidSurface(source, true, {}, copy, { failed = true }, Modifier.fillMaxWidth().weight(1f))
             }
         }
     }

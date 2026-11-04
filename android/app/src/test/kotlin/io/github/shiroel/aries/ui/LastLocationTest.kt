@@ -41,6 +41,7 @@ class LastLocationTest {
     private val pushTarget = mutableStateOf<PushTarget?>(null)
     private var incomingShare: Intent? = null
     private lateinit var model: HostsModel
+    private lateinit var settings: ThemeSettings
     private val terminal = TerminalInfo("box/t1", "shell", "", listOf("sh"), "/repo", "live", null)
 
     private fun core() = FakeCore().apply {
@@ -64,7 +65,8 @@ class LastLocationTest {
                     incomingShare?.let(model::receiveShare)
                     model.start(pushTarget.value)
                 }
-                AriesApp(model)
+                settings = remember { ThemeSettings.from(context) }
+                AriesApp(model, settings)
             }
         }
         compose.waitForIdle()
@@ -141,11 +143,17 @@ class LastLocationTest {
         }
         compose.waitForIdle()
 
-        restart()
-
+        // Regression: a saved layout must not replace the restored route with its own home.
+        for (layout in AppLayout.entries) {
+            compose.runOnIdle { settings.chooseLayout(layout) }
+            restart()
+            compose.runOnIdle {
+                assertEquals(layout, settings.layout)
+                assertEquals("box/t1", (model.screen as Screen.Chat).chat.terminal.address)
+                assertEquals(AgentView.TERMINAL, model.agentView)
+            }
+        }
         compose.runOnIdle {
-            assertEquals("box/t1", (model.screen as Screen.Chat).chat.terminal.address)
-            assertEquals(AgentView.TERMINAL, model.agentView)
             model.closeChat()
             assertEquals("tab2", (model.screen as Screen.Browse).browser.tab?.id)
         }
@@ -170,6 +178,10 @@ class LastLocationTest {
             assertTrue("the first foreground refresh must not unlock the same Host again", core.snapshotsRequested.isEmpty())
             assertTrue("restoration uses the key-work context", core.offKeyWork.isEmpty())
         }
+        // Regression: an interrupted restore must not erase the last successful location.
+        core.failWith = null
+        restart()
+        compose.runOnIdle { assertEquals("box/t1", (model.screen as Screen.Terminal).viewer.terminal.address) }
     }
 
     @Test fun aGoneTerminalFallsBackToItsTabEvenWhenTheLayoutStillContainsIt() {
@@ -261,7 +273,8 @@ class LastLocationTest {
             val viewer = (model.screen as Screen.Terminal).viewer
             assertEquals("h2", viewer.link!!.host.id)
             assertEquals("t1", viewer.terminal.address)
-            assertTrue(core.connectionsOf.getValue("h1").views.isEmpty())
+            assertTrue(core.connectionsOf.getValue("h1").views.all { it.detached })
+            assertEquals("cold notification must not reconnect the saved Host", 1, core.connectAttempts.count { it == "h1" })
         }
     }
 
@@ -336,4 +349,46 @@ class LastLocationTest {
         compose.waitForIdle()
         compose.runOnIdle { assertEquals("h2", (model.screen as Screen.Chat).chat.host.id) }
     }
+    // Regression: a delayed startup status snapshot must not replace the Terminal the user already opened from structure.
+    @Test fun userNavigationBeforeTheFirstStatusListAbandonsRestoration() {
+        val saved = terminal.copy(agentStatus = AgentStatus.Working)
+        val other = terminal.copy(address = "box/t2", name = "Chosen shell")
+        val core = core().apply {
+            terminals = listOf(saved, other)
+            structure = structure!!.copy(unplaced = listOf(other))
+            savedView = AgentView.CHAT
+        }
+        show(core)
+        compose.runOnIdle { model.connect(model.hosts.single()) }
+        compose.waitForIdle()
+        compose.runOnIdle { model.openTerminal(saved) }
+        compose.waitForIdle()
+        val hold = CompletableDeferred<Unit>()
+        core.firstTerminalListHolds["h1"] = hold
+
+        restart()
+        compose.runOnIdle { model.openTerminal(other) }
+        compose.waitForIdle()
+        val chosen = model.screen
+        compose.runOnIdle { hold.complete(Unit) }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertTrue(chosen is Screen.Terminal)
+            assertTrue("the user's Terminal must remain visible", model.screen === chosen)
+            assertEquals("box/t2", (model.screen as Screen.Terminal).viewer.terminal.address)
+        }
+    }
+
+    // Regression: closing a notification Chat to its list must not reopen that Chat after process recreation.
+    @Test fun closingChatToTheAgentListClearsTheSavedDetail() {
+        val core = core().apply { terminals = listOf(terminal.copy(agentStatus = AgentStatus.Working)) }
+        show(core)
+        compose.runOnIdle { model.openPushedAgent("h1", "box/t1", openChat = true) }
+        compose.waitForIdle()
+        compose.runOnIdle { model.closeChat() }
+        compose.waitForIdle()
+        restart()
+        compose.runOnIdle { assertEquals(Screen.Hosts, model.screen) }
+    }
+
 }

@@ -7,6 +7,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.graphics.asAndroidBitmap
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.*
 import java.io.ByteArrayOutputStream
@@ -31,6 +32,15 @@ class ChatToolMediaTest {
             recycle()
         }
         out.toByteArray()
+    }
+
+    private fun screenshot(name: String, dialog: Boolean = false) {
+        val file = java.io.File("/tmp/aries-mvp-run/lanes/231-shots/$name.png")
+        file.parentFile?.mkdirs()
+        file.outputStream().use { out ->
+            (if (dialog) compose.onNode(isDialog()) else compose.onRoot()).captureToImage().asAndroidBitmap()
+                .compress(Bitmap.CompressFormat.PNG, 100, out)
+        }
     }
 
     private fun openChat(tool: ChatEntryBody.Tool): Pair<FakeCore, ChatModel> {
@@ -58,7 +68,7 @@ class ChatToolMediaTest {
             "Read", "/repo/shot.png", "{}", ChatToolStatus.DONE, "[image image/png]",
             images = listOf(ChatImage("read#0", "image/png", png.size.toULong(), 160u, 120u, true)),
         ))
-        val header = compose.onNodeWithContentDescription(compose.activity.getString(R.string.chat_tool_expand_label, "Read"))
+        val header = compose.onNode(hasToolAction(compose.activity.getString(R.string.chat_tool_expand_label, "Read")))
         compose.onNodeWithContentDescription("Image").assertDoesNotExist()
         header.performTouchInput { click(topLeft + androidx.compose.ui.geometry.Offset(4f, 4f)) }
         assertEquals(setOf("read"), chat.expanded)
@@ -77,6 +87,36 @@ class ChatToolMediaTest {
         compose.onNodeWithContentDescription("Image").performTouchInput { click() }
         compose.waitUntil(5_000) { compose.onAllNodesWithContentDescription("Image viewer").fetchSemanticsNodes().isNotEmpty() }
         assertEquals(setOf("read"), chat.expanded)
+    }
+
+    // Regression: a cached row with missing bytes must recover when its watch reconnects, without disposing the row.
+    @Test fun missingImageBytesRecoverAfterReconnectAndDifferFromDecodeFailure() {
+        val body = ChatEntryBody.Tool("Read", "/repo/shot.png", "{}", ChatToolStatus.DONE, null,
+            images = listOf(ChatImage("read#0", "image/png", png.size.toULong(), 160u, 120u, true)))
+        val (core, _) = openChat(body)
+        compose.runOnIdle { core.chatImages.clear() }
+        compose.onNode(hasToolAction(compose.activity.getString(R.string.chat_tool_expand_label, "Read")))
+            .performTouchInput { click(topLeft + androidx.compose.ui.geometry.Offset(4f, 4f)) }
+        compose.waitUntil(5_000) { compose.onAllNodesWithText(compose.activity.getString(R.string.chat_image_unavailable)).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText(compose.activity.getString(R.string.chat_image_unreadable)).assertDoesNotExist()
+        screenshot("image-unavailable")
+        core.pushChat(ChatSnapshot(listOf(ChatEntry("read", null, body)), ChatStatus.RECONNECTING, "cached"))
+        compose.waitForIdle()
+        compose.runOnIdle { core.chatImages["read#0"] = byteArrayOf(1, 2, 3) }
+        core.pushChat(ChatSnapshot(listOf(ChatEntry("read", null, body)), ChatStatus.LIVE, "invalid"))
+        compose.waitUntil(5_000) { compose.onAllNodesWithText(compose.activity.getString(R.string.chat_image_unreadable)).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText(compose.activity.getString(R.string.chat_image_unavailable)).assertDoesNotExist()
+        core.pushChat(ChatSnapshot(listOf(ChatEntry("read", null, body)), ChatStatus.RECONNECTING, "retry"))
+        compose.waitForIdle()
+        compose.runOnIdle { core.chatImages["read#0"] = png }
+        core.pushChat(ChatSnapshot(listOf(ChatEntry("read", null, body)), ChatStatus.LIVE, "live"))
+        compose.waitUntil(5_000) { compose.onAllNodesWithContentDescription(compose.activity.getString(R.string.chat_image)).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription(compose.activity.getString(R.string.chat_image)).performClick()
+        // The viewer owns its bytes even if the originating entry disappears.
+        core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, "reset"))
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Image viewer").assertExists()
+        screenshot("image-viewer", dialog = true)
     }
 
     @Test fun toolPathUsesRecordedCwdAndBinaryViewerAndMissingFilesShowAnError() {
@@ -121,7 +161,7 @@ class ChatToolMediaTest {
         compose.onNodeWithText("Back").performClick()
         compose.onNodeWithContentDescription(compose.activity.getString(R.string.files_actions_label)).performClick()
         compose.onNodeWithText("Close files").performClick()
-        compose.onNodeWithContentDescription(compose.activity.getString(R.string.chat_tool_expand_label, "Read"))
+        compose.onNode(hasToolAction(compose.activity.getString(R.string.chat_tool_expand_label, "Read")))
             .performTouchInput { click(topLeft + androidx.compose.ui.geometry.Offset(4f, 4f)) }
         compose.onNodeWithText(compose.activity.getString(R.string.chat_tool_path, "/tmp/deleted.svg")).performFirstLinkClick()
         compose.waitUntil(5_000) { compose.onAllNodesWithContentDescription("Image viewer").fetchSemanticsNodes().isNotEmpty() }

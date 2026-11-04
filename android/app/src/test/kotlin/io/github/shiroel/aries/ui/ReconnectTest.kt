@@ -207,6 +207,9 @@ class ReconnectTest {
             }
         }
         start(core)
+        // The user explicitly opens the all-Host board; notification entry only connects its target now.
+        compose.runOnIdle { model.openAgents() }
+        compose.waitForIdle()
         compose.runOnIdle { model.openPushedAgent(home.id, agent.address) }
         compose.waitForIdle()
         assertTrue("another Host must not open a modal", model.prompt == null)

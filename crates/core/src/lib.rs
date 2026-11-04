@@ -1369,8 +1369,10 @@ impl AriesCore {
 #[uniffi::export]
 impl AriesCore {
     /// Follows the Chat of the Agent in `terminal` (address or name) through
-    /// the Host's Beacon. Pass the `cursor` of an earlier snapshot to resume
-    /// after it. Reconnects by itself; call `next` for each change.
+    /// the Host's Beacon. A new watch resumes from its loaded cached snapshot,
+    /// or requests full history when none exists. `cursor` is retained for API
+    /// compatibility; it cannot advance past the history this watch holds.
+    /// Reconnects by itself; call `next` for each change.
     pub fn watch_chat(
         &self,
         host_id: String,

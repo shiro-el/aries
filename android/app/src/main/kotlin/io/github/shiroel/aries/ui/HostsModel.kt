@@ -147,7 +147,9 @@ class HostsModel(
     private val http: HttpClient = HttpRelayClient(),
     private val onSavedLaunchesChanged: () -> Unit = {},
     private val locationStore: LastLocationStore? = null,
+    private val onCallAnswered: (Host, String) -> Unit = { _, _ -> },
 ) {
+    internal val pairingReview = QrPairingReview()
     /** Current Host's settings models; a previous Host's pending work keeps its own state. */
     var beacon by mutableStateOf(BeaconModel(core, scope, beaconFetcher, keyWork = keyWork))
         private set
@@ -190,7 +192,7 @@ class HostsModel(
     }
 
     /** Every Host's Calls for the inbox; see [resumeCalls]. */
-    val calls = CallsModel(core, scope, keyWork)
+    val calls = CallsModel(core, scope, keyWork, onCallAnswered)
     /** Chat cache retention and per-Host clearing (ticket 44). */
     val chatCache = ChatCacheModel(core, scope, keyWork)
     val diagnosticHistory = DiagnosticsModel(core, scope, keyWork)
@@ -220,6 +222,10 @@ class HostsModel(
     var agentView by mutableStateOf(AgentView.TERMINAL)
         private set
 
+    // Settings overlays the route owner, so appearance changes never retire a connection or draft.
+    private var settingsReturnTo by mutableStateOf<Screen?>(null)
+    private val ownedScreen: Screen get() = settingsReturnTo ?: screen
+
     /** Settings subpages share the drawer destination and own all configuration. */
     var settingsHost by mutableStateOf<Host?>(null)
         private set
@@ -242,6 +248,7 @@ class HostsModel(
     private var setupRevision = 0
 
     fun startAddingHost(method: HostAddMethod = HostAddMethod.MANUAL) {
+        pairingReview.clear()
         if (screen != Screen.Hosts) back()
         addedHost = null
         setupHostId = null
@@ -249,7 +256,7 @@ class HostsModel(
         hostAddMethod = method
     }
 
-    fun closeAddingHost() { setupRevision++; hostAddMethod = null; addedHost = null }
+    fun closeAddingHost() { pairingReview.clear(); setupRevision++; hostAddMethod = null; addedHost = null }
 
     /** The open Host's connection and structure watch, while [Screen.Browse] shows (the latest line after a reconnect). */
     private var open: Pair<HostConnection, StructureWatch?>? = null
@@ -317,6 +324,7 @@ class HostsModel(
         }
 
     fun openQuickOpen() {
+        userNavigation()
         closeCallInbox()
         guard { lastKnownStates = core.lastKnownStates() }
         quickOpenVisible = true
@@ -346,6 +354,7 @@ class HostsModel(
     }
 
     fun selectQuickOpen(result: QuickOpenResult) {
+        userNavigation()
         closeQuickOpen()
         val browser = quickOpenBrowser
         if (browser?.host?.id == result.host.id && browser.link?.state == LinkState.Up) {
@@ -456,7 +465,7 @@ class HostsModel(
 
 
     /** Every line the screens use now: the open Host's and the Agent list's. */
-    private val links: List<HostLink> get() = listOfNotNull(browseLink, callLink) + agentLinks.values
+    private val links: List<HostLink> get() = listOfNotNull(browseLink, callLink, agentOpeningLink) + agentLinks.values
 
     /**
      * The phone's network changed (Wi-Fi to LTE, airplane mode): replace every
@@ -533,24 +542,34 @@ class HostsModel(
 
     /** The Chat that is open, or still running under the Terminal opened from it. */
     private val liveChat: ChatModel?
-        get() = (screen as? Screen.Chat ?: (screen as? Screen.Terminal)?.returnTo as? Screen.Chat)?.chat
+        get() = (ownedScreen as? Screen.Chat ?: (ownedScreen as? Screen.Terminal)?.returnTo as? Screen.Chat)?.chat
 
     private var started = false
     private var explicitSurfaceEntry = false
     private var startupHostId: String? = null
     private var restoring by mutableStateOf(false)
+    private var navigationVersion = 0L
+    private var suppressLocationSave by mutableStateOf(false)
+
+    /** Explicit navigation supersedes automatic focus, restoration and any pending detail connection. */
+    private fun userNavigation() {
+        navigationVersion++
+        suppressLocationSave = false
+        restoring = false
+        cancelAgentOpen()
+    }
 
     /** Called after the activity resumes and installs its biometric authorizer. */
     fun start(target: PushTarget? = null) {
         if (started) {
-            target?.let { openPushedAgent(it.hostId, it.terminal, openChat = it.chat) }
+            target?.let(::openNotificationTarget)
             return
         }
         started = true
         val saved = locationStore?.load()
         if (target != null) {
             startupHostId = target.hostId
-            openPushedAgent(target.hostId, target.terminal, openChat = target.chat)
+            openNotificationTarget(target)
         } else if (!explicitSurfaceEntry && screen == Screen.Hosts) {
             hosts.find { it.id == saved?.hostId }?.let {
                 startupHostId = it.id
@@ -558,13 +577,14 @@ class HostsModel(
             }
         }
         if (locationStore != null) scope.launch {
-            snapshotFlow { if (restoring) null else lastLocation() }
+            snapshotFlow { if (restoring || suppressLocationSave) null else lastLocation() }
                 .filterNotNull().collect { locationStore.save(it) }
         }
     }
 
-    private fun lastLocation(): LastLocation? = when (val s = screen) {
-        Screen.Hosts -> LastLocation()
+    private fun lastLocation(): LastLocation? = when (val s = ownedScreen) {
+        Screen.Hosts, Screen.Settings -> LastLocation()
+        is Screen.Agents -> LastLocation()
         is Screen.Browse -> LastLocation(s.browser.host.id, s.browser.openSpaceId, s.browser.tab?.id)
         is Screen.Terminal -> s.viewer.link?.host?.let { host ->
             terminalLocation(host.id, s.viewer.terminal.address, AgentView.TERMINAL, s.returnTo)
@@ -744,6 +764,12 @@ class HostsModel(
 
     private fun connect(host: Host, restore: LastLocation?, savedLaunchId: String? = null, confirmSavedLaunch: Boolean = true) {
         closeAddingHost()
+        val quickOpen = pendingQuickOpen
+        val taskHostId = newTaskHostId
+        back()
+        pendingQuickOpen = quickOpen
+        newTaskHostId = taskHostId
+        suppressLocationSave = false
         restoring = restore != null
         missingKeyHostId = null
         val link = link(host, null) { error ->
@@ -752,7 +778,7 @@ class HostsModel(
         browseLink = link
         val stored = try { core.lastKnownState(host.id) } catch (_: CoreException) { null }
         val cachedBrowser = stored?.structure?.let { structure ->
-            HostBrowser(host).also { browser ->
+            HostBrowser(host, ::userNavigation).also { browser ->
                 browser.link = link
                 browser.update(structure)
                 stored.agents.forEach(browser::replaceTerminal)
@@ -762,16 +788,17 @@ class HostsModel(
         screen = connecting
         status = scope.launch {
             link.keep { conn, _ ->
-                if (screen !== connecting) return@keep
+                if (ownedScreen !== connecting) return@keep
 
-                val browser = cachedBrowser ?: HostBrowser(host)
+                val browser = cachedBrowser ?: HostBrowser(host, ::userNavigation)
                 browser.layoutEditor = LayoutEditor(browser, scope)
                 browser.link = link
                 browser.savedLaunches = conn.savedLaunches()
                 open = conn to null
-                screen = Screen.Browse(browser)
+                val next = Screen.Browse(browser)
+                if (settingsReturnTo === connecting) settingsReturnTo = next else screen = next
                 loadHostSettings(host)
-                status = watchBrowse(link, browser, restore, savedLaunchId, confirmSavedLaunch)
+                status = watchBrowse(link, browser, restore.takeIf { restoring }, savedLaunchId, confirmSavedLaunch)
             }
         }
     }
@@ -1146,10 +1173,10 @@ class HostsModel(
         val host = hosts.find { it.id == prompt.host.id } ?: return
         when (prompt.then) {
             AfterTrust.Connect -> {
-                val waiting = links.firstOrNull { it.host.id == host.id && it.state is LinkState.Down }
+                val waiting = links.filter { it.host.id == host.id && it.state is LinkState.Down }
                 val chat = liveChat?.takeIf { it.host.id == host.id && it.connectionError != null }
-                if (waiting != null || chat != null) {
-                    waiting?.retryNow()
+                if (waiting.isNotEmpty() || chat != null) {
+                    waiting.forEach { it.retryNow() }
                     chat?.retryConnection()
                 } else connect(host)
             }
@@ -1206,10 +1233,10 @@ class HostsModel(
         val host = hosts.find { it.id == prompt.host.id } ?: return
         when (prompt.then) {
             AfterTrust.Connect -> {
-                val waiting = links.firstOrNull { it.host.id == host.id && it.state is LinkState.Down }
+                val waiting = links.filter { it.host.id == host.id && it.state is LinkState.Down }
                 val chat = liveChat?.takeIf { it.host.id == host.id && it.connectionError != null }
-                if (waiting != null || chat != null) {
-                    waiting?.retryNow()
+                if (waiting.isNotEmpty() || chat != null) {
+                    waiting.forEach { it.retryNow() }
                     chat?.retryConnection()
                 } else connect(host)
             }
@@ -1226,6 +1253,7 @@ class HostsModel(
         guard {
             conversations.filterKeys { it.hostId == prompt.host.id }.values.forEach { it.stop() }
             core.removeHost(prompt.host.id)
+            if (settingsReturnTo != null) back()
             hostSettings.remove(prompt.host.id)
             conversations.keys.removeAll { it.hostId == prompt.host.id }
             hosts = core.hosts()
@@ -1247,6 +1275,7 @@ class HostsModel(
         pendingQuickOpen = null
         prompt = null
         // Initial trust belongs to the pending connection; cancelling abandons it.
+        if (cancelledHost != null && agentOpeningLink?.host?.id == cancelledHost.id) cancelAgentOpen()
         if (cancelledHost != null && (screen as? Screen.Connecting)?.host?.id == cancelledHost.id) back()
     }
 
@@ -1256,12 +1285,19 @@ class HostsModel(
     private fun watchBrowse(link: HostLink, browser: HostBrowser, restore: LastLocation? = null, savedLaunchId: String? = null, confirmSavedLaunch: Boolean = true): Job = scope.launch {
         var pendingLaunch = savedLaunchId
         var pending = restore
+        val restoreVersion = navigationVersion
         var terminals: List<TerminalInfo>? = null
         fun restoreIfReady() {
             val saved = pending ?: return
             val structure = browser.structure ?: return
             val list = terminals ?: return
-            if (browseLink !== link) return
+            if (browseLink !== link || navigationVersion != restoreVersion ||
+                (screen as? Screen.Browse)?.browser !== browser) {
+                pending = null
+                return
+            }
+            pending = null
+            restoring = false
             val terminal = list.find { it.address == saved.terminal && it.state == "live" }
             val space = structure.spaces.find { space ->
                 terminal != null && space.tabs.any { tab -> tab.panes.any { pane ->
@@ -1275,8 +1311,6 @@ class HostsModel(
                 } } ?: it.tabs.find { it.id == saved.tabId }
                 tab?.let(browser::selectTab)
             }
-            pending = null
-            restoring = false
             if (terminal != null) {
                 val origin = Screen.Browse(browser)
                 if (saved.view == AgentView.CHAT && terminal.agentStatus != null) chat(link, terminal, origin)
@@ -1344,6 +1378,7 @@ class HostsModel(
      * identity. Leaving a Terminal returns to where it was opened.
      */
     fun openTerminal(terminal: TerminalInfo) {
+        userNavigation()
         when (val s = screen) {
             is Screen.Browse -> {
                 val link = browseLink ?: return
@@ -1378,6 +1413,9 @@ class HostsModel(
 
     private fun chat(link: HostLink?, terminal: TerminalInfo, returnTo: Screen, draft: String = "") {
         val line = link ?: return
+        viewing?.cancel()
+        viewing = null
+        liveChat?.stop()
         val chat = conversation(line, terminal)
         if (draft.isNotEmpty()) chat.appendDraft(draft)
         screen = Screen.Chat(chat, returnTo)
@@ -1390,6 +1428,7 @@ class HostsModel(
      * next Agent opened.
      */
     fun switchView(view: AgentView) {
+        userNavigation()
         when (val s = screen) {
             is Screen.Terminal -> {
                 if (view != AgentView.CHAT || s.viewer.terminal.agentStatus == null) return
@@ -1455,6 +1494,8 @@ class HostsModel(
 
     /** Re-attaches with `resumed` on each new line, so the screen comes back after a network change. */
     private fun observe(link: HostLink, terminal: TerminalInfo, returnTo: Screen) {
+        viewing?.cancel()
+        if (returnTo !is Screen.Chat) liveChat?.stop()
         val owner = conversation(link, terminal)
         val viewer = TerminalViewer(terminal, owner.terminalComposer)
         viewer.inputHistory = owner.inputHistory
@@ -1465,7 +1506,7 @@ class HostsModel(
             try {
                 link.keepWatching(onFailure = { viewer.watchError = it }, onStart = { viewer.watchError = null }) { conn, resumed ->
                     if (!viewer.typing) {
-                        // Watch until the input is focused, then let go of the observer.
+                        // Watch until the first key/paste, then let go of the observer.
                         val options = AttachOptions(observe = true, cols = 80u, rows = 24u, history = SCROLLBACK_LINES, resumed = resumed)
                         val exited = coroutineScope {
                             val watching = async { draw(conn, viewer, options, null) }
@@ -1478,6 +1519,7 @@ class HostsModel(
                         if (exited) return@keepWatching
                     }
                     // An ordinary viewer at the phone's grid; from now on the phone sets the size.
+                    // The Canvas publishes only settled grids, including before the first attach.
                     val (cols, rows) = snapshotFlow { viewer.phoneGrid }.filterNotNull().first()
                     val options = AttachOptions(
                         observe = false, cols = cols.toUShort(), rows = rows.toUShort(), history = SCROLLBACK_LINES, resumed = resumed,
@@ -1622,12 +1664,12 @@ class HostsModel(
 
     /** Leaves the open Terminal (it keeps running) and shows where it was opened from. */
     fun closeTerminal() {
+        userNavigation()
         val s = screen as? Screen.Terminal ?: return
         viewing?.cancel()
         viewing = null
         if (s.viewer.link === callLink && s.returnTo !is Screen.Chat) {
-            callLink?.close()
-            callLink = null
+            ownCallLink(null)
         }
         screen = s.returnTo
     }
@@ -1655,7 +1697,16 @@ class HostsModel(
     /** Connects to every Host and shows all their Agents in one list. */
     fun openAgents() {
         back()
+        suppressLocationSave = false
         openAgents(focus = null)
+    }
+
+    private fun openNotificationTarget(target: PushTarget) {
+        if (target.agents) {
+            explicitSurfaceEntry = true
+            back()
+            openAgents(focus = null, selectedHosts = hosts.filter { it.id == target.hostId })
+        } else openPushedAgent(target.hostId, target.terminal, openChat = target.chat)
     }
 
     /** Resolve QS taps from the latest persisted pull, including the whole machine address. */
@@ -1690,27 +1741,27 @@ class HostsModel(
         prompt = Prompt.Problem(Message(R.string.shortcuts_missing_title), Message(R.string.shortcuts_missing_body))
     }
 
-    /**
-     * A tapped Agent notification (warm or cold start): leaves whatever is
-     * open, shows the Agents list and, once [hostId]'s list arrives, opens
-     * that Agent in its saved view, or Chat for a question action (back returns to the list). A Terminal that is
-     * no longer live, or a Host that was removed, is explained instead.
-     */
+    /** Notifications and drawer entries reuse a live owner; cold entry opens only its Host's list. */
     fun openPushedAgent(hostId: String, address: String, openChat: Boolean = false) {
-        back()
         val host = hosts.find { it.id == hostId }
-        openAgents(focus = host?.let { AgentKey(it.id, address) }, openChat = openChat)
+        if (host != null && screen != Screen.Hosts && screen !is Screen.Connecting) {
+            openAgentTarget(host, address, openChat)
+            return
+        }
+        back()
+        openAgents(focus = host?.let { AgentKey(it.id, address) }, openChat = openChat, selectedHosts = listOfNotNull(host))
         if (host == null) {
             prompt = Prompt.Problem(Message(R.string.push_terminal_gone_title), Message(R.string.push_host_gone_body, listOf(address)))
         }
     }
 
     /** [focus]: the Agent whose Terminal to open once its Host's list arrives. */
-    private fun openAgents(focus: AgentKey?, openChat: Boolean = false) {
-        val board = AgentBoard(hosts)
+    private fun openAgents(focus: AgentKey?, openChat: Boolean = false, selectedHosts: List<Host> = hosts) {
+        val board = AgentBoard(selectedHosts)
         val agents = Screen.Agents(board)
+        val focusVersion = navigationVersion
         screen = agents
-        hosts.forEach { host ->
+        selectedHosts.forEach { host ->
             var focusing = focus?.takeIf { it.hostId == host.id }
             agentJobs += scope.launch {
                 val link = link(host, null)
@@ -1738,7 +1789,7 @@ class HostsModel(
                                     terminalOn(host.id)?.update(list)
                                     focusing?.let { key ->
                                         focusing = null
-                                        if (screen === agents) focusOn(agents, host, key, list, openChat)
+                                        if (screen === agents && navigationVersion == focusVersion) focusOn(agents, host, key, list, openChat)
                                     }
                                 }
                             } finally {
@@ -1769,6 +1820,7 @@ class HostsModel(
 
     /** Opens an Agent in its saved view (or Chat for a question); the visible screen owns seen sync. */
     fun openAgent(board: AgentBoard, entry: AgentEntry, openChat: Boolean = false) {
+        userNavigation()
         val agents = screen as? Screen.Agents ?: return
         if (agents.board !== board) return
         val current = board.find(entry.key) ?: return
@@ -1843,6 +1895,7 @@ class HostsModel(
         private set
 
     fun openCallInbox() {
+        userNavigation()
         callInboxOpen = true
         calls.dismissBanner()
         calls.watch(hosts, everyHost = true)
@@ -1859,7 +1912,7 @@ class HostsModel(
     fun closeCallInbox() {
         if (!callInboxOpen) return
         callInboxOpen = false
-        callOpenRequest++
+        if (agentOpeningFromInbox) cancelAgentOpen()
         openingCall = null
         calls.stopAll()
         if (callsActive) calls.watch(hosts, everyHost = false)
@@ -1903,53 +1956,19 @@ class HostsModel(
             it.key != current && isWaiting(it.terminal.agentStatus)
         } }
 
-    private var nextAgentRequest = 0
-
-    /** Switch in place over the original list; reuse its line and release the previous view. */
+    /** Switch in place over the original list, using the same entry path as drawer and inbox. */
     fun openNextWaitingAgent() {
         val next = nextWaitingAgent ?: return
-        val origin = screen
-        val request = ++nextAgentRequest
-        val base = quickOpenBase()
-        val existingLink = (agentLinks[next.host.id] ?: browseLink?.takeIf { it.host.id == next.host.id })
-            ?.takeIf { it.state == LinkState.Up }
-        if (existingLink != null) {
-            returnToQuickOpenBase()
-            show(existingLink, next.terminal, base)
-        } else {
-            // A stored Agent on another Host needs a fresh list before it can open.
-            // Like inbox entry, this line belongs to the detail view, not its original list.
-            scope.launch {
-                var pending: HostLink? = null
-                fun current() = screen === origin && request == nextAgentRequest
-                try {
-                    val connected = link(next.host, connectScreen(next.host.id))
-                    pending = connected
-                    if (!current()) return@launch
-                    val terminal = connected.keep { conn, _ -> conn.terminals() }
-                        .find { it.address == next.terminal.address && it.state == "live" }
-                    if (!current()) return@launch
-                    if (terminal == null) {
-                        prompt = Prompt.Problem(Message(R.string.push_terminal_gone_title),
-                            Message(R.string.push_terminal_gone_body, listOf(next.terminal.address, next.host.name)))
-                        return@launch
-                    }
-                    returnToQuickOpenBase()
-                    callLink?.close()
-                    callLink = connected
-                    pending = null
-                    show(connected, terminal, base)
-                } catch (e: CoreException) {
-                    if (current()) prompt = problemFor(e)
-                } finally { pending?.close() }
-            }
-        }
+        openAgentTarget(next.host, next.terminal.address)
     }
 
     /** A home badge opens the first waiting Agent, or the list if the Host has none. */
     fun openHostWaiting(host: Host) {
         val next = drawerAgents.firstOrNull { it.host.id == host.id && isWaiting(it.terminal.agentStatus) }
-        if (next == null) openAgents() else openPushedAgent(next.host.id, next.terminal.address)
+        if (next == null) {
+            back()
+            openAgents(focus = null, selectedHosts = listOf(host))
+        } else openPushedAgent(next.host.id, next.terminal.address)
     }
 
     /** Resolve a Call against snapshots already available; opening the inbox starts no Agent watch. */
@@ -1976,16 +1995,20 @@ class HostsModel(
     /** Uses whole Host/address identity and the existing saved-view/notification route. */
     fun openDrawerAgent(entry: AgentEntry) {
         val board = (screen as? Screen.Agents)?.board
-        if (board != null) {
+        if (board?.find(entry.key) != null && agentLinks[entry.host.id]?.state == LinkState.Up) {
             openAgent(board, entry)
         } else {
             openPushedAgent(entry.host.id, entry.terminal.address)
         }
     }
 
-    /** Settings is a drawer destination. */
+    /** Keep the route and its live owners while changing app or Host settings. */
     fun openSettings() {
-        back()
+        userNavigation()
+        if (screen != Screen.Settings && screen !is Screen.JumpHosts) settingsReturnTo = screen
+        closeQuickOpen()
+        pendingQuickOpen = null
+        closeCallInbox()
         settingsHost = null
         settingsKeys = false
         recoveringKeys = false
@@ -2022,7 +2045,9 @@ class HostsModel(
             settingsKeys = false
             settingsDiagnostics = false
         } else {
-            back()
+            val origin = settingsReturnTo
+            settingsReturnTo = null
+            if (origin != null) screen = origin else back()
         }
     }
 
@@ -2031,69 +2056,124 @@ class HostsModel(
         agentView = core.agentView()
     }
 
-    /** The connection owned by a Chat opened from the inbox. */
+    /** A detail owns this line when no Browse or Agent list owns its Host. */
     private var callLink: HostLink? = null
-    private var callOpenRequest = 0
+    private var callStatus: Job? = null
     var openingCall by mutableStateOf<String?>(null)
         private set
+
+    /** A detail-only line supplies status for its own Host, including after reconnect. */
+    private fun ownCallLink(link: HostLink?) {
+        callStatus?.cancel()
+        callStatus = null
+        callLink?.close()
+        callLink = link
+        if (link == null) return
+        callStatus = scope.launch {
+            link.keepWatching(onFailure = { error ->
+                if (callLink === link) prompt = problemFor(error)
+            }) { conn, _ ->
+                val watch = conn.watchTerminals()
+                try {
+                    while (true) {
+                        val list = watch.next()
+                        updateConversations(link.host.id, list)
+                        terminalOn(link.host.id)?.update(list)
+                    }
+                } finally { watch.stop() }
+            }
+        }
+    }
+
+    private var agentOpeningLink: HostLink? = null
+    private var agentOpeningJob: Job? = null
+    private var agentOpenRequest = 0
+    private var agentOpeningFromInbox = false
+
+    private fun cancelAgentOpen() {
+        agentOpenRequest++
+        agentOpeningJob?.cancel()
+        agentOpeningJob = null
+        agentOpeningLink?.close()
+        agentOpeningLink = null
+        agentOpeningFromInbox = false
+        openingCall = null
+    }
+
+    /** Resolve against exactly one Host. Pending trust retries this same action on this same link. */
+    private fun openAgentTarget(host: Host, address: String, openChat: Boolean = false, callKey: String? = null) {
+        userNavigation()
+        val fromInbox = callKey != null
+        openingCall = callKey
+        val origin = screen
+        val request = agentOpenRequest
+        fun current() = screen === origin && request == agentOpenRequest && (!fromInbox || callInboxOpen)
+        val existing = links.firstOrNull { it.host.id == host.id && it.state == LinkState.Up }
+        val target = existing ?: link(host, null) { error ->
+            if (current()) prompt = when (error) {
+                is CoreException.HostKeyUnknown -> Prompt.TrustHostKey(host, error.fingerprint)
+                is CoreException.JumpHostKeyUnknown -> Prompt.TrustJumpHostKey(host, error.hop, error.address, error.fingerprint)
+                else -> {
+                    cancelAgentOpen()
+                    problemFor(error)
+                }
+            }
+        }
+        agentOpeningFromInbox = fromInbox
+        if (existing == null) agentOpeningLink = target
+        agentOpeningJob = scope.launch {
+            var adopted = false
+            try {
+                val terminal = target.keep { conn, _ -> conn.terminals() }
+                    .find { it.address == address && it.state == "live" }
+                if (!current()) return@launch
+                if (terminal == null) {
+                    prompt = if (fromInbox) Prompt.Problem(Message(R.string.call_terminal_gone_title),
+                        Message(R.string.call_terminal_gone_body, listOf(address, host.name)))
+                    else Prompt.Problem(Message(R.string.push_terminal_gone_title),
+                        Message(R.string.push_terminal_gone_body, listOf(address, host.name)))
+                    return@launch
+                }
+                // Detach the request before closing previous views so their navigation cannot cancel it.
+                agentOpeningLink = null
+                agentOpeningJob = null
+                agentOpeningFromInbox = false
+                val retained = callLink?.takeIf { it === target }
+                if (retained != null) callLink = null
+                returnToQuickOpenBase()
+                if (retained != null) callLink = retained
+                if (existing == null) ownCallLink(target)
+                adopted = true
+                closeCallInbox()
+                if (openChat) chat(target, terminal, screen) else show(target, terminal, screen)
+            } catch (e: CoreException) {
+                if (current()) prompt = problemFor(e)
+            } finally {
+                if (existing == null && !adopted) target.close()
+                if (agentOpeningLink === target) agentOpeningLink = null
+                if (request == agentOpenRequest) openingCall = null
+            }
+        }
+    }
 
     /** Opens the caller in Chat without changing the saved Agent view. */
     fun openCallChat(entry: CallEntry) {
         val address = entry.call.terminal ?: return
         if (!callInboxOpen || openingCall == entry.key) return
-        val origin = screen
-        if (origin is Screen.Chat && origin.chat.host.id == entry.host.id && origin.chat.terminal.address == address) {
+        if (currentAgentKey == AgentKey(entry.host.id, address) && screen is Screen.Chat) {
             closeCallInbox()
             return
         }
-        val request = ++callOpenRequest
-        openingCall = entry.key
-        fun current() = callInboxOpen && screen === origin && request == callOpenRequest
-        scope.launch {
-            var pending: HostLink? = null
-            try {
-                val link = link(entry.host, connectScreen(entry.host.id))
-                pending = link
-                if (!current()) return@launch
-                val terminal = link.keep { conn, _ -> conn.terminals() }
-                    .find { it.address == address && it.state == "live" }
-                if (!current()) return@launch
-                if (terminal == null) {
-                    prompt = Prompt.Problem(
-                        Message(R.string.call_terminal_gone_title),
-                        Message(R.string.call_terminal_gone_body, listOf(address, entry.host.name)),
-                    )
-                    return@launch
-                }
-                // A new caller replaces the current Agent, retaining its Browse/list destination.
-                while (screen is Screen.Terminal || screen is Screen.Chat) {
-                    if (screen is Screen.Terminal) closeTerminal() else closeChat()
-                }
-                val returnTo = screen
-                callLink?.close()
-                callLink = link
-                pending = null
-                closeCallInbox()
-                chat(link, terminal, returnTo)
-            } catch (e: CoreException) {
-                if (current()) prompt = when (e) {
-                    is CoreException.HostKeyUnknown -> Prompt.TrustHostKey(entry.host, e.fingerprint)
-                    else -> problemFor(e)
-                }
-            } finally {
-                pending?.close()
-                if (request == callOpenRequest) openingCall = null
-            }
-        }
+        openAgentTarget(entry.host, address, openChat = true, callKey = entry.key)
     }
 
     /** Leaves the Chat (the Agent keeps running) for where it was opened. */
     fun closeChat() {
+        userNavigation()
         val s = screen as? Screen.Chat ?: return
         s.chat.stop()
         if (s.chat.link === callLink) {
-            callLink?.close()
-            callLink = null
+            ownCallLink(null)
         }
         screen = s.returnTo
     }
@@ -2104,9 +2184,16 @@ class HostsModel(
     }
 
     private fun terminalOn(hostId: String): TerminalViewer? =
-        (screen as? Screen.Terminal)?.viewer?.takeIf { it.link?.host?.id == hostId }
+        (ownedScreen as? Screen.Terminal)?.viewer?.takeIf { it.link?.host?.id == hostId }
 
     fun back() {
+        // Leaving Settings for a different destination releases its retained route normally.
+        settingsReturnTo?.let { screen = it }
+        settingsReturnTo = null
+        val interruptedRestore = restoring
+        userNavigation()
+        // Cancelling a cold reconnect does not replace the last successfully viewed location.
+        suppressLocationSave = interruptedRestore
         newTaskHostId = null
         if (prompt is Prompt.ConfirmSavedLaunch) prompt = null
         closeQuickOpen()
@@ -2117,8 +2204,7 @@ class HostsModel(
         ((screen as? Screen.Terminal)?.returnTo as? Screen.Chat)?.chat?.stop()
         viewing?.cancel()
         viewing = null
-        callLink?.close()
-        callLink = null
+        ownCallLink(null)
         closeCallInbox()
         // Also under a Terminal or Chat opened from the Agents list.
         closeAgents()
