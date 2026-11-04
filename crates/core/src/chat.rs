@@ -1101,6 +1101,10 @@ async fn follow(
             } = stream;
             let mut lines = BufReader::new(reader).lines();
             let mut heard = Instant::now();
+            // Reset can span multiple writes/polls. Keep the delivered model and
+            // cursor intact until the Beacon emits its caught-up State. Dropping
+            // an interrupted replay also makes reconnect resume the complete model.
+            let mut replay: Option<ChatModel> = None;
             loop {
                 let silent = heard + SILENCE;
 
@@ -1115,11 +1119,45 @@ async fn follow(
                     Err(_) => break,
                 };
                 heard = Instant::now();
-                model.apply_text(&text);
+                let line = ChatLine::parse(&text);
+                let reset = matches!(
+                    &line,
+                    Ok(ChatLine {
+                        event: ChatEvent::Reset { .. },
+                        ..
+                    })
+                );
+                let caught_up = matches!(
+                    &line,
+                    Ok(ChatLine {
+                        event: ChatEvent::State { .. },
+                        ..
+                    })
+                );
+                if reset {
+                    let mut replacement = ChatModel::new(None);
+                    replacement.generation = model.generation;
+                    replacement.status = model.status;
+                    replay = Some(replacement);
+                }
+                let target = replay.as_mut().unwrap_or(&mut model);
+                match line {
+                    Ok(line) => target.apply(line),
+                    Err(_) => target.apply_text(&text),
+                }
+                if (caught_up || target.status.is_final())
+                    && let Some(mut replacement) = replay.take()
+                {
+                    // Image callers hold the watch's shared store. Swap its bytes
+                    // only when the replacement conversation is ready to publish.
+                    *model.images() = std::mem::take(&mut *replacement.images());
+                    replacement.images = model.images.clone();
+                    model = replacement;
+                }
                 backoff = retry;
                 // Publish once the burst is read, not for every line.
                 let burst_read = lines.get_ref().buffer().is_empty();
-                if (burst_read || model.status.is_final()) && model.changed {
+                if replay.is_none() && (burst_read || model.status.is_final()) && model.changed {
                     model.changed = false;
                     if let Some(saver) = &saver {
                         saver.changed(&mut model);

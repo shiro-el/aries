@@ -13,8 +13,10 @@ import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.hasText
@@ -49,6 +51,7 @@ class ChatScrollTest {
     private val agent = TerminalInfo("t1", "claude", "", listOf("claude"), "/repo", "live", AgentStatus.Working)
     private val generation = mutableStateOf(0)
     private val compositionGeneration = mutableStateOf(0)
+    private val chatVisible = mutableStateOf(true)
     private val hostNumber = mutableStateOf(0)
     private val terminal = mutableStateOf(agent)
     private lateinit var currentChat: ChatModel
@@ -56,7 +59,7 @@ class ChatScrollTest {
         ChatEntry("a$it", null, ChatEntryBody.Agent("Reply $it\nSecond line\nThird line"))
     }
 
-    private fun open(connected: Boolean = false, thread: Boolean = false) {
+    private fun open(connected: Boolean = false, thread: Boolean = false, tasks: Boolean = false, first: List<ChatEntry> = entries(30)) {
         val hosts = listOf(
             core.addHost("home", Endpoint.Ssh("home.test", 22u, "me")),
             core.addHost("other", Endpoint.Ssh("other.test", 22u, "me")),
@@ -74,13 +77,15 @@ class ChatScrollTest {
                 val calls = remember { CallsModel(core, scope).also { it.watch(hosts, everyHost = true) } }
                 DisposableEffect(chat) { onDispose { chat.stop(); calls.stopAll() } }
                 val threadModel = remember { if (thread) HostsModel(core, scope) else null }
-                CompositionLocalProvider(LocalThreadChat provides threadModel) {
-                    key(compositionGeneration.value) { ChatScreen(chat, {}, calls = calls) }
+                val tasksPresentation = remember { if (tasks) TasksDetailPresentation(TasksChangesState(), TasksDetailTab.ACTIVITY, null, {}) else null }
+                CompositionLocalProvider(LocalThreadChat provides threadModel, LocalTasksDetail provides tasksPresentation) {
+                    if (chatVisible.value) key(compositionGeneration.value) { ChatScreen(chat, {}, calls = calls) }
                 }
             }
         }
-        push(entries(30))
-        compose.waitUntil(5_000) {
+        push(first)
+        if (tasks) compose.waitUntil(5_000) { currentChat.dialogs.tasksRequest != null }
+        else compose.waitUntil(5_000) {
             compose.onAllNodesWithText("Reply 30\nSecond line\nThird line").fetchSemanticsNodes().isNotEmpty()
         }
     }
@@ -109,6 +114,124 @@ class ChatScrollTest {
         compose.waitForIdle() // finish navigation before delivering to its new ChatWatch
         core.pushChat(ChatSnapshot(entries, ChatStatus.LIVE, null))
         compose.waitForIdle()
+    }
+
+    // D93: temporary text selection must pause a follower without losing its intent.
+    @Test fun closingSelectionResumesFollowingButPreservesAHistoryReader() {
+        open()
+        compose.onNodeWithText("Reply 30\nSecond line\nThird line").performTouchInput { longClick() }
+        push(entries(32))
+        compose.onNodeWithText(context.getString(io.github.shiroel.aries.R.string.chat_copy_all)).performClick()
+        assertReply(32)
+
+        compose.runOnIdle { currentChat.dialogs.selection = "Selected reply" }
+        push(entries(33))
+        compose.onNodeWithText("Back").performClick()
+        assertReply(33)
+        compose.runOnIdle { currentChat.dialogs.responseMetadata = io.github.shiroel.aries.core.ChatResponseMetadata(model = "test") }
+        push(entries(34))
+        compose.onNodeWithText(context.getString(io.github.shiroel.aries.R.string.ok_button)).performClick()
+        assertReply(34)
+
+        readReply(6)
+        compose.runOnIdle { currentChat.dialogs.selection = "Selected reply" }
+        push(entries(35))
+        compose.onNodeWithText("Back").performClick()
+        assertReply(6)
+        awaitLatest("Latest (1)")
+    }
+
+    // D92: releasing at the end without a fling must resume following.
+    @Test fun slowDragReleasedAtTheBottomResumesFollowing() {
+        open()
+        readReply(6)
+        readReply(29)
+        compose.onNodeWithTag("chat-transcript").performTouchInput {
+            down(center)
+            repeat(20) {
+                moveBy(androidx.compose.ui.geometry.Offset(0f, -height / 20f), delayMillis = 50)
+            }
+            advanceEventTime(250)
+            up()
+        }
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Latest").assertDoesNotExist()
+        push(entries(31))
+        assertReply(31)
+    }
+
+    // D95: a covered follower must return to the current tail, not its previous top anchor.
+    @Test fun aFollowingVisitReturnsToTheCurrentTailAfterBeingCovered() {
+        open()
+        compose.runOnIdle { chatVisible.value = false }
+        push(entries(40))
+        compose.runOnIdle { chatVisible.value = true }
+        assertReply(40)
+        compose.onNodeWithContentDescription("Latest (10)").assertDoesNotExist()
+        push(entries(41))
+        assertReply(41)
+    }
+
+    // D94/D93: a live Tasks question may open before the initial Markdown is ready.
+    @Test fun anAutomaticallyOpenedTasksSheetDefersInitialPlacementUntilDismissed() {
+        terminal.value = agent.copy(agentStatus = AgentStatus.Blocked(io.github.shiroel.aries.core.BlockedReason.QUESTION, "Choose"))
+        val question = ChatEntry("question", null, ChatEntryBody.Question("AskUserQuestion", "Choose a route",
+            listOf(io.github.shiroel.aries.core.ChatQuestionPart("Which route?", "Route", false,
+                listOf(io.github.shiroel.aries.core.ChatQuestionOption("North", "Go north")))),
+            io.github.shiroel.aries.core.ChatToolStatus.RUNNING, null))
+        open(tasks = true, first = entries(30) + question)
+        compose.onNodeWithContentDescription("Close sheet").performClick()
+        assertReply(30)
+        push(entries(40))
+        assertReply(40)
+        compose.onNodeWithContentDescription("Latest (10)").assertDoesNotExist()
+    }
+
+    // D98: submitting from history must reveal the queued message and never count its echo as unread.
+    @Test fun sendingFromHistoryRevealsTheMessageAndDoesNotCountUserInputAsUnread() {
+        open(connected = true)
+        readReply(6)
+        compose.onNodeWithText(context.getString(io.github.shiroel.aries.R.string.chat_input_label)).performTextInput("Follow-up from history")
+        compose.onNodeWithText(context.getString(io.github.shiroel.aries.R.string.chat_send_button)).performClick()
+        awaitText("Follow-up from history")
+        compose.onNodeWithText("Follow-up from history").assertIsDisplayed()
+
+        readReply(6)
+        val mine = ChatEntry("mine", null, ChatEntryBody.User("Follow-up from history"))
+        push(entries(30) + mine)
+        compose.onNodeWithContentDescription("Latest (1)").assertDoesNotExist()
+        push(entries(30) + mine + entries(31).last())
+        awaitLatest("Latest (1)")
+    }
+
+    // D101: passing newly arrived rows must reduce unread even before reaching the tail.
+    @Test fun passingUnreadMessagesDecreasesTheCountBeforeReachingTheEnd() {
+        open()
+        readReply(6)
+        // Keep message ends several viewports apart, so bringing one into view
+        // cannot also reach the tail and clear the entire count via following.
+        val incoming = (1..5).map { number ->
+            ChatEntry("incoming$number", null, ChatEntryBody.Agent(
+                (1..12).joinToString("\n\n") { part -> "Message $number paragraph $part. " + "Details to read. ".repeat(20) } +
+                    "\n\nEnd of incoming $number",
+            ))
+        }
+        push(entries(30) + incoming)
+        awaitLatest("Latest (5)")
+        fun readUntilUnread(count: Int) {
+            val description = "Latest ($count)"
+            repeat(120) {
+                if (compose.onAllNodesWithContentDescription(description).fetchSemanticsNodes().isNotEmpty()) return
+                // Move continuously forward: seeking a text node may visit the
+                // tail while scanning and thereby legitimately mark everything read.
+                compose.onNodeWithContentDescription("Latest", substring = true).assertExists()
+                compose.onNodeWithTag("chat-transcript").performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 300f) }
+                compose.waitForIdle()
+            }
+            compose.onNodeWithContentDescription(description).assertIsDisplayed()
+        }
+        readUntilUnread(3)
+        readUntilUnread(1)
     }
 
     // Regression: expanding the latest tool must not make follow mode scroll its header to the top.
