@@ -168,6 +168,7 @@ internal fun rememberChatSearch(
 
 /** One explicit query/navigation action; each visible field reveals its glyph at most once. */
 internal class ChatSearchNavigation {
+    var target by mutableStateOf<ChatSearchMatch?>(null)
     val revealed = mutableSetOf<Pair<String, String>>()
 }
 
@@ -227,10 +228,13 @@ internal fun SearchableChatText(
     style: TextStyle = androidx.compose.material3.LocalTextStyle.current,
 ) {
     val decoration = LocalChatSearch.current
+    val navigation = decoration.navigation
     val entry = LocalChatSearchEntry.current
     val matches = decoration.ranges[entry to key].orEmpty()
     val active = decoration.active?.ranges?.firstOrNull { it.field.entryId == entry && it.field.key == key }
-    val target = decoration.active?.takeIf { it.field.entryId == entry && it.field.key == key }
+    val target = decoration.active?.takeIf {
+        it.field.entryId == entry && it.field.key == key && navigation?.target?.sameOccurrence(it) == true
+    }
     val palette = MaterialTheme.colorScheme
     val highlighted = remember(text, matches, active, palette) {
         AnnotatedString.Builder(annotateChatWebLinks(text, palette.primary)).apply {
@@ -254,7 +258,6 @@ internal fun SearchableChatText(
         textAlign = textAlign, maxLines = if (matches.isEmpty()) maxLines else Int.MAX_VALUE,
         softWrap = softWrap, style = style, onTextLayout = { layout = it },
     )
-    val navigation = decoration.navigation
     LaunchedEffect(navigation, target != null) {
         val field = entry to key
         if (target != null && navigation != null && field !in navigation.revealed) {

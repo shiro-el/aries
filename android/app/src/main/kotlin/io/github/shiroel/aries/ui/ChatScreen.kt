@@ -999,6 +999,7 @@ fun ChatScreen(
     LaunchedEffect(query, searchRequest) {
         if (query.isEmpty()) return@LaunchedEffect
         val target = snapshotFlow { currentActive }.filterNotNull().first()
+        searchNavigation.target = target
         selected = target
         val body = currentEntries.find { it.id == target.field.entryId }?.body
         if (body is ChatEntryBody.Tool && target.field.entryId !in chat.expanded) chat.toggle(target.field.entryId)
