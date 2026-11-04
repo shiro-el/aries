@@ -119,7 +119,10 @@ internal fun threadHistoryContent(
         }
     }
     items(calls, key = { "call:${it.key}" }, contentType = { "call" }) { entry ->
-        Column(Modifier.padding(16.dp)) {
+        val model = LocalThreadChat.current
+        Column(Modifier.fillMaxWidth().testTag("thread-call:${entry.call.id}")
+            .clickable(role = Role.Button) { model?.calls?.openThreadCall(entry) }
+            .padding(16.dp)) {
             Text(stringResource(R.string.console_chat_call_label), style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(entry.call.title, fontWeight = FontWeight.Medium)
@@ -252,7 +255,7 @@ internal fun ThreadChatHeader(chat: ChatModel, onBack: () -> Unit, onTerminal: (
         }
         Column(Modifier.weight(1f).clickable(role = Role.Button) { menu = true }.padding(vertical = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(displayName(chat.terminal), Modifier.weight(1f, fill = false), maxLines = 1,
+                Text(LocalThreadChat.current?.threadTitle(chat) ?: displayName(chat.terminal), Modifier.weight(1f, fill = false), maxLines = 1,
                     overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
                 Icon(painterResource(R.drawable.ic_chevron_down), null, Modifier.size(16.dp))
             }
@@ -326,14 +329,13 @@ internal fun ThreadComposer(chat: ChatModel, compact: Boolean) {
 @Composable
 internal fun ThreadChatInput(model: HostsModel, chat: ChatModel, agentCalls: List<CallEntry>, calls: CallsModel?,
     question: ChatEntry?, compact: Boolean) {
-    var closedCalls by remember(chat) { mutableStateOf(emptySet<String>()) }
     Column(Modifier.fillMaxWidth()) {
         ThreadWaitingPill(model, chat)
         ThreadConnectionGuidance(chat)
-        val activeCall = agentCalls.sortedByDescending { it.call.urgency.ordinal }.firstOrNull { it.key !in closedCalls }
+        val activeCall = agentCalls.firstOrNull { it.key == calls?.openedThreadCall }
+            ?: agentCalls.sortedByDescending { it.call.urgency.ordinal }.firstOrNull { calls?.isThreadPanelVisible(it) == true }
         if (activeCall != null && calls != null) ThreadCallPanel(activeCall, calls, chat, compact, onDismiss = {
-            closedCalls = closedCalls + activeCall.key
-            if (calls.banner?.key == activeCall.key) calls.dismissBanner()
+            calls.closeThreadCall(activeCall)
         })
         else if (question != null) ThreadAnswerPanel(chat, question)
         else if (chat.link != null) ThreadComposer(chat, compact)

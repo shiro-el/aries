@@ -184,4 +184,23 @@ class TasksHomeTest {
         compose.onNodeWithTag("tasks-needs-sheet").assertDoesNotExist()
         compose.runOnIdle { assertEquals(listOf("urgent", "regular"), core.replies.map { it.second }) }
     }
+    // Regression D33: a Host-side answer/status change must advance the captured queue,
+    // including Error needs, instead of leaving the sheet on an obsolete request.
+    @Test fun anotherClientResolvingTheCurrentNeedAdvancesToTheNextAgent() {
+        val core = FakeCore().apply {
+            addHost("home", Endpoint.Ssh("home.test", 22u, "me"))
+            terminals = listOf(
+                TerminalInfo("t1", "First request", "", listOf("codex"), "/repo", "live", AgentStatus.Error("Build failed"), statusMs = 200uL),
+                TerminalInfo("t2", "Second request", "", listOf("claude"), "/repo", "live", AgentStatus.Blocked(BlockedReason.QUESTION, "Color?"), statusMs = 100uL))
+        }
+        show(core)
+        compose.onNodeWithTag("tasks-filter-needs").performClick()
+        compose.onNode(hasText("First request") and hasAnyAncestor(hasTestTag("tasks-needs-sheet"))).assertExists()
+        compose.runOnIdle { core.push(core.terminals.map { if (it.address == "t1") it.copy(agentStatus = AgentStatus.Working) else it }) }
+        compose.onNode(hasText("Second request") and hasAnyAncestor(hasTestTag("tasks-needs-sheet"))).assertExists()
+        compose.runOnIdle { core.push(core.terminals.map { it.copy(agentStatus = AgentStatus.Working) }) }
+        compose.onNodeWithTag("tasks-needs-sheet").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(emptyList<Triple<String, String, List<List<UInt>>>>(), core.answers) }
+    }
+
 }

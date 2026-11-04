@@ -109,7 +109,7 @@ private fun ThreadDrawer(model: HostsModel, navigate: (() -> Unit) -> Unit) {
     val agents = model.drawerAgents.filter { it.terminal.agentStatus != null }.filter { entry ->
         listOf(model.threadTitle(entry), entry.space?.name.orEmpty(), entry.host.name).any { it.contains(query, true) }
     }
-    val calls = model.calls.calls.filter { it.answerable }
+    val calls = model.calls.calls.filter(model.calls::isThreadWaiting)
     val urgent = calls.filter { it.call.urgency >= CallUrgency.URGENT }.mapNotNull { call ->
         call.call.terminal?.let { AgentKey(call.host.id, it) }
     }.toSet()
@@ -209,6 +209,8 @@ private fun ThreadConversationRow(model: HostsModel, entry: AgentEntry, urgent: 
             Text(agentLastSeen(source.fetchedAtMs?.toLong()), style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+        if (entry.terminal.agentStatus is AgentStatus.Error) Text(stringResource(R.string.agents_waiting_error),
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         if (urgent) Text(stringResource(R.string.thread_urgent_call), style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.primary)
     }

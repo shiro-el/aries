@@ -1866,9 +1866,12 @@ class HostsModel(
         }, openChat = true, restoreAgent = true)
     }
 
-    internal fun threadTitle(entry: AgentEntry): String = conversations[entry.key]?.snapshot?.entries
+    internal fun threadTitle(entry: AgentEntry): String =
+        conversations[entry.key]?.let(::threadTitle) ?: displayName(entry.terminal)
+
+    internal fun threadTitle(chat: ChatModel): String = chat.snapshot?.entries
         ?.firstNotNullOfOrNull { (it.body as? ChatEntryBody.User)?.text?.trim()?.takeIf(String::isNotEmpty) }
-        ?.lineSequence()?.firstOrNull()?.take(160) ?: displayName(entry.terminal)
+        ?.lineSequence()?.firstOrNull()?.take(160) ?: displayName(chat.terminal)
 
     internal fun beginThreadTask(host: Host, showDialog: Boolean = true, resetFolder: Boolean = false) {
         val link = links.firstOrNull { it.host.id == host.id && it.state == LinkState.Up && it.connection != null }

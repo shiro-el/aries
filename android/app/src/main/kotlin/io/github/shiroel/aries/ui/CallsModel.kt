@@ -65,6 +65,27 @@ class CallsModel(
     var banner by mutableStateOf<CallEntry?>(null)
         private set
 
+    // Owned with the live model so navigating away or recreating the Activity cannot
+    // put an acknowledged informational Call back into Thread's waiting queue.
+    private var closedThreadCalls by mutableStateOf<Set<String>>(emptySet())
+    internal var openedThreadCall by mutableStateOf<String?>(null)
+        private set
+
+    internal fun isThreadWaiting(entry: CallEntry): Boolean =
+        (entry.answerable || entry.needsAttention) && entry.key !in closedThreadCalls
+
+    internal fun isThreadPanelVisible(entry: CallEntry): Boolean =
+        entry.key == openedThreadCall || entry.key !in closedThreadCalls &&
+            (entry.answerable || entry.needsAttention || entry.key in replying || entry.key in replyNotes)
+
+    internal fun openThreadCall(entry: CallEntry) { openedThreadCall = entry.key }
+
+    internal fun closeThreadCall(entry: CallEntry) {
+        closedThreadCalls = closedThreadCalls + entry.key
+        if (openedThreadCall == entry.key) openedThreadCall = null
+        if (banner?.key == entry.key) dismissBanner()
+    }
+
     /** Fresh arrivals, without replay: a burst may replace the banner but still needs each haptic. */
     private val attentionEvents = MutableSharedFlow<CallEntry>(extraBufferCapacity = 64)
     internal val attention = attentionEvents.asSharedFlow()
@@ -168,6 +189,8 @@ class CallsModel(
     fun retainHosts(hosts: List<Host>) {
         this.hosts = hosts.associateBy { it.id }
         (watches.keys - this.hosts.keys).forEach { stop(it) }
+        closedThreadCalls = closedThreadCalls.filterTo(mutableSetOf()) { key -> this.hosts.keys.any { key.startsWith("$it/") } }
+        if (openedThreadCall?.let { key -> this.hosts.keys.none { key.startsWith("$it/") } } == true) openedThreadCall = null
         perHost.keys.retainAll(this.hosts.keys)
         checkedAt.keys.retainAll(this.hosts.keys)
         confirmedFinals.retainAll(perHost.flatMap { (id, calls) -> calls.map { "$id/${it.id}" } }.toSet())

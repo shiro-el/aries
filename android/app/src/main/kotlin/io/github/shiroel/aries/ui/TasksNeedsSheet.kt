@@ -92,8 +92,13 @@ private fun TasksQuestion(model: HostsModel, board: AgentBoard, original: AgentE
         chat?.resume()
         onStopOrDispose { if (chat != null && !model.isViewedChat(chat)) chat.pause() }
     }
-    // Remember the question displayed for this queue item, even if the Host resolves it before
-    // the answer RPC returns. Only an acknowledged phone answer automatically moves the cursor.
+    // Live Agent status also resolves requests answered on another client. Offline/stale
+    // entries cannot acknowledge an answer and must leave the current item available.
+    LaunchedEffect(entry.live, entry.terminal.agentStatus) {
+        if (entry.live && !isWaiting(entry.terminal.agentStatus)) onAnswered()
+    }
+    // Remember the displayed question so a local acknowledgement can advance the queue
+    // even while the Terminal list is still catching up.
     var questionId by remember { mutableStateOf<String?>(null) }
     val question = chat?.snapshot?.entries?.firstOrNull {
         it.body is ChatEntryBody.Question && chat.questionMode(it.id) == ChatModel.QuestionMode.Live && chat.answers[it.id] != AnswerState.Sent
@@ -105,12 +110,15 @@ private fun TasksQuestion(model: HostsModel, board: AgentBoard, original: AgentE
     Text(entry.host.name, Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall)
     when {
         !entry.live -> Text(stringResource(R.string.tasks_offline), Modifier.padding(16.dp))
+        entry.terminal.agentStatus is AgentStatus.Error -> {
+            Text(stringResource(R.string.agents_waiting_error), Modifier.padding(16.dp))
+            statusMessage(entry.terminal.agentStatus)?.takeIf { it.isNotBlank() }?.let {
+                Text(it, Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.error)
+            }
+        }
         question != null -> QuestionView(chat, question.id, question.body as ChatEntryBody.Question)
         chat?.snapshot == null -> ScreenLoading(stringResource(R.string.chat_loading), compact = true, onRetry = { chat?.retryConnection() })
         else -> {
-            (entry.terminal.agentStatus as? AgentStatus.Error)?.message?.takeIf { it.isNotBlank() }?.let {
-                Text(it, Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error)
-            }
             Text(stringResource(R.string.tasks_needs_open), Modifier.padding(16.dp))
         }
     }
