@@ -1367,6 +1367,8 @@
 
     <string name="attachments_choose_agent">Choose an Agent for the shared content</string>
     <string name="attachments_uploading">Uploading attachment…</string>
+    <string name="attachments_cancel_button">Cancel upload</string>
+    <string name="attachments_canceled">Upload canceled. Files left out of the draft: %1$s. Already attached files are kept; camera originals remain on this phone.</string>
     <string name="attachments_too_large">Attachment exceeds %1$d MiB. Choose a smaller file or enable image resizing.</string>
     <string name="attachments_failed">Could not attach the file. Choose it again. If this keeps happening, reconnect to the Host and try again.</string>
     <string name="attachments_connection_failed">Could not attach because the Host connection is unavailable. Reconnect to the Host, then choose the file again.</string>

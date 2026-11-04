@@ -124,6 +124,10 @@ class AttachmentEntryPointsTest {
     fun cameraGetsAFullSizeOutputUriThenKeepsTheUploadedPhotoOutsideTheTextField() {
         shadowOf(compose.activity.application).denyPermissions(Manifest.permission.CAMERA)
         val connection = openChat()
+        // Robolectric gives each test a new cache root; recreate Android's provider lifecycle.
+        val info = compose.activity.packageManager.resolveContentProvider(
+            "${compose.activity.packageName}.attachments", PackageManager.GET_META_DATA)!!
+        androidx.core.content.FileProvider().attachInfo(compose.activity, info)
         compose.onNodeWithContentDescription(str(R.string.chat_input_tools_button)).performClick()
         compose.onNodeWithContentDescription(str(R.string.attachments_camera_button)).performClick()
         compose.waitForIdle()
