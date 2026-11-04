@@ -151,11 +151,10 @@ async fn fails_clearly_when_the_host_floods_stdout() {
 
 #[tokio::test]
 async fn fails_clearly_when_herdr_core_is_missing() {
-    let err = connect_err(script_endpoint(
-        "echo 'sh: herdr-core: not found' >&2; exit 127",
-    ))
-    .await;
-    assert!(matches!(err, CoreError::Unreachable { .. }), "{err:?}");
+    for script in ["exit 127", "echo 'sh: herdr-core: not found' >&2; exit 1"] {
+        let err = connect_err(script_endpoint(script)).await;
+        assert!(matches!(err, CoreError::HerdrCoreMissing), "{err:?}");
+    }
 }
 
 // Regression: a dropped hello (including a truncated reply) must remain retryable on Android.
@@ -163,6 +162,7 @@ async fn fails_clearly_when_herdr_core_is_missing() {
 async fn a_peer_that_drops_before_hello_is_unreachable() {
     for script in [
         "read -r _; exit 0",
+        "read -r _; echo 'herdr-core: connect /tmp/session.sock: No such file or directory' >&2; exit 1",
         "read -r _; printf '{\"jsonrpc\":\"2.0\",\"id\":0,'",
     ] {
         let err = connect_err(script_endpoint(script)).await;

@@ -102,9 +102,9 @@ private fun AriesContent(
         model.resumeScreens()
         model.resumeCalls()
         onStopOrDispose {
-            // A replacement Activity keeps its sessions; App Lock releases immediately.
+            // A replacement Activity keeps its sessions; a lock policy owns its grace period.
             if (activity?.isChangingConfigurations != true) {
-                model.backgrounded(retainConnections = appLock?.enabled != true)
+                model.backgrounded(connectionGraceMs = appLock?.takeIf { it.enabled }?.delay?.milliseconds ?: SCREEN_CONNECTION_GRACE_MS)
                 model.pauseCalls()
             }
         }
