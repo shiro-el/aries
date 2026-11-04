@@ -523,6 +523,12 @@
     <string name="agents_waiting_partial">%1$d+ waiting</string>
     <string name="agents_next_waiting">Next waiting Agent: %1$s · %2$s</string>
 
+    <!-- Agent list liveness -->
+    <string name="agents_watch_stopped">%1$s · Stopped: %2$s</string>
+    <string name="agents_host_offline">%1$s · Offline</string>
+    <string name="agents_last_known_group">Last-known · %1$d</string>
+    <string name="agents_last_seen">Last seen %1$d min ago</string>
+    <string name="agents_last_seen_unknown">Last seen: unknown</string>
     <string name="agents_title">Agents</string>
     <string name="agents_empty">No Agents are running on your Hosts.</string>
     <string name="agents_no_hosts">Add a Host first.</string>

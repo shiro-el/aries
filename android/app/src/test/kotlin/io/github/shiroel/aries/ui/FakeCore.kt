@@ -144,8 +144,15 @@ class FakeCore : AriesCoreInterface {
     private val hostUpdates = mutableMapOf<String, Channel<List<TerminalInfo>>>()
     private val terminalWatchers = mutableMapOf<String, MutableSet<Channel<List<TerminalInfo>>>>()
 
+    var attachFailure: CoreException? = null
+    val watchFailures = mutableMapOf<String, CoreException>()
+    fun failTerminalWatch(hostId: String, error: CoreException) {
+        terminalWatchers[hostId]?.toList()?.forEach { it.close(error) }
+    }
+
     /** Each subscriber receives every update, like independent core event subscriptions. */
     internal fun watchTerminals(hostId: String, gone: kotlinx.coroutines.Deferred<Unit>): TerminalWatch {
+        watchFailures[hostId]?.let { throw it }
         val channel = Channel<List<TerminalInfo>>(Channel.UNLIMITED)
         val watchers = terminalWatchers.getOrPut(hostId) { mutableSetOf() }
         watchers += channel
@@ -1036,8 +1043,10 @@ class FakeConnection(
     /** Terminals attached on this connection, in order. */
     val views = mutableListOf<FakeTerminalView>()
 
-    override suspend fun attachTerminal(address: String, options: AttachOptions): TerminalView =
-        FakeTerminalView(address, options).also { views += it }
+    override suspend fun attachTerminal(address: String, options: AttachOptions): TerminalView {
+        core?.attachFailure?.let { throw it }
+        return FakeTerminalView(address, options).also { views += it }
+    }
 
     override suspend fun disconnect() {
         disconnected = true

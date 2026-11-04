@@ -264,7 +264,7 @@ class HostsModel(
     val quickOpenSources: List<QuickOpenSource>
         get() {
             val live = when (val base = quickOpenBase()) {
-                is Screen.Browse -> listOfNotNull(base.browser.takeIf { it.link?.state == LinkState.Up && it.hasTerminalList }?.let {
+                is Screen.Browse -> listOfNotNull(base.browser.takeIf { it.link?.state == LinkState.Up && it.hasTerminalList && it.hasLiveTerminals }?.let {
                     QuickOpenSource(it.host, it.structure, it.agents.map { entry -> entry.terminal })
                 })
                 is Screen.Agents -> base.board.quickOpenSources
@@ -1002,7 +1002,7 @@ class HostsModel(
             }
         }
         try {
-            link.keep { conn, _ ->
+            link.keepWatching(onFailure = { browser.watchError = it }, onStart = browser::startingWatch) { conn, _ ->
                 val structure = conn.watchStructure(object : StructureListener {
                     override fun onStructure(structure: HostStructure) {
                         scope.launch {
@@ -1172,7 +1172,7 @@ class HostsModel(
         screen = Screen.Terminal(viewer, returnTo, chatDraft)
         viewing = scope.launch {
             try {
-                link.keep { conn, resumed ->
+                link.keepWatching(onFailure = { viewer.watchError = it }, onStart = { viewer.watchError = null }) { conn, resumed ->
                     if (!viewer.typing) {
                         // Watch until the input is focused, then let go of the observer.
                         val options = AttachOptions(observe = true, cols = 80u, rows = 24u, history = SCROLLBACK_LINES, resumed = resumed)
@@ -1184,7 +1184,7 @@ class HostsModel(
                             watching.cancelAndJoin()
                             done
                         }
-                        if (exited) return@keep
+                        if (exited) return@keepWatching
                     }
                     // An ordinary viewer at the phone's grid; from now on the phone sets the size.
                     val (cols, rows) = snapshotFlow { viewer.phoneGrid }.filterNotNull().first()
@@ -1395,7 +1395,7 @@ class HostsModel(
                 board.links[host.id] = link
                 try {
                     // A new line starts from its snapshot, so what changed while away shows.
-                    link.keep { c, _ ->
+                    link.keepWatching(onFailure = { board.fail(host.id, it) }, onStart = { board.starting(host.id) }) { c, _ ->
                         board.savedLaunches[host.id] = c.savedLaunches()
                         val structure = c.watchStructure(object : StructureListener {
                             override fun onStructure(structure: HostStructure) {
@@ -1448,6 +1448,10 @@ class HostsModel(
         val agents = screen as? Screen.Agents ?: return
         if (agents.board !== board) return
         val current = board.find(entry.key) ?: return
+        if (!current.live) {
+            board.links[entry.host.id]?.retryNow()
+            return
+        }
         val link = agentLinks[current.host.id] ?: return
         val t = current.terminal
         val shared = pendingShare

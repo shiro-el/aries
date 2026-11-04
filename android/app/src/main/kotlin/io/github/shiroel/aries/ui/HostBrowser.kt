@@ -22,6 +22,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import io.github.shiroel.aries.core.CoreException
+import io.github.shiroel.aries.core.HostConnection
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.Host
 import io.github.shiroel.aries.core.HostStructure
@@ -47,6 +49,9 @@ class HostBrowser(val host: Host) {
     var closed by mutableStateOf(false)
         private set
 
+    /** A stopped subscription may leave the SSH connection healthy. */
+    var watchError by mutableStateOf<CoreException?>(null)
+
     /** The Host line; its state shows while it reconnects. */
     var link: HostLink? = null
 
@@ -69,7 +74,19 @@ class HostBrowser(val host: Host) {
 
     fun replaceTerminal(terminal: TerminalInfo) { live[terminal.address] = terminal }
 
+    var lastUpdatedMs by mutableStateOf<Long?>(null)
+        private set
+    private var observing: HostConnection? = null
+    private var refreshing by mutableStateOf(false)
+    val hasLiveTerminals: Boolean get() = watchError == null && !refreshing &&
+        (link == null || link?.state == LinkState.Up && observing === link?.connection)
+
+    fun startingWatch() { watchError = null; refreshing = true }
+
     fun updateTerminals(list: List<TerminalInfo>) {
+        lastUpdatedMs = System.currentTimeMillis()
+        observing = link?.connection
+        refreshing = false
         liveOrder = list.map { it.address }
         val addresses = list.map { it.address }.toSet()
         live.keys.retainAll(addresses)
@@ -87,7 +104,9 @@ class HostBrowser(val host: Host) {
 
     /** Latest Agent snapshot for Browse and its drawer; no additional watch is opened. */
     val agents: List<AgentEntry>
-        get() = orderAgents(withAgentSpaces(agentFamily(host, terminals), structure))
+        get() = orderAgents(withAgentSpaces(agentFamily(host, terminals), structure).map {
+            it.copy(live = hasLiveTerminals, lastUpdatedMs = lastUpdatedMs)
+        })
 
     /** The "new Terminal" form, while it is open. */
     var launchForm by mutableStateOf<LaunchForm?>(null)
@@ -213,15 +232,18 @@ fun BrowseScreen(
             )
         }
         val line = browser.link?.state
-        browser.link?.let { ConnectionNotice(it, firstLoad = browser.structure == null) }
-        if (browser.structure != null && !browser.hasTerminalList && line == LinkState.Up) {
+        browser.link?.let {
+            ConnectionNotice(it, firstLoad = browser.structure == null)
+            if (line == LinkState.Up) browser.watchError?.let { error -> WatchFailureNotice(it, error) }
+        }
+        if (browser.structure != null && !browser.hasTerminalList && line == LinkState.Up && browser.watchError == null) {
             ScreenLoading(stringResource(R.string.hosts_loading), compact = true,
                 onRetry = { browser.link?.networkChanged() })
         }
         if (browser.closed && line == LinkState.Up) Notice(stringResource(R.string.structure_connection_closed))
         browser.structure?.problem?.let { Notice(problemText(it)) }
         when {
-            browser.structure == null -> if (line == null || line == LinkState.Up) {
+            browser.structure == null -> if (browser.watchError == null && (line == null || line == LinkState.Up)) {
                 ScreenLoading(stringResource(R.string.hosts_loading), onRetry = { browser.link?.networkChanged() })
             }
             else -> HostTreeList(browser, browser.structure!!, hostSections, onOpen, onPin, onNewTerminal, current)
@@ -261,7 +283,7 @@ private fun HostTreeList(
     val agents = browser.agents
     val family = agents.map { it.key.address }.toSet()
     val plain = withAgentSpaces(browser.terminals.filterNot { it.address in family }
-        .mapIndexed { index, terminal -> AgentEntry(browser.host, terminal, sequence = index) }, structure)
+        .mapIndexed { index, terminal -> AgentEntry(browser.host, terminal, sequence = index, live = browser.hasLiveTerminals, lastUpdatedMs = browser.lastUpdatedMs) }, structure)
     val plainKey = "plain-terminals"
     androidx.compose.runtime.LaunchedEffect(browser.revealRequest) {
         if (browser.revealRequest != null) folds.expand(plainKey)

@@ -15,6 +15,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.sp
@@ -71,16 +72,19 @@ internal fun ConsoleTerminalRow(
     tabName: String? = null,
     compact: Boolean = false,
     selected: Boolean = false,
+    live: Boolean = true,
+    lastUpdatedMs: Long? = null,
     onLongClick: (() -> Unit)? = null,
     trailing: @Composable RowScope.() -> Unit = {},
 ) {
     val status = terminal.agentStatus
-    val waiting = isWaiting(status)
+    val waiting = live && isWaiting(status)
+    val lastSeen = if (!live) agentLastSeen(lastUpdatedMs) else null
     val location = stringResource(R.string.terminal_subtitle, host, terminal.address)
     val spokenName = stringResource(R.string.console_agent_accessibility, displayName(terminal), location)
-    val description = status?.let { stringResource(agentStatusLabel(it)) } ?: terminal.state
+    val description = lastSeen ?: status?.let { stringResource(agentStatusLabel(it)) } ?: terminal.state
     val folder = stringResource(R.string.console_agent_location, host, terminal.currentCwd ?: terminal.address)
-    val sub = listOfNotNull(spaceName, tabName,
+    val sub = listOfNotNull(lastSeen, spaceName, tabName,
         if (waiting) statusMessage(status)?.takeIf { it.isNotBlank() } ?: description else folder).joinToString(" · ")
     val density = androidx.compose.ui.platform.LocalDensity.current
     val largeText = density.fontScale > 1.3f
@@ -95,7 +99,7 @@ internal fun ConsoleTerminalRow(
         hovered -> MaterialTheme.colorScheme.surfaceContainerHigh
         else -> androidx.compose.ui.graphics.Color.Transparent
     }
-    val rowModifier = modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(background)
+    val rowModifier = modifier.alpha(if (live) 1f else 0.55f).fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(background)
         .hoverable(interactions).combinedClickable(role = Role.Button, onClick = onOpen, onLongClick = onLongClick, onLongClickLabel = actionsLabel)
         .semantics {
             contentDescription = spokenName
@@ -108,8 +112,9 @@ internal fun ConsoleTerminalRow(
             ProgramMark(terminal, Modifier.size(14.dp))
             Text(displayName(terminal), Modifier.weight(1f), fontSize = 12.5.sp, lineHeight = 18.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
+            if (lastSeen != null) Text(lastSeen, style = MaterialTheme.typography.labelSmall)
             trailing()
-            if (status != null) AgentStatusMark(status, Modifier.size(20.dp)) else TerminalMark()
+            if (status != null) AgentStatusMark(status, Modifier.size(20.dp), live = live) else TerminalMark()
         }
     } else {
         Row(rowModifier, verticalAlignment = Alignment.Top) {
@@ -127,29 +132,29 @@ internal fun ConsoleTerminalRow(
                     if (largeText) {
                         Text(sub, style = MaterialTheme.typography.bodySmall,
                             color = if (waiting) statusColor(AgentStatus.Blocked(null, null)) else MaterialTheme.colorScheme.onSurfaceVariant)
-                        if (tabName == null) Text(terminal.currentProgram.orEmpty(), Modifier.testTag("terminal-kind:${terminal.address}"),
+                        if (live && tabName == null) Text(terminal.currentProgram.orEmpty(), Modifier.testTag("terminal-kind:${terminal.address}"),
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Box(Modifier.testTag("terminal-age:${terminal.address}")) {
-                            if (status != null) AgentElapsedTime(terminal.statusMs)
+                            if (live && status != null) AgentElapsedTime(terminal.statusMs)
                         }
                     } else Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(sub, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
                             color = if (waiting) statusColor(AgentStatus.Blocked(null, null)) else MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
-                        if (tabName == null) Box(Modifier.width(kindWidth), contentAlignment = Alignment.CenterStart) {
+                        if (live && tabName == null) Box(Modifier.width(kindWidth), contentAlignment = Alignment.CenterStart) {
                             Text(terminal.currentProgram.orEmpty(), Modifier.testTag("terminal-kind:${terminal.address}"),
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
                         }
-                        Box(Modifier.width(ageWidth).testTag("terminal-age:${terminal.address}"), contentAlignment = Alignment.CenterEnd) {
-                            if (status != null) AgentElapsedTime(terminal.statusMs)
+                        if (live) Box(Modifier.width(ageWidth).testTag("terminal-age:${terminal.address}"), contentAlignment = Alignment.CenterEnd) {
+                            if (live && status != null) AgentElapsedTime(terminal.statusMs)
                         }
                     }
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 trailing()
-                if (status != null) AgentStatusMark(status)
+                if (status != null) AgentStatusMark(status, live = live)
             }
         }
     }
@@ -186,4 +191,16 @@ internal fun TreeBackButton(onBack: () -> Unit) {
     IconButton(onClick = onBack) {
         Icon(painterResource(R.drawable.ic_arrow_left), stringResource(R.string.back_button), Modifier.size(20.dp))
     }
+}
+
+@Composable
+private fun agentLastSeen(updatedAt: Long?): String {
+    val now by androidx.compose.runtime.produceState(System.currentTimeMillis(), updatedAt) {
+        if (updatedAt != null) while (true) {
+            kotlinx.coroutines.delay(30_000)
+            value = System.currentTimeMillis()
+        }
+    }
+    return if (updatedAt == null) stringResource(R.string.agents_last_seen_unknown)
+        else stringResource(R.string.agents_last_seen, ((now - updatedAt).coerceAtLeast(0) / 60_000).toInt())
 }

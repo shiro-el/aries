@@ -523,6 +523,12 @@
     <string name="agents_waiting_partial">확인 필요 %1$d+</string>
     <string name="agents_next_waiting">다음 대기 Agent: %1$s · %2$s</string>
 
+    <!-- Agent list liveness -->
+    <string name="agents_watch_stopped">%1$s · 멈춤: %2$s</string>
+    <string name="agents_host_offline">%1$s · 오프라인</string>
+    <string name="agents_last_known_group">마지막 확인 상태 · %1$d</string>
+    <string name="agents_last_seen">%1$d분 전 마지막 확인</string>
+    <string name="agents_last_seen_unknown">마지막 확인 시각 없음</string>
     <string name="agents_title">Agent</string>
     <string name="agents_empty">Host에서 실행 중인 Agent가 없어요.</string>
     <string name="agents_no_hosts">먼저 Host를 추가해 주세요.</string>

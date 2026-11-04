@@ -53,6 +53,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentView
 import io.github.shiroel.aries.core.CellRun
@@ -101,6 +102,9 @@ class TerminalViewer(terminal: TerminalInfo) {
     /** The stream ended without an exit (connection lost). */
     var closed by mutableStateOf(false)
         private set
+
+    /** A stopped attach may leave the SSH connection healthy. */
+    var watchError by mutableStateOf<CoreException?>(null)
 
     /** The Host line this screen streams over; its state shows while it reconnects. */
     var link: HostLink? = null
@@ -456,7 +460,10 @@ fun TerminalScreen(
                 TerminalSearchBar(viewer, searching, onClose = { searching = false })
                 viewer.exit?.let { Banner(exitText(it)) }
                 val line = viewer.link?.state
-                if (viewer.exit == null) viewer.link?.let { ConnectionNotice(it) }
+                if (viewer.exit == null) viewer.link?.let {
+                    ConnectionNotice(it)
+                    if (line == LinkState.Up) viewer.watchError?.let { error -> WatchFailureNotice(it, error) }
+                }
                 if (viewer.exit == null && viewer.closed && (line == null || line == LinkState.Up)) {
                     Banner(stringResource(R.string.terminal_connection_closed))
                 }
