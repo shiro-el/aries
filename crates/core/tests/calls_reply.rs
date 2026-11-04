@@ -144,6 +144,13 @@ async fn answering_a_call_whose_terminal_is_gone_fails_and_says_so() {
     let answer = s.call(&call.id).await.answer.unwrap();
     assert_eq!(answer.state, CallAnswerState::Failed);
     assert!(agent.inputs().is_empty());
+    // D22: a definite failure releases the durable claim for an explicit retry.
+    let retry = s
+        .core
+        .reply_call(s.host.clone(), call.id.clone(), 0)
+        .await
+        .unwrap();
+    assert_eq!(retry.outcome, CallReplyOutcome::Failed);
 }
 
 #[tokio::test]

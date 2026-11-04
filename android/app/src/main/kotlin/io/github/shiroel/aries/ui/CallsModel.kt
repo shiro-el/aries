@@ -23,14 +23,17 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** One Call and the Host it came from. */
-data class CallEntry(val host: Host, val call: CallInfo, val live: Boolean = true, val checkedAtMs: Long? = null) {
+data class CallEntry(val host: Host, val call: CallInfo, val live: Boolean = true, val checkedAtMs: Long? = null, val acknowledged: Boolean = false) {
     val key get() = "${host.id}/${call.id}"
 
     /** It can still be answered with a Choice from here. */
-    val answerable get() = live && call.topLevel && call.terminal != null && call.answer == null && call.choices.isNotEmpty()
+    val answerable get() = live && call.topLevel && call.terminal != null && (call.answer == null || call.answer?.state == CallAnswerState.FAILED) && call.choices.isNotEmpty()
+
+    /** These results still require an explicit retry or a check in Terminal. */
+    val unresolvedAnswer get() = call.answer?.state in setOf(CallAnswerState.FAILED, CallAnswerState.UNCONFIRMED)
 
     /** Attention does not require Choices: CHECK results can need a look or a free-text reply. */
-    val needsAttention get() = live && call.answer == null && call.pushesByDefault
+    val needsAttention get() = live && !acknowledged && (call.answer == null || unresolvedAnswer) && call.pushesByDefault
 }
 
 /** Feedback from a local reply, kept even when the Call is no longer answerable. */
@@ -78,13 +81,24 @@ class CallsModel(
         entry.key == openedThreadCall || entry.key !in closedThreadCalls &&
             (entry.answerable || entry.needsAttention || entry.key in replying || entry.key in replyNotes)
 
-    internal fun openThreadCall(entry: CallEntry) { openedThreadCall = entry.key }
+    internal fun openThreadCall(entry: CallEntry) {
+        openedThreadCall = entry.key
+        if (entry.unresolvedAnswer) {
+            closedThreadCalls = closedThreadCalls - entry.key
+            publish()
+        }
+    }
 
     internal fun closeThreadCall(entry: CallEntry) {
         closedThreadCalls = closedThreadCalls + entry.key
         if (openedThreadCall == entry.key) openedThreadCall = null
         if (banner?.key == entry.key) dismissBanner()
+        publish()
     }
+
+    /** Distinguishes results started here from answers arriving from another device. */
+    internal var localReplies by mutableStateOf<Set<String>>(emptySet())
+        private set
 
     /** Last confirmed Calls stay in Tasks during a feed outage; only live rows accept input. */
     internal fun isTaskWaiting(entry: CallEntry, caller: AgentEntry? = null): Boolean =
@@ -142,10 +156,16 @@ class CallsModel(
         val key = entry.key
         if (key in replying || calls.none { it.key == key && it.answerable }) return
         replying = replying + key
+        localReplies = localReplies + key
         replyNotes = replyNotes - key
+        if (key in closedThreadCalls) {
+            closedThreadCalls = closedThreadCalls - key
+            publish()
+        }
         scope.launch {
             val note: ReplyNote? = try {
                 val r = withContext(keyWork) { core.replyCall(entry.host.id, entry.call.id, choice.toUInt()) }
+                if (r.outcome == CallReplyOutcome.ANSWERED) localReplies = localReplies - key
                 r.answer?.let { answer ->
                     perHost[entry.host.id] = perHost[entry.host.id].orEmpty().map {
                         if (it.id == entry.call.id) it.copy(answer = mergeAnswer(it.answer, answer)) else it
@@ -255,6 +275,7 @@ class CallsModel(
 
     fun dismissReplyNote(key: String) {
         replyNotes = replyNotes - key
+        calls.firstOrNull { it.key == key && it.unresolvedAnswer }?.let(::closeThreadCall)
     }
 
     fun dismissBanner() {
@@ -275,9 +296,11 @@ class CallsModel(
     }
 
     private fun publish() {
-        calls = perHost.flatMap { (id, list) -> hosts[id]?.let { h -> list.map { CallEntry(h, it, id in liveHosts, checkedAt[id]) } }.orEmpty() }
+        calls = perHost.flatMap { (id, list) -> hosts[id]?.let { h -> list.map { CallEntry(h, it, id in liveHosts, checkedAt[id], "$id/${it.id}" in closedThreadCalls) } }.orEmpty() }
             .sortedByDescending { it.call.atMs }
-        recalled.keys.retainAll(calls.map { it.key }.toSet())
+        val keys = calls.map { it.key }.toSet()
+        recalled.keys.retainAll(keys)
+        localReplies = localReplies.intersect(keys)
         calls.forEach { entry ->
             val answer = entry.call.answer ?: return@forEach
             if (banner?.key == entry.key) banner = null
@@ -299,7 +322,7 @@ class CallsModel(
                 syncingHosts = syncingHosts - hostId
                 if (hostId !in feedProblems) liveHosts.add(hostId)
                 checkedAt[hostId] = System.currentTimeMillis()
-                val finalKeys = calls.filter { it.answer?.let { answer -> answer.state != CallAnswerState.CLAIMED } == true }
+                val finalKeys = calls.filter { it.answer?.let { answer -> answer.state == CallAnswerState.DELIVERED } == true }
                     .map { "$hostId/${it.id}" }.toSet()
                 val keys = calls.map { "$hostId/${it.id}" }.toSet()
                 confirmedFinals.removeAll { it.startsWith("$hostId/") && it !in keys }
@@ -349,7 +372,7 @@ class CallsModel(
 private fun mergeAnswer(current: CallAnswer?, incoming: CallAnswer?): CallAnswer? = when {
     current == null -> incoming
     incoming == null -> current
-    current.state != CallAnswerState.CLAIMED && incoming.state == CallAnswerState.CLAIMED -> current
+    current.state in setOf(CallAnswerState.DELIVERED, CallAnswerState.UNCONFIRMED) && incoming.state == CallAnswerState.CLAIMED -> current
     current.state == CallAnswerState.CLAIMED && incoming.state != CallAnswerState.CLAIMED -> incoming
     incoming.atMs >= current.atMs -> incoming
     else -> current

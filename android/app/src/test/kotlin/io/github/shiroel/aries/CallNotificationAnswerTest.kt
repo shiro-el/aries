@@ -87,9 +87,10 @@ class CallNotificationAnswerTest {
         PushService.show(context, push()) { core.canAnswerInBackground(it) }
 
     /** Runs the worker as WorkManager would after [ChoiceReceiver]. */
-    private fun runWorker(choice: Int): ListenableWorker.Result = runBlocking {
+    private fun runWorker(choice: Int, attempt: Int = 0): ListenableWorker.Result = runBlocking {
         if (manager.activeNotifications.none { it.tag == "call:c1" }) showWithBackgroundKey()
         TestListenableWorkerBuilder<CallReplyWorker>(context)
+            .setRunAttemptCount(attempt)
             .setInputData(CallReplyWorker.input(context, notice(), choice))
             .build()
             .doWork()
@@ -221,6 +222,46 @@ class CallNotificationAnswerTest {
 
         assertEquals(str(R.string.call_notify_unknown), text(shown()))
         assertEquals(listOf(str(R.string.call_notify_try_again), str(R.string.call_notify_open_app)), buttons(shown()))
+    }
+
+    // D25: another device's claim must remain pending and be refreshed to its final receipt.
+    @Test
+    fun anotherDeviceClaimKeepsTheWorkerPendingUntilItsFinalAnswer() {
+        showWithBackgroundKey()
+        core.replyResult = CallReply(CallReplyOutcome.ANSWERED, CallAnswer(0u, "Merge", CallAnswerState.CLAIMED, 2uL, null), null)
+        assertEquals(ListenableWorker.Result.retry(), runWorker(0))
+        assertTrue(shown().flags and Notification.FLAG_ONGOING_EVENT != 0)
+        assertEquals(emptyList<String>(), buttons(shown()))
+        core.callsOf[hostId] = listOf(io.github.shiroel.aries.core.CallInfo(hostId, "c1", 1uL, "t3", true,
+            "Merge?", "Tests pass.", CallUrgency.CHECK, listOf("Merge", "Wait"), CallAnswer(0u, "Merge", CallAnswerState.DELIVERED, 3uL, null), true))
+        assertEquals(ListenableWorker.Result.success(), runWorker(0, attempt = 1))
+        assertEquals(1, core.replies.size)
+        assertEquals(str(R.string.call_answer_delivered, "Merge"), text(shown()))
+        assertEquals(0, shown().flags and Notification.FLAG_ONGOING_EVENT)
+    }
+
+    // D25: a sender that dies after its durable claim must not leave an ongoing notification forever.
+    @Test
+    fun anAbandonedClaimEndsObservationAsUnconfirmedWithoutTypingAgain() {
+        showWithBackgroundKey()
+        core.callsOf[hostId] = listOf(io.github.shiroel.aries.core.CallInfo(hostId, "c1", 1uL, "t3", true,
+            "Merge?", "Tests pass.", CallUrgency.CHECK, listOf("Merge", "Wait"), CallAnswer(0u, "Merge", CallAnswerState.CLAIMED, 2uL, null), true))
+        assertEquals(ListenableWorker.Result.success(), runWorker(0, attempt = 3))
+        assertEquals(str(R.string.call_answer_unconfirmed, "Merge"), text(shown()))
+        assertEquals(0, shown().flags and Notification.FLAG_ONGOING_EVENT)
+        assertEquals(listOf(str(R.string.call_notify_open_app)), buttons(shown()))
+        assertTrue(core.replies.isEmpty())
+    }
+
+    // D25: losing permission to observe a claim cannot prove the other device did not deliver it.
+    @Test
+    fun aLockedRefreshKeepsDeliveryUncertainAndNeverSubmitsAnAnswer() {
+        showWithBackgroundKey()
+        core.setKeyProtection(KeyProtection.BIOMETRIC)
+        assertEquals(ListenableWorker.Result.success(), runWorker(0, attempt = 1))
+        assertEquals(str(R.string.call_answer_unconfirmed, "Merge"), text(shown()))
+        assertEquals(listOf(str(R.string.call_notify_open_app)), buttons(shown()))
+        assertTrue(core.replies.isEmpty())
     }
 
     @Test

@@ -95,7 +95,7 @@ class ChatCallsTest {
 
     @Test
     fun chatOmitsPastCallsButInboxKeepsTheirHistory() {
-        val past = CallAnswerState.entries.mapIndexed { index, state ->
+        val past = listOf(CallAnswerState.CLAIMED, CallAnswerState.DELIVERED).mapIndexed { index, state ->
             call.copy(id = "call-secret-$index", title = "Past $state", atMs = index.toULong(), answer = answer(state))
         } + call.copy(id = "call-secret-record", title = "Record only", choices = emptyList())
         openChat(core(past + call))
@@ -195,24 +195,49 @@ class ChatCallsTest {
 
     @Test
     fun aFailedLocalReplyKeepsItsRecordedErrorVisible() {
-        openChat(core().apply { replyResult = CallReply(CallReplyOutcome.FAILED, answer(CallAnswerState.FAILED), "reply detail") })
+        val hold = CompletableDeferred<Unit>()
+        val core = core().apply {
+            replyHold = hold
+            replyResult = CallReply(CallReplyOutcome.FAILED, answer(CallAnswerState.FAILED), "reply detail")
+        }
+        openChat(core)
         chooseWait()
+        // The feed can record failure before the reply RPC finishes.
+        compose.runOnIdle { core.callListeners.getValue("h1").onCalls(listOf(call.copy(answer = answer(CallAnswerState.FAILED)))) }
+        hold.complete(Unit)
+        compose.waitForIdle()
         compose.onNodeWithText(call.title).assertExists()
         compose.onNodeWithText(str(R.string.call_answer_failed, "Wait")).assertExists()
         compose.onNodeWithText("reply detail").assertExists()
         compose.onNodeWithText(str(R.string.call_reply_unknown)).assertDoesNotExist()
-        // A final error must be dismissible even when its note has no separate text.
-        compose.onNodeWithText(str(R.string.call_reply_dismiss)).performClick()
-        compose.onNodeWithText(call.title).assertDoesNotExist()
+        // D22: the durable FAILED feed receipt must keep the card and allow a new attempt.
+        compose.runOnIdle { core.callListeners.getValue("h1").onCalls(listOf(call.copy(answer = answer(CallAnswerState.FAILED)))) }
+        compose.onNodeWithText(str(R.string.call_answer_failed, "Wait")).assertExists()
+        core.replyResult = CallReply(CallReplyOutcome.DELIVERED, answer(CallAnswerState.DELIVERED), null)
+        chooseWait()
+        assertEquals(2, core.replies.size)
     }
 
+    // D22: an UNCONFIRMED feed receipt must retain guidance without enabling duplicate typing.
     @Test
     fun anUnconfirmedLocalReplyKeepsItsRecordedResultVisible() {
-        openChat(core().apply { replyResult = CallReply(CallReplyOutcome.UNCONFIRMED, answer(CallAnswerState.UNCONFIRMED), "reply detail") })
+        val core = core().apply { replyResult = CallReply(CallReplyOutcome.UNCONFIRMED, answer(CallAnswerState.UNCONFIRMED), "reply detail") }
+        openChat(core)
         chooseWait()
+        compose.runOnIdle { core.callListeners.getValue("h1").onCalls(listOf(call.copy(answer = answer(CallAnswerState.UNCONFIRMED)))) }
         compose.onNodeWithText(str(R.string.call_answer_unconfirmed, "Wait")).assertExists()
         compose.onNodeWithText("reply detail").assertExists()
-        compose.onNodeWithText(str(R.string.call_reply_unknown)).assertDoesNotExist()
+        compose.onNodeWithContentDescription(str(R.string.call_answer_choice_label, call.title, "Wait")).assertDoesNotExist()
+        // Explicit acknowledgement hides the warning without erasing the durable result or its recovery route.
+        compose.onNodeWithText(str(R.string.call_reply_dismiss)).performClick()
+        compose.onNodeWithText(call.title).assertDoesNotExist()
+        openInboxFromChat()
+        compose.onNodeWithText(str(R.string.call_answer_unconfirmed, "Wait")).assertExists()
+        compose.onNodeWithText(str(R.string.call_open_chat)).performClick()
+        compose.onNodeWithTag("call-inbox-panel").assertDoesNotExist()
+        compose.onNodeWithText(call.title).assertExists()
+        compose.onNodeWithText(str(R.string.call_answer_unconfirmed, "Wait")).assertExists()
+        assertEquals(1, core.replies.size)
     }
 
     @Test

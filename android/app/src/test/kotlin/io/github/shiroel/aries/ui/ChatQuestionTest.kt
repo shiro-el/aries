@@ -110,6 +110,17 @@ class ChatQuestionTest {
         compose.onNode(isDialog()).assertDoesNotExist()
     }
 
+    // D24: losing the live key-delivery receipt must not let the user press the same answer twice.
+    @Test fun anUnconfirmedLiveAnswerRequiresTerminalInsteadOfRetry() {
+        val core = FakeCore().apply { answerFailure = CoreException.AnswerRefused(AnswerProblem.UNCONFIRMED, "receipt lost") }
+        open(core)
+        core.pushChat(ChatSnapshot(listOf(question("q-lost")), ChatStatus.LIVE, null))
+        compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Red")).performClick()
+        compose.onNodeWithText(str(R.string.chat_question_unconfirmed)).assertExists()
+        compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue")).assertDoesNotExist()
+        compose.runOnIdle { assertEquals(1, core.answers.size) }
+    }
+
     @Test fun freeTextUsesTheQuestionApiAndCannotBeSentTwice() {
         val core = FakeCore()
         open(core)
