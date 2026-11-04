@@ -90,6 +90,24 @@ class LaunchScreenTest {
 
     // Regression: a delayed/lost launch reply must not allow a duplicate write after
     // dismissal or through the saved-launch entry; existing spawn_failed tests miss it.
+    // Regression D87: retiring an uncertain saved launch must release the Host without executing that saved request again.
+    @Test fun stopTrackingSavedLaunchAllowsAnUnrelatedNewTask() {
+        val saved = io.github.shiroel.aries.core.SavedLaunch("L1", "Build repo", LaunchRequest("make", "/repo", null, null))
+        val core = FakeCore().apply { savedLaunches += saved }
+        open(core)
+        val conn = core.connection!!
+        conn.launchReplyFailure = CoreException.Closed()
+        compose.onNodeWithContentDescription(str(R.string.host_create_title)).performClick()
+        compose.onNodeWithTag("saved_run:L1").performClick()
+        compose.onNodeWithText(str(R.string.launch_stop_tracking_button)).performScrollTo().performClick()
+        compose.onNodeWithContentDescription(str(R.string.host_create_title)).performClick()
+        compose.onNodeWithText(str(R.string.new_task_title)).performClick()
+        compose.onNodeWithTag("new-task-prompt").performScrollTo().performTextInput("Different work")
+        compose.onNodeWithText(str(R.string.new_task_start)).assertIsEnabled()
+        assertEquals(listOf(saved.request), conn.launched)
+        assertEquals(emptyList<Pair<String, String>>(), conn.typed)
+    }
+
     @Test fun delayedSavedLaunchAndLostReplyRequireExplicitDuplicateApproval() {
         val saved = io.github.shiroel.aries.core.SavedLaunch("L1", "Build repo", LaunchRequest("make", "/repo", null, null))
         val core = FakeCore().apply { savedLaunches += saved }

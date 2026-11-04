@@ -168,6 +168,7 @@ internal fun NewTaskAccess(model: HostsModel, content: @Composable () -> Unit) {
                 onSave = model::saveActiveLaunch, onDelete = model::deleteActiveLaunch,
                 connected = flow.link.state == LinkState.Up,
                 onUndoDelete = model::undoLaunchDelete, onLaunchAgain = { model.launchActive(again = true) },
+                onStopTracking = model::stopTrackingLaunch,
                 onPin = if (io.github.shiroel.aries.LaunchShortcuts.canPin(context)) { saved ->
                     io.github.shiroel.aries.LaunchShortcuts.pin(context, flow.link.host.id, saved)
                 } else null)
@@ -234,6 +235,11 @@ internal fun NewTaskDialog(task: NewTask, onStart: () -> Unit, onOpenChat: () ->
             if (task.waiting) Text(stringResource(R.string.new_task_waiting))
             if (form.busy) ConsoleProgress(Modifier.fillMaxWidth())
             form.error?.let { Text(stringResource(it.res, *it.args.toTypedArray()), color = MaterialTheme.colorScheme.error) }
+            if (task.launchUnknown && !form.busy) {
+                val owner = LocalTaskOwner.current
+                Text(stringResource(R.string.launch_stop_tracking_body))
+                TextButton(onClick = { owner?.stopTrackingTask() }) { Text(stringResource(R.string.launch_stop_tracking_button)) }
+            }
             if (task.terminal != null && !form.busy) TextButton(onClick = onOpenChat) { Text(stringResource(R.string.new_task_open_chat)) }
         }
     }

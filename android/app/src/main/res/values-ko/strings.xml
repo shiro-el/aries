@@ -941,6 +941,8 @@
     <string name="new_task_nested_host">이 컴퓨터를 Host로 추가하면 Agent를 시작할 수 있어요.</string>
 
     <string name="launch_starting">Terminal을 시작하는 중…</string>
+    <string name="launch_stop_tracking_button">이 실행 추적 그만하기</string>
+    <string name="launch_stop_tracking_body">Host를 확인한 뒤 추적을 그만하면 새로 만들 수 있어요. Terminal은 계속 실행 중일 수 있어요. 다시 실행하거나 프롬프트를 보내지 않아요.</string>
     <string name="launch_unknown_title">다시 실행하기 전에 확인</string>
     <string name="launch_unknown_body">Host에서 이미 Terminal을 시작했을 수 있어요. 다시 실행하기 전에 Terminal 목록을 확인하세요. 다시 실행하면 작업이 중복될 수 있어요.</string>
     <string name="launch_review_button">다시 실행 검토…</string>
