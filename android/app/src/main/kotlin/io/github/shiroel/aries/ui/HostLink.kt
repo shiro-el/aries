@@ -92,11 +92,15 @@ class HostLink(
     private val finishingSends = mutableMapOf<HostConnection, MutableSet<Job>>()
 
     /** Finish explicitly submitted input on its original line; never reconnect or retry it. */
-    internal fun finishBeforeDisconnect(conn: HostConnection, send: suspend () -> Unit): Job {
-        val job = scope.launch(NonCancellable, start = CoroutineStart.UNDISPATCHED) {
-            // A lifecycle handoff gets one existing RPC timeout, not an ongoing service.
-            withTimeoutOrNull(30_000L) { send() }
-        }
+    internal fun finishBeforeDisconnect(conn: HostConnection, send: suspend () -> Unit): Job =
+        retainOperation(conn) { withTimeoutOrNull(30_000L) { send() } }
+
+    /** Uploads budget each file separately, including its provider read. */
+    internal fun finishUploadsBeforeDisconnect(conn: HostConnection, upload: suspend () -> Unit): Job =
+        retainOperation(conn, upload)
+
+    private fun retainOperation(conn: HostConnection, operation: suspend () -> Unit): Job {
+        val job = scope.launch(NonCancellable, start = CoroutineStart.UNDISPATCHED) { operation() }
         finishingSends.getOrPut(conn) { mutableSetOf() }.add(job)
         job.invokeOnCompletion {
             finishingSends[conn]?.let { jobs ->

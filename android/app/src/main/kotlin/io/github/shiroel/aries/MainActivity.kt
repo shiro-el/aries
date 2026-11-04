@@ -54,6 +54,8 @@ class MainActivity : AppCompatActivity() {
         val push = sessions.push
         push.bind(this)
         model = sessions.model
+        // Rotation retains the current Chat/request; only a fresh model needs redelivery.
+        if (savedInstanceState != null && model?.pendingShareIntent != null) shareIntent = null
         // A retained model already owns its route; a fresh model queues only IDs until unlock.
         model?.restoreSettingsState(savedInstanceState?.getBundle("settings-route"))
         setContent {
@@ -152,7 +154,7 @@ class MainActivity : AppCompatActivity() {
         // Preserve the received credential (or its absence); recreation must never sign an external entry.
         outState.putParcelable("pending-launch-target", savedLaunchIntent)
         outState.putBoolean("pending-tile-target", tileRequested)
-        // openShare hands ownership to the Agent picker; its unconsumed envelope must survive death too.
+        // Preserve the grant envelope through selection, provider reads and the draft checkpoint.
         outState.putParcelable("pending-share-intent", shareIntent ?: model?.pendingShareIntent)
         super.onSaveInstanceState(outState)
     }

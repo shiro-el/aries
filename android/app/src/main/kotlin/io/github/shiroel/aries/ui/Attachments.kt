@@ -25,49 +25,111 @@ data class PreparedAttachment(val name: String, val bytes: ByteArray)
 /** One literal POSIX shell argument, including embedded quotes and newlines. */
 fun shellQuote(path: String): String = "'" + path.replace("'", "'\"'\"'") + "'"
 
-/** Decode to the upload dimensions, rather than allocating a full camera-sized bitmap. */
-fun prepareAttachment(context: Context, uri: Uri, resizeImages: Boolean): PreparedAttachment {
+/** Cancellation resumes the caller immediately, even if a provider ignores its signal. */
+internal suspend fun prepareAttachmentCancellable(context: Context, uri: Uri, resizeImages: Boolean): PreparedAttachment =
+    kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
+        val app = context.applicationContext
+        val read = AttachmentRead()
+        continuation.invokeOnCancellation { read.cancel() }
+        kotlinx.coroutines.Dispatchers.IO.dispatch(kotlin.coroutines.EmptyCoroutineContext) {
+            continuation.resumeWith(runCatching { prepareAttachment(app, uri, resizeImages, read) })
+        }
+    }
+
+/** Provider cancellation and stream closure run outside the UI thread. */
+private class AttachmentRead {
+    val signal = android.os.CancellationSignal()
+    private val canceled = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val active = java.util.concurrent.atomic.AtomicReference<java.io.Closeable?>()
+
+    fun check() {
+        if (canceled.get()) throw android.os.OperationCanceledException()
+    }
+
+    fun cancel() {
+        canceled.set(true)
+        kotlinx.coroutines.Dispatchers.IO.dispatch(kotlin.coroutines.EmptyCoroutineContext) {
+            runCatching { active.getAndSet(null)?.close() }
+            runCatching { signal.cancel() }
+        }
+    }
+
+    fun <T : java.io.Closeable, R> use(resource: T, block: (T) -> R): R = resource.use {
+        active.set(it)
+        try { check(); block(it) } finally { active.compareAndSet(it, null) }
+    }
+}
+
+/** Decode locally so the image decoder cannot reopen an uncancellable provider stream. */
+fun prepareAttachment(context: Context, uri: Uri, resizeImages: Boolean): PreparedAttachment =
+    prepareAttachment(context, uri, resizeImages, AttachmentRead())
+
+private fun prepareAttachment(context: Context, uri: Uri, resizeImages: Boolean, read: AttachmentRead): PreparedAttachment {
+    read.check()
     val resolver = context.contentResolver
     val name = if (uri.scheme == "file") File(uri.path!!).name else {
-        resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
+        resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null, read.signal)?.use {
             if (it.moveToFirst()) it.getString(0) else null
         } ?: "attachment"
     }
+    read.check()
     val mime = resolver.getType(uri) ?: MimeTypeMap.getSingleton()
         .getMimeTypeFromExtension(name.substringAfterLast('.', "").lowercase(Locale.ROOT))
-    if (resizeImages && mime?.startsWith("image/") == true) {
-        // ImageDecoder applies image orientation and decodes only the first frame.
-        val bitmap = ImageDecoder.decodeBitmap(ImageDecoder.createSource(resolver, uri)) { decoder, info, _ ->
-            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
-            val longest = maxOf(info.size.width, info.size.height)
-            if (longest > ATTACHMENT_IMAGE_SIDE) {
-                decoder.setTargetSize(
-                    maxOf(1, (info.size.width.toLong() * ATTACHMENT_IMAGE_SIDE / longest).toInt()),
-                    maxOf(1, (info.size.height.toLong() * ATTACHMENT_IMAGE_SIDE / longest).toInt()),
-                )
+    read.check()
+    val descriptor = resolver.openAssetFileDescriptor(uri, "r", read.signal)
+        ?: throw IOException("attachment could not be opened")
+    return read.use(descriptor) { asset ->
+        val input = asset.createInputStream()
+        read.use(input) { source ->
+            if (resizeImages && mime?.startsWith("image/") == true) {
+                val local = File.createTempFile("attachment-read-", ".image", context.cacheDir)
+                try {
+                    local.outputStream().use { output ->
+                        val buffer = ByteArray(64 * 1024)
+                        while (true) {
+                            read.check()
+                            val count = source.read(buffer)
+                            if (count < 0) break
+                            output.write(buffer, 0, count)
+                        }
+                    }
+                    read.check()
+                    val bitmap = ImageDecoder.decodeBitmap(ImageDecoder.createSource(local)) { decoder, info, _ ->
+                        decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                        val longest = maxOf(info.size.width, info.size.height)
+                        if (longest > ATTACHMENT_IMAGE_SIDE) {
+                            decoder.setTargetSize(
+                                maxOf(1, (info.size.width.toLong() * ATTACHMENT_IMAGE_SIDE / longest).toInt()),
+                                maxOf(1, (info.size.height.toLong() * ATTACHMENT_IMAGE_SIDE / longest).toInt()),
+                            )
+                        }
+                    }
+                    val bytes = try {
+                        read.check()
+                        ByteArrayOutputStream().use {
+                            check(bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it))
+                            it.toByteArray()
+                        }
+                    } finally { bitmap.recycle() }
+                    read.check()
+                    checkAttachmentSize(bytes.size)
+                    PreparedAttachment(name.substringBeforeLast('.', name) + ".jpg", bytes)
+                } finally { local.delete() }
+            } else {
+                val output = ByteArrayOutputStream()
+                val buffer = ByteArray(64 * 1024)
+                while (true) {
+                    read.check()
+                    val count = source.read(buffer)
+                    if (count < 0) break
+                    checkAttachmentSize(output.size() + count)
+                    output.write(buffer, 0, count)
+                }
+                read.check()
+                PreparedAttachment(name, output.toByteArray())
             }
         }
-        val bytes = try {
-            ByteArrayOutputStream().use {
-                check(bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it))
-                it.toByteArray()
-            }
-        } finally { bitmap.recycle() }
-        checkAttachmentSize(bytes.size)
-        return PreparedAttachment(name.substringBeforeLast('.', name) + ".jpg", bytes)
     }
-    val bytes = resolver.openInputStream(uri)?.use { input ->
-        val output = ByteArrayOutputStream()
-        val buffer = ByteArray(64 * 1024)
-        while (true) {
-            val read = input.read(buffer)
-            if (read < 0) break
-            checkAttachmentSize(output.size() + read)
-            output.write(buffer, 0, read)
-        }
-        output.toByteArray()
-    } ?: throw IOException("attachment could not be opened")
-    return PreparedAttachment(name, bytes)
 }
 
 class AttachmentTooLarge : IOException()
