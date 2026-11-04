@@ -53,7 +53,8 @@ fun WatchInbox(
     notice: Int?,
     onRefresh: () -> Unit,
     onOpenPhone: (WatchAgent) -> Unit,
-    detailActions: @Composable (WatchAgent) -> Unit = { WatchDetailActionPlaceholders(it) },
+    detailActions: @Composable (WatchAgent) -> Unit = {},
+    onDetailRefresh: (WatchAgent) -> Unit = { onRefresh() },
 ) {
     val selected = summary.inbox.firstOrNull { it.hostId == target?.first && it.terminal == target.second }
     BackHandler(selected != null) { onTarget(null) }
@@ -110,11 +111,12 @@ fun WatchInbox(
                             }
                             if (selected.contentHidden) item { Caption(stringResource(R.string.wear_inbox_hidden)) }
                             else {
-                                item { DetailSection(R.string.wear_inbox_request, selected.requestBody.ifBlank { stringResource(if (selected.status.equals("blocked", true)) R.string.wear_open_phone else R.string.wear_inbox_no_request) }) }
-                                selected.choices.forEach { choice -> item { Text(choice, modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) } }
-                                item { DetailSection(R.string.wear_inbox_summary, selected.conversationSummary.ifBlank { stringResource(R.string.wear_inbox_no_summary) }) }
+                                if (selected.requestBody.isNotBlank()) item { DetailSection(R.string.wear_inbox_request, selected.requestBody) }
+                                if (selected.conversationSummary.isNotBlank()) item { DetailSection(R.string.wear_inbox_summary, selected.conversationSummary) }
                             }
                             item { detailActions(selected) }
+                            item { InboxChip(stringResource(if (refreshing) R.string.wear_inbox_refreshing else R.string.wear_inbox_refresh), !refreshing, { onDetailRefresh(selected) }) }
+                            notice?.let { resource -> item { Caption(stringResource(resource)) } }
                             item { InboxChip(stringResource(R.string.wear_inbox_open_phone), true, { onOpenPhone(selected) }) }
                             item { InboxChip(stringResource(R.string.wear_inbox_back), true, { onTarget(null) }) }
                         }
@@ -161,16 +163,6 @@ private fun DetailSection(title: Int, text: String) {
 private fun InboxChip(label: String, enabled: Boolean, onClick: () -> Unit) {
     Chip(label = { Text(label) }, onClick = onClick, enabled = enabled,
         colors = ChipDefaults.secondaryChipColors(), shape = WatchConsoleShape, modifier = Modifier.fillMaxWidth())
-}
-
-/** Separate composables keep watch actions reusable as the other action slots are filled. */
-@Composable
-fun WatchDetailActionPlaceholders(agent: WatchAgent) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        // Answer actions are provided by WatchAnswerActions.
-        WatchInterruptAction(agent)
-        InboxChip(stringResource(R.string.wear_inbox_watch), false, {})
-    }
 }
 
 @Composable

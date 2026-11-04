@@ -944,6 +944,20 @@ class FakeConnection(
         return core?.let { it.terminalsOf[hostId] ?: it.terminals } ?: list
     }
 
+    override suspend fun readChat(terminal: String): ChatSnapshot {
+        val watch = requireNotNull(core).watchChat(hostId, terminal, null)
+        try {
+            while (true) {
+                val snapshot = watch.next()
+                if (snapshot.status !in listOf(io.github.shiroel.aries.core.ChatStatus.CONNECTING, io.github.shiroel.aries.core.ChatStatus.RECONNECTING)) return snapshot
+            }
+        } finally { watch.stop(); watch.close() }
+    }
+
+    override suspend fun answerQuestion(terminal: String, questionId: String, picks: List<List<UInt>>) {
+        requireNotNull(core).answerQuestionBackground(hostId, terminal, questionId, picks)
+    }
+
     override suspend fun watchTerminals(): TerminalWatch =
         core?.watchTerminals(hostId, gone) ?: FakeWatch(list, updates, gone)
     override suspend fun structure(): HostStructure = current.also { calls += "structure" }
