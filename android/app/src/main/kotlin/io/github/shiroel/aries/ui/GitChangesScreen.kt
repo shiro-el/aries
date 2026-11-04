@@ -22,12 +22,20 @@ internal fun ColumnScope.GitFileDiff(
     onSend: ((String) -> Unit)?,
     cachedDiffs: Map<GitDiffKind, GitDiff> = emptyMap(),
     colors: DiffColors = DiffColors(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.error),
+    selectedKind: GitDiffKind? = null,
+    onKindChange: ((GitDiffKind) -> Unit)? = null,
 ) {
-    var kind by remember(selectedFile) { mutableStateOf(when {
+    var localKind by remember(selectedFile) { mutableStateOf(when {
         selectedFile.untracked -> GitDiffKind.UNTRACKED
         selectedFile.unstaged -> GitDiffKind.UNSTAGED
         else -> GitDiffKind.STAGED
     }) }
+    val kind = selectedKind?.takeIf { when (it) {
+        GitDiffKind.STAGED -> selectedFile.staged
+        GitDiffKind.UNSTAGED -> selectedFile.unstaged
+        GitDiffKind.UNTRACKED -> selectedFile.untracked
+    } } ?: localKind
+    fun chooseKind(value: GitDiffKind) { localKind = value; onKindChange?.invoke(value) }
     var diff by remember(selectedFile, kind) { mutableStateOf<GitDiff?>(null) }
     var error by remember(selectedFile, kind) { mutableStateOf<Message?>(null) }
     var selection by remember(selectedFile, kind) { mutableStateOf<IntRange?>(null) }
@@ -42,8 +50,8 @@ internal fun ColumnScope.GitFileDiff(
     }
     error?.let { Text(stringResource(R.string.git_error, messageText(it)), color = MaterialTheme.colorScheme.error) }
     Row {
-        if (selectedFile.staged) SingleChoiceChip(selected = kind == GitDiffKind.STAGED, onClick = { kind = GitDiffKind.STAGED }, label = { Text(stringResource(R.string.git_staged)) })
-        if (selectedFile.unstaged) SingleChoiceChip(selected = kind == GitDiffKind.UNSTAGED, onClick = { kind = GitDiffKind.UNSTAGED }, label = { Text(stringResource(R.string.git_unstaged)) })
+        if (selectedFile.staged) SingleChoiceChip(selected = kind == GitDiffKind.STAGED, onClick = { chooseKind(GitDiffKind.STAGED) }, label = { Text(stringResource(R.string.git_staged)) })
+        if (selectedFile.unstaged) SingleChoiceChip(selected = kind == GitDiffKind.UNSTAGED, onClick = { chooseKind(GitDiffKind.UNSTAGED) }, label = { Text(stringResource(R.string.git_unstaged)) })
         if (selectedFile.untracked) Text(stringResource(R.string.git_untracked), Modifier.padding(12.dp))
     }
     if (onSend != null) {

@@ -120,10 +120,15 @@ object WatchTile {
             .addContent(label(code, 11f, color))
             .addContent(Spacer.Builder().setWidth(dp(6f)).build())
             .addContent(Box.Builder().setWidth(expand()).setHorizontalAlignment(HORIZONTAL_ALIGN_START)
-                .addContent(Column.Builder().setHorizontalAlignment(HORIZONTAL_ALIGN_START)
+                .addContent(Column.Builder().setWidth(expand()).setHorizontalAlignment(HORIZONTAL_ALIGN_START)
                     .addContent(label(agent.name, 12f))
-                    .addContent(label(context.getString(R.string.wear_row_age, agent.hostName.ifBlank { agent.hostId },
-                        age(context, fetchedAt, now, compact = true)), 10f, WatchConsole.MUTED)).build()).build()).build()
+                    // Reserve the age's intrinsic width; only the Host name may ellipsize.
+                    .addContent(Row.Builder().setWidth(expand()).setVerticalAlignment(VERTICAL_ALIGN_CENTER)
+                        .addContent(Box.Builder().setWidth(expand()).setHorizontalAlignment(HORIZONTAL_ALIGN_START)
+                            .addContent(label(agent.hostName.ifBlank { agent.hostId }, 10f, WatchConsole.MUTED)).build())
+                        .addContent(Spacer.Builder().setWidth(dp(3f)).build())
+                        .addContent(label(age(context, fetchedAt, now, compact = true), 10f, WatchConsole.MUTED))
+                        .build()).build()).build()).build()
         return Box.Builder().setWidth(expand()).setHeight(dp(32f))
             .setModifiers(ModifiersBuilders.Modifiers.Builder()
                 .setClickable(WatchNavigation.clickable(context, agent))

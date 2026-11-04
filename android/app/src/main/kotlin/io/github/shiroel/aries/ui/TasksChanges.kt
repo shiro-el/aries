@@ -65,7 +65,14 @@ internal class TasksChangesState {
         private set
     var fetchedAt by mutableStateOf<Long?>(null)
         private set
-    var selected by mutableStateOf<String?>(null)
+    var selectedKind by mutableStateOf<GitDiffKind?>(null)
+    private var selectedPath by mutableStateOf<String?>(null)
+    var selected: String?
+        get() = selectedPath
+        set(value) {
+            if (selectedPath != value) selectedKind = null
+            selectedPath = value
+        }
 
     private data class Context(val cwd: String?, val turn: ULong, val working: Boolean)
     private fun context(terminal: TerminalInfo) = Context(terminal.currentCwd, terminal.turn, terminal.agentStatus == AgentStatus.Working)
@@ -185,7 +192,7 @@ internal fun ColumnScope.TasksChanges(state: TasksChangesState, link: HostLink?,
             TextButton(onClick = { state.selected = null }) { Text(stringResource(R.string.tasks_changes)) }
             Text(file.path, fontFamily = FontFamily.Monospace)
             GitFileDiff(connection, terminal.address, git.cwd, file, revision, wrap = true, onSend = onSend,
-                colors = colors)
+                colors = colors, selectedKind = state.selectedKind, onKindChange = { state.selectedKind = it })
         }
     } else LazyColumn(Modifier.weight(1f).testTag("tasks-changes-files")) {
         items(git?.files.orEmpty(), key = { it.path }) { changed ->

@@ -838,6 +838,10 @@ async fn a_blocked_agent_reaches_the_phone_once() {
             },
             question: None,
             excerpt: None,
+            at_ms: match notices[0].content {
+                PushContent::Status { at_ms, .. } => at_ms,
+                _ => None,
+            },
             at: match notices[0].content {
                 PushContent::Status { at, .. } => at,
                 _ => 0,

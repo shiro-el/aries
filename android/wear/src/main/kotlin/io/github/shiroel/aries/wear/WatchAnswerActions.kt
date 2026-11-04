@@ -47,19 +47,21 @@ internal fun WatchAnswerActions(agent: WatchAgent, session: WatchDetailSession) 
     val sending = answer.pending
     val result = answer.result
     val check = session.check(agent)
-    var draft by remember(agent.hostId, agent.terminal, agent.stateToken) { mutableStateOf("") }
+    val draft = session.draft(agent)
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { response ->
         if (response.resultCode == Activity.RESULT_OK) {
-            draft = response.data?.let { RemoteInput.getResultsFromIntent(it)?.getCharSequence(REPLY_KEY)?.toString() }.orEmpty()
+            session.setDraft(agent, response.data?.let { RemoteInput.getResultsFromIntent(it)?.getCharSequence(REPLY_KEY)?.toString() }.orEmpty())
         }
     }
     fun send(command: WatchCommand, path: String) {
         session.send(command, path) { outcome ->
             view.performHapticFeedback(if (outcome == WatchResult.SENT) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.REJECT)
-            if (outcome == WatchResult.SENT) draft = ""
         }
     }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        // Text has the same session lifetime as its outcome, including uncertain sends.
+        if (!agent.contentHidden && draft.isNotBlank())
+            Text(draft, modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp))
         if (!agent.contentHidden && result == null && !sending && check !in listOf(WatchDetailSession.DetailCheck.LOADING, WatchDetailSession.DetailCheck.FAILED, WatchDetailSession.DetailCheck.PHONE)) {
             if (agent.status == "blocked") {
                 if (agent.canAnswerOnWatch && agent.requestId.isNotBlank()) {
@@ -74,9 +76,8 @@ internal fun WatchAnswerActions(agent: WatchAgent, session: WatchDetailSession) 
             }
             if (agent.status in listOf("done", "error")) {
                 if (draft.isNotBlank()) {
-                    Text(draft, modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp))
                     ActionChip(stringResource(R.string.wear_answer_send)) { send(WatchCommand(agent, text = draft), WatchCommand.REPLY_PATH) }
-                    ActionChip(stringResource(R.string.wear_answer_discard)) { draft = "" }
+                    ActionChip(stringResource(R.string.wear_answer_discard)) { session.setDraft(agent, "") }
                 }
                 ActionChip(stringResource(R.string.wear_answer_reply)) {
                     val input = RemoteInput.Builder(REPLY_KEY).setLabel(replyLabel).build()

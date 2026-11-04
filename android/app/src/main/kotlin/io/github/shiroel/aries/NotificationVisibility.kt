@@ -19,8 +19,10 @@ internal class NotificationVisibility : Application.ActivityLifecycleCallbacks {
     private val resumed = mutableSetOf<Activity>()
     private val agents = mutableMapOf<Activity, PushTarget>()
 
+    private fun Activity.canReplaceNotifications() = (application as? AriesApplication)?.appLock?.locked != true
+
     val foreground: Boolean
-        @Synchronized get() = resumed.isNotEmpty()
+        @Synchronized get() = resumed.any { it.canReplaceNotifications() }
 
     @Synchronized
     fun viewing(activity: Activity, target: PushTarget?) {
@@ -29,10 +31,12 @@ internal class NotificationVisibility : Application.ActivityLifecycleCallbacks {
 
     @Synchronized
     fun isViewing(hostId: String, terminal: String?): Boolean =
-        terminal != null && resumed.any { agents[it] == PushTarget(hostId, terminal) }
+        terminal != null && resumed.any { it.canReplaceNotifications() && agents[it] == PushTarget(hostId, terminal) }
 
-    @Synchronized
-    override fun onActivityResumed(activity: Activity) { resumed.add(activity) }
+    override fun onActivityResumed(activity: Activity) {
+        synchronized(this) { resumed.add(activity) }
+        if (activity.canReplaceNotifications()) NotificationGroups.foregrounded(activity)
+    }
 
     @Synchronized
     override fun onActivityPaused(activity: Activity) { resumed.remove(activity) }

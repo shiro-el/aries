@@ -35,13 +35,15 @@ internal object WatchProgressPhone {
             (at == previous.atMs && previous.cancelled && previous.hostId == host && previous.terminal == progress.terminal))) return
         save(context, WatchProgress(host, progress.terminal, NotificationMarkdown.render(progress.name ?: progress.terminal).plain.take(128),
             (at - millis(progress.elapsedSecs)).coerceAtLeast(0),
-            progress.childAgents.coerceAtMost(Int.MAX_VALUE.toUInt()).toInt(), at))
+            progress.childAgents.coerceAtMost(Int.MAX_VALUE.toUInt()).toInt(), at,
+            observedAtMs = previous?.observedAtMs?.takeIf { previous.atMs == at && it != 0L } ?: System.currentTimeMillis()))
     }
 
     @Synchronized fun completed(context: Context, host: String, terminal: String, at: ULong) {
         val previous = all(context).find { it.hostId == host && it.terminal == terminal } ?: return
         if (previous.hostId != host || previous.terminal != terminal || millis(at) < previous.atMs) return
-        prefs(context).edit().putLong("completed:${previous.dataPath}", millis(at)).commit()
+        prefs(context).edit().putLong("completed:${previous.dataPath}", millis(at))
+            .putLong("completed-recorded:${previous.dataPath}", System.currentTimeMillis()).commit()
         save(context, previous.copy(atMs = millis(at), cancelled = true))
     }
 
@@ -50,9 +52,14 @@ internal object WatchProgressPhone {
         all(context).filterNot { it.cancelled }.forEach { progress ->
             val state = byHost[progress.hostId]
             val terminal = state?.agents?.find { it.address == progress.terminal }
-            if ((state != null && state.fetchedAtMs >= progress.atMs.toULong() &&
+            // Legacy payloads acquire a phone observation before participating in pull recall.
+            if (progress.observedAtMs == 0L) {
+                save(context, progress.copy(observedAtMs = System.currentTimeMillis()))
+                return@forEach
+            }
+            if ((state != null && state.fetchedAtMs >= progress.observedAtMs.toULong() &&
                     (terminal == null || terminal.state != "live" || terminal.agentStatus != AgentStatus.Working)) ||
-                System.currentTimeMillis() - progress.atMs >= WatchProgress.MAX_AGE_MS) {
+                System.currentTimeMillis() - progress.observedAtMs >= WatchProgress.MAX_AGE_MS) {
                 completed(context, progress.hostId, progress.terminal, (progress.atMs / 1000).toULong())
             }
         }
@@ -76,7 +83,12 @@ internal object WatchProgressPhone {
         val editor = prefs(context).edit().remove("payload:${progress.dataPath}")
         val cutoff = System.currentTimeMillis() - 7 * 24 * 60 * 60_000L
         prefs(context).all.forEach { (key, value) ->
-            if (key.startsWith("completed:") && value is Long && value < cutoff) editor.remove(key)
+            if (key.startsWith("completed:") && value is Long) {
+                val recorded = "completed-recorded:${key.removePrefix("completed:")}"
+                val time = prefs(context).getLong(recorded, 0)
+                if (time == 0L) editor.putLong(recorded, System.currentTimeMillis())
+                else if (time < cutoff) editor.remove(key).remove(recorded)
+            }
         }
         editor.commit()
     }
