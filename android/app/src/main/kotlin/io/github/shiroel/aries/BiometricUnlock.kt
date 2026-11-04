@@ -18,6 +18,10 @@ class BiometricUnlock(private val activity: Activity) : BiometricAuthorizer {
         var result: Cipher? = null
         val cancel = CancellationSignal()
         activity.runOnUiThread {
+            if (activity.isFinishing || activity.isDestroyed) {
+                done.countDown()
+                return@runOnUiThread
+            }
             BiometricPrompt.Builder(activity)
                 .setTitle(activity.getString(R.string.key_biometric_prompt_title))
                 .setNegativeButton(activity.getString(R.string.cancel_button), activity.mainExecutor) { _, _ ->
@@ -40,7 +44,13 @@ class BiometricUnlock(private val activity: Activity) : BiometricAuthorizer {
                     },
                 )
         }
-        if (!done.await(PROMPT_TIMEOUT_SECONDS, TimeUnit.SECONDS)) cancel.cancel()
+        val completed = try {
+            done.await(PROMPT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+            false
+        }
+        if (!completed) cancel.cancel()
         return result
     }
 

@@ -88,7 +88,6 @@ class MainActivity : AppCompatActivity() {
         intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY == 0
     private var shareIntent: Intent? = null
     private var resumed = false
-    private var needsForegroundRefresh = true
 
     private fun openShare() {
         val m = model ?: return
@@ -162,7 +161,6 @@ class MainActivity : AppCompatActivity() {
         app.appLock.foregrounded()
         app.appLock.applyPrivacy(window)
         super.onStart()
-        needsForegroundRefresh = true
     }
 
     private fun resumeModel() {
@@ -171,8 +169,8 @@ class MainActivity : AppCompatActivity() {
         val explicitSurface = savedLaunchIntent != null || tileRequested
         openShare()
         openEntryTarget()
-        if (needsForegroundRefresh) {
-            needsForegroundRefresh = false
+        if (sessions.foregroundRefreshPending) {
+            sessions.foregroundRefreshPending = false
             // A launch connects only its selected Host; do not open other biometric keys first.
             if (!explicitSurface) m.foregrounded()
         }
@@ -201,7 +199,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onStop() {
-        if (!isChangingConfigurations) app.appLock.backgrounded()
+        if (!isChangingConfigurations) {
+            sessions.foregroundRefreshPending = true
+            app.appLock.backgrounded()
+        }
         super.onStop()
     }
 

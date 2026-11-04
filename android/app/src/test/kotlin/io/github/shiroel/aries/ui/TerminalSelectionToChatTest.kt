@@ -110,6 +110,42 @@ class TerminalSelectionToChatTest {
         screenshot("selection-ended-by-remote-key")
     }
 
+    // Regression: a pointer still dragging must not revive the snapshot cleared by remote input.
+    @Test
+    fun continuingAHeldSelectionAfterInputKeepsTheLiveScreen() {
+        open()
+        compose.runOnIdle { (model.screen as Screen.Terminal).viewer.startTyping() }
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(300)
+        compose.waitForIdle()
+        val view = core.connection!!.views.last()
+        val run = CellRun(0u, 13u, "error details", false, null, null, false, false, false, false, false, false)
+        view.push(TerminalUpdate.Screen(ScreenFrame(40u, 2u, true, listOf(ScreenLine(0u, listOf(run))), null, null)))
+        compose.waitForIdle()
+        val screen = compose.onNodeWithTag("terminal-screen")
+        screen.performTouchInput {
+            down(Offset(1f, 1f))
+            advanceEventTime(1_000)
+            moveTo(Offset(2f, 1f))
+        }
+        compose.onNodeWithContentDescription(str(R.string.terminal_send_to_agent)).assertExists()
+        compose.runOnIdle { (model.screen as Screen.Terminal).viewer.type("x") }
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription(str(R.string.terminal_send_to_agent)).assertDoesNotExist()
+        val live = run.copy(width = 11u, text = "live prompt")
+        view.push(TerminalUpdate.Screen(ScreenFrame(40u, 2u, true, listOf(ScreenLine(0u, listOf(live))), null, null)))
+        compose.waitForIdle()
+        screen.performTouchInput { moveTo(Offset(width / 3f, 1f)); up() }
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription(str(R.string.terminal_send_to_agent)).assertDoesNotExist()
+        compose.runOnIdle {
+            val viewer = (model.screen as Screen.Terminal).viewer
+            assertEquals(null, viewer.look.selection)
+            assertTrue(viewer.text().contains("live prompt"))
+            assertEquals(listOf("text:x"), view.sent)
+        }
+    }
+
     @Test
     fun typingSelectionKeepsItsTextAcrossOutputSearchAndResizeUntilSent() {
         open()
