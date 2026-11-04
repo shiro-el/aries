@@ -388,13 +388,14 @@ fn answer(args: Vec<String>) {
     };
     let mut link = aries_beacon::core_link::CoreLookup::default();
     let agents = aries_beacon::chat::agents();
-    let reply = aries_beacon::chat::answer::answer(&terminal, &answer, &mut link, &agents)
-        .unwrap_or_else(|e| {
-            aries_protocol::answer::AnswerReply::new(
-                aries_protocol::answer::AnswerOutcome::Gone,
-                Some(format!("transcript: {e}")),
-            )
-        });
+    let reply =
+        aries_beacon::chat::answer::answer(&state_dir(), &terminal, &answer, &mut link, &agents)
+            .unwrap_or_else(|e| {
+                aries_protocol::answer::AnswerReply::new(
+                    aries_protocol::answer::AnswerOutcome::Gone,
+                    Some(format!("transcript: {e}")),
+                )
+            });
     println!("{}", reply.to_json());
     if !reply.outcome.is_sent() {
         std::process::exit(1);

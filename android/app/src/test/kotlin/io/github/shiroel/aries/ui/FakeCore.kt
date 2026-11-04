@@ -783,6 +783,8 @@ class FakeConnection(
     var githubPage = io.github.shiroel.aries.core.GithubPage(listOf(
         io.github.shiroel.aries.core.GithubItem(42u, "Issue title", "open", "octocat", "2026-11-04", "**Issue body**", io.github.shiroel.aries.core.GithubKind.ISSUE),
     ), true, false)
+    var githubListReply: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+    var githubDetailReply: kotlinx.coroutines.CompletableDeferred<Unit>? = null
     val githubRequests = mutableListOf<List<String>>()
     override suspend fun githubRepository(address: String): io.github.shiroel.aries.core.GithubRepository {
         githubRepoReads++
@@ -791,20 +793,24 @@ class FakeConnection(
     }
     override suspend fun githubList(repo: io.github.shiroel.aries.core.GithubRepository, kind: io.github.shiroel.aries.core.GithubKind, state: io.github.shiroel.aries.core.GithubState, search: String, page: UInt): io.github.shiroel.aries.core.GithubPage {
         githubRequests += listOf(kind.name, state.name, search, page.toString())
+        githubListReply?.await()
         githubFailure?.let { throw it }
         return githubPage
     }
     var githubThread: io.github.shiroel.aries.core.GithubDetail? = null
     override suspend fun githubDetail(repo: io.github.shiroel.aries.core.GithubRepository, number: UInt): io.github.shiroel.aries.core.GithubDetail {
+        githubDetailReply?.await()
         githubFailure?.let { throw it }
         return githubThread ?: io.github.shiroel.aries.core.GithubDetail(githubPage.items.first(), emptyList(), null, null)
     }
+    var githubCommentReply: kotlinx.coroutines.CompletableDeferred<Unit>? = null
     val githubComments = mutableListOf<Triple<io.github.shiroel.aries.core.GithubKind, UInt, String>>()
     override suspend fun githubComment(repo: io.github.shiroel.aries.core.GithubRepository, kind: io.github.shiroel.aries.core.GithubKind, number: UInt, body: String) {
         githubComments += Triple(kind, number, body)
         githubFailure?.let { throw it }
         val current = githubThread ?: io.github.shiroel.aries.core.GithubDetail(githubPage.items.first(), emptyList(), null, null)
         githubThread = current.copy(comments = current.comments + io.github.shiroel.aries.core.GithubComment((current.comments.size + 1).toULong(), body, "me", "2026-11-04"))
+        githubCommentReply?.await()
     }
     val githubStateChanges = mutableListOf<Pair<UInt, Boolean>>()
     override suspend fun githubSetIssueClosed(repo: io.github.shiroel.aries.core.GithubRepository, number: UInt, closed: Boolean) {
@@ -813,9 +819,18 @@ class FakeConnection(
         val current = githubThread ?: io.github.shiroel.aries.core.GithubDetail(githubPage.items.first(), emptyList(), null, null)
         githubThread = current.copy(item = current.item.copy(state = if (closed) "closed" else "open"))
     }
-    val githubDrafts = mutableMapOf<Pair<String, UInt>, String>()
-    override fun githubLoadDraft(repo: io.github.shiroel.aries.core.GithubRepository, number: UInt): String = githubDrafts[repo.nameWithOwner to number].orEmpty()
+    @Volatile var githubDraftAccessedOnMain = false
+    @Volatile var githubDraftReadFailure: CoreException? = null
+    @Volatile var githubDraftSaveFailure: CoreException? = null
+    val githubDrafts = java.util.concurrent.ConcurrentHashMap<Pair<String, UInt>, String>()
+    override fun githubLoadDraft(repo: io.github.shiroel.aries.core.GithubRepository, number: UInt): String {
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) githubDraftAccessedOnMain = true
+        githubDraftReadFailure?.let { throw it }
+        return githubDrafts[repo.nameWithOwner to number].orEmpty()
+    }
     override fun githubSaveDraft(repo: io.github.shiroel.aries.core.GithubRepository, number: UInt, body: String) {
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) githubDraftAccessedOnMain = true
+        githubDraftSaveFailure?.let { throw it }
         githubDrafts[repo.nameWithOwner to number] = body
     }
     var worktrees = emptyList<io.github.shiroel.aries.core.WorktreeInfo>()
@@ -976,11 +991,12 @@ class FakeConnection(
     val uploads = mutableListOf<Triple<String, String, ByteArray>>()
     var uploadHold: CompletableDeferred<Unit>? = null
     var uploadFailWith: CoreException? = null
+    var uploadPaths: List<String> = emptyList()
     override suspend fun uploadAttachment(terminal: String, name: String, bytes: ByteArray): String {
         uploadHold?.await()
         uploadFailWith?.let { throw it }
         uploads += Triple(terminal, name, bytes)
-        return "/host/it's file.jpg"
+        return uploadPaths.getOrNull(uploads.lastIndex) ?: "/host/it's file.jpg"
     }
 
     /** The fake Agents' input record: (address, text) of each message typed in. */

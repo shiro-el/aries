@@ -41,8 +41,8 @@ internal fun AgentScreenHeader(
     var menu by remember(terminal.address) { mutableStateOf(false) }
     var showUsage by remember(terminal.address) { mutableStateOf(false) }
     if (showUsage) AgentUsageSheet(usage) { showUsage = false }
-    var showGithub by remember(terminal.address) { mutableStateOf(false) }
-    if (showGithub) GithubDialog(link, terminal) { showGithub = false }
+    val github = link?.github(terminal.address)
+    if (github?.shown == true) GithubDialog(link, terminal, github::dismiss)
     val colors = MaterialTheme.colorScheme
     val openFiles = LocalOpenFiles.current
     val quickOpen = LocalQuickOpen.current
@@ -106,7 +106,7 @@ internal fun AgentScreenHeader(
                         onClick = { menu = false; it() }, modifier = Modifier.semantics { contentDescription = searchLabel })
                 }
                 ActionMenuItem(stringResource(R.string.github_button), R.drawable.ic_github,
-                    enabled = link?.connection != null, onClick = { menu = false; showGithub = true })
+                    enabled = link?.connection != null, onClick = { menu = false; github?.open() })
                 quickOpen?.let { ActionMenuItem(stringResource(R.string.quick_open_title), R.drawable.ic_terminal_view,
                     onClick = { menu = false; it() }) }
                 if (terminal.agentStatus != null) {
