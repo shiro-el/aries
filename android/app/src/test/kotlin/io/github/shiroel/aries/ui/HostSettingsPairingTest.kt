@@ -64,7 +64,7 @@ class HostSettingsPairingTest {
         compose.runOnIdle { assertTrue(model.beacon.installed) }
         screenshot("beacon-recovered")
         compose.onNodeWithTag("push-advanced").performScrollTo().performClick()
-        compose.onNodeWithText("Herdr Core").performScrollTo()
+        compose.onNodeWithTag("host-actions:h1").performScrollToKey("herdr-install")
         screenshot("healthy-components")
     }
 
