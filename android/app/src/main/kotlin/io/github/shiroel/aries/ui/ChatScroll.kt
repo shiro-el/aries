@@ -149,8 +149,14 @@ internal fun rememberChatScrollState(
                     }
                 }
                 if (followEnabled && (latest || (state.following && (previous != null || saved == null)))) {
-                    state.list.scrollToLatest(keys.lastIndex, alignBottom)
-                    state.following = !state.list.canScrollForward
+                    // A streamed edit keeps the same tail key. Let its natural
+                    // measure run before checking whether its height moved the
+                    // bottom; forcing a jump here also measures the old height.
+                    val tailMoved = previousItemKeys.lastOrNull() != keys.lastOrNull()
+                    if (latest || previous == null || tailMoved || state.list.canScrollForward) {
+                        state.list.scrollToLatest(keys.lastIndex, alignBottom)
+                        state.following = !state.list.canScrollForward
+                    }
                 }
                 previousEntries = rows
                 previousCalls = calls

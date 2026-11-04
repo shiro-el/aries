@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.HorizontalDivider
@@ -59,6 +60,8 @@ import io.github.shiroel.aries.core.AriesCoreInterface
 import io.github.shiroel.aries.core.BlockedReason
 import io.github.shiroel.aries.core.ChatEntry
 import io.github.shiroel.aries.core.ChatEntryBody
+import io.github.shiroel.aries.core.ChatImage
+import io.github.shiroel.aries.core.ChatResponseMetadata
 import io.github.shiroel.aries.core.ChatSnapshot
 import io.github.shiroel.aries.core.ChatStatus
 import io.github.shiroel.aries.core.ChatToolStatus
@@ -425,8 +428,11 @@ fun ChatScreen(
         readAloud.notice?.let { android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_LONG).show() }
     }
     val snapshot = chat.snapshot
-    val entries = snapshot?.entries.orEmpty()
-    val markdown by rememberChatMarkdown(entries)
+    val rawEntries = snapshot?.entries.orEmpty()
+    val markdown by rememberChatMarkdown(rawEntries)
+    val rendered = remember(chat) { ChatRenderedEntries() }
+    val entries = remember(rendered, rawEntries, markdown) { rendered.update(rawEntries, markdown) }
+    val transcript = remember(chat) { ChatTranscript() }
     var searchOpen by remember(chat) { mutableStateOf(false) }
     var query by remember(chat) { mutableStateOf("") }
     var selected by remember(chat) { mutableStateOf<ChatSearchMatch?>(null) }
@@ -442,6 +448,9 @@ fun ChatScreen(
         }.sortedBy { it.call.atMs }
     }.orEmpty()
     val scroll = rememberChatScrollState(chat, entries, agentCalls.map { "call:${it.key}" }, markdown, followEnabled = !searchOpen)
+    if (!scroll.following) {
+        remember(transcript, entries, markdown) { transcript.update(entries, markdown) }
+    }
     LaunchedEffect(active) {
         if (active != null) {
             val body = entries.find { it.id == active.field.entryId }?.body
@@ -467,46 +476,49 @@ fun ChatScreen(
             }
             io.github.shiroel.aries.speech.ReadAloudPlayback(readAloud, showInactiveNotice = false)
             Column(Modifier.weight(1f).fillMaxWidth()) {
-                LazyColumn(
-                    Modifier.weight(1f).fillMaxWidth().chatImeAnchor(scroll.list).testTag("chat-transcript"),
-                    state = scroll.list,
-                ) {
-                    entries.forEach { entry ->
-                        val body = entry.body
-                        val source = body.markdownSource()
-                        item(key = "transcript:${entry.id}") {
-                            CompositionLocalProvider(LocalChatSearchEntry provides entry.id) {
-                                if (body is ChatEntryBody.Question) {
-                                    QuestionView(chat, entry.id, body)
-                                } else {
-                                    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (body is ChatEntryBody.Agent) 0.dp else 12.dp)) {
-                                        ChatEntryView(entry, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image, readAloud) { chat.toggle(entry.id) }
+                val transcriptModifier = Modifier.weight(1f).fillMaxWidth().chatImeAnchor(scroll.list).testTag("chat-transcript")
+                if (scroll.following) {
+                    // Keep main's follow renderer inline: its lazy provider and
+                    // forced scroll measure must consume the same content update.
+                    LazyColumn(transcriptModifier, state = scroll.list) {
+                        entries.forEach { entry ->
+                            val body = entry.body
+                            val source = body.markdownSource()
+                            item(key = "transcript:${entry.id}") {
+                                CompositionLocalProvider(LocalChatSearchEntry provides entry.id) {
+                                    if (body is ChatEntryBody.Question) {
+                                        QuestionView(chat, entry.id, body)
+                                    } else {
+                                        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (body is ChatEntryBody.Agent) 0.dp else 12.dp)) {
+                                            ChatEntryView(entry, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image, readAloud) { chat.toggle(entry.id) }
+                                        }
+                                        if (source == null) HorizontalDivider()
                                     }
-                                    if (source == null) HorizontalDivider()
+                                }
+                            }
+                            if (source != null) {
+                                chatMarkdownItems(entry.id, markdown[entry.id], thinking = body is ChatEntryBody.Thinking)
+                                item(key = "transcript:${entry.id}:footer") {
+                                    if (body is ChatEntryBody.User && body.images.isNotEmpty()) {
+                                        Column(Modifier.padding(horizontal = 16.dp)) {
+                                            body.images.forEach { ChatImageView(it, chat::image) }
+                                        }
+                                    }
+                                    if (body is ChatEntryBody.Agent) body.metadata?.let { metadata ->
+                                        Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                                            ChatResponseMetadataView(metadata)
+                                        }
+                                    }
+                                    HorizontalDivider(Modifier.padding(top = 8.dp))
                                 }
                             }
                         }
-                        if (source != null) {
-                            // Keep the last complete document visible until the background parse swaps it.
-                            chatMarkdownItems(entry.id, markdown[entry.id], thinking = body is ChatEntryBody.Thinking)
-                            item(key = "transcript:${entry.id}:footer") {
-                                if (body is ChatEntryBody.User && body.images.isNotEmpty()) {
-                                    Column(Modifier.padding(horizontal = 16.dp)) {
-                                        body.images.forEach { ChatImageView(it, chat::image) }
-                                    }
-                                }
-                                if (body is ChatEntryBody.Agent) body.metadata?.let { metadata ->
-                                    Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                                        ChatResponseMetadataView(metadata)
-                                    }
-                                }
-                                HorizontalDivider(Modifier.padding(top = 8.dp))
-                            }
+                        items(agentCalls, key = { "call:${it.key}" }) { entry ->
+                            if (calls != null) ConsoleChatCall(entry, calls)
                         }
                     }
-                    items(agentCalls, key = { "call:${it.key}" }) { entry ->
-                        if (calls != null) ConsoleChatCall(entry, calls)
-                    }
+                } else {
+                    ChatHistoryTranscript(transcriptModifier, scroll.list, transcript, chat, readAloud, agentCalls, calls)
                 }
                 if (!searchOpen && !scroll.following && (entries.isNotEmpty() || agentCalls.isNotEmpty())) {
                     // Reserve the button's measured height so bringing a Choice or
@@ -547,6 +559,70 @@ fun ChatScreen(
             }
         }
     }
+}
+
+/** A stable provider observes only the history rows that actually changed. */
+@Composable
+private fun ChatHistoryTranscript(
+    modifier: Modifier,
+    list: LazyListState,
+    transcript: ChatTranscript,
+    chat: ChatModel,
+    readAloud: io.github.shiroel.aries.speech.ReadAloudState,
+    agentCalls: List<CallEntry>,
+    calls: CallsModel?,
+) {
+    LazyColumn(modifier, state = list) {
+        items(transcript.rows, key = { it.key }, contentType = { it.contentType }) { row ->
+            ChatTranscriptRowView(row, chat, readAloud)
+        }
+        items(agentCalls, key = { "call:${it.key}" }, contentType = { "call" }) { entry ->
+            if (calls != null) ConsoleChatCall(entry, calls)
+        }
+    }
+}
+
+@Composable
+private fun ChatTranscriptRowView(
+    row: ChatTranscriptRow,
+    chat: ChatModel,
+    readAloud: io.github.shiroel.aries.speech.ReadAloudState,
+) {
+    CompositionLocalProvider(LocalChatSearchEntry provides row.entryId) {
+        when (val content = row.content) {
+            is ChatTranscriptContent.Header -> ChatEntryHeader(content.entry, chat, readAloud)
+            is ChatTranscriptContent.Markdown -> ChatMarkdownItem(content.source, content.block, content.index, content.thinking)
+            is ChatTranscriptContent.Footer -> ChatEntryFooter(content.images, content.metadata, chat)
+        }
+    }
+}
+
+@Composable
+private fun ChatEntryHeader(entry: ChatEntry, chat: ChatModel, readAloud: io.github.shiroel.aries.speech.ReadAloudState) {
+    val body = entry.body
+    if (body is ChatEntryBody.Question) {
+        QuestionView(chat, entry.id, body)
+    } else {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (body is ChatEntryBody.Agent) 0.dp else 12.dp)) {
+            ChatEntryView(entry, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image, readAloud) { chat.toggle(entry.id) }
+        }
+        if (body.markdownSource() == null) HorizontalDivider()
+    }
+}
+
+@Composable
+private fun ChatEntryFooter(images: List<ChatImage>, metadata: ChatResponseMetadata?, chat: ChatModel) {
+    if (images.isNotEmpty()) {
+        Column(Modifier.padding(horizontal = 16.dp)) {
+            images.forEach { ChatImageView(it, chat::image) }
+        }
+    }
+    metadata?.let {
+        Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            ChatResponseMetadataView(it)
+        }
+    }
+    HorizontalDivider(Modifier.padding(top = 8.dp))
 }
 
 @Composable
