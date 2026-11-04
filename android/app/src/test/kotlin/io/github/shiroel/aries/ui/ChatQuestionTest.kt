@@ -89,7 +89,7 @@ class ChatQuestionTest {
                 ChatQuestionOption("Deny", null)))), ChatToolStatus.RUNNING, null))
         core.pushChat(ChatSnapshot(listOf(permission("permission:1")), ChatStatus.LIVE, null))
         compose.waitForIdle()
-        val always = compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Allow always"))
+        val always = compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Allow always"), substring = true)
         always.performClick()
         compose.waitForIdle()
         assertTrue(core.answers.isEmpty())

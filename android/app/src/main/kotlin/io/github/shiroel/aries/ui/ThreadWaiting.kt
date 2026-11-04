@@ -59,15 +59,14 @@ internal fun ThreadWaitingPill(model: HostsModel, chat: ChatModel) {
             if (target != null) {
                 val index = waiting.indexOfFirst { it.key == target.key }
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(target.name, Modifier.weight(1f), fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    QueueHeading(listOf(stringResource(R.string.thread_waiting_position, index + 1, waiting.size), target.name).joinToString(" · "),
+                        "${target.key.hostId}:${target.key.address}", Modifier.weight(1f))
                     val previousLabel = stringResource(R.string.thread_previous_waiting)
                     val nextLabel = stringResource(R.string.thread_next_waiting_button)
                     TextButton(onClick = {
                         val next = waiting[(if (index <= 0) waiting.lastIndex else index - 1).coerceAtLeast(0)]
                         selected = next.key
                     }, enabled = waiting.size > 1, modifier = Modifier.semantics { contentDescription = previousLabel }) { Text(stringResource(R.string.thread_previous)) }
-                    Text(stringResource(R.string.thread_waiting_position, (index + 1).coerceAtLeast(1), waiting.size.coerceAtLeast(1)),
-                        style = MaterialTheme.typography.labelMedium)
                     TextButton(onClick = {
                         val next = waiting[(index + 1).coerceAtLeast(0) % waiting.size]
                         selected = next.key
@@ -80,7 +79,7 @@ internal fun ThreadWaitingPill(model: HostsModel, chat: ChatModel) {
                 }) { Text(stringResource(R.string.thread_open_conversation)) }
                 if (target.call != null) {
                     val live = model.calls.calls.firstOrNull { it.key == target.call.key } ?: target.call.copy(live = false)
-                    ThreadCallPanel(live, model.calls, onDismiss = { model.calls.closeThreadCall(live) })
+                    ThreadCallPanel(live, model.calls, onDismiss = { model.calls.closeThreadCall(live) }, announce = true)
                 } else if (target.agent != null) ThreadWaitingQuestion(model, target.agent)
             } else Text(stringResource(R.string.thread_waiting_empty), Modifier.padding(16.dp))
             Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
@@ -115,7 +114,7 @@ private fun ThreadWaitingQuestion(model: HostsModel, agent: AgentEntry) {
         val excerpt = preview.snapshot?.entries?.lastOrNull { it.body is ChatEntryBody.Agent }?.body as? ChatEntryBody.Agent
         excerpt?.let { Text(it.text, Modifier.padding(16.dp), maxLines = 4, style = MaterialTheme.typography.bodySmall) }
         ThreadConnectionGuidance(preview)
-        if (question != null) ThreadAnswerPanel(preview, question)
+        if (question != null) ThreadAnswerPanel(preview, question, announce = true)
         else Text(stringResource(if (preview.snapshot == null) R.string.chat_loading else R.string.thread_waiting_open_required), Modifier.padding(16.dp))
     }
 }

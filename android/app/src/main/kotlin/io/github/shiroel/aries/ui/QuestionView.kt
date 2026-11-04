@@ -39,7 +39,7 @@ import io.github.shiroel.aries.core.ChatStatus
 import io.github.shiroel.aries.core.ChatToolStatus
 
 @Composable
-internal fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question) {
+internal fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question, announce: Boolean = false) {
     val permission = q.name == PERMISSION_TOOL
     val mode = chat.questionMode(id)
     val state = chat.answers[id]
@@ -81,13 +81,14 @@ internal fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question
         permission -> R.string.chat_permission_label
         else -> R.string.chat_question_label
     }
+    if (announce) QuestionAnnouncements(chat, id)
     ConsoleChatCallSurface(accent) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if ((answered && !unconfirmed) || cancelled) Icon(
                 painterResource(if (answered) R.drawable.ic_check else R.drawable.ic_x),
                 contentDescription = null, tint = accent, modifier = Modifier.size(18.dp),
             )
-            AnnouncedText(stringResource(label), style = MaterialTheme.typography.labelMedium, color = accent)
+            Text(stringResource(label), style = MaterialTheme.typography.labelMedium, color = accent)
         }
         q.questions.forEachIndexed { part, question ->
             if (part > 0) androidx.compose.material3.HorizontalDivider(Modifier.padding(vertical = 4.dp))
@@ -163,15 +164,15 @@ internal fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question
             }
         }
         if (unconfirmed) {
-            AnnouncedText(stringResource(R.string.chat_queue_uncertain), style = MaterialTheme.typography.bodySmall, color = colors.error)
+            Text(stringResource(R.string.chat_queue_uncertain), style = MaterialTheme.typography.bodySmall, color = colors.error)
             if (mode == ChatModel.QuestionMode.History) {
                 TextButton(onClick = { confirmingRetry = true }) { Text(stringResource(R.string.chat_delivery_retry_button)) }
             }
         }
         when {
-            state == AnswerState.Held -> AnnouncedText(stringResource(R.string.chat_send_held), style = MaterialTheme.typography.bodySmall)
-            state == AnswerState.Sending -> AnnouncedText(stringResource(R.string.chat_question_sending), style = MaterialTheme.typography.bodySmall)
-            state is AnswerState.Failed -> AnnouncedText(messageText(state.why),
+            state == AnswerState.Held -> Text(stringResource(R.string.chat_send_held), style = MaterialTheme.typography.bodySmall)
+            state == AnswerState.Sending -> Text(stringResource(R.string.chat_question_sending), style = MaterialTheme.typography.bodySmall)
+            state is AnswerState.Failed -> Text(messageText(state.why),
                 style = MaterialTheme.typography.bodySmall, color = colors.error)
         }
     }
@@ -211,4 +212,26 @@ internal fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question
             },
         )
     }
+}
+
+/** Observe reply state outside lazy transcript rows, including transcript-confirmed completion. */
+@Composable
+internal fun QuestionAnnouncements(chat: ChatModel, id: String? = null) {
+    val questions = chat.snapshot?.entries.orEmpty().filter { it.body is ChatEntryBody.Question && (id == null || id == it.id) }
+    val states = questions.associate { it.id to (chat.answers[it.id] to (it.body as ChatEntryBody.Question).status) }
+    var previous by remember(chat, id) { mutableStateOf(states) }
+    val changed = questions.lastOrNull { it.id in previous && previous[it.id] != states[it.id] }
+    val state = changed?.let { chat.answers[it.id] }
+    val message = when {
+        changed == null -> null
+        state is AnswerState.Failed -> messageText(state.why)
+        state == AnswerState.Sending -> stringResource(R.string.chat_question_sending)
+        state == AnswerState.Held -> stringResource(R.string.chat_send_held)
+        state == AnswerState.Unconfirmed -> stringResource(R.string.chat_queue_uncertain)
+        (changed.body as ChatEntryBody.Question).status == ChatToolStatus.DONE -> stringResource(R.string.chat_question_sent)
+        state == AnswerState.Sent -> stringResource(R.string.chat_question_waiting)
+        else -> null
+    }
+    AnnounceChanges(states, message)
+    androidx.compose.runtime.SideEffect { previous = states }
 }

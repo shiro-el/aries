@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
@@ -45,7 +46,7 @@ internal fun TasksActivityEntry(entry: ChatEntry, chat: ChatModel, content: @Com
         }
     } else Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         if (body is ChatEntryBody.User && entry.id == chat.snapshot?.entries?.firstOrNull { it.body is ChatEntryBody.User }?.id) {
-            Text(stringResource(R.string.tasks_request), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.tasks_request), Modifier.semantics { heading() }, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         timestamp?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         content()
@@ -68,7 +69,7 @@ internal fun TasksPlan(chat: ChatModel) {
         else -> R.string.tasks_plan_stopped
     }
     Column(Modifier.fillMaxWidth().padding(16.dp).testTag("tasks-plan"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(stringResource(R.string.tasks_plan), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(stringResource(R.string.tasks_plan), Modifier.semantics { heading() }, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         items.forEach { item ->
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 val description = stringResource(when (item.status) {
@@ -142,10 +143,10 @@ internal fun TasksRequestDialogs(dialogs: ChatDialogState, chat: ChatModel, call
             when (request) {
                 is TasksRequest.Question -> CompositionLocalProvider(LocalChatSearchEntry provides request.id) {
                     QuestionView(chat, request.id,
-                        chat.snapshot?.entries?.find { it.id == request.id }?.body as? ChatEntryBody.Question ?: request.body)
+                        chat.snapshot?.entries?.find { it.id == request.id }?.body as? ChatEntryBody.Question ?: request.body, announce = true)
                 }
                 is TasksRequest.Call -> if (calls != null) ConsoleChatCall(
-                    calls.calls.find { it.key == request.entry.key } ?: request.entry.copy(live = false), calls)
+                    calls.calls.find { it.key == request.entry.key } ?: request.entry.copy(live = false), calls, announce = true)
             }
         }
     }

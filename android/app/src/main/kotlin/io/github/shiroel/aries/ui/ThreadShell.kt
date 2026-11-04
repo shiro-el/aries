@@ -20,6 +20,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -157,7 +158,7 @@ private fun ThreadDrawer(model: HostsModel, navigate: (() -> Unit) -> Unit) {
                     .thenByDescending { it.terminal.agentStatus is AgentStatus.Error })
                 if (entries.isNotEmpty()) {
                     item(key = "section:$section") {
-                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).semantics(mergeDescendants = true) { heading() }) {
                             Text(stringResource(section), Modifier.weight(1f), style = MaterialTheme.typography.labelLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(entries.size.toString(), style = MaterialTheme.typography.labelLarge) // i18n-ok: bare count

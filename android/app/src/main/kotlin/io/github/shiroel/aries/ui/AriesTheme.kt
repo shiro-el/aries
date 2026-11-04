@@ -65,7 +65,7 @@ private fun forLight(c: Color): Color {
 }
 
 /** Clamp text accents against the most raised surface, including arbitrary custom colours. */
-private fun readableAccent(c: Color, surface: Color, dark: Boolean): Color {
+internal fun readableAccent(c: Color, surface: Color, dark: Boolean): Color {
     var result = c
     repeat(60) {
         val a = result.luminance() + .05f
@@ -92,6 +92,7 @@ fun schemeFor(accent: Color, dark: Boolean, layout: AppLayout = AppLayout.CONSOL
     if (layout == AppLayout.CONSOLE) return base
     val tokens = tokensFor(layout)
     val p = if (dark) tokens.dark else tokens.light
+    val primaryContainer = mix(seed, p.background, if (dark) .84f else .88f)
     return base.copy(
         background = p.background, onBackground = p.foreground,
         surface = p.background, onSurface = p.foreground,
@@ -105,7 +106,8 @@ fun schemeFor(accent: Color, dark: Boolean, layout: AppLayout = AppLayout.CONSOL
         outline = p.outline, outlineVariant = p.divider,
         primary = readableAccent(seed, p.raisedSurface, dark),
         onPrimary = onAccent(readableAccent(seed, p.raisedSurface, dark)),
-        primaryContainer = mix(seed, p.background, if (dark) .72f else .2f),
+        primaryContainer = primaryContainer,
+        onPrimaryContainer = readableAccent(seed, primaryContainer, dark),
         secondaryContainer = mix(accent, p.background, .84f), onSecondaryContainer = p.foreground,
     )
 }

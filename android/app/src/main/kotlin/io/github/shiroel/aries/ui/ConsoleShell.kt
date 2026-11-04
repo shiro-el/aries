@@ -27,6 +27,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.text.font.FontWeight
@@ -286,7 +287,7 @@ private fun ConsoleDrawer(model: HostsModel, navigate: (() -> Unit) -> Unit) {
             }
             DrawerRow(stringResource(R.string.calls_title), model.callInboxOpen, Modifier.testTag("drawer-calls"),
                 onClick = { navigate(model::openCallInbox) })
-            Text(stringResource(R.string.hosts_title), Modifier.padding(horizontal = 12.dp, vertical = 8.dp), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.hosts_title), Modifier.padding(horizontal = 12.dp, vertical = 8.dp).semantics { heading() }, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         model.hosts.forEach { host ->
             item(key = "host:${host.id}") {

@@ -4,9 +4,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assert
-import androidx.compose.ui.test.SemanticsMatcher
-import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -173,10 +170,10 @@ class ChatCallsTest {
         openChat(core)
         chooseWait()
         compose.runOnIdle { core.callListeners.getValue("h1").onCalls(listOf(call.copy(answer = answer(CallAnswerState.CLAIMED)))) }
-        // Regression: a live Call and Sending must announce politely while focus stays on the Choice.
-        val polite = SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite)
-        compose.onNodeWithText(call.title).assert(polite)
-        compose.onNodeWithText(str(R.string.call_answer_sending)).assert(polite)
+        // A feed receipt must not remove the in-flight reply. The screen's stable status slot
+        // owns speech; transcript rows stay quiet when scrolling back through history.
+        compose.onNodeWithText(call.title).assertExists()
+        compose.onNodeWithText(str(R.string.call_answer_sending)).assertExists()
         hold.complete(Unit)
         compose.waitForIdle()
         compose.onNodeWithText(call.title).assertDoesNotExist()

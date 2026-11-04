@@ -40,6 +40,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
+import androidx.compose.runtime.key
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -1179,6 +1180,16 @@ fun ChatScreen(
     calls: CallsModel? = null,
 ) {
     val thread = LocalThreadChat.current
+    key(chat) {
+        QuestionAnnouncements(chat)
+        calls?.let { CallReplyAnnouncements(it, chat.host.id, chat.terminal.address) }
+        val status = chat.terminal.agentStatus
+        var previousStatus by remember { mutableStateOf(status) }
+        val finished = previousStatus == AgentStatus.Working && status != null && status != AgentStatus.Working && chat.link?.state == LinkState.Up
+        val message = if (finished) stringResource(R.string.chat_agent_status_announcement, displayName(chat.terminal), stringResource(agentStatusLabel(status))) else null
+        AnnounceChanges(status, message)
+        SideEffect { previousStatus = status }
+    }
     val readAloud = io.github.shiroel.aries.speech.rememberReadAloud(chat)
     val context = androidx.compose.ui.platform.LocalContext.current
     // Every layout and input panel shares this owner, including compact Chat and live answers.
@@ -1409,9 +1420,7 @@ fun ChatScreen(
                         else agentCalls.any { call -> call.answerable }
                     if (!answerableQuestion && !answerableCall) BlockedNotice(it, refused = chat.refused, onOpenTerminal)
                 }
-                chat.sendError?.let {
-                    AnnouncedText(stringResource(R.string.chat_send_failed, messageText(it)), color = MaterialTheme.colorScheme.error)
-                }
+                AnnouncedText(chat.sendError?.let { stringResource(R.string.chat_send_failed, messageText(it)) }, color = MaterialTheme.colorScheme.error)
                 if (chat.uploading) {
                     ConsoleProgress(Modifier.fillMaxWidth())
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -1419,8 +1428,8 @@ fun ChatScreen(
                         TextButton(onClick = chat::cancelUpload) { Text(stringResource(R.string.attachments_cancel_button)) }
                     }
                 }
-                chat.attachmentNotice?.let { AnnouncedText(messageText(it)) }
-                chat.attachmentError?.let { AnnouncedText(stringResource(it.res, *it.args.toTypedArray()), color = MaterialTheme.colorScheme.error) }
+                AnnouncedText(chat.attachmentNotice?.let { messageText(it) })
+                AnnouncedText(chat.attachmentError?.let { messageText(it) }, color = MaterialTheme.colorScheme.error)
                 if (chat.inputUnavailable) {
                     ConsoleChatCallSurface {
                         if (thread == null || snapshot?.status != ChatStatus.NO_TERMINAL ||
@@ -1767,12 +1776,21 @@ private fun ToolContent(
     val title = remember(tool.title, tool.details?.path, open, color) {
         annotateChatFileLinks(chatToolPathText(tool.title, tool.details?.path), open, color)
     }
+    val patch = if (LocalTasksDetail.current != null) tool.diff?.takeUnless { it.truncated } else null
+    val patchStats = remember(patch) {
+        patch?.hunks?.flatMap { it.lines }?.let { lines ->
+            TaskChangeStats(lines.count { it.startsWith("+") }, lines.count { it.startsWith("-") })
+        }
+    }
+    val accessibleStatus = listOfNotNull(disclosure, status, patchStats?.let {
+        stringResource(R.string.tasks_change_stats_announcement, it.added, it.removed)
+    }).joinToString(", ")
     Column(Modifier.fillMaxWidth()) {
         ChatTextActions(tool.output?.takeIf { it.isNotEmpty() } ?: tool.input, onClick = onToggle, onClickLabel = label,
             showIndication = false) { actions ->
             Row(
                 Modifier.fillMaxWidth().heightIn(min = 36.dp).then(actions)
-                    .semantics { stateDescription = "$disclosure, $status" },
+                    .semantics { stateDescription = accessibleStatus },
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -1796,12 +1814,6 @@ private fun ToolContent(
                         maxLines = 1, fontFamily = FontFamily.Monospace,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                }
-                val patch = if (LocalTasksDetail.current != null) tool.diff?.takeUnless { it.truncated } else null
-                val patchStats = remember(patch) {
-                    patch?.hunks?.flatMap { it.lines }?.let { lines ->
-                        TaskChangeStats(lines.count { it.startsWith("+") }, lines.count { it.startsWith("-") })
-                    }
                 }
                 Text(
                     if (LocalTasksDetail.current != null && patchStats != null)
