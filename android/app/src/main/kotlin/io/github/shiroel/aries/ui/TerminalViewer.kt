@@ -127,7 +127,13 @@ class TerminalViewer(terminal: TerminalInfo, private val composer: TerminalCompo
         private set
 
     /** A stopped attach may leave the SSH connection healthy. */
-    var watchError by mutableStateOf<CoreException?>(null)
+    private var attachError by mutableStateOf<CoreException?>(null)
+    var watchError: CoreException?
+        get() = attachError
+        set(value) {
+            attachError = value
+            if (value != null) discardInput()
+        }
 
     /** The Host line this screen streams over; its state shows while it reconnects. */
     var link: HostLink? = null
@@ -277,7 +283,7 @@ class TerminalViewer(terminal: TerminalInfo, private val composer: TerminalCompo
     }
 
     val canInput: Boolean
-        get() = exit == null && !closed && terminal.state == "live" &&
+        get() = exit == null && !closed && watchError == null && terminal.state == "live" &&
             (link == null || (link?.state == LinkState.Up && link?.connection != null))
 
     internal val inputUnavailableReason: Int?
@@ -333,6 +339,10 @@ class TerminalViewer(terminal: TerminalInfo, private val composer: TerminalCompo
     /** What was typed, in order, until the model sends it. */
     internal val inputs = Channel<PendingTerminalInput>(Channel.UNLIMITED)
 
+    /** A Retry on the same SSH line also invalidates the old keyboard callbacks. */
+    internal var inputGeneration = 0L
+        private set
+
     /** A lost attachment must not leave a composition or commands for its replacement. */
     internal fun discardInput(connection: HostConnection? = null) {
         val keep = mutableListOf<PendingTerminalInput>()
@@ -344,7 +354,10 @@ class TerminalViewer(terminal: TerminalInfo, private val composer: TerminalCompo
         if (connection == null || pasteConnection === connection) {
             pendingPaste?.let { pasteFinished(it, delivered = false) }
         }
-        if (connection == null || inputConnection === connection) resetInputState()
+        if (connection == null || inputConnection === connection) {
+            inputGeneration++
+            resetInputState()
+        }
     }
 
     private var inputConnection: HostConnection? = null
@@ -472,6 +485,7 @@ class TerminalViewer(terminal: TerminalInfo, private val composer: TerminalCompo
     /** Presses [key] with active key-bar modifiers and extra [mods]. */
     fun press(key: TerminalKey, mods: KeyMods = NoMods) {
         if (!readyForInput()) return
+        startTyping()
         interruptComposition()
         pressNow(key, mods)
     }
@@ -486,6 +500,9 @@ class TerminalViewer(terminal: TerminalInfo, private val composer: TerminalCompo
     /** Typing while scrolled back returns to the live screen, as terminals do. */
     private fun send(input: TerminalInput) {
         if (!canInput) return
+        // Selection freezes the displayed rows. Restore the live viewport before
+        // typing so an echoed command and its result cannot stay hidden.
+        look.selection = null
         if (scrolled != 0) scrollToLive()
         inputs.trySend(PendingTerminalInput(link?.connection, input))
     }
