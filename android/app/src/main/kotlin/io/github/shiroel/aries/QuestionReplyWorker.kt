@@ -93,7 +93,7 @@ object QuestionReplies {
                     core.answerQuestionBackground(notice.hostId, notice.terminal, notice.question.id, listOf(listOf(choice.toUInt())))
                 }
             }
-            QuestionView.Done(context.getString(R.string.question_notify_sent, notice.question.options[choice]), openApp = false)
+            QuestionView.Done(context.getString(R.string.question_notify_sent, notice.choiceLabel(context, choice)), openApp = false)
         } catch (_: TimeoutCancellationException) {
             QuestionView.Done(context.getString(R.string.question_notify_unknown))
         } catch (e: CoreException) {

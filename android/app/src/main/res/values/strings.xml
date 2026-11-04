@@ -555,6 +555,12 @@
     <string name="image_viewer_exporting">Preparing image…</string>
     <string name="chat_diff_more">%1$d more lines</string>
     <string name="chat_diff_truncated">The diff is too large; the rest is not shown.</string>
+    <!-- Permission requests -->
+    <string name="chat_permission_label">Permission request</string>
+    <string name="chat_permission_allow">Allow</string>
+    <string name="chat_permission_allow_always">Allow always</string>
+    <string name="chat_permission_deny">Deny</string>
+
     <string name="chat_question_label">Question</string>
     <string name="chat_question_option_label">Answer %1$s</string>
     <string name="chat_question_text_label">Write an answer to %1$s</string>

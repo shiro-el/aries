@@ -3,6 +3,7 @@ package io.github.shiroel.aries.ui
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.core.app.ApplicationProvider
@@ -38,6 +39,29 @@ class ChatQuestionTest {
         compose.waitForIdle()
         compose.onNodeWithText("claude").performClick()
         compose.waitForIdle()
+    }
+
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    @Test fun aPermissionCardUsesCheckedAnswers() {
+        val core = FakeCore()
+        open(core, AgentStatus.Blocked(BlockedReason.PERMISSION, null))
+        val permission = ChatEntry("permission:current", null, ChatEntryBody.Question("permission", "Allow Write?",
+            listOf(ChatQuestionPart("Create file /repo/file.txt\n+hello\nDo you want to create file.txt?", null, false, listOf(
+                ChatQuestionOption("Allow", "Yes"), ChatQuestionOption("Allow always", "Yes, allow all edits in /repo during this session"),
+                ChatQuestionOption("Deny", null)))), ChatToolStatus.RUNNING, null))
+        core.pushChat(ChatSnapshot(listOf(permission), ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        System.getenv("ARIES_PERMISSION_RENDER_DIR")?.let { directory ->
+            java.io.File(directory).mkdirs()
+            java.io.File(directory, "permission-card.png").outputStream().use {
+                compose.onRoot().captureToImage().asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+            }
+        }
+        compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Deny")).performClick()
+        compose.waitForIdle()
+        assertEquals("permission:current", core.answers.single().second)
+        assertEquals(listOf(listOf(2u)), core.answers.single().third)
+        assertTrue(core.connection!!.typed.isEmpty())
     }
 
     @Test fun freeTextUsesTheQuestionApiAndCannotBeSentTwice() {
