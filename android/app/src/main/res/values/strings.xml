@@ -693,16 +693,21 @@
     <string name="chat_permission_label">Permission request</string>
     <string name="chat_permission_allow">Allow</string>
     <string name="chat_permission_allow_always">Allow always</string>
+    <string name="chat_permission_always_title">Always allow this request?</string>
     <string name="chat_permission_deny">Deny</string>
 
     <string name="chat_question_label">Question</string>
     <string name="chat_question_option_label">Answer %1$s</string>
     <string name="chat_question_text_label">Write an answer to %1$s</string>
     <string name="chat_question_text_hint">Write your own answer</string>
+    <string name="chat_question_asking_now">The Agent is asking now. Try the question choices again.</string>
+    <string name="chat_question_live_pending">Waiting for the Agent to finish asking…</string>
+    <string name="chat_question_reconnecting">Reconnecting · choices return when live</string>
     <string name="chat_question_queued">Queued question</string>
     <string name="chat_question_history">Past question</string>
     <string name="chat_question_send">Send answer</string>
     <string name="chat_question_sending">Sending…</string>
+    <string name="chat_question_waiting">Sent · waiting for the Agent to respond</string>
     <string name="chat_question_sent">Answered</string>
     <string name="chat_question_cancelled">Cancelled</string>
     <string name="chat_question_expired">Expired</string>
@@ -710,6 +715,7 @@
     <string name="chat_question_notes">Notes</string>
     <!-- Notification question answers -->
     <string name="question_notify_open_app">Answer in app</string>
+    <string name="question_notify_confirm_in_app">Confirm “Allow always” in the app.</string>
     <string name="question_notify_sent">Sent “%1$s”</string>
     <string name="question_notify_unknown">The answer may have been sent. Check the Chat before answering again.</string>
 
