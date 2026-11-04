@@ -41,6 +41,8 @@ import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.KeyProtection
 import io.github.shiroel.aries.core.TerminalInfo
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -492,6 +494,8 @@ class CallHistoryTest {
         val core = twoHosts()
         show(core)
         compose.onNodeWithText("home").performClick()
+        val hostScreen = model.screen
+        val connection = core.connection!!
         openCalls()
         compose.runOnIdle { back.onBackPressed() }
         compose.onNodeWithTag("call-inbox-panel").assertDoesNotExist()
@@ -502,12 +506,24 @@ class CallHistoryTest {
         compose.onNodeWithTag("call-inbox-panel").assertDoesNotExist()
         compose.onNodeWithTag("settings-open").performClick()
         compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
+        compose.runOnIdle {
+            assertSame(hostScreen, model.screen)
+            assertSame(connection, core.connection)
+            assertFalse(connection.disconnected)
+        }
         openCalls()
         compose.onNodeWithTag("console-drawer").assertIsNotDisplayed()
         compose.onNodeWithTag("call-inbox-panel").assertExists()
         compose.runOnIdle { back.onBackPressed() }
         compose.onNodeWithTag("call-inbox-panel").assertDoesNotExist()
         compose.onNodeWithTag("console-top-bar").assert(hasAnyDescendant(hasText("home")))
+        compose.runOnIdle {
+            assertSame(hostScreen, model.screen)
+            assertFalse(connection.disconnected)
+            back.onBackPressed()
+        }
+        compose.onNodeWithText("me@10.0.0.2").assertExists()
+        compose.runOnIdle { assertTrue(connection.disconnected) }
     }
 
     @Test
