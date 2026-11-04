@@ -102,9 +102,12 @@ class ChatQueuedMessageTest {
         compose.waitForIdle()
         assertEquals(emptyList<QueuedChatMessage>(), chat.queuedMessages)
         send("third")
+        // Storage completion is asynchronous; only confirmed input has a dismissible receipt.
+        compose.waitUntil(5_000) { chat.queuedMessages.any { it.draft == "third" && it.confirmed } }
         compose.onNodeWithContentDescription(str(R.string.chat_delivery_dismiss_button)).performClick()
         compose.waitForIdle()
         assertEquals(emptyList<QueuedChatMessage>(), chat.queuedMessages)
+        compose.waitUntil(5_000) { core.chatOutbox(chat.host.id, chat.terminal.address)?.let(::decodeChatOutbox)?.messages.orEmpty().isEmpty() }
         assertEquals(emptyList<QueuedChatMessage>(), ChatModel(core, chat.host, chat.terminal).queuedMessages)
         assertEquals(listOf("t1" to "first", "t1" to "second", "t1" to "third"), connection.typed)
     }
@@ -663,6 +666,11 @@ class ChatQueuedMessageTest {
     @Test fun unreadableJournalKeepsItsBannerUntilDiscardAndThenAllowsSending() {
         val core = FakeCore()
         core.saveChatOutbox("h1", "t1", """{"version":99}""")
+        // D11: discarding one undecodable Terminal must preserve another Agent's FIFO and draft.
+        val other = ChatOutboxState("other draft", emptyList(), listOf(
+            QueuedChatMessage(draft = "other queued", text = "other queued", attachments = emptyList(), before = emptySet())
+        )).encode()
+        core.saveChatOutbox("h1", "t2", other)
         open(core)
         val chat = compose.runOnIdle { (hosts.screen as Screen.Chat).chat }
         compose.runOnIdle { org.junit.Assert.assertNotNull(chat.journalError) }
@@ -674,13 +682,14 @@ class ChatQueuedMessageTest {
         compose.onNodeWithText(str(R.string.chat_drafts_read_failed)).assertExists()
         compose.onNodeWithText(str(R.string.chat_drafts_discard_button)).performClick()
         compose.waitUntil(5_000) { !chat.needsDraftRecovery }
+        assertEquals(other, core.chatOutbox("h1", "t2"))
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("new draft")
         compose.onNodeWithText(str(R.string.chat_send_button)).assertIsEnabled().performClick()
         compose.waitUntil(5_000) { chat.queuedMessages.size == 1 }
         core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
         compose.waitUntil(5_000) { core.connection!!.typed == listOf("t1" to "new draft") }
-        // The first write seeded the broken fixture; every app checkpoint uses IO.
-        org.junit.Assert.assertFalse(core.outboxWritesOnMain.drop(1).any { it })
+        // The first two writes seeded the fixtures; every app checkpoint uses IO.
+        org.junit.Assert.assertFalse(core.outboxWritesOnMain.drop(2).any { it })
     }
 
     private fun screenshot(name: String) {

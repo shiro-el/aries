@@ -38,6 +38,8 @@ class AttachmentEntryPointsTest {
     private lateinit var model: HostsModel
     private var reconnectGate: CompletableDeferred<Unit>? = null
     private var uploadGate: CompletableDeferred<Unit>? = null
+    private var journalFailure: CoreException? = null
+    private lateinit var backing: AriesCoreInterface
 
     private fun openChat(thread: Boolean = false): FakeConnection {
         val core = FakeCore().apply {
@@ -48,11 +50,15 @@ class AttachmentEntryPointsTest {
         compose.setContent {
             val scope = rememberCoroutineScope()
             model = remember { HostsModel(object : AriesCoreInterface by core {
+                override fun saveChatOutbox(hostId: String, terminal: String, content: String?) {
+                    if (content?.let(::decodeChatOutbox)?.attachments.orEmpty().isNotEmpty()) journalFailure?.let { throw it }
+                    core.saveChatOutbox(hostId, terminal, content)
+                }
                 override suspend fun connect(hostId: String): HostConnection {
                     reconnectGate?.await()
                     return core.connect(hostId).also { (it as FakeConnection).uploadHold = uploadGate }
                 }
-            }, scope) }
+            }.also { backing = it }, scope) }
             if (thread) {
                 val appearance = remember { ThemeSettings(compose.activity.getSharedPreferences("thread-attachment-test", 0)).apply {
                     chooseLayout(AppLayout.THREAD)
@@ -140,7 +146,7 @@ class AttachmentEntryPointsTest {
 
     // Keep the existing camera flow on the folded toolbar; the picker covers portrait controls.
     @Test @Config(qualifiers = "h400dp")
-    fun cameraGetsAFullSizeOutputUriThenKeepsTheUploadedPhotoOutsideTheTextField() {
+    fun cameraUploadFailureCanBeRetriedFromItsPhotoChipWithoutRetakingThePhoto() {
         shadowOf(compose.activity.application).denyPermissions(Manifest.permission.CAMERA)
         val connection = openChat()
         // Robolectric gives each test a new cache root; recreate Android's provider lifecycle.
@@ -178,9 +184,25 @@ class AttachmentEntryPointsTest {
         val bitmap = Bitmap.createBitmap(3000, 1000, Bitmap.Config.ARGB_8888)
         compose.activity.contentResolver.openOutputStream(uri)!!.use { bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }
         bitmap.recycle()
+        connection.uploadFailWith = CoreException.Storage("upload refused")
         compose.runOnIdle { shadowOf(compose.activity).receiveResult(request.intent, Activity.RESULT_OK, Intent()) }
-        compose.waitUntil(5_000) { connection.uploads.isNotEmpty() }
+        val chat = (model.screen as Screen.Chat).chat
+        compose.waitUntil(5_000) { chat.attachmentError != null && !chat.uploading }
+        assertEquals(1, File(compose.activity.cacheDir, "attachments").listFiles().orEmpty().size)
+        // D13: the failed capture remains reachable without another camera Activity.
+        compose.waitUntil(5_000) { backing.chatOutbox(chat.host.id, "t1")?.let(::decodeChatOutbox)?.capturedPhotos?.size == 1 }
+        val restored = ChatModel(backing, chat.host, chat.terminal)
+        assertEquals(chat.capturedPhotos.single().path, restored.capturedPhotos.single().path)
+        connection.uploadFailWith = null
+        journalFailure = CoreException.Storage("disk full")
+        compose.onNode(hasText(str(R.string.attachments_retry_photo_button)) and hasAnyAncestor(isDialog())).performClick()
+        compose.waitUntil(5_000) { connection.uploads.isNotEmpty() && !chat.uploading && chat.journalError != null }
+        assertTrue("A failed checkpoint must keep the source", File(chat.capturedPhotos.single().path).isFile)
+        journalFailure = null
+        compose.onNode(hasText(str(R.string.attachments_retry_photo_button)) and hasAnyAncestor(isDialog())).performClick()
+        compose.waitUntil(5_000) { chat.capturedPhotos.isEmpty() }
         compose.waitForIdle()
+        // Storage-only retry must not upload the already attached photo again.
         val upload = connection.uploads.single()
         assertEquals("t1", upload.first)
         val decoded = BitmapFactory.decodeByteArray(upload.third, 0, upload.third.size)

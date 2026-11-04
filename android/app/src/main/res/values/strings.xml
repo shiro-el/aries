@@ -879,10 +879,10 @@
     <string name="chat_queue_uncertain">Delivery unconfirmed · Check the messages before sending again</string>
     <string name="chat_queue_cancel_button">Cancel queued message</string>
     <!-- Chat draft recovery -->
-    <string name="chat_drafts_read_failed">Saved drafts could not be read. Discard this Host’s saved drafts to continue. Your current input will be kept.</string>
+    <string name="chat_drafts_read_failed">Saved drafts could not be read. Discard this Agent’s saved drafts to continue. Your current input will be kept.</string>
     <string name="chat_drafts_save_failed">Draft changes could not be saved.</string>
     <string name="chat_drafts_discard_failed">Saved drafts could not be discarded. Try again.</string>
-    <string name="chat_drafts_discard_button">Discard saved drafts for this Host</string>
+    <string name="chat_drafts_discard_button">Discard saved drafts for this Agent</string>
     <string name="chat_queue_returned">Queued messages were returned to the input. Review them and send when ready.</string>
     <string name="chat_delivery_dismiss_button">Dismiss delivery note</string>
 
@@ -1497,6 +1497,7 @@
     <string name="attachments_read_failed">Could not read the file. Choose it again, or save a copy on your phone and attach that copy.</string>
     <string name="attachments_file_button">Attach files</string>
     <string name="attachments_camera_button">Take a photo</string>
+    <string name="attachments_retry_photo_button">Retry photo</string>
     <string name="attachments_remove_button">Remove attachment: %1$s</string>
     <string name="attachments_resize_label">Resize images to %1$d px</string>
 
