@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aries: your Herdr agents, in your pocket</title>
+  <meta name="description" content="Aries is a native Android app for herdr-core Hosts. See which Agent is Blocked, answer it, read its Chat or type into its Terminal, over plain SSH.">
+  <meta name="theme-color" content="#121315">
+  <link rel="icon" type="image/png" sizes="32x32" href="brand/aries-icon-flat-32.png">
+  <link rel="apple-touch-icon" href="brand/aries-icon-small-192.png">
+  <link rel="preload" href="fonts/JetBrainsMono.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="nav container">
+    <a class="wordmark" href="./" aria-label="Aries home">
+      <img src="brand/aries-icon-small.svg" alt="" width="32" height="32">
+      <span>Aries</span>
+    </a>
+    <nav aria-label="Main">
+      <ul>
+        <li><a href="#features">Features</a></li>
+        <li><a href="#install">Install</a></li>
+        <li><a href="https://github.com/shiro-el/aries">GitHub</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="hero container" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <h1 id="hero-title">Your Herdr agents, in&nbsp;your&nbsp;pocket.</h1>
+        <p class="lede">See who is Blocked, answer, and type back, over plain SSH.</p>
+        <div class="actions">
+          <a class="button primary" href="https://github.com/shiro-el/aries">Source on GitHub</a>
+          <a class="button" href="#install">Build it today</a>
+        </div>
+      </div>
+      <ul class="panes" aria-label="Screens from the app">
+        <li><img src="screenshots/agents.webp" width="720" height="1600" alt="Agents on every Host, grouped by status"></li>
+        <li><img src="screenshots/question.webp" width="720" height="1600" alt="A question and a Call with answers to tap"></li>
+        <li><img src="screenshots/chat.webp" width="720" height="1600" alt="Chat with an attachment, a diff and Markdown"></li>
+        <li><img src="screenshots/terminal.webp" width="720" height="1600" alt="A Terminal with two rows of extra keys" loading="lazy"></li>
+        <li><img src="screenshots/browse.webp" width="720" height="1600" alt="A Host's Spaces and Tabs" loading="lazy"></li>
+      </ul>
+    </section>
+
+    <section id="features" class="statuses container" aria-labelledby="status-title">
+      <div class="status-copy">
+        <h2 id="status-title">The Agent that needs you comes first.</h2>
+        <p class="side">One list across every Host. Push tells you when one stops.</p>
+      </div>
+      <ol class="status-list">
+        <li><span class="state blocked">Blocked</span><span>needs an answer, a permission or a login</span></li>
+        <li><span class="state error">Error</span><span>reported a failure</span></li>
+        <li><span class="state working">Working</span><span>busy, and you can follow it live</span></li>
+        <li><span class="state done">Done</span><span>finished a turn you have not read</span></li>
+        <li><span class="state idle">Idle</span><span>nothing new</span></li>
+      </ol>
+    </section>
+
+    <section class="answer container" aria-labelledby="answer-title">
+      <h2 id="answer-title">Answer from wherever you are.</h2>
+      <ul class="facts">
+        <li><h3>Chat</h3><p>Claude Code, Codex, OpenCode and Pi, read from their own transcripts.</p></li>
+        <li><h3>Questions</h3><p>One tap for a listed answer, or write your own.</p></li>
+        <li><h3>Calls</h3><p>Agents ask for you by urgency; pick a Choice right in the notification.</p></li>
+      </ul>
+    </section>
+
+    <section class="keys container" aria-labelledby="keys-title">
+      <h2 id="keys-title">A real terminal, with the keys a phone lacks.</h2>
+      <div class="keyboard" role="img" aria-label="The extra key rows: Esc, slash, dash, Home, up, End, PgUp; Tab, Ctrl, Alt, left, down, right, PgDn">
+        <span>ESC</span><span>/</span><span>-</span><span>HOME</span><span>↑</span><span>END</span><span>PGUP</span>
+        <span>TAB</span><span class="held">CTRL</span><span>ALT</span><span>←</span><span>↓</span><span>→</span><span>PGDN</span>
+      </div>
+      <p class="side">Watch without resizing the desktop; start typing and Aries attaches. Ctrl and Alt stay held until you let go.</p>
+    </section>
+
+    <section class="host container" aria-labelledby="host-title">
+      <h2 id="host-title">Files, Git and GitHub, read where they live.</h2>
+      <ul class="shots">
+        <li><img src="screenshots/files.webp" width="720" height="1600" alt="Host files with the changed ones on top" loading="lazy"><p>Files with type icons, syntax colour and wrap.</p></li>
+        <li><img src="screenshots/diff.webp" width="720" height="1600" alt="A Git diff of one file" loading="lazy"><p>Git diffs, read-only, with line numbers.</p></li>
+        <li><img src="screenshots/github.webp" width="720" height="1600" alt="A pull request with checks and changed files" loading="lazy"><p>Issues and pull requests through the Host’s <code>gh</code>.</p></li>
+      </ul>
+    </section>
+
+    <section class="wire container" aria-labelledby="wire-title">
+      <h2 id="wire-title">Nothing new listens on your Host.</h2>
+      <div class="diagram" role="img" aria-label="The phone reaches herdr-core and the optional Beacon over SSH; the Beacon sends encrypted push through the Relay back to the phone">
+        <div class="node"><strong>Phone</strong><span>Aries: Compose UI on a Rust core</span></div>
+        <div class="link">SSH</div>
+        <div class="node"><strong>Host</strong><span>herdr-core</span><span>aries-beacon, optional</span></div>
+        <div class="link">encrypted push</div>
+        <div class="node"><strong>Relay</strong><span>forwards, cannot read</span></div>
+      </div>
+      <p class="side">The phone runs <code>herdr-core connect</code> over SSH. Terminal traffic never passes through our servers.</p>
+    </section>
+
+    <section id="install" class="install container" aria-labelledby="install-title">
+      <h2 id="install-title">No release yet. Build it from source.</h2>
+      <p class="side">Signed builds will land on <a href="https://github.com/shiro-el/aries/releases">GitHub Releases</a>. Until then you need Rust, Java 21 and the Android SDK with NDK 27.</p>
+      <pre><code>git clone https://github.com/shiro-el/aries.git
+cd aries/android
+./gradlew :app:assembleDogfood -Paries.abis=arm64-v8a
+adb install app/build/outputs/apk/dogfood/app-dogfood.apk</code></pre>
+      <p class="more"><a href="https://github.com/shiro-el/aries#install">Full install steps</a></p>
+    </section>
+  </main>
+
+  <footer class="footer container">
+    <img src="brand/aries-icon.svg" alt="" width="48" height="48">
+    <p>Aries is MIT licensed. The logo has <a href="https://github.com/shiro-el/aries/blob/main/assets/aries/LICENSE">its own license</a>.</p>
+    <p>Aries is not made, maintained or endorsed by the Herdr project.</p>
+    <ul>
+      <li><a href="https://github.com/shiro-el/aries">Repository</a></li>
+      <li><a href="https://github.com/shiro-el/aries/releases">Releases</a></li>
+      <li><a href="https://github.com/shiro-el/aries/blob/main/CONTRIBUTING.md">Contributing</a></li>
+    </ul>
+  </footer>
+</body>
+</html>
