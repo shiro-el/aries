@@ -90,13 +90,17 @@ private fun AriesContent(
     guidance: io.github.shiroel.aries.guidance.AppGuidanceState? = null,
     allowNotifications: suspend () -> Boolean = { false },
 ) {
+    val activity = LocalContext.current as? android.app.Activity
     // Screen connections and the Call banner follow the visible lifecycle.
     LifecycleStartEffect(model) {
         model.resumeScreens()
         model.resumeCalls()
         onStopOrDispose {
-            model.backgrounded()
-            model.pauseCalls()
+            // A replacement Activity keeps the same sessions. Home/app lock still release them.
+            if (activity?.isChangingConfigurations != true) {
+                model.backgrounded()
+                model.pauseCalls()
+            }
         }
     }
     Scaffold { padding ->

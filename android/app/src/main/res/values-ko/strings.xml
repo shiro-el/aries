@@ -8,6 +8,18 @@
   Error, Done, Idle. Everything else follows standard Android / One UI Korean.
 -->
 <resources>
+    <!-- Host localhost preview -->
+    <string name="preview_auto_refresh">Agent 변경 후 자동 새로고침</string>
+    <string name="preview_title">미리보기</string>
+    <string name="preview_open_port">미리보기 열기 · %1$d</string>
+    <string name="preview_address">Host · http://127.0.0.1:%1$d</string>
+    <string name="preview_reload">새로고침</string>
+    <string name="preview_mobile">모바일 보기</string>
+    <string name="preview_desktop">데스크톱 보기</string>
+    <string name="preview_close">미리보기 닫기</string>
+    <string name="preview_failed">미리보기를 열 수 없습니다. Host 연결과 개발 서버를 확인해 주세요.</string>
+    <string name="preview_retry">다시 시도</string>
+
     <!-- Action menus -->
     <string name="menu_switch">위치 선택</string>
     <string name="menu_current">현재</string>

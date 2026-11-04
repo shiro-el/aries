@@ -320,6 +320,7 @@ pub(crate) async fn reply(
         reader,
         writer,
         guard,
+        ..
     } = stream;
     let mut lines = BufReader::new(reader).lines();
     let mut line = None;

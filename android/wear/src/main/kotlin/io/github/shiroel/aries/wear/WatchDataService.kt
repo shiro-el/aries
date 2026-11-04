@@ -19,6 +19,6 @@ class WatchDataService : WearableListenerService() {
             }
         }
         TileService.getUpdater(this).requestUpdate(AgentsTileService::class.java)
-        // Complications use the declared 300 s cadence, never a per-event push loop.
+        // WatchStateStore requests complication updates only when displayed state changes.
     }
 }

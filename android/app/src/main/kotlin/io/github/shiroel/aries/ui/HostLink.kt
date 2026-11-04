@@ -11,6 +11,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.transformLatest
@@ -105,7 +106,7 @@ class HostLink(
         if (closed || current.value !== conn) return
         current.value = null
         state = LinkState.Reconnecting
-        scope.launch { conn.disconnect() }
+        scope.launch(NonCancellable) { conn.disconnect() }
         if (!paused) reconnecting = scope.launch { reconnect() }
     }
 
@@ -153,7 +154,7 @@ class HostLink(
         val conn = current.value
         current.value = null
         if (state !is LinkState.Down) state = LinkState.Reconnecting
-        conn?.let { scope.launch { it.disconnect() } }
+        conn?.let { scope.launch(NonCancellable) { it.disconnect() } }
     }
 
     fun resume() {
@@ -169,7 +170,8 @@ class HostLink(
         reconnecting?.cancel()
         val conn = current.value
         current.value = null
-        conn?.let { scope.launch { it.disconnect() } }
+        // ViewModel clearing cancels the owner scope before onCleared releases its links.
+        conn?.let { scope.launch(NonCancellable) { it.disconnect() } }
     }
 
     private suspend fun reconnect() {

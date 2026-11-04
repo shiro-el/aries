@@ -37,6 +37,7 @@ internal fun AgentScreenHeader(
     link: HostLink? = null,
     onTerminalUpdate: (TerminalInfo) -> Unit = {},
     onSearch: (() -> Unit)? = null,
+    preview: LocalhostPreview? = null,
 ) {
     var menu by remember(terminal.address) { mutableStateOf(false) }
     var showGithub by remember(terminal.address) { mutableStateOf(false) }
@@ -76,6 +77,12 @@ internal fun AgentScreenHeader(
             }
         }
         onView?.let { AgentViewSwitch(current, it) }
+        if (preview != null && preview.ports.isNotEmpty()) {
+            IconButton(onClick = { preview.selected = if (preview.selected != null) null else preview.ports.first() }, modifier = Modifier.size(48.dp)) {
+                Icon(painterResource(R.drawable.ic_browser_preview), stringResource(R.string.preview_title), Modifier.size(20.dp),
+                    tint = if (preview.selected != null) colors.primary else colors.onSurface)
+            }
+        }
         Box {
             val label = stringResource(R.string.agent_actions_label)
             IconButton(onClick = { menu = true }, modifier = Modifier.testTag("agent-actions").semantics { contentDescription = label }) {
