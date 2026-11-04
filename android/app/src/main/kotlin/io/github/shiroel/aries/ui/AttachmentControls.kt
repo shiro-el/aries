@@ -22,8 +22,8 @@ import java.io.File
 @Composable
 fun AttachmentControls(chat: ChatModel) {
     val context = LocalContext.current
-    LaunchedEffect(chat, chat.pendingShare) {
-        chat.pendingShare?.let {
+    LaunchedEffect(chat, chat.pendingShare, chat.inputUnavailable) {
+        chat.pendingShare?.takeUnless { chat.inputUnavailable }?.let {
             chat.pendingShare = null
             chat.attach(context.applicationContext, it)
         }
@@ -42,7 +42,7 @@ fun AttachmentControls(chat: ChatModel) {
             } else file.delete()
         }
     }
-    val enabled = !chat.uploading && chat.sending == null
+    val enabled = !chat.uploading && chat.canEdit
     val takePhoto = rememberCameraAccess {
         if (enabled) {
             try {
