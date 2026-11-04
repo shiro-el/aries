@@ -77,8 +77,10 @@ fun AriesApp(
     terminalDisplay: TerminalDisplaySettings = rememberTerminalDisplaySettings(),
 ) {
     AriesTheme(settings) {
-        if (guidance == null) AriesContent(model, settings, terminalDisplay)
-        else io.github.shiroel.aries.guidance.AppGuidance(guidance) { AriesContent(model, settings, terminalDisplay, guidance, allowNotifications) }
+        NewTaskAccess(model) {
+            if (guidance == null) AriesContent(model, settings, terminalDisplay)
+            else io.github.shiroel.aries.guidance.AppGuidance(guidance) { AriesContent(model, settings, terminalDisplay, guidance, allowNotifications) }
+        }
     }
 }
 
@@ -128,7 +130,7 @@ private fun AriesContent(
 
 @Composable
 private fun ScreenContent(model: HostsModel, settings: ThemeSettings, terminalDisplay: TerminalDisplaySettings, screen: Screen) {
-    val context = LocalContext.current
+    val context = LocalContext.current.applicationContext
     when (val s = screen) {
         Screen.Hosts -> HostListScreen(model)
         Screen.Settings -> {
