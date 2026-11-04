@@ -92,9 +92,9 @@ class TerminalSelectionToChatTest {
     @Test
     fun agentSelectionReturnsToItsOwnChatAndPreservesTheDraftAcrossViewSwitches() {
         val view = open(terminal.copy(agentStatus = AgentStatus.Working))
-        compose.onNodeWithText(str(R.string.agent_view_chat)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.agent_switch_chat_label)).performClick()
         compose.runOnIdle { (model.screen as Screen.Chat).chat.draft = "Why did this fail?" }
-        compose.onNodeWithText(str(R.string.agent_view_terminal)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.agent_switch_terminal_label)).performClick()
         val currentView = core.connection!!.views.last()
         selectWord(currentView)
         compose.onNodeWithContentDescription(str(R.string.terminal_send_to_agent)).performClick()
@@ -133,7 +133,7 @@ class TerminalSelectionToChatTest {
     @Test
     fun terminalOpenedOverALiveChatAppendsToThatExistingChat() {
         open(terminal.copy(agentStatus = AgentStatus.Working))
-        compose.onNodeWithText(str(R.string.agent_view_chat)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.agent_switch_chat_label)).performClick()
         lateinit var chat: ChatModel
         compose.runOnIdle {
             chat = (model.screen as Screen.Chat).chat

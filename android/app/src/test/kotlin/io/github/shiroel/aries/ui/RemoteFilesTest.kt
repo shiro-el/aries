@@ -234,7 +234,7 @@ class RemoteFilesTest {
         assertEquals(emptyList<Pair<String, String>>(), core.connection!!.typed)
 
         // The same action from Terminal keeps the previous Chat draft and appends another reference.
-        compose.onNodeWithText(str(R.string.agent_view_terminal)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.agent_switch_terminal_label)).performClick()
         compose.onNodeWithTag("agent-actions").performClick()
         compose.onNodeWithTag("files-open").performClick()
         compose.onNodeWithText("a'b.kt").performClick()
