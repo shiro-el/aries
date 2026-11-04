@@ -243,6 +243,7 @@ internal fun KeySection(model: HostsModel) {
             ?.setPrimaryClip(ClipData.newPlainText(clipLabel, key.openssh))
     }) { Text(stringResource(R.string.key_copy_button)) }
     ConsoleButton(onClick = model::showKeyQr) { Text(stringResource(R.string.key_qr_button)) }
+    TextButton(onClick = model::openKeyRecovery) { Text(stringResource(R.string.key_recover_button)) }
     BiometricToggle(model.keyProtection == KeyProtection.BIOMETRIC, model::requireBiometric)
 }
 
@@ -380,7 +381,14 @@ private fun PromptDialog(prompt: Prompt, model: HostsModel) {
             onDismissRequest = model::dismiss,
             title = { Text(text(prompt.title)) },
             text = { Text(text(prompt.body)) },
-            confirmButton = { TextButton(onClick = model::dismiss) { Text(stringResource(R.string.ok_button)) } },
+            confirmButton = {
+                TextButton(onClick = { if (prompt.recoverKey) model.openKeyRecovery() else model.dismiss() }) {
+                    Text(stringResource(if (prompt.recoverKey) R.string.key_recover_button else R.string.ok_button))
+                }
+            },
+            dismissButton = {
+                if (prompt.recoverKey) TextButton(onClick = model::dismiss) { Text(stringResource(R.string.cancel_button)) }
+            },
         )
     }
 }
