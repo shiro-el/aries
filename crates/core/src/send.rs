@@ -2,6 +2,11 @@
 //! `terminal.send` (paste, then Enter). herdr-core holds a send while a
 //! person types in the Terminal and refuses it while the Agent is Blocked;
 //! Aries never forces it, so a message can't answer an Agent's dialog.
+//!
+//! herdr-core 0.1.17 has no recall RPC: after `terminal.send` is issued,
+//! dropping this future only abandons its reply. It cannot guarantee that
+//! input will not be typed later. A cancellable queue must stay on the phone
+//! until dispatch; `on_held` is a progress hint, never a cancellation handle.
 
 use std::time::Duration;
 

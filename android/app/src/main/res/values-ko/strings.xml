@@ -685,6 +685,12 @@
     <string name="chat_send_button">보내기</string>
     <string name="chat_sent">메시지를 보냈습니다</string>
     <string name="chat_sending">보내는 중…</string>
+    <!-- Phone-local Chat queue -->
+    <string name="chat_queue_waiting">대기 중</string>
+    <string name="chat_queue_agent">Agent에 전달됨 · 차례 대기 중</string>
+    <string name="chat_queue_uncertain">전달 여부 미확인 · 다시 보내기 전에 대화를 확인하세요</string>
+    <string name="chat_queue_cancel_button">대기 메시지 취소</string>
+
     <string name="chat_send_held">누군가 이 Terminal에 입력하고 있어요. 입력이 멈추면 메시지를 넣을게요.</string>
     <string name="chat_send_refused">보내지 않았어요. Agent가 Blocked 상태라 Terminal에서 응답을 기다리고 있어요.</string>
     <string name="chat_send_failed">메시지를 보내지 못했어요: %1$s</string>
