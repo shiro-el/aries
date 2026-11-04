@@ -281,3 +281,67 @@ async fn a_watch_reports_a_missing_beacon_as_a_typed_state() {
     );
     watch.stop();
 }
+
+#[tokio::test]
+async fn host_changes_stop_call_watches_and_their_reconnects() {
+    for change in ["endpoint", "jump", "key", "remove"] {
+        let s = setup();
+        s.call_from_outside("before");
+        let rec = Arc::new(Recorder::default());
+        let watch = s
+            .core
+            .watch_calls(s.host.clone(), rec.clone())
+            .await
+            .unwrap();
+        wait_until("first sync", || rec.titles() == ["before"]);
+        match change {
+            "endpoint" => {
+                s.core
+                    .edit_host(
+                        s.host.clone(),
+                        "dev".into(),
+                        common::script_endpoint("exit 1"),
+                    )
+                    .await
+                    .unwrap();
+            }
+            "jump" => s
+                .core
+                .set_jump_hosts(
+                    s.host.clone(),
+                    vec![aries_core::JumpHost {
+                        address: "jump".into(),
+                        port: 22,
+                        user: "me".into(),
+                        key_id: None,
+                        host_key: None,
+                    }],
+                )
+                .unwrap(),
+            "key" => {
+                let key = s.core.create_key("new key".into()).unwrap();
+                s.core
+                    .set_host_ssh_key(s.host.clone(), Some(key.id))
+                    .unwrap();
+            }
+            "remove" => s.core.remove_host(s.host.clone()).unwrap(),
+            _ => unreachable!(),
+        }
+        let states = rec.states.lock().unwrap().len();
+        watch.drop_connection();
+        s.call_from_outside("after invalidation");
+        // An uncancelled watch retries after one second, then immediately syncs.
+        tokio::time::sleep(Duration::from_millis(1500)).await;
+        assert_eq!(
+            rec.titles(),
+            ["before"],
+            "{change}: old feed kept reporting"
+        );
+        assert_eq!(
+            rec.states.lock().unwrap().len(),
+            states,
+            "{change}: old feed reconnected"
+        );
+        watch.stop();
+    }
+}
