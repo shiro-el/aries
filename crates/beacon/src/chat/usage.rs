@@ -60,6 +60,7 @@ pub struct ClaudeUsage {
 
 impl ClaudeUsage {
     pub fn record(&mut self, record: &Value) -> Option<ChatEvent> {
+        let before = self.usage.clone();
         let ts = record["timestamp"].as_str().map(str::to_owned);
         match record["type"].as_str()? {
             "assistant" => {
@@ -77,7 +78,7 @@ impl ClaudeUsage {
                         .checked_add(u["cache_creation_input_tokens"].as_u64()?)
                 });
                 let window = self.usage.context.as_ref().and_then(|c| c.window_tokens);
-                self.usage.context = Some(ContextUsage {
+                self.usage.context = (used.is_some() || window.is_some()).then_some(ContextUsage {
                     used_tokens: used,
                     window_tokens: window,
                     updated_at: ts,
@@ -126,7 +127,7 @@ impl ClaudeUsage {
             }
             _ => return None,
         }
-        Some(ChatEvent::Usage {
+        (before != self.usage).then(|| ChatEvent::Usage {
             usage: self.usage.clone(),
         })
     }
