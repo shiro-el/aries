@@ -1,9 +1,10 @@
 package io.github.shiroel.aries.ui
 
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.structuralEqualityPolicy
 import io.github.shiroel.aries.core.ChatEntry
 import io.github.shiroel.aries.core.ChatEntryBody
 import io.github.shiroel.aries.core.ChatImage
@@ -35,32 +36,49 @@ internal class ChatRenderedEntries {
     }
 }
 
-/** UniFFI replaces every wrapper on each snapshot. Observe changes at lazy-row granularity
- * so streaming below the viewport does not invalidate the rows being read.
- * The list changes only when row keys/types change; payloads have independent snapshot state.
+/** Derive history from the same rendered entries/Markdown as the following renderer.
+ * The provider observes row keys/types, while each row observes only its own payload.
+ * Projection caches contain plain values; calculating them never writes snapshot state.
  */
 @Stable
-internal class ChatTranscript {
-    var rows by mutableStateOf<List<ChatTranscriptRow>>(emptyList())
-        private set
-    private class MessageRows(val entry: ChatEntry, val document: ChatMarkdownDocument?, val rows: List<ChatTranscriptRow>)
-    private var messages = emptyMap<String, MessageRows>()
+internal class ChatTranscript(
+    entries: State<List<ChatEntry>>,
+    markdown: State<Map<String, ChatMarkdownDocument>>,
+) {
+    private class ProjectedRow(val entryId: String, val key: String, val contentType: Any, val content: ChatTranscriptContent)
+    private class MessageRows(val entry: ChatEntry, val document: ChatMarkdownDocument?, val rows: List<ProjectedRow>) {
+        val byKey = rows.associateBy { it.key }
+    }
+    private class Projection(val messages: Map<String, MessageRows>, val rows: List<ProjectedRow>)
+    private var previous = Projection(emptyMap(), emptyList())
+    private val projection by derivedStateOf(structuralEqualityPolicy()) { project(entries.value, markdown.value) }
+    private var handles = emptyMap<String, ChatTranscriptRow>()
 
-    fun update(entries: List<ChatEntry>, markdown: Map<String, ChatMarkdownDocument>) {
+    val rows: List<ChatTranscriptRow> by derivedStateOf(structuralEqualityPolicy()) {
+        projection.rows.map { row ->
+            handles[row.key]?.takeIf { it.contentType == row.contentType }
+                ?: ChatTranscriptRow(row.entryId, row.key, row.contentType, derivedStateOf(structuralEqualityPolicy()) {
+                    // A removed/retyped lazy item may still be observed until it is disposed.
+                    projection.messages[row.entryId]?.byKey?.get(row.key)
+                        ?.takeIf { it.contentType == row.contentType }?.content ?: row.content
+                })
+        }.also { handles = it.associateBy { row -> row.key } }
+    }
+
+    private fun project(entries: List<ChatEntry>, markdown: Map<String, ChatMarkdownDocument>): Projection {
         val nextMessages = entries.associate { entry ->
             val document = markdown[entry.id]
-            val previous = messages[entry.id]
-            if (previous != null && previous.entry == entry && previous.document === document) {
-                // Most snapshots change one message. Avoid allocating payloads and touching
-                // snapshot state for every historical Markdown block on the main thread.
-                return@associate entry.id to previous
+            val message = previous.messages[entry.id]
+            if (message != null && message.entry == entry && message.document === document) {
+                // Most snapshots change one message. Avoid allocating payloads for
+                // every historical Markdown block on the main thread.
+                return@associate entry.id to message
             }
-            val byKey = previous?.rows?.associateBy { it.key }.orEmpty()
+            val byKey = message?.byKey.orEmpty()
             val next = buildList {
                 fun row(key: String, type: Any, content: ChatTranscriptContent) {
-                    val row = byKey[key]?.takeIf { it.contentType == type }
-                        ?: ChatTranscriptRow(entry.id, key, type, content)
-                    row.content = content
+                    val row = byKey[key]?.takeIf { it.contentType == type && it.content == content }
+                        ?: ProjectedRow(entry.id, key, type, content)
                     add(row)
                 }
                 val body = entry.body
@@ -80,8 +98,9 @@ internal class ChatTranscript {
             }
             entry.id to MessageRows(entry, document, next)
         }
-        messages = nextMessages
-        rows = nextMessages.values.flatMap { it.rows }
+        val nextRows = nextMessages.values.flatMap { it.rows }
+        if (previous.rows != nextRows) previous = Projection(nextMessages, nextRows)
+        return previous
     }
 }
 
@@ -90,9 +109,9 @@ internal class ChatTranscriptRow(
     val entryId: String,
     val key: String,
     val contentType: Any,
-    content: ChatTranscriptContent,
+    content: State<ChatTranscriptContent>,
 ) {
-    var content by mutableStateOf(content)
+    val content by content
 }
 
 internal sealed interface ChatTranscriptContent {

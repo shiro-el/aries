@@ -33,10 +33,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.structuralEqualityPolicy
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -429,10 +431,14 @@ fun ChatScreen(
     }
     val snapshot = chat.snapshot
     val rawEntries = snapshot?.entries.orEmpty()
-    val markdown by rememberChatMarkdown(rawEntries)
+    val markdownState = rememberChatMarkdown(rawEntries)
+    val markdown by markdownState
     val rendered = remember(chat) { ChatRenderedEntries() }
-    val entries = remember(rendered, rawEntries, markdown) { rendered.update(rawEntries, markdown) }
-    val transcript = remember(chat) { ChatTranscript() }
+    val entriesState = remember(chat, rendered, markdownState) {
+        derivedStateOf(structuralEqualityPolicy()) { rendered.update(chat.snapshot?.entries.orEmpty(), markdownState.value) }
+    }
+    val entries by entriesState
+    val transcript = remember(chat, entriesState, markdownState) { ChatTranscript(entriesState, markdownState) }
     var searchOpen by remember(chat) { mutableStateOf(false) }
     var query by remember(chat) { mutableStateOf("") }
     var selected by remember(chat) { mutableStateOf<ChatSearchMatch?>(null) }
@@ -448,9 +454,6 @@ fun ChatScreen(
         }.sortedBy { it.call.atMs }
     }.orEmpty()
     val scroll = rememberChatScrollState(chat, entries, agentCalls.map { "call:${it.key}" }, markdown, followEnabled = !searchOpen)
-    if (!scroll.following) {
-        remember(transcript, entries, markdown) { transcript.update(entries, markdown) }
-    }
     LaunchedEffect(active) {
         if (active != null) {
             val body = entries.find { it.id == active.field.entryId }?.body
@@ -561,7 +564,7 @@ fun ChatScreen(
     }
 }
 
-/** A stable provider observes only the history rows that actually changed. */
+/** The provider changes only with row keys/types; payloads are derived per visible row. */
 @Composable
 private fun ChatHistoryTranscript(
     modifier: Modifier,
