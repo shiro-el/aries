@@ -30,17 +30,20 @@ android {
         resValues = true
     }
 
-    // Fake-core workload only; the Activity and tracing code never ship in release.
     buildTypes {
+        getByName("dogfood") { proguardFiles("proguard-rules.pro") }
+        // Capture unobfuscated ART rules from the real app (API 34+).
+        // Never publish this APK; scripts/collect-baseline-profile.sh uses it.
+        create("baselineCapture") {
+            initWith(getByName("dogfood"))
+            isMinifyEnabled = false
+            isShrinkResources = false
+        }
+        // Shares dogfood's optimization settings, but keeps the inert workload
+        // and separate app ID: it must never replace the real Application/core.
         create("chatProfile") {
-            initWith(getByName("release"))
+            initWith(getByName("dogfood"))
             applicationIdSuffix = ".chatprofile"
-            isDebuggable = false
-            isMinifyEnabled = true
-            isShrinkResources = true
-            signingConfig = signingConfigs.getByName("debug")
-            matchingFallbacks += "release"
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
         }
     }
 
@@ -84,6 +87,7 @@ licensee {
 
 dependencies {
     implementation("androidx.appcompat:appcompat:1.7.1")
+    implementation(libs.androidx.profileinstaller)
     implementation(project(":wear-data"))
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(platform(libs.androidx.compose.bom))

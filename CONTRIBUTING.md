@@ -40,6 +40,22 @@ cd relay && npm ci --legacy-peer-deps && npm run typecheck && npm test   # Relay
 `-Paries.abis=x86_64` limits the Android build to one ABI (faster on an emulator);
 `-Paries.rustProfile=debug` builds the core unoptimised.
 
+For a locally sideloaded optimized build, use `:app:assembleDogfood` and
+`:wear:assembleDogfood`. Dogfood uses R8/resource shrinking, is not debuggable,
+and retains the existing debug certificate and `io.github.shiroel.aries.dev`
+ID so it updates the installed development app. It is not a Play release.
+`chatProfile` inherits these optimization settings with its own inert workload
+and separate ID; never publish it.
+
+The app ships a generated Baseline Profile plus ProfileInstaller for sideloads.
+To refresh it on API 34+, build `:app:assembleBaselineCapture` (unobfuscated,
+not debuggable), then run `scripts/collect-baseline-profile.sh prepare APK`.
+Exercise startup, a test Host connection, opening/scrolling Chat and Terminal;
+run `scripts/collect-baseline-profile.sh collect` to save app rules. AndroidX
+provides the library rules. Rebuild dogfood afterwards; do not publish the
+capture APK. Each script command holds the shared emulator lock only for its
+short command batch, leaving navigation between batches free.
+
 Core tests never touch your own herdr-core: each `HcSession` uses its own
 `HC_SESSION` and puts socket, state and config under a temp dir, and strips
 inherited `HC_*` variables. Set `ARIES_HERDR_CORE` to use another binary of the
