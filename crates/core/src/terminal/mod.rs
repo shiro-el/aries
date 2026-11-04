@@ -192,6 +192,14 @@ struct Inner {
     detached: AtomicBool,
     /// Attached with `observe: true`: no typing, no resizing.
     observe: bool,
+    input_ready: watch::Receiver<InputReadiness>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum InputReadiness {
+    Waiting,
+    Ready,
+    Closed,
 }
 
 impl TerminalView {
@@ -243,6 +251,7 @@ impl TerminalView {
         let wake = Arc::new(Notify::new());
         let bytes = Arc::new(AtomicU64::new(0));
         let (hold_credit, hold_rx) = watch::channel(false);
+        let (input_ready, ready_rx) = watch::channel(InputReadiness::Waiting);
         let task = tokio::spawn(pump(Pump {
             client: client.clone(),
             channel,
@@ -251,6 +260,7 @@ impl TerminalView {
             wake: wake.clone(),
             bytes: bytes.clone(),
             hold: hold_rx,
+            input_ready,
         }));
         let inner = Inner {
             client,
@@ -263,6 +273,7 @@ impl TerminalView {
             hold_credit,
             detached: AtomicBool::new(false),
             observe: options.observe,
+            input_ready: ready_rx,
         };
         Ok(Self {
             inner: Arc::new(inner),
@@ -288,6 +299,32 @@ impl TerminalView {
 }
 
 impl Inner {
+    /// The attach reply precedes the initial repaint, which can span DATA
+    /// frames. Its trailing CSI ?9001h/l follows the screen's keyboard modes
+    /// in herdr-core 0.1.17; a resize or first partial frame is not readiness.
+    async fn ready_for_input(&self) -> Result<(), CoreError> {
+        if self.observe {
+            return Err(protocol("an observe-mode view cannot type"));
+        }
+        if self.detached.load(Ordering::SeqCst) {
+            return Err(CoreError::Closed);
+        }
+        let mut ready = self.input_ready.clone();
+        let state = tokio::time::timeout(Duration::from_secs(30), async {
+            ready
+                .wait_for(|s| *s != InputReadiness::Waiting)
+                .await
+                .map(|s| *s)
+        })
+        .await
+        .map_err(|_| protocol("terminal initial repaint timed out"))?
+        .map_err(|_| CoreError::Closed)?;
+        if state != InputReadiness::Ready || self.detached.load(Ordering::SeqCst) {
+            return Err(CoreError::Closed);
+        }
+        Ok(())
+    }
+
     async fn next(&self) -> Result<TerminalUpdate, CoreError> {
         let _one = self.reading.lock().await;
         loop {
@@ -321,9 +358,7 @@ impl Inner {
     }
 
     async fn input(&self, bytes: &[u8]) -> Result<(), CoreError> {
-        if self.observe {
-            return Err(protocol("an observe-mode view cannot type"));
-        }
+        self.ready_for_input().await?;
         if bytes.is_empty() {
             return Ok(());
         }
@@ -401,6 +436,7 @@ impl TerminalView {
     pub async fn paste_text(&self, text: String) -> Result<(), CoreError> {
         let inner = self.inner.clone();
         crate::on_runtime(async move {
+            inner.ready_for_input().await?;
             let bytes = inner
                 .state
                 .lock()
@@ -418,6 +454,7 @@ impl TerminalView {
     pub async fn send_key(&self, key: TerminalKey, mods: KeyMods) -> Result<(), CoreError> {
         let inner = self.inner.clone();
         crate::on_runtime(async move {
+            inner.ready_for_input().await?;
             let app_cursor = inner.state.lock().expect("state lock").vt.app_cursor();
             inner.input(&keys::encode(&key, mods, app_cursor)).await
         })
@@ -501,11 +538,14 @@ struct Pump {
     wake: Arc<Notify>,
     bytes: Arc<AtomicU64>,
     hold: watch::Receiver<bool>,
+    input_ready: watch::Sender<InputReadiness>,
 }
 
 /// Reads the stream into the VT and credits each DATA once it is parsed.
 async fn pump(mut p: Pump) {
     let mut owed: u64 = 0;
+    let mut initial_tail = Vec::new();
+    let mut initialized = false;
     loop {
         let deadline = p
             .state
@@ -537,6 +577,19 @@ async fn pump(mut p: Pump) {
         match kind {
             KIND_DATA => {
                 p.state.lock().expect("state lock").vt.feed(&payload);
+                if !initialized {
+                    initial_tail.extend_from_slice(&payload);
+                    initialized = initial_tail
+                        .windows(8)
+                        .any(|s| s == b"\x1b[?9001h" || s == b"\x1b[?9001l");
+                    if initialized {
+                        p.input_ready.send_replace(InputReadiness::Ready);
+                        initial_tail.clear();
+                    } else {
+                        let keep = initial_tail.len().saturating_sub(7);
+                        initial_tail.drain(..keep);
+                    }
+                }
                 p.bytes.fetch_add(payload.len() as u64, Ordering::Relaxed);
                 mark_dirty(&p);
                 owed += payload.len() as u64;
@@ -562,6 +615,7 @@ async fn pump(mut p: Pump) {
         }
     }
     p.state.lock().expect("state lock").ended = true;
+    p.input_ready.send_replace(InputReadiness::Closed);
     p.wake.notify_one();
 }
 
