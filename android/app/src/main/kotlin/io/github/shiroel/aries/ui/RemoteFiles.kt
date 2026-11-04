@@ -140,18 +140,6 @@ fun RemoteFilesScreen(
                 val entries = directory?.entries.orEmpty()
                 val parentLabel = stringResource(R.string.files_parent_folder_button)
                 LazyColumn(Modifier.weight(1f).testTag("files-tree")) {
-                    parentFolder?.let { parent ->
-                        item(key = "parent") {
-                            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                                .clickable(role = Role.Button) { folder = parent }
-                                .semantics { contentDescription = parentLabel }
-                                .padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(painterResource(R.drawable.ic_arrow_left), null, Modifier.padding(end = 8.dp).size(20.dp))
-                                Text(stringResource(R.string.files_parent_folder_entry), fontFamily = FontFamily.Monospace)
-                            }
-                            HorizontalDivider()
-                        }
-                    }
                     item {
                         gitError?.let { Text(stringResource(R.string.git_error, it), color = MaterialTheme.colorScheme.error) }
                         when {
@@ -181,24 +169,35 @@ fun RemoteFilesScreen(
                     item {
                         Text(stringResource(R.string.files_folders_heading), Modifier.padding(top = 12.dp), style = MaterialTheme.typography.titleSmall)
                         if (failed) Text(stringResource(R.string.files_failed), color = MaterialTheme.colorScheme.error)
-                        else if (entries.isEmpty()) Text(stringResource(R.string.files_empty_folder))
+                    }
+                    parentFolder?.let { parent ->
+                        item(key = "parent") {
+                            FileTreeRow(
+                                name = stringResource(R.string.files_parent_folder_entry),
+                                folderIcon = R.drawable.ic_folder_up,
+                                modifier = Modifier.clickable(role = Role.Button) { folder = parent }
+                                    .semantics { contentDescription = parentLabel },
+                            )
+                            HorizontalDivider()
+                        }
+                    }
+                    if (!failed && entries.isEmpty()) item {
+                        Text(stringResource(R.string.files_empty_folder))
                     }
                     itemsIndexed(if (failed) emptyList() else tree, key = { _, entry -> "tree:${entry.path}" }) { _, entry ->
                         val isExpanded = entry.path in expanded
                         val folderState = stringResource(if (isExpanded) R.string.files_folder_expanded else R.string.files_folder_collapsed)
-                        Row(Modifier.fillMaxWidth().clickable {
-                            if (entry.directory) toggleFolder(entry.path)
-                            else { file = entry.path }
-                        }.then(if (entry.directory) Modifier.semantics { stateDescription = folderState } else Modifier)
-                            .padding(start = (entry.depth * 16).dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            if (entry.directory) {
-                                Icon(painterResource(if (isExpanded) R.drawable.ic_chevron_down else R.drawable.ic_chevron_right),
-                                    contentDescription = null, modifier = Modifier.size(16.dp))
-                            }
-                            if (!entry.directory) Spacer(Modifier.width(16.dp))
-                            FileTypeIcon(entry.name, Modifier.padding(end = 8.dp), entry.directory, isExpanded)
-                            Text(if (entry.directory) "${entry.name}/" else entry.name, fontFamily = FontFamily.Monospace)
-                        }
+                        FileTreeRow(
+                            name = if (entry.directory) "${entry.name}/" else entry.name,
+                            depth = entry.depth,
+                            filePath = entry.name,
+                            directory = entry.directory,
+                            expanded = if (entry.directory) isExpanded else null,
+                            modifier = Modifier.clickable {
+                                if (entry.directory) toggleFolder(entry.path)
+                                else { file = entry.path }
+                            }.then(if (entry.directory) Modifier.semantics { stateDescription = folderState } else Modifier),
+                        )
                         if (entry.path in treeLoading) Text(stringResource(R.string.files_loading))
                         if (entry.path in treeFailed) Text(stringResource(R.string.files_failed), color = MaterialTheme.colorScheme.error)
                         HorizontalDivider()
@@ -219,6 +218,32 @@ fun RemoteFilesScreen(
                     initialLocation?.takeIf { it.path == file }?.line ?: 1uL, wrap, onSend)
             }
         }
+    }
+}
+
+/** Parent navigation and folders share their icon slots, text alignment and touch target. */
+@Composable
+private fun FileTreeRow(
+    name: String,
+    modifier: Modifier = Modifier,
+    depth: Int = 0,
+    folderIcon: Int? = null,
+    expanded: Boolean? = null,
+    filePath: String? = null,
+    directory: Boolean = false,
+) {
+    Row(modifier.fillMaxWidth().heightIn(min = 48.dp)
+        .padding(start = (depth * 16).dp, top = 12.dp, bottom = 12.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        if (folderIcon != null || filePath != null) {
+            if (expanded == null) Spacer(Modifier.size(16.dp))
+            else Icon(painterResource(if (expanded) R.drawable.ic_chevron_down else R.drawable.ic_chevron_right),
+                contentDescription = null, modifier = Modifier.size(16.dp))
+            if (filePath != null) FileTypeIcon(filePath, Modifier.padding(end = 8.dp), directory, expanded == true)
+            else Icon(painterResource(checkNotNull(folderIcon)), contentDescription = null,
+                modifier = Modifier.padding(end = 8.dp).size(20.dp))
+        }
+        Text(name, fontFamily = FontFamily.Monospace)
     }
 }
 
