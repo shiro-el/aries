@@ -12,6 +12,11 @@
     <string name="wear_interrupt_busy">Another stop request is pending.</string>
     <string name="wear_interrupt_unknown">Stop could not be verified. Check your phone before trying again.</string>
 
+    <!-- Watched Agent Ongoing Activity -->
+    <string name="wear_progress_channel">Agent progress</string>
+    <string name="wear_progress_status">#name# · #time# elapsed · #children# subagents</string>
+    <string name="wear_progress_body">Working · %1$d subagents</string>
+
     <!-- Watch Inbox -->
     <string name="wear_inbox_title">INBOX</string>
     <string name="wear_inbox_attention">WAITING</string>

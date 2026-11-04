@@ -12,6 +12,11 @@
     <string name="wear_interrupt_busy">다른 중단 요청을 처리 중이에요.</string>
     <string name="wear_interrupt_unknown">중단 결과를 확인하지 못했어요. 다시 시도하기 전에 폰에서 확인해 주세요.</string>
 
+    <!-- Watched Agent Ongoing Activity -->
+    <string name="wear_progress_channel">Agent 진행 상황</string>
+    <string name="wear_progress_status">#name# · #time# 경과 · 하위 Agent #children#개</string>
+    <string name="wear_progress_body">작업 중 · 하위 Agent %1$d개</string>
+
     <!-- Watch Inbox -->
     <string name="wear_inbox_title">INBOX</string>
     <string name="wear_inbox_attention">대기</string>
