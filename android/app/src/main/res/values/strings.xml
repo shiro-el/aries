@@ -687,6 +687,9 @@
     <string name="thread_permission_waiting">Permission request · waiting for your answer</string>
     <string name="thread_previous_waiting">Previous conversation that needs you</string>
     <string name="thread_next_waiting_button">Next conversation that needs you</string>
+    <string name="thread_status_no_beacon">Beacon needed</string>
+    <string name="thread_status_no_core">herdr-core unavailable</string>
+    <string name="thread_status_no_terminal">Terminal ended</string>
     <string name="thread_question_waiting">Question · waiting for your answer</string>
     <string name="chat_agent_status_announcement">%1$s: %2$s</string>
     <string name="thread_chat_subtitle">%1$s · %2$s</string>
@@ -1248,6 +1251,7 @@
     <string name="push_on_body">Relay: %1$s</string>
     <string name="push_test_sent">Test notification sent.</string>
     <string name="push_relay_label">Relay URL</string>
+    <string name="push_relay_invalid">Enter a valid Relay URL starting with https://, without a username, password, query or fragment.</string>
     <string name="push_relay_required">Enter a Relay URL to turn on push notifications.</string>
     <string name="push_relay_placeholder" translatable="false">https://relay.example.com</string>
     <string name="push_change_relay_button">Change Relay</string>

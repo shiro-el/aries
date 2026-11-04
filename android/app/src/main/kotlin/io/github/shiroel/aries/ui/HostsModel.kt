@@ -158,6 +158,7 @@ class HostsModel(
     private val locationStore: LastLocationStore? = null,
     private val onCallAnswered: (Host, String, CallAnswerState) -> Unit = { _, _, _ -> },
     private val elapsedRealtime: () -> Long = android.os.SystemClock::elapsedRealtime,
+    private val threadCallPreferences: android.content.SharedPreferences? = null,
 ) {
     internal val pairingReview = QrPairingReview()
     /** Current Host's settings models; a previous Host's pending work keeps its own state. */
@@ -211,7 +212,7 @@ class HostsModel(
     }
 
     /** Every Host's Calls for the inbox; see [resumeCalls]. */
-    val calls = CallsModel(core, scope, keyWork, onCallAnswered)
+    val calls = CallsModel(core, scope, keyWork, onCallAnswered, preferences = threadCallPreferences)
     /** Chat cache retention and per-Host clearing (ticket 44). */
     val chatCache = ChatCacheModel(core, scope, keyWork)
     val diagnosticHistory = DiagnosticsModel(core, scope, keyWork)
@@ -244,6 +245,7 @@ class HostsModel(
     // Settings overlays the route owner, so appearance changes never retire a connection or draft.
     private var settingsReturnTo by mutableStateOf<Screen?>(null)
     private var pendingSettingsState: SettingsNavigationState? = null
+    private var pendingHostSetupState: HostSetupState? = null
     private var settingsColdReturn by mutableStateOf<SettingsReturnState?>(null)
     private val ownedScreen: Screen get() = settingsReturnTo ?: screen
 
@@ -641,11 +643,19 @@ class HostsModel(
         val saved = locationStore?.load()
         val settings = pendingSettingsState
         pendingSettingsState = null
+        val setup = pendingHostSetupState
+        pendingHostSetupState = null
         if (target != null) {
             startupHostId = target.hostId
             openNotificationTarget(target)
         } else if (!explicitSurfaceEntry && screen == Screen.Hosts) {
+            setup?.let {
+                hostAddMethod = it.method
+                addedHost = hosts.find { host -> host.id == it.addedHostId }
+                setupHostId = hosts.find { host -> host.id == it.setupHostId }?.id
+            }
             if (settings != null) applySettingsState(settings)
+            else if (hostAddMethod != null) Unit // The saved form owns this startup, including in Tasks.
             else if (layout == AppLayout.THREAD) restoreThreadHome()
             else if (layout == AppLayout.TASKS) {
                 // Restore detail over the all-Host home, so Back keeps the Tasks board.
@@ -783,16 +793,33 @@ class HostsModel(
         }
     }
 
-    /** Creates another key under the current policy, so it may ask for a biometric unlock. */
+    var extraKeyBusy by mutableStateOf(false)
+        private set
+    internal var createdExtraKeyLabel by mutableStateOf<String?>(null)
+        private set
+
+    internal fun consumeCreatedExtraKey(): String? = createdExtraKeyLabel.also { createdExtraKeyLabel = null }
+
+    /** Retain the result until the current (possibly recreated) form consumes it. */
     fun createExtraKey(label: String) {
+        if (extraKeyBusy) return
+        extraKeyBusy = true
         scope.launch {
             try {
                 withContext(keyWork) { core.createKey(label.trim()) }
+                createdExtraKeyLabel = label.trim()
             } catch (e: CoreException) {
                 prompt = problemFor(e)
+            } finally {
+                extraKeyBusy = false
             }
             guard { keys = core.keys() }
         }
+    }
+
+    val keyImport = KeyImportModel(scope) { label, privateKey, passphrase, replacementKeyId ->
+        if (replacementKeyId == null) importKey(label, privateKey, passphrase)
+        else recoverKey(replacementKeyId, privateKey, passphrase)
     }
 
     /** Import/decryption and vault work can block, including biometric authorization. */
@@ -2436,7 +2463,15 @@ class HostsModel(
 
     /** Activity state is deliberately limited to IDs and destination flags. */
     fun saveSettingsState(): android.os.Bundle? {
-        pendingSettingsState?.let { return it.bundle() }
+        val settings = pendingSettingsState ?: currentSettingsState()
+        val setup = pendingHostSetupState ?: if (hostAddMethod != null || setupHostId != null) {
+            HostSetupState(hostAddMethod, addedHost?.id, setupHostId)
+        } else null
+        if (settings == null && setup == null) return null
+        return (settings?.bundle() ?: android.os.Bundle()).also { setup?.writeTo(it) }
+    }
+
+    private fun currentSettingsState(): SettingsNavigationState? {
         if (screen != Screen.Settings && screen !is Screen.JumpHosts) return null
         fun agentBase(route: Screen): Screen.Agents? = when (route) {
             is Screen.Agents -> route
@@ -2456,12 +2491,15 @@ class HostsModel(
             settingsKeys -> if (recoveringKeys) "recovery" else "keys"
             settingsDiagnostics -> "diagnostics"
             else -> "settings"
-        }, (screen as? Screen.JumpHosts)?.host?.id ?: settingsHost?.id, origin).bundle()
+        }, (screen as? Screen.JumpHosts)?.host?.id ?: settingsHost?.id, origin)
     }
 
     /** Queue until start(), behind App Lock and the resumed biometric authorizer. */
     fun restoreSettingsState(state: android.os.Bundle?) {
-        if (!started) pendingSettingsState = SettingsNavigationState.read(state)
+        if (!started) {
+            pendingSettingsState = SettingsNavigationState.read(state)
+            pendingHostSetupState = HostSetupState.read(state)
+        }
     }
 
     private fun applySettingsState(saved: SettingsNavigationState) {
@@ -2552,6 +2590,16 @@ class HostsModel(
     /** A layout change remaps only the previous layout's home, retaining any open detail. */
     internal fun homeLayoutChanged(previous: AppLayout, next: AppLayout) {
         if (previous == next) return
+        val cold = settingsColdReturn
+        if (settingsReturnTo == null && cold != null) {
+            val wasHome = cold.location.terminal == null && if (previous == AppLayout.CONSOLE) {
+                cold.agentHosts == null && cold.location.hostId == null
+            } else cold.agentHosts != null
+            if (wasHome) settingsColdReturn = SettingsReturnState(
+                LastLocation(), if (next == AppLayout.CONSOLE) null else hosts.map { it.id },
+            )
+            return
+        }
         val origin = settingsReturnTo ?: screen
         val wasHome = if (previous == AppLayout.CONSOLE) origin == Screen.Hosts else origin is Screen.Agents
         if (!wasHome) return
@@ -2823,6 +2871,7 @@ class HostsModel(
         settingsReturnTo = null
         settingsColdReturn = null
         pendingSettingsState = null
+        pendingHostSetupState = null
         val interruptedRestore = restoring
         userNavigation()
         // Cancelling a cold reconnect does not replace the last successfully viewed location.

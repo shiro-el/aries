@@ -46,6 +46,13 @@ class ReadAloudUiTest {
         compose.onNodeWithContentDescription(str(R.string.agent_switch_chat_label)).performClick()
     }
 
+    private fun awaitReadControl() {
+        // Chat exposes its transcript after asynchronous Markdown placement completes.
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithTag("read-aloud:reply").fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
     @Test fun responseOnlyReadsWhenTappedAndStopSurvivesLateCallbacksAndStreaming() {
         openChat()
         fun show(text: String) {
@@ -54,6 +61,7 @@ class ReadAloudUiTest {
         }
         show("**Hello**\n\n```sh\nsecret command\n```")
         assertTrue(engine.spoken.isEmpty())
+        awaitReadControl()
         compose.onNodeWithTag("read-aloud:reply").performScrollTo().performClick()
         assertEquals("Hello", engine.spoken.single())
         compose.onNodeWithText(str(R.string.read_aloud_preparing)).assertExists()
@@ -67,6 +75,7 @@ class ReadAloudUiTest {
         compose.runOnIdle { oldStart(); oldFinish(SpeechResult.DONE) }
         compose.onNodeWithTag("read-aloud-stop").assertDoesNotExist()
         assertTrue(engine.stops > 0)
+        awaitReadControl()
         compose.onNodeWithTag("read-aloud:reply").performScrollTo().performClick()
         assertEquals("Hello updated", engine.spoken.last())
         compose.onNodeWithContentDescription(str(R.string.agent_switch_terminal_label)).performClick()
@@ -82,6 +91,7 @@ class ReadAloudUiTest {
             ChatEntry("user", null, ChatEntryBody.User("Next question")),
             ChatEntry("next", null, ChatEntryBody.Agent("Another turn.")),
         ), ChatStatus.LIVE, null))
+        awaitReadControl()
         compose.onNodeWithTag("read-aloud:reply").performScrollTo().performClick()
         assertEquals("Before the tool.\nAfter the tool.", engine.spoken.single())
     }

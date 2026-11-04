@@ -1,7 +1,11 @@
 package io.github.shiroel.aries.ui
 
 import android.content.Context
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.core.app.ApplicationProvider
@@ -346,6 +350,71 @@ class ThreadWaitingTest {
         )).assertExists()
         compose.openConsoleDrawer()
         compose.onNodeWithTag("thread-agent:h1:t2").assertTextContains("Investigate the reconnect failure")
+    }
+
+    // D129: Close Call hides an unanswered Choice panel without acknowledging its attention.
+    @Test fun closingAnUnansweredChoiceKeepsItInTheDrawerAndWaitingSheet() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val core = FakeCore().apply {
+            addHost("home", Endpoint.Ssh("home.test", 22u, "me")); ensureKey(); savedView = AgentView.CHAT
+            terminals = listOf("Current", "Choice caller").mapIndexed { index, name ->
+                TerminalInfo("t${index + 1}", name, "", listOf("claude"), "/repo", "live", AgentStatus.Working)
+            }
+            callsOf["h1"] = listOf(CallInfo("h1", "choice", 1000uL, "t2", true,
+                "Review ready", "Choose when ready", CallUrgency.CHECK, listOf("Continue"), null, true))
+        }
+        val settings = ThemeSettings(context.getSharedPreferences("choice-close-test", Context.MODE_PRIVATE)).apply {
+            chooseLayout(AppLayout.THREAD)
+        }
+        lateinit var model: HostsModel
+        compose.setContent {
+            val scope = rememberCoroutineScope()
+            model = remember { HostsModel(core, scope) }
+            AriesApp(model, settings)
+        }
+        compose.runOnIdle { model.openPushedAgent("h1", "t2", openChat = true) }
+        compose.onNodeWithText(context.getString(R.string.thread_call_dismiss)).performClick()
+        compose.onNodeWithTag("thread-call-panel").assertDoesNotExist()
+        compose.openConsoleDrawer()
+        compose.onNodeWithText(context.getString(R.string.thread_section_needs)).assertExists()
+        compose.onNodeWithTag("thread-agent:h1:t2").assertExists()
+        compose.onNodeWithTag("thread-agent:h1:t1").performClick()
+        compose.onNodeWithTag("thread-waiting-pill").performClick()
+        compose.onNodeWithText(context.getString(R.string.thread_call_dismiss)).performClick()
+        compose.onNodeWithTag("thread-call-panel").assertDoesNotExist()
+        compose.onNodeWithTag("thread-waiting-pill").performClick()
+        compose.onNodeWithContentDescription(context.getString(R.string.call_answer_choice_label, "Review ready", "Continue"))
+            .performClick()
+        compose.runOnIdle { assertEquals(listOf(Triple("h1", "choice", 0u)), core.replies) }
+    }
+
+    // D47: shrinking the viewport must not dispose an open waiting sheet or lose its target.
+    @Test fun openWaitingSheetRemainsAnswerableWhenTheViewportBecomesCompact() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val core = FakeCore().apply {
+            addHost("home", Endpoint.Ssh("home.test", 22u, "me")); ensureKey(); savedView = AgentView.CHAT
+            terminals = listOf("Current", "Waiting").mapIndexed { index, name ->
+                TerminalInfo("t${index + 1}", name, "", listOf("claude"), "/repo", "live", AgentStatus.Working)
+            }
+            callsOf["h1"] = listOf(CallInfo("h1", "choice", 1000uL, "t2", true,
+                "Keep going?", "", CallUrgency.CHECK, listOf("Continue"), null, true))
+        }
+        val settings = ThemeSettings(context.getSharedPreferences("compact-waiting-test", Context.MODE_PRIVATE)).apply {
+            chooseLayout(AppLayout.THREAD)
+        }
+        var height by mutableStateOf(1000.dp)
+        lateinit var model: HostsModel
+        compose.setContent {
+            val scope = rememberCoroutineScope()
+            model = remember { HostsModel(core, scope) }
+            Box(Modifier.height(height)) { AriesApp(model, settings) }
+        }
+        compose.runOnIdle { model.openPushedAgent("h1", "t1", openChat = true) }
+        compose.onNodeWithTag("thread-waiting-pill").performClick()
+        compose.runOnIdle { height = 360.dp }
+        compose.onNodeWithContentDescription(context.getString(R.string.call_answer_choice_label, "Keep going?", "Continue"))
+            .assertIsDisplayed().performClick()
+        compose.runOnIdle { assertEquals(listOf(Triple("h1", "choice", 0u)), core.replies) }
     }
 
     private fun assertQueueHeading(name: String) {
