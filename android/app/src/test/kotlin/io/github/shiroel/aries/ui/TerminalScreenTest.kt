@@ -3,6 +3,7 @@ package io.github.shiroel.aries.ui
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -12,6 +13,7 @@ import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentStatus
+import io.github.shiroel.aries.core.CursorPos
 import io.github.shiroel.aries.core.CellRun
 import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.HostStructure
@@ -48,7 +50,7 @@ class TerminalScreenTest {
         ScreenFrame(
             cols.toUShort(), rows.toUShort(), full,
             lines.map { (row, text) -> ScreenLine(row.toUShort(), listOf(run(0, text))) },
-            null, null,
+            lines.lastOrNull()?.let { CursorPos(it.first.toUShort(), 0u) }, null,
         ),
     )
 
@@ -89,16 +91,34 @@ class TerminalScreenTest {
         screenShows("Thinking...")
         compose.onNodeWithText(str(R.string.terminal_observing, "t1", 120, 3)).assertExists()
 
-        // Only row 1 changed; row 0 stays.
+        // A partial frame updates the cursor line without reading the other rows.
         view.push(frame(120, 3, false, 1 to "Done."))
         compose.waitForIdle()
-        screenShows("$ claude\nDone.")
+        screenShows("Done.")
 
         // The desktop resized the Terminal: the phone follows.
         view.push(frame(80, 2, true, 0 to "resized"))
         compose.waitForIdle()
         compose.onNodeWithText(str(R.string.terminal_observing, "t1", 80, 2)).assertExists()
         screenShows("resized")
+    }
+
+    @Test
+    fun terminalAnnouncementStaysBoundedAndReadsOnlyTheCursorLine() {
+        val core = FakeCore().apply { terminals = listOf(build) }
+        open(core)
+        compose.onNodeWithText("build").performClick()
+        val view = core.connection!!.views.single()
+        val lines = (0 until 80).map { row ->
+            ScreenLine(row.toUShort(), listOf(run(0, if (row == 40) "cursor prompt " + "x".repeat(2000) else "unrelated output $row")))
+        }
+        view.push(TerminalUpdate.Screen(ScreenFrame(4096u, 80u, true, lines, CursorPos(40u, 0u), null)))
+        compose.waitForIdle()
+        val spoken = compose.onNodeWithTag("terminal-screen").fetchSemanticsNode()
+            .config[SemanticsProperties.ContentDescription].joinToString()
+        assertTrue("bounded regardless of grid and line lengths", spoken.length <= 512)
+        assertTrue("cursor context remains available", spoken.contains("cursor prompt"))
+        assertTrue("other screen rows are not read automatically", !spoken.contains("unrelated output"))
     }
 
     @Test

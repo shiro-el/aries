@@ -117,20 +117,20 @@ fun AgentsScreen(
             if (board.hosts.isEmpty()) item { Text(stringResource(R.string.agents_no_hosts)) }
             items(board.hosts.filter { it.id in board.unavailable }, key = { "down:" + it.id }) { host ->
                 Column {
-                    Text(
+                    AnnouncedText(
                         stringResource(R.string.agents_host_unavailable, host.name),
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.titleSmall,
                     )
-                    board.unavailable[host.id]?.let { Text(stringResource(it.res, *it.args.toTypedArray()), style = MaterialTheme.typography.bodySmall) }
+                    board.unavailable[host.id]?.let { AnnouncedText(stringResource(it.res, *it.args.toTypedArray()), style = MaterialTheme.typography.bodySmall) }
                 }
             }
             items(board.hosts.filter { board.links[it.id]?.state == LinkState.Reconnecting }, key = { "again:" + it.id }) { host ->
-                Text(stringResource(R.string.agents_host_reconnecting, host.name), style = MaterialTheme.typography.bodySmall)
+                AnnouncedText(stringResource(R.string.agents_host_reconnecting, host.name), style = MaterialTheme.typography.bodySmall)
             }
             val down = { h: Host -> board.closed[h.id] == true || board.links[h.id]?.state is LinkState.Down }
             items(board.hosts.filter(down), key = { "closed:" + it.id }) { host ->
-                Text(
+                AnnouncedText(
                     stringResource(R.string.agents_host_closed, host.name),
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall,

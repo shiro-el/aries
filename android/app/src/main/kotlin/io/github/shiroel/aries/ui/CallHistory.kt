@@ -95,9 +95,9 @@ private fun CallRow(
             Text(stringResource(R.string.call_choices, call.choices.joinToString(" · ")), style = MaterialTheme.typography.bodySmall)
         }
         call.answer?.let { a ->
-            Text(stringResource(a.state.labelResource(), a.text), style = MaterialTheme.typography.bodySmall)
+            AnnouncedText(stringResource(a.state.labelResource(), a.text), style = MaterialTheme.typography.bodySmall)
             if (a.state != CallAnswerState.DELIVERED) {
-                a.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+                a.detail?.let { AnnouncedText(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
             }
         }
         when {
@@ -111,7 +111,7 @@ private fun CallRow(
             }
         }
         note?.let { replyNoteText(it) }?.let { text ->
-            Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            AnnouncedText(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         }
         call.terminal?.let { address ->
             val label = stringResource(R.string.call_open_chat_label, address, call.title)

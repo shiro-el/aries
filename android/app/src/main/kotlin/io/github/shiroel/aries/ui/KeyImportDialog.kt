@@ -124,7 +124,7 @@ fun KeyImportDialog(model: HostsModel, replacementKeyId: String? = null, onDismi
                     keyboardOptions = passwordKeyboard, visualTransformation = PasswordVisualTransformation(),
                     modifier = Modifier.fillMaxWidth().testTag("key-import-passphrase"),
                 )
-                problem?.let { Text(stringResource(it.res, *it.args.toTypedArray()), color = MaterialTheme.colorScheme.error) }
+                problem?.let { AnnouncedText(stringResource(it.res, *it.args.toTypedArray()), color = MaterialTheme.colorScheme.error) }
                 if (busy) Text(stringResource(R.string.key_import_busy))
             }
         },

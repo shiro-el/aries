@@ -172,6 +172,8 @@ class ChatModel(
         set(value) { input = TextFieldValue(value, TextRange(value.length)) }
     var sending by mutableStateOf<Sending?>(null)
         private set
+    var sent by mutableStateOf(false)
+        private set
     /** The Blocked Agent refused the last message; cleared once it is no longer Blocked. */
     var refused by mutableStateOf(false)
         private set
@@ -299,6 +301,7 @@ class ChatModel(
         val text = sentAttachments.fold(sentDraft) { message, attachment ->
             message + (if (message.isEmpty() || message.last().isWhitespace()) "" else " ") + shellQuote(attachment.path)
         }
+        sent = false
         sending = Sending.Sending
         refused = false
         sendError = null
@@ -306,6 +309,7 @@ class ChatModel(
             try {
                 when (val outcome = conn.sendMessage(terminal.address, text, HeldListener())) {
                     SendOutcome.Sent -> {
+                        sent = true
                         inputHistory.remember(text)
                         if (draft == sentDraft) draft = ""
                         attachments = attachments - sentAttachments.toSet()
@@ -620,16 +624,16 @@ fun ChatScreen(
             when (chat.sending) {
                 ChatModel.Sending.Sending -> ChatNotice(stringResource(R.string.chat_sending))
                 ChatModel.Sending.Held -> ChatNotice(stringResource(R.string.chat_send_held))
-                null -> {}
+                null -> if (chat.sent && chat.draft.isEmpty() && chat.attachments.isEmpty()) ChatNotice(stringResource(R.string.chat_sent))
             }
             chat.sendError?.let {
-                Text(stringResource(R.string.chat_send_failed, it), color = MaterialTheme.colorScheme.error)
+                AnnouncedText(stringResource(R.string.chat_send_failed, it), color = MaterialTheme.colorScheme.error)
             }
             if (chat.uploading) {
                 LinearProgressIndicator(Modifier.fillMaxWidth())
                 ChatNotice(stringResource(R.string.attachments_uploading))
             }
-            chat.attachmentError?.let { Text(stringResource(it.res, *it.args.toTypedArray()), color = MaterialTheme.colorScheme.error) }
+            chat.attachmentError?.let { AnnouncedText(stringResource(it.res, *it.args.toTypedArray()), color = MaterialTheme.colorScheme.error) }
             if (chat.inputUnavailable) {
                 ConsoleChatCallSurface {
                     Text(stringResource(if (chat.terminalAvailable) R.string.chat_input_agent_ended else R.string.chat_status_no_terminal))
@@ -776,7 +780,7 @@ private fun BlockedNotice(status: AgentStatus.Blocked, refused: Boolean, onOpenT
     val color = statusColor(status)
     ConsoleChatCallSurface {
         if (refused) {
-            Text(stringResource(R.string.chat_send_refused), color = color, style = MaterialTheme.typography.labelLarge)
+            AnnouncedText(stringResource(R.string.chat_send_refused), color = color, style = MaterialTheme.typography.labelLarge)
         }
         Text(stringResource(why), color = color)
         status.message?.let {
@@ -802,7 +806,7 @@ private fun statusText(status: ChatStatus): String? = when (status) {
 
 @Composable
 private fun ChatNotice(text: String) {
-    Text(
+    AnnouncedText(
         text,
         Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.secondaryContainer).padding(8.dp),
         color = MaterialTheme.colorScheme.onSecondaryContainer,

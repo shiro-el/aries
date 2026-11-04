@@ -117,17 +117,17 @@ fun PushSection(model: PushModel, beaconInstalled: Boolean) {
             }
         }
         when (model.verificationState) {
-            PushVerificationState.PENDING -> Text(stringResource(R.string.push_verification_pending))
+            PushVerificationState.PENDING -> AnnouncedText(stringResource(R.string.push_verification_pending))
             PushVerificationState.FAILED -> {
-                Text(stringResource(R.string.push_verification_failed), color = MaterialTheme.colorScheme.error)
+                AnnouncedText(stringResource(R.string.push_verification_failed), color = MaterialTheme.colorScheme.error)
                 if (model.ui is PushUi.On) {
                     TextButton(onClick = model::enable) { Text(stringResource(R.string.push_retry_button)) }
                 }
             }
             else -> Unit
         }
-        model.problem?.let { Text(resolve(it), color = MaterialTheme.colorScheme.error) }
-        model.notice?.let { Text(resolve(it), style = MaterialTheme.typography.bodySmall) }
+        model.problem?.let { AnnouncedText(resolve(it), color = MaterialTheme.colorScheme.error) }
+        model.notice?.let { AnnouncedText(resolve(it), style = MaterialTheme.typography.bodySmall) }
     }
 }
 
@@ -139,7 +139,7 @@ private fun PolicyOptions(model: PushModel) {
     if (policy == null) {
         if (model.policyBusy) CircularProgressIndicator()
         model.policyProblem?.let {
-            Text(resolve(it), color = MaterialTheme.colorScheme.error)
+            AnnouncedText(resolve(it), color = MaterialTheme.colorScheme.error)
             TextButton(onClick = model::loadPolicy) { Text(stringResource(R.string.push_policy_retry)) }
         }
         return
@@ -157,7 +157,7 @@ private fun PolicyOptions(model: PushModel) {
     PolicyOption(R.string.push_policy_child_agents, policy.childAgents, enabled) { on ->
         model.changePolicy { it.copy(childAgents = on) }
     }
-    model.policyProblem?.let { Text(resolve(it), color = MaterialTheme.colorScheme.error) }
+    model.policyProblem?.let { AnnouncedText(resolve(it), color = MaterialTheme.colorScheme.error) }
 }
 
 @Composable

@@ -240,7 +240,7 @@ private fun problemText(p: StructureProblem): String = when (p) {
 
 @Composable
 private fun Notice(text: String) {
-    Text(
+    AnnouncedText(
         text,
         Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
         color = MaterialTheme.colorScheme.error,

@@ -18,7 +18,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -374,7 +374,23 @@ class TerminalViewer(terminal: TerminalInfo) {
         inputs.trySend(input)
     }
 
-    /** The visible text, one string per row (for accessibility and tests). */
+    /** A bounded excerpt; never build the whole screen merely to focus its Canvas. */
+    fun cursorLineText(): String? {
+        val row = cursor?.row?.toInt() ?: return null
+        val runs = line(row)?.runs ?: return null
+        val excerpt = StringBuilder()
+        for (run in runs) {
+            if (excerpt.length >= 240) break
+            val column = run.column.toInt().coerceAtMost(240)
+            while (excerpt.length < column) excerpt.append(' ')
+            excerpt.append(run.text.take(240 - excerpt.length))
+        }
+        // Avoid exposing half of an emoji when the cap falls between UTF-16 surrogates.
+        if (excerpt.lastOrNull()?.isHighSurrogate() == true) excerpt.deleteCharAt(excerpt.lastIndex)
+        return excerpt.toString().trimEnd()
+    }
+
+    /** The visible text, one string per row (explicit copy/export and tests). */
     fun text(): String = (0 until rows).joinToString("\n") { row ->
         val sb = StringBuilder()
         line(row)?.runs?.forEach { run ->
@@ -455,8 +471,8 @@ fun TerminalScreen(
 @Composable
 internal fun TerminalInput(viewer: TerminalViewer, modifier: Modifier = Modifier) {
     Box(
-        modifier.fillMaxWidth().height(48.dp).background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier.fillMaxWidth().heightIn(min = with(LocalDensity.current) { MaterialTheme.typography.bodyMedium.lineHeight.toDp() } + 24.dp).background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outline),
         contentAlignment = Alignment.CenterStart,
     ) {
         AndroidView(
@@ -490,7 +506,7 @@ private fun exitText(e: TerminalExit): String {
 
 @Composable
 private fun Banner(text: String) {
-    Text(
+    AnnouncedText(
         text,
         Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.secondaryContainer).padding(8.dp),
         color = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -507,7 +523,10 @@ private fun TerminalCanvas(viewer: TerminalViewer, look: TerminalLook, settings:
     val probe = remember(measurer, family) {
         measurer.measure("M", TextStyle(fontFamily = family, fontSize = 100.sp))
     }
-    val description = viewer.version.let { viewer.text() }
+    val cursorLine = viewer.version.let { viewer.cursorLineText() }
+    val summary = stringResource(R.string.terminal_accessibility_summary, viewer.cols, viewer.rows)
+    val description = if (cursorLine == null) summary else summary + ". " +
+        stringResource(R.string.terminal_accessibility_cursor, viewer.cursor!!.row.toInt() + 1, cursorLine)
     // The selected cells moved away.
     LaunchedEffect(look, viewer.scrolled, viewer.cols, viewer.rows) { look.selection = null }
     BoxWithConstraints(modifier.background(TerminalBackground)) {
