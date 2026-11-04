@@ -55,11 +55,18 @@ class RemoteFilesTest {
             override suspend fun listFiles(address: String, path: String?): RemoteDirectory {
                 assertEquals("box/t7", address)
                 requests += path
-                return RemoteDirectory(path ?: "/home/me/repo", emptyList())
+                val entries = if (path == null) listOf(RemoteFileEntry("src", true), RemoteFileEntry("README.md", false)) +
+                    (1..30).map { RemoteFileEntry("file-$it.txt", false) } else emptyList()
+                return RemoteDirectory(path ?: "/home/me/repo", entries)
             }
         }
         compose.setContent { MaterialTheme { RemoteFilesScreen(conn, "box/t7", {}) } }
         screenshot("starting-folder")
+        if (System.getenv("ARIES_FILES_RENDER_DIR") != null) {
+            compose.onNodeWithTag("files-tree").performScrollToIndex(20)
+            screenshot("scrolled-folder")
+            compose.onNodeWithTag("files-tree").performScrollToIndex(0)
+        }
         compose.onNodeWithText("..").performClick()
         compose.runOnIdle { assertEquals(listOf(null, "/home/me"), requests) }
         compose.onNodeWithText("..").performClick()
