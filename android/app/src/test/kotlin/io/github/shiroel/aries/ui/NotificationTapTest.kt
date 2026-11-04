@@ -84,7 +84,7 @@ class NotificationTapTest {
     }
 
     @Test
-    fun foregroundRequestsAreQuietAndOnlyTheViewedHostAndAgentAreSuppressed() {
+    fun ordinaryForegroundRequestsAreQuietAndOnlyTheViewedHostAndAgentAreSuppressed() {
         show(twoHosts())
         val manager = context.getSystemService(NotificationManager::class.java)
         val question = PushQuestion("q1", "Which color?", listOf("Red", "Blue"))
@@ -94,7 +94,7 @@ class NotificationTapTest {
             PushContent.Status("t1", "claude", null, true,
                 AgentStatus.Blocked(BlockedReason.QUESTION, question.text), ++pushedAt, 1uL, question, null))) { true }
         fun call() = PushService.show(context, PushNotice("h1", "box",
-            PushContent.Call(callId, "t1", true, "Review", "Ready", CallUrgency.URGENT, listOf("Continue", "Stop"), 10uL))) { true }
+            PushContent.Call(callId, "t1", true, "Review", "Ready", CallUrgency.CHECK, listOf("Continue", "Stop"), 10uL))) { true }
         fun quietCard(host: String, tag: String): Notification {
             val notification = manager.activeNotifications.single { it.id == host.hashCode() && it.tag == tag }.notification
             val channel = manager.getNotificationChannel(notification.channelId)
@@ -131,7 +131,7 @@ class NotificationTapTest {
             // Local Call updates share the same gate as the FCM entry point.
             CallNotifications.post(context,
                 CallNotice("h1", "box", PushContent.Call(callId, "t1", true,
-                    "Review", "Ready", CallUrgency.URGENT, listOf("Continue", "Stop"), 10uL)),
+                    "Review", "Ready", CallUrgency.CHECK, listOf("Continue", "Stop"), 10uL)),
                 CallView.Choices)
         }
         assertTrue(manager.activeNotifications.none { it.id == "h1".hashCode() })
