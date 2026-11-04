@@ -69,6 +69,11 @@ async fn edits_pass_names_as_one_json_argument_without_a_shell() {
             "tab.close",
             serde_json::json!({"id":"tab1", "confirmed":true}),
         ),
+        (
+            LayoutEdit::ClosePane { id: "pane1".into() },
+            "pane.close",
+            serde_json::json!({"pane":"pane1", "confirmed":true}),
+        ),
     ] {
         let result = conn.edit_layout(edit).await.unwrap();
         let (command, args) = result.split_once('\n').unwrap();

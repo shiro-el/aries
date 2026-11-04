@@ -6,6 +6,11 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentStatus
@@ -22,6 +27,30 @@ import org.robolectric.RobolectricTestRunner
 @RunWith(RobolectricTestRunner::class)
 class ConsoleAgentsTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test
+    fun drawerPinBecomesUsableOnlyAfterItsStoredHostGetsALiveLink() {
+        val core = FakeCore()
+        val host = core.addHost("home", Endpoint.Ssh("host", 22u, "me"))
+        val terminal = TerminalInfo("t1", "agent", "", listOf("claude"), "/repo", "live", AgentStatus.Idle)
+        core.terminals = listOf(terminal)
+        core.storedStates[host.id] = io.github.shiroel.aries.core.LastKnownState(host.id, listOf(terminal), 1uL)
+        core.snapshotFailures += host.id
+        compose.setContent {
+            val scope = rememberCoroutineScope()
+            val model = remember { HostsModel(core, scope) }
+            androidx.compose.material3.MaterialTheme { AriesApp(model) }
+        }
+        compose.openConsoleDrawer()
+        compose.onNodeWithTag("agent-pin:${host.id}:t1").assertIsNotEnabled()
+        compose.onNodeWithTag("drawer-host:${host.id}").performClick()
+        compose.waitForIdle()
+        compose.openConsoleDrawer()
+        compose.onNode(hasTestTag("agent-pin:${host.id}:t1") and hasAnyAncestor(hasTestTag("console-drawer")))
+            .assertIsEnabled().performClick()
+        compose.waitForIdle()
+        assertEquals(listOf("${host.id} t1 pinned=true"), core.labelWrites)
+    }
 
     @Test
     fun pinnedWorkComesBeforeWaitingRowsAndKeepsMessageLocationAndPinActions() {

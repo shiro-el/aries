@@ -185,7 +185,8 @@ class AgentViewToggleTest {
             )
         }
         show(core)
-        compose.onNodeWithTag("console-inbox").performClick()
+        compose.openConsoleDrawer()
+        compose.onNodeWithTag("drawer-calls").performClick()
         compose.onNodeWithContentDescription(str(R.string.call_open_chat_label, "t1", "Review ready")).performClick()
         compose.waitForIdle()
         assertTrue(model.screen is Screen.Chat)
@@ -193,6 +194,6 @@ class AgentViewToggleTest {
 
         compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         assertEquals(AgentView.TERMINAL, core.savedView)
-        compose.onNodeWithText("me@10.0.0.2:22").assertExists()
+        compose.onNodeWithText("me@10.0.0.2").assertExists()
     }
 }

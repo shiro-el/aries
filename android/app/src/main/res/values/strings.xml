@@ -428,6 +428,7 @@
     <string name="key_install_write_failed">Signed in, but could not write ~/.ssh/authorized_keys on the Host: %1$s\n\nCheck that the user owns ~/.ssh and can write to it.</string>
 
     <string name="host_ssh_address">%1$s@%2$s:%3$d</string>
+    <string name="host_ssh_default_address">%1$s@%2$s</string>
     <string name="host_local_address">Local process</string>
     <!-- QR Host pairing -->
     <string name="host_pair_scan_button">Scan Host QR</string>
@@ -646,6 +647,8 @@
     <string name="chat_response_cache_read_tokens">Cache read %1$s</string>
     <string name="chat_response_cache_write_tokens">Cache write %1$s</string>
     <string name="chat_response_duration">%1$s ms</string>
+    <string name="chat_response_duration_seconds">%1$s s</string>
+    <string name="chat_response_details_button">Response details</string>
     <string name="chat_response_complete">Complete</string>
     <string name="chat_response_interrupted">Interrupted</string>
     <string name="chat_response_error">Error</string>
@@ -890,6 +893,11 @@
     <string name="herdr_diagnostics_status">Herdr Core status</string>
     <string name="herdr_diagnostics_failed">Herdr Core installation failed</string>
     <string name="herdr_diagnostics_checksum">Herdr Core checksum mismatch</string>
+    <string name="settings_advanced_button">Advanced</string>
+    <string name="settings_less_button">Show less</string>
+    <string name="herdr_install_ready">Ready</string>
+    <string name="herdr_install_connect_reason">This Host needs Herdr Core installed or updated before Aries can connect.</string>
+    <string name="herdr_install_consent_body">Aries downloads the pinned Herdr Core release from releases.herdr.dev and verifies its SHA-256 checksum before running it. A new installation writes ~/.local/bin/herdr-core and may add an hc link there. An existing installation is updated using its updater; Terminals stay running.</string>
     <string name="herdr_install_title">Herdr Core</string>
     <string name="herdr_install_missing">herdr-core is missing on this Host.</string>
     <string name="herdr_install_version">herdr-core %1$s</string>
@@ -908,6 +916,8 @@
     <string name="herdr_install_checksum">Checksum verification failed. Nothing was installed. Expected: %1$s; got: %2$s</string>
     <string name="herdr_install_failed">Herdr Core failed at %1$s: %2$s</string>
 
+    <string name="beacon_check_again">Check Beacon again</string>
+    <string name="beacon_ready">Running and connected</string>
     <string name="beacon_title">Beacon</string>
     <string name="beacon_needs_ssh">The Beacon can only be installed on an SSH Host.</string>
     <string name="beacon_status_unknown">Could not read the Beacon on this Host.</string>
@@ -923,7 +933,7 @@
     <string name="beacon_linger_title">Beacon stops when you log out</string>
     <string name="beacon_linger_body">The Beacon is installed, but the Host refused to keep your services running after logout (%1$s). Without that the Beacon, and its notifications, stop until you log in again.\n\nOn the Host, run: sudo loginctl enable-linger %2$s</string>
     <string name="beacon_remove_title">Remove Beacon from %1$s?</string>
-    <string name="beacon_failed_title">Beacon not installed</string>
+    <string name="beacon_failed_title">Could not complete Beacon action</string>
     <string name="beacon_checksum_body">The downloaded Beacon does not match the checksum built into this app, so nothing was installed.\n\nExpected: %1$s\nGot: %2$s</string>
     <string name="beacon_unsupported_host_body">The Beacon does not support %1$s/%2$s Hosts.</string>
     <string name="beacon_unavailable_body">This version of Aries has no Beacon for %1$s/%2$s yet.</string>
@@ -966,7 +976,7 @@
     <string name="jump_key_changed_body">Jump host %1$d (%2$s) presented a different key than before, so Aries did not connect. Someone may be intercepting the connection, or the jump host was reinstalled.\n\nTrusted: %3$s\nNow: %4$s</string>
     <string name="connect_jump_auth_rejected">Jump host %1$d (%2$s) did not accept the key chosen for it. Add that key\'s public key to ~/.ssh/authorized_keys on the jump host.</string>
     <string name="calls_title">Calls</string>
-    <string name="calls_feed_down">%1$s: Calls are not up to date (%2$s). Retrying.</string>
+    <string name="calls_feed_down">%1$s: Calls are not up to date. %2$s</string>
     <string name="call_meta">%1$s · %2$s · %3$s</string>
     <string name="call_choices">Choices: %1$s</string>
     <string name="call_urgency_record">Record</string>
@@ -988,6 +998,14 @@
     <string name="call_reply_no_call">This Call is no longer in the Host\'s history.</string>
     <string name="call_reply_no_choice">That Choice is no longer offered.</string>
     <string name="call_reply_no_beacon">The Beacon is not installed on this Host.</string>
+    <string name="push_on_summary">Push is on</string>
+    <string name="push_off_summary">Push is off</string>
+    <string name="push_testing">Sending test notification…</string>
+    <string name="push_test_timeout">The test took too long. Check the Host connection and try again.</string>
+    <string name="push_disable_title">Turn off push for %1$s?</string>
+    <string name="push_disable_body">Agent alerts and Calls from this Host will no longer notify this phone. You can turn push on again here.</string>
+    <string name="push_cancelled">Push setup was cancelled. Try again when you are ready.</string>
+    <string name="push_checking_beacon">Checking Beacon…</string>
     <string name="push_title">Push notifications</string>
     <string name="push_needs_beacon">Install the Beacon to turn on push notifications for this Host.</string>
     <string name="push_enable_button">Turn on push</string>
@@ -1005,7 +1023,7 @@
     <string name="push_step_done_description">Completed</string>
     <string name="push_step_failed_description">Failed</string>
     <string name="push_failed">Step \"%1$s\" failed: %2$s</string>
-    <string name="push_on_body">Push is on. Relay: %1$s</string>
+    <string name="push_on_body">Relay: %1$s</string>
     <string name="push_test_sent">Test notification sent.</string>
     <string name="push_relay_label">Relay URL</string>
     <string name="push_relay_placeholder" translatable="false">https://relay.example.com</string>
@@ -1150,7 +1168,20 @@
     <string name="call_inbox_expanded">Expanded</string>
     <string name="call_inbox_collapsed">Collapsed</string>
     <string name="call_inbox_past">Past Calls</string>
-    <string name="call_inbox_empty">No waiting Calls.</string>
+    <string name="call_feed_retrying">Retrying…</string>
+    <string name="call_feed_unlock">Unlock</string>
+    <string name="call_feed_retry">Retry</string>
+    <string name="call_feed_settings">Settings</string>
+    <string name="call_inbox_other">Other unanswered Calls</string>
+    <string name="call_inbox_helper">This Call is from a helper Agent. Open its Chat to follow up; Choices cannot be sent here.</string>
+    <string name="call_inbox_read_only">Read-only · Last checked %1$s.</string>
+    <string name="call_inbox_blocked">Blocked Agents: %1$d · View Agents</string>
+    <string name="call_reply_dismiss">Dismiss reply note</string>
+    <plurals name="call_inbox_syncing">
+        <item quantity="one">Checking %1$d Host…</item>
+        <item quantity="other">Checking %1$d Hosts…</item>
+    </plurals>
+    <string name="call_inbox_empty">No Calls to answer here.</string>
     <string name="call_inbox_caller">%1$s on %2$s</string>
     <string name="call_open_chat">Open in Chat</string>
     <string name="call_open_chat_label">Open %1$s in Chat for Call: %2$s</string>
@@ -1172,6 +1203,8 @@
     <string name="settings_beacon_missing">Beacon not installed · Host settings</string>
 
     <!-- Beacon aries-call-human skill diagnostics. -->
+    <string name="beacon_skill_summary_ready">Call skill: ready</string>
+    <string name="beacon_skill_summary_problems">Call skill: %1$d paths need attention</string>
     <string name="beacon_skill_title">aries-call-human skill</string>
     <string name="beacon_skill_unknown">This Beacon did not report aries-call-human skill status. The Aries Call connection cannot be verified.</string>
     <string name="beacon_skill_foreign">Another tool’s skill was kept. Agents using this path cannot send Calls to Aries.</string>
@@ -1223,6 +1256,7 @@
     <string name="layout_folder_label">Folder (optional)</string>
     <string name="layout_close_space_button">Close Space</string>
     <string name="layout_close_tab_button">Close Tab</string>
+    <string name="layout_close_pane_button">Close Pane</string>
     <string name="layout_target_gone">This item has already been closed.</string>
     <!-- Shared searchable language picker -->
     <string name="language_picker_auto">Auto-detect</string>
