@@ -276,7 +276,7 @@ class CallHistoryTest {
         compose.onNodeWithTag("call-inbox-panel").assertDoesNotExist()
         compose.onNodeWithTag("host-actions:h2").assertExists()
         compose.onNodeWithText(str(R.string.beacon_install_button)).performScrollTo().assertIsDisplayed().performClick()
-        compose.onNodeWithText(str(R.string.beacon_version, "0.1.0")).assertExists()
+        compose.onNodeWithText(str(R.string.beacon_ready)).assertExists()
         assertEquals(listOf("h2"), installs)
     }
 
@@ -560,7 +560,7 @@ class CallHistoryTest {
         compose.runOnIdle { ready.complete(Unit) }
         compose.onNodeWithTag("call-inbox-panel").assertExists()
         assertEquals(emptyList<Pair<String, String>>(), core.chatsOpened)
-        assertTrue(core.connectionsOf.getValue("h1").disconnected)
+        assertTrue("a cancelled open must leave no live connection", core.connectionsOf["h1"]?.disconnected != false)
     }
 
     @Test

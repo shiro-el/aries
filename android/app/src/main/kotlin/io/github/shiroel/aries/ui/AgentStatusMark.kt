@@ -29,12 +29,12 @@ import io.github.shiroel.aries.core.AgentStatus
 
 /** Shared Console mark: a fixed slot, one spoken status word, no chip. */
 @Composable
-fun AgentStatusMark(status: AgentStatus, modifier: Modifier = Modifier) {
+fun AgentStatusMark(status: AgentStatus, modifier: Modifier = Modifier, live: Boolean = true) {
     val label = stringResource(if (status is AgentStatus.Blocked) R.string.agent_status_blocked else agentStatusLabel(status))
-    val color = statusColor(status)
+    val color = if (live) statusColor(status) else androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
     // InfiniteTransition observes Compose's MotionDurationScale. At scale zero it
     // uses the target value, so both endpoints keep the cursor visible.
-    val cursor = if (status == AgentStatus.Working) {
+    val cursor = if (live && status == AgentStatus.Working) {
         val transition = rememberInfiniteTransition(label = label)
         val alpha by transition.animateFloat(
             initialValue = 1f, targetValue = 1f,

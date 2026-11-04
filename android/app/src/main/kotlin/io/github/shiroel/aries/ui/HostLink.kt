@@ -71,6 +71,7 @@ class HostLink(
     private val current = MutableStateFlow<HostConnection?>(first)
     /** Observable connection identity, including the reconnecting gap. */
     val connections = current.asStateFlow()
+    private val watchRetries = MutableStateFlow(0L)
     private val poke = Channel<Unit>(Channel.CONFLATED)
     private var reconnecting: Job? = null
     private var closed = false
@@ -145,6 +146,32 @@ class HostLink(
         }.first()
     }
 
+    /** Failed subscriptions wait on this line for Retry, or restart on a replacement line.
+     * Cancellation and Closed retain keep's lifecycle/reconnection behavior. */
+    suspend fun <T> keepWatching(
+        onFailure: (CoreException) -> Unit,
+        onStart: () -> Unit = {},
+        block: suspend (HostConnection, Boolean) -> T,
+    ): T = keep { conn, resumed ->
+        var again = resumed
+        while (true) {
+            onStart()
+            try {
+                return@keep block(conn, again)
+            } catch (e: CoreException.Closed) {
+                throw e
+            } catch (e: CoreException) {
+                // A retry for another failed stream must not arm a future failure here.
+                val failedAt = watchRetries.value
+                onFailure(e)
+                watchRetries.first { it != failedAt }
+                again = true
+            }
+        }
+        @Suppress("UNREACHABLE_CODE")
+        error("watch loop ended")
+    }
+
     /** [conn] stopped working: drop it and connect again. A connection already replaced is ignored. */
     fun lost(conn: HostConnection) {
         if (closed || current.value !== conn) return
@@ -160,7 +187,10 @@ class HostLink(
         if (state is LinkState.Down) {
             state = LinkState.Reconnecting
             reconnecting = scope.launch { reconnect() }
-        } else poke.trySend(Unit)
+        } else {
+            watchRetries.value++
+            poke.trySend(Unit)
+        }
     }
 
     fun settings(error: CoreException? = (state as? LinkState.Down)?.error) = onSettings(error)

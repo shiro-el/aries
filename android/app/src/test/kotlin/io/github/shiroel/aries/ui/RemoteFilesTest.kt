@@ -42,6 +42,36 @@ class RemoteFilesTest {
     private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
     private fun str(id: Int) = context.getString(id)
 
+    // Regression: the lock's saved-state holder does not retain lazy reading
+    // position inside a removed Dialog, even when its open file is retained.
+    @Test fun unlockingFilesKeepsTheReadingPositionInsideItsDialog() {
+        val navigation = RemoteFilesState(FileLocation("/repo/notes.txt"))
+        var visible by androidx.compose.runtime.mutableStateOf(true)
+        val conn = object : HostConnection(NoHandle) {
+            override suspend fun readFilePage(address: String, path: String, offset: ULong, limit: UInt): RemoteFilePage {
+                val last = minOf(600uL, offset + limit - 1u)
+                return RemoteFilePage((offset..last).joinToString("\n") { "line $it" }, offset, last, 600u)
+            }
+        }
+        compose.setContent {
+            val saved = androidx.compose.runtime.saveable.rememberSaveableStateHolder()
+            MaterialTheme {
+                if (visible) saved.SaveableStateProvider("unlocked") {
+                    androidx.compose.ui.window.Dialog(onDismissRequest = {}) {
+                        androidx.compose.material3.Surface {
+                            RemoteFilesScreen(conn, "t1", {}, initialLocation = navigation.initialLocation, navigation = navigation)
+                        }
+                    }
+                }
+            }
+        }
+        compose.onNodeWithTag("files-lines").performScrollToIndex(450)
+        compose.onNodeWithText("line 451").assertExists()
+        compose.runOnIdle { visible = false }
+        compose.runOnIdle { visible = true }
+        compose.onNodeWithText("line 451").assertExists()
+    }
+
     private fun screenshot(name: String) {
         System.getenv("ARIES_FILES_RENDER_DIR")?.let { directory ->
             java.io.File(directory).mkdirs()

@@ -147,12 +147,21 @@ class FakeCore : AriesCoreInterface {
     private val hostUpdates = mutableMapOf<String, Channel<List<TerminalInfo>>>()
     private val terminalWatchers = mutableMapOf<String, MutableSet<Channel<List<TerminalInfo>>>>()
 
+    var attachFailure: CoreException? = null
+    val watchFailures = mutableMapOf<String, CoreException>()
+    fun failTerminalWatch(hostId: String, error: CoreException) {
+        terminalWatchers[hostId]?.toList()?.forEach { it.close(error) }
+    }
+
     /** Each subscriber receives every update, like independent core event subscriptions. */
+    val firstTerminalListHolds = mutableMapOf<String, kotlinx.coroutines.Deferred<Unit>>()
+
     internal fun watchTerminals(hostId: String, gone: kotlinx.coroutines.Deferred<Unit>): TerminalWatch {
+        watchFailures[hostId]?.let { throw it }
         val channel = Channel<List<TerminalInfo>>(Channel.UNLIMITED)
         val watchers = terminalWatchers.getOrPut(hostId) { mutableSetOf() }
         watchers += channel
-        return FakeWatch(terminalsOf[hostId] ?: terminals, channel, gone) { watchers -= channel }
+        return FakeWatch(terminalsOf[hostId] ?: terminals, channel, gone, firstTerminalListHolds[hostId]) { watchers -= channel }
     }
 
     private fun updatesOf(hostId: String) = hostUpdates.getOrPut(hostId) { Channel(Channel.UNLIMITED) }
@@ -1051,8 +1060,10 @@ class FakeConnection(
     /** Terminals attached on this connection, in order. */
     val views = mutableListOf<FakeTerminalView>()
 
-    override suspend fun attachTerminal(address: String, options: AttachOptions): TerminalView =
-        FakeTerminalView(address, options).also { views += it }
+    override suspend fun attachTerminal(address: String, options: AttachOptions): TerminalView {
+        core?.attachFailure?.let { throw it }
+        return FakeTerminalView(address, options).also { views += it }
+    }
 
     override suspend fun disconnect() {
         disconnected = true
@@ -1069,12 +1080,14 @@ class FakeWatch(
     private val first: List<TerminalInfo>,
     private val updates: Channel<List<TerminalInfo>>,
     private val gone: kotlinx.coroutines.Deferred<Unit> = kotlinx.coroutines.CompletableDeferred(),
+    private val firstHold: kotlinx.coroutines.Deferred<Unit>? = null,
     private val onStop: () -> Unit = {},
 ) : TerminalWatch(NoHandle) {
     private var started = false
 
     override suspend fun next(): List<TerminalInfo> {
         if (!started) {
+            firstHold?.await()
             started = true
             return first
         }

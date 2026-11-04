@@ -2,10 +2,10 @@ package io.github.shiroel.aries.ui
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -27,17 +27,25 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.withContext
 
+/** Reading controls outlive the Dialog without retaining file bytes or RPC work. */
+internal class FileReadingState(initialLine: ULong) {
+    val scroll = LazyListState((initialLine.toInt() - 1).coerceAtLeast(0))
+    val horizontal = ScrollState(0)
+    var approved by mutableStateOf(false)
+    var query by mutableStateOf("")
+}
+
 /** A file is a virtual list of all its lines, with only viewport ranges retained on the phone. */
 @Composable
 internal fun ColumnScope.RemoteTextFile(
     connection: HostConnection?, address: String, path: String, initialLine: ULong,
-    wrap: Boolean, onSend: ((String) -> Unit)?, onRefresh: () -> Unit,
+    wrap: Boolean, onSend: ((String) -> Unit)?, onRefresh: () -> Unit, reading: FileReadingState,
 ) {
     var first by remember { mutableStateOf<RemoteFilePage?>(null) }
     var error by remember { mutableStateOf<Int?>(null) }
     var unavailable by remember { mutableStateOf<ULong?>(null) }
     var large by remember { mutableStateOf(false) }
-    var approved by remember { mutableStateOf(false) }
+    var approved by reading::approved
     var inspected by remember { mutableStateOf(false) }
     LaunchedEffect(connection, address, path, approved) {
         // Size probing is optional: file.read remains authoritative if machine.exec is unavailable.
@@ -77,7 +85,7 @@ internal fun ColumnScope.RemoteTextFile(
         first == null -> Text(stringResource(R.string.files_loading))
         else -> {
             unavailable?.let { Text(stringResource(R.string.files_line_unavailable, it.toLong())) }
-            PagedFileLines(first!!, path, wrap, onSend, onRefresh) { offset -> checkNotNull(connection).readFilePage(address, path, offset, 200u) }
+            PagedFileLines(first!!, path, wrap, onSend, onRefresh, reading) { offset -> checkNotNull(connection).readFilePage(address, path, offset, 200u) }
         }
     }
 }
@@ -112,7 +120,7 @@ private suspend fun textPage(page: RemoteFilePage, path: String, colors: ColorSc
 
 @Composable
 private fun ColumnScope.PagedFileLines(
-    first: RemoteFilePage, path: String, wrap: Boolean, onSend: ((String) -> Unit)?, onRefresh: () -> Unit,
+    first: RemoteFilePage, path: String, wrap: Boolean, onSend: ((String) -> Unit)?, onRefresh: () -> Unit, reading: FileReadingState,
     read: suspend (ULong) -> RemoteFilePage,
 ) {
     val colors = MaterialTheme.colorScheme
@@ -120,7 +128,7 @@ private fun ColumnScope.PagedFileLines(
     var failed by remember { mutableStateOf(false) }
     var notText by remember { mutableStateOf(false) }
     val count = first.lines.coerceAtMost(Int.MAX_VALUE.toULong()).toInt()
-    val state = rememberLazyListState((first.first.toInt() - 1).coerceAtLeast(0))
+    val state = reading.scroll
     val currentRead by rememberUpdatedState(read)
     var ready by remember { mutableStateOf(false) }
     val lexerStates = remember(first, colors) { mutableMapOf(1 to FileLexerState()) }
@@ -172,7 +180,7 @@ private fun ColumnScope.PagedFileLines(
             }
         }
     }
-    var query by remember { mutableStateOf("") }
+    var query by reading::query
     var step by remember { mutableIntStateOf(0) }
     var backwards by remember { mutableStateOf(false) }
     var match by remember { mutableStateOf<Int?>(null) }
@@ -254,7 +262,7 @@ private fun ColumnScope.PagedFileLines(
         Text(stringResource(R.string.files_failed), Modifier.weight(1f), color = MaterialTheme.colorScheme.error)
         TextButton(onClick = onRefresh) { Text(stringResource(R.string.files_refresh_button)) }
     }
-    val horizontal = rememberScrollState()
+    val horizontal = reading.horizontal
     LazyColumn(Modifier.weight(1f).testTag("files-lines")
         .then(if (wrap) Modifier.fillMaxWidth() else Modifier.horizontalScroll(horizontal)), state = state) {
         items(count, key = { it }) { index ->
