@@ -141,4 +141,21 @@ class SettingsScreenTest {
         compose.runOnIdle { assertEquals("#00AAFF", settings.accentHex) }
     }
 
+    // D104: a custom sheet must outlive its lazy row leaving the viewport during rotation.
+    @Test fun customAccentSurvivesRecreationWithItsOriginatingRowOffscreen() {
+        val restore = androidx.compose.ui.test.junit4.StateRestorationTester(compose)
+        val settings = ThemeSettings(context.getSharedPreferences("accent-restoration", Context.MODE_PRIVATE))
+        restore.setContent {
+            val scope = rememberCoroutineScope()
+            val model = remember { HostsModel(FakeCore(), scope) }
+            AriesTheme(settings) { SettingsScreen(model, settings, {}) }
+        }
+        compose.onNodeWithTag("accent-custom").performClick()
+        compose.onNodeWithTag("accent-hex").performTextReplacement("#12zz00")
+        compose.onNodeWithTag("settings-list").performScrollToKey("quiet-hours")
+        restore.emulateSavedInstanceStateRestore()
+        compose.onNodeWithTag("accent-hex").assertExists()
+        compose.onNodeWithText(str(R.string.accent_hex_invalid)).assertExists()
+    }
+
 }

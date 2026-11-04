@@ -97,6 +97,7 @@ fun SettingsScreen(
         }
         return
     }
+    var customAccent by rememberSaveable { mutableStateOf(false) }
     val readAloud = io.github.shiroel.aries.speech.rememberReadAloud(model)
     Column(Modifier.fillMaxSize()) {
         if (showHeader) {
@@ -123,7 +124,7 @@ fun SettingsScreen(
                     )
                 }
             }
-            item { SettingsField(R.string.accent_title) { AccentControls(settings) } }
+            item { SettingsField(R.string.accent_title) { AccentControls(settings, onCustom = { customAccent = true }) } }
             item { SettingsHeading(R.string.settings_interaction_section) }
             item {
                 val context = androidx.compose.ui.platform.LocalContext.current
@@ -192,6 +193,7 @@ fun SettingsScreen(
             }
         }
     }
+    if (customAccent) CustomAccentSheet(settings, onDismiss = { customAccent = false })
 }
 
 /** Keep the three names readable with the same enlarged-text threshold as Agent rows. */
@@ -272,13 +274,12 @@ private fun SettingsHeading(title: Int) {
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-private fun AccentControls(settings: ThemeSettings) {
-    var custom by rememberSaveable { mutableStateOf(false) }
+private fun AccentControls(settings: ThemeSettings, onCustom: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()).selectableGroup()) {
             if (AccentPresets.none { it.hex.equals(settings.accentHex, ignoreCase = true) }) {
                 val label = stringResource(R.string.accent_custom)
-                Box(Modifier.size(48.dp).selectable(true, role = Role.RadioButton, onClick = { custom = true })
+                Box(Modifier.size(48.dp).selectable(true, role = Role.RadioButton, onClick = onCustom)
                     .semantics { contentDescription = label }, contentAlignment = Alignment.Center) {
                     Box(Modifier.size(32.dp).border(2.dp, MaterialTheme.colorScheme.primary).padding(4.dp)
                         .background(Color(settings.accentArgb)))
@@ -295,20 +296,26 @@ private fun AccentControls(settings: ThemeSettings) {
                 }
             }
         }
-        IconButton(onClick = { custom = true }, modifier = Modifier.size(48.dp).testTag("accent-custom")) {
+        IconButton(onClick = onCustom, modifier = Modifier.size(48.dp).testTag("accent-custom")) {
             Icon(painterResource(R.drawable.ic_square_pen), stringResource(R.string.accent_custom), Modifier.size(20.dp))
         }
     }
-    if (custom) ConsoleSheet(onDismissRequest = { custom = false }) {
+}
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun CustomAccentSheet(settings: ThemeSettings, onDismiss: () -> Unit) {
+    // Keep the draft in the screen's saved-state registry, outside the sheet Dialog.
+    var hex by rememberSaveable(settings.accentHex) { mutableStateOf(settings.accentHex) }
+    var invalid by rememberSaveable(settings.accentHex) { mutableStateOf(false) }
+    ConsoleSheet(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(LocalLayoutTokens.current.contentPadding),
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.accent_custom), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                TextButton(onClick = { custom = false }) { Text(stringResource(R.string.ok_button)) }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.ok_button)) }
             }
             // An invalid draft stays visible while the last valid colour remains applied.
-            var hex by rememberSaveable(settings.accentHex) { mutableStateOf(settings.accentHex) }
-            var invalid by rememberSaveable(settings.accentHex) { mutableStateOf(false) }
             ConsoleField(value = hex, onValueChange = { hex = it; invalid = !settings.setAccent(it) },
                 modifier = Modifier.fillMaxWidth().testTag("accent-hex"),
                 label = { Text(stringResource(R.string.accent_hex)) }, singleLine = true, isError = invalid,

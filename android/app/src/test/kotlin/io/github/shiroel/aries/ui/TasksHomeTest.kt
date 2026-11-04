@@ -31,6 +31,7 @@ class TasksHomeTest {
     }
     @get:Rule val compose = createComposeRule()
     private val context = ApplicationProvider.getApplicationContext<Context>()
+    private val generation = androidx.compose.runtime.mutableIntStateOf(0)
     private lateinit var model: HostsModel
 
     private val callTime = System.currentTimeMillis().toULong() - 60_000uL
@@ -48,7 +49,7 @@ class TasksHomeTest {
         compose.setContent {
             val scope = rememberCoroutineScope()
             model = remember { HostsModel(core, scope).apply { start() } }
-            AriesApp(model, settings)
+            androidx.compose.runtime.key(generation.intValue) { AriesApp(model, settings) }
         }
         compose.waitForIdle()
     }
@@ -383,9 +384,32 @@ class TasksHomeTest {
         compose.onNode(hasText("First request") and hasAnyAncestor(hasTestTag("tasks-needs-sheet"))).assertExists()
         compose.runOnIdle { core.push(core.terminals.map { if (it.address == "t1") it.copy(agentStatus = AgentStatus.Working) else it }) }
         compose.onNode(hasText("Second request") and hasAnyAncestor(hasTestTag("tasks-needs-sheet"))).assertExists()
+        // D101: rebuilding the UI must keep the captured order and already resolved cursor.
+        compose.runOnIdle { generation.intValue++ }
+        compose.onNode(hasText("Second request") and hasAnyAncestor(hasTestTag("tasks-needs-sheet"))).assertExists()
         compose.runOnIdle { core.push(core.terminals.map { it.copy(agentStatus = AgentStatus.Working) }) }
         compose.onNodeWithTag("tasks-needs-sheet").assertDoesNotExist()
         compose.runOnIdle { assertEquals(emptyList<Triple<String, String, List<List<UInt>>>>(), core.answers) }
+    }
+
+    // D101: reconstructing from a changed feed would reset skipped items or reorder this visit.
+    @Test fun rotationKeepsCapturedNeedsOrderAndSkippedPrefixWhenTheFeedChanges() {
+        val core = FakeCore().apply {
+            addHost("home", Endpoint.Ssh("home.test", 22u, "me"))
+            terminals = (1..3).map { TerminalInfo("t$it", "Request $it", "", listOf("claude"), "/repo", "live",
+                AgentStatus.Error("Review failure"), statusMs = (400 - it * 100).toULong()) }
+        }
+        show(core)
+        compose.onNodeWithTag("tasks-filter-needs").performClick()
+        compose.onNodeWithTag("tasks-needs-next").performClick()
+        compose.onNode(hasText("Request 2") and hasAnyAncestor(hasTestTag("tasks-needs-sheet"))).assertExists()
+        compose.runOnIdle {
+            core.sendCall(call("new urgent call", "t1", CallUrgency.URGENT))
+            generation.intValue++
+        }
+        compose.onNode(hasText("Request 2") and hasAnyAncestor(hasTestTag("tasks-needs-sheet"))).assertExists()
+        compose.onNodeWithTag("tasks-needs-next").performClick()
+        compose.onNode(hasText("Request 3") and hasAnyAncestor(hasTestTag("tasks-needs-sheet"))).assertExists()
     }
 
 }

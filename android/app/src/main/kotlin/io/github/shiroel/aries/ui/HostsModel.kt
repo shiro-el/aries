@@ -242,6 +242,8 @@ class HostsModel(
 
     // Settings overlays the route owner, so appearance changes never retire a connection or draft.
     private var settingsReturnTo by mutableStateOf<Screen?>(null)
+    private var pendingSettingsState: SettingsNavigationState? = null
+    private var settingsColdReturn by mutableStateOf<SettingsReturnState?>(null)
     private val ownedScreen: Screen get() = settingsReturnTo ?: screen
 
     /** Settings subpages share the drawer destination and own all configuration. */
@@ -584,6 +586,13 @@ class HostsModel(
         private set
 
     private fun userNavigation() {
+        // Recreation reuses these owners; an explicit destination change ends their overlays.
+        conversations.values.forEach { chat ->
+            chat.dialogs.dismiss()
+            chat.waitingSheetOpen = false
+            chat.waitingSheetTarget = null
+        }
+        agentHome?.board?.needsQueue = null
         overlayNavigationVersion++
         navigationIntent()
     }
@@ -609,11 +618,14 @@ class HostsModel(
         }
         started = true
         val saved = locationStore?.load()
+        val settings = pendingSettingsState
+        pendingSettingsState = null
         if (target != null) {
             startupHostId = target.hostId
             openNotificationTarget(target)
         } else if (!explicitSurfaceEntry && screen == Screen.Hosts) {
-            if (layout == AppLayout.THREAD) restoreThreadHome()
+            if (settings != null) applySettingsState(settings)
+            else if (layout == AppLayout.THREAD) restoreThreadHome()
             else hosts.find { it.id == saved?.hostId }?.let {
                 startupHostId = it.id
                 connect(it, saved)
@@ -629,7 +641,7 @@ class HostsModel(
         }
     }
 
-    private fun lastLocation(): LastLocation? = when (val s = ownedScreen) {
+    private fun lastLocation(): LastLocation? = settingsColdReturn?.location ?: when (val s = ownedScreen) {
         Screen.Hosts, Screen.Settings -> LastLocation()
         is Screen.Agents -> LastLocation()
         is Screen.Browse -> LastLocation(s.browser.host.id, s.browser.openSpaceId, s.browser.tab?.id)
@@ -871,7 +883,8 @@ class HostsModel(
 
     fun connect(host: Host) = connect(host, null)
 
-    private fun connect(host: Host, restore: LastLocation?, savedLaunchId: String? = null, confirmSavedLaunch: Boolean = true) {
+    private fun connect(host: Host, restore: LastLocation?, savedLaunchId: String? = null, confirmSavedLaunch: Boolean = true,
+        restoreTerminalParent: String? = null) {
         closeAddingHost()
         val quickOpen = pendingQuickOpen
         val taskHostId = newTaskHostId
@@ -909,7 +922,7 @@ class HostsModel(
                 val next = Screen.Browse(browser)
                 if (settingsReturnTo === connecting) settingsReturnTo = next else screen = next
                 loadHostSettings(host)
-                status = watchBrowse(link, browser, restore.takeIf { restoring }, savedLaunchId, confirmSavedLaunch)
+                status = watchBrowse(link, browser, restore.takeIf { restoring }, savedLaunchId, confirmSavedLaunch, restoreTerminalParent)
             }
         }
     }
@@ -1437,7 +1450,8 @@ class HostsModel(
     /** The open Host's structure and live Agent status, on each line [HostLink] brings; cancelled on [back]. */
     private var status: Job? = null
 
-    private fun watchBrowse(link: HostLink, browser: HostBrowser, restore: LastLocation? = null, savedLaunchId: String? = null, confirmSavedLaunch: Boolean = true): Job = scope.launch {
+    private fun watchBrowse(link: HostLink, browser: HostBrowser, restore: LastLocation? = null, savedLaunchId: String? = null, confirmSavedLaunch: Boolean = true,
+        restoreTerminalParent: String? = null): Job = scope.launch {
         var pendingLaunch = savedLaunchId
         var pending = restore
         val restoreVersion = navigationVersion
@@ -1468,8 +1482,12 @@ class HostsModel(
             }
             if (terminal != null) {
                 val origin = Screen.Browse(browser)
-                if (saved.view == AgentView.CHAT && terminal.agentStatus != null) chat(link, terminal, origin)
-                else observe(link, terminal, origin)
+                if ((saved.view == AgentView.CHAT || restoreTerminalParent != null) && terminal.agentStatus != null) {
+                    chat(link, terminal, origin)
+                    if (saved.view == AgentView.TERMINAL) {
+                        if (restoreTerminalParent == "chat") openTerminal(terminal) else switchView(AgentView.TERMINAL)
+                    }
+                } else observe(link, terminal, origin)
             }
         }
         try {
@@ -2009,7 +2027,7 @@ class HostsModel(
 
     /** [focus]: the Agent whose Terminal to open once its Host's list arrives. */
     private fun openAgents(focus: AgentKey?, openChat: Boolean = false, selectedHosts: List<Host> = hosts,
-        restoreAgent: Boolean = false) {
+        restoreAgent: Boolean = false, focusView: AgentView? = null, focusTerminalParent: String? = null) {
         val board = AgentBoard(selectedHosts)
         lastKnownStates.forEach(board::seed)
         val agents = Screen.Agents(board)
@@ -2047,6 +2065,16 @@ class HostsModel(
                                             if (restoreAgent) {
                                                 list.find { it.address == key.address && it.state == "live" && it.agentStatus != null }?.let {
                                                     openAgent(board, AgentEntry(host, it), openChat = true)
+                                                }
+                                            } else if (focusView != null) {
+                                                val terminal = list.find { it.address == key.address && it.state == "live" }
+                                                if (terminal != null) {
+                                                    if (terminal.agentStatus != null && (focusView == AgentView.CHAT || focusTerminalParent != null)) {
+                                                        chat(link, terminal, agents)
+                                                        if (focusView == AgentView.TERMINAL) {
+                                                            if (focusTerminalParent == "chat") openTerminal(terminal) else switchView(AgentView.TERMINAL)
+                                                        }
+                                                    } else observe(link, terminal, agents)
                                                 }
                                             } else focusOn(agents, host, key, list, openChat)
                                         }
@@ -2299,6 +2327,65 @@ class HostsModel(
         }
     }
 
+    /** Activity state is deliberately limited to IDs and destination flags. */
+    fun saveSettingsState(): android.os.Bundle? {
+        pendingSettingsState?.let { return it.bundle() }
+        if (screen != Screen.Settings && screen !is Screen.JumpHosts) return null
+        fun agentBase(route: Screen): Screen.Agents? = when (route) {
+            is Screen.Agents -> route
+            is Screen.Chat -> agentBase(route.returnTo)
+            is Screen.Terminal -> agentBase(route.returnTo)
+            else -> null
+        }
+        val origin = settingsColdReturn ?: SettingsReturnState(
+            lastLocation() ?: LastLocation(hostId = (ownedScreen as? Screen.Connecting)?.host?.id), agentBase(ownedScreen)?.board?.hosts?.map { it.id },
+            (ownedScreen as? Screen.Terminal)?.let {
+                if (it.returnTo is Screen.Chat) "chat" else if (it.fromChatToggle) "toggle" else null
+            },
+        )
+        return SettingsNavigationState(when {
+            screen is Screen.JumpHosts -> "jumps"
+            settingsHost != null -> "host"
+            settingsKeys -> if (recoveringKeys) "recovery" else "keys"
+            settingsDiagnostics -> "diagnostics"
+            else -> "settings"
+        }, (screen as? Screen.JumpHosts)?.host?.id ?: settingsHost?.id, origin).bundle()
+    }
+
+    /** Queue until start(), behind App Lock and the resumed biometric authorizer. */
+    fun restoreSettingsState(state: android.os.Bundle?) {
+        if (!started) pendingSettingsState = SettingsNavigationState.read(state)
+    }
+
+    private fun applySettingsState(saved: SettingsNavigationState) {
+        settingsColdReturn = saved.origin
+        screen = Screen.Settings
+        settingsKeys = saved.page == "keys" || saved.page == "recovery"
+        recoveringKeys = saved.page == "recovery"
+        settingsDiagnostics = saved.page == "diagnostics"
+        settingsHost = hosts.find { it.id == saved.hostId }
+        settingsHost?.let { host ->
+            loadHostSettings(host)
+            if (saved.page == "jumps") editJumps(host)
+        }
+    }
+
+    private fun restoreSettingsReturn(saved: SettingsReturnState) {
+        val location = saved.location
+        if (saved.agentHosts != null) {
+            back()
+            openAgents(focus = location.hostId?.let { host -> location.terminal?.let { AgentKey(host, it) } },
+                selectedHosts = hosts.filter { it.id in saved.agentHosts },
+                focusView = location.view, focusTerminalParent = saved.terminalParent)
+        } else {
+            val host = hosts.find { it.id == location.hostId }
+            if (host == null) back() else {
+                startupHostId = host.id
+                connect(host, location, restoreTerminalParent = saved.terminalParent)
+            }
+        }
+    }
+
     /** Keep the route and its live owners while changing app or Host settings. */
     fun openSettings() {
         userNavigation()
@@ -2344,7 +2431,11 @@ class HostsModel(
         } else {
             val origin = settingsReturnTo
             settingsReturnTo = null
-            if (origin != null) screen = origin else back()
+            val cold = settingsColdReturn
+            settingsColdReturn = null
+            if (origin != null) screen = origin
+            else if (cold != null) restoreSettingsReturn(cold)
+            else back()
         }
     }
 
@@ -2421,6 +2512,8 @@ class HostsModel(
     }
 
     private fun restoreSettingsBase() {
+        if (settingsColdReturn != null) screen = Screen.Hosts
+        settingsColdReturn = null
         settingsReturnTo?.let { screen = it }
         settingsReturnTo = null
     }
@@ -2558,6 +2651,8 @@ class HostsModel(
         // Leaving Settings for a different destination releases its retained route normally.
         settingsReturnTo?.let { screen = it }
         settingsReturnTo = null
+        settingsColdReturn = null
+        pendingSettingsState = null
         val interruptedRestore = restoring
         userNavigation()
         // Cancelling a cold reconnect does not replace the last successfully viewed location.

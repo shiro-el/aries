@@ -54,10 +54,8 @@ class MainActivity : AppCompatActivity() {
         val push = sessions.push
         push.bind(this)
         model = sessions.model
-        // After process death only IDs/settings are restored; recreation reuses the live route.
-        if (savedInstanceState?.getBoolean("settings-open") == true && model?.screen == io.github.shiroel.aries.ui.Screen.Hosts) {
-            model?.openSettings()
-        }
+        // A retained model already owns its route; a fresh model queues only IDs until unlock.
+        model?.restoreSettingsState(savedInstanceState?.getBundle("settings-route"))
         setContent {
             val model = sessions.model
             LaunchedEffect(model) { resumeModel() }
@@ -150,8 +148,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
-        // A language change recreates the activity; keep its Settings destination open.
-        outState.putBoolean("settings-open", model?.screen == io.github.shiroel.aries.ui.Screen.Settings)
+        outState.putBundle("settings-route", model?.saveSettingsState())
         outState.putParcelable("pending-push-target", pushIntent)
         // Preserve the received credential (or its absence); recreation must never sign an external entry.
         outState.putParcelable("pending-launch-target", savedLaunchIntent)

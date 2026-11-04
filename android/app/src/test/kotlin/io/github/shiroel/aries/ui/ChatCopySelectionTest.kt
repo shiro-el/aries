@@ -61,6 +61,7 @@ import org.robolectric.annotation.Implements
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @OptIn(ExperimentalFoundationApi::class)
 class ChatCopySelectionTest {
+    private val generation = androidx.compose.runtime.mutableIntStateOf(0)
     @get:Rule val compose = createComposeRule()
     private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
     private fun str(id: Int, vararg args: Any) = context.getString(id, *args)
@@ -83,7 +84,7 @@ class ChatCopySelectionTest {
             val scope = rememberCoroutineScope()
             val model = remember { HostsModel(core, scope) }
             CompositionLocalProvider(LocalTextContextMenuToolbarProvider provides toolbar) {
-                MaterialTheme { AriesApp(model) }
+                androidx.compose.runtime.key(generation.intValue) { MaterialTheme { AriesApp(model) } }
             }
         }
         compose.onNodeWithText("home").performClick()
@@ -266,6 +267,9 @@ class ChatCopySelectionTest {
         compose.onNodeWithText(str(R.string.chat_select_text)).performClick()
         core.pushChat(ChatSnapshot(listOf(ChatEntry("replacement", null, ChatEntryBody.Agent("New transcript"))), ChatStatus.LIVE, "new"))
         compose.waitForIdle()
+        compose.onNode(hasText("Keep this selection") and hasAnyAncestor(isDialog()), useUnmergedTree = true).assertExists()
+        // D101: the frozen selection also survives Activity UI recreation after row replacement.
+        compose.runOnIdle { generation.intValue++ }
         compose.onNode(hasText("Keep this selection") and hasAnyAncestor(isDialog()), useUnmergedTree = true).assertExists()
         val shot = java.io.File("/tmp/aries-mvp-run/lanes/231-shots/selection.png")
         shot.parentFile?.mkdirs()
