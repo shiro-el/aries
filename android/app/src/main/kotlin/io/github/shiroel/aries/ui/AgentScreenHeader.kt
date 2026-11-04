@@ -75,7 +75,7 @@ internal fun AgentScreenHeader(
                 AgentElapsedTime(terminal.statusMs, R.string.console_agent_missing_value, R.string.console_agent_unknown_age)
             }
         }
-        onView?.let { AgentViewToggle(current, it) }
+        onView?.let { AgentViewSwitch(current, it) }
         Box {
             val label = stringResource(R.string.agent_actions_label)
             IconButton(onClick = { menu = true }, modifier = Modifier.testTag("agent-actions").semantics { contentDescription = label }) {

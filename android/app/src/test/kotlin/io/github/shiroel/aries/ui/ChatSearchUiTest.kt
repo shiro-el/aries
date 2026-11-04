@@ -42,7 +42,7 @@ class ChatSearchUiTest {
         }
         compose.onNodeWithText("home").performClick()
         compose.onNodeWithText("claude").performClick()
-        compose.onNodeWithText(str(R.string.agent_view_chat)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.agent_switch_chat_label)).performClick()
     }
 
     private fun search(query: String, count: Int = 3) {
