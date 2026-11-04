@@ -85,7 +85,11 @@ class AgentCatalogTest {
         open()
         compose.runOnIdle { chat.input = TextFieldValue("please OLD next", TextRange(7, 10)) }
         compose.onNodeWithContentDescription(str(R.string.chat_skills_button)).performScrollTo().performClick()
-        compose.onNodeWithContentDescription(str(R.string.chat_skills_search)).performTextInput("regressions")
+        val search = compose.onNodeWithContentDescription(str(R.string.chat_skills_search))
+        search.performTextInput("/home/me")
+        compose.onNodeWithText("/testing").assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.chat_catalog_empty)).assertExists()
+        search.performTextReplacement("regressions")
         compose.onNodeWithText("/testing").performClick()
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("please /testing next")
         compose.runOnIdle { assertEquals(16, chat.input.selection.start) }

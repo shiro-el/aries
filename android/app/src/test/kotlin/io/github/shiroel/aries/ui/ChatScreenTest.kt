@@ -3,6 +3,8 @@ package io.github.shiroel.aries.ui
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.onNodeWithTag
@@ -84,7 +86,7 @@ class ChatScreenTest {
         val core = FakeCore()
         openChat(core)
         assertEquals(listOf("h1" to "t1"), core.chatsOpened)
-        compose.onNodeWithText(str(R.string.console_agent_host_prefix, "home") + "claude").assertExists()
+        compose.onNode(hasTestTag("console-top-bar") and hasAnyDescendant(hasText("claude"))).assertExists()
         compose.onNodeWithText(str(R.string.chat_status_connecting)).assertExists()
 
         core.pushChat(
@@ -364,7 +366,7 @@ class ChatScreenTest {
         compose.onNodeWithContentDescription(str(R.string.agent_switch_chat_label)).performClick()
         compose.waitForIdle()
         assertEquals(listOf("h2" to "t1"), core.chatsOpened)
-        compose.onNodeWithText(str(R.string.console_agent_host_prefix, "server") + "claude").assertExists()
+        compose.onNode(hasTestTag("console-top-bar") and hasAnyDescendant(hasText("claude"))).assertExists()
 
         compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         compose.waitForIdle()
@@ -469,7 +471,7 @@ class ChatScreenTest {
         compose.waitForIdle()
         assertTrue(core.chatStopped)
         compose.onNodeWithText("claude").assertExists()
-        compose.onNodeWithText(str(R.string.console_agent_host_prefix, "home") + "claude").assertDoesNotExist()
+        compose.onNode(hasTestTag("console-top-bar") and hasAnyDescendant(hasText("claude"))).assertDoesNotExist()
     }
 
     private companion object {

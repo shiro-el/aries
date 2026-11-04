@@ -37,6 +37,10 @@
     <string name="preview_capture_attach_failed">캡처를 추가하지 못했습니다. Agent 연결을 확인한 후 다시 시도하세요.</string>
     <string name="preview_capture_context">미리보기: %1$s\n보기 모드: %2$s</string>
 
+    <!-- Agent header details (203) -->
+    <string name="agent_details_host">호스트 · %1$s</string>
+    <string name="agent_details_folder">폴더 · %1$s</string>
+
     <!-- Host creation and context sheets -->
     <string name="host_create_title">새로 만들기</string>
     <string name="host_create_task_detail">Agent와 첫 프롬프트를 골라 작업 시작</string>
@@ -582,6 +586,7 @@
     <string name="chat_tool_running">실행 중</string>
     <string name="chat_tool_failed">실패</string>
     <!-- Agent usage and context (193) -->
+    <string name="usage_menu_label">%1$s · %2$s</string>
     <string name="usage_title">사용량 및 한도</string>
     <string name="usage_source">이 Agent에 기록된 마지막 수치입니다. 다른 Agent와 계정 한도를 공유할 수 있습니다. 이전 수치일 수 있으며, 시각은 기기의 시간대로 표시됩니다.</string>
     <string name="usage_context_title">마지막 컨텍스트 기록</string>
