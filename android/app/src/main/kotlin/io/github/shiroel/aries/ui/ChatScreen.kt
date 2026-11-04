@@ -144,6 +144,12 @@ class ChatModel(
     /** Typed failures survive initial watch creation and later SSH reconnects. */
     var connectionError by mutableStateOf<CoreException?>(null)
         private set
+    /** Until there is content, one loading body owns the status and retry action. */
+    internal val firstLoading: Boolean get() = snapshot?.status.let {
+        it == null || it in setOf(ChatStatus.CONNECTING, ChatStatus.RECONNECTING, ChatStatus.NO_CORE)
+    } && snapshot?.entries.isNullOrEmpty() && queuedMessages.isEmpty()
+    internal val showInitialLoading: Boolean get() = firstLoading &&
+        connectionError?.retryableConnection() != false && link?.state !is LinkState.Down
     /** Tool entry IDs and response:<entry ID> disclosures the user expanded. */
     var expanded by mutableStateOf<Set<String>>(emptySet())
         private set
@@ -292,7 +298,7 @@ class ChatModel(
     var interruptNotice by mutableStateOf<Message?>(null)
         private set
     val canInterrupt: Boolean get() = terminalAvailable && terminal.agentStatus == AgentStatus.Working &&
-        link?.connection != null && !interrupting && sending == null
+        link?.state == LinkState.Up && link?.connection != null && !interrupting && sending == null
 
     /** One confirmed attempt, with no reconnect queue or automatic retry. */
     fun interrupt() {
@@ -1046,6 +1052,9 @@ fun ChatScreen(
                     thread != null && it.call.pushesByDefault && it.call.answer == null))
         }.sortedBy { it.call.atMs }
     }.orEmpty()
+    var closedThreadCalls by remember(chat) { mutableStateOf(emptySet<String>()) }
+    val activeThreadCall = if (thread != null) agentCalls.sortedByDescending { it.call.urgency.ordinal }
+        .firstOrNull { it.key !in closedThreadCalls } else null
     val scroll = rememberChatScrollState(chat, entries, agentCalls.map { "call:${it.key}" } + chat.queuedMessages.map { "queued:${it.id}" } +
         if (chat.showWorking) listOf("working") else emptyList(), markdown, followEnabled = !searchOpen && !dialogs.isOpen)
     val toggleTool = remember(chat, scroll) {
@@ -1082,7 +1091,10 @@ fun ChatScreen(
             },
             input = { compact ->
                 if (preview.selected == null) {
-                    if (thread != null) ThreadChatInput(thread, chat, agentCalls, calls, answerQuestion, compact)
+                    if (thread != null) ThreadChatInput(thread, chat, activeThreadCall, calls, answerQuestion, compact, onDismissCall = { call ->
+                        closedThreadCalls = closedThreadCalls + call.key
+                        if (calls?.banner?.key == call.key) calls.dismissBanner()
+                    })
                     else if (chat.link != null) {
                         if (!compact) ChatCatalogControls(chat)
                         MessageInput(chat, compact)
@@ -1109,7 +1121,7 @@ fun ChatScreen(
                 val chatLink = chat.link
                 val reconnecting = snapshot?.status == ChatStatus.RECONNECTING || snapshot?.status == ChatStatus.NO_CORE
                 val loading = snapshot == null || snapshot.status in setOf(ChatStatus.CONNECTING, ChatStatus.RECONNECTING, ChatStatus.NO_CORE)
-                val firstLoading = loading && entries.isEmpty() && chat.queuedMessages.isEmpty()
+                val firstLoading = chat.firstLoading
                 val chatProblem = chat.connectionError ?: if (snapshot?.status == ChatStatus.NO_BEACON) CoreException.BeaconNotInstalled() else null
                 if (thread == null) chatLink?.let { link ->
                     val state = when {
@@ -1167,8 +1179,9 @@ fun ChatScreen(
                         }
                         queuedChatMessages(chat)
                     }
-                    if (firstLoading && chatProblem?.retryableConnection() != false && chatLink?.state !is LinkState.Down) {
-                        ScreenLoading(stringResource(R.string.chat_loading), onRetry = {
+                    if (chat.showInitialLoading) {
+                        val loadingText = if (thread != null) statusText(snapshot?.status ?: ChatStatus.LIVE) else null
+                        ScreenLoading(loadingText ?: stringResource(R.string.chat_loading), onRetry = {
                             chat.link?.retryNow()
                             chat.retryConnection()
                         })
@@ -1191,11 +1204,13 @@ fun ChatScreen(
                 (chat.terminal.agentStatus as? AgentStatus.Blocked)?.let {
                     // A question the Chat shows open is answered with its own buttons;
                     // the Terminal notice is for what the Chat cannot answer.
-                    val answerable = entries.any { e ->
+                    val answerableQuestion = (thread == null || activeThreadCall == null) && entries.any { e ->
                         e.body is ChatEntryBody.Question && chat.questionMode(e.id) == ChatModel.QuestionMode.Live &&
                             chat.answers[e.id] != AnswerState.Unconfirmed
-                    }
-                    if (!answerable || chat.refused) BlockedNotice(it, refused = chat.refused, onOpenTerminal)
+                    } && (thread != null || !chat.refused)
+                    val answerableCall = calls != null && if (thread != null) activeThreadCall?.answerable == true
+                        else agentCalls.any { call -> call.answerable }
+                    if (!answerableQuestion && !answerableCall) BlockedNotice(it, refused = chat.refused, onOpenTerminal)
                 }
                 chat.sendError?.let {
                     AnnouncedText(stringResource(R.string.chat_send_failed, messageText(it)), color = MaterialTheme.colorScheme.error)
@@ -1207,7 +1222,10 @@ fun ChatScreen(
                 chat.attachmentError?.let { AnnouncedText(stringResource(it.res, *it.args.toTypedArray()), color = MaterialTheme.colorScheme.error) }
                 if (chat.inputUnavailable) {
                     ConsoleChatCallSurface {
-                        Text(stringResource(if (chat.terminalAvailable) R.string.chat_input_agent_ended else R.string.chat_status_no_terminal))
+                        if (thread == null || snapshot?.status != ChatStatus.NO_TERMINAL ||
+                            chat.link?.state != LinkState.Up || chat.connectionError != null) {
+                            Text(stringResource(if (chat.terminalAvailable) R.string.chat_input_agent_ended else R.string.chat_status_no_terminal))
+                        }
                         ConsoleButton(onClick = if (chat.terminalAvailable) onOpenTerminal else onBack) {
                             Text(stringResource(if (chat.terminalAvailable) R.string.terminal_open_button else R.string.back_button))
                         }
@@ -1365,8 +1383,7 @@ internal fun MessageInput(chat: ChatModel, compact: Boolean = false, leading: (@
         if (compact && leading == null) ActionIcon(R.drawable.ic_plus, R.string.chat_input_tools_button,
             { tools = true }, enabled = chat.canEdit)
         val showInterrupt = chat.draft.isEmpty() && chat.attachments.isEmpty() &&
-            ((chat.terminalAvailable && chat.terminal.agentStatus == AgentStatus.Working &&
-                (LocalThreadChat.current == null || chat.showWorking && chat.connectionError == null)) || chat.interrupting)
+            (chat.canInterrupt || chat.interrupting)
         if (showInterrupt) {
             ChatInterruptButton(chat, onConfirmed = { returningFromInterrupt = true })
         } else {
@@ -1411,7 +1428,7 @@ private fun BlockedNotice(status: AgentStatus.Blocked, refused: Boolean, onOpenT
 }
 
 @Composable
-private fun statusText(status: ChatStatus): String? = when (status) {
+internal fun statusText(status: ChatStatus): String? = when (status) {
     ChatStatus.LIVE -> null
     ChatStatus.CONNECTING -> stringResource(R.string.chat_status_connecting)
     ChatStatus.WAITING -> null
