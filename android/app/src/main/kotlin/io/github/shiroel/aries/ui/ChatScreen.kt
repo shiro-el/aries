@@ -181,7 +181,10 @@ class ChatModel(
     // Keep the String seam for attachments, dictation and existing callers.
     var draft: String
         get() = input.text
-        set(value) { input = TextFieldValue(value, TextRange(value.length)) }
+        set(value) {
+            if (value == input.text) return
+            input = TextFieldValue(value, TextRange(value.length))
+        }
     var sending by mutableStateOf<Sending?>(null)
         private set
     var sent by mutableStateOf(false)
