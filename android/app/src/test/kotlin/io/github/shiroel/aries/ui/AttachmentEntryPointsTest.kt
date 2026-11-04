@@ -17,6 +17,7 @@ import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.*
 import java.io.File
 import java.io.ByteArrayInputStream
+import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -32,6 +33,9 @@ class AttachmentEntryPointsTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private fun str(id: Int) = compose.activity.getString(id)
 
+    private lateinit var model: HostsModel
+    private var reconnectGate: CompletableDeferred<Unit>? = null
+
     private fun openChat(): FakeConnection {
         val core = FakeCore().apply {
             savedView = AgentView.CHAT
@@ -40,7 +44,12 @@ class AttachmentEntryPointsTest {
         }
         compose.setContent {
             val scope = rememberCoroutineScope()
-            val model = remember { HostsModel(core, scope) }
+            model = remember { HostsModel(object : AriesCoreInterface by core {
+                override suspend fun connect(hostId: String): HostConnection {
+                    reconnectGate?.await()
+                    return core.connect(hostId)
+                }
+            }, scope) }
             AriesApp(model)
         }
         compose.onNodeWithText("home").performClick()
@@ -66,6 +75,35 @@ class AttachmentEntryPointsTest {
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("keep this")
         assertTrue(connection.uploads.isEmpty())
         assertTrue(connection.typed.isEmpty())
+    }
+
+    @Test fun pickerResultWaitsForTheConnectionReleasedWhileThePickerWasOpen() {
+        val old = openChat()
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).performTextInput("keep this")
+        compose.onNodeWithContentDescription(str(R.string.attachments_file_button)).performClick()
+        val request = shadowOf(compose.activity).nextStartedActivityForResult
+        val ready = CompletableDeferred<Unit>()
+        reconnectGate = ready
+        compose.runOnIdle {
+            model.backgrounded()
+            model.resumeScreens()
+        }
+        val chat = (model.screen as Screen.Chat).chat
+        val uri = Uri.parse("content://documents/returned-file")
+        shadowOf(compose.activity.contentResolver).registerInputStream(uri, ByteArrayInputStream(byteArrayOf(4, 2)))
+        compose.runOnIdle { shadowOf(compose.activity).receiveResult(request.intent, Activity.RESULT_OK, Intent().setData(uri)) }
+        compose.waitForIdle()
+        assertTrue("The picker result must survive foreground reconnection", chat.uploading)
+        assertNull(chat.attachmentError)
+        assertTrue(old.uploads.isEmpty())
+        ready.complete(Unit)
+        compose.waitUntil(5_000) { chat.attachments.size == 1 }
+        compose.waitForIdle()
+        assertFalse(chat.uploading)
+        assertNull(chat.attachmentError)
+        assertArrayEquals(byteArrayOf(4, 2), (chat.link!!.connection!! as FakeConnection).uploads.single().third)
+        assertTrue(old.uploads.isEmpty())
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("keep this")
     }
 
     @Test fun cameraGetsAFullSizeOutputUriThenKeepsTheUploadedPhotoOutsideTheTextField() {

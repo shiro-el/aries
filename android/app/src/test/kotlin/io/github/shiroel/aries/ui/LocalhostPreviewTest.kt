@@ -5,6 +5,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Column
+import androidx.compose.ui.test.*
+import androidx.test.core.app.ApplicationProvider
+import io.github.shiroel.aries.R
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.captureToImage
@@ -72,6 +76,28 @@ class LocalhostPreviewTest {
             findWebView(view.getChildAt(i))?.let { return it }
         }
         return null
+    }
+
+    /** Regression: detected ports must not reserve a transcript row until preview is opened. */
+    @Test fun portChipsFollowPreviewVisibilityAndStillSwitchPorts() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val preview = LocalhostPreview().apply { ports = listOf(5173u, 3000u) }
+        compose.setContent { MaterialTheme { Column {
+            AgentScreenHeader(TerminalInfo("t1", "claude", "", listOf("claude"), "/repo", "live", AgentStatus.Working),
+                "home", {}, AgentView.CHAT, {}, preview = preview)
+            PreviewChips(preview)
+        } } }
+        val first = context.getString(R.string.preview_open_port, 5173)
+        val second = context.getString(R.string.preview_open_port, 3000)
+        compose.onNodeWithText(first).assertDoesNotExist()
+        compose.onNodeWithText(second).assertDoesNotExist()
+        compose.onNodeWithContentDescription(context.getString(R.string.preview_title)).performClick()
+        compose.onNodeWithText(first).assertIsDisplayed()
+        compose.onNodeWithText(second).performClick()
+        compose.runOnIdle { assertEquals(3000.toUShort(), preview.selected) }
+        compose.onNodeWithContentDescription(context.getString(R.string.preview_title)).performClick()
+        compose.onNodeWithText(first).assertDoesNotExist()
+        compose.onNodeWithText(second).assertDoesNotExist()
     }
 
     @Test fun backgroundingAndLeavingCloseTheForwardWithoutDisconnectingTheHost() {

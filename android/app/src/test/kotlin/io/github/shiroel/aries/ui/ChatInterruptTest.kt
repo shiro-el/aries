@@ -4,6 +4,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.*
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.test.core.app.ApplicationProvider
@@ -26,6 +28,7 @@ class ChatInterruptTest {
     @get:Rule val compose = createComposeRule()
     private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
     private fun str(id: Int, vararg args: Any) = context.getString(id, *args)
+    private lateinit var model: HostsModel
     private val agent = TerminalInfo("t1", "claude", "", listOf("claude"), "/repo", "live", AgentStatus.Working, false, 0uL)
 
     private fun screenshot(name: String, dialog: Boolean = false) {
@@ -44,7 +47,7 @@ class ChatInterruptTest {
         core.addHost("home", Endpoint.Ssh("10.0.0.2", 22u, "me"))
         compose.setContent {
             val scope = rememberCoroutineScope()
-            val model = remember { HostsModel(core, scope) }
+            model = remember { HostsModel(core, scope) }
             MaterialTheme { AriesApp(model) }
         }
         compose.onNodeWithText("home").performClick()
@@ -54,22 +57,70 @@ class ChatInterruptTest {
     }
 
     @Test
+    fun emptyWorkingComposerInterruptsButTypingSwitchesTheSameActionToSend() {
+        val conn = open(FakeCore())
+        val input = compose.onNodeWithContentDescription(str(R.string.chat_input_label))
+        compose.onNodeWithContentDescription(str(R.string.chat_interrupt_confirm_button)).assertIsEnabled()
+        compose.onNodeWithText(str(R.string.chat_send_button)).assertDoesNotExist()
+        screenshot("composer-empty-stop")
+
+        input.performTextInput(" ")
+        compose.onNodeWithContentDescription(str(R.string.chat_interrupt_confirm_button)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.chat_send_button)).assertIsNotEnabled()
+        input.performTextReplacement("x")
+        screenshot("composer-typed-send")
+        compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
+        compose.waitForIdle()
+        assertEquals(listOf("t1" to "x"), conn.typed)
+        assertEquals(emptyList<String>(), conn.interrupted)
+
+        compose.onNodeWithContentDescription(str(R.string.chat_interrupt_confirm_button)).performClick()
+        compose.onNodeWithText(str(R.string.chat_interrupt_confirm_button)).performClick()
+        compose.waitForIdle()
+        assertEquals(listOf("t1"), conn.interrupted)
+        assertEquals(listOf("t1" to "x"), conn.typed)
+    }
+
+    @Test
+    fun anAttachmentWithoutTextSendsTheAttachmentInsteadOfInterrupting() {
+        val conn = open(FakeCore())
+        val file = File(context.cacheDir, "interrupt-notes.txt").apply { writeText("Review notes") }
+        try {
+            compose.runOnIdle {
+                (model.screen as Screen.Chat).chat.attach(context, SharedContent(listOf(android.net.Uri.fromFile(file))))
+            }
+            compose.waitUntil(5_000) { conn.uploads.isNotEmpty() }
+            compose.waitForIdle()
+            compose.onNodeWithContentDescription(str(R.string.chat_input_label))
+                .assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
+            compose.onNodeWithContentDescription(str(R.string.chat_interrupt_confirm_button)).assertDoesNotExist()
+            screenshot("composer-attachment-send")
+            compose.onNodeWithText(str(R.string.chat_send_button)).assertIsEnabled().performClick()
+            compose.waitForIdle()
+            assertEquals(listOf("t1" to "'/host/it'\"'\"'s file.jpg'"), conn.typed)
+            assertEquals(emptyList<String>(), conn.interrupted)
+        } finally { file.delete() }
+    }
+
+    @Test
     fun interruptionRequiresConfirmationAndPreservesTheDraftWhileSuppressingDuplicates() {
         val conn = open(FakeCore())
-        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).performTextInput("keep my draft")
         screenshot("chat-working")
-        compose.onNodeWithText(str(R.string.chat_interrupt_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.chat_interrupt_confirm_button)).performClick()
         screenshot("interrupt-confirm", dialog = true)
         assertEquals(emptyList<String>(), conn.interrupted)
         compose.onNodeWithText(str(R.string.cancel_button)).performClick()
         assertEquals(emptyList<String>(), conn.interrupted)
 
         conn.interruptHold = CompletableDeferred()
-        compose.onNodeWithText(str(R.string.chat_interrupt_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.chat_interrupt_confirm_button)).performClick()
         compose.onNodeWithText(str(R.string.chat_interrupt_confirm_button)).performClick()
         compose.waitForIdle()
         assertEquals(listOf("t1"), conn.interrupted)
-        compose.onNodeWithText(str(R.string.chat_interrupt_pending)).assertIsNotEnabled()
+        compose.onNodeWithContentDescription(str(R.string.chat_interrupt_confirm_button)).assertIsNotEnabled()
+        compose.onNodeWithContentDescription(str(R.string.chat_interrupt_pending)).assertExists()
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).performTextInput("keep my draft")
+        compose.onNodeWithText(str(R.string.chat_send_button)).assertIsNotEnabled()
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("keep my draft")
         conn.interruptHold!!.complete(Unit)
         compose.waitForIdle()
@@ -81,7 +132,7 @@ class ChatInterruptTest {
     fun aStatusChangeWhileConfirmingSendsNothingAndFailureCanBeRetriedExplicitly() {
         val core = FakeCore()
         val conn = open(core)
-        compose.onNodeWithText(str(R.string.chat_interrupt_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.chat_interrupt_confirm_button)).performClick()
         core.push(listOf(agent.copy(agentStatus = AgentStatus.Blocked(BlockedReason.PERMISSION, "Allow?"))))
         compose.waitForIdle()
         compose.onNodeWithText(str(R.string.chat_interrupt_confirm_button)).assertDoesNotExist()
@@ -90,24 +141,24 @@ class ChatInterruptTest {
         core.push(listOf(agent))
         compose.waitForIdle()
         conn.interruptFailWith = CoreException.Closed()
-        compose.onNodeWithText(str(R.string.chat_interrupt_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.chat_interrupt_confirm_button)).performClick()
         compose.onNodeWithText(str(R.string.chat_interrupt_confirm_button)).performClick()
         compose.waitForIdle()
         compose.onNodeWithText(str(R.string.chat_interrupt_failed, ""), substring = true).assertExists()
         assertEquals(listOf("t1"), conn.interrupted)
         conn.interruptFailWith = null
         conn.interruptOutcome = InterruptOutcome.STILL_WORKING
-        compose.onNodeWithText(str(R.string.chat_interrupt_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.chat_interrupt_confirm_button)).performClick()
         compose.onNodeWithText(str(R.string.chat_interrupt_confirm_button)).performClick()
         compose.waitForIdle()
         compose.onNodeWithText(str(R.string.chat_interrupt_still_working)).assertExists()
         assertEquals(listOf("t1", "t1"), conn.interrupted)
 
-        compose.onNodeWithText(str(R.string.chat_interrupt_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.chat_interrupt_confirm_button)).performClick()
         core.push(emptyList())
         compose.waitForIdle()
         compose.onNodeWithText(str(R.string.chat_interrupt_confirm_button)).assertDoesNotExist()
-        compose.onNodeWithText(str(R.string.chat_interrupt_button)).assertDoesNotExist()
+        compose.onNodeWithContentDescription(str(R.string.chat_interrupt_confirm_button)).assertDoesNotExist()
         assertEquals(listOf("t1", "t1"), conn.interrupted)
     }
 }

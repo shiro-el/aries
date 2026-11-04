@@ -96,7 +96,7 @@ internal fun rememberChatLocalhostPreview(link: HostLink?, entries: List<ChatEnt
 /** Detected servers remain available when output scrolls away. */
 @Composable
 internal fun PreviewChips(preview: LocalhostPreview) {
-    if (preview.ports.isEmpty()) return
+    if (preview.selected == null || preview.ports.isEmpty()) return
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         preview.ports.forEach { port ->

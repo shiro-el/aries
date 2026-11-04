@@ -38,6 +38,23 @@
     <string name="preview_capture_attach_failed">Could not add the capture. Check the Agent connection and try again.</string>
     <string name="preview_capture_context">Preview: %1$s\nView mode: %2$s</string>
 
+    <!-- Agent header details (203) -->
+    <string name="agent_details_host">Host · %1$s</string>
+    <string name="agent_details_folder">Folder · %1$s</string>
+
+    <!-- Host creation and context sheets -->
+    <string name="host_create_title">Create new</string>
+    <string name="host_create_task_detail">Choose an Agent and write its first prompt</string>
+    <string name="host_create_terminal_detail">Run a command on this Host</string>
+    <string name="host_create_space_detail">Group work in a new Space</string>
+    <string name="host_create_tab_detail">Add a Tab to %1$s</string>
+    <string name="host_create_tab_no_space">Choose a Space from the header first</string>
+    <string name="host_create_worktree_detail">Open a Git worktree in a new Tab</string>
+    <string name="host_create_worktree_no_folder">Choose a Space with a folder first</string>
+    <string name="host_create_saved_detail">Run with saved Agent options</string>
+    <string name="host_context_edit_hint">Touch and hold a Space or Tab to rename or close it.</string>
+    <string name="host_context_empty">No Spaces yet. Use + to create one.</string>
+
     <!-- Action menus -->
     <string name="menu_switch">Switch</string>
     <string name="menu_current">Current</string>
@@ -572,6 +589,7 @@
     <string name="chat_tool_running">running</string>
     <string name="chat_tool_failed">failed</string>
     <!-- Agent usage and context (193) -->
+    <string name="usage_menu_label">%1$s · %2$s</string>
     <string name="usage_title">Usage &amp; limits</string>
     <string name="usage_source">Last readings recorded by this Agent. Account limits may be shared with other Agents. Readings can be stale; times are shown in your local time zone.</string>
     <string name="usage_context_title">Last recorded context</string>
@@ -1124,7 +1142,9 @@
     <string name="attachments_choose_agent">Choose an Agent for the shared content</string>
     <string name="attachments_uploading">Uploading attachment…</string>
     <string name="attachments_too_large">Attachment exceeds 8 MiB. Choose a smaller file or enable image resizing.</string>
-    <string name="attachments_failed">Could not attach: %1$s</string>
+    <string name="attachments_failed">Could not attach the file. Choose it again. If this keeps happening, reconnect to the Host and try again.</string>
+    <string name="attachments_connection_failed">Could not attach because the Host connection is unavailable. Reconnect to the Host, then choose the file again.</string>
+    <string name="attachments_read_failed">Could not read the file. Choose it again, or save a copy on your phone and attach that copy.</string>
     <string name="attachments_file_button">Attach files</string>
     <string name="attachments_camera_button">Take a photo</string>
     <string name="attachments_remove_button">Remove attachment: %1$s</string>

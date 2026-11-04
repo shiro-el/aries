@@ -228,15 +228,19 @@ class ChatModel(
     private var uploadJob: Job? = null
 
     fun attachmentFailed(error: Exception) {
-        attachmentError = if (error is AttachmentTooLarge) Message(R.string.attachments_too_large)
-            else Message(R.string.attachments_failed, listOf(error.message ?: ""))
+        attachmentError = Message(when {
+            error is AttachmentTooLarge || (error is CoreException.Rpc && error.kind == "attachment_too_large") -> R.string.attachments_too_large
+            error is CoreException.Closed || error is CoreException.Unreachable -> R.string.attachments_connection_failed
+            error is java.io.IOException || error is SecurityException -> R.string.attachments_read_failed
+            else -> R.string.attachments_failed
+        })
     }
 
     /** Saves bytes and adds attachment chips to the current draft; never calls sendMessage. */
     fun attach(context: Context, content: SharedContent, cleanup: () -> Unit = {}): Boolean {
         val scope = scope ?: run { cleanup(); return false }
         if (inputUnavailable || uploading || sending != null) { cleanup(); return false }
-        val connection = link?.connection ?: run { attachmentFailed(CoreException.Closed()); cleanup(); return false }
+        val link = link ?: run { attachmentFailed(CoreException.Closed()); cleanup(); return false }
         val resize = AttachmentSettings.from(context).resizeImages
         attachmentError = null
         uploading = true
@@ -248,8 +252,16 @@ class ChatModel(
             try {
                 for (uri in content.uris) {
                     val attachment = withContext(Dispatchers.IO) { prepareAttachment(context, uri, resize) }
+                    // The picker/camera may stop the Activity and release its Host connection.
+                    // Wait for its replacement after reading the URI; never retry a put itself.
+                    val connection = link.awaitConnection()
                     if (inputUnavailable) break
-                    val path = connection.uploadAttachment(terminal.address, attachment.name, attachment.bytes)
+                    val path = try {
+                        connection.uploadAttachment(terminal.address, attachment.name, attachment.bytes)
+                    } catch (e: CoreException.Closed) {
+                        link.lost(connection)
+                        throw e
+                    }
                     attachments = attachments + DraftAttachment(path, attachment.name, attachment.bytes.size,
                         attachment.bytes.takeIf { remoteMediaKind(attachment.name) == RemoteMediaKind.IMAGE })
                 }
@@ -590,8 +602,7 @@ fun ChatScreen(
     CompositionLocalProvider(LocalChatSearch provides searchDecoration) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))) {
             AgentScreenHeader(chat.terminal, chat.host.name, onBack, AgentView.CHAT, onView,
-                preview = preview, link = chat.link, onTerminalUpdate = { chat.update(listOf(it)) }, onSearch = { searchOpen = true })
-            AgentUsageHeader(snapshot?.usage)
+                preview = preview, usage = snapshot?.usage, link = chat.link, onTerminalUpdate = { chat.update(listOf(it)) }, onSearch = { searchOpen = true })
             PreviewChips(preview)
             if (preview.selected != null) {
                 LocalhostPreviewBrowser(preview, chat.link, Modifier.weight(1f).fillMaxWidth(),
@@ -796,7 +807,7 @@ private fun MessageInput(chat: ChatModel) {
         lineHeight = 20.sp,
     )
     HorizontalDivider()
-    ChatInterruptControls(chat)
+    ChatInterruptNotice(chat)
     DraftAttachments(chat)
     io.github.shiroel.aries.dictation.DictationInput(
         names = listOf(chat.host.name, displayName(chat.terminal), chat.terminal.cwd.orEmpty().trimEnd('/').substringAfterLast('/')),
@@ -825,14 +836,21 @@ private fun MessageInput(chat: ChatModel) {
                 }
             },
         )
-        TextButton(
-            onClick = chat::send,
-            enabled = chat.canSend,
-            modifier = Modifier.heightIn(min = 48.dp),
-            shape = RectangleShape,
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
-        ) {
-            Text(stringResource(R.string.chat_send_button), style = inputStyle)
+        val showInterrupt = chat.draft.isEmpty() && chat.attachments.isEmpty() &&
+            ((chat.terminalAvailable && chat.terminal.agentStatus == AgentStatus.Working) || chat.interrupting)
+        if (showInterrupt) {
+            ChatInterruptButton(chat)
+        } else {
+            TextButton(
+                onClick = chat::send,
+                enabled = chat.canSend,
+                modifier = Modifier.heightIn(min = 48.dp),
+                shape = RectangleShape,
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+            ) {
+                if (chat.interrupting) ChatInterruptProgress()
+                Text(stringResource(R.string.chat_send_button), style = inputStyle)
+            }
         }
     }
 }
