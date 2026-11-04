@@ -65,13 +65,46 @@ class WorktreeScreenTest {
         compose.onNodeWithText(str(R.string.worktrees_open_button)).assertIsNotEnabled()
         compose.onNodeWithTag("worktree:/bare").assertIsNotEnabled()
         compose.onNodeWithTag("worktree:/gone").assertIsNotEnabled()
-        assertEquals(listOf("/current"), conn.worktreeFolders)
+        assertEquals(listOf("/space"), conn.worktreeFolders)
         compose.onNodeWithTag("worktree:/linked").performClick()
         compose.onNodeWithTag("worktree-preset:CODEX").performClick()
         compose.onNodeWithText(str(R.string.worktrees_open_button)).performClick()
         compose.waitForIdle()
         assertEquals(listOf(Triple("/linked", "s1", AgentPreset.CODEX)), conn.openedWorktrees)
         compose.onNodeWithText(str(R.string.worktrees_title)).assertDoesNotExist()
+        compose.onNodeWithTag("terminal-screen").assertExists()
+    }
+
+    // Regression: a row in a different Space must use its own cwd and Space,
+    // rather than the selected context or an invisible focused Pane.
+    @Test fun placedRowUsesTheClickedTerminalFolderAndSpace() {
+        val wrong = TerminalInfo("t1", "wrong", "", listOf("sh"), "/wrong", "live")
+        val clicked = TerminalInfo("t2", "clicked", "", listOf("sh"), "/right", "live")
+        val core = FakeCore().apply {
+            addHost("home", Endpoint.Ssh("example.invalid", 22u, "me"))
+            terminals = listOf(wrong, clicked)
+            structure = HostStructure(listOf(
+                SpaceInfo("s1", "first", "/space-one", listOf(TabInfo("tb1", "one", listOf(PaneInfo("p1", "t1", wrong))))),
+                SpaceInfo("s2", "second", "/space-two", listOf(TabInfo("tb2", "two", listOf(PaneInfo("p2", "t2", clicked))))),
+            ), emptyList(), null)
+        }
+        compose.setContent {
+            val scope = rememberCoroutineScope()
+            val model = remember { HostsModel(core, scope) }
+            AriesApp(model)
+        }
+        compose.onNodeWithText("home").performClick()
+        compose.onNodeWithTag("host-layout-context").performClick()
+        compose.onNodeWithTag("host-context-space:s1").performClick()
+        compose.onNodeWithText("clicked").performTouchInput { longClick() }
+        val conn = core.connection!!
+        conn.worktrees = listOf(WorktreeInfo("/linked", "abc123", null, true, false, null, null))
+        compose.onNodeWithContentDescription(str(R.string.worktrees_button)).performClick()
+        assertEquals(listOf("/right"), conn.worktreeFolders)
+        compose.onNodeWithTag("worktree:/linked").performClick()
+        compose.onNodeWithText(str(R.string.worktrees_open_button)).performClick()
+        assertEquals(listOf(Triple("/linked", "s2", null)), conn.openedWorktrees)
+        compose.onNodeWithTag("terminal-screen").assertExists()
     }
 
     @Test fun failedOpenKeepsTheSelectionAndDoesNotRepeatTheRequest() {
@@ -100,5 +133,6 @@ class WorktreeScreenTest {
         compose.waitForIdle()
         assertEquals(listOf(Triple("/linked", null, null)), conn.openedWorktrees)
         compose.onNodeWithText(str(R.string.worktrees_title)).assertDoesNotExist()
+        compose.onNodeWithTag("terminal-screen").assertExists()
     }
 }

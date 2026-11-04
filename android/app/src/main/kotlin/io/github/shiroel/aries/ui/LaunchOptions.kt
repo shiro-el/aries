@@ -21,23 +21,23 @@ import io.github.shiroel.aries.core.AgentPreset
 
 /** Model IDs stay editable: the available models belong to the Host's Agent configuration. */
 @Composable
-fun LaunchOptions(form: LaunchForm, preset: AgentPreset) {
+fun LaunchOptions(form: LaunchForm, preset: AgentPreset, enabled: Boolean = true) {
     var modelsOpen by remember(preset) { mutableStateOf(false) }
     var effortsOpen by remember(preset) { mutableStateOf(false) }
     OutlinedTextField(
-        value = form.model,
+        value = form.model, enabled = enabled,
         onValueChange = { form.model = it },
         modifier = Modifier.fillMaxWidth().testTag("launch_model"),
         label = { Text(stringResource(R.string.launch_model_label)) },
         placeholder = { Text(stringResource(R.string.launch_agent_default)) },
         trailingIcon = {
             Box {
-                TextButton(onClick = {
+                TextButton(enabled = enabled, onClick = {
                     if (preset == AgentPreset.CLAUDE_CODE) modelsOpen = true else form.model = ""
                 }) {
                     Text(stringResource(if (preset == AgentPreset.CLAUDE_CODE) R.string.launch_model_choose else R.string.launch_agent_default))
                 }
-                DropdownMenu(expanded = modelsOpen, onDismissRequest = { modelsOpen = false }) {
+                DropdownMenu(expanded = modelsOpen && enabled, onDismissRequest = { modelsOpen = false }) {
                     SingleChoiceMenuItem(
                         selected = form.model.isEmpty(),
                         text = { Text(stringResource(R.string.launch_agent_default)) },
@@ -69,9 +69,9 @@ fun LaunchOptions(form: LaunchForm, preset: AgentPreset) {
         Box {
             TextButton(
                 modifier = Modifier.testTag("launch_effort"),
-                onClick = { effortsOpen = true },
+                onClick = { effortsOpen = true }, enabled = enabled,
             ) { EffortText(form.effort) }
-            DropdownMenu(expanded = effortsOpen, onDismissRequest = { effortsOpen = false }) {
+            DropdownMenu(expanded = effortsOpen && enabled, onDismissRequest = { effortsOpen = false }) {
                 for (effort in listOf("") + efforts) {
                     SingleChoiceMenuItem(
                         selected = form.effort == effort,
