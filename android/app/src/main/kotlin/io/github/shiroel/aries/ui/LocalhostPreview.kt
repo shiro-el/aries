@@ -112,6 +112,7 @@ internal fun LocalhostPreviewBrowser(preview: LocalhostPreview, link: HostLink?,
             if (change != previousChange && preview.autoRefresh) webView?.reload()
             previousChange = change
         }
+        link?.let { ConnectionNotice(it) }
         Text(stringResource(R.string.preview_address, port.toInt()), Modifier.padding(horizontal = 12.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TextButton(onClick = { webView?.reload() }, enabled = forward != null) { Text(stringResource(R.string.preview_reload)) }
@@ -131,7 +132,7 @@ internal fun LocalhostPreviewBrowser(preview: LocalhostPreview, link: HostLink?,
             }
         } else if (failed || connection == null) {
             Text(stringResource(R.string.preview_failed), Modifier.padding(12.dp))
-            TextButton(onClick = { retry++ }) { Text(stringResource(R.string.preview_retry)) }
+            TextButton(onClick = { link?.retryNow(); retry++ }) { Text(stringResource(R.string.preview_retry)) }
         } else if (started) {
             CircularProgressIndicator(Modifier.padding(12.dp))
         }
