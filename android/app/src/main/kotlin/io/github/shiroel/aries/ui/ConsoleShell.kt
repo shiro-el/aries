@@ -153,6 +153,7 @@ internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit) {
                             model.closeCallInbox()
                             scope.launch { drawer.open() }
                         }, onBack = consoleBack(model), actions = {
+                            if (screen is Screen.Agents) AgentActions(screen.board)
                             if (screen is Screen.Browse) HostActions(screen.browser, onRunSaved = { model.runSaved(screen.browser, it) }) { model.newTerminal(screen.browser) }
                         }, titleContent = {
                             if (screen is Screen.Browse) HostContextTitle(screen.browser, Modifier.weight(1f))

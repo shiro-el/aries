@@ -830,6 +830,21 @@ class HostsModel(
         }
     }
 
+    /** Agent-list launches retain its watches and return to that list from the new Chat. */
+    internal fun runSavedFromAgents(board: AgentBoard, link: HostLink, saved: SavedLaunch) {
+        val origin = screen as? Screen.Agents ?: return
+        if (origin.board !== board || board.links[link.host.id] !== link || link.state != LinkState.Up) return
+        val conn = link.connection ?: return
+        scope.launch {
+            try {
+                val terminal = conn.launch(saved.request)
+                if (screen === origin) openTaskChat(link, terminal, "")
+            } catch (e: CoreException) {
+                if (screen === origin) prompt = problemFor(e)
+            }
+        }
+    }
+
     /** Starts [form]'s command on the open Host, then shows the new Terminal; failures stay on the form. */
     fun launch(browser: HostBrowser, form: LaunchForm) {
         val conn = open?.first ?: return
@@ -1380,6 +1395,7 @@ class HostsModel(
                 try {
                     // A new line starts from its snapshot, so what changed while away shows.
                     link.keep { c, _ ->
+                        board.savedLaunches[host.id] = c.savedLaunches()
                         val structure = c.watchStructure(object : StructureListener {
                             override fun onStructure(structure: HostStructure) {
                                 scope.launch { board.updateStructure(host.id, structure) }
