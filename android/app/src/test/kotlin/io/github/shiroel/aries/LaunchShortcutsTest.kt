@@ -148,7 +148,11 @@ class LaunchShortcutsTest {
         model.openSavedLaunch(context, intent)
         runCurrent()
         assertEquals(listOf(latest.request), core.connection!!.launched)
-        assertEquals(host.id, (model.screen as Screen.Browse).browser.host.id)
+        val terminal = model.screen as Screen.Terminal
+        assertEquals(host.id, terminal.viewer.link!!.host.id)
+        assertSame(core.connection, terminal.viewer.link!!.connection)
+        assertEquals(core.terminals.single().address, terminal.viewer.terminal.address)
+        assertEquals(listOf(host.id), core.connectAttempts)
         assertTrue(core.offKeyWork.isEmpty())
         val launched = core.connection!!
         launched.push(HostStructure(emptyList(), emptyList(), null))
@@ -159,8 +163,10 @@ class LaunchShortcutsTest {
         core.failWith = CoreException.KeyLocked()
         model.openSavedLaunch(context, intent)
         runCurrent()
-        assertTrue(model.screen is Screen.Connecting)
+        assertEquals(host.id, (model.screen as Screen.Connecting).host.id)
         assertNull(model.prompt)
+        assertEquals(listOf(host.id, host.id), core.connectAttempts)
+        assertSame(launched, core.connection)
         assertEquals(1, launched.launched.size)
     }
 
