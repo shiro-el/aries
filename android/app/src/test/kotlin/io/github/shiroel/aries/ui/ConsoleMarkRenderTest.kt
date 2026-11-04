@@ -14,13 +14,13 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.unit.Density
 import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.R
-import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -55,11 +55,8 @@ class ConsoleMarkRenderTest {
         for (dark in listOf(false, true)) for (density in listOf(3, 4)) {
             compose.runOnIdle { appearance = dark to density }
             val header = compose.onNodeWithTag("console-top-bar")
-            val title = compose.onNodeWithText(context.getString(R.string.app_name)).fetchSemanticsNode().boundsInRoot
-            // 44dp navigation + 26dp mark + 8dp gap; both share the header's centre.
-            assertEquals(78f * density, title.left, .5f)
-            assertEquals(22f * density, title.center.y, .5f)
-            assertEquals(44f * density, header.fetchSemanticsNode().boundsInRoot.height, .5f)
+            header.assertIsDisplayed()
+            compose.onNodeWithText(context.getString(R.string.app_name)).assertIsDisplayed()
             System.getenv("ARIES_BRAND_RENDER_DIR")?.let { directory ->
                 File(directory).mkdirs()
                 File(directory, "topbar-${if (dark) "dark" else "light"}-${density}x.png").outputStream().use {

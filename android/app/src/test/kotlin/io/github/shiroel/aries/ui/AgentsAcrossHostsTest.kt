@@ -187,7 +187,7 @@ class AgentsAcrossHostsTest {
                 ScreenFrame(
                     80u, 1u, true,
                     listOf(ScreenLine(0u, listOf(CellRun(0u, 9u, "pi> ready", false, null, null, false, false, false, false, false, false)))),
-                    null, null,
+                    io.github.shiroel.aries.core.CursorPos(0u, 0u), null,
                 ),
             ),
         )
