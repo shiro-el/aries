@@ -101,6 +101,33 @@ class ChatScrollTest {
         compose.waitForIdle()
     }
 
+    // Regression: expanding the latest tool must not make follow mode scroll its header to the top.
+    @Test fun expandingTheLatestToolKeepsItsReadingPosition() {
+        open()
+        val tool = ChatEntry("long-tool", null, ChatEntryBody.Tool(
+            "Bash", "gradle lint", "{}", io.github.shiroel.aries.core.ChatToolStatus.DONE,
+            (1..100).joinToString("\n") { "Output line $it" },
+        ))
+        push(entries(30) + tool)
+        val label = context.getString(io.github.shiroel.aries.R.string.chat_tool_expand_label, "Bash")
+        val header = compose.onNodeWithContentDescription(label)
+        header.assertIsDisplayed()
+        val before = header.fetchSemanticsNode().positionInRoot.y
+
+        header.performClick()
+        compose.waitForIdle()
+
+        header.assertIsDisplayed()
+        assertEquals(before, header.fetchSemanticsNode().positionInRoot.y, 0.5f)
+        compose.onNodeWithText((tool.body as ChatEntryBody.Tool).output!!).assertExists()
+        // The Latest overlay is centered; tap the leading disclosure itself.
+        header.performTouchInput { click(androidx.compose.ui.geometry.Offset(24f, height / 2f)) }
+        compose.waitForIdle()
+        header.assertIsDisplayed()
+        compose.onNodeWithText((tool.body as ChatEntryBody.Tool).output!!).assertDoesNotExist()
+        assertEquals(before, header.fetchSemanticsNode().positionInRoot.y, 0.5f)
+    }
+
     @Test fun newRowsKeepTheReadingPositionAndLatestResumesFollowing() {
         open()
         assertReply(30)

@@ -2,6 +2,12 @@ package io.github.shiroel.aries.ui
 
 import androidx.annotation.StringRes
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -21,6 +27,17 @@ import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.ChatResponseCompletion
 import io.github.shiroel.aries.core.ChatResponseMetadata
 import io.github.shiroel.aries.core.ChatToolDetails
+
+/** Keep the disclosure header outside the bounded, independently scrollable details. */
+@Composable
+internal fun ChatToolDetailsPane(content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState())
+            .padding(start = 20.dp, bottom = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        content = content,
+    )
+}
 
 /** Raw input has its own disclosure, independent of the tool header. */
 @Composable
