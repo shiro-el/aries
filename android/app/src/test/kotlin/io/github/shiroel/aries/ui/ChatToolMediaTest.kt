@@ -84,6 +84,9 @@ class ChatToolMediaTest {
         compose.onNodeWithContentDescription("Image viewer").assertDoesNotExist()
         header.performTouchInput { click(topLeft + androidx.compose.ui.geometry.Offset(4f, 4f)) }
         assertEquals(setOf("read"), chat.expanded)
+        // Re-expanding starts image decoding again; wait for its accessible action.
+        compose.waitUntil(5_000) { compose.onAllNodesWithContentDescription("Image").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("Image").assertHasClickAction()
         compose.onNodeWithContentDescription("Image").performTouchInput { click() }
         compose.waitUntil(5_000) { compose.onAllNodesWithContentDescription("Image viewer").fetchSemanticsNodes().isNotEmpty() }
         assertEquals(setOf("read"), chat.expanded)

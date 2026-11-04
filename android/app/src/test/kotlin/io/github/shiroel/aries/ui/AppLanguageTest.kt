@@ -63,7 +63,7 @@ class AppLanguageTest {
             activity.recreate()
             assertEquals("Settings", activity.get().getString(R.string.settings_title))
             compose.onNodeWithText("Settings").assertExists()
-            assertBackgroundLanguage(activity.get().applicationContext, "Push works for box", "0 need you", "No saved Agents")
+            assertBackgroundLanguage(activity.get().applicationContext, "Push works for box", "Needs you · 0", "No saved Agents")
             compose.waitUntil(5_000) {
                 LocaleManagerCompat.getApplicationLocales(activity.get()).toLanguageTags() == "en"
             }
@@ -74,14 +74,14 @@ class AppLanguageTest {
             activity.recreate()
             assertEquals("설정", activity.get().getString(R.string.settings_title))
             compose.onNodeWithText("설정").assertExists()
-            assertBackgroundLanguage(activity.get().applicationContext, "box 푸시 알림 테스트", "확인 필요 0", "저장된 Agent 없음")
+            assertBackgroundLanguage(activity.get().applicationContext, "box 푸시 알림 테스트", "확인 필요 · 0", "저장된 Agent 없음")
             compose.onNodeWithTag("app-language").performClick()
             compose.onNodeWithTag("app-language:").performClick()
             compose.waitForIdle()
             activity.recreate()
             assertEquals("설정", activity.get().getString(R.string.settings_title))
             compose.onNodeWithText("설정").assertExists()
-            assertBackgroundLanguage(activity.get().applicationContext, "box 푸시 알림 테스트", "확인 필요 0", "저장된 Agent 없음")
+            assertBackgroundLanguage(activity.get().applicationContext, "box 푸시 알림 테스트", "확인 필요 · 0", "저장된 Agent 없음")
             assertEquals("", AppCompatDelegate.getApplicationLocales().toLanguageTags())
         } finally {
             AppLanguage.choose(activity.get(), "")
