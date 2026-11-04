@@ -45,13 +45,18 @@ import java.io.ByteArrayInputStream
 @Stable
 internal class LocalhostPreview {
     var ports by mutableStateOf<List<UShort>>(emptyList())
+    internal var discovery by mutableStateOf(PreviewDiscovery.SEARCHING)
+    internal var discoveryRevision by mutableIntStateOf(0)
+        private set
+    internal fun retryDiscovery() { discoveryRevision++ }
     private var selectedPort by mutableStateOf<UShort?>(null)
     var selected: UShort?
         get() = selectedPort
         set(value) {
-            if (value != selectedPort) capture = null
+            if (value != selectedPort) { capture = null; pagePath = "/" }
             selectedPort = value
         }
+    internal var pagePath by mutableStateOf("/")
     var desktop by mutableStateOf(false)
     var autoRefresh by mutableStateOf(false)
     // Pixels and annotations stay in memory, never in saved-instance-state Bundles.
@@ -73,18 +78,45 @@ internal fun rememberLocalhostPreview(
         }
     }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    LaunchedEffect(preview, enabled, connection, preview.selected != null, lifecycle) {
+    LaunchedEffect(preview, enabled, connection, preview.selected != null, lifecycle, preview.discoveryRevision) {
+        preview.discovery = PreviewDiscovery.SEARCHING
         if (enabled && connection != null) lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             do {
                 // A successful scan replaces stale hints, including stopped servers.
                 // Missing machine.exec/tools leaves transcript-derived candidates available.
-                try { preview.ports = connection.previewListeningPorts().distinct().take(24) }
-                catch (_: io.github.shiroel.aries.core.CoreException) { }
+                preview.discovery = PreviewDiscovery.SEARCHING
+                try {
+                    preview.ports = connection.previewListeningPorts().distinct().take(24)
+                    preview.discovery = PreviewDiscovery.READY
+                } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                catch (_: io.github.shiroel.aries.core.CoreException) { preview.discovery = PreviewDiscovery.FAILED }
                 delay(30_000)
             } while (true)
         }
     }
     return preview
+}
+
+internal enum class PreviewDiscovery { SEARCHING, READY, FAILED }
+
+/** Empty means no server only after discovery succeeds; connection failures stay recoverable. */
+@Composable
+internal fun PreviewDiscoveryNotice(preview: LocalhostPreview, onRetry: () -> Unit) {
+    Column(Modifier.padding(16.dp)) {
+        when (preview.discovery) {
+            PreviewDiscovery.SEARCHING -> if (preview.ports.isEmpty()) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    ConsoleBusyIndicator()
+                    Text(stringResource(R.string.preview_searching))
+                }
+            }
+            PreviewDiscovery.READY -> if (preview.ports.isEmpty()) Text(stringResource(R.string.preview_no_servers))
+            PreviewDiscovery.FAILED -> {
+                Text(stringResource(R.string.error_connection), color = MaterialTheme.colorScheme.error)
+                TextButton(onClick = onRetry) { Text(stringResource(R.string.preview_retry)) }
+            }
+        }
+    }
 }
 
 /** Sample live output at most four times a second, including under continuous output. */
@@ -248,6 +280,7 @@ internal fun LocalhostPreviewBrowser(
             key(port) {
                 RestrictedPreviewWebView(currentOrigin, preview.desktop, Modifier.fillMaxWidth().weight(1f),
                     active = started && forward != null, forward = forward,
+                    pagePath = preview.pagePath, onPath = { preview.pagePath = it },
                     onReconnect = { retry++ }, onView = { webView = it })
             }
         }
@@ -276,6 +309,7 @@ internal fun previewOriginAllows(origin: String, candidate: String): Boolean = t
 @Composable
 private fun RestrictedPreviewWebView(
     origin: String, desktop: Boolean, modifier: Modifier, active: Boolean, forward: PreviewForward?,
+    pagePath: String, onPath: (String) -> Unit,
     onReconnect: () -> Unit, onView: (WebView?) -> Unit,
 ) {
     val context = LocalContext.current
@@ -285,6 +319,13 @@ private fun RestrictedPreviewWebView(
     var navigation by remember { mutableIntStateOf(0) }
     var currentView by remember { mutableStateOf<WebView?>(null) }
     val currentOrigin by rememberUpdatedState(origin)
+    val savePath by rememberUpdatedState(onPath)
+    fun rememberPath(url: String?) {
+        if (url == null || !previewOriginAllows(currentOrigin, url)) return
+        val page = java.net.URI(url)
+        savePath(page.rawPath.orEmpty().ifEmpty { "/" } +
+            (page.rawQuery?.let { "?$it" } ?: "") + (page.rawFragment?.let { "#$it" } ?: ""))
+    }
     val reconnect by rememberUpdatedState(onReconnect)
     val isActive by rememberUpdatedState(active)
     var loadedOrigin by remember { mutableStateOf(origin) }
@@ -321,7 +362,8 @@ private fun RestrictedPreviewWebView(
                 settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
                 // No addJavascriptInterface, file chooser, download handler or permission grants.
                 webViewClient = object : WebViewClient() {
-                    override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) { loading() }
+                    override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) { rememberPath(url); loading() }
+                    override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) { rememberPath(url) }
                     override fun onPageCommitVisible(view: WebView, url: String?) {
                         if (state == PreviewPageState.LOADING) { state = PreviewPageState.READY; reconnectAttempted = false }
                     }
@@ -354,7 +396,7 @@ private fun RestrictedPreviewWebView(
                         if (previewOriginAllows(currentOrigin, request.url.toString())) null
                         else WebResourceResponse("text/plain", "utf-8", 403, "Blocked", emptyMap(), ByteArrayInputStream(byteArrayOf()))
                 }
-                loadUrl(origin)
+                loadUrl(origin.trimEnd('/') + pagePath)
                 onView(this)
             }
         }, update = { view ->

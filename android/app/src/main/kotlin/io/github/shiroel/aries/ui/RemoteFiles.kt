@@ -49,14 +49,14 @@ class RemoteFilesState internal constructor(val initialLocation: FileLocation? =
     internal val reading = mutableMapOf<String, FileReadingState>()
     internal var history by mutableStateOf<List<String?>>(emptyList())
     private var selectedFile by mutableStateOf(initialLocation?.path)
-    internal var fullFile by mutableStateOf(false)
+    internal var fullFile by mutableStateOf(true)
     internal var preview by mutableStateOf(false)
     internal var file: String?
         get() = selectedFile
         set(value) {
             if (value == selectedFile) return
             selectedFile = value
-            fullFile = false
+            fullFile = true
             preview = initialLocation?.path != value
         }
 }
@@ -215,6 +215,7 @@ fun RemoteFilesScreen(
                             val path = gitFilePath(changes!!.cwd, entry.path)
                             if (folder == null && directory == null) folder = path.substringBeforeLast('/').ifEmpty { "/" }
                             file = path
+                            fullFile = false
                         }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                             FileTypeIcon(entry.path, Modifier.padding(end = 8.dp))
                             Surface(color = MaterialTheme.colorScheme.secondaryContainer) {
@@ -256,7 +257,11 @@ fun RemoteFilesScreen(
                             expanded = if (entry.directory) isExpanded else null,
                             modifier = Modifier.clickable {
                                 if (entry.directory) toggleFolder(entry.path)
-                                else { file = entry.path }
+                                else {
+                                    file = entry.path
+                                    // Decide at opening; a later Git response only enables the Diff button.
+                                    fullFile = changes?.let { git -> git.files.any { gitFilePath(git.cwd, it.path) == entry.path } } != true
+                                }
                             }.then(if (entry.directory) Modifier.semantics { stateDescription = folderState } else Modifier),
                         )
                         if (entry.path in treeLoading) Text(stringResource(R.string.files_loading))

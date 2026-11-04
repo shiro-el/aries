@@ -13,6 +13,7 @@
 
     <!-- Host localhost preview -->
     <string name="preview_auto_refresh">Agent 변경 후 자동 새로고침</string>
+    <string name="preview_searching">개발 서버 찾는 중…</string>
     <string name="preview_no_servers">이 Host에서 실행 중인 개발 서버를 찾지 못했습니다.</string>
     <string name="preview_title">미리보기</string>
     <string name="preview_open_port">미리보기 열기 · %1$d</string>
@@ -904,6 +905,12 @@
     <string name="tasks_filter_done">끝남</string>
     <string name="tasks_filter_count">%1$s %2$d</string>
     <string name="tasks_list_view">목록 보기</string>
+    <!-- Tasks Host tools -->
+    <string name="tasks_host_tools_terminal">%1$s · %2$s의 도구</string>
+    <string name="tasks_host_tools_start_terminal">먼저 Terminal을 시작하면 Host 도구를 쓸 수 있어요.</string>
+    <string name="tasks_host_tools_need_folder">파일과 GitHub를 보려면 현재 폴더가 있는 Terminal이 필요해요.</string>
+    <string name="tasks_host_preview_direct_ssh">미리보기는 이 SSH Host에서 직접 실행 중인 Terminal이 필요해요.</string>
+
     <string name="tasks_host_view">Host별 보기</string>
     <string name="tasks_offline">연결 끊김</string>
     <string name="tasks_reconnecting">재연결 중…</string>

@@ -81,7 +81,7 @@ class RemoteFilesTest {
         }
     }
 
-    // Regression: delayed git status must not block browsing or opening files.
+    // Regression: delayed Git must not block browsing or replace a source file already being read.
     @Test fun filesRemainUsableWhileGitIsPending() {
         val git = kotlinx.coroutines.CompletableDeferred<GitChanges>()
         val conn = object : HostConnection(NoHandle) {
@@ -94,7 +94,9 @@ class RemoteFilesTest {
         compose.setContent { MaterialTheme { RemoteFilesScreen(conn, "t1", {}) } }
         compose.onNodeWithText("a.txt").performClick()
         compose.onNodeWithText("ready before git").assertExists()
-        compose.runOnIdle { git.complete(GitChanges("/repo", emptyList(), false, false)) }
+        compose.runOnIdle { git.complete(GitChanges("/repo", listOf(GitFile("a.txt", null, " M", false, true, false)), false, false)) }
+        compose.onNodeWithText("ready before git").assertExists()
+        compose.onNodeWithContentDescription(str(R.string.files_diff_button)).assertExists()
     }
 
     // Regression: inline retry must recover when the Host changes a file's line count.
@@ -360,7 +362,7 @@ class RemoteFilesTest {
         org.junit.Assert.assertTrue(requests.any { it.second > 200uL })
 
     }
-    @Test fun changedFileLinkStartsWithDiffAndFullFileKeepsTheLinkedLine() {
+    @Test fun fileLinkStartsWithSourceAndExplicitDiffKeepsTheLinkedLine() {
         val diffLine = "+updated " + "long comment ".repeat(20)
         val sourceLine = "full source // " + "long comment ".repeat(20)
         val reads = mutableListOf<ULong>()
@@ -392,7 +394,9 @@ class RemoteFilesTest {
                 .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
             return results.single().lineCount
         }
-        assertEquals(1, lineCount(diffLine))
+        compose.waitUntil(5000) { lineCount(sourceLine) == 1 }
+        compose.onNodeWithContentDescription(str(R.string.files_diff_button)).performClick()
+        compose.waitUntil(5000) { lineCount(diffLine) == 1 }
         // Source can load immediately while Git status resolves.
         val readsBeforeFullFile = reads.size
         screenshot("wrap-diff-off")
