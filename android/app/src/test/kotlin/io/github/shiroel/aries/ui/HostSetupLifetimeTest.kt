@@ -1,6 +1,8 @@
 package io.github.shiroel.aries.ui
 
-import io.github.shiroel.aries.core.AriesCoreInterface
+import io.github.shiroel.aries.core.*
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import io.github.shiroel.aries.core.Host
 import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.HostPairingDetails
@@ -23,6 +25,49 @@ class HostSetupLifetimeTest {
         private val pending = ArrayDeque<Runnable>()
         override fun dispatch(context: CoroutineContext, block: Runnable) { pending.addLast(block) }
         fun runPending() { while (pending.isNotEmpty()) pending.removeFirst().run() }
+    }
+
+    // Regression D90: editing the endpoint must discard delayed old Ready results, even when cancellation is ignored.
+    @Test fun editingEndpointInvalidatesHealthAndDropsOldReplies() = runTest {
+        val fake = FakeCore().apply { beacon = installed("0.1.0") }
+        val host = fake.addHost("Desk", Endpoint.Ssh("old.example", 22u, "me"))
+        val oldReply = CompletableDeferred<Unit>()
+        val newReply = CompletableDeferred<Unit>()
+        var delayed = false
+        val core = object : AriesCoreInterface by fake {
+            override suspend fun checkBeacon(hostId: String, fetcher: BeaconFetcher): BeaconCheck {
+                val old = (fake.hosts().single().endpoint as Endpoint.Ssh).address == "old.example"
+                if (delayed) withContext(NonCancellable) { (if (old) oldReply else newReply).await() }
+                return BeaconCheck(if (old) fake.installed("0.1.0") else BeaconState.NotInstalled, BeaconUpdate.NotNeeded)
+            }
+            override suspend fun herdrCoreStatus(hostId: String): HerdrCoreState {
+                val old = (fake.hosts().single().endpoint as Endpoint.Ssh).address == "old.example"
+                if (delayed) withContext(NonCancellable) { (if (old) oldReply else newReply).await() }
+                return if (old) HerdrCoreState.Installed("0.1.17", false) else HerdrCoreState.Missing
+            }
+        }
+        val model = HostsModel(core, backgroundScope)
+        model.openHostSettings(host)
+        runCurrent()
+        assertEquals(true, model.beacon.installed)
+        assertEquals(HerdrCoreState.Installed("0.1.17", false), model.herdrInstall.state)
+        delayed = true
+        model.beacon.load(host)
+        model.herdrInstall.refresh()
+        runCurrent()
+        val edit = launch { model.saveHost(host, "Desk", "new.example", 22, "me") }
+        runCurrent()
+        assertEquals(BeaconUi.Loading, model.beacon.ui)
+        assertEquals(null, model.herdrInstall.state)
+        oldReply.complete(Unit)
+        runCurrent()
+        assertEquals(BeaconUi.Loading, model.beacon.ui)
+        assertEquals(null, model.herdrInstall.state)
+        newReply.complete(Unit)
+        runCurrent()
+        edit.join()
+        assertEquals(BeaconUi.Known(BeaconState.NotInstalled), model.beacon.ui)
+        assertEquals(HerdrCoreState.Missing, model.herdrInstall.state)
     }
 
     // Regression: leaving the scanner after the core saves a Host must not skip the model refresh.
