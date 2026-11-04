@@ -14,6 +14,7 @@ data class WatchAgent(
     val requestId: String = "", val requestKind: String = "",
     val choices: List<String> = emptyList(),
     val contentHidden: Boolean = false,
+    val stateToken: String = "", val canAnswerOnWatch: Boolean = false,
 )
 
 /**
@@ -94,6 +95,7 @@ private fun WatchAgent.bounded(): WatchAgent {
         requestBody = if (contentHidden) "" else requestBody.limit(WatchSummary.MAX_REQUEST_CHARS),
         conversationSummary = if (contentHidden) "" else conversationSummary.limit(WatchSummary.MAX_SUMMARY_CHARS),
         requestId = if (contentHidden) "" else requestId.limit(256), requestKind = requestKind.limit(32),
+        stateToken = stateToken.limit(128), canAnswerOnWatch = canAnswerOnWatch && !contentHidden,
         choices = if (contentHidden) emptyList() else choices.take(8).map { it.limit(128) })
 }
 
@@ -103,6 +105,7 @@ private fun WatchAgent.toMap(details: Boolean) = DataMap().apply {
     if (details) {
         putString("host_name", hostName); putString("project", project)
         putString("request_body", requestBody); putString("conversation_summary", conversationSummary)
+        putString("state_token", stateToken); putBoolean("can_answer", canAnswerOnWatch)
         putString("request_id", requestId); putString("request_kind", requestKind)
         putStringArrayList("choices", ArrayList(choices)); putBoolean("content_hidden", contentHidden)
     }
@@ -115,6 +118,7 @@ private fun DataMap.toAgent(): WatchAgent = WatchAgent(
     getString("request_body") ?: "", getString("conversation_summary") ?: "",
     getString("request_id") ?: "", getString("request_kind") ?: "",
     getStringArrayList("choices") ?: emptyList(), getBoolean("content_hidden"),
+    getString("state_token") ?: "", getBoolean("can_answer"),
 ).bounded()
 
 /** MessageClient commands preserve machine-qualified addresses, without delimiter escaping. */
@@ -146,5 +150,33 @@ data class OpenWatchAgent(val hostId: String, val terminal: String) {
             val terminal = requireNotNull(map.getString("terminal")).also { require(it.isNotBlank()) }
             OpenWatchAgent(host, terminal)
         }.getOrNull()
+    }
+}
+
+/** One immediate request; no watch/phone retry queue. Choice indexes stay in Host order. */
+data class WatchCommand(val agent: WatchAgent, val choice: Int = -1, val text: String = "") {
+    fun toBytes(): ByteArray = agent.bounded().toMap(true).apply {
+        putInt("choice", choice); putString("text", text)
+    }.toByteArray().also { require(it.size <= 16_384 && text.length <= 4096) }
+
+    companion object {
+        const val ANSWER_PATH = "/aries/answer"
+        const val REPLY_PATH = "/aries/reply"
+        const val DETAILS_PATH = "/aries/answer-context"
+        fun fromBytes(bytes: ByteArray): WatchCommand? = runCatching {
+            require(bytes.size <= 16_384)
+            val map = DataMap.fromByteArray(bytes)
+            WatchCommand(map.toAgent(), if (map.containsKey("choice")) map.getInt("choice") else -1,
+                map.getString("text").orEmpty()).also { require(it.text.length <= 4096) }
+        }.getOrNull()
+    }
+}
+
+enum class WatchResult {
+    SENT, CHANGED, LOCKED, PHONE, FAILED, UNKNOWN;
+    fun toBytes() = name.toByteArray(Charsets.UTF_8)
+    companion object {
+        fun fromBytes(bytes: ByteArray): WatchResult =
+            entries.firstOrNull { it.name == bytes.toString(Charsets.UTF_8) } ?: UNKNOWN
     }
 }

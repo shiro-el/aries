@@ -25,6 +25,7 @@ licensee {
 }
 dependencies {
     implementation(project(":wear-data"))
+    implementation("androidx.wear:wear-input:1.1.0")
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation("androidx.wear.compose:compose-material:1.7.1")
