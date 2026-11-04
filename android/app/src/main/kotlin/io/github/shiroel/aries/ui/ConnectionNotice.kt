@@ -25,6 +25,16 @@ fun ConnectionNotice(link: HostLink, state: LinkState = link.state, firstLoad: B
         return
     }
     if (state !is LinkState.Down) return
+    if (state.error is io.github.shiroel.aries.core.CoreException.BeaconNotInstalled) {
+        Column(Modifier.fillMaxWidth().background(colors.surfaceContainer).padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(stringResource(R.string.chat_status_no_beacon), color = colors.onSurfaceVariant)
+            TextButton(onClick = { link.settings(state.error) }) {
+                Text(stringResource(R.string.beacon_install_button))
+            }
+        }
+        return
+    }
     Column(
         Modifier.fillMaxWidth().background(colors.errorContainer).padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),

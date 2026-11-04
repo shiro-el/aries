@@ -209,14 +209,21 @@ class HostsModel(
         private set
     var addedHost by mutableStateOf<Host?>(null)
         private set
+    /** The Host submitted by the current setup flow, retained when its form closes. */
+    var setupHostId by mutableStateOf<String?>(null)
+        private set
+
+    private var setupRevision = 0
 
     fun startAddingHost(method: HostAddMethod = HostAddMethod.MANUAL) {
         if (screen != Screen.Hosts) back()
         addedHost = null
+        setupHostId = null
+        setupRevision++
         hostAddMethod = method
     }
 
-    fun closeAddingHost() { hostAddMethod = null; addedHost = null }
+    fun closeAddingHost() { setupRevision++; hostAddMethod = null; addedHost = null }
 
     /** The open Host's connection and structure watch, while [Screen.Browse] shows (the latest line after a reconnect). */
     private var open: Pair<HostConnection, StructureWatch?>? = null
@@ -594,7 +601,7 @@ class HostsModel(
         recoveringKeys = true
     }
 
-    suspend fun recoverKey(keyId: String, privateKey: String? = null, passphrase: String = "") {
+    suspend fun recoverKey(keyId: String, privateKey: String? = null, passphrase: String = "") = modelOperation {
         withContext(keyWork) { core.recoverKey(keyId, privateKey, passphrase) }
         key = core.publicKey()
         keyProtection = core.keyProtection()
@@ -627,7 +634,7 @@ class HostsModel(
     }
 
     /** Import/decryption and vault work can block, including biometric authorization. */
-    suspend fun importKey(label: String, privateKey: String, passphrase: String) {
+    suspend fun importKey(label: String, privateKey: String, passphrase: String) = modelOperation {
         withContext(keyWork) { core.importKey(label.trim(), privateKey, passphrase) }
         key = core.publicKey()
         keyProtection = core.keyProtection()
@@ -650,29 +657,45 @@ class HostsModel(
         jumps = hosts.associate { it.id to core.jumpHosts(it.id) }
     }
 
-    fun addHost(name: String, address: String, port: Int, user: String, connectAfterAdd: Boolean = false) = guard {
-        val label = name.trim().ifBlank { address.trim() }
-        val host = core.addHost(label, Endpoint.Ssh(address.trim(), port.toUShort(), user.trim()))
-        hosts = core.hosts()
-        refreshRoutes()
-        hostsChanged()
-        if (hostAddMethod != null) addedHost = host
-        if (connectAfterAdd) connect(host)
+    fun addHost(name: String, address: String, port: Int, user: String, connectAfterAdd: Boolean = false): Boolean {
+        return try {
+            val label = name.trim().ifBlank { address.trim() }
+            val host = core.addHost(label, Endpoint.Ssh(address.trim(), port.toUShort(), user.trim()))
+            hosts = core.hosts()
+            refreshRoutes()
+            hostsChanged()
+            if (hostAddMethod != null) { addedHost = host; setupHostId = host.id }
+            if (connectAfterAdd) connect(host)
+            true
+        } catch (e: CoreException) {
+            prompt = problemFor(e)
+            false
+        }
     }
+
+    /** Submitted writes and the refresh after them belong to the ViewModel, not a form's lifetime. */
+    private suspend fun <T> modelOperation(write: suspend () -> T): T =
+        scope.async { runCatching { write() } }.await().getOrThrow()
 
     fun inspectPairingQr(qr: String) = core.inspectPairingQr(qr)
 
-    suspend fun pairHostQr(name: String, qr: String): Host {
+    suspend fun pairHostQr(name: String, qr: String, connectAfterPair: Boolean = false): Host = modelOperation {
+        val origin = screen
+        val revision = setupRevision
         val host = withContext(keyWork) { core.pairHostQr(name, qr) }
         hosts = core.hosts()
         refreshRoutes()
         hostsChanged()
-        return host
+        if (connectAfterPair && screen === origin && setupRevision == revision && hostAddMethod == HostAddMethod.QR) {
+            setupHostId = host.id
+            connect(host)
+        }
+        host
     }
 
     /** Saves in place; the core closes old lines only when the endpoint changed. */
-    suspend fun saveHost(host: Host, name: String, address: String, port: Int, user: String): Boolean {
-        return try {
+    suspend fun saveHost(host: Host, name: String, address: String, port: Int, user: String): Boolean = modelOperation {
+        try {
             val previous = hosts.firstOrNull { it.id == host.id } ?: host
             val endpoint = Endpoint.Ssh(address.trim(), port.toUShort(), user.trim())
             withContext(keyWork) {
@@ -692,6 +715,7 @@ class HostsModel(
     fun connect(host: Host) = connect(host, null)
 
     private fun connect(host: Host, restore: LastLocation?, savedLaunchId: String? = null, confirmSavedLaunch: Boolean = true) {
+        closeAddingHost()
         restoring = restore != null
         missingKeyHostId = null
         val link = link(host, null) { error ->
@@ -896,7 +920,12 @@ class HostsModel(
     }
 
     /** Installs the public key on [host] with a one-time password login. The password is not kept. */
+    var installingKeyOn by mutableStateOf<String?>(null)
+        private set
+
     fun installKey(host: Host, password: String) {
+        if (installingKeyOn != null) return
+        installingKeyOn = host.id
         prompt = null
         scope.launch {
             prompt = try {
@@ -906,6 +935,8 @@ class HostsModel(
                 }
                 key = core.publicKey()
                 keys = core.keys()
+                links.filter { it.host.id == host.id && it.state is LinkState.Down }.forEach { it.retryNow() }
+                liveChat?.takeIf { it.host.id == host.id && it.connectionError != null }?.retryConnection()
                 Prompt.Problem(Message(R.string.key_install_done_title), Message(body, listOf(host.name)))
             } catch (e: CoreException) {
                 when (e) {
@@ -914,7 +945,7 @@ class HostsModel(
                         Prompt.TrustJumpHostKey(host, e.hop, e.address, e.fingerprint, AfterTrust.InstallKey)
                     else -> problemFor(e)
                 }
-            }
+            } finally { installingKeyOn = null }
         }
     }
 

@@ -3,6 +3,10 @@ package io.github.shiroel.aries.ui
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.onRoot
+import org.robolectric.annotation.GraphicsMode
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -315,6 +319,8 @@ class ChatScreenTest {
     }
 
     @Test
+    @Config(qualifiers = "h1200dp")
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
     fun showsWhyThereIsNoChatAndWhatANewerBeaconSent() {
         val core = FakeCore()
         val model = openChat(core)
@@ -344,6 +350,16 @@ class ChatScreenTest {
         core.pushChat(ChatSnapshot(emptyList(), ChatStatus.NO_BEACON, null))
         compose.waitForIdle()
         compose.onNodeWithText(str(R.string.chat_status_no_beacon)).assertExists()
+        System.getenv("ARIES_ONBOARDING_RENDER_DIR")?.let { directory ->
+            java.io.File(directory, "chat-install-beacon.png").outputStream().use {
+                compose.onRoot().captureToImage().asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+            }
+        }
+        compose.onNodeWithText(str(R.string.beacon_install_button)).performClick()
+        compose.runOnIdle {
+            assertEquals(Screen.Settings, model.screen)
+            assertEquals("h1", model.settingsHost?.id)
+        }
     }
 
     @Test

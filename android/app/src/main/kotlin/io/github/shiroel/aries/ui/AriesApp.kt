@@ -127,6 +127,10 @@ private fun AriesContent(
                 }
             }
             model.prompt?.let { PromptDialog(it, model) }
+            if (model.installingKeyOn != null) {
+                AlertDialog(onDismissRequest = {},
+                    text = { Text(stringResource(R.string.key_install_busy)) }, confirmButton = {})
+            }
         }
     }
 }
@@ -368,7 +372,7 @@ private fun HostConnectionForm(model: HostsModel) {
         }
         method == HostAddMethod.QR -> {
             Text(stringResource(R.string.onboarding_qr_body), style = MaterialTheme.typography.bodySmall)
-            QrHostPairing(model, onPaired = model::connect)
+            QrHostPairing(model, connectAfterPair = true)
         }
         else -> AddHostForm(model)
     }
@@ -389,24 +393,26 @@ private fun AddHostForm(model: HostsModel) {
     var user by rememberSaveable { mutableStateOf("") }
     val portNumber = port.toIntOrNull()?.takeIf { it in 1..65535 }
     val guided = io.github.shiroel.aries.guidance.LocalAppGuidance.current?.onboardingStep != null
+    val errors = hostInputErrors(model.hosts, null, name, address, portNumber, user)
     Text(stringResource(R.string.onboarding_manual_key_body), style = MaterialTheme.typography.bodySmall)
     PublicKeyDetails(model)
     Text(stringResource(R.string.host_add_title), style = MaterialTheme.typography.titleMedium)
-    OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.host_add_name)) }, singleLine = true)
-    OutlinedTextField(address, { address = it }, label = { Text(stringResource(R.string.host_add_address)) }, singleLine = true)
+    OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.host_add_name)) }, singleLine = true, isError = errors.name != null, supportingText = hostInputSupport(errors.name))
+    OutlinedTextField(address, { address = it }, label = { Text(stringResource(R.string.host_add_address)) }, singleLine = true, isError = errors.address != null && address.isNotEmpty(), supportingText = hostInputSupport(errors.address))
     OutlinedTextField(
         port, { port = it },
         label = { Text(stringResource(R.string.host_add_port)) },
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        isError = errors.port != null, supportingText = hostInputSupport(errors.port),
     )
-    OutlinedTextField(user, { user = it }, label = { Text(stringResource(R.string.host_add_user)) }, singleLine = true)
+    OutlinedTextField(user, { user = it }, label = { Text(stringResource(R.string.host_add_user)) }, singleLine = true, isError = errors.user != null && user.isNotEmpty(), supportingText = hostInputSupport(errors.user))
     ConsoleButton(
         enabled = validHostInput(model.hosts, null, name, address, portNumber, user),
         onClick = {
-            model.addHost(name, address, portNumber ?: 22, user,
-                connectAfterAdd = guided)
-            name = ""; address = ""; port = "22"; user = ""
+            if (model.addHost(name, address, portNumber ?: 22, user, connectAfterAdd = guided)) {
+                name = ""; address = ""; port = "22"; user = ""
+            }
         },
     ) { Text(stringResource(R.string.host_add_button)) }
 }

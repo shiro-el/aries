@@ -20,6 +20,8 @@ import androidx.compose.ui.test.performScrollToKey
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ApplicationProvider
 import com.sun.net.httpserver.HttpServer
+import io.github.shiroel.aries.core.AriesCoreInterface
+import io.github.shiroel.aries.core.KeyInstall
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.ui.AriesApp
 import io.github.shiroel.aries.ui.FakeCore
@@ -62,10 +64,15 @@ class AppGuidanceTest {
             requireTrust = "SHA256:abc"
             failFor["h1"] = io.github.shiroel.aries.core.CoreException.AuthRejected()
         }
+        val api = object : AriesCoreInterface by core {
+            override suspend fun installKeyWithPassword(hostId: String, password: String): KeyInstall {
+                return core.installKeyWithPassword(hostId, password).also { core.failFor.remove(hostId) }
+            }
+        }
         var permissionRequested = false
         compose.setContent {
             val scope = rememberCoroutineScope()
-            val model = remember { HostsModel(core, scope) }
+            val model = remember { HostsModel(api, scope) }
             AriesApp(model, guidance = state, allowNotifications = { permissionRequested = true; false })
         }
         screenshot("welcome")
@@ -85,10 +92,8 @@ class AppGuidanceTest {
         compose.onNodeWithText(context.getString(R.string.key_install_button)).performClick()
         compose.runOnIdle {
             assertEquals(listOf("h1" to "one-time password"), core.passwordsTried)
-            core.failFor.clear()
         }
         compose.onNodeWithText(context.getString(R.string.ok_button)).performClick()
-        compose.onNodeWithText(context.getString(R.string.connect_retry_button)).performClick()
         compose.onNodeWithTag("onboarding-connected").assertExists()
         compose.onNodeWithText(context.getString(R.string.beacon_install_button)).performScrollTo().performClick()
         compose.onNodeWithText(context.getString(R.string.beacon_reinstall_button)).assertExists()
@@ -109,7 +114,7 @@ class AppGuidanceTest {
             AriesApp(model, guidance = state)
         }
         compose.onNodeWithTag("onboarding-qr").performClick()
-        assertEquals(1, AppGuidanceState(prefs, 1, "0.1").onboardingStep)
+        assertEquals(1, state.onboardingStep)
         compose.onNodeWithText(context.getString(R.string.key_import_button)).performScrollTo().performClick()
         compose.onNodeWithTag("key-import-private").performTextReplacement("private test key")
         compose.onNodeWithTag("key-import-save").performClick()
@@ -152,10 +157,20 @@ class AppGuidanceTest {
             compose.setContent { MaterialTheme { AppGuidance(state) {} } }
             runBlocking { state.checkForUpdate() }
             compose.onNodeWithTag("app-update-banner").assertExists()
-            compose.onNodeWithTag("app-update-banner").performClick()
+            compose.onNodeWithTag("app-update-download").performClick()
             val opened = shadowOf(context as Application).nextStartedActivity
             assertEquals(Intent.ACTION_VIEW, opened.action)
             assertEquals("https://example.test/aries.apk", opened.dataString)
+            screenshot("update-banner")
+            compose.onNodeWithTag("app-update-dismiss").performClick()
+            runBlocking { state.checkForUpdate() }
+            compose.onNodeWithTag("app-update-banner").assertDoesNotExist()
+            val recreated = AppGuidanceState(prefs, 10, "0.10")
+            runBlocking { recreated.checkForUpdate() }
+            assertEquals(null, recreated.bannerRelease)
+            code.set(12)
+            runBlocking { state.checkForUpdate() }
+            compose.onNodeWithTag("app-update-banner").assertExists()
             code.set(10)
             runBlocking { state.checkForUpdate() }
             compose.onNodeWithTag("app-update-banner").assertDoesNotExist()
@@ -231,6 +246,41 @@ class AppGuidanceTest {
         } finally {
             server.stop(0)
         }
+    }
+
+    // Regression: upgrading a pre-guide install must not hide its saved Hosts behind welcome.
+    @Test fun existingHostsCompleteOnboardingAndAnAbandonedConnectStepRestartsAtWelcome() {
+        prefs.edit().clear().putInt("onboarding_step", 1).commit()
+        assertEquals(0, AppGuidanceState(prefs, 1, "0.1").onboardingStep)
+        assertEquals(null, AppGuidanceState(prefs, 1, "0.1", hasHosts = true).onboardingStep)
+        assertEquals(null, AppGuidanceState(prefs, 1, "0.1").onboardingStep)
+    }
+
+    // Regression: connecting an unrelated Host or entering Settings must not advance or overlay a guide.
+    @Test fun guideFollowsOnlyItsSubmittedHost() {
+        prefs.edit().clear().commit()
+        val state = AppGuidanceState(prefs, 1, "0.1")
+        val core = FakeCore().apply { ensureKey() }
+        val other = core.addHost("Other", io.github.shiroel.aries.core.Endpoint.Ssh("other.example", 22u, "me"))
+        lateinit var model: HostsModel
+        compose.setContent {
+            val scope = rememberCoroutineScope()
+            model = remember { HostsModel(core, scope) }
+            AriesApp(model, guidance = state)
+        }
+        compose.onNodeWithTag("onboarding-manual").performClick()
+        compose.runOnIdle {
+            model.addHost("New", "new.example", 22, "me")
+            model.connect(other)
+        }
+        compose.waitForIdle()
+        assertEquals(1, state.onboardingStep)
+        compose.onNodeWithTag("onboarding-connected").assertDoesNotExist()
+        compose.runOnIdle { model.openSettings() }
+        compose.onNodeWithTag("onboarding-skip").assertDoesNotExist()
+        compose.runOnIdle { model.back(); model.connect(model.hosts.last()) }
+        compose.onNodeWithTag("onboarding-connected").assertExists()
+        assertEquals(2, state.onboardingStep)
     }
 
 }
