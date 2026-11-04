@@ -228,7 +228,7 @@ internal class ChatDialogState {
         diagram = null
         responseMetadata = null
     }
-    val isOpen: Boolean get() = textMenu != null || rewind != null || tasksRequest != null || selection != null || image != null || diagram != null || responseMetadata != null
+    val isOpen: Boolean get() = showUsage || textMenu != null || rewind != null || tasksRequest != null || selection != null || image != null || diagram != null || responseMetadata != null
 }
 
 internal data class ChatTextMenu(val text: String, val bounds: Rect, val metadata: ChatResponseMetadata? = null, val entryId: String? = null)
