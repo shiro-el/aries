@@ -628,6 +628,24 @@
     <string name="worktrees_locked">Locked · %1$s</string>
     <string name="worktrees_prunable">Unavailable · %1$s</string>
 
+    <!-- New task from the phone -->
+    <string name="new_task_title">New task</string>
+    <string name="new_task_on_host">New task on %1$s</string>
+    <string name="new_task_prompt">First prompt</string>
+    <string name="new_task_start">Start Agent</string>
+    <string name="new_task_from_issue">Start Agent with this Issue</string>
+    <string name="new_task_issue_prompt">Work on %1$s #%2$d: %3$s\n%4$s\n\nIssue summary:\n%5$s</string>
+    <string name="new_task_browse">Browse folders</string>
+    <string name="new_task_use_folder">Use this folder</string>
+    <string name="new_task_options">Launch options</string>
+    <string name="new_task_waiting">Waiting for the Agent to be ready…</string>
+    <string name="new_task_not_ready">The Agent is not ready yet. Your prompt is kept. Check its Terminal or wait again.</string>
+    <string name="new_task_delivery_unknown">The send could not be confirmed. Your prompt is kept. Check Chat before sending it again.</string>
+    <string name="new_task_launch_unknown">The launch could not be confirmed. Check the Host’s Agents before starting again. Your prompt is kept.</string>
+    <string name="new_task_open_chat">Open Agent Chat</string>
+    <string name="new_task_wait_again">Wait for Agent</string>
+    <string name="new_task_nested_host">Add this machine as a Host to start an Agent there.</string>
+
     <string name="launch_open_button">New Terminal</string>
     <string name="launch_title">Start a Terminal</string>
     <string name="launch_command">Command</string>
