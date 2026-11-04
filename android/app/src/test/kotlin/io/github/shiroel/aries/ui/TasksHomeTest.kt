@@ -110,6 +110,56 @@ class TasksHomeTest {
         compose.runOnIdle { chat.stop() }
     }
 
+    // D21: a newer permission in the same turn must invalidate the previous DONE snapshot.
+    @Test fun secondPermissionRemainsInNeedsWhileItsTranscriptCatchesUp() {
+        val terminal = TerminalInfo("t1", "Permission task", "", listOf("claude"), "/repo", "live",
+            AgentStatus.Blocked(BlockedReason.PERMISSION, null), turn = 1uL, statusMs = 100uL)
+        val core = FakeCore().apply {
+            addHost("home", Endpoint.Ssh("home.test", 22u, "me"))
+            terminals = listOf(terminal)
+        }
+        show(core)
+        lateinit var chat: ChatModel
+        val first = ChatEntry("permission:first", null, ChatEntryBody.Question("permission", "Old permission",
+            listOf(ChatQuestionPart("Old permission", null, false, emptyList())), ChatToolStatus.DONE, null))
+        compose.runOnIdle {
+            chat = model.taskQuestion((model.screen as Screen.Agents).board, AgentKey("h1", "t1"))!!
+            model.startTaskQuestion(chat)
+            core.pushChat(ChatSnapshot(listOf(first), ChatStatus.LIVE, null))
+        }
+        compose.onNodeWithTag("tasks-filter-needs").assertTextContains(context.getString(R.string.tasks_filter_count,
+            context.getString(R.string.tasks_filter_needs), 0))
+        compose.runOnIdle { core.push(listOf(terminal.copy(statusMs = 200uL))) }
+        compose.onNodeWithTag("tasks-filter-needs").assertTextContains(context.getString(R.string.tasks_filter_count,
+            context.getString(R.string.tasks_filter_needs), 1))
+        compose.onNodeWithTag("tasks-filter-needs").performClick()
+        compose.onNodeWithText("Old permission").assertDoesNotExist()
+        val second = first.copy(id = "permission:second", body = (first.body as ChatEntryBody.Question).copy(
+            title = "New permission", questions = listOf(ChatQuestionPart("New permission", null, false,
+                listOf(ChatQuestionOption("Allow", null)))), status = ChatToolStatus.RUNNING))
+        compose.runOnIdle { core.pushChat(ChatSnapshot(listOf(first, second), ChatStatus.LIVE, null)) }
+        compose.onNode(hasText("New permission") and hasAnyAncestor(hasTestTag("tasks-needs-sheet"))).assertExists()
+        compose.onNodeWithContentDescription(context.getString(R.string.chat_question_option_label,
+            context.getString(R.string.chat_permission_allow))).performClick()
+        compose.runOnIdle { assertEquals("permission:second", core.answers.single().second) }
+    }
+
+    // D21: completion received before the sheet ever saw RUNNING must still retire the need.
+    @Test fun firstQuestionSnapshotAlreadyCompleteClosesTheObsoleteNeed() {
+        val core = FakeCore().apply {
+            addHost("home", Endpoint.Ssh("home.test", 22u, "me"))
+            terminals = listOf(TerminalInfo("t1", "Question task", "", listOf("codex"), "/repo", "live",
+                AgentStatus.Blocked(BlockedReason.QUESTION, null)))
+        }
+        show(core)
+        compose.onNodeWithTag("tasks-filter-needs").performClick()
+        compose.runOnIdle { core.pushChat(ChatSnapshot(listOf(ChatEntry("done", null,
+            ChatEntryBody.Question("request_user_input", "Already answered", emptyList(), ChatToolStatus.DONE, null))), ChatStatus.LIVE, null)) }
+        compose.onNodeWithTag("tasks-needs-sheet").assertDoesNotExist()
+        compose.onNodeWithTag("tasks-filter-needs").assertTextEquals(context.getString(R.string.tasks_filter_count,
+            context.getString(R.string.tasks_filter_needs), 0))
+    }
+
     // D58: a delayed connection/reconnection must offer recovery in the card and retain its draft.
     @Test fun newTaskWaitsForItsHostAndKeepsTheDraftThroughReconnectAndRetry() {
         var gate = CompletableDeferred<Unit>()
@@ -204,8 +254,8 @@ class TasksHomeTest {
         compose.runOnIdle { assertEquals(emptyList<String>(), attempted) }
     }
 
-    // D25: Needs must ignore helpers, unknown callers and stale feeds, including on biometric Hosts.
-    @Test fun needsOnlyCountsLiveConfirmedTopLevelCallsOnTheForegroundHost() {
+    // D25/D33: ignore helpers and unknown callers, but retain confirmed Calls during a feed outage.
+    @Test fun needsRetainsConfirmedTopLevelCallsDuringAFeedOutage() {
         val core = FakeCore().apply {
             addHost("home", Endpoint.Ssh("home.test", 22u, "me"))
             ensureKey()
@@ -225,9 +275,73 @@ class TasksHomeTest {
         compose.onNodeWithTag("tasks-needs-next").performClick()
         compose.onNodeWithTag("task-call:h1/review").assertExists()
         compose.runOnIdle { core.callListeners.getValue("h1").onState(CallFeedState.Reconnecting("offline")) }
+        compose.onNodeWithTag("task-call:h1/review").assertExists()
+        compose.onNodeWithTag("tasks-filter-needs").assertTextEquals(context.getString(R.string.tasks_filter_count,
+            context.getString(R.string.tasks_filter_needs), 1))
+        compose.onNodeWithTag("task-call:h1/review").performClick()
+        compose.onNodeWithContentDescription(context.getString(R.string.call_answer_choice_label, "review", "Continue")).assertDoesNotExist()
+        compose.runOnIdle { core.callListeners.getValue("h1").onState(CallFeedState.Live) }
+        compose.runOnIdle { core.callListeners.getValue("h1").onCalls(core.callsOf.getValue("h1")) }
+        compose.onNodeWithContentDescription(context.getString(R.string.call_answer_choice_label, "review", "Continue")).assertExists()
+    }
+
+    // D27: acknowledging an informational Call must remove it from Tasks across recreation.
+    @Test fun informationalCallCanBeAcknowledgedFromTasks() {
+        val core = FakeCore().apply {
+            addHost("home", Endpoint.Ssh("home.test", 22u, "me")); ensureKey()
+            callsOf["h1"] = listOf(call("review", "t1", CallUrgency.CHECK).copy(choices = emptyList()))
+        }
+        show(core)
+        compose.onNodeWithTag("task-call:h1/review").performClick()
+        compose.onNode(hasText(context.getString(R.string.ok_button)) and hasAnyAncestor(hasTestTag("tasks-needs-sheet"))).performClick()
+        compose.onNodeWithTag("tasks-needs-sheet").assertDoesNotExist()
         compose.onNodeWithTag("task-call:h1/review").assertDoesNotExist()
+        compose.runOnIdle { generation.intValue++ }
         compose.onNodeWithTag("tasks-filter-needs").assertTextEquals(context.getString(R.string.tasks_filter_count,
             context.getString(R.string.tasks_filter_needs), 0))
+        compose.runOnIdle { assertEquals(emptyList<Triple<String, String, UInt>>(), core.replies) }
+    }
+
+    // D27: only fresh caller progress after the Call can clear an unanswered informational Call.
+    @Test fun callerProgressAfterTheCallRemovesItFromNeeds() {
+        val terminal = TerminalInfo("t1", "Review task", "", listOf("claude"), "/repo", "live",
+            AgentStatus.Working, statusMs = callTime - 1uL)
+        val core = FakeCore().apply {
+            addHost("home", Endpoint.Ssh("home.test", 22u, "me")); ensureKey()
+            terminals = listOf(terminal)
+        }
+        show(core)
+        compose.runOnIdle { core.sendCall(call("review", "t1", CallUrgency.CHECK).copy(choices = emptyList())) }
+        compose.onNodeWithTag("task-call:h1/review").assertExists()
+        compose.onNodeWithTag("task-call:h1/review").performClick()
+        compose.runOnIdle { core.push(listOf(terminal.copy(agentStatus = AgentStatus.Done, statusMs = callTime + 1uL))) }
+        compose.onNodeWithTag("task-call:h1/review").assertDoesNotExist()
+        compose.onNodeWithTag("tasks-needs-sheet").assertDoesNotExist()
+        compose.onNodeWithTag("call_banner").assertDoesNotExist()
+        compose.onNodeWithTag("tasks-filter-needs").assertTextEquals(context.getString(R.string.tasks_filter_count,
+            context.getString(R.string.tasks_filter_needs), 0))
+    }
+
+    // D38: scoped Tasks rows, counts and banners must not leak Calls from another Host.
+    @Test fun hostScopedTasksOnlyShowsThatHostsCalls() {
+        val core = FakeCore().apply {
+            addHost("home", Endpoint.Ssh("home.test", 22u, "me"))
+            addHost("work", Endpoint.Ssh("work.test", 22u, "me")); ensureKey()
+            callsOf["h1"] = listOf(call("home review", "t1", CallUrgency.CHECK))
+            callsOf["h2"] = listOf(call("work review", "t1", CallUrgency.CHECK).copy(hostId = "h2"))
+        }
+        show(core)
+        compose.onNodeWithTag("task-call:h2/work review").assertExists()
+        compose.runOnIdle { model.openHostWaiting(core.hosts().first()) }
+        compose.onNodeWithTag("task-call:h1/home review").assertExists()
+        compose.onNodeWithTag("task-call:h2/work review").assertDoesNotExist()
+        compose.onNodeWithTag("tasks-filter-needs").assertTextEquals(context.getString(R.string.tasks_filter_count,
+            context.getString(R.string.tasks_filter_needs), 1))
+        compose.runOnIdle { core.sendCall(call("new work call", "t1", CallUrgency.CHECK).copy(hostId = "h2")) }
+        compose.onNodeWithTag("call_banner").assertDoesNotExist()
+        compose.onNodeWithTag("agents-show-all").performClick()
+        compose.onNodeWithTag("tasks-filter-needs").assertTextEquals(context.getString(R.string.tasks_filter_count,
+            context.getString(R.string.tasks_filter_needs), 3))
     }
 
     // D86: a list-only outage must not stop/reopen the sheet's independent Chat stream or lose its question.
@@ -337,8 +451,7 @@ class TasksHomeTest {
         val second = first.copy(id = "q2")
         compose.runOnIdle { core.pushChat(ChatSnapshot(listOf(first.copy(body =
             (first.body as ChatEntryBody.Question).copy(status = ChatToolStatus.DONE)), second), ChatStatus.LIVE, null)) }
-        compose.onNodeWithTag("tasks-needs-sheet").assertDoesNotExist()
-        compose.onNodeWithTag("tasks-filter-needs").performClick()
+        // D21/D34: q2 is already live when q1 completes; continue without closing/reopening.
         compose.onNodeWithTag("tasks-needs-sheet").assertExists()
         compose.onNodeWithContentDescription(context.getString(R.string.chat_question_option_label, "Blue")).performClick()
         compose.runOnIdle { assertEquals(listOf("q1", "q2"), core.answers.map { it.second }) }
@@ -362,6 +475,26 @@ class TasksHomeTest {
             CallAnswer(0u, "Continue", CallAnswerState.DELIVERED, 2000uL, null), null) }
         compose.onNodeWithContentDescription(choice).performClick()
         compose.onNodeWithContentDescription(context.getString(R.string.call_answer_choice_label, "second", "Continue")).assertExists()
+    }
+
+    // D27/294 integration: another device's CLAIMED receipt must not consume the sheet item before delivery.
+    @Test fun anotherDevicesClaimDoesNotAdvanceUntilDelivered() {
+        val first = call("first", "t1", CallUrgency.CHECK)
+        val second = call("second", "t2", CallUrgency.CHECK)
+        val core = FakeCore().apply {
+            addHost("home", Endpoint.Ssh("home.test", 22u, "me")); ensureKey()
+            callsOf["h1"] = listOf(first, second)
+        }
+        show(core)
+        compose.onNodeWithTag("tasks-filter-needs").performClick()
+        compose.runOnIdle { core.callListeners.getValue("h1").onCalls(listOf(first.copy(answer =
+            CallAnswer(0u, "Continue", CallAnswerState.CLAIMED, 2000uL, null)), second)) }
+        val nextChoice = context.getString(R.string.call_answer_choice_label, "second", "Continue")
+        compose.onNodeWithContentDescription(nextChoice).assertDoesNotExist()
+        compose.onNodeWithTag("tasks-needs-sheet").assertExists()
+        compose.runOnIdle { core.callListeners.getValue("h1").onCalls(listOf(first.copy(answer =
+            CallAnswer(0u, "Continue", CallAnswerState.DELIVERED, 2001uL, null)), second)) }
+        compose.onNodeWithContentDescription(nextChoice).assertExists()
     }
 
     // Regression: inline start has no dialog visibility flag; it must still open the created Chat
@@ -453,6 +586,29 @@ class TasksHomeTest {
         compose.runOnIdle { core.push(core.terminals.map { it.copy(agentStatus = AgentStatus.Working) }) }
         compose.onNodeWithTag("tasks-needs-sheet").assertDoesNotExist()
         compose.runOnIdle { assertEquals(emptyList<Triple<String, String, List<List<UInt>>>>(), core.answers) }
+    }
+
+    // D34: a newly blocked task already in the feed must follow the final original question.
+    @Test fun resolvingTheLastOriginalItemContinuesToANewlyArrivedTask() {
+        val firstTerminal = TerminalInfo("t1", "First task", "", listOf("codex"), "/repo", "live",
+            AgentStatus.Blocked(BlockedReason.QUESTION, null), statusMs = 100uL)
+        val secondTerminal = firstTerminal.copy(address = "t2", name = "Next task", agentStatus = AgentStatus.Working)
+        val core = FakeCore().apply {
+            addHost("home", Endpoint.Ssh("home.test", 22u, "me"))
+            terminals = listOf(firstTerminal, secondTerminal)
+        }
+        show(core)
+        compose.onNodeWithTag("tasks-filter-needs").performClick()
+        val question = ChatEntry("q1", null, ChatEntryBody.Question("request_user_input", "First question",
+            listOf(ChatQuestionPart("First question", null, false, listOf(ChatQuestionOption("Blue", null)))), ChatToolStatus.RUNNING, null))
+        compose.runOnIdle { core.pushChat(ChatSnapshot(listOf(question), ChatStatus.LIVE, null)) }
+        compose.onNodeWithContentDescription(context.getString(R.string.chat_question_option_label, "Blue")).performClick()
+        compose.runOnIdle { core.push(listOf(firstTerminal, secondTerminal.copy(
+            agentStatus = AgentStatus.Blocked(BlockedReason.QUESTION, null), statusMs = 200uL))) }
+        compose.waitForIdle()
+        compose.runOnIdle { core.pushChat(ChatSnapshot(listOf(question.copy(body =
+            (question.body as ChatEntryBody.Question).copy(status = ChatToolStatus.DONE))), ChatStatus.LIVE, null)) }
+        compose.onNode(hasText("Next task") and hasAnyAncestor(hasTestTag("tasks-needs-sheet"))).assertExists()
     }
 
     // D101: reconstructing from a changed feed would reset skipped items or reorder this visit.
