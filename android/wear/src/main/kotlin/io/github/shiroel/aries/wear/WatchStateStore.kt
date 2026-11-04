@@ -25,8 +25,14 @@ class WatchStateStore(private val context: Context, private val now: () -> Long 
         val next = WatchSummary.fromBytes(bytes) ?: return false
         if (phone.isBlank()) return false
         val previous = summary()
-        val saved = prefs.edit().putString("phone", phone)
-            .putString("payload", Base64.encodeToString(bytes, Base64.NO_WRAP)).commit()
+        val editor = prefs.edit().putString("phone", phone)
+            .putString("payload", Base64.encodeToString(bytes, Base64.NO_WRAP))
+        val hosts = next.hostFetchedAtMs.keys + next.inbox.map { it.hostId } + progresses().map { it.second.hostId }
+        hosts.forEach { host ->
+            if (next.fetchedAt(host) > previous.fetchedAt(host) || phone != phoneNode())
+                editor.putLong("received:$host", now())
+        }
+        val saved = editor.commit()
         if (saved) {
             refreshComplication(previous, next)
             refreshProgress()
@@ -61,6 +67,8 @@ class WatchStateStore(private val context: Context, private val now: () -> Long 
                 (next.atMs == previous.second.atMs && previous.second.cancelled && !next.cancelled))) return false
         val editor = progressPrefs.edit().putString("phone:$key", phone)
             .putString(key, Base64.encodeToString(bytes, Base64.NO_WRAP))
+        if (previous == null || progressPhone(previous.first) != phone || next.atMs > previous.second.atMs)
+            editor.putLong("received:$key", now())
         val source = path ?: next.dataPath
         // The legacy mirror must not replace ownership of a per-Agent DataItem.
         if (source != WatchProgress.DATA_PATH || progressPrefs.getString("path:$key", null) != next.dataPath)
@@ -90,15 +98,23 @@ class WatchStateStore(private val context: Context, private val now: () -> Long 
             val fetched = summary.fetchedAt(current.hostId)
             val agent = summary.inbox.find { it.hostId == current.hostId && it.terminal == current.terminal }
             val completeList = summary.totalAgents <= summary.inbox.size
-            val retired = !current.cancelled && progressPhone(key) == phoneNode() && fetched > current.atMs &&
+            val newerPull = current.observedAtMs != 0L && fetched > current.observedAtMs
+            val retired = !current.cancelled && progressPhone(key) == phoneNode() && newerPull &&
                 ((agent != null && agent.status != "working") || (agent == null && completeList))
             if (retired) {
-                saveCancelled(key, current.copy(atMs = fetched))
+                saveCancelled(key, current)
                 WatchProgressNotifications.clear(context, current)
             } else {
-                val confirmed = if (agent?.status == "working" && progressPhone(key) == phoneNode()) maxOf(current.atMs, fetched) else current.atMs
+                // Receipt and lifetime use this watch's clock. Both fetch ordering fields
+                // originate on the phone; Host timestamps only order progress generations.
+                val receivedKey = "received:$key"
+                val received = if (progressPrefs.contains(receivedKey)) progressPrefs.getLong(receivedKey, 0)
+                    else now().also { progressPrefs.edit().putLong(receivedKey, it).commit() }
+                val confirmed = if (newerPull && agent?.status == "working" && progressPhone(key) == phoneNode())
+                    maxOf(received, prefs.getLong("received:${current.hostId}", received)) else received
                 WatchProgressNotifications.show(context, current, summary,
-                    (confirmed + WatchProgress.MAX_AGE_MS - now()).coerceAtLeast(0))
+                    (WatchProgress.MAX_AGE_MS - (now() - confirmed).coerceAtLeast(0)).coerceAtLeast(0),
+                    (received - (current.atMs - current.startedAtMs)).coerceAtLeast(0))
             }
         }
     }

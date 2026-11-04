@@ -25,9 +25,11 @@ mod host_edit;
 mod host_model;
 mod host_pairing;
 mod input_history;
+mod key_unlock;
 mod last_known_state;
 mod launch;
 mod layout_edit;
+mod network_timeout;
 mod preview;
 mod private_content;
 mod push;
@@ -295,6 +297,7 @@ async fn on_runtime<T: Send + 'static>(
 pub struct AriesCore {
     store: Store,
     vault: Arc<dyn KeyVault>,
+    key_unlocks: Arc<key_unlock::KeyUnlocks>,
     hosts: Arc<Mutex<Vec<SavedHost>>>,
     last_known: last_known_state::States,
     sessions: host_edit::HostSessions,
@@ -340,6 +343,7 @@ impl AriesCore {
             store,
             last_known,
             vault,
+            key_unlocks: Arc::default(),
             chat_cache,
             push_replay: Default::default(),
             hosts,
@@ -876,13 +880,13 @@ impl AriesCore {
                     address,
                     port,
                     user,
-                    key: self.private_key(host.key_id.as_deref())?,
+                    key: self.deferred_key(host.key_id.as_deref())?,
                     trusted: host.host_key,
                     jumps: self.ssh_hops(host.jumps)?,
                 }),
             };
             let client = on_runtime(async move {
-                tokio::time::timeout(std::time::Duration::from_secs(20), async {
+                network_timeout::timeout(std::time::Duration::from_secs(20), async {
                     HcClient::handshake(transport.open().await?).await
                 })
                 .await
@@ -933,7 +937,7 @@ impl AriesCore {
             .into_iter()
             .map(|j| {
                 Ok(SshHop {
-                    key: self.private_key(j.key_id.as_deref())?,
+                    key: self.deferred_key(j.key_id.as_deref())?,
                     address: j.address,
                     port: j.port,
                     user: j.user,
@@ -943,17 +947,14 @@ impl AriesCore {
             .collect()
     }
 
-    /// The private half of `key_id` (`None` or [`DEFAULT_KEY_ID`]: the
-    /// default key).
-    fn private_key(&self, key_id: Option<&str>) -> Result<PrivateKey, CoreError> {
+    fn deferred_key(&self, key_id: Option<&str>) -> Result<key_unlock::SshKey, CoreError> {
         let (protection, sealed) = self.sealed_key(key_id)?;
-        let pem = self.vault.open(sealed, protection)?;
-        let pem = String::from_utf8(pem).map_err(|e| CoreError::Vault {
-            detail: e.to_string(),
-        })?;
-        PrivateKey::from_openssh(&pem).map_err(|e| CoreError::Vault {
-            detail: e.to_string(),
-        })
+        Ok(key_unlock::SshKey::new(
+            sealed,
+            protection,
+            self.vault.clone(),
+            self.key_unlocks.clone(),
+        ))
     }
 
     /// The sealed private half of `key_id` and the protection it is under.
@@ -1658,6 +1659,7 @@ impl AriesCore {
                 let first = self.beacon_ssh(host_id)?;
                 let store = self.store.clone();
                 let vault = self.vault.clone();
+                let unlocks = self.key_unlocks.clone();
                 let host_id = host_id.to_owned();
                 chat::ChatHost::Ssh {
                     first: Mutex::new(Some(Box::new(first))),
@@ -1670,7 +1672,7 @@ impl AriesCore {
                             .ok_or_else(|| CoreError::UnknownHost {
                                 id: host_id.clone(),
                             })?;
-                        ssh_for_saved_host(&store, vault.as_ref(), host)
+                        ssh_for_saved_host(&store, vault.clone(), unlocks.clone(), host)
                     }),
                 }
             }
@@ -1690,7 +1692,12 @@ impl AriesCore {
 
     fn beacon_ssh(&self, host_id: &str) -> Result<Ssh, CoreError> {
         let host = self.saved_host(host_id)?;
-        ssh_for_saved_host(&self.store, self.vault.as_ref(), host)
+        ssh_for_saved_host(
+            &self.store,
+            self.vault.clone(),
+            self.key_unlocks.clone(),
+            host,
+        )
     }
 }
 
@@ -1698,10 +1705,11 @@ impl AriesCore {
 /// Watches keep sealed credentials, never a reusable unlocked private key.
 fn ssh_for_saved_host(
     store: &Store,
-    vault: &dyn KeyVault,
+    vault: Arc<dyn KeyVault>,
+    unlocks: Arc<key_unlock::KeyUnlocks>,
     host: SavedHost,
 ) -> Result<Ssh, CoreError> {
-    let key = |id: Option<&str>| -> Result<PrivateKey, CoreError> {
+    let key = |id: Option<&str>| -> Result<key_unlock::SshKey, CoreError> {
         let (protection, sealed) = match id {
             None | Some(DEFAULT_KEY_ID) => {
                 let identity = store.read_identity()?.ok_or(CoreError::NoKey)?;
@@ -1714,10 +1722,12 @@ fn ssh_for_saved_host(
                 store.read_key_sealed(id)?
             }
         };
-        let pem = vault.open(sealed, protection)?;
-        PrivateKey::from_openssh(pem).map_err(|e| CoreError::Vault {
-            detail: e.to_string(),
-        })
+        Ok(key_unlock::SshKey::new(
+            sealed,
+            protection,
+            vault.clone(),
+            unlocks.clone(),
+        ))
     };
     match host.endpoint {
         Endpoint::Ssh {

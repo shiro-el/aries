@@ -15,6 +15,7 @@
     <string name="preview_auto_refresh">Agent 변경 후 자동 새로고침</string>
     <string name="preview_searching">개발 서버 찾는 중…</string>
     <string name="preview_no_servers">이 Host에서 실행 중인 개발 서버를 찾지 못했어요.</string>
+    <string name="preview_discovery_failed">이 Host의 개발 서버를 탐색하지 못했어요. 다시 시도해 주세요.</string>
     <string name="preview_title">미리보기</string>
     <string name="preview_open_port">미리보기 열기 · %1$d</string>
     <string name="preview_address">localhost:%1$d 미리보기</string>
@@ -418,6 +419,7 @@
     <string name="key_recover_register_body">위에서 복구한 공개 키를 복사해 Host와 점프 Host의 authorized_keys에 추가해 주세요. Host가 비밀번호 로그인을 허용하면 아래 등록 버튼으로 해당 Host에 연결된 키를 등록할 수 있어요. 다시 접속해 확인해 주세요. 기존 Host 키 신뢰 정보는 유지해요.</string>
 
     <string name="key_biometric_label">SSH 키를 쓸 때 생체 인증</string>
+    <string name="key_unlock_button">SSH 키 잠금 풀기</string>
     <string name="key_biometric_prompt_title">SSH 키 잠금 해제</string>
     <string name="key_locked_title">SSH 키 잠김</string>
     <string name="key_locked_body">생체 인증을 마치지 않아서 SSH 키를 쓸 수 없어요. 다시 시도해 주세요.</string>

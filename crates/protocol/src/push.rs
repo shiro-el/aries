@@ -84,8 +84,12 @@ pub enum PushMessage {
         /// First ~200 characters of the last assistant reply, on Done.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         excerpt: Option<String>,
-        /// Unix seconds on the Host.
+        /// Unix seconds on the Host, retained for older phones.
         at: u64,
+        /// Subsecond generation on the Host. Compare only with other Host pushes,
+        /// never with a phone's fetch timestamp. Absent on older Beacons.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        at_ms: Option<u64>,
     },
     /// A user-selected Watched Agent is Working. Older phones reject this
     /// new kind as UnknownMessage without changing the v1 envelope.

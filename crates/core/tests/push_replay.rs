@@ -83,6 +83,7 @@ fn messages_at(secs: u64) -> Vec<PushMessage> {
             turn: None,
             question: None,
             excerpt: None,
+            at_ms: None,
             at: secs,
         },
         PushMessage::Progress {

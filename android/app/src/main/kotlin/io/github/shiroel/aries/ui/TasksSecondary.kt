@@ -131,7 +131,7 @@ internal class TasksHostToolsState {
 
     fun open(id: String, target: TerminalInfo) {
         terminal = target
-        files = RemoteFilesState().apply { folder = target.cwd?.takeIf(String::isNotBlank) }
+        files = RemoteFilesState().apply { folder = target.currentCwd?.takeIf(String::isNotBlank) }
         preview = LocalhostPreview()
         tool = id
     }
@@ -156,15 +156,18 @@ private fun TasksHostTools(browser: HostBrowser) {
             listOf(Triple("files", R.string.files_title, R.drawable.ic_folder),
                 Triple("github", R.string.github_button, R.drawable.file_type_git),
                 Triple("preview", R.string.preview_title, R.drawable.ic_browser_preview)).forEach { (id, label, icon) ->
-                Surface(onClick = { selected?.let { state.open(id, it) } },
-                    enabled = enabled && (if (id == "preview") previewEnabled else !selected?.cwd.isNullOrBlank()),
+                Surface(onClick = { selected?.let {
+                    if (id == "github") link?.github(it.address)?.open()
+                    state.open(id, it)
+                } },
+                    enabled = enabled && (if (id == "preview") previewEnabled else !selected.currentCwd.isNullOrBlank()),
                     modifier = Modifier.weight(1f).testTag("tasks-host-$id"), shape = MaterialTheme.shapes.small,
                     color = MaterialTheme.colorScheme.surfaceContainer, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
                     Column(Modifier.padding(horizontal = 8.dp, vertical = 14.dp), horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Icon(painterResource(icon), null, Modifier.size(22.dp))
                         Text(stringResource(label), style = MaterialTheme.typography.labelLarge, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
-                        selected?.cwd?.takeIf(String::isNotBlank)?.let { folder ->
+                        selected?.currentCwd?.takeIf(String::isNotBlank)?.let { folder ->
                             Text(folder, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
                     }
@@ -175,7 +178,7 @@ private fun TasksHostTools(browser: HostBrowser) {
             selected == null -> listOf(R.string.tasks_host_tools_start_terminal)
             !enabled -> listOf(R.string.error_connection)
             else -> listOfNotNull(
-                R.string.tasks_host_tools_need_folder.takeIf { selected.cwd.isNullOrBlank() },
+                R.string.tasks_host_tools_need_folder.takeIf { selected.currentCwd.isNullOrBlank() },
                 R.string.tasks_host_preview_direct_ssh.takeIf { !previewEnabled },
             )
         }
@@ -183,7 +186,7 @@ private fun TasksHostTools(browser: HostBrowser) {
             color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
     val target = state.terminal ?: return
-    if (tool == "github") GithubDialog(link, target) { tool = null }
+    if (tool == "github") GithubDialog(link, target) { link?.github(target.address)?.dismiss(); tool = null }
     if (tool == "files") Dialog(onDismissRequest = { tool = null }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize()) {
             val connection = link?.connections?.collectAsState()?.value
@@ -197,7 +200,7 @@ private fun TasksHostTools(browser: HostBrowser) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f).padding(16.dp)) {
                         Text(stringResource(R.string.preview_title), style = MaterialTheme.typography.titleLarge)
-                        Text(target.cwd.orEmpty(), style = MaterialTheme.typography.bodySmall)
+                        Text(target.currentCwd.orEmpty(), style = MaterialTheme.typography.bodySmall)
                     }
                     ActionIcon(R.drawable.ic_x, R.string.preview_close, { tool = null })
                 }
