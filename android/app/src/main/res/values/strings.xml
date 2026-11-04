@@ -207,6 +207,21 @@
     <string name="whats_new_title">What’s New · %1$s</string>
     <string name="whats_new_body">This release adds a three-step getting started guide, bundled release notes and an app update banner. Find the guide, release notes and update feed in Settings.</string>
 
+    <!-- First connection guide (195) -->
+    <string name="onboarding_welcome_title">Connect your first Host</string>
+    <string name="onboarding_welcome_body">Connect to a Host running herdr-core to see its Agents. Choose how to register it; Aries will help you prepare an SSH key.</string>
+    <string name="onboarding_qr_button">Connect with QR</string>
+    <string name="onboarding_manual_button">Connect manually</string>
+    <string name="onboarding_connect_body">Add or select a Host, confirm its Host key, then connect. Beacon setup follows a successful connection.</string>
+    <string name="onboarding_key_body">Create an SSH key for this phone, or import a key already authorized on your Host. Your selected connection method will continue here.</string>
+    <string name="onboarding_qr_body">On your Host, run aries-beacon pair-qr --address ADDRESS. Use an address reachable from this phone, then scan the QR. The QR installs your public key and registers the Host.</string>
+    <string name="onboarding_manual_key_body">Authorize this public key in ~/.ssh/authorized_keys on the Host before connecting. You can also register the Host and install the key with a one-time password below.</string>
+    <string name="onboarding_connected">Connected to %1$s</string>
+    <string name="onboarding_beacon_body">Beacon enables Chat, Calls and push notifications on this Host. Install it here, then allow notifications and enable push to send a test notification. You can finish now and return in Host settings.</string>
+    <string name="onboarding_hosts_button">Choose a saved Host</string>
+    <string name="onboarding_continue_button">Connect to Host</string>
+    <string name="agents_empty_hosts_button">Open Hosts to start an Agent</string>
+
     <string name="onboarding_title">Get started · %1$d of 3</string>
     <string name="onboarding_host_title">Add a Host</string>
     <string name="onboarding_beacon_title">Install Beacon</string>

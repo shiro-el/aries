@@ -23,7 +23,11 @@ import kotlinx.coroutines.launch
 
 /** QR credentials deliberately use remember, never saved state or disk. */
 @Composable
-internal fun QrHostPairing(model: HostsModel, scanQr: (((String) -> Unit) -> Unit)? = null) {
+internal fun QrHostPairing(
+    model: HostsModel,
+    scanQr: (((String) -> Unit) -> Unit)? = null,
+    onPaired: (io.github.shiroel.aries.core.Host) -> Unit = {},
+) {
     var qr by remember { mutableStateOf<String?>(null) }
     var details by remember { mutableStateOf<HostPairingDetails?>(null) }
     var name by remember { mutableStateOf("") }
@@ -66,8 +70,9 @@ internal fun QrHostPairing(model: HostsModel, scanQr: (((String) -> Unit) -> Uni
                         busy = true; error = null
                         scope.launch {
                             try {
-                                model.pairHostQr(name, credential)
+                                val host = model.pairHostQr(name, credential)
                                 qr = null; details = null; name = ""
+                                onPaired(host)
                             } catch (e: CoreException) {
                                 error = when (e) {
                                     is CoreException.InvalidPairingQr -> R.string.host_pair_invalid

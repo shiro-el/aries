@@ -210,6 +210,21 @@
     <string name="whats_new_title">새로운 기능 · %1$s</string>
     <string name="whats_new_body">3단계 시작 안내, 앱에서 바로 보는 릴리스 노트, 업데이트 배너가 추가됐어요. 시작 안내와 릴리스 노트, 업데이트 주소는 설정에 있어요.</string>
 
+    <!-- First connection guide (195) -->
+    <string name="onboarding_welcome_title">첫 Host에 연결하기</string>
+    <string name="onboarding_welcome_body">herdr-core가 실행 중인 Host에 연결하면 Agent를 볼 수 있어요. 등록 방법을 고르면 SSH 키 준비부터 안내할게요.</string>
+    <string name="onboarding_qr_button">QR로 연결</string>
+    <string name="onboarding_manual_button">직접 연결</string>
+    <string name="onboarding_connect_body">Host를 추가하거나 선택한 뒤 Host 키를 확인하고 연결해 주세요. 연결에 성공하면 Beacon 설정으로 이어져요.</string>
+    <string name="onboarding_key_body">이 휴대폰의 SSH 키를 만들거나 Host에서 이미 허용한 키를 가져오세요. 선택한 연결 방법으로 여기서 이어갈 수 있어요.</string>
+    <string name="onboarding_qr_body">Host에서 aries-beacon pair-qr --address ADDRESS를 실행하세요. 휴대폰에서 접근할 수 있는 주소를 넣고 QR을 스캔하면 공개 키 설치와 Host 등록을 함께 진행해요.</string>
+    <string name="onboarding_manual_key_body">연결하기 전에 이 공개 키를 Host의 ~/.ssh/authorized_keys에 추가하세요. 아래에서 Host를 등록한 뒤 일회용 비밀번호로 키를 설치할 수도 있어요.</string>
+    <string name="onboarding_connected">%1$s에 연결했어요</string>
+    <string name="onboarding_beacon_body">이 Host에서 Chat, Call, push 알림을 사용하려면 Beacon이 필요해요. 여기서 설치한 뒤 알림을 허용하고 push를 켜면 테스트 알림을 보낼 수 있어요. 지금 마치고 Host 설정에서 이어가도 돼요.</string>
+    <string name="onboarding_hosts_button">저장한 Host 선택</string>
+    <string name="onboarding_continue_button">Host에 연결</string>
+    <string name="agents_empty_hosts_button">Host를 열어 Agent 시작</string>
+
     <string name="onboarding_title">시작하기 · %1$d/3</string>
     <string name="onboarding_host_title">Host 추가</string>
     <string name="onboarding_beacon_title">Beacon 설치</string>

@@ -97,7 +97,7 @@ object WatchTile {
     private fun agentRow(context: Context, agent: WatchAgent): Box {
         val status = agent.status.takeIf { it in setOf("blocked", "error", "working", "done") } ?: "idle"
         val color = WatchConsole.color(status)
-        val code = WatchConsole.code(context, status)
+        val code = WatchConsole.code(context, status, agent.requestKind)
         val content = Row.Builder().setWidth(expand()).setVerticalAlignment(VERTICAL_ALIGN_CENTER)
             .addContent(Image.Builder().setResourceId(status).setWidth(dp(14f)).setHeight(dp(14f))
                 .setColorFilter(ColorFilter.Builder().setTint(argb(color)).build()).build())
@@ -113,7 +113,7 @@ object WatchTile {
                     context.getString(R.string.wear_agent_row, WatchConsole.status(context, status), agent.name)).build())
                 .setPadding(ModifiersBuilders.Padding.Builder().setStart(dp(8f)).setEnd(dp(8f)).build())
                 .setBackground(ModifiersBuilders.Background.Builder().setColor(argb(WatchConsole.CARD))
-                    .setCorner(ModifiersBuilders.Corner.Builder().setRadius(dp(2f)).build()).build()).build())
+                    .setCorner(ModifiersBuilders.Corner.Builder().setRadius(dp(WatchConsole.CORNER_RADIUS_DP)).build()).build()).build())
             .addContent(content).build()
     }
 
