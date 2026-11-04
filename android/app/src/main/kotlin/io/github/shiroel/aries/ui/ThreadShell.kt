@@ -100,6 +100,11 @@ internal fun ThreadEmptyHome(model: HostsModel, board: AgentBoard) {
         } else {
             LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.Center) {
                 threadBoardStatus(board)
+                // Keep phone-owned pending work visible beside the new-conversation entry.
+                items(board.agents.filter { model.queuedCount(it.key) > 0 },
+                    key = { "queued:${it.host.id}:${it.terminal.address}" }) { entry ->
+                    ThreadConversationRow(model, entry) { model.openAgent(board, entry, openChat = true) }
+                }
                 if (board.isEmpty || board.hosts.isEmpty()) item {
                     Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(stringResource(R.string.thread_home_empty_title), style = MaterialTheme.typography.headlineSmall)
@@ -237,6 +242,7 @@ private fun ThreadConversationRow(model: HostsModel, entry: AgentEntry, urgent: 
         verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(model.threadTitle(entry), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium,
             maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
+        ChatQueueCount(model.queuedCount(entry.key))
         val metadata = threadMetadata(entry).joinToString(" · ")
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             entry.terminal.agentStatus?.let { AgentStatusMark(it, modifier = Modifier.size(12.dp), live = entry.live) }

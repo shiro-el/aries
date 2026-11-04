@@ -122,9 +122,6 @@ internal fun threadHistoryContent(
                             val question = content.entry.body as ChatEntryBody.Question
                             Text(stringResource(if (question.name == PERMISSION_TOOL) R.string.thread_permission_waiting else R.string.thread_question_waiting), style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            question.questions.forEachIndexed { part, question ->
-                                SearchableChatText(question.text, "question:$part", style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium))
-                            }
                         }
                     }
                     row.entryId in users -> ThreadUserRow(row, chat, row.entryId == users.lastOrNull() && chat.queuedMessages.isEmpty())
@@ -252,7 +249,7 @@ internal fun ThreadAnswerPanel(chat: ChatModel, entry: ChatEntry, maxHeight: Dp 
 }
 
 @Composable
-internal fun ThreadCallPanel(entry: CallEntry, calls: CallsModel, chat: ChatModel? = null, compact: Boolean = false,
+internal fun ThreadCallPanel(entry: CallEntry, calls: CallsModel,
     onDismiss: (() -> Unit)? = null, maxHeight: Dp = 360.dp, announce: Boolean = false, onOpenTerminal: (() -> Unit)? = null) {
     val urgent = entry.call.urgency in setOf(CallUrgency.URGENT, CallUrgency.EMERGENCY)
     val accent = if (urgent) Color(0xFFF0B23E) else MaterialTheme.colorScheme.outlineVariant
@@ -270,11 +267,6 @@ internal fun ThreadCallPanel(entry: CallEntry, calls: CallsModel, chat: ChatMode
         val colors = MaterialTheme.colorScheme
         MaterialTheme(colorScheme = if (urgent) colors.copy(surfaceContainer = accent.copy(alpha = .1f).compositeOver(colors.surface)) else colors) {
             ConsoleChatCall(entry, calls, announce = announce, onOpenTerminal = onOpenTerminal)
-        }
-        if (entry.call.choices.isEmpty() && chat != null) ChatCatalogControls(chat) { openTools ->
-            MessageInput(chat, compact, leading = {
-                ActionIcon(R.drawable.ic_plus, R.string.chat_input_tools_button, openTools, enabled = chat.canEdit)
-            })
         }
     }
 }
@@ -335,23 +327,27 @@ internal fun ThreadChatHeader(chat: ChatModel, onBack: () -> Unit, onTerminal: (
 private fun threadConnectionText(chat: ChatModel): String? = when {
     chat.link?.state is LinkState.Down -> stringResource(R.string.agents_host_offline, chat.host.name)
     chat.link?.state == LinkState.Reconnecting -> statusText(ChatStatus.RECONNECTING)
-    chat.connectionError != null -> messageText(problemFor(chat.connectionError!!).body)
+    chat.connectionError is CoreException.BeaconNotInstalled || chat.snapshot?.status == ChatStatus.NO_BEACON ->
+        stringResource(R.string.thread_status_no_beacon)
+    chat.connectionError != null -> stringResource(R.string.connect_failed_title)
+    chat.snapshot?.status == ChatStatus.INCOMPATIBLE -> stringResource(R.string.incompatible_title)
+    chat.snapshot?.status == ChatStatus.NO_CORE -> stringResource(R.string.thread_status_no_core)
+    chat.snapshot?.status == ChatStatus.NO_TERMINAL -> stringResource(R.string.thread_status_no_terminal)
     else -> statusText(chat.snapshot?.status ?: ChatStatus.CONNECTING)
 }
 
 @Composable
 internal fun ThreadConnectionGuidance(chat: ChatModel) {
-    // The body owns first load; subsequent status changes are announced in the header.
+    // The header carries a short state; recovery instructions belong in the body.
     if (chat.showInitialLoading || chat.snapshot?.status == ChatStatus.NO_TERMINAL &&
         chat.link?.state == LinkState.Up && chat.connectionError == null) return
-    val text = threadConnectionText(chat) ?: return
+    threadConnectionText(chat) ?: return
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
         val state = chat.link?.state as? LinkState.Down
         val error = chat.connectionError ?: state?.error ?: if (chat.snapshot?.status == ChatStatus.NO_BEACON) CoreException.BeaconNotInstalled() else null
-        if (error != null) {
-            val detail = messageText(problemFor(error).body)
-            if (detail != text) Text(detail, style = MaterialTheme.typography.bodySmall)
-        }
+        val detail = error?.let { messageText(problemFor(it).body) }
+            ?: if (chat.snapshot?.status in setOf(ChatStatus.INCOMPATIBLE, ChatStatus.NO_CORE)) statusText(chat.snapshot!!.status) else null
+        if (detail != null) Text(detail, style = MaterialTheme.typography.bodySmall)
         Row {
             TextButton(onClick = { chat.link?.retryNow(); chat.retryConnection() }) { Text(stringResource(R.string.connect_retry_button)) }
             if (error != null) TextButton(onClick = { chat.link?.settings(error) }) { Text(stringResource(R.string.connect_settings_button)) }
@@ -378,12 +374,12 @@ internal fun ThreadChatInput(model: HostsModel, chat: ChatModel, activeCall: Cal
     question: ChatEntry?, compact: Boolean) {
     val panelHeight = if (compact) minOf(360.dp, LocalAgentViewportHeight.current * .4f) else 360.dp
     Column(Modifier.fillMaxWidth()) {
-        if (!compact) ThreadWaitingPill(model, chat)
-        ThreadConnectionGuidance(chat)
-        if (activeCall != null && calls != null) ThreadCallPanel(activeCall, calls, chat, compact, onDismiss = {
+        // Compact hides the entry button, while an already open sheet keeps its owner.
+        ThreadWaitingPill(model, chat, showPill = !compact)
+        if (activeCall != null && calls != null) ThreadCallPanel(activeCall, calls, onDismiss = {
             calls.closeThreadCall(activeCall)
         }, maxHeight = panelHeight, onOpenTerminal = { model.openTerminal(chat.terminal) })
-        else if (question != null) ThreadAnswerPanel(chat, question, panelHeight)
+        if (activeCall == null && question != null) ThreadAnswerPanel(chat, question, panelHeight)
         else if (chat.link != null) ThreadComposer(chat, compact)
     }
 }

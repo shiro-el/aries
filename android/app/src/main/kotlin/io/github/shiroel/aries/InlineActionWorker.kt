@@ -73,6 +73,11 @@ class InlineActionWorker(context: Context, params: WorkerParameters) : Coroutine
                             failed(R.string.notification_action_failed)
                             return@withTimeout
                         }
+                        if (io.github.shiroel.aries.ui.ChatReplyRecovery.enqueueFromWorker(core,
+                                io.github.shiroel.aries.ui.AgentKey(target.hostId, target.terminal), target.generation, text)) {
+                            show(R.string.notification_message_queued)
+                            return@withTimeout
+                        }
                         val outcome = core.sendMessageBackground(target.hostId, target.terminal, text, object : SendListener {
                             override fun onHeld() { show(R.string.chat_send_held) }
                         })
@@ -94,6 +99,10 @@ class InlineActionWorker(context: Context, params: WorkerParameters) : Coroutine
                 e is CoreException.Rpc && e.kind == "no_agent" -> R.string.chat_input_agent_ended
                 else -> R.string.notification_action_failed
             }, uncertain = e !is CoreException.Rpc || e.kind != "no_agent")
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            failed(R.string.notification_action_failed, uncertain = false)
         } finally {
             LastKnownStates.requestRefresh(applicationContext, target.hostId)
         }

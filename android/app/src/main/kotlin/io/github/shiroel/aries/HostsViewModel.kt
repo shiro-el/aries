@@ -16,6 +16,7 @@ class HostsViewModel(application: Application) : AndroidViewModel(application) {
     val model = HostsModel(
         core, viewModelScope, keyWork = Dispatchers.IO, pushPlatform = push,
         locationStore = LastLocationStore.from(application),
+        threadCallPreferences = application.getSharedPreferences("thread_calls", android.content.Context.MODE_PRIVATE),
         onSavedLaunchesChanged = ::refreshLaunchShortcuts,
         onCallAnswered = { host, callId, state -> NotificationGroups.answeredCall(application, host.id, host.name, callId, state) },
     )

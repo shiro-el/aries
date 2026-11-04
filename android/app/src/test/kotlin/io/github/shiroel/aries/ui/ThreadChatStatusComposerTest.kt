@@ -129,8 +129,8 @@ class ThreadChatStatusComposerTest {
         compose.onNodeWithText(str(R.string.connect_settings_button)).assertExists()
     }
 
-    // D32: Terminal fallback must follow the visible Call controls, including dismissal of Thread's panel.
-    @Test fun anAnswerableCallHidesTheTerminalFallbackUntilItsPanelIsDismissed() {
+    // D128: a Choice Call cannot answer the Agent's independent permission request.
+    @Test fun anAnswerableCallKeepsIndependentBlockedRoutesVisible() {
         val core = FakeCore().apply {
             callsOf["h1"] = listOf(CallInfo("h1", "review", 1000uL, "t1", true,
                 "Ready to merge?", "Tests pass", CallUrgency.CHECK, listOf("Merge", "Wait"), null, true))
@@ -139,8 +139,28 @@ class ThreadChatStatusComposerTest {
         core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, null))
         core.push(listOf(agent.copy(agentStatus = AgentStatus.Blocked(BlockedReason.PERMISSION, null))))
         compose.onNodeWithContentDescription(str(R.string.call_answer_choice_label, "Ready to merge?", "Wait")).assertIsEnabled()
-        compose.onNodeWithText(str(R.string.chat_blocked_permission)).assertDoesNotExist()
-        compose.onNodeWithText(str(R.string.thread_call_dismiss)).performClick()
         compose.onNodeWithText(str(R.string.chat_blocked_permission)).assertIsDisplayed()
+        core.push(listOf(agent.copy(agentStatus = AgentStatus.Blocked(BlockedReason.QUESTION, null))))
+        compose.onNodeWithText(str(R.string.chat_blocked_question)).assertIsDisplayed()
+        compose.onNodeWithText(str(R.string.thread_call_dismiss)).performClick()
+        compose.onNodeWithText(str(R.string.chat_blocked_question)).assertIsDisplayed()
     }
+    // D127: an active Choice Call must not remove Working's only Interrupt route or the draft.
+    @Test fun workingWithAChoiceCallKeepsTheComposerAndCanBeInterrupted() {
+        val core = FakeCore().apply {
+            callsOf["h1"] = listOf(CallInfo("h1", "review", 1000uL, "t1", true,
+                "Ready to merge?", "Tests pass", CallUrgency.CHECK, listOf("Merge", "Wait"), null, true))
+        }
+        val connection = open(core)
+        core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, null))
+        compose.onNodeWithTag("thread-call-panel").assertIsDisplayed()
+        compose.onNodeWithContentDescription(str(R.string.chat_message_input_label)).assertIsEnabled()
+        compose.onNodeWithContentDescription(str(R.string.chat_interrupt_confirm_button)).assertIsEnabled().performClick()
+        compose.onNodeWithText(str(R.string.chat_interrupt_confirm_button)).performClick()
+        compose.waitForIdle()
+        assertEquals(listOf("t1"), connection.interrupted)
+        compose.onNodeWithContentDescription(str(R.string.chat_message_input_label)).performTextInput("Keep reviewing")
+        compose.onNodeWithContentDescription(str(R.string.chat_message_input_label)).assertTextContains("Keep reviewing")
+    }
+
 }

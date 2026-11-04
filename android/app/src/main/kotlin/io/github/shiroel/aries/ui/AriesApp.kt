@@ -74,7 +74,8 @@ fun AriesApp(
     terminalDisplay: TerminalDisplaySettings = rememberTerminalDisplaySettings(),
 ) {
     AriesTheme(settings) {
-        androidx.compose.runtime.CompositionLocalProvider(LocalLayoutScreens provides layoutScreensFor(settings.layout)) {
+        androidx.compose.runtime.CompositionLocalProvider(LocalLayoutScreens provides layoutScreensFor(settings.layout),
+            LocalChatQueueCounts provides model::queuedCount) {
             CallAttentionHost(model) {
                 NewTaskAccess(model) {
                     if (guidance == null) AriesContent(model, settings, terminalDisplay)

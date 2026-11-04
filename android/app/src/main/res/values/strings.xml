@@ -687,6 +687,9 @@
     <string name="thread_permission_waiting">Permission request · waiting for your answer</string>
     <string name="thread_previous_waiting">Previous conversation that needs you</string>
     <string name="thread_next_waiting_button">Next conversation that needs you</string>
+    <string name="thread_status_no_beacon">Beacon needed</string>
+    <string name="thread_status_no_core">herdr-core unavailable</string>
+    <string name="thread_status_no_terminal">Terminal ended</string>
     <string name="thread_question_waiting">Question · waiting for your answer</string>
     <string name="chat_agent_status_announcement">%1$s: %2$s</string>
     <string name="thread_chat_subtitle">%1$s · %2$s</string>
@@ -864,6 +867,11 @@
     <string name="chat_delivery_restore_button">Restore to input</string>
     <string name="chat_delivery_resend_title">Resend message?</string>
     <!-- Phone-local Chat queue -->
+    <string name="chat_queue_count">Queued %1$d</string>
+    <string name="chat_queue_blocked">Check the earlier message before sending</string>
+    <string name="chat_queue_returned_ended">The Agent ended. Copy the returned message below.</string>
+    <string name="chat_queue_copy_returned_button">Copy returned message</string>
+    <string name="notification_message_queued">Reply queued · open Chat to review</string>
     <string name="chat_queue_waiting">Queued</string>
     <string name="chat_queue_agent">Passed to Agent · waiting for its turn</string>
     <string name="chat_queue_uncertain">Delivery unconfirmed · Check the messages before sending again</string>
