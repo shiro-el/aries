@@ -554,7 +554,7 @@
     <string name="agents_host_not_connected">%1$s · Not connected</string>
     <string name="agents_watch_stopped">%1$s · Could not receive the list</string>
     <string name="agents_host_offline">%1$s · Offline</string>
-    <string name="agents_waiting_stored">Last-known needs you · %1$d</string>
+    <string name="agents_waiting_stored">Saved waiting · %1$d</string>
     <string name="agents_last_known_group">Last-known · %1$d</string>
     <string name="agents_last_seen">Last seen %1$s</string>
     <string name="agents_last_seen_unknown">Last seen: unknown</string>
