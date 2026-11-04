@@ -323,16 +323,17 @@ class ChatScreenTest {
         compose.waitForIdle()
         compose.onNodeWithText(str(R.string.chat_unsupported)).assertExists()
         // Chat has its own stream: it can reconnect while the Host link is Up.
+        compose.mainClock.advanceTimeBy(1_600)
         compose.onNodeWithText(str(R.string.reconnecting)).assertExists()
-        compose.onNodeWithText(str(R.string.connect_retry_button)).assertExists()
-        compose.onNodeWithText(str(R.string.connect_settings_button)).assertExists()
+        compose.onNodeWithText(str(R.string.connect_retry_button)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.connect_settings_button)).assertDoesNotExist()
 
         // Losing the Host as well must still show one shared recovery notice.
         core.failWith = CoreException.Unreachable("network is unreachable")
         compose.runOnIdle { model.networkChanged() }
         compose.onNodeWithText(str(R.string.reconnecting)).assertExists()
         core.failWith = null
-        compose.onNodeWithText(str(R.string.connect_retry_button)).performClick()
+        compose.runOnIdle { model.networkChanged() }
         core.pushChat(ChatSnapshot(listOf(entry("q", ChatEntryBody.Unsupported)), ChatStatus.LIVE, null))
         compose.waitForIdle()
         compose.onNodeWithText(str(R.string.chat_unsupported)).assertExists()

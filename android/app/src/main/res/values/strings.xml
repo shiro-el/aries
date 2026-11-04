@@ -475,7 +475,6 @@
     <string name="terminal_accessibility_summary">Terminal, %1$d columns, %2$d rows</string>
     <string name="terminal_accessibility_cursor">Cursor line %1$d: %2$s</string>
     <string name="terminal_connection_closed">The connection to the Terminal closed. What you see may be out of date.</string>
-    <string name="reconnecting">Connecting… Retrying automatically.</string>
     <string name="terminal_scrolled_back">%1$d lines back</string>
     <string name="terminal_back_to_live">Back to live</string>
     <string name="terminal_zoom_reset">Zoom %1$d%% · Reset</string>
@@ -811,7 +810,8 @@
     <string name="incompatible_core_too_old">This Host runs herdr-core %1$s. Aries needs %2$s or newer: run `hc update` on the Host.</string>
     <string name="incompatible_missing_methods">This Host\'s herdr-core lacks %1$s. Run `hc update` on the Host.</string>
 
-    <!-- Host connection recovery -->
+    <!-- Host connection status and recovery -->
+    <string name="reconnecting">Connecting…</string>
     <string name="connect_host_status">%1$s · connection</string>
     <string name="connect_retry_button">Try again</string>
     <string name="connect_settings_button">Connection settings</string>
