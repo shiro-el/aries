@@ -2495,7 +2495,7 @@ class HostsModel(
                 if (shared != null && terminal.agentStatus != null) {
                     chat(target, terminal, screen)
                     (screen as Screen.Chat).chat.pendingShare = shared
-                    pendingShare = null
+                    cancelShare()
                 } else if (openChat) chat(target, terminal, screen) else show(target, terminal, screen)
                 closeCallInbox()
             } catch (e: CoreException) {
