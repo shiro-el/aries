@@ -29,6 +29,8 @@ internal fun LazyListScope.agentTreeItems(
     current: AgentKey? = null,
     sectionNamespace: String = "all",
     sections: Boolean = true,
+    showHost: Boolean = true,
+    canPin: (AgentEntry) -> Boolean = { true },
     actions: (@Composable ColumnScope.(AgentEntry, () -> Unit) -> Unit)? = null,
 ) {
     val groups = if (sections) agentGroups(entries, AgentListView.Priority)
@@ -52,13 +54,14 @@ internal fun LazyListScope.agentTreeItems(
                         Modifier.testTag("$tag:${entry.host.id}:${entry.terminal.address}"),
                         spaceName = entry.space?.name,
                         tabName = entry.tabName,
+                        showHost = showHost,
                         compact = compact,
                         selected = current == entry.key,
                         onLongClick = if (actions != null || compact && entry.terminal.agentStatus != null) ({ menu = true }) else null,
                         trailing = {
                             if (!compact) {
                                 AgentFoldButton(entry, descendants, folds.contains(entry.key.foldKey)) { folds.toggle(entry.key.foldKey) }
-                                if (entry.terminal.agentStatus != null) AgentPinButton(entry) { onPin(entry, it) }
+                                if (entry.terminal.agentStatus != null) AgentPinButton(entry, enabled = canPin(entry)) { onPin(entry, it) }
                             }
                             Box {
                                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
@@ -69,6 +72,7 @@ internal fun LazyListScope.agentTreeItems(
                                             icon = if (entry.terminal.pinned) R.drawable.agent_pin_off else R.drawable.agent_pin,
                                             modifier = Modifier.semantics { contentDescription = pinDescription },
                                             onClick = { menu = false; onPin(entry, !entry.terminal.pinned) },
+                                            enabled = canPin(entry),
                                         )
                                     }
                                     actions?.invoke(this, entry) { menu = false }
@@ -132,14 +136,15 @@ internal fun AgentFoldButton(entry: AgentEntry, descendants: List<AgentEntry>, f
 }
 
 @Composable
-internal fun AgentPinButton(entry: AgentEntry, onPin: (Boolean) -> Unit) {
+internal fun AgentPinButton(entry: AgentEntry, enabled: Boolean = true, onPin: (Boolean) -> Unit) {
     val pinned = entry.terminal.pinned
     val label = stringResource(if (pinned) R.string.agent_unpin_button_label else R.string.agent_pin_button_label,
         displayName(entry.terminal), entry.host.name)
-    IconButton(onClick = { onPin(!pinned) }, modifier = Modifier.size(48.dp)
+    IconButton(onClick = { onPin(!pinned) }, enabled = enabled, modifier = Modifier.size(48.dp)
         .testTag("agent-pin:${entry.host.id}:${entry.terminal.address}").semantics { selected = pinned }) {
         Icon(painterResource(if (pinned) R.drawable.agent_pin_off else R.drawable.agent_pin), label,
-            Modifier.size(18.dp), tint = if (pinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+            Modifier.size(18.dp), tint = (if (pinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                .copy(alpha = if (enabled) 1f else .38f))
     }
 }
 

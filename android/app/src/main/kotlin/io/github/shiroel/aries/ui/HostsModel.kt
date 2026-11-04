@@ -1460,8 +1460,14 @@ class HostsModel(
     }
 
     /** Pin from any shared row, using the connection already owned by that surface. */
+    fun canPin(entry: AgentEntry): Boolean = pinLink(entry)?.let { it.state == LinkState.Up && it.connection != null } == true
+
+    private fun pinLink(entry: AgentEntry): HostLink? =
+        agentLinks[entry.host.id] ?: browseLink?.takeIf { it.host.id == entry.host.id }
+
     fun pin(entry: AgentEntry, pinned: Boolean) {
-        val link = agentLinks[entry.host.id] ?: browseLink?.takeIf { it.host.id == entry.host.id } ?: return
+        if (!canPin(entry)) return
+        val link = pinLink(entry) ?: return
         val conn = link.connection ?: return
         scope.launch {
             try {

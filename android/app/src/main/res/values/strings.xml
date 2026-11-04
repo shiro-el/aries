@@ -421,6 +421,7 @@
     <string name="key_install_write_failed">Signed in, but could not write ~/.ssh/authorized_keys on the Host: %1$s\n\nCheck that the user owns ~/.ssh and can write to it.</string>
 
     <string name="host_ssh_address">%1$s@%2$s:%3$d</string>
+    <string name="host_ssh_default_address">%1$s@%2$s</string>
     <string name="host_local_address">Local process</string>
     <!-- QR Host pairing -->
     <string name="host_pair_scan_button">Scan Host QR</string>
@@ -637,6 +638,8 @@
     <string name="chat_response_cache_read_tokens">Cache read %1$s</string>
     <string name="chat_response_cache_write_tokens">Cache write %1$s</string>
     <string name="chat_response_duration">%1$s ms</string>
+    <string name="chat_response_duration_seconds">%1$s s</string>
+    <string name="chat_response_details_button">Response details</string>
     <string name="chat_response_complete">Complete</string>
     <string name="chat_response_interrupted">Interrupted</string>
     <string name="chat_response_error">Error</string>
@@ -1202,6 +1205,7 @@
     <string name="layout_folder_label">Folder (optional)</string>
     <string name="layout_close_space_button">Close Space</string>
     <string name="layout_close_tab_button">Close Tab</string>
+    <string name="layout_close_pane_button">Close Pane</string>
     <string name="layout_target_gone">This item has already been closed.</string>
     <!-- Shared searchable language picker -->
     <string name="language_picker_auto">Auto-detect</string>
