@@ -39,7 +39,7 @@ import io.github.shiroel.aries.core.KeyInfo
 /** One jump host being edited. `keyId == null` is the default key. */
 private data class HopDraft(val address: String, val port: String, val user: String, val keyId: String?) {
     val portNumber get() = port.toIntOrNull()?.takeIf { it in 1..65535 }
-    val valid get() = address.isNotBlank() && user.isNotBlank() && portNumber != null
+    val valid get() = validHostToken(address.trim()) && validHostToken(user.trim()) && portNumber != null
 
     fun toJumpHost() = JumpHost(address.trim(), portNumber!!.toUShort(), user.trim(), keyId, null)
 }
@@ -99,15 +99,21 @@ fun JumpHostsScreen(model: HostsModel, host: Host, jumps: List<JumpHost>, hostKe
                 OutlinedTextField(
                     d.address, { drafts[i] = d.copy(address = it) },
                     label = { Text(stringResource(R.string.host_add_address)) }, singleLine = true,
+                    isError = d.address.isNotEmpty() && !validHostToken(d.address.trim()),
+                    supportingText = hostInputSupport(R.string.host_input_address_error.takeUnless { validHostToken(d.address.trim()) }),
                 )
                 OutlinedTextField(
                     d.port, { drafts[i] = d.copy(port = it) },
                     label = { Text(stringResource(R.string.host_add_port)) }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    isError = d.portNumber == null,
+                    supportingText = hostInputSupport(R.string.host_input_port_error.takeIf { d.portNumber == null }),
                 )
                 OutlinedTextField(
                     d.user, { drafts[i] = d.copy(user = it) },
                     label = { Text(stringResource(R.string.host_add_user)) }, singleLine = true,
+                    isError = d.user.isNotEmpty() && !validHostToken(d.user.trim()),
+                    supportingText = hostInputSupport(R.string.host_input_user_error.takeUnless { validHostToken(d.user.trim()) }),
                 )
                 Row {
                     KeyPicker(R.string.jumps_key_label, model.keys, d.keyId) { drafts[i] = d.copy(keyId = it) }

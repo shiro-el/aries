@@ -59,12 +59,7 @@ class MainActivity : AppCompatActivity() {
         setContent {
             val model = sessions.model
             LaunchedEffect(model) { resumeModel() }
-            val guidance = remember {
-                io.github.shiroel.aries.guidance.AppGuidanceState(
-                    getSharedPreferences("app-guidance", MODE_PRIVATE), BuildConfig.VERSION_CODE, BuildConfig.VERSION_NAME,
-                )
-            }
-            LaunchedEffect(guidance) { guidance.checkForUpdate() }
+            val guidance = sessions.guidance
             val settings = remember { ThemeSettings.from(this) }
             val protectPreviews = app.appLock.enabled && app.appLock.hidePreviews
             SideEffect { window.setAppLockPrivacy(protectPreviews) }

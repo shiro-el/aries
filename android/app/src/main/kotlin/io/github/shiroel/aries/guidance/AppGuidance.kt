@@ -3,6 +3,9 @@ package io.github.shiroel.aries.guidance
 import android.content.ActivityNotFoundException
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
@@ -42,7 +45,7 @@ fun AppGuidance(
     val uriHandler = LocalUriHandler.current
     var downloadFailed by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
-        state.release?.let { release ->
+        state.bannerRelease?.let { release ->
             val openDownload = {
                 try {
                     uriHandler.openUri(release.apkUrl)
@@ -54,17 +57,23 @@ fun AppGuidance(
                 }
             }
             Surface(color = MaterialTheme.colorScheme.secondaryContainer) {
-                Column(Modifier.fillMaxWidth().statusBarsPadding().testTag("app-update-banner")
-                    .clickable(onClick = openDownload).padding(12.dp)) {
-                    Text(stringResource(R.string.app_update_available, release.versionName))
-                    TextButton(onClick = openDownload, modifier = Modifier.testTag("app-update-download")) {
-                        Text(stringResource(R.string.app_update_download_button))
+                Row(Modifier.fillMaxWidth().statusBarsPadding().testTag("app-update-banner"),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.app_update_available, release.versionName),
+                        Modifier.weight(1f).testTag("app-update-download").clickable(onClick = openDownload).padding(horizontal = 12.dp, vertical = 8.dp),
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    TextButton(onClick = state::dismissUpdate, modifier = Modifier.testTag("app-update-dismiss")) {
+                        Text(stringResource(R.string.app_update_dismiss_button))
                     }
-                    if (downloadFailed) Text(stringResource(R.string.app_update_browser_failed))
                 }
             }
         }
-        val consumedStatusBar = if (state.release != null) Modifier.consumeWindowInsets(WindowInsets.statusBars) else Modifier
+        if (downloadFailed) {
+            AlertDialog(onDismissRequest = { downloadFailed = false },
+                text = { Text(stringResource(R.string.app_update_browser_failed)) },
+                confirmButton = { TextButton(onClick = { downloadFailed = false }) { Text(stringResource(R.string.ok_button)) } })
+        }
+        val consumedStatusBar = if (state.bannerRelease != null) Modifier.consumeWindowInsets(WindowInsets.statusBars) else Modifier
         Box(Modifier.weight(1f).fillMaxWidth().then(consumedStatusBar)) {
             CompositionLocalProvider(LocalAppGuidance provides state) { content() }
         }
@@ -74,7 +83,7 @@ fun AppGuidance(
             modifier = Modifier.testTag("whats-new-dialog"),
             onDismissRequest = state::dismissWhatsNew,
             title = { Text(stringResource(R.string.whats_new_title, state.versionName)) },
-            text = { Text(stringResource(R.string.whats_new_body), Modifier.verticalScroll(rememberScrollState())) },
+            text = { Text(stringResource(state.releaseNotes), Modifier.verticalScroll(rememberScrollState())) },
             confirmButton = {
                 TextButton(state::dismissWhatsNew, Modifier.testTag("whats-new-dismiss")) {
                     Text(stringResource(R.string.ok_button))

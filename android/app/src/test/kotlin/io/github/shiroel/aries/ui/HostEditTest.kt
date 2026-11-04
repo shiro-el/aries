@@ -5,7 +5,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.*
+import androidx.compose.ui.graphics.asAndroidBitmap
+import org.robolectric.annotation.GraphicsMode
 import androidx.compose.ui.test.junit4.createComposeRule
+import io.github.shiroel.aries.core.AriesCoreInterface
+import io.github.shiroel.aries.core.Host
+import io.github.shiroel.aries.R
+import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Endpoint
 import org.junit.Assert.assertEquals
@@ -56,13 +62,20 @@ class HostEditTest {
         compose.onNodeWithTag("host-edit-address").assertTextContains("new.example")
     }
 
-    @Test fun cancelDoesNotWriteAndInvalidOrDuplicateValuesCannotSave() {
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun cancelDoesNotWriteAndInvalidOrDuplicateValuesCannotSave() {
         val core = FakeCore()
         val original = core.addHost("home", Endpoint.Ssh("old.example", 22u, "me"))
         core.addHost("taken", Endpoint.Ssh("other", 22u, "me"))
         show(core)
         compose.onNodeWithTag("host-edit-name").performTextReplacement("taken")
         compose.onNodeWithTag("host-edit-save").assertIsNotEnabled()
+        System.getenv("ARIES_ONBOARDING_RENDER_DIR")?.let { directory ->
+            java.io.File(directory, "host-name-error.png").outputStream().use {
+                compose.onRoot().captureToImage().asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+            }
+        }
         compose.onNodeWithTag("host-edit-name").performTextReplacement("renamed")
         for (invalid in listOf("0", "65536", "abc")) {
             compose.onNodeWithTag("host-edit-port").performTextReplacement(invalid)
@@ -103,4 +116,24 @@ class HostEditTest {
         compose.onNodeWithTag("host-edit-name").assertTextContains("retry this")
         compose.onNodeWithTag("host-edit-save").assertIsEnabled()
     }
+    // Regression: a core-side add rejection must leave the user's address/user drafts available for correction.
+    @Test fun failedAddKeepsTheDraftForCorrection() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val fake = FakeCore().apply { ensureKey() }
+        val core = object : AriesCoreInterface by fake {
+            override fun addHost(name: String, endpoint: Endpoint): Host = throw CoreException.InvalidHost("rejected")
+        }
+        compose.setContent {
+            val scope = rememberCoroutineScope()
+            val model = remember { HostsModel(core, scope).also { it.startAddingHost() } }
+            MaterialTheme { AriesApp(model) }
+        }
+        compose.onNodeWithText(context.getString(R.string.host_add_address)).performScrollTo().performTextReplacement("desk.example")
+        compose.onNodeWithText(context.getString(R.string.host_add_user)).performScrollTo().performTextReplacement("me")
+        compose.onNodeWithText(context.getString(R.string.host_add_button)).performScrollTo().performClick()
+        compose.onNodeWithText(context.getString(R.string.ok_button)).performClick()
+        compose.onNodeWithText(context.getString(R.string.host_add_address)).assertTextContains("desk.example")
+        compose.onNodeWithText(context.getString(R.string.host_add_user)).assertTextContains("me")
+    }
+
 }
