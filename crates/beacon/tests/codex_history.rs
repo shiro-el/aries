@@ -3,9 +3,12 @@
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::{cell::Cell, rc::Rc, time::Duration};
 
 use aries_beacon::chat::codex::Codex;
-use aries_beacon::chat::{Agent, Batch, Located, Source};
+use aries_beacon::chat::{
+    Agent, Batch, Interpreter, Located, Opened, Options, Source, TerminalFacts, TerminalLookup, run,
+};
 use aries_protocol::chat::{ChatBody, ChatEvent};
 use serde_json::{Value, json};
 
@@ -88,6 +91,127 @@ fn prompts(events: &Events) -> Vec<&str> {
             _ => None,
         })
         .collect()
+}
+
+#[test]
+fn following_a_codex_revert_replaces_cached_turns_with_the_retained_prefix() {
+    // Regression: the same thread moves to a replacement rollout on revert;
+    // following must clear already-emitted discarded users, tools and replies.
+    // Handwritten records match the installed 0.165 thread/revert format.
+    let home = tempfile::tempdir().unwrap();
+    let day = home.path().join("sessions/2026/11/05");
+    std::fs::create_dir_all(&day).unwrap();
+    let before = day.join(format!("rollout-2026-11-05T10-00-00-{THREAD}.jsonl"));
+    let after = day.join(format!(
+        "rollout-2026-11-05T10-01-00-{THREAD}_00000000-0000-4000-8000-000000000288.jsonl"
+    ));
+    let message = |ordinal, id, kind, text| {
+        json!({"ordinal":ordinal,"type":"event_msg","payload":{
+            "type":"item_completed","item":{"id":id,"type":kind,"content":[{"type":"text","text":text}]}
+        }})
+    };
+    let records = [
+        json!({"ordinal":0,"type":"session_meta","payload":{"id":THREAD}}),
+        message(1, "retained-user", "UserMessage", "Keep this turn"),
+        message(2, "retained-agent", "AgentMessage", "Retained reply"),
+        message(3, "discarded-user", "UserMessage", "Discard this turn"),
+        json!({"ordinal":4,"type":"response_item","payload":{"type":"function_call",
+            "call_id":"discarded-tool","name":"shell_command","arguments":"{\"command\":\"pwd\"}"}}),
+        message(5, "discarded-agent", "AgentMessage", "Discarded reply"),
+    ];
+    let encode = |rows: &[Value]| rows.iter().map(|r| format!("{r}\n")).collect::<String>();
+    let prefix = encode(&records[..3]);
+    std::fs::write(&before, encode(&records)).unwrap();
+    let replacement = [
+        json!({"ordinal":3,"type":"session_meta","payload":{"id":THREAD,"history_base":{
+            "thread_id":THREAD,"end_byte_offset":prefix.len(),"end_ordinal_exclusive":3
+        }}}),
+        message(4, "replacement-user", "UserMessage", "Try again"),
+    ];
+    std::fs::write(&after, encode(&replacement)).unwrap();
+
+    struct RevertingAgent {
+        before: Located,
+        after: Located,
+        reverted: Rc<Cell<bool>>,
+    }
+    impl Agent for RevertingAgent {
+        fn name(&self) -> &'static str {
+            "codex"
+        }
+        fn locate(&self, _: &TerminalFacts) -> Option<Located> {
+            Some(
+                if self.reverted.get() {
+                    &self.after
+                } else {
+                    &self.before
+                }
+                .clone(),
+            )
+        }
+        fn interpreter(&self) -> Box<dyn Interpreter> {
+            Codex.interpreter()
+        }
+        fn open(&self, located: &Located, resume: Option<&str>) -> Opened {
+            Codex.open(located, resume)
+        }
+    }
+    struct Revert {
+        reverted: Rc<Cell<bool>>,
+        polls: u8,
+    }
+    impl TerminalLookup for Revert {
+        fn get(&mut self, _: &str) -> Result<Option<TerminalFacts>, String> {
+            self.polls += 1;
+            if self.polls > 1 {
+                self.reverted.set(true);
+            }
+            Ok((self.polls <= 3).then(TerminalFacts::default))
+        }
+    }
+    let reverted = Rc::new(Cell::new(false));
+    let agents: Vec<Box<dyn Agent>> = vec![Box::new(RevertingAgent {
+        before: Located {
+            session: THREAD.into(),
+            path: before,
+        },
+        after: Located {
+            session: THREAD.into(),
+            path: after,
+        },
+        reverted: reverted.clone(),
+    })];
+    let mut lookup = Revert { reverted, polls: 0 };
+    let mut opts = Options::new("t1");
+    opts.follow = true;
+    opts.poll = Duration::ZERO;
+    let mut out = Vec::new();
+    run(opts, &mut lookup, &agents, &mut out).unwrap();
+    let lines: Vec<_> = String::from_utf8(out)
+        .unwrap()
+        .lines()
+        .map(|l| aries_protocol::chat::ChatLine::parse(l).unwrap())
+        .collect();
+    let mut ids = Vec::new();
+    let mut resets = 0;
+    assert!(
+        lines
+            .iter()
+            .any(|l| matches!(&l.event, ChatEvent::Item { item } if item.id == "discarded-tool"))
+    );
+    for line in lines {
+        match line.event {
+            ChatEvent::Reset { .. } => {
+                ids.clear();
+                resets += 1;
+            }
+            ChatEvent::Item { item } if !ids.contains(&item.id) => ids.push(item.id),
+            ChatEvent::Remove { id } => ids.retain(|i| i != &id),
+            _ => {}
+        }
+    }
+    assert_eq!(resets, 2);
+    assert_eq!(ids, ["retained-user", "retained-agent", "replacement-user"]);
 }
 
 #[test]
