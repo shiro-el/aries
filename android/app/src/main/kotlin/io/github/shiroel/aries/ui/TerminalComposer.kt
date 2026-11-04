@@ -40,9 +40,13 @@ internal fun TerminalComposer(viewer: TerminalViewer) {
         return
     }
     val hint = stringResource(R.string.terminal_composer_hint)
-    val active = viewer.exit == null && !viewer.closed
+    val active = viewer.canInput
     Column(Modifier.fillMaxWidth()) {
         HorizontalDivider()
+        viewer.inputUnavailableReason?.let { reason ->
+            Text(stringResource(reason), Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         viewer.inputHistory?.let { history ->
             InputHistoryButton(history) { viewer.draft = it }
         }
@@ -66,6 +70,14 @@ internal fun TerminalComposer(viewer: TerminalViewer) {
                 }
             },
         )
+        if (viewer.pasteSending || viewer.pasteUncertain) {
+            AnnouncedText(
+                stringResource(if (viewer.pasteSending) R.string.terminal_paste_sending else R.string.terminal_paste_uncertain),
+                Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             if (viewer.typing) TerminalKeyBarToggle(viewer)
             ActionIcon(R.drawable.ic_keyboard, R.string.terminal_direct_input_button, viewer::closeComposer)

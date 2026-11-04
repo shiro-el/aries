@@ -29,12 +29,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.CoreException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 
 /** Android editing stays in this field; only the core's search API sees it. */
 @Composable
@@ -44,7 +40,6 @@ internal fun TerminalSearchBar(viewer: TerminalViewer, open: Boolean, onClose: (
     var regex by remember(viewer) { mutableStateOf(false) }
     var invalid by remember(viewer) { mutableStateOf(false) }
     var busy by remember(viewer) { mutableStateOf(false) }
-    val operations = remember(viewer) { Mutex() }
     val scope = rememberCoroutineScope()
     val focus = LocalFocusManager.current
     val searcher = viewer.searcher
@@ -53,15 +48,11 @@ internal fun TerminalSearchBar(viewer: TerminalViewer, open: Boolean, onClose: (
         busy = true
         try {
             if (open && query.isNotEmpty()) delay(150)
-            operations.withLock {
-                withContext(Dispatchers.Default) {
-                    try {
-                        searcher?.invoke(if (open) query else "", caseSensitive, regex)
-                    } catch (e: CoreException.Protocol) {
-                        searcher?.invoke("", caseSensitive, regex)
-                        throw e
-                    }
-                }
+            try {
+                searcher?.invoke(if (open) query else "", caseSensitive, regex)
+            } catch (e: CoreException.Protocol) {
+                searcher?.invoke("", caseSensitive, regex)
+                throw e
             }
         } catch (_: CoreException.Protocol) {
             invalid = true
@@ -96,9 +87,7 @@ internal fun TerminalSearchBar(viewer: TerminalViewer, open: Boolean, onClose: (
                     enabled = canMove,
                     onClick = {
                         scope.launch {
-                            operations.withLock {
-                                withContext(Dispatchers.Default) { viewer.searchNavigator?.invoke(backwards) }
-                            }
+                            viewer.searchNavigator?.invoke(backwards)
                         }
                     },
                 )
