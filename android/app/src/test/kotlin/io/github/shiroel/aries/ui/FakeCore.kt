@@ -847,9 +847,17 @@ class FakeConnection(
     override suspend fun openWorktree(folder: String, spaceId: String?, preset: io.github.shiroel.aries.core.AgentPreset?): io.github.shiroel.aries.core.WorktreeOpen {
         openedWorktrees += Triple(folder, spaceId, preset)
         worktreeFailure?.let { throw it }
+        val terminal = TerminalInfo("t9", "worktree", "", listOf("sh"), folder, "live")
+        core?.let { core ->
+            val next = (core.terminalsOf[hostId] ?: core.terminals) + terminal
+            if (hostId in core.terminalsOf) core.push(hostId, next) else core.push(next)
+        }
         return if (spaceId != null) io.github.shiroel.aries.core.WorktreeOpen.Tab(spaceId, "tb2", "t9")
         else io.github.shiroel.aries.core.WorktreeOpen.Terminal("t9")
     }
+    override suspend fun machineExec(argv: List<String>, cwd: String?, timeoutSeconds: UInt) =
+        io.github.shiroel.aries.core.ExecOutput(0, null, "/home/me".toByteArray(), byteArrayOf(), false, false)
+
     var fileDirectory = io.github.shiroel.aries.core.RemoteDirectory("/repo", emptyList())
     override suspend fun listFiles(address: String, path: String?) = fileDirectory
     var fileReader: (String, String, ULong, UInt) -> io.github.shiroel.aries.core.RemoteFilePage = { _, _, _, _ ->
@@ -920,7 +928,7 @@ class FakeConnection(
     override suspend fun terminals(): List<TerminalInfo> {
         calls += "terminals"
         if (dead) throw CoreException.Closed()
-        return list
+        return core?.let { it.terminalsOf[hostId] ?: it.terminals } ?: list
     }
 
     override suspend fun watchTerminals(): TerminalWatch =
@@ -946,6 +954,8 @@ class FakeConnection(
 
     /** When set, `launch` fails with it. */
     var launchFailWith: CoreException? = null
+    var launchReplyHold: CompletableDeferred<Unit>? = null
+    var launchReplyFailure: CoreException? = null
 
     var recentCwds: List<String> = emptyList()
 
@@ -982,6 +992,8 @@ class FakeConnection(
             if (hostId in core.terminalsOf) core.push(hostId, next) else core.push(next)
         }
         push(current.copy(spaces = placed, unplaced = if (inTab) current.unplaced else current.unplaced + t))
+        launchReplyHold?.await()
+        launchReplyFailure?.let { throw it }
         return t
     }
 
@@ -1111,15 +1123,20 @@ class FakeTerminalView(val address: String, val options: AttachOptions) : Termin
     /** Grids asked for with `resize`, in order. */
     val resizes = mutableListOf<Pair<Int, Int>>()
 
+    var textReply: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+    var pasteReply: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+
     override fun observing(): Boolean = options.observe
 
     override suspend fun sendText(text: String) {
         check(!options.observe) { "an observer cannot type" }
+        textReply?.await()
         sent += "text:$text"
     }
 
     override suspend fun pasteText(text: String) {
         check(!options.observe) { "an observer cannot paste" }
+        pasteReply?.await()
         sent += "paste:$text"
     }
 
@@ -1144,11 +1161,18 @@ class FakeTerminalView(val address: String, val options: AttachOptions) : Termin
 
     val searches = mutableListOf<Triple<String, Boolean, Boolean>>()
     val searchMoves = mutableListOf<Boolean>()
+    var duringSearch: ((String) -> Unit)? = null
+    @Volatile var closed = false
+        private set
+    @Volatile var searchedAfterClose = false
+        private set
     override fun search(query: String, caseSensitive: Boolean, regex: Boolean) {
+        duringSearch?.invoke(query)
+        if (closed) searchedAfterClose = true
         if (regex && query == "[") throw CoreException.Protocol("invalid terminal search pattern")
         searches += Triple(query, caseSensitive, regex)
     }
     override fun searchNext(backwards: Boolean) { searchMoves += backwards }
 
-    override fun close() {}
+    override fun close() { closed = true }
 }
