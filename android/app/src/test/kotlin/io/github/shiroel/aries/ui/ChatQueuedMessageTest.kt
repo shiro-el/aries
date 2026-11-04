@@ -90,6 +90,8 @@ class ChatQueuedMessageTest {
         core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
         compose.waitForIdle()
         core.push(listOf(agent))
+        compose.waitForIdle()
+        screenshot("agent-handoff")
         core.pushChat(ChatSnapshot(listOf(ChatEntry("u1", null, ChatEntryBody.User("next step", emptyList(), true))), ChatStatus.LIVE, null))
         compose.waitForIdle()
         // One transcript row and the second phone-local message, not three rows.

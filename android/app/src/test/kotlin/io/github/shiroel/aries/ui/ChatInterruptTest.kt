@@ -57,7 +57,7 @@ class ChatInterruptTest {
     }
 
     @Test
-    fun emptyWorkingComposerInterruptsButTypingSwitchesTheSameActionToSend() {
+    fun emptyWorkingComposerInterruptsButTypingSwitchesTheSameActionToQueue() {
         val conn = open(FakeCore())
         val input = compose.onNodeWithContentDescription(str(R.string.chat_input_label))
         compose.onNodeWithContentDescription(str(R.string.chat_interrupt_confirm_button)).assertIsEnabled()
@@ -71,19 +71,22 @@ class ChatInterruptTest {
         screenshot("composer-typed-send")
         compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
         compose.waitForIdle()
-        assertEquals(listOf("t1" to "x"), conn.typed)
+        assertEquals(emptyList<Pair<String, String>>(), conn.typed)
+        compose.onNodeWithText("x").assertExists()
+        compose.onNodeWithContentDescription(str(R.string.chat_queue_cancel_button)).assertExists()
         assertEquals(emptyList<String>(), conn.interrupted)
 
         compose.onNodeWithContentDescription(str(R.string.chat_interrupt_confirm_button)).performClick()
         compose.onNodeWithText(str(R.string.chat_interrupt_confirm_button)).performClick()
         compose.waitForIdle()
         assertEquals(listOf("t1"), conn.interrupted)
-        assertEquals(listOf("t1" to "x"), conn.typed)
+        assertEquals(emptyList<Pair<String, String>>(), conn.typed)
     }
 
     @Test
-    fun anAttachmentWithoutTextSendsTheAttachmentInsteadOfInterrupting() {
-        val conn = open(FakeCore())
+    fun anAttachmentWithoutTextQueuesTheAttachmentInsteadOfInterrupting() {
+        val core = FakeCore()
+        val conn = open(core)
         val file = File(context.cacheDir, "interrupt-notes.txt").apply { writeText("Review notes") }
         try {
             compose.runOnIdle {
@@ -97,8 +100,13 @@ class ChatInterruptTest {
             screenshot("composer-attachment-send")
             compose.onNodeWithText(str(R.string.chat_send_button)).assertIsEnabled().performClick()
             compose.waitForIdle()
-            assertEquals(listOf("t1" to "'/host/it'\"'\"'s file.jpg'"), conn.typed)
+            assertEquals(emptyList<Pair<String, String>>(), conn.typed)
+            compose.onNodeWithContentDescription(str(R.string.chat_queue_cancel_button)).assertExists()
             assertEquals(emptyList<String>(), conn.interrupted)
+            core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, null))
+            core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
+            compose.waitForIdle()
+            assertEquals(listOf("t1" to "'/host/it'\"'\"'s file.jpg'"), conn.typed)
         } finally { file.delete() }
     }
 
