@@ -976,11 +976,12 @@ class FakeConnection(
     val uploads = mutableListOf<Triple<String, String, ByteArray>>()
     var uploadHold: CompletableDeferred<Unit>? = null
     var uploadFailWith: CoreException? = null
+    var uploadPaths: List<String> = emptyList()
     override suspend fun uploadAttachment(terminal: String, name: String, bytes: ByteArray): String {
         uploadHold?.await()
         uploadFailWith?.let { throw it }
         uploads += Triple(terminal, name, bytes)
-        return "/host/it's file.jpg"
+        return uploadPaths.getOrNull(uploads.lastIndex) ?: "/host/it's file.jpg"
     }
 
     /** The fake Agents' input record: (address, text) of each message typed in. */

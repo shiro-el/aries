@@ -28,7 +28,7 @@ class AgentElapsedTest {
         assertNull(agentDuration(null, 1_000))
     }
 
-    @Test fun listAndHeaderShowElapsedTimeFromTheCoreStatusTimestamp() {
+    @Test fun listAndAgentMenuShowElapsedTimeFromTheCoreStatusTimestamp() {
         val terminal = TerminalInfo("t1", "agent", "", emptyList(), null, "live", AgentStatus.Working,
             statusMs = (System.currentTimeMillis() - 5 * 60_000).toULong())
         val host = Host("h1", "home", Endpoint.Ssh("host", 22u, "me"), null)
@@ -39,6 +39,8 @@ class AgentElapsedTest {
                 AgentsScreen(board, {}, {}, { _, _ -> })
             }
         }
-        compose.onAllNodesWithText("5m").assertCountEquals(2)
+        compose.onNodeWithText("5m").assertExists()
+        compose.onNodeWithTag("agent-actions").performClick()
+        compose.onNode(hasText("5m") and hasAnyAncestor(isPopup())).assertExists()
     }
 }

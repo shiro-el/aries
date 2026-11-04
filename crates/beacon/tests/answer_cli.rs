@@ -67,15 +67,20 @@ impl Host {
         }
     }
 
-    fn answer(&self, terminal: &str, args: &[&str]) -> (AnswerReply, bool) {
+    fn command(&self, command: &str, terminal: &str, args: &[&str]) -> Command {
         let mut cmd = Command::new(BEACON);
-        cmd.arg("answer").arg(terminal).args(args).env_clear();
+        cmd.arg(command).arg(terminal).args(args).env_clear();
         cmd.envs(self.hc.env());
         let bin_dir = self.hc.bin().parent().unwrap();
         cmd.env("PATH", format!("{}:/usr/bin:/bin", bin_dir.display()));
         cmd.env("HOME", self.config.parent().unwrap());
         cmd.env("CLAUDE_CONFIG_DIR", &self.config);
-        let out = cmd.stdin(Stdio::null()).output().unwrap();
+        cmd.stdin(Stdio::null());
+        cmd
+    }
+
+    fn answer(&self, terminal: &str, args: &[&str]) -> (AnswerReply, bool) {
+        let out = self.command("answer", terminal, args).output().unwrap();
         let text = String::from_utf8(out.stdout).unwrap();
         let line = text.lines().last().unwrap_or_default();
         let reply = AnswerReply::parse(line).unwrap_or_else(|e| panic!("{text:?}: {e}"));
@@ -185,4 +190,178 @@ fn nothing_is_pressed_for_a_question_that_is_not_on_screen_or_bad_picks() {
 
     std::thread::sleep(Duration::from_millis(300));
     assert_eq!(agent.inputs(), ["go"]);
+}
+
+/// Without this, overlapping phone/watch commands can both send while the
+/// Agent has not yet updated its transcript or Blocked status.
+#[test]
+fn overlapping_answers_claim_the_question_before_the_agent_updates() {
+    for permission in [false, true] {
+        let host = Host::new();
+        let screen = include_str!("../../../fixtures/agents/permissions/claude-write.txt")
+            .lines()
+            .map(|line| format!("say {line}\n"))
+            .collect::<String>();
+        let steps = if permission {
+            format!("{screen}status blocked permission\nkeys 1\nkeys 1\n")
+        } else {
+            "lines claude-code/main-session.jsonl 1 65 $T\nstatus blocked question answer: Which color do you prefer?\nkeys 1\nkeys 1\n".into()
+        };
+        let agent = host.claude(&steps);
+        host.wait_status(&agent, "blocked");
+        let question = if permission {
+            use aries_protocol::chat::{ChatEvent, ChatLine};
+            let out = host.command("chat", &agent.address, &[]).output().unwrap();
+            String::from_utf8(out.stdout)
+                .unwrap()
+                .lines()
+                .find_map(|line| match ChatLine::parse(line).unwrap().event {
+                    ChatEvent::Item { item } if item.id.starts_with("permission:") => Some(item.id),
+                    _ => None,
+                })
+                .expect("live permission question")
+        } else {
+            COLOR.into()
+        };
+        let replies = std::thread::scope(|scope| {
+            let first = scope.spawn(|| host.answer(&agent.address, &[&question, "1"]));
+            let second = scope.spawn(|| host.answer(&agent.address, &[&question, "2"]));
+            [first.join().unwrap(), second.join().unwrap()]
+        });
+        assert_eq!(
+            replies
+                .iter()
+                .filter(|(r, _)| r.outcome == AnswerOutcome::Sent)
+                .count(),
+            1,
+            "{replies:?}"
+        );
+        assert_eq!(
+            replies
+                .iter()
+                .filter(|(r, _)| r.outcome == AnswerOutcome::Failed)
+                .count(),
+            1,
+            "an attempted answer with stale Host state has uncertain delivery: {replies:?}"
+        );
+        input(&agent, 1);
+        // A later process must also honor the durable claim, even with different picks.
+        assert_eq!(
+            host.answer(&agent.address, &[&question, "0"]).0.outcome,
+            AnswerOutcome::Failed
+        );
+        std::thread::sleep(Duration::from_millis(200));
+        assert_eq!(agent.inputs().len(), 1);
+    }
+}
+
+/// A durable request claim alone does not prevent another answer from reading
+/// the Terminal while an earlier multipart input is only partially delivered.
+#[test]
+fn terminal_validation_waits_for_input_and_failed_delivery_is_never_repeated() {
+    use aries_beacon::chat::{TerminalFacts, TerminalInput, TerminalLookup, claude::ClaudeCode};
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+        mpsc,
+    };
+
+    struct Link {
+        facts: TerminalFacts,
+        read: Option<mpsc::Sender<()>>,
+        entered: Option<mpsc::Sender<()>>,
+        release: Option<mpsc::Receiver<()>>,
+        inputs: Arc<AtomicUsize>,
+    }
+    impl TerminalLookup for Link {
+        fn get(&mut self, _: &str) -> Result<Option<TerminalFacts>, String> {
+            if let Some(read) = &self.read {
+                read.send(()).unwrap();
+            }
+            Ok(Some(self.facts.clone()))
+        }
+    }
+    impl TerminalInput for Link {
+        fn keys(&mut self, _: &str, _: &[String]) -> Result<(), String> {
+            self.inputs.fetch_add(1, Ordering::SeqCst);
+            if let Some(entered) = self.entered.take() {
+                entered.send(()).unwrap();
+            }
+            if let Some(release) = self.release.take() {
+                release.recv_timeout(Duration::from_secs(10)).unwrap();
+            }
+            Err("connection lost after input may have landed".into())
+        }
+    }
+
+    let host = Host::new();
+    let agent = host
+        .claude("lines claude-code/main-session.jsonl 1 65 $T\nstatus blocked question\nwait\n");
+    host.wait_status(&agent, "blocked");
+    let facts = TerminalFacts::from_json(&host.hc.rpc(
+        "terminal.get",
+        serde_json::json!({"terminal": agent.address}),
+    ));
+    let state = host._home.path().join("claims");
+    let inputs = Arc::new(AtomicUsize::new(0));
+    let (entered, wait_entered) = mpsc::channel();
+    let (release, wait_release) = mpsc::channel();
+    let (read, wait_read) = mpsc::channel();
+    let (starting, wait_starting) = mpsc::channel();
+    let mut first = Link {
+        facts: facts.clone(),
+        read: None,
+        entered: Some(entered),
+        release: Some(wait_release),
+        inputs: inputs.clone(),
+    };
+    let mut second = Link {
+        facts,
+        read: Some(read),
+        entered: None,
+        release: None,
+        inputs: inputs.clone(),
+    };
+    let run = |link: &mut Link| {
+        let agents: Vec<Box<dyn aries_beacon::chat::Agent>> = vec![Box::new(ClaudeCode {
+            config_dir: host.config.clone(),
+        })];
+        aries_beacon::chat::answer::answer(
+            &state,
+            &agent.address,
+            &aries_protocol::answer::Answer::from_args(&[COLOR.into(), "1".into()]).unwrap(),
+            link,
+            &agents,
+        )
+        .unwrap()
+    };
+    let (during_input, replies) = std::thread::scope(|scope| {
+        let first = scope.spawn(|| run(&mut first));
+        wait_entered.recv_timeout(Duration::from_secs(10)).unwrap();
+        let second = scope.spawn(|| {
+            starting.send(()).unwrap();
+            run(&mut second)
+        });
+        wait_starting.recv_timeout(Duration::from_secs(10)).unwrap();
+        let during_input = wait_read.recv_timeout(Duration::from_millis(200));
+        // Always release the first caller before asserting, even on regression.
+        release.send(()).unwrap();
+        (
+            during_input,
+            [first.join().unwrap(), second.join().unwrap()],
+        )
+    });
+    assert!(
+        matches!(during_input, Err(mpsc::RecvTimeoutError::Timeout)),
+        "another answer read a partially changed Terminal"
+    );
+    assert_eq!(
+        inputs.load(Ordering::SeqCst),
+        1,
+        "an uncertain input must retain its claim"
+    );
+    assert!(
+        replies.iter().all(|r| r.outcome == AnswerOutcome::Failed),
+        "{replies:?}"
+    );
 }
