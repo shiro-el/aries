@@ -38,7 +38,7 @@ class AttachmentEntryPointsTest {
     private lateinit var model: HostsModel
     private var reconnectGate: CompletableDeferred<Unit>? = null
 
-    private fun openChat(): FakeConnection {
+    private fun openChat(thread: Boolean = false): FakeConnection {
         val core = FakeCore().apply {
             savedView = AgentView.CHAT
             terminals = listOf(TerminalInfo("t1", "claude", "", listOf("claude"), "/repo", "live", AgentStatus.Idle, false, 0uL))
@@ -52,7 +52,12 @@ class AttachmentEntryPointsTest {
                     return core.connect(hostId)
                 }
             }, scope) }
-            AriesApp(model)
+            if (thread) {
+                val appearance = remember { ThemeSettings(compose.activity.getSharedPreferences("thread-attachment-test", 0)).apply {
+                    chooseLayout(AppLayout.THREAD)
+                } }
+                AriesApp(model, appearance)
+            } else AriesApp(model)
         }
         compose.onNodeWithText("home").performClick()
         compose.onNodeWithText("claude").performClick()
@@ -66,15 +71,19 @@ class AttachmentEntryPointsTest {
     @Test @Config(qualifiers = "h400dp")
     fun compactToolsFilePickerRejectsOversizeAndKeepsTheDraft() = filePickerKeepsDraft(compact = true)
 
-    private fun filePickerKeepsDraft(compact: Boolean = false) {
-        val connection = openChat()
+    // D69: closing Thread tools at picker launch must keep its Activity result callback registered.
+    @Test fun threadFilePickerStillReceivesItsResultAfterToolsClose() = filePickerKeepsDraft(thread = true)
+
+    private fun filePickerKeepsDraft(compact: Boolean = false, thread: Boolean = false) {
+        val connection = openChat(thread)
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).performTextInput("keep this")
         captureAttachmentScreenshot(compose, if (compact) "compact-composer" else "portrait-composer")
-        if (compact) {
+        if (compact || thread) {
             compose.onNodeWithContentDescription(str(R.string.chat_input_tools_button)).performClick()
-            captureAttachmentScreenshot(compose, "compact-chat-tools", compose.onNode(isDialog()))
+            if (compact) captureAttachmentScreenshot(compose, "compact-chat-tools", compose.onNode(isDialog()))
         }
-        compose.onNodeWithContentDescription(str(R.string.attachments_file_button)).performClick()
+        compose.onNode(hasText(str(R.string.attachments_file_button)) or hasContentDescription(str(R.string.attachments_file_button))).performClick()
+        if (thread) compose.onNodeWithText(str(R.string.chat_input_tools_button)).assertDoesNotExist()
         compose.waitForIdle()
         val request = shadowOf(compose.activity).nextStartedActivityForResult
         assertEquals(Intent.ACTION_OPEN_DOCUMENT, request.intent.action)

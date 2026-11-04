@@ -19,7 +19,8 @@ import java.io.File
 
 /** System document picker and camera: each result only appends to the Chat draft. */
 @Composable
-fun AttachmentControls(chat: ChatModel) {
+fun AttachmentControls(chat: ChatModel,
+    actions: (@Composable (files: () -> Unit, camera: () -> Unit, enabled: Boolean) -> Unit)? = null) {
     val context = LocalContext.current
     val files = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNotEmpty()) chat.attach(context.applicationContext, SharedContent(uris))
@@ -52,12 +53,15 @@ fun AttachmentControls(chat: ChatModel) {
     }
     val fileLabel = stringResource(R.string.attachments_file_button)
     val cameraLabel = stringResource(R.string.attachments_camera_button)
-    Row {
+    val chooseFiles: () -> Unit = {
+        try { files.launch(arrayOf("*/*")) } catch (e: Exception) { chat.attachmentFailed(e) }
+    }
+    // The launchers stay registered when a caller folds away its action sheet.
+    if (actions != null) actions(chooseFiles, takePhoto, enabled)
+    else Row {
         IconButton(
             enabled = enabled,
-            onClick = {
-                try { files.launch(arrayOf("*/*")) } catch (e: Exception) { chat.attachmentFailed(e) }
-            },
+            onClick = chooseFiles,
         ) { Icon(painterResource(R.drawable.ic_paperclip), contentDescription = fileLabel) }
         IconButton(
             enabled = enabled,
