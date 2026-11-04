@@ -244,10 +244,16 @@ class LastKnownStateTest {
         assertEquals(old, core.lastKnownState(first.id))
     }
 
-    @Test fun biometricHostsCanRefreshWhileTheAppIsInFront() = runTest {
+    @Test fun foregroundRefreshSkipsBiometricHostsButStillPullsPlainHosts() = runTest {
         val host = core.addHost("private", Endpoint.Ssh("box", 22u, "me"))
         core.setKeyProtection(KeyProtection.BIOMETRIC)
         val model = HostsModel(core, backgroundScope)
+        model.foregrounded()
+        runCurrent()
+        assertTrue(core.snapshotsRequested.isEmpty())
+        assertTrue(core.connectAttempts.isEmpty())
+
+        core.setKeyProtection(KeyProtection.PLAIN)
         model.foregrounded()
         runCurrent()
         assertEquals(listOf(host.id), core.snapshotsRequested)

@@ -45,33 +45,42 @@ pub(crate) async fn authorization<T>(future: impl Future<Output = T>) -> T {
     drop(pause);
     result
 }
-pub(crate) async fn timeout<T>(
+pub(crate) fn timeout<T>(
     duration: Duration,
     future: impl Future<Output = T>,
-) -> Result<T, ()> {
-    let clock = CLOCK.try_with(Clone::clone).unwrap_or_else(|_| Clock {
-        state: Arc::default(),
-        changed: watch::channel(()).0,
-    });
-    CLOCK.scope(clock.clone(), async move {
-        let start = Instant::now();
-        let excluded = clock.excluded();
-        let mut changes = clock.changed.subscribe();
-        tokio::pin!(future);
-        loop {
-            let elapsed = start.elapsed().saturating_sub(clock.excluded().saturating_sub(excluded));
-            let remaining = duration.saturating_sub(elapsed);
-            let paused = clock.state.lock().expect("network clock").paused.is_some();
-            tokio::select! {
-                biased;
-                result = &mut future => return Ok(result),
-                _ = changes.changed() => {},
-                _ = tokio::time::sleep(remaining), if !paused => {
-                    if start.elapsed().saturating_sub(clock.excluded().saturating_sub(excluded)) >= duration { return Err(()); }
+) -> impl Future<Output = Result<T, ()>> {
+    // Box before constructing the wrapper future: nested SSH budgets would
+    // otherwise embed large child futures at every level. Boxing inside the
+    // async block still leaves the unboxed input in its initial state.
+    let mut future = Box::pin(future);
+    async move {
+        let clock = CLOCK.try_with(Clone::clone).unwrap_or_else(|_| Clock {
+            state: Arc::default(),
+            changed: watch::channel(()).0,
+        });
+        CLOCK
+            .scope(clock.clone(), async move {
+                let start = Instant::now();
+                let excluded = clock.excluded();
+                let mut changes = clock.changed.subscribe();
+                loop {
+                    let elapsed = start
+                        .elapsed()
+                        .saturating_sub(clock.excluded().saturating_sub(excluded));
+                    let remaining = duration.saturating_sub(elapsed);
+                    let paused = clock.state.lock().expect("network clock").paused.is_some();
+                    tokio::select! {
+                        biased;
+                        result = &mut future => return Ok(result),
+                        _ = changes.changed() => {},
+                        _ = tokio::time::sleep(remaining), if !paused => {
+                            if start.elapsed().saturating_sub(clock.excluded().saturating_sub(excluded)) >= duration { return Err(()); }
+                        }
+                    }
                 }
-            }
-        }
-    }).await
+            })
+            .await
+    }
 }
 
 #[cfg(test)]
