@@ -31,10 +31,13 @@ import io.github.shiroel.aries.core.ChatEntryBody
 import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.PreviewForward
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayInputStream
 
@@ -54,7 +57,9 @@ internal fun rememberLocalhostPreview(link: HostLink?, output: String, address: 
     val connection = link?.connections?.collectAsState()?.value
     LaunchedEffect(preview, enabled, connection, output) {
         if (enabled && connection != null && output.isNotEmpty()) {
-            preview.ports = (connection.previewPorts(output) + preview.ports).distinct().take(24)
+            delay(200)
+            val ports = withContext(Dispatchers.Default) { connection.previewPorts(output) }
+            preview.ports = (ports + preview.ports).distinct().take(24)
         }
     }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -67,6 +72,27 @@ internal fun rememberLocalhostPreview(link: HostLink?, output: String, address: 
                 catch (_: io.github.shiroel.aries.core.CoreException) { }
                 delay(30_000)
             } while (true)
+        }
+    }
+    return preview
+}
+
+/** Sample live output at most four times a second, including under continuous output. */
+@Composable
+@OptIn(FlowPreview::class)
+internal fun rememberTerminalLocalhostPreview(viewer: TerminalViewer): LocalhostPreview {
+    val link = viewer.link
+    val address = viewer.terminal.address
+    val preview = rememberLocalhostPreview(link, "", address)
+    val connection = link?.connections?.collectAsState()?.value
+    LaunchedEffect(preview, viewer, connection) {
+        if (link?.host?.endpoint !is Endpoint.Ssh || address.contains('/') || connection == null) return@LaunchedEffect
+        snapshotFlow { viewer.version }.sample(250).collect {
+            // Snapshot row references on Main; build text and call the synchronous
+            // core parser on Default. Never build screen text as a composition key.
+            val snapshot = viewer.snapshot()
+            val ports = withContext(Dispatchers.Default) { connection.previewPorts(snapshot.text()) }
+            preview.ports = (ports + preview.ports).distinct().take(24)
         }
     }
     return preview

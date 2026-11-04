@@ -6,6 +6,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
@@ -66,6 +69,37 @@ class TerminalSelectionToChatTest {
         val screen = compose.onNodeWithTag("terminal-screen")
         val width = screen.fetchSemanticsNode().size.width
         screen.performTouchInput { longClick(Offset(1.5f * width / 40, 1f)) }
+    }
+
+    @Test
+    fun typingSelectionKeepsItsTextAcrossOutputSearchAndResizeUntilSent() {
+        open()
+        compose.runOnIdle { (model.screen as Screen.Terminal).viewer.startTyping() }
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(300)
+        compose.waitForIdle()
+        val view = core.connection!!.views.last()
+        assertFalse(view.options.observe)
+        selectWord(view)
+        fun shot(name: String) {
+            val file = java.io.File("/tmp/aries-mvp-run/lanes/223-shots/$name.png")
+            file.parentFile?.mkdirs()
+            file.outputStream().use { compose.onRoot().captureToImage().asAndroidBitmap()
+                .compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+        }
+        shot("typing-selected")
+        val text = "replacement output"
+        view.push(TerminalUpdate.Screen(ScreenFrame(60u, 4u, true,
+            listOf(ScreenLine(0u, listOf(CellRun(0u, text.length.toUShort(), text, false, null, null,
+                false, false, false, false, false, false)))), null, null, 2u, 10u,
+            search = io.github.shiroel.aries.core.TerminalSearch(1u, 0u, listOf(
+                io.github.shiroel.aries.core.TerminalSearchHighlight(3u, 0u, 2u, true))),
+        )))
+        compose.waitForIdle()
+        shot("typing-selected-after-output-resize-search")
+        compose.onNodeWithContentDescription(str(R.string.terminal_send_to_agent)).performClick()
+        compose.onNodeWithTag("terminal-composer").assertTextEquals("```\nerror\n```")
+        compose.runOnIdle { assertTrue(view.sent.isEmpty()) }
     }
 
     @Test

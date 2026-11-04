@@ -89,7 +89,7 @@ class TerminalScreenTest {
         view.push(frame(120, 3, true, 0 to "$ claude", 1 to "Thinking..."))
         compose.waitForIdle()
         screenShows("Thinking...")
-        compose.onNodeWithText(str(R.string.terminal_observing, "t1", 120, 3)).assertExists()
+        screenShows(str(R.string.terminal_accessibility_summary, 120, 3))
 
         // A partial frame updates the cursor line without reading the other rows.
         view.push(frame(120, 3, false, 1 to "Done."))
@@ -99,7 +99,7 @@ class TerminalScreenTest {
         // The desktop resized the Terminal: the phone follows.
         view.push(frame(80, 2, true, 0 to "resized"))
         compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.terminal_observing, "t1", 80, 2)).assertExists()
+        screenShows(str(R.string.terminal_accessibility_summary, 80, 2))
         screenShows("resized")
     }
 

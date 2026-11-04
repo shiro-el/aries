@@ -38,6 +38,38 @@ import org.robolectric.annotation.Config
 class LocalhostPreviewTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
+    // Regression: streaming output must not rebuild/scan every frame on Main or miss the final server hint.
+    @Test fun terminalOutputScanningCoalescesFramesOffMainAndKeepsTheLatestHint() {
+        val scans = java.util.Collections.synchronizedList(mutableListOf<Pair<String, Boolean>>())
+        val conn = object : HostConnection(NoHandle) {
+            override suspend fun previewListeningPorts(): List<UShort> = emptyList()
+            override fun previewPorts(output: String): List<UShort> {
+                scans += output to (android.os.Looper.myLooper() == android.os.Looper.getMainLooper())
+                return if (output.contains("latest")) listOf(5173u) else emptyList()
+            }
+        }
+        val host = FakeCore().addHost("fixture", Endpoint.Ssh("host", 22u, "me"))
+        val link = HostLink(host, conn, CoroutineScope(Dispatchers.Main), { conn })
+        val viewer = TerminalViewer(TerminalInfo("t1", "build", "", listOf("sh"), "/repo", "live")).apply { this.link = link }
+        compose.setContent { MaterialTheme { TerminalScreen(viewer, {}) } }
+        compose.mainClock.autoAdvance = false
+        repeat(20) { frame ->
+            val text = if (frame == 19) "latest http://localhost:5173" else "output $frame"
+            compose.runOnIdle {
+                viewer.apply(ScreenFrame(40u, 4u, true, listOf(ScreenLine(0u, listOf(
+                    CellRun(0u, text.length.toUShort(), text, false, null, null, false, false, false, false, false, false),
+                ))), null, null))
+            }
+            compose.mainClock.advanceTimeBy(16)
+        }
+        compose.mainClock.advanceTimeBy(300)
+        compose.waitUntil(5_000) { scans.lastOrNull()?.first?.contains("latest") == true }
+        assertTrue("coalesce the burst instead of scanning all 20 frames: ${scans.size}", scans.size <= 3)
+        assertTrue("the synchronous core parser must run off Main", scans.none { it.second })
+        compose.mainClock.autoAdvance = true
+        compose.onNodeWithContentDescription(compose.activity.getString(R.string.preview_title)).assertExists()
+    }
+
     /** Regression: a forwarded SSH banner must offer recovery instead of a blank WebView. */
     @Test fun nonHttpMainFrameErrorShowsRetryAndCloseAndRetryLoadsAgain() {
         val connection = object : HostConnection(NoHandle) {
