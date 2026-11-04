@@ -51,7 +51,7 @@ fun childAgentStatus(status: AgentStatus?): AgentStatus? =
 
 private data class AgentFamily(val entries: List<AgentEntry>, val sequence: Int) {
     val root get() = entries.first()
-    val priority get() = entries.maxOf { agentPriority(it.terminal.agentStatus) }
+    val priority get() = entries.maxOf { if (it.live) agentPriority(it.terminal.agentStatus) else 0 }
 }
 
 private fun families(entries: List<AgentEntry>): List<AgentFamily> {
@@ -76,11 +76,12 @@ private fun families(entries: List<AgentEntry>): List<AgentFamily> {
 fun orderAgents(entries: List<AgentEntry>, view: AgentListView = AgentListView.Priority): List<AgentEntry> {
     // Older callers may still supply Grouped; retired preferences have no effect.
     val ordered = families(entries).sortedWith(
-        compareByDescending<AgentFamily> { it.priority }
+        compareByDescending<AgentFamily> { it.root.live }
+            .thenByDescending { it.priority }
             .thenByDescending { it.root.terminal.statusMs ?: 0uL }
             .thenByDescending { it.sequence },
     )
-    return (ordered.filter { it.root.terminal.pinned } + ordered.filterNot { it.root.terminal.pinned })
+    return (ordered.filter { it.root.live && it.root.terminal.pinned } + ordered.filter { it.root.live && !it.root.terminal.pinned } + ordered.filterNot { it.root.live })
         .flatMap { it.entries }
 }
 
@@ -96,6 +97,7 @@ data class AgentGroup(
 fun agentGroups(entries: List<AgentEntry>, view: AgentListView): List<AgentGroup> {
     val groups = families(orderAgents(entries, view)).groupBy { family ->
         when {
+            !family.root.live -> "last-known"
             family.root.terminal.pinned -> "pinned"
             else -> "priority:${family.priority.coerceAtLeast(1)}"
         }

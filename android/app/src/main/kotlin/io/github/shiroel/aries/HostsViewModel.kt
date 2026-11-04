@@ -19,6 +19,13 @@ class HostsViewModel(application: Application) : AndroidViewModel(application) {
         onSavedLaunchesChanged = ::refreshLaunchShortcuts,
     )
 
+    val guidance = io.github.shiroel.aries.guidance.AppGuidanceState(
+        application.getSharedPreferences("app-guidance", android.content.Context.MODE_PRIVATE),
+        BuildConfig.VERSION_CODE, BuildConfig.VERSION_NAME, hasHosts = model.hosts.isNotEmpty(),
+    )
+
+    init { viewModelScope.launch { guidance.checkForUpdate() } }
+
     fun refreshLaunchShortcuts() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
