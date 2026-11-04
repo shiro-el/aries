@@ -769,6 +769,7 @@
     <string name="chat_question_send">답변 보내기</string>
     <string name="chat_question_sending">보내는 중…</string>
     <string name="chat_question_waiting">보냄 · Agent 응답 기다리는 중</string>
+    <string name="chat_question_unconfirmed">전달 여부 미확인</string>
     <string name="chat_question_sent">답변 완료</string>
     <string name="chat_question_cancelled">취소됨</string>
     <string name="chat_question_expired">만료됨</string>
