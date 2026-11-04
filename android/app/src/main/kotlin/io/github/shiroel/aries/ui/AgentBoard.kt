@@ -112,6 +112,8 @@ class AgentBoard(val hosts: List<Host>) {
         refreshing[state.hostId] = true
     }
 
+    internal fun lastUpdatedMs(hostId: String): Long? = updatedAt[hostId]
+
     /** Latest layout for retaining an Agent's navigation ancestors on the phone. */
     fun structureOf(hostId: String): HostStructure? = structures[hostId]
 

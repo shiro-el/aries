@@ -1581,6 +1581,9 @@ class HostsModel(
     /** Read already available transcript facts; the task list never opens per-row SSH watches. */
     internal fun taskTranscript(key: AgentKey) = conversations[key]?.snapshot
 
+    internal fun taskPreview(entry: AgentEntry) = if (entry.live)
+        conversations[entry.key]?.currentTranscript(entry.terminal) else null
+
     private val taskChanges = mutableMapOf<AgentKey, TasksChangesState>()
     internal fun taskChanges(key: AgentKey) = taskChanges.getOrPut(key) { TasksChangesState() }
     internal fun taskChangeStats(key: AgentKey, terminal: TerminalInfo) = taskChanges[key]?.takeIf {
@@ -1917,6 +1920,8 @@ class HostsModel(
         val link = links.firstOrNull { it.host.id == host.id && it.state == LinkState.Up && it.connection != null }
         if (resetFolder) task?.let { threadTaskSelection = ThreadTaskSelection(host.id, it.input, showDialog) }
         if (link == null) {
+            // Connecting leaves the inline home for Browse. Resume in its task dialog there.
+            threadTaskSelection = threadTaskSelection?.copy(showDialog = true)
             taskVisible = false
             newTask(host)
         } else prepareTask(link, showDialog = showDialog)

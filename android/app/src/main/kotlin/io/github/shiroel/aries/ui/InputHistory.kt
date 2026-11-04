@@ -70,8 +70,10 @@ class InputHistoryModel(
 }
 
 @Composable
-internal fun InputHistoryButton(history: InputHistoryModel, enabled: Boolean = true, onSelect: (String) -> Unit) {
-    ActionIcon(R.drawable.ic_history, R.string.input_history_title, history::show, enabled)
+internal fun InputHistoryButton(history: InputHistoryModel, enabled: Boolean = true,
+    button: (@Composable (show: () -> Unit) -> Unit)? = null, onSelect: (String) -> Unit) {
+    if (button != null) button(history::show)
+    else ActionIcon(R.drawable.ic_history, R.string.input_history_title, history::show, enabled)
     if (!history.open) return
     AlertDialog(
         onDismissRequest = { history.open = false },

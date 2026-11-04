@@ -115,14 +115,7 @@ internal fun TasksDetailTabs(presentation: TasksDetailPresentation, terminal: Te
             Tab(selected = selected, onClick = { presentation.select(tab) },
                 modifier = Modifier.testTag("tasks-tab-${tab.name.lowercase()}").drawBehind {
                     if (selected) drawLine(accent, Offset(0f, size.height), Offset(size.width, size.height), 4.dp.toPx())
-                }, text = {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(label, maxLines = 1)
-                        if (tab == TasksDetailTab.CHANGES && fresh) presentation.changes.stats?.let {
-                            Text(tasksChangeText(it), style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
-                })
+                }, text = { Text(label, maxLines = 1) })
         }
     }
     HorizontalDivider()
