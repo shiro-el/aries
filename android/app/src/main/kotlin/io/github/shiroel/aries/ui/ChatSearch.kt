@@ -225,7 +225,7 @@ internal fun SearchableChatText(
     val target = decoration.active?.takeIf { it.field.entryId == entry && it.field.key == key }
     val palette = MaterialTheme.colorScheme
     val highlighted = remember(text, matches, active, palette) {
-        AnnotatedString.Builder(text).apply {
+        AnnotatedString.Builder(annotateChatWebLinks(text, palette.primary)).apply {
             matches.forEach { match ->
                 if (match.end <= text.length) {
                     val selected = active == match

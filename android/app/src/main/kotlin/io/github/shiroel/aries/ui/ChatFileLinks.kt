@@ -44,7 +44,8 @@ fun ChatFileText(text: String, modifier: Modifier = Modifier) {
 }
 
 /** Adds native file actions without removing Markdown styles or replacing explicit web links. */
-internal fun annotateChatFileLinks(text: AnnotatedString, open: ((FileLocation) -> Unit)?, color: Color): AnnotatedString {
+internal fun annotateChatFileLinks(source: AnnotatedString, open: ((FileLocation) -> Unit)?, color: Color): AnnotatedString {
+    val text = annotateChatWebLinks(source, color)
     if (open == null) return text
     val builder = AnnotatedString.Builder(text)
     val reserved = mutableListOf<IntRange>()

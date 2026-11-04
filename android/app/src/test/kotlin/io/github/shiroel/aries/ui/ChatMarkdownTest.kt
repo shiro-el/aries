@@ -161,6 +161,35 @@ class ChatMarkdownTest {
         compose.onNodeWithText(str(R.string.chat_code_copied)).assertExists()
     }
 
+    // Regression: bare and inline-code URLs must stay actionable without sending punctuation to the browser.
+    @Test
+    @Config(qualifiers = "h1200dp")
+    fun bareUrlsInAgentUserAndToolTextOpenWithoutTrailingPunctuation() {
+        val core = FakeCore()
+        openChat(core)
+        val displayed = "See https://example.com/docs., (http://example.org/page), https://example.net/end」 and https://example.com/a_(b)."
+        val expected = listOf("https://example.com/docs", "http://example.org/page", "https://example.net/end", "https://example.com/a_(b)")
+        for (body in listOf(
+            ChatEntryBody.Agent(displayed),
+            ChatEntryBody.User(displayed.replace("https://example.net/end", "`https://example.net/end`")),
+            ChatEntryBody.Tool("Bash", "URL output", "{}", io.github.shiroel.aries.core.ChatToolStatus.DONE, displayed),
+        )) {
+            core.pushChat(ChatSnapshot(listOf(entry("link", body)), ChatStatus.LIVE, null))
+            if (body is ChatEntryBody.Tool) {
+                compose.waitUntil(5_000) { compose.onAllNodesWithText("URL output").fetchSemanticsNodes().isNotEmpty() }
+                compose.onNodeWithText("URL output").performClick()
+            }
+            compose.waitUntil(5_000) { compose.onAllNodesWithText(displayed).fetchSemanticsNodes().isNotEmpty() }
+            val node = compose.onNodeWithText(displayed)
+            val annotated = node.fetchSemanticsNode().config[SemanticsProperties.Text].single()
+            val links = annotated.getLinkAnnotations(0, annotated.length)
+            assertEquals(expected, links.map { annotated.text.substring(it.start, it.end) })
+            openedUris.clear()
+            for (link in links) node.performFirstLinkClick { it.start == link.start }
+            assertEquals(expected, openedUris)
+        }
+    }
+
     @Test
     @Config(qualifiers = "h1200dp")
     fun markdownLinksOpenThroughThePhoneAndUnsafeSchemesStayText() {

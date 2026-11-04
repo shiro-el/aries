@@ -28,6 +28,9 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.core.app.ApplicationProvider
@@ -160,6 +163,39 @@ class ChatCopySelectionTest {
             compose.onNodeWithText(str(R.string.chat_copy_all)).performClick()
             assertEquals(output ?: input, clipboard())
         }
+    }
+
+    // Regression: holding a URL must offer URL-only actions rather than copying Markdown or the whole response.
+    @Test
+    fun longPressOffersCopyAndShareForTheLinkAlongsideMessageActions() {
+        open()
+        val url = "https://example.com/docs"
+        show(ChatEntryBody.Agent("Read [Docs]($url)."), "Read Docs.")
+        val node = compose.onNodeWithText("Read Docs.")
+        val screenshot = java.io.File("build/reports/chat-links/message.png")
+        screenshot.parentFile?.mkdirs()
+        screenshot.outputStream().use { output ->
+            compose.onRoot().captureToImage().asAndroidBitmap()
+                .compress(android.graphics.Bitmap.CompressFormat.PNG, 100, output)
+        }
+        var layout: TextLayoutResult? = null
+        node.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { action ->
+            val results = mutableListOf<TextLayoutResult>()
+            action(results)
+            layout = results.single()
+        }
+        node.performTouchInput { longClick(layout!!.getBoundingBox(6).center) }
+        compose.onNodeWithText(str(R.string.chat_copy_all)).assertExists()
+        compose.onNodeWithText(str(R.string.chat_link_copy, url)).performClick()
+        assertEquals(url, clipboard())
+        node.performTouchInput { longClick(layout!!.getBoundingBox(6).center) }
+        compose.onNodeWithText(str(R.string.chat_link_share, url)).performClick()
+        val chooser = org.robolectric.Shadows.shadowOf(context as android.app.Application).nextStartedActivity
+        assertEquals(android.content.Intent.ACTION_CHOOSER, chooser.action)
+        @Suppress("DEPRECATION")
+        val shared = chooser.getParcelableExtra<android.content.Intent>(android.content.Intent.EXTRA_INTENT)!!
+        assertEquals(android.content.Intent.ACTION_SEND, shared.action)
+        assertEquals(url, shared.getStringExtra(android.content.Intent.EXTRA_TEXT))
     }
 
     @Test

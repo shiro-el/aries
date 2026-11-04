@@ -432,46 +432,50 @@ fun TerminalScreen(
     var searching by remember(viewer) { mutableStateOf(false) }
     // The keyboard pushes the input and key bar up and shrinks the screen
     // (the Scaffold already keeps clear of the navigation bar).
-    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))) {
-        AgentScreenHeader(viewer.terminal, viewer.link?.host?.name, onBack, AgentView.TERMINAL, onView,
-            title = viewer.terminal.name?.takeIf { it.isNotBlank() } ?: viewer.title?.takeIf { it.isNotBlank() } ?: displayName(viewer.terminal),
-            preview = preview, link = viewer.link, onTerminalUpdate = { viewer.update(listOf(it)) }, onSearch = { searching = true })
-        PreviewChips(preview)
-        if (preview.selected != null) {
-            LocalhostPreviewBrowser(preview, viewer.link, Modifier.weight(1f).fillMaxWidth(), change = viewer.terminal.turn,
-                captureEnabled = viewer.terminal.state == "live",
-                onAttachCapture = onPreviewCapture.takeIf { viewer.terminal.agentStatus != null })
-        } else {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    stringResource(if (viewer.typing) R.string.terminal_typing else R.string.terminal_observing,
-                        viewer.terminal.address, viewer.cols, viewer.rows),
-                    Modifier.weight(1f).padding(horizontal = 16.dp, vertical = 4.dp),
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            TerminalSearchBar(viewer, searching, onClose = { searching = false })
-            viewer.exit?.let { Banner(exitText(it)) }
-            val line = viewer.link?.state
-            if (viewer.exit == null) viewer.link?.let { ConnectionNotice(it) }
-            if (viewer.exit == null && viewer.closed && (line == null || line == LinkState.Up)) {
-                Banner(stringResource(R.string.terminal_connection_closed))
-            }
-            val look = remember(viewer) { TerminalLook(viewer) }
-            val scope = rememberCoroutineScope()
-            TerminalLookBar(viewer, look, onSelectionSend)
-            Box(Modifier.fillMaxWidth().weight(1f)) {
-                TerminalCanvas(viewer, look, displaySettings, Modifier.fillMaxSize())
-                if (viewer.scrolled > 0) {
-                    LatestButton(
-                        description = stringResource(R.string.terminal_back_to_live),
-                        onClick = { scope.launch { viewer.animateToLive() } },
-                        modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp),
+    androidx.compose.runtime.CompositionLocalProvider(
+        androidx.compose.ui.platform.LocalUriHandler provides rememberAgentUriHandler(preview, viewer.link, viewer.terminal.address),
+    ) {
+        Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))) {
+            AgentScreenHeader(viewer.terminal, viewer.link?.host?.name, onBack, AgentView.TERMINAL, onView,
+                title = viewer.terminal.name?.takeIf { it.isNotBlank() } ?: viewer.title?.takeIf { it.isNotBlank() } ?: displayName(viewer.terminal),
+                preview = preview, link = viewer.link, onTerminalUpdate = { viewer.update(listOf(it)) }, onSearch = { searching = true })
+            PreviewChips(preview)
+            if (preview.selected != null) {
+                LocalhostPreviewBrowser(preview, viewer.link, Modifier.weight(1f).fillMaxWidth(), change = viewer.terminal.turn,
+                    captureEnabled = viewer.terminal.state == "live",
+                    onAttachCapture = onPreviewCapture.takeIf { viewer.terminal.agentStatus != null })
+            } else {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        stringResource(if (viewer.typing) R.string.terminal_typing else R.string.terminal_observing,
+                            viewer.terminal.address, viewer.cols, viewer.rows),
+                        Modifier.weight(1f).padding(horizontal = 16.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                TerminalSearchBar(viewer, searching, onClose = { searching = false })
+                viewer.exit?.let { Banner(exitText(it)) }
+                val line = viewer.link?.state
+                if (viewer.exit == null) viewer.link?.let { ConnectionNotice(it) }
+                if (viewer.exit == null && viewer.closed && (line == null || line == LinkState.Up)) {
+                    Banner(stringResource(R.string.terminal_connection_closed))
+                }
+                val look = remember(viewer) { TerminalLook(viewer) }
+                val scope = rememberCoroutineScope()
+                TerminalLookBar(viewer, look, onSelectionSend)
+                Box(Modifier.fillMaxWidth().weight(1f)) {
+                    TerminalCanvas(viewer, look, displaySettings, Modifier.fillMaxSize())
+                    if (viewer.scrolled > 0) {
+                        LatestButton(
+                            description = stringResource(R.string.terminal_back_to_live),
+                            onClick = { scope.launch { viewer.animateToLive() } },
+                            modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp),
+                        )
+                    }
+                }
+                TerminalComposer(viewer)
+                if (viewer.typing && viewer.keyBarVisible) TerminalKeyBar(viewer)
             }
-            TerminalComposer(viewer)
-            if (viewer.typing && viewer.keyBarVisible) TerminalKeyBar(viewer)
         }
     }
 }

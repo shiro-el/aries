@@ -1,6 +1,5 @@
 package io.github.shiroel.aries.ui
 
-import android.content.Intent
 import android.webkit.WebResourceError
 import android.graphics.Bitmap
 import android.webkit.WebResourceRequest
@@ -228,6 +227,7 @@ internal fun previewOriginAllows(origin: String, candidate: String): Boolean = t
 @Composable
 private fun RestrictedPreviewWebView(origin: String, desktop: Boolean, modifier: Modifier, onView: (WebView?) -> Unit) {
     val context = LocalContext.current
+    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
     var state by remember(origin) { mutableStateOf(PreviewPageState.LOADING) }
     var status by remember(origin) { mutableStateOf<Int?>(null) }
     var navigation by remember(origin) { mutableIntStateOf(0) }
@@ -275,8 +275,7 @@ private fun RestrictedPreviewWebView(origin: String, desktop: Boolean, modifier:
                         val url = request.url.toString()
                         if (previewOriginAllows(origin, url)) return false
                         if (request.isForMainFrame && request.hasGesture() && request.url.scheme in listOf("http", "https")) {
-                            try { context.startActivity(Intent(Intent.ACTION_VIEW, request.url).addCategory(Intent.CATEGORY_BROWSABLE)) }
-                            catch (_: android.content.ActivityNotFoundException) { }
+                            uriHandler.openUri(url)
                         }
                         return true
                     }
