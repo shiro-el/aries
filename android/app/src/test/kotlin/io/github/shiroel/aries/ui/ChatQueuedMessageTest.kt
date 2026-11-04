@@ -401,7 +401,7 @@ class ChatQueuedMessageTest {
         connection.sendFailWith = CoreException.Closed()
         connection.sendHold!!.complete(Unit)
         compose.waitForIdle()
-        compose.onNodeWithText("Delivery unconfirmed · check the conversation before resending").assertExists()
+        compose.onNodeWithText(str(R.string.chat_queue_uncertain)).assertExists()
         screenshot("delivery-unconfirmed")
         core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, null))
         core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
@@ -410,7 +410,7 @@ class ChatQueuedMessageTest {
         // A lost reply may still have delivered. Only the transcript resolves it.
         core.pushChat(ChatSnapshot(listOf(ChatEntry("u1", null, ChatEntryBody.User("check delivery", emptyList(), false))), ChatStatus.LIVE, null))
         compose.waitUntil(5_000) {
-            compose.onAllNodesWithText("Delivery unconfirmed · check the conversation before resending").fetchSemanticsNodes().isEmpty()
+            compose.onAllNodesWithText(str(R.string.chat_queue_uncertain)).fetchSemanticsNodes().isEmpty()
         }
     }
 
