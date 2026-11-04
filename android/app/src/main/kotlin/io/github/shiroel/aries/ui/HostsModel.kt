@@ -1724,7 +1724,8 @@ class HostsModel(
     internal fun isViewedChat(chat: ChatModel) = liveChat === chat
 
     /** Read already available transcript facts; the task list never opens per-row SSH watches. */
-    internal fun taskTranscript(key: AgentKey) = conversations[key]?.snapshot
+    internal fun taskTranscript(entry: AgentEntry) = if (entry.live)
+        conversations[entry.key]?.taskTranscript(entry.terminal) else null
 
     internal fun taskPreview(entry: AgentEntry) = if (entry.live)
         conversations[entry.key]?.currentTranscript(entry.terminal) else null
