@@ -38,7 +38,16 @@ class WatchInboxActivity : ComponentActivity() {
     private var target by mutableStateOf<Pair<String, String>?>(null)
     private val preferences by lazy { getSharedPreferences("watch-summary", MODE_PRIVATE) }
     private val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
-        runOnUiThread { summary = store.summary() }
+        runOnUiThread {
+            val incoming = store.summary()
+            // A local publication has no cached permission menu. Keep the user-requested
+            // live detail in memory while its Host status/turn identity still matches.
+            summary = incoming.copy(inbox = incoming.inbox.map { row ->
+                val live = summary.inbox.firstOrNull { it.hostId == row.hostId && it.terminal == row.terminal }
+                if (!row.contentHidden && row.requestKind == "permission" && row.stateToken.isNotBlank() &&
+                    live?.stateToken == row.stateToken && live.requestId.isNotBlank()) live else row
+            })
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -102,7 +111,8 @@ class WatchInboxActivity : ComponentActivity() {
 
     private fun openPhone(agent: WatchAgent) {
         startActivity(Intent(this, OpenOnPhoneActivity::class.java)
-            .putExtra("host", agent.hostId).putExtra("terminal", agent.terminal))
+            .putExtra("host", agent.hostId).putExtra("terminal", agent.terminal)
+            .putExtra("chat", agent.status in listOf("blocked", "done", "error")))
     }
 
     private fun refresh() {

@@ -20,6 +20,7 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.wear.compose.material.ChipDefaults
 import androidx.wear.compose.material.Chip
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -107,7 +108,7 @@ fun WatchAnswerActions(agent: WatchAgent, onOpenPhone: (WatchAgent) -> Unit) {
                 WatchResult.LOCKED, WatchResult.PHONE -> R.string.wear_answer_phone
                 WatchResult.FAILED -> R.string.wear_answer_failed
                 WatchResult.UNKNOWN -> R.string.wear_answer_unknown
-            }))
+            }), color = Color(if (outcome == WatchResult.SENT) WatchConsole.SAFFRON else WatchConsole.ERROR))
             if (outcome in listOf(WatchResult.PHONE, WatchResult.LOCKED))
                 ActionChip(stringResource(R.string.wear_answer_phone)) { onOpenPhone(agent) }
         }
@@ -118,7 +119,8 @@ private const val REPLY_KEY = "watch_reply"
 
 @Composable
 private fun ActionChip(label: String, onClick: () -> Unit) {
-    Chip(label = { Text(label) }, onClick = onClick, modifier = Modifier.fillMaxWidth())
+    Chip(label = { Text(label) }, onClick = onClick, colors = ChipDefaults.secondaryChipColors(),
+        shape = WatchConsoleShape, modifier = Modifier.fillMaxWidth())
 }
 
 @Composable
@@ -128,7 +130,7 @@ private fun HoldToAllow(onAllow: () -> Unit) {
     var progress by remember { mutableFloatStateOf(0f) }
     val label = stringResource(R.string.wear_answer_hold_allow)
     // A completed hold is 800 ms; releasing or scrolling before then cancels it.
-    Column(Modifier.fillMaxWidth().semantics {
+    Column(Modifier.fillMaxWidth().background(Color(WatchConsole.CARD), WatchConsoleShape).semantics {
         customActions = listOf(CustomAccessibilityAction(label) { callback(); true })
     }.pointerInput(Unit) {
         detectTapGestures(onPress = {
@@ -142,9 +144,9 @@ private fun HoldToAllow(onAllow: () -> Unit) {
             }
         })
     }.padding(12.dp)) {
-        Text(label)
-        Box(Modifier.fillMaxWidth().height(3.dp).background(Color.DarkGray)) {
-            Box(Modifier.fillMaxWidth(progress).height(3.dp).background(Color(0xffffca74)))
+        Text(label, color = Color(WatchConsole.SAFFRON))
+        Box(Modifier.fillMaxWidth().height(3.dp).background(Color(WatchConsole.MUTED).copy(alpha = 0.3f))) {
+            Box(Modifier.fillMaxWidth(progress).height(3.dp).background(Color(WatchConsole.SAFFRON)))
         }
     }
 }

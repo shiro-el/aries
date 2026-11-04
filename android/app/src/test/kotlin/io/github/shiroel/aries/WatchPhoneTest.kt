@@ -84,6 +84,8 @@ class WatchPhoneTest {
         val command = OpenWatchAgent("h1", "remote/t7")
         val intent = command.remoteIntent(context.packageName)
         assertEquals(PushTarget("h1", "remote/t7"), PushTarget.from(intent))
+        assertEquals(PushTarget("h1", "remote/t7", chat = true),
+            PushTarget.from(OpenWatchAgent("h1", "remote/t7", chat = true).remoteIntent(context.packageName)))
         assertNull(PushTarget.from(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("aries-watch://wrong"))))
         intent.addFlags(android.content.Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY)
         assertNull(PushTarget.from(intent))

@@ -41,7 +41,7 @@ class OpenOnPhoneActivity : Activity() {
                     label.text = message(R.string.wear_opening_phone)
                     val phone = requireNotNull(store.phoneNode())
                     val remoteIntent = if (!host.isNullOrBlank() && !terminal.isNullOrBlank()) {
-                        val command = OpenWatchAgent(host, terminal)
+                        val command = OpenWatchAgent(host, terminal, intent.getBooleanExtra("chat", false))
                         // RPC acknowledges that the phone still knows this Host/Agent.
                         val reply = Wearable.getMessageClient(this@OpenOnPhoneActivity)
                             .sendRequest(phone, WatchSummary.OPEN_PATH, command.toBytes()).await()

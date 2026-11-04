@@ -65,7 +65,7 @@ object WatchActions {
             core.answerQuestionBackground(target.hostId, target.terminal, detail.requestId, listOf(listOf(command.choice.toUInt())))
             runCatching {
                 val localized = AppLanguage.context(context)
-                val notice = QuestionNotice(target.hostId, core.host(target.hostId).name, target.terminal,
+                val notice = QuestionNotice(target.hostId, core.hosts().first { it.id == target.hostId }.name, target.terminal,
                     PushQuestion(detail.requestId, detail.requestBody, detail.choices))
                 QuestionNotifications.post(context, notice, QuestionView.Done(localized.getString(
                     R.string.question_notify_sent, notice.choiceLabel(localized, command.choice)), openApp = false))

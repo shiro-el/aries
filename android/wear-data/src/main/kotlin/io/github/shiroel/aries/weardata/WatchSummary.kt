@@ -122,15 +122,17 @@ private fun DataMap.toAgent(): WatchAgent = WatchAgent(
 ).bounded()
 
 /** MessageClient commands preserve machine-qualified addresses, without delimiter escaping. */
-data class OpenWatchAgent(val hostId: String, val terminal: String) {
+data class OpenWatchAgent(val hostId: String, val terminal: String, val chat: Boolean = false) {
     fun remoteIntent(packageName: String): Intent = Intent(Intent.ACTION_VIEW,
         Uri.Builder().scheme("aries-watch").authority("agent")
-            .appendQueryParameter("host", hostId).appendQueryParameter("terminal", terminal).build(),
+            .appendQueryParameter("host", hostId).appendQueryParameter("terminal", terminal)
+            .apply { if (chat) appendQueryParameter("view", "chat") }.build(),
     ).addCategory(Intent.CATEGORY_BROWSABLE).setPackage(packageName)
 
     fun toBytes(): ByteArray = DataMap().apply {
         putString("host", hostId)
         putString("terminal", terminal)
+        putBoolean("chat", chat)
     }.toByteArray()
 
     companion object {
@@ -140,7 +142,7 @@ data class OpenWatchAgent(val hostId: String, val terminal: String) {
             if (uri.scheme != "aries-watch" || uri.host != "agent" || uri.toString().length > 4096) return null
             val host = uri.getQueryParameter("host")?.takeIf { it.isNotBlank() } ?: return null
             val terminal = uri.getQueryParameter("terminal")?.takeIf { it.isNotBlank() } ?: return null
-            return OpenWatchAgent(host, terminal)
+            return OpenWatchAgent(host, terminal, uri.getQueryParameter("view") == "chat")
         }
 
         fun fromBytes(bytes: ByteArray): OpenWatchAgent? = runCatching {
@@ -148,7 +150,7 @@ data class OpenWatchAgent(val hostId: String, val terminal: String) {
             val map = DataMap.fromByteArray(bytes)
             val host = requireNotNull(map.getString("host")).also { require(it.isNotBlank()) }
             val terminal = requireNotNull(map.getString("terminal")).also { require(it.isNotBlank()) }
-            OpenWatchAgent(host, terminal)
+            OpenWatchAgent(host, terminal, map.getBoolean("chat"))
         }.getOrNull()
     }
 }
