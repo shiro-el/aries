@@ -47,6 +47,7 @@ class SettingsScreenTest {
         }
         compose.openConsoleDrawer()
         compose.onNodeWithTag("settings-open").performClick()
+        compose.onNode(hasScrollToKeyAction()).performScrollToKey("quiet-hours")
         compose.onNodeWithTag("quiet-hours-enabled").performScrollTo().performClick()
         compose.onNodeWithTag("quiet-hours-start").performScrollTo().performClick()
         compose.runOnIdle {

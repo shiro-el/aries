@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -39,12 +38,14 @@ fun LaunchOptions(form: LaunchForm, preset: AgentPreset) {
                     Text(stringResource(if (preset == AgentPreset.CLAUDE_CODE) R.string.launch_model_choose else R.string.launch_agent_default))
                 }
                 DropdownMenu(expanded = modelsOpen, onDismissRequest = { modelsOpen = false }) {
-                    DropdownMenuItem(
+                    SingleChoiceMenuItem(
+                        selected = form.model.isEmpty(),
                         text = { Text(stringResource(R.string.launch_agent_default)) },
                         onClick = { form.model = ""; modelsOpen = false },
                     )
                     for (alias in listOf("sonnet", "opus", "haiku", "fable")) {
-                        DropdownMenuItem(
+                        SingleChoiceMenuItem(
+                            selected = form.model == alias,
                             text = { Text(alias) },
                             onClick = { form.model = alias; modelsOpen = false },
                         )
@@ -72,7 +73,8 @@ fun LaunchOptions(form: LaunchForm, preset: AgentPreset) {
             ) { EffortText(form.effort) }
             DropdownMenu(expanded = effortsOpen, onDismissRequest = { effortsOpen = false }) {
                 for (effort in listOf("") + efforts) {
-                    DropdownMenuItem(
+                    SingleChoiceMenuItem(
+                        selected = form.effort == effort,
                         text = { EffortText(effort) },
                         onClick = { form.effort = effort; effortsOpen = false },
                     )

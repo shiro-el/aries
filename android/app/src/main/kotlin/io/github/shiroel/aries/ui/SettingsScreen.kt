@@ -8,7 +8,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.items
 import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.Host
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,7 +19,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -40,7 +38,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -225,18 +222,13 @@ private fun SettingsField(title: Int? = null, content: @Composable () -> Unit) {
 
 @Composable
 private fun AccentControls(settings: ThemeSettings) {
-    val c = MaterialTheme.colorScheme
-    Row(Modifier.fillMaxWidth().border(1.dp, c.outline).selectableGroup()) {
+    Column(Modifier.fillMaxWidth().selectableGroup()) {
         AccentPresets.forEach { preset ->
             val label = stringResource(preset.label)
-            val selected = settings.accentHex == preset.hex
-            Box(
-                Modifier.weight(1f).height(48.dp).background(Color(android.graphics.Color.parseColor(preset.hex)))
-                    .selectable(selected = selected, role = Role.RadioButton, onClick = { settings.setAccent(preset.hex) })
-                    .semantics { contentDescription = label },
-                contentAlignment = Alignment.Center,
-            ) {
-                if (selected) Box(Modifier.size(32.dp).border(3.dp, c.background))
+            SingleChoiceRow(settings.accentHex == preset.hex, { settings.setAccent(preset.hex) },
+                Modifier.fillMaxWidth().semantics { contentDescription = label }) {
+                Box(Modifier.size(24.dp).background(Color(android.graphics.Color.parseColor(preset.hex))))
+                Text(label, Modifier.padding(start = 12.dp))
             }
         }
     }
