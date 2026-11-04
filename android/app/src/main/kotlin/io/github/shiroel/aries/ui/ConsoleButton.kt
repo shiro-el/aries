@@ -5,9 +5,9 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Button
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 
-/** Material's CornerFull button default bypasses theme shapes; Console actions stay square. */
+/** Material's CornerFull default bypasses theme shapes; actions follow the layout tokens. */
 @Composable
 internal fun ConsoleButton(
     onClick: () -> Unit,
@@ -17,7 +17,8 @@ internal fun ConsoleButton(
 ) {
     val accent = LocalAccentColor.current
     Button(
-        onClick = onClick, modifier = modifier, enabled = enabled, shape = RectangleShape,
+        onClick = onClick, modifier = modifier, enabled = enabled,
+        shape = RoundedCornerShape(LocalLayoutTokens.current.cornerRadius),
         colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = onAccent(accent)),
         content = content,
     )

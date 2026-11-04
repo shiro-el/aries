@@ -188,54 +188,75 @@ internal fun NewTaskDialog(task: NewTask, onStart: () -> Unit, onOpenChat: () ->
     var options by remember(task) { mutableStateOf(false) }
     var savedOpen by remember(task) { mutableStateOf(false) }
     val editable = !form.busy && task.terminal == null && !task.launchUnknown
-    AlertDialog(onDismissRequest = onDismiss,
-        modifier = (if (fullScreen) Modifier.fillMaxSize() else Modifier).testTag("new-task-dialog"),
-        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = !fullScreen),
-        title = { Text(stringResource(R.string.new_task_title)) },
-        text = {
-            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(task.link.host.name, style = MaterialTheme.typography.labelLarge)
-                val saved = form.saved.filter { it.request.preset in taskPresets }
-                if (saved.isNotEmpty()) Box {
-                    TextButton(onClick = { savedOpen = true }, enabled = editable) { Text(stringResource(R.string.launch_saved)) }
-                    DropdownMenu(expanded = savedOpen, onDismissRequest = { savedOpen = false }) {
-                        saved.forEach { launch -> DropdownMenuItem(text = { Text(launch.name) }, modifier = Modifier.testTag("new-task-saved:${launch.id}"), onClick = {
-                            form.fill(launch.request)
-                            // New tasks create an unplaced Terminal; never reuse a saved layout target.
-                            form.selectSpace(null)
-                            savedOpen = false
-                        }) }
-                    }
+    val promptField: @Composable () -> Unit = {
+        OutlinedTextField(task.input, { task.input = it }, enabled = !form.busy && !task.sent,
+            minLines = 4, maxLines = 8, label = { Text(stringResource(R.string.new_task_prompt)) },
+            modifier = Modifier.fillMaxWidth().testTag("new-task-prompt"))
+    }
+    val fields: @Composable () -> Unit = {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(LocalLayoutTokens.current.itemSpacing)) {
+            if (fullScreen) promptField()
+            Text(task.link.host.name, style = MaterialTheme.typography.labelLarge)
+            val saved = form.saved.filter { it.request.preset in taskPresets }
+            if (saved.isNotEmpty()) Box {
+                TextButton(onClick = { savedOpen = true }, enabled = editable) { Text(stringResource(R.string.launch_saved)) }
+                DropdownMenu(expanded = savedOpen, onDismissRequest = { savedOpen = false }) {
+                    saved.forEach { launch -> DropdownMenuItem(text = { Text(launch.name) }, modifier = Modifier.testTag("new-task-saved:${launch.id}"), onClick = {
+                        form.fill(launch.request)
+                        // New tasks create an unplaced Terminal; never reuse a saved layout target.
+                        form.selectSpace(null)
+                        savedOpen = false
+                    }) }
                 }
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    taskPresets.forEach { preset ->
-                        FilterChip(selected = form.preset == preset, enabled = editable,
-                            onClick = { form.preset = preset }, label = { Text(stringResource(preset.label)) })
-                    }
-                }
-                OutlinedTextField(form.cwd, { form.cwd = it }, enabled = editable, singleLine = true,
-                    label = { Text(stringResource(R.string.launch_cwd)) },
-                    supportingText = { Text(stringResource(R.string.new_task_folder_hint)) },
-                    isError = form.cwd.isNotBlank() && !form.cwd.startsWith('/'),
-                    modifier = Modifier.testTag("launch_cwd"))
-                TextButton(onClick = { browsing = true }, enabled = editable && task.link.connection != null) {
-                    Text(stringResource(R.string.new_task_browse))
-                }
-                OutlinedTextField(task.input, { task.input = it }, enabled = !form.busy && !task.sent,
-                    minLines = 4, maxLines = 8, label = { Text(stringResource(R.string.new_task_prompt)) },
-                    modifier = Modifier.fillMaxWidth().testTag("new-task-prompt"))
-                TextButton(onClick = { options = !options }, enabled = editable) { Text(stringResource(R.string.new_task_options)) }
-                if (options && editable) {
-                    form.preset?.let { LaunchOptions(form, it) }
-                    OutlinedTextField(form.command, { form.command = it }, enabled = editable,
-                        singleLine = true, label = { Text(stringResource(R.string.launch_preset_args)) })
-                }
-                if (task.waiting) Text(stringResource(R.string.new_task_waiting))
-                if (form.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-                form.error?.let { Text(stringResource(it.res, *it.args.toTypedArray()), color = MaterialTheme.colorScheme.error) }
-                if (task.terminal != null && !form.busy) TextButton(onClick = onOpenChat) { Text(stringResource(R.string.new_task_open_chat)) }
             }
-        },
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                taskPresets.forEach { preset ->
+                    FilterChip(selected = form.preset == preset, enabled = editable,
+                        onClick = { form.preset = preset }, label = { Text(stringResource(preset.label)) })
+                }
+            }
+            OutlinedTextField(form.cwd, { form.cwd = it }, enabled = editable, singleLine = true,
+                label = { Text(stringResource(R.string.launch_cwd)) },
+                supportingText = { Text(stringResource(R.string.new_task_folder_hint)) },
+                isError = form.cwd.isNotBlank() && !form.cwd.startsWith('/'),
+                modifier = Modifier.testTag("launch_cwd"))
+            TextButton(onClick = { browsing = true }, enabled = editable && task.link.connection != null) {
+                Text(stringResource(R.string.new_task_browse))
+            }
+            if (!fullScreen) promptField()
+            TextButton(onClick = { options = !options }, enabled = editable) { Text(stringResource(R.string.new_task_options)) }
+            if (options && editable) {
+                form.preset?.let { LaunchOptions(form, it) }
+                OutlinedTextField(form.command, { form.command = it }, enabled = editable,
+                    singleLine = true, label = { Text(stringResource(R.string.launch_preset_args)) })
+            }
+            if (task.waiting) Text(stringResource(R.string.new_task_waiting))
+            if (form.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+            form.error?.let { Text(stringResource(it.res, *it.args.toTypedArray()), color = MaterialTheme.colorScheme.error) }
+            if (task.terminal != null && !form.busy) TextButton(onClick = onOpenChat) { Text(stringResource(R.string.new_task_open_chat)) }
+        }
+    }
+    val start: @Composable () -> Unit = {
+        ConsoleButton(onClick = onStart, enabled = task.canStart, modifier = if (fullScreen) Modifier.fillMaxWidth() else Modifier) {
+            Text(stringResource(if (task.terminal == null) R.string.new_task_start else R.string.new_task_wait_again))
+        }
+    }
+    if (fullScreen) androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(Modifier.fillMaxSize().testTag("new-task-dialog"), color = MaterialTheme.colorScheme.background) {
+            Column(Modifier.fillMaxSize().imePadding()) {
+                Row(Modifier.fillMaxWidth().heightIn(min = 56.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel_button)) }
+                    Text(stringResource(R.string.new_task_title), style = MaterialTheme.typography.titleLarge)
+                }
+                HorizontalDivider()
+                Box(Modifier.weight(1f).padding(LocalLayoutTokens.current.contentPadding)) { fields() }
+                HorizontalDivider()
+                Column(Modifier.fillMaxWidth().padding(LocalLayoutTokens.current.contentPadding)) { start() }
+            }
+        }
+    } else AlertDialog(onDismissRequest = onDismiss, modifier = Modifier.testTag("new-task-dialog"),
+        title = { Text(stringResource(R.string.new_task_title)) }, text = fields,
         confirmButton = { TextButton(onClick = onStart, enabled = task.canStart) {
             Text(stringResource(if (task.terminal == null) R.string.new_task_start else R.string.new_task_wait_again))
         } },

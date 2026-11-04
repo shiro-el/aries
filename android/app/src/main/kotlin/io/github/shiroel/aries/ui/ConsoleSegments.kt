@@ -5,6 +5,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
@@ -32,7 +34,8 @@ fun <T> ConsoleSegments(
     label: @Composable (T) -> String,
 ) {
     val colors = MaterialTheme.colorScheme
-    Row(modifier.border(1.dp, colors.outline).selectableGroup()) {
+    val shape = RoundedCornerShape(LocalLayoutTokens.current.cornerRadius)
+    Row(modifier.clip(shape).border(1.dp, colors.outline, shape).selectableGroup()) {
         options.forEachIndexed { index, option ->
             if (index > 0) Box(Modifier.width(1.dp).height(height).background(colors.outline))
             val active = selected == option

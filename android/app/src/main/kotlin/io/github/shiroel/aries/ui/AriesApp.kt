@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
@@ -133,11 +134,11 @@ private fun AriesContent(
 }
 
 @Composable
-internal fun HostListScreen(model: HostsModel) {
+internal fun HostListScreen(model: HostsModel, tasks: Boolean = false) {
     val adding = model.hostAddMethod != null
     LazyColumn(Modifier.fillMaxSize()) {
         if (model.hosts.isEmpty()) item { Text(stringResource(R.string.hosts_empty), Modifier.padding(12.dp), fontSize = 12.sp) }
-        items(model.hosts, key = { it.id }) { host -> ConsoleHostRow(model, host) }
+        items(model.hosts, key = { it.id }) { host -> ConsoleHostRow(model, host, tasks) }
         item(key = "add") {
             val expansion = stringResource(if (adding) R.string.tree_expanded else R.string.tree_collapsed)
             Text(
@@ -156,11 +157,10 @@ internal fun HostListScreen(model: HostsModel) {
 }
 
 @Composable
-private fun ConsoleHostRow(model: HostsModel, host: Host) {
+private fun ConsoleHostRow(model: HostsModel, host: Host, tasks: Boolean = false) {
     val color = if (host.endpoint is Endpoint.Local) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
     val connectLabel = stringResource(R.string.hosts_connect_button)
-    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.width(3.dp).fillMaxHeight().background(color))
+    val name: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
         Column(Modifier.weight(1f).heightIn(min = 48.dp).clickable(onClickLabel = connectLabel, role = Role.Button) { model.openHost(host) }.padding(horizontal = 12.dp, vertical = 6.dp)) {
             Text(host.name, fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
             val where = when (val endpoint = host.endpoint) {
@@ -171,6 +171,8 @@ private fun ConsoleHostRow(model: HostsModel, host: Host) {
             }
             Text(where, fontSize = 12.sp, lineHeight = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
         }
+    }
+    val actions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
         WaitingSummary(model.quickOpenSources.filter { it.host.id == host.id },
             model.drawerAgents.filter { it.host.id == host.id }, Modifier.testTag("host-waiting:${host.id}"),
             onClick = { model.openHostWaiting(host) })
@@ -179,12 +181,33 @@ private fun ConsoleHostRow(model: HostsModel, host: Host) {
             modifier = Modifier.testTag("host-new-task").semantics {
                 contentDescription = taskLabel
             })
+    }
+    val more: @Composable () -> Unit = {
         val moreLabel = stringResource(R.string.console_host_menu, host.name)
         Box(
             Modifier.size(48.dp).testTag("host-menu:${host.id}").clickable(role = Role.Button) { model.openHostSettings(host) }
                 .semantics { contentDescription = moreLabel },
             contentAlignment = Alignment.Center,
         ) { Text(stringResource(R.string.console_more), Modifier.clearAndSetSemantics {}, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    }
+    if (tasks) Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 64.dp), verticalAlignment = Alignment.CenterVertically) {
+            val live = model.quickOpenSources.any { it.host.id == host.id && it.live }
+            val dot = androidx.compose.foundation.shape.CircleShape
+            Box(Modifier.padding(start = 16.dp).size(8.dp)
+                .then(if (live) Modifier.background(statusColor(io.github.shiroel.aries.core.AgentStatus.Done), dot)
+                    else Modifier.border(1.dp, MaterialTheme.colorScheme.outline, dot)))
+            name()
+            more()
+        }
+        Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            actions()
+        }
+    } else Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.width(3.dp).fillMaxHeight().background(color))
+        name()
+        actions()
+        more()
     }
     if (model.missingKeyHostId == host.id) {
         Column(Modifier.padding(12.dp)) {

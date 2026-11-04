@@ -89,7 +89,8 @@ private fun ConsoleMark() {
 
 /** Modal drawer owns navigation only; entering a destination goes through model cleanup. */
 @Composable
-internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit) {
+internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit,
+    secondaryHeader: (@Composable () -> Unit)? = null) {
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val screen = model.screen
@@ -157,7 +158,8 @@ internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit) {
                     }
                     // Agent screens supply their own ConsoleTopBar in ticket 05.
                     val agentHeader = screen is Screen.Terminal || screen is Screen.Chat
-                    if (!agentHeader) {
+                    if (!agentHeader && secondaryHeader != null) secondaryHeader()
+                    else if (!agentHeader) {
                         ConsoleTopBar(consoleTitle(screen), onMenu = {
                             model.closeCallInbox()
                             scope.launch { drawer.open() }

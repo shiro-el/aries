@@ -1,6 +1,9 @@
 package io.github.shiroel.aries.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -43,7 +46,11 @@ internal fun CallInboxPanel(
     blockedAgents: Int = 0,
     onWaitingAgents: () -> Unit = {},
 ) {
-    val waiting = model.calls.filter { it.answerable }
+    val waiting = model.calls.filter { it.answerable }.let { calls ->
+        if (LocalLayoutTokens.current == tokensFor(AppLayout.TASKS))
+            taskNeeds(emptyList(), calls).filterIsInstance<TaskNeed.Call>().map { it.entry }
+        else calls
+    }
     val other = model.calls.filter { !it.answerable && it.call.answer == null }
     val past = model.calls.filter { it.call.answer != null }
     LazyColumn(modifier.fillMaxWidth().testTag("call-inbox-list")) {
@@ -131,7 +138,17 @@ private fun CallRow(
     opening: Boolean,
 ) {
     val call = entry.call
-    Column(Modifier.fillMaxWidth().testTag("call-${call.id}").padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    val tasks = LocalLayoutTokens.current == tokensFor(AppLayout.TASKS)
+    val urgent = tasks && entry.answerable && (call.urgency == CallUrgency.URGENT || call.urgency == CallUrgency.EMERGENCY)
+    Column(Modifier.fillMaxWidth().testTag("call-${call.id}")
+        .then(if (urgent) Modifier.background(Brand.Saffron.copy(alpha = .07f)).drawBehind {
+            drawLine(Brand.Saffron, Offset(1.5.dp.toPx(), 0f), Offset(1.5.dp.toPx(), size.height), 3.dp.toPx())
+        } else Modifier).padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        if (urgent) androidx.compose.material3.Surface(color = Brand.Saffron, contentColor = Brand.Ink,
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp)) {
+            Text(stringResource(R.string.tasks_urgent_call), Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                style = MaterialTheme.typography.labelSmall)
+        }
         Text(call.title, style = MaterialTheme.typography.titleMedium)
         val caller = call.terminal?.let { stringResource(R.string.call_inbox_caller, callerName ?: it, entry.host.name) }
             ?: entry.host.name
