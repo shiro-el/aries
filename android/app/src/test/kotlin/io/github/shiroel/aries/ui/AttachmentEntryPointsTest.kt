@@ -24,13 +24,11 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
-import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.Config
 
 /** System picker/camera results cross the same UI -> fake core seam as incoming shares. */
 @RunWith(RobolectricTestRunner::class)
-@Config(qualifiers = "h1200dp")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(qualifiers = "h740dp") // Normal phone portrait; short windows use the tools dialog.
 class AttachmentEntryPointsTest {
