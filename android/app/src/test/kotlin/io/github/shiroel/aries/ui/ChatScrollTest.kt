@@ -110,7 +110,7 @@ class ChatScrollTest {
         ))
         push(entries(30) + tool)
         val label = context.getString(io.github.shiroel.aries.R.string.chat_tool_expand_label, "Bash")
-        val header = compose.onNodeWithContentDescription(label)
+        val header = compose.onNode(hasToolAction(label))
         header.assertIsDisplayed()
         val before = header.fetchSemanticsNode().positionInRoot.y
 

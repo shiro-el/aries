@@ -175,7 +175,7 @@ class ChatScreenTest {
         compose.waitForIdle()
         compose.onNodeWithText("File created successfully").assertDoesNotExist()
 
-        compose.onNodeWithContentDescription(str(R.string.chat_tool_expand_label, "Write")).performClick()
+        compose.onNode(hasToolAction(str(R.string.chat_tool_expand_label, "Write"))).performClick()
         compose.waitForIdle()
         compose.onNodeWithText("File created successfully").assertExists()
         compose.onNodeWithText(write.body.let { (it as ChatEntryBody.Tool).input }).assertDoesNotExist()
@@ -185,7 +185,7 @@ class ChatScreenTest {
         compose.onNodeWithText(str(R.string.chat_tool_raw_input)).performScrollTo().assertIsDisplayed().performClick()
         compose.onNodeWithText(write.body.let { (it as ChatEntryBody.Tool).input }).assertDoesNotExist()
 
-        compose.onNodeWithContentDescription(str(R.string.chat_tool_expand_label, "Write")).performClick()
+        compose.onNode(hasToolAction(str(R.string.chat_tool_expand_label, "Write"))).performClick()
         compose.waitForIdle()
         compose.onNodeWithText("File created successfully").assertDoesNotExist()
     }
@@ -208,7 +208,7 @@ class ChatScreenTest {
         core.pushChat(ChatSnapshot(listOf(command, reply), ChatStatus.LIVE, null))
         compose.waitForIdle()
         compose.onNodeWithText(str(R.string.chat_tool_command, "pwd")).assertDoesNotExist()
-        compose.onNodeWithContentDescription(str(R.string.chat_tool_expand_label, "Bash")).performClick()
+        compose.onNode(hasToolAction(str(R.string.chat_tool_expand_label, "Bash"))).performClick()
         compose.onNodeWithText(str(R.string.chat_tool_command, "pwd")).assertExists()
         compose.onNodeWithText(str(R.string.chat_tool_cwd, "/repo")).assertExists()
         compose.onNodeWithText(str(R.string.chat_tool_exit_code, "0")).assertExists()
@@ -240,7 +240,7 @@ class ChatScreenTest {
         ))
         core.pushChat(ChatSnapshot(listOf(search), ChatStatus.LIVE, null))
         compose.waitForIdle()
-        compose.onNodeWithContentDescription(str(R.string.chat_tool_expand_label, "Grep")).performClick()
+        compose.onNode(hasToolAction(str(R.string.chat_tool_expand_label, "Grep"))).performClick()
         compose.onNodeWithText(str(R.string.chat_tool_pattern, "TODO")).assertExists()
         compose.onNodeWithText(str(R.string.chat_tool_path, "src")).assertExists()
         compose.onNodeWithText(str(R.string.chat_tool_result_count, "0")).assertExists()
@@ -264,7 +264,7 @@ class ChatScreenTest {
         core.pushChat(ChatSnapshot(listOf(edit(listOf(" keep", "-hi", "+hello"))), ChatStatus.LIVE, null))
         compose.waitForIdle()
         compose.onNodeWithText("-hi", substring = true).assertDoesNotExist()
-        compose.onNodeWithContentDescription(str(R.string.chat_tool_expand_label, "Edit")).performClick()
+        compose.onNode(hasToolAction(str(R.string.chat_tool_expand_label, "Edit"))).performClick()
         compose.onNodeWithText("-hi", substring = true).assertExists()
         compose.onNodeWithText("+hello", substring = true).assertExists()
         compose.onNodeWithText("@@ -1 +1 @@", substring = true).assertExists()
@@ -282,7 +282,7 @@ class ChatScreenTest {
         compose.onNodeWithText("+line 1\n", substring = true).assertDoesNotExist()
         compose.onNodeWithText("+line 2000", substring = true).assertDoesNotExist()
 
-        compose.onNodeWithContentDescription(str(R.string.chat_tool_expand_label, "Edit")).performClick()
+        compose.onNode(hasToolAction(str(R.string.chat_tool_expand_label, "Edit"))).performClick()
         compose.waitForIdle()
         compose.onNodeWithText("+line 2000", substring = true).assertExists()
         compose.onNodeWithText(str(R.string.chat_diff_truncated)).assertExists()
