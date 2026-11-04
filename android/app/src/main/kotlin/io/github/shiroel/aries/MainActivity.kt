@@ -49,7 +49,9 @@ class MainActivity : AppCompatActivity() {
             tileRequested = savedInstanceState.getBoolean("pending-tile-target")
             shareIntent = savedInstanceState.getParcelable("pending-share-intent")
         }
-        sessions = ViewModelProvider(this)[HostsViewModel::class.java]
+        // AndroidViewModelFactory.getInstance caches the first Application in the JVM.
+        // Bind creation to this Activity's Application, including when a test replaces it.
+        sessions = ViewModelProvider(this, ViewModelProvider.AndroidViewModelFactory(application))[HostsViewModel::class.java]
         val push = sessions.push
         push.bind(this)
         model = sessions.model
