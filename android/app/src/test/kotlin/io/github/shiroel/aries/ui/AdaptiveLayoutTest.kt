@@ -4,6 +4,7 @@ import androidx.activity.OnBackPressedDispatcher
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -40,11 +41,12 @@ class AdaptiveLayoutTest {
             terminals = listOf(TerminalInfo("t1", "shell", "", listOf("sh"), "/repo", "live", null))
         }
         var width by mutableStateOf(1000.dp)
+        var height by mutableStateOf(1000.dp)
         lateinit var model: HostsModel
         compose.setContent {
             val scope = rememberCoroutineScope()
             model = remember { HostsModel(core, scope) }
-            Box(Modifier.requiredWidth(width).fillMaxHeight()) { AriesApp(model) }
+            Box(Modifier.requiredWidth(width).requiredHeight(height)) { AriesApp(model) }
         }
         compose.onNodeWithText("home").performClick()
         compose.onNodeWithTag("host-terminal:h1:t1").performClick()
@@ -59,7 +61,10 @@ class AdaptiveLayoutTest {
         compose.onNodeWithTag("host-terminal:h1:t1").assertDoesNotExist()
         compose.onNodeWithTag("terminal-composer").assertTextEquals("unsent\n한국어 draft")
         compose.onNodeWithText(context.getString(R.string.terminal_scrolled_back, 42)).assertExists()
-        compose.runOnIdle { width = 700.dp }
+        compose.runOnIdle { width = 900.dp; height = 360.dp }
+        compose.onNodeWithTag("host-terminal:h1:t1").assertDoesNotExist()
+        compose.onNodeWithTag("terminal-composer").assertTextEquals("unsent\n한국어 draft")
+        compose.runOnIdle { width = 700.dp; height = 1000.dp }
         compose.onNodeWithTag("host-terminal:h1:t1").assertIsSelected()
         compose.onNodeWithTag("terminal-composer").assertTextEquals("unsent\n한국어 draft")
         view.push(TerminalUpdate.Screen(ScreenFrame(80u, 24u, true, emptyList(), null, null, 43u, 501u)))
@@ -71,6 +76,33 @@ class AdaptiveLayoutTest {
             assertFalse(view.detached)
             assertTrue(view.sent.isEmpty())
         }
+    }
+
+    @Test fun hostCreationAndNavigationRemainUsableWhileDetailIsOpen() {
+        val core = FakeCore().apply {
+            addHost("home", Endpoint.Ssh("home.test", 22u, "me"))
+            terminals = listOf(TerminalInfo("t1", "shell", "", listOf("sh"), "/repo", "live", null))
+        }
+        lateinit var model: HostsModel
+        compose.setContent {
+            val scope = rememberCoroutineScope()
+            model = remember { HostsModel(core, scope) }
+            AriesApp(model)
+        }
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        compose.onNodeWithText("home").performClick()
+        compose.onNodeWithTag("host-terminal:h1:t1").performClick()
+        val terminal = model.screen
+        compose.onNodeWithContentDescription(context.getString(R.string.host_create_title)).performClick()
+        compose.onNodeWithText(context.getString(R.string.launch_open_button)).performClick()
+        compose.runOnIdle {
+            assertSame(terminal, model.screen)
+            assertNotNull(model.activeLaunch)
+            model.dismissLaunch()
+        }
+        compose.onNodeWithTag("console-menu").performClick()
+        compose.onNodeWithTag("settings-open").performClick()
+        compose.runOnIdle { assertEquals(Screen.Settings, model.screen) }
     }
 
     @Test fun wideListReplacesDetailAndBackDeselectsBeforeLeavingTheList() {

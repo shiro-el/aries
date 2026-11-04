@@ -561,11 +561,20 @@ fun TerminalScreen(
     androidx.compose.runtime.CompositionLocalProvider(
         androidx.compose.ui.platform.LocalUriHandler provides rememberAgentUriHandler(preview, viewer.link, viewer.terminal.address),
     ) {
-        Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))) {
-            AgentScreenHeader(viewer.terminal, viewer.link?.host?.name, onBack, AgentView.TERMINAL, onView,
-                title = viewer.terminal.name?.takeIf { it.isNotBlank() } ?: viewer.title?.takeIf { it.isNotBlank() } ?: displayName(viewer.terminal),
-                preview = preview, link = viewer.link, onTerminalUpdate = { viewer.update(listOf(it)) }, onSearch = { searching = true })
-            PreviewChips(preview)
+        AgentViewport(
+            header = {
+                AgentScreenHeader(viewer.terminal, viewer.link?.host?.name, onBack, AgentView.TERMINAL, onView,
+                    title = viewer.terminal.name?.takeIf { it.isNotBlank() } ?: viewer.title?.takeIf { it.isNotBlank() } ?: displayName(viewer.terminal),
+                    preview = preview, link = viewer.link, onTerminalUpdate = { viewer.update(listOf(it)) }, onSearch = { searching = true })
+            },
+            input = { compact ->
+                if (preview.selected == null) {
+                    TerminalComposer(viewer, compact)
+                    if (!compact && viewer.typing && viewer.keyBarVisible) TerminalKeyBar(viewer)
+                }
+            },
+        ) { compact ->
+            if (!compact) PreviewChips(preview)
             if (preview.selected != null) {
                 LocalhostPreviewBrowser(preview, viewer.link, Modifier.weight(1f).fillMaxWidth(), change = viewer.terminal.turn,
                     captureEnabled = viewer.terminal.state == "live",
@@ -601,8 +610,6 @@ fun TerminalScreen(
                         TerminalLookBar(viewer, look, onSelectionSend)
                     }
                 }
-                TerminalComposer(viewer)
-                if (viewer.typing && viewer.keyBarVisible) TerminalKeyBar(viewer)
             }
         }
     }

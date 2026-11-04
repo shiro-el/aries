@@ -1066,10 +1066,19 @@ fun ChatScreen(
         LocalChatImageRevision provides chat.imageRevision,
         androidx.compose.ui.platform.LocalUriHandler provides rememberAgentUriHandler(preview, chat.link, chat.terminal.address)) {
         ChatDialogs(dialogs)
-        Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))) {
-            AgentScreenHeader(chat.terminal, chat.host.name, onBack, AgentView.CHAT, onView,
-                preview = preview, usage = snapshot?.usage, link = chat.link, onTerminalUpdate = { chat.update(listOf(it)) }, onSearch = { searchOpen = true })
-            PreviewChips(preview)
+        AgentViewport(
+            header = {
+                AgentScreenHeader(chat.terminal, chat.host.name, onBack, AgentView.CHAT, onView,
+                    preview = preview, usage = snapshot?.usage, link = chat.link, onTerminalUpdate = { chat.update(listOf(it)) }, onSearch = { searchOpen = true })
+            },
+            input = { compact ->
+                if (preview.selected == null && chat.link != null) {
+                    if (!compact) ChatCatalogControls(chat)
+                    MessageInput(chat, compact)
+                }
+            },
+        ) { compact ->
+            if (!compact) PreviewChips(preview)
             if (preview.selected != null) {
                 LocalhostPreviewBrowser(preview, chat.link, Modifier.weight(1f).fillMaxWidth(),
                     change = chat.terminal.turn to rawEntries.mapNotNull { (it.body as? ChatEntryBody.Tool)?.diff },
@@ -1191,10 +1200,8 @@ fun ChatScreen(
                         }
                     }
                 }
-                if (chat.link != null) {
-                    ChatCatalogControls(chat)
-                    MessageInput(chat)
-                }
+                if (compact) ChatInterruptNotice(chat)
+                DraftAttachments(chat)
             }
         }
     }
@@ -1290,7 +1297,9 @@ private fun ChatEntryFooter(images: List<ChatImage>, metadata: ChatResponseMetad
 }
 
 @Composable
-private fun MessageInput(chat: ChatModel) {
+private fun MessageInput(chat: ChatModel, compact: Boolean) {
+    var tools by remember(chat) { mutableStateOf(false) }
+    if (tools) ChatInputToolsDialog(chat) { tools = false }
     val inputLabel = stringResource(R.string.chat_input_label)
     val inputStyle = MaterialTheme.typography.bodyLarge.copy(
         fontFamily = FontFamily.Monospace,
@@ -1301,9 +1310,9 @@ private fun MessageInput(chat: ChatModel) {
     val noticeFocus = remember(chat) { FocusRequester() }
     var returningFromInterrupt by remember(chat) { mutableStateOf(false) }
     var noticeHadFocus by remember(chat) { mutableStateOf(false) }
-    LaunchedEffect(chat.interrupting, chat.interruptNotice, returningFromInterrupt) {
+    LaunchedEffect(chat.interrupting, chat.interruptNotice, returningFromInterrupt, compact) {
         if (returningFromInterrupt && !chat.interrupting) {
-            if (chat.interruptNotice != null) noticeFocus.requestFocus()
+            if (chat.interruptNotice != null && !compact) noticeFocus.requestFocus()
             else {
                 if (chat.canEdit) inputFocus.requestFocus()
                 returningFromInterrupt = false
@@ -1311,13 +1320,13 @@ private fun MessageInput(chat: ChatModel) {
         }
     }
     HorizontalDivider()
-    ChatInterruptNotice(chat, Modifier.focusRequester(noticeFocus).onFocusChanged {
+    if (!compact) ChatInterruptNotice(chat, Modifier.focusRequester(noticeFocus).onFocusChanged {
         // Follow a removed result back to the composer, but do not pull focus
         // back after the user has deliberately moved elsewhere.
         if (noticeHadFocus && !it.isFocused && chat.interruptNotice != null && !chat.interrupting) returningFromInterrupt = false
         noticeHadFocus = it.isFocused
     }.focusable())
-    DraftAttachments(chat)
+
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
         BasicTextField(
             value = chat.input,
@@ -1328,7 +1337,7 @@ private fun MessageInput(chat: ChatModel) {
             textStyle = inputStyle.copy(color = MaterialTheme.colorScheme.onSurface),
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
-            maxLines = 6,
+            maxLines = if (compact) 1 else 6,
             enabled = chat.canEdit,
             decorationBox = { field ->
                 Box(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
@@ -1339,6 +1348,8 @@ private fun MessageInput(chat: ChatModel) {
                 }
             },
         )
+        if (compact) ActionIcon(R.drawable.ic_plus, R.string.chat_input_tools_button,
+            { tools = true }, enabled = chat.canEdit)
         val showInterrupt = chat.draft.isEmpty() && chat.attachments.isEmpty() &&
             ((chat.terminalAvailable && chat.terminal.agentStatus == AgentStatus.Working) || chat.interrupting)
         if (showInterrupt) {
