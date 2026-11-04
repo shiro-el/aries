@@ -12,6 +12,9 @@ import io.github.shiroel.aries.R
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.graphics.asAndroidBitmap
 import org.robolectric.annotation.GraphicsMode
 import androidx.lifecycle.Lifecycle
@@ -34,6 +37,68 @@ import org.robolectric.annotation.Config
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class LocalhostPreviewTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
+
+    /** Regression: a forwarded SSH banner must offer recovery instead of a blank WebView. */
+    @Test fun nonHttpMainFrameErrorShowsRetryAndCloseAndRetryLoadsAgain() {
+        val connection = object : HostConnection(NoHandle) {
+            override suspend fun openPreview(port: UShort) = object : PreviewForward(NoHandle) {
+                override fun url() = "http://127.0.0.1:49152/"
+                override suspend fun stop() {}
+            }
+        }
+        val host = FakeCore().addHost("fixture", Endpoint.Ssh("host", 22u, "me"))
+        val link = HostLink(host, connection, CoroutineScope(Dispatchers.Main), { connection })
+        val preview = LocalhostPreview().apply { selected = 22u }
+        compose.setContent { MaterialTheme { LocalhostPreviewBrowser(preview, link, Modifier.fillMaxSize()) } }
+        compose.waitForIdle()
+        val web = compose.runOnIdle { findWebView(compose.activity.window.decorView)!! }
+        compose.runOnIdle {
+            val request = object : android.webkit.WebResourceRequest {
+                override fun getUrl() = android.net.Uri.parse("http://127.0.0.1:49152/")
+                override fun isForMainFrame() = true
+                override fun isRedirect() = false
+                override fun hasGesture() = false
+                override fun getMethod() = "GET"
+                override fun getRequestHeaders() = emptyMap<String, String>()
+            }
+            val error = android.webkit.PreviewWebResourceError()
+            web.webViewClient.onReceivedError(web, request, error)
+            // WebView finishes failed navigations too; that must not erase the error.
+            web.webViewClient.onPageFinished(web, request.url.toString())
+        }
+        compose.onNodeWithText("Retry").assertIsDisplayed().performClick()
+        compose.onNodeWithText("Retry").assertDoesNotExist()
+        compose.onNodeWithText("Close preview").assertIsDisplayed().performClick()
+        compose.runOnIdle { assertNull(preview.selected) }
+    }
+
+    private fun findWebView(view: android.view.View): android.webkit.WebView? {
+        if (view is android.webkit.WebView) return view
+        if (view is android.view.ViewGroup) for (i in 0 until view.childCount) {
+            findWebView(view.getChildAt(i))?.let { return it }
+        }
+        return null
+    }
+
+    /** Regression: a silent TCP service sends no WebView error and must still time out. */
+    @Test fun unresponsivePageTimesOutAndStillOffersRetryAndClose() {
+        val connection = object : HostConnection(NoHandle) {
+            override suspend fun openPreview(port: UShort) = object : PreviewForward(NoHandle) {
+                override fun url() = "http://127.0.0.1:49152/"
+                override suspend fun stop() {}
+            }
+        }
+        val host = FakeCore().addHost("fixture", Endpoint.Ssh("host", 22u, "me"))
+        val link = HostLink(host, connection, CoroutineScope(Dispatchers.Main), { connection })
+        val preview = LocalhostPreview().apply { selected = 5173u }
+        compose.setContent { MaterialTheme { LocalhostPreviewBrowser(preview, link, Modifier.fillMaxSize()) } }
+        compose.onNodeWithText("Loading preview…").assertIsDisplayed()
+        compose.mainClock.advanceTimeBy(10_100)
+        compose.onNodeWithText("The preview did not respond within 10 seconds. Check the development server and try again.").assertIsDisplayed()
+        compose.onNodeWithText("Retry").assertIsDisplayed()
+        compose.onNodeWithText("Close preview").assertIsDisplayed().performClick()
+        compose.runOnIdle { assertNull(preview.selected) }
+    }
 
     /** Regression: detected ports must not reserve a transcript row until preview is opened. */
     @Test fun portChipsFollowPreviewVisibilityAndStillSwitchPorts() {
