@@ -90,7 +90,7 @@ private fun AriesContent(
     guidance: io.github.shiroel.aries.guidance.AppGuidanceState? = null,
     allowNotifications: suspend () -> Boolean = { false },
 ) {
-    val activity = LocalContext.current as? android.app.Activity
+    val activity = androidx.activity.compose.LocalActivity.current
     // Screen connections and the Call banner follow the visible lifecycle.
     LifecycleStartEffect(model) {
         model.resumeScreens()
