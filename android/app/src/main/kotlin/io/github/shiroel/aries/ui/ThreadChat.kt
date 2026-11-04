@@ -191,7 +191,7 @@ internal fun ThreadAnswerPanel(chat: ChatModel, entry: ChatEntry) {
 }
 
 @Composable
-internal fun ThreadCallPanel(entry: CallEntry, calls: CallsModel, chat: ChatModel? = null) {
+internal fun ThreadCallPanel(entry: CallEntry, calls: CallsModel, chat: ChatModel? = null, compact: Boolean = false) {
     val urgent = entry.call.urgency in setOf(CallUrgency.URGENT, CallUrgency.EMERGENCY)
     val accent = if (urgent) Color(0xFFF0B23E) else MaterialTheme.colorScheme.outlineVariant
     Column(Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState()).testTag("thread-call-panel")) {
@@ -203,7 +203,7 @@ internal fun ThreadCallPanel(entry: CallEntry, calls: CallsModel, chat: ChatMode
         MaterialTheme(colorScheme = if (urgent) colors.copy(surfaceContainer = accent.copy(alpha = .1f).compositeOver(colors.surface)) else colors) {
             ConsoleChatCall(entry, calls)
         }
-        if (entry.call.choices.isEmpty() && chat != null) MessageInput(chat)
+        if (entry.call.choices.isEmpty() && chat != null) MessageInput(chat, compact)
     }
 }
 
@@ -277,10 +277,23 @@ internal fun ThreadConnectionGuidance(chat: ChatModel) {
 }
 
 @Composable
-internal fun ThreadComposer(chat: ChatModel) {
-    ChatCatalogControls(chat)
+internal fun ThreadComposer(chat: ChatModel, compact: Boolean) {
+    if (!compact) ChatCatalogControls(chat)
     Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
-        MessageInput(chat)
+        MessageInput(chat, compact)
+    }
+}
+
+@Composable
+internal fun ThreadChatInput(model: HostsModel, chat: ChatModel, agentCalls: List<CallEntry>, calls: CallsModel?,
+    question: ChatEntry?, compact: Boolean) {
+    Column(Modifier.fillMaxWidth()) {
+        ThreadWaitingPill(model, chat)
+        ThreadConnectionGuidance(chat)
+        val activeCall = agentCalls.sortedByDescending { it.call.urgency.ordinal }.firstOrNull()
+        if (activeCall != null && calls != null) ThreadCallPanel(activeCall, calls, chat, compact)
+        else if (question != null) ThreadAnswerPanel(chat, question)
+        else if (chat.link != null) ThreadComposer(chat, compact)
     }
 }

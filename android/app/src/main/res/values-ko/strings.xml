@@ -783,6 +783,7 @@
     <string name="chat_catalog_builtin">기본 명령어</string>
 
     <string name="chat_input_label">Agent에게 보낼 메시지</string>
+    <string name="chat_input_tools_button">입력 도구</string>
     <string name="chat_send_button">보내기</string>
     <string name="chat_sent">메시지를 보냈어요</string>
     <string name="chat_sending">보내는 중…</string>

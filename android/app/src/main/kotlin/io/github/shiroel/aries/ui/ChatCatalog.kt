@@ -2,6 +2,7 @@ package io.github.shiroel.aries.ui
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -105,12 +106,12 @@ internal fun ChatCatalogControls(chat: ChatModel) {
     }
     if (showSkills) {
         ModalBottomSheet(onDismissRequest = { showSkills = false }) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+            Column(Modifier.fillMaxWidth().imePadding().padding(horizontal = 16.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.chat_skills_title), Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
                     ActionIcon(R.drawable.ic_x, R.string.cancel_button, { showSkills = false })
                 }
-                Column(Modifier.fillMaxWidth()) {
+                Column(Modifier.fillMaxWidth().weight(1f, fill = false)) {
                     val searchLabel = stringResource(R.string.chat_skills_search)
                     OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().semantics { contentDescription = searchLabel },
                         label = { Text(searchLabel) }, singleLine = true)
@@ -118,8 +119,8 @@ internal fun ChatCatalogControls(chat: ChatModel) {
                     val skills = catalog?.skills.orEmpty().filter { entry ->
                         listOf(entry.name, entry.description).any { it.contains(query.trim(), ignoreCase = true) }
                     }
-                    PullToRefreshBox(isRefreshing = loading, onRefresh = { revision++ }, modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp)) {
-                        LazyColumn(Modifier.fillMaxWidth().heightIn(min = 160.dp, max = 360.dp)) {
+                    PullToRefreshBox(isRefreshing = loading, onRefresh = { revision++ }, modifier = Modifier.fillMaxWidth().weight(1f, fill = false)) {
+                        LazyColumn(Modifier.fillMaxWidth()) {
                             if (!loading && !failed && skills.isEmpty()) item { Text(stringResource(R.string.chat_catalog_empty)) }
                             items(skills, key = { it.token }) { entry ->
                                 CatalogRow(entry, enabled) {
@@ -157,4 +158,20 @@ private fun CatalogRow(entry: AgentCatalogEntry, enabled: Boolean, onClick: () -
         if (entry.description.isNotEmpty()) Text(entry.description, style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
+}
+
+/** Compact windows expose secondary input actions on demand without covering Send. */
+@Composable
+internal fun ChatInputToolsDialog(chat: ChatModel, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.chat_input_tools_button)) },
+        text = {
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+                ChatCatalogControls(chat)
+                DraftAttachments(chat)
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ok_button)) } },
+    )
 }

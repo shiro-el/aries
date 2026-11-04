@@ -40,6 +40,10 @@ private object ConsoleScreens : LayoutScreens()
 internal open class LayoutScreens {
     @Composable open fun Shell(model: HostsModel, content: @Composable () -> Unit) = ConsoleShell(model, content)
 
+    @Composable open fun Header(model: HostsModel, screen: Screen) {
+        ConsoleScreenHeader(model, screen, LocalConsoleMenu.current ?: {})
+    }
+
     @Composable fun Screen(model: HostsModel, settings: ThemeSettings, display: TerminalDisplaySettings, screen: Screen) {
         when (screen) {
             Screen.Hosts -> Hosts(model)

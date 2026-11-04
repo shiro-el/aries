@@ -42,6 +42,7 @@ import org.robolectric.annotation.Config
 
 /** Seam 3: typing into a Terminal (input mode, key bar), against a fake core. */
 @RunWith(RobolectricTestRunner::class)
+@Config(qualifiers = "h700dp")
 class TerminalTypingTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
@@ -157,6 +158,7 @@ class TerminalTypingTest {
         assertEquals(listOf("text:x"), typing.sent)
     }
 
+
     @Test
     fun composeEditsStayLocalAndSendAsOnePasteWithoutEnter() {
         val core = FakeCore()
@@ -247,7 +249,7 @@ class TerminalTypingTest {
     }
 
     @Test
-    @Config(qualifiers = "w360dp")
+    @Config(qualifiers = "w360dp-h700dp")
     fun navigationConsumesAltAndCtrlTogetherBeforeTheNextImeCommit() {
         val core = FakeCore()
         open(core)
