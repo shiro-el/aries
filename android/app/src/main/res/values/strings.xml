@@ -648,6 +648,14 @@
         <item quantity="one">%1$d step</item>
         <item quantity="other">%1$d steps</item>
     </plurals>
+    <plurals name="thread_tools_commands">
+        <item quantity="one">%1$d command run</item>
+        <item quantity="other">%1$d commands run</item>
+    </plurals>
+    <plurals name="thread_tools_searches">
+        <item quantity="one">%1$d search</item>
+        <item quantity="other">%1$d searches</item>
+    </plurals>
     <string name="thread_permission_waiting">Permission request · waiting for your answer</string>
     <string name="thread_previous_waiting">Previous waiting conversation</string>
     <string name="thread_next_waiting_button">Next waiting conversation</string>
