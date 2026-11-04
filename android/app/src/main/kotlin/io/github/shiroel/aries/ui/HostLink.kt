@@ -3,6 +3,7 @@ package io.github.shiroel.aries.ui
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Host
 import io.github.shiroel.aries.core.HostConnection
@@ -73,6 +74,15 @@ class HostLink(
 
     /** The live connection; `null` while reconnecting. */
     val connection: HostConnection? get() = current.value
+
+    /** Waits for foreground reconnection without replaying the caller's operation. */
+    suspend fun awaitConnection(): HostConnection = withTimeoutOrNull(30_000L) {
+        val (state, connection) = snapshotFlow { state to connection }.first { (state, connection) ->
+            state is LinkState.Down || (state == LinkState.Up && connection != null)
+        }
+        if (state is LinkState.Down) throw state.error
+        connection
+    } ?: throw CoreException.Closed()
 
     /**
      * Runs [block] on the live connection, and again on the next one each
