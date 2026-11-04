@@ -96,7 +96,7 @@ internal fun TasksNewTaskCard(model: HostsModel, board: AgentBoard) {
                         modifier = Modifier.fillMaxWidth().testTag("tasks-new-prompt"))
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         if (task.form.busy) LinearProgressIndicator(Modifier.weight(1f))
-                        else task.form.error?.let { Text(stringResource(it.res, *it.args.toTypedArray()),
+                        else task.form.error?.let { Text(messageText(it),
                             Modifier.weight(1f), color = MaterialTheme.colorScheme.error) } ?: Spacer(Modifier.weight(1f))
                         TextButton(onClick = model::startInlineTask, enabled = task.canStart,
                             modifier = Modifier.testTag("tasks-new-start")) { Text(stringResource(R.string.new_task_start)) }

@@ -105,7 +105,7 @@ internal fun TasksHome(model: HostsModel, board: AgentBoard) {
                 if (link != null && link.state != LinkState.Up) item(key = "connection:${host.id}") { ConnectionNotice(link) }
                 board.watchErrors[host.id]?.let { error -> if (link != null) item(key = "watch:${host.id}") { WatchFailureNotice(link, error) } }
                 board.unavailable[host.id]?.let { message -> item(key = "unavailable:${host.id}") {
-                    Text(stringResource(message.res, *message.args.toTypedArray()), Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error)
+                    Text(messageText(message), Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error)
                 } }
             }
             // Calls precede all Agents, so an urgent Call can never disappear below a pinned family.
