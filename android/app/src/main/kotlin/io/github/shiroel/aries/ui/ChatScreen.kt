@@ -366,7 +366,17 @@ class ChatModel(
     }
 
     private fun restoreMessage(message: QueuedChatMessage) {
-        draft = listOf(message.draft, draft).filter { it.isNotEmpty() }.joinToString("\n\n")
+        if (message.draft.isNotEmpty()) {
+            // Cancellation/recovery inserts text outside the active IME range.
+            // Keep composition and selection attached to the user's newer text.
+            val current = input
+            val prefix = message.draft + if (current.text.isNotEmpty()) "\n\n" else ""
+            input = current.copy(
+                text = prefix + current.text,
+                selection = TextRange(current.selection.start + prefix.length, current.selection.end + prefix.length),
+                composition = current.composition?.let { TextRange(it.start + prefix.length, it.end + prefix.length) },
+            )
+        }
         attachments = (message.attachments + attachments).distinctBy { it.path }
     }
 

@@ -4,6 +4,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.core.app.ApplicationProvider
@@ -66,8 +67,17 @@ class ChatQueuedMessageTest {
         compose.onNodeWithText("review the patch").assertIsDisplayed()
         screenshot("waiting")
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).performTextInput("keep the newer draft")
+        compose.runOnIdle {
+            val chat = (hosts.screen as Screen.Chat).chat
+            chat.input = chat.input.copy(selection = TextRange(8), composition = TextRange(5, 8))
+        }
         compose.onNodeWithContentDescription("Cancel queued message").performClick()
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("review the patch\n\nkeep the newer draft")
+        compose.runOnIdle {
+            val input = (hosts.screen as Screen.Chat).chat.input
+            assertEquals(TextRange(26), input.selection)
+            assertEquals(TextRange(23, 26), input.composition)
+        }
         core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
         compose.waitForIdle()
         assertEquals(emptyList<Pair<String, String>>(), connection.typed)
