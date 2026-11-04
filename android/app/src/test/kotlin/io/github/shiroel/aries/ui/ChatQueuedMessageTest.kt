@@ -157,6 +157,7 @@ class ChatQueuedMessageTest {
         compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
         compose.waitForIdle()
         compose.onNodeWithContentDescription("Cancel queued message").assertDoesNotExist()
+        screenshot("held-for-host-typing")
         connection.sendFailWith = CoreException.Closed()
         connection.sendHold!!.complete(Unit)
         compose.waitForIdle()
