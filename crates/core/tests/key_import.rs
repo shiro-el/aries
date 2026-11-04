@@ -246,3 +246,22 @@ fn first_import_becomes_the_default_key_without_generating_another_identity() {
     assert_eq!(core.keys().unwrap(), [imported]);
     assert_eq!(core.key_protection().unwrap(), Some(KeyProtection::Plain));
 }
+
+#[test]
+fn recovery_imports_a_backup_into_the_same_named_key_slot() {
+    let (private, public) = openssh_key("ed25519", "256", "backup password");
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    let default = core.ensure_key().unwrap();
+    let extra = core.create_key("jump backup".into()).unwrap();
+    let recovered = core
+        .recover_key(extra.id.clone(), Some(private), "backup password".into())
+        .unwrap();
+    assert_eq!(recovered.id, extra.id);
+    assert_eq!(recovered.label, "jump backup");
+    assert_eq!(recovered.openssh, public.trim());
+    let again = core_in(data.path());
+    assert_eq!(again.public_key().unwrap(), Some(default));
+    assert_eq!(again.keys().unwrap().len(), 2);
+    assert_eq!(again.keys().unwrap()[1], recovered);
+}

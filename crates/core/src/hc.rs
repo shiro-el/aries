@@ -237,6 +237,9 @@ impl HcClient {
 
     /// Sends one frame on a stream channel (CREDIT, DATA, RESIZE, CLOSE...).
     pub async fn send(&self, channel: u32, kind: u8, payload: &[u8]) -> Result<(), CoreError> {
+        if self.channels.lock().expect("channels lock").closed {
+            return Err(CoreError::Closed);
+        }
         send_frame(&self.writer, channel, kind, payload)
             .await
             .map_err(|_| CoreError::Closed)
@@ -248,8 +251,9 @@ impl HcClient {
         }
     }
 
-    pub async fn close(&self) {
-        let _ = self.writer.lock().await.shutdown().await;
+    /// Revoke the client synchronously, including from Host settings/removal.
+    /// Transport shutdown runs on the core runtime; no caller has to block it.
+    pub fn close_now(&self) {
         self.reader.abort();
         fail_all(&self.pending);
         // Aborting the reader skips its normal stream cleanup. Wake every
@@ -258,6 +262,16 @@ impl HcClient {
         channels.closed = true;
         channels.open.clear();
         channels.early.clear();
+        drop(channels);
+        let writer = self.writer.clone();
+        crate::runtime().spawn(async move {
+            let _ = writer.lock().await.shutdown().await;
+        });
+    }
+
+    pub async fn close(&self) {
+        self.close_now();
+        let _ = self.writer.lock().await.shutdown().await;
     }
 }
 

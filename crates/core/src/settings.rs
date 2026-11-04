@@ -32,23 +32,21 @@ pub enum AgentView {
 impl AriesCore {
     /// How opening a Terminal attaches; [`AttachMode::Observe`] until changed.
     pub fn attach_mode(&self) -> Result<AttachMode, CoreError> {
-        Ok(self.store.read_settings().attach_mode)
+        Ok(self.store.read_settings()?.attach_mode)
     }
 
     pub fn set_attach_mode(&self, mode: AttachMode) -> Result<(), CoreError> {
-        let mut settings = self.store.read_settings();
-        settings.attach_mode = mode;
-        self.store.write_settings(&settings)
+        self.store
+            .update_settings(|settings| settings.attach_mode = mode, |_| {})
     }
 
     /// How an Agent's Terminal opens; [`AgentView::Terminal`] until changed.
     pub fn agent_view(&self) -> Result<AgentView, CoreError> {
-        Ok(self.store.read_settings().agent_view)
+        Ok(self.store.read_settings()?.agent_view)
     }
 
     pub fn set_agent_view(&self, view: AgentView) -> Result<(), CoreError> {
-        let mut settings = self.store.read_settings();
-        settings.agent_view = view;
-        self.store.write_settings(&settings)
+        self.store
+            .update_settings(|settings| settings.agent_view = view, |_| {})
     }
 }
