@@ -58,15 +58,19 @@ internal fun FilesHeader(
         if (isFile) Box {
             ActionIcon(R.drawable.ic_ellipsis_vertical, R.string.files_actions_label, { menu = !menu })
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                onSend?.let { action -> DropdownMenuItem(text = { Text(stringResource(R.string.files_send_file_button)) },
+                onSend?.let { action -> ActionMenuItem(stringResource(R.string.files_send_file_button), R.drawable.ic_send,
                     onClick = { menu = false; action() }) }
-                onSave?.let { action -> DropdownMenuItem(text = { Text(stringResource(R.string.files_save_button)) },
+                onSave?.let { action -> ActionMenuItem(stringResource(R.string.files_save_button), R.drawable.ic_download,
                     enabled = exportEnabled, onClick = { menu = false; action() }) }
-                onShare?.let { action -> DropdownMenuItem(text = { Text(stringResource(R.string.files_share_button)) },
+                onShare?.let { action -> ActionMenuItem(stringResource(R.string.files_share_button), R.drawable.ic_share_2,
                     enabled = exportEnabled, onClick = { menu = false; action() }) }
-                onWrap?.let { action -> SwitchMenuItem(checked = wrap, text = { Text(stringResource(R.string.files_wrap_lines)) },
-                    onClick = { menu = false; action() }) }
-                DropdownMenuItem(text = { Text(stringResource(R.string.files_close_button)) }, onClick = { menu = false; onClose() })
+                onWrap?.let { action ->
+                    if (onSend != null || onSave != null || onShare != null) MenuDivider()
+                    SwitchMenuItem(checked = wrap, text = { Text(stringResource(R.string.files_wrap_lines)) },
+                        leadingIcon = { MenuIcon(R.drawable.ic_wrap_text) }, onClick = { menu = false; action() })
+                }
+                if (onSend != null || onSave != null || onShare != null || onWrap != null) MenuDivider()
+                ActionMenuItem(stringResource(R.string.files_close_button), R.drawable.ic_x, onClick = { menu = false; onClose() })
             }
         }
     }

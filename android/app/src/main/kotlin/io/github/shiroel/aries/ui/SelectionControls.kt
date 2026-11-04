@@ -78,11 +78,14 @@ internal fun SwitchMenuItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    leadingIcon: (@Composable () -> Unit)? = null,
 ) {
     DropdownMenuItem(
         text = text, onClick = onClick, enabled = enabled,
-        trailingIcon = { Switch(checked, onCheckedChange = null, enabled = enabled) },
-        modifier = modifier.semantics { toggleableState = ToggleableState(checked); role = Role.Switch },
+        leadingIcon = leadingIcon,
+        trailingIcon = { MenuToggleState(checked, enabled) },
+        modifier = modifier.widthIn(min = 240.dp, max = 320.dp)
+            .semantics { toggleableState = ToggleableState(checked); role = Role.Switch },
     )
 }
 

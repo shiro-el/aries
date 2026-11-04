@@ -49,6 +49,28 @@ class LayoutEditTest {
         compose.waitForIdle()
     }
 
+    @Test fun returningFromEditMenuKeepsTheSelectedContextWithoutChangingTheHost() {
+        val core = FakeCore().apply {
+            structure = HostStructure(listOf(SpaceInfo("s1", "repo", "/repo", listOf(
+                TabInfo("tab1", "build", emptyList()),
+            ))), emptyList(), null)
+        }
+        open(core)
+        compose.onNodeWithContentDescription(str(R.string.hosts_actions_label)).performClick()
+        compose.onNodeWithTag("host-layout-context").performClick()
+        compose.onNodeWithTag("host-context-tab:s1:tab1").performClick()
+        compose.onNodeWithContentDescription(str(R.string.hosts_actions_label)).performClick()
+        compose.onNodeWithTag("host-edit-actions").performClick()
+        compose.onNodeWithText(str(R.string.layout_close_tab_button)).assertExists()
+        compose.onNodeWithTag("host-menu-back").performClick()
+        assertEquals(emptyList<LayoutEdit>(), core.connection!!.edits)
+        compose.onNodeWithText(str(R.string.layout_new_tab_button)).performClick()
+        compose.onNodeWithTag("layout-name").performTextReplacement("tests")
+        compose.onNodeWithText(str(R.string.layout_save_button)).performClick()
+        compose.waitForIdle()
+        assertEquals(listOf(LayoutEdit.NewTab("s1", "tests", "/repo", null)), core.connection!!.edits)
+    }
+
     @Test fun unavailableAppRejectsLayoutAttemptsButTerminalKillStillWorks() {
         val terminal = TerminalInfo("t1", "build", "", listOf("sleep"), "/repo", "live")
         val core = FakeCore().apply {
@@ -111,6 +133,7 @@ class LayoutEditTest {
         assertEquals(LayoutEdit.NewTab("s1", "tests", "/repo", null), core.connection!!.edits.last())
 
         compose.onNodeWithContentDescription(str(R.string.hosts_actions_label)).performClick()
+        compose.onNodeWithTag("host-edit-actions").performClick()
         compose.onNodeWithText(str(R.string.layout_rename_space_button)).performClick()
         compose.onNodeWithTag("layout-name").performTextReplacement("renamed")
         compose.onNodeWithText(str(R.string.layout_save_button)).performClick()
@@ -118,6 +141,7 @@ class LayoutEditTest {
         assertEquals(LayoutEdit.RenameSpace("s1", "renamed"), core.connection!!.edits.last())
 
         compose.onNodeWithContentDescription(str(R.string.hosts_actions_label)).performClick()
+        compose.onNodeWithTag("host-edit-actions").performClick()
         compose.onNodeWithText(str(R.string.layout_rename_tab_button)).performClick()
         compose.onNodeWithTag("layout-name").performTextReplacement("")
         compose.onNodeWithText(str(R.string.layout_save_button)).performClick()
@@ -141,6 +165,7 @@ class LayoutEditTest {
         compose.onNodeWithTag("host-layout-context").performClick()
         compose.onNodeWithTag("host-context-space:s1").performClick()
         compose.onNodeWithContentDescription(str(R.string.hosts_actions_label)).performClick()
+        compose.onNodeWithTag("host-edit-actions").performClick()
         compose.onNodeWithText(str(R.string.layout_close_space_button)).performClick()
         compose.onNodeWithText(str(R.string.layout_confirm_title, "repo")).assertExists()
         compose.onNodeWithText(str(R.string.layout_impact, 3, 1)).assertExists()
@@ -155,6 +180,7 @@ class LayoutEditTest {
         assertEquals(emptyList<LayoutEdit>(), core.connection!!.edits)
 
         compose.onNodeWithContentDescription(str(R.string.hosts_actions_label)).performClick()
+        compose.onNodeWithTag("host-edit-actions").performClick()
         compose.onNodeWithText(str(R.string.layout_close_space_button)).performClick()
         compose.onNodeWithText(str(R.string.layout_hold_button)).performTouchInput { longClick(durationMillis = 2_100) }
         compose.waitForIdle()
@@ -170,6 +196,7 @@ class LayoutEditTest {
         compose.onNodeWithTag("host-layout-context").performClick()
         compose.onNodeWithTag("host-context-space:s1").performClick()
         compose.onNodeWithContentDescription(str(R.string.hosts_actions_label)).performClick()
+        compose.onNodeWithTag("host-edit-actions").performClick()
         compose.onNodeWithText(str(R.string.layout_close_tab_button)).performClick()
         compose.onNodeWithText(str(R.string.layout_confirm_title, "build")).assertExists()
         compose.onNodeWithText(str(R.string.layout_impact, 0, 0)).assertExists()
@@ -189,6 +216,7 @@ class LayoutEditTest {
         compose.onNodeWithTag("host-layout-context").performClick()
         compose.onNodeWithTag("host-context-space:s1").performClick()
         compose.onNodeWithContentDescription(str(R.string.hosts_actions_label)).performClick()
+        compose.onNodeWithTag("host-edit-actions").performClick()
         compose.onNodeWithText(str(R.string.layout_close_tab_button)).performClick()
         compose.onNodeWithText(str(R.string.layout_confirm_button)).performClick()
         compose.waitForIdle()

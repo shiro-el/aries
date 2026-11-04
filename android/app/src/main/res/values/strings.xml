@@ -5,6 +5,18 @@
   Add every new string to values-ko/strings.xml too (TranslationsTest checks it).
 -->
 <resources>
+    <!-- Action menus -->
+    <string name="menu_switch">Switch</string>
+    <string name="menu_current">Current</string>
+    <string name="menu_switch_context">Switch context</string>
+    <string name="menu_state_on">On</string>
+    <string name="menu_state_off">Off</string>
+    <string name="menu_program_label">Program</string>
+    <string name="menu_open_files">Open files</string>
+    <string name="menu_search">Search</string>
+    <string name="menu_pin">Pin</string>
+    <string name="menu_unpin">Unpin</string>
+
     <!-- GitHub Issues and PR conversations (113) -->
     <string name="github_button">GitHub</string>
     <string name="github_issues">Issues</string>
@@ -182,7 +194,7 @@
 
 
     <!-- Host file downloads and sharing (112) -->
-    <string name="files_save_button">Save to phone</string>
+    <string name="files_save_button">Save file</string>
     <string name="files_share_button">Share</string>
     <string name="files_share_title">Share Host file</string>
     <string name="files_export_starting">Starting download…</string>
@@ -210,7 +222,7 @@
     <string name="files_up_button">Parent folder</string>
     <string name="files_refresh_button">Refresh</string>
     <string name="files_back_folder_button">Back to folder</string>
-    <string name="files_send_file_button">Send file to Agent</string>
+    <string name="files_send_file_button">Send file</string>
     <string name="files_send_line_label">Send line %1$d to Agent</string>
     <string name="files_not_text">Cannot preview this file: binary or non-UTF-8 text.</string>
     <!-- Continuous file and diff reader (152) -->

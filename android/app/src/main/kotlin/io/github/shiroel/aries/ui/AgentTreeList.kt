@@ -62,11 +62,15 @@ internal fun LazyListScope.agentTreeItems(
                             }
                             Box {
                                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                                    if (compact && entry.terminal.agentStatus != null) DropdownMenuItem(
-                                        text = { Text(stringResource(if (entry.terminal.pinned) R.string.agent_unpin_button_label else R.string.agent_pin_button_label,
-                                            displayName(entry.terminal), entry.host.name)) },
-                                        onClick = { menu = false; onPin(entry, !entry.terminal.pinned) },
-                                    )
+                                    if (compact && entry.terminal.agentStatus != null) {
+                                        val pinDescription = pinLabel(entry)
+                                        ActionMenuItem(
+                                            label = stringResource(if (entry.terminal.pinned) R.string.menu_unpin else R.string.menu_pin),
+                                            icon = if (entry.terminal.pinned) R.drawable.agent_pin_off else R.drawable.agent_pin,
+                                            modifier = Modifier.semantics { contentDescription = pinDescription },
+                                            onClick = { menu = false; onPin(entry, !entry.terminal.pinned) },
+                                        )
+                                    }
                                     actions?.invoke(this, entry) { menu = false }
                                 }
                             }
@@ -76,6 +80,12 @@ internal fun LazyListScope.agentTreeItems(
         }
     }
 }
+
+@Composable
+private fun pinLabel(entry: AgentEntry): String = stringResource(
+    if (entry.terminal.pinned) R.string.agent_unpin_button_label else R.string.agent_pin_button_label,
+    displayName(entry.terminal), entry.host.name,
+)
 
 @Composable
 private fun agentGroupLabel(group: AgentGroup): String =

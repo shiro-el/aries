@@ -84,15 +84,25 @@ internal fun AgentScreenHeader(
                 }
             }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                openFiles?.let { DropdownMenuItem(text = { Text(stringResource(R.string.files_open_button)) }, onClick = { menu = false; it() }, modifier = Modifier.testTag("files-open")) }
-                WatchAgentMenuItem(terminal, link) { onTerminalUpdate(it); menu = false }
+                openFiles?.let { ActionMenuItem(stringResource(R.string.menu_open_files), R.drawable.ic_folder_open,
+                    onClick = { menu = false; it() }, modifier = Modifier.testTag("files-open")) }
                 onSearch?.let {
                     val searchLabel = stringResource(if (current == AgentView.CHAT) R.string.chat_search_button else R.string.terminal_search_button)
-                    DropdownMenuItem(text = { Text(searchLabel) }, onClick = { menu = false; it() }, modifier = Modifier.semantics { contentDescription = searchLabel })
+                    ActionMenuItem(stringResource(R.string.menu_search), R.drawable.ic_search,
+                        onClick = { menu = false; it() }, modifier = Modifier.semantics { contentDescription = searchLabel })
                 }
-                DropdownMenuItem(text = { Text(stringResource(R.string.github_button)) }, enabled = link?.connection != null, onClick = { menu = false; showGithub = true })
-                quickOpen?.let { DropdownMenuItem(text = { Text(stringResource(R.string.quick_open_title)) }, onClick = { menu = false; it() }) }
-                terminal.currentProgram?.let { DropdownMenuItem(text = { Text(it) }, enabled = false, onClick = {}) }
+                ActionMenuItem(stringResource(R.string.github_button), R.drawable.ic_link,
+                    enabled = link?.connection != null, onClick = { menu = false; showGithub = true })
+                quickOpen?.let { ActionMenuItem(stringResource(R.string.quick_open_title), R.drawable.ic_terminal_view,
+                    onClick = { menu = false; it() }) }
+                if (terminal.agentStatus != null) {
+                    MenuDivider()
+                    WatchAgentMenuItem(terminal, link) { onTerminalUpdate(it); menu = false }
+                }
+                terminal.currentProgram?.let {
+                    MenuDivider()
+                    MenuInfo(stringResource(R.string.menu_program_label), it, R.drawable.ic_terminal_view)
+                }
             }
         }
     }
