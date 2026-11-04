@@ -168,7 +168,8 @@ class WaitingAgentFlowTest {
         compose.openConsoleDrawer()
         compose.onNode(hasText(context.getString(R.string.agents_button)) and hasText(context.getString(R.string.console_agents_waiting, 1))).assertExists()
         compose.onNodeWithTag("drawer-agent:h1:t2").assertDoesNotExist()
-        compose.onNodeWithTag("drawer-agent:h2:t3").assertExists()
+        // Selecting a Host scopes the drawer tree; the summary still counts all Hosts.
+        compose.onNodeWithTag("drawer-agent:h2:t3").assertDoesNotExist()
     }
 
     @Test fun edgeSwipeOpensTheDrawerWithoutTakingTerminalCanvasGestures() {
