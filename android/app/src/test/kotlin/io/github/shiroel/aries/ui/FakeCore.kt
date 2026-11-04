@@ -1092,15 +1092,20 @@ class FakeTerminalView(val address: String, val options: AttachOptions) : Termin
     /** Grids asked for with `resize`, in order. */
     val resizes = mutableListOf<Pair<Int, Int>>()
 
+    var textReply: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+    var pasteReply: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+
     override fun observing(): Boolean = options.observe
 
     override suspend fun sendText(text: String) {
         check(!options.observe) { "an observer cannot type" }
+        textReply?.await()
         sent += "text:$text"
     }
 
     override suspend fun pasteText(text: String) {
         check(!options.observe) { "an observer cannot paste" }
+        pasteReply?.await()
         sent += "paste:$text"
     }
 
@@ -1125,11 +1130,18 @@ class FakeTerminalView(val address: String, val options: AttachOptions) : Termin
 
     val searches = mutableListOf<Triple<String, Boolean, Boolean>>()
     val searchMoves = mutableListOf<Boolean>()
+    var duringSearch: ((String) -> Unit)? = null
+    @Volatile var closed = false
+        private set
+    @Volatile var searchedAfterClose = false
+        private set
     override fun search(query: String, caseSensitive: Boolean, regex: Boolean) {
+        duringSearch?.invoke(query)
+        if (closed) searchedAfterClose = true
         if (regex && query == "[") throw CoreException.Protocol("invalid terminal search pattern")
         searches += Triple(query, caseSensitive, regex)
     }
     override fun searchNext(backwards: Boolean) { searchMoves += backwards }
 
-    override fun close() {}
+    override fun close() { closed = true }
 }

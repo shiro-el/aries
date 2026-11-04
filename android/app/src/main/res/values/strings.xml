@@ -466,6 +466,8 @@
     <string name="terminal_observing">%1$s · observing · %2$d×%3$d</string>
     <string name="terminal_typing">%1$s · typing · %2$d×%3$d</string>
     <string name="terminal_input_hint">Type in Terminal</string>
+    <string name="terminal_input_offline">Input paused — Terminal is disconnected</string>
+    <string name="terminal_input_ended">Program ended — output is read-only</string>
     <string name="terminal_input_typing">Typing into the Terminal</string>
     <!-- Terminal extra-key rows -->
     <string name="terminal_keys_on">On</string>
@@ -1211,6 +1213,8 @@
     <string name="terminal_direct_input_button">Direct typing</string>
     <string name="terminal_composer_hint">Edit text to send to the Terminal</string>
     <string name="terminal_composer_send_button">Send</string>
+    <string name="terminal_paste_sending">Sending… Draft kept until delivery succeeds.</string>
+    <string name="terminal_paste_uncertain">Paste delivery was not confirmed. Draft kept. Check the Terminal before sending again.</string>
     <string name="terminal_enter_button">Enter</string>
     <string name="push_channel_done">Done</string>
     <string name="push_channel_attention">Blocked and Error</string>

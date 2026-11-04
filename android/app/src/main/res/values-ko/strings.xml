@@ -466,6 +466,8 @@
     <string name="terminal_observing">%1$s · 보기 전용 · %2$d×%3$d</string>
     <string name="terminal_typing">%1$s · 입력 중 · %2$d×%3$d</string>
     <string name="terminal_input_hint">Terminal에 입력</string>
+    <string name="terminal_input_offline">입력 일시 중지 — Terminal 연결이 끊겼어요</string>
+    <string name="terminal_input_ended">프로그램 종료 — 출력을 읽을 수만 있어요</string>
     <string name="terminal_input_typing">Terminal에 입력 중</string>
     <!-- Terminal extra-key rows -->
     <string name="terminal_keys_on">켜짐</string>
@@ -1206,6 +1208,8 @@
     <string name="terminal_direct_input_button">직접 입력</string>
     <string name="terminal_composer_hint">Terminal로 보낼 내용</string>
     <string name="terminal_composer_send_button">보내기</string>
+    <string name="terminal_paste_sending">보내는 중… 전송이 성공할 때까지 초안을 보관해요.</string>
+    <string name="terminal_paste_uncertain">붙여넣기 전송을 확인하지 못했어요. 초안을 보관했어요. 다시 보내기 전에 Terminal을 확인하세요.</string>
     <string name="terminal_enter_button">Enter</string>
     <string name="push_channel_done">Done</string>
     <string name="push_channel_attention">Blocked 및 Error</string>

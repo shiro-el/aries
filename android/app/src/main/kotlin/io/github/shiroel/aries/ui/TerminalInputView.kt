@@ -21,6 +21,7 @@ import io.github.shiroel.aries.core.TerminalKey
 @SuppressLint("ViewConstructor")
 class TerminalInputView(context: Context, viewer: TerminalViewer) : View(context) {
     private val interruptKeyboard: () -> Unit = ::resetKeyboard
+    private var keyboardConnection = viewer.link?.connection
     var viewer: TerminalViewer = viewer
         set(value) {
             if (field !== value && field.onCompositionInterrupted === interruptKeyboard) field.onCompositionInterrupted = null
@@ -47,6 +48,7 @@ class TerminalInputView(context: Context, viewer: TerminalViewer) : View(context
     }
 
     fun showKeyboard() {
+        if (!viewer.canInput) return
         requestFocus()
         context.getSystemService(InputMethodManager::class.java)?.showSoftInput(this, 0)
     }
@@ -56,9 +58,23 @@ class TerminalInputView(context: Context, viewer: TerminalViewer) : View(context
         context.getSystemService(InputMethodManager::class.java)?.restartInput(this)
     }
 
-    override fun onCheckIsTextEditor(): Boolean = true
+    fun updateAvailability() {
+        val enabled = viewer.canInput
+        val connection = viewer.link?.connection
+        if (isEnabled == enabled && keyboardConnection === connection) return
+        keyboardConnection = connection
+        isEnabled = enabled
+        if (!enabled) {
+            clearFocus()
+            context.getSystemService(InputMethodManager::class.java)?.hideSoftInputFromWindow(windowToken, 0)
+        }
+        resetKeyboard()
+    }
 
-    override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection {
+    override fun onCheckIsTextEditor(): Boolean = isEnabled && viewer.canInput
+
+    override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection? {
+        if (!viewer.canInput) return null
         // Plain text, so keyboards keep their Korean layout (visible-password
         // makes Gboard and Samsung Keyboard Latin-only). No suggestions, so
         // Latin keys mostly arrive one by one; when a keyboard composes words
@@ -85,23 +101,30 @@ class TerminalInputView(context: Context, viewer: TerminalViewer) : View(context
  * [TerminalKey]s. The editor stays empty: the Terminal is the text.
  */
 class TerminalInputConnection(view: View, private val viewer: TerminalViewer) : BaseInputConnection(view, true) {
+    private val connection = viewer.link?.connection
+    private fun currentLine(): Boolean = viewer.canInput && viewer.link?.connection === connection
+
     override fun commitText(text: CharSequence, newCursorPosition: Int): Boolean {
+        if (!currentLine()) return true
         viewer.commit(text.toString())
         editable?.clear()
         return true
     }
 
     override fun setComposingText(text: CharSequence, newCursorPosition: Int): Boolean {
+        if (!currentLine()) return true
         viewer.compose(text.toString())
         return true
     }
 
     override fun finishComposingText(): Boolean {
+        if (!currentLine()) return true
         viewer.finishComposing()
         return true
     }
 
     override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
+        if (!currentLine()) return true
         if (viewer.deleteComposing(beforeLength)) return true
         repeat(beforeLength) { viewer.press(TerminalKey.Backspace) }
         repeat(afterLength) { viewer.press(TerminalKey.Delete) }
@@ -109,6 +132,7 @@ class TerminalInputConnection(view: View, private val viewer: TerminalViewer) : 
     }
 
     override fun sendKeyEvent(event: KeyEvent): Boolean {
+        if (!currentLine()) return true
         if (event.action == KeyEvent.ACTION_DOWN) sendKey(viewer, event)
         return true
     }

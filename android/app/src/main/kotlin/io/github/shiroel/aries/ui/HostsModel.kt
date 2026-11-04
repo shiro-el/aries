@@ -38,6 +38,9 @@ import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.NonCancellable
@@ -59,6 +62,12 @@ import kotlinx.coroutines.withContext
 
 /** Bounded reuse for a short trip to another app; never a resident background connection. */
 const val SCREEN_CONNECTION_GRACE_MS = 120_000L
+
+/** Local VT operations are owned by draw, so close waits for an in-flight search. */
+private data class TerminalLocalOperation(
+    val apply: (TerminalView) -> Unit,
+    val result: CompletableDeferred<Unit> = CompletableDeferred(),
+)
 
 /** A message for the user: a string resource and its format arguments. */
 data class Message(@StringRes val res: Int, val args: List<Any> = emptyList())
@@ -1192,7 +1201,7 @@ class HostsModel(
                         observe = false, cols = cols.toUShort(), rows = rows.toUShort(), history = SCROLLBACK_LINES, resumed = resumed,
                     )
                     draw(conn, viewer, options) { view ->
-                        // A failed send means the line is going; next() reports it and the link re-attaches.
+                        // A failed write propagates to the link; it must not silently stop the input job.
                         launch {
                             try {
                                 snapshotFlow { viewer.phoneGrid }.filterNotNull().distinctUntilChanged()
@@ -1202,20 +1211,28 @@ class HostsModel(
                             }
                         }
                         launch {
-                            try {
-                                // One at a time, so keys arrive in the order they were typed. Keys typed
-                                // while the line is down wait here for the next attach.
-                                for (input in viewer.inputs) {
-                                    when (input) {
-                                        is TerminalInput.Text -> view.sendText(input.text)
-                                        is TerminalInput.Paste -> {
-                                            view.pasteText(input.text)
-                                            viewer.inputHistory?.remember(input.text)
-                                        }
-                                        is TerminalInput.Key -> view.sendKey(input.key, input.mods)
-                                    }
+                            // Preserve order only on the original line. A replacement connection
+                            // must never receive commands left behind by a dropped write.
+                            for (pending in viewer.inputs) {
+                                val input = pending.input
+                                if (!viewer.canInput || pending.connection !== conn || link.connection !== conn) {
+                                    if (input is TerminalInput.Paste) viewer.pasteFinished(input, delivered = false)
+                                    continue
                                 }
-                            } catch (e: CoreException) {
+                                when (input) {
+                                    is TerminalInput.Text -> view.sendText(input.text)
+                                    is TerminalInput.Paste -> {
+                                        var delivered = false
+                                        try {
+                                            view.pasteText(input.text)
+                                            delivered = true
+                                        } finally {
+                                            viewer.pasteFinished(input, delivered)
+                                        }
+                                        viewer.inputHistory?.remember(input.text)
+                                    }
+                                    is TerminalInput.Key -> view.sendKey(input.key, input.mods)
+                                }
                             }
                         }
                     }
@@ -1240,19 +1257,42 @@ class HostsModel(
     ): Boolean {
         val view = conn.attachTerminal(viewer.terminal.address, options)
         val localChanges = Channel<Unit>(Channel.CONFLATED)
+        val localOperations = Channel<TerminalLocalOperation>(Channel.UNLIMITED,
+            onUndeliveredElement = { it.result.cancel() })
+        suspend fun localOperation(apply: (TerminalView) -> Unit) {
+            val request = TerminalLocalOperation(apply)
+            // A debounced UI effect can still hold the previous attach's callback.
+            if (!localOperations.trySend(request).isSuccess) return
+            try {
+                request.result.await()
+            } finally {
+                request.result.cancel()
+            }
+        }
         viewer.scroller = { lines -> view.scrollTo(lines).also { localChanges.trySend(Unit) } }
         viewer.searcher = { query, caseSensitive, regex ->
-            view.search(query, caseSensitive, regex)
-            localChanges.trySend(Unit)
-            Unit
+            localOperation { it.search(query, caseSensitive, regex) }
         }
         viewer.searchNavigator = { backwards ->
-            view.searchNext(backwards)
-            localChanges.trySend(Unit)
-            Unit
+            localOperation { it.searchNext(backwards) }
         }
         try {
             return coroutineScope {
+                launch {
+                    for (request in localOperations) {
+                        if (!request.result.isActive) continue
+                        try {
+                            withContext(Dispatchers.Default) { request.apply(view) }
+                            localChanges.trySend(Unit)
+                            request.result.complete(Unit)
+                        } catch (e: CancellationException) {
+                            request.result.cancel()
+                            throw e
+                        } catch (e: CoreException) {
+                            request.result.completeExceptionally(e)
+                        }
+                    }
+                }
                 val side = alongside?.let { f -> launch { f(view) } }
                 try {
                     var exited = false
@@ -1282,9 +1322,11 @@ class HostsModel(
                 }
             }
         } finally {
+            if (!options.observe || viewer.link?.connection !== conn) viewer.discardInput(conn)
             viewer.scroller = null
             viewer.searcher = null
             viewer.searchNavigator = null
+            localOperations.cancel()
             localChanges.close()
             withContext(NonCancellable) { withTimeoutOrNull(2_000L) { view.detach() } }
             view.close()
