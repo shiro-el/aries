@@ -184,13 +184,13 @@ class CallsModel(
     /**
      * Watches each of [hosts] not watched yet. With [everyHost] false, Hosts
      * that would need a biometric unlock are left out, except [retainedHostIds]
-     * already opened explicitly in Chat. Calls of Hosts no
+     * whose feed was already opened explicitly. Calls of Hosts no
      * longer in [hosts] are dropped.
      */
     fun watch(hosts: List<Host>, everyHost: Boolean, retainedHostIds: Set<String> = emptySet()) {
         retainHosts(hosts)
         for (host in hosts) {
-            val allowed = everyHost || host.id in retainedHostIds || backgroundAllowed(host.id)
+            val allowed = everyHost || host.id in retainedHostIds && host.id in watches || backgroundAllowed(host.id)
             if (!allowed) { stop(host.id); continue }
             if (host.id !in watches) start(host)
         }

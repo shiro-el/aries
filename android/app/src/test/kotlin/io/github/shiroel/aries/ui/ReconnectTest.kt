@@ -258,11 +258,11 @@ class ReconnectTest {
         assertTrue(model.screen is Screen.Chat)
         compose.runOnIdle { model.networkChanged(); model.backgrounded(); model.foregrounded() }
         compose.waitForIdle()
-        assertEquals("unlock cancellation must not prompt repeatedly", 1, core.chatsOpened.size)
+        assertEquals("returning to the visible locked Agent must retry authorization", 2, core.chatsOpened.size)
         core.failChatWith = null
         compose.onNodeWithText(str(R.string.connect_retry_button)).performClick()
         compose.waitForIdle()
-        assertEquals(2, core.chatsOpened.size)
+        assertEquals(3, core.chatsOpened.size)
         core.pushChat(io.github.shiroel.aries.core.ChatSnapshot(emptyList(), io.github.shiroel.aries.core.ChatStatus.LIVE, null))
         compose.waitForIdle()
         assertEquals(io.github.shiroel.aries.core.ChatStatus.LIVE, (model.screen as Screen.Chat).chat.snapshot!!.status)
