@@ -179,7 +179,7 @@ private fun ConsoleHostRow(model: HostsModel, host: Host, tasks: Boolean = false
             model.drawerAgents.filter { it.host.id == host.id }, Modifier.testTag("host-waiting:${host.id}"),
             onClick = { model.openHostWaiting(host) })
         val taskLabel = stringResource(R.string.new_task_on_host, host.name)
-        ActionIcon(R.drawable.ic_plus, R.string.new_task_title, { model.back(); model.newTask(host) },
+        ActionIcon(R.drawable.ic_plus, R.string.new_task_title, { model.newTask(host) },
             modifier = Modifier.testTag("host-new-task").semantics {
                 contentDescription = taskLabel
             })

@@ -43,7 +43,26 @@ data class QueuedChatMessage(
     /** Progress only: herdr-core is waiting for a person to stop typing. */
     val heldForTyping: Boolean = false,
     val error: String? = null,
+    /** herdr-core increments this counter when a Working turn ends. */
+    val dispatchTurn: ULong? = null,
 )
+
+/** Compare delivery identity despite Claude's bash wrapper and shell-quoted upload paths. */
+internal fun QueuedChatMessage.matchesTranscript(text: String): Boolean {
+    fun normalize(source: String): String {
+        var value = source.trim()
+        if (value.startsWith("<bash-input>") && value.endsWith("</bash-input>")) {
+            value = "!" + value.removePrefix("<bash-input>").removeSuffix("</bash-input>").trim()
+        }
+        if (value.startsWith("!")) value = "!" + value.drop(1).trimStart()
+        for (attachment in attachments.sortedByDescending { it.path.length }) {
+            val path = attachment.path
+            value = value.replace(shellQuote(path), path).replace("\"$path\"", path).replace("`$path`", path)
+        }
+        return value.trim()
+    }
+    return normalize(this.text) == normalize(text)
+}
 
 @Composable
 internal fun QueuedMessageBubble(message: QueuedChatMessage, chat: ChatModel) {
@@ -79,7 +98,11 @@ internal fun QueuedMessageBubble(message: QueuedChatMessage, chat: ChatModel) {
                     Modifier.weight(1f).padding(vertical = 12.dp),
                     style = MaterialTheme.typography.labelMedium,
                 )
-                if (message.phase == QueuedMessagePhase.Waiting) {
+                if (message.confirmed) {
+                    IconButton(onClick = { chat.dismissEnteredMessage(message.id) }) {
+                        Icon(painterResource(R.drawable.ic_x), stringResource(R.string.chat_delivery_dismiss_button))
+                    }
+                } else if (message.phase == QueuedMessagePhase.Waiting) {
                     IconButton(onClick = { chat.cancelQueuedMessage(message.id) }) {
                         Icon(painterResource(R.drawable.ic_x), stringResource(R.string.chat_queue_cancel_button))
                     }
@@ -123,6 +146,7 @@ internal data class ChatOutboxState(
     val questionText: Map<String, List<String>> = emptyMap(),
     val picks: Map<String, List<Set<Int>>> = emptyMap(),
     val answers: Map<String, String> = emptyMap(),
+    val waitingReturned: Boolean = false,
 )
 
 private fun attachmentsJson(attachments: List<DraftAttachment>) = org.json.JSONArray().apply {
@@ -136,8 +160,8 @@ private fun readAttachments(array: org.json.JSONArray) = (0 until array.length()
 
 internal fun ChatOutboxState.encode(): String? {
     if (draft.isEmpty() && attachments.isEmpty() && messages.isEmpty() && terminalDraft.isEmpty() &&
-        !terminalComposerOpen && questionText.isEmpty() && picks.isEmpty() && answers.isEmpty()) return null
-    return org.json.JSONObject().put("version", 2).put("draft", draft)
+        !terminalComposerOpen && questionText.isEmpty() && picks.isEmpty() && answers.isEmpty() && !waitingReturned) return null
+    return org.json.JSONObject().put("version", 2).put("draft", draft).put("waitingReturned", waitingReturned)
         .put("terminalDraft", terminalDraft).put("terminalComposerOpen", terminalComposerOpen)
         .put("questionText", org.json.JSONObject().apply {
             questionText.forEach { (id, parts) -> put(id, org.json.JSONArray(parts)) }
@@ -154,7 +178,7 @@ internal fun ChatOutboxState.encode(): String? {
                 .put("id", message.id).put("draft", message.draft).put("text", message.text)
                 .put("attachments", attachmentsJson(message.attachments))
                 .put("before", org.json.JSONArray(message.before.toList())).put("phase", message.phase.name)
-                .put("confirmed", message.confirmed).put("error", message.error)) }
+                .put("confirmed", message.confirmed).put("error", message.error).put("dispatchTurn", message.dispatchTurn?.toString())) }
         }).toString()
 }
 
@@ -170,7 +194,8 @@ internal fun decodeChatOutbox(content: String): ChatOutboxState {
                 readAttachments(message.getJSONArray("attachments")), message.getString("text"),
                 (0 until before.length()).map { i -> before.getString(i) }.toSet(),
                 QueuedMessagePhase.valueOf(message.getString("phase")), message.optBoolean("confirmed", false),
-                error = message.optString("error").takeIf { it.isNotEmpty() && it != "null" })
+                error = message.optString("error").takeIf { it.isNotEmpty() && it != "null" },
+                dispatchTurn = message.optString("dispatchTurn").toULongOrNull())
         }, terminalDraft = value.optString("terminalDraft"), terminalComposerOpen = value.optBoolean("terminalComposerOpen"),
         questionText = value.optJSONObject("questionText")?.let { questions ->
             questions.keys().asSequence().associateWith { id ->
@@ -189,5 +214,5 @@ internal fun decodeChatOutbox(content: String): ChatOutboxState {
         }.orEmpty(),
         answers = value.optJSONObject("answers")?.let { answers ->
             answers.keys().asSequence().associateWith { answers.getString(it) }
-        }.orEmpty())
+        }.orEmpty(), waitingReturned = value.optBoolean("waitingReturned"))
 }
