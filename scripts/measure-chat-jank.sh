@@ -3,9 +3,10 @@
 # The profile APK uses a fake core and needs no Rust JNI library. It is R8-optimized/non-debuggable.
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
-out=${1:?Usage: measure-chat-jank.sh OUTPUT_DIRECTORY [DEVICE] [APK]}
+out=${1:?Usage: measure-chat-jank.sh OUTPUT_DIRECTORY [DEVICE] [APK] [SCENARIOS]}
 device=${2:-emulator-5556}
 apk=${3:-$root/android/app/build/outputs/apk/chatProfile/app-chatProfile.apk}
+scenarios=${4:-"scroll stream reading"}
 mkdir -p "$out"
 out=$(cd "$out" && pwd)
 adb=${ANDROID_HOME:-$HOME/Android/Sdk}/platform-tools/adb
@@ -24,7 +25,8 @@ call shell wm density >> "$out/device.txt"
 call shell dumpsys display >> "$out/device.txt"
 # Compile the same way for both revisions; exclude cold/JIT compilation from the hot-path comparison.
 call shell cmd package compile -m speed -f "$package" > "$out/compile.txt"
-for scenario in scroll stream reading; do
+for scenario in $scenarios; do
+    case "$scenario" in scroll|stream|reading) ;; *) exit 2 ;; esac
     cleanup
     call shell am start -W -n "$package/io.github.shiroel.aries.ui.ChatProfileActivity" > "$out/$scenario-launch.txt"
     sleep 8

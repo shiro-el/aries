@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.HorizontalDivider
@@ -59,6 +60,8 @@ import io.github.shiroel.aries.core.AriesCoreInterface
 import io.github.shiroel.aries.core.BlockedReason
 import io.github.shiroel.aries.core.ChatEntry
 import io.github.shiroel.aries.core.ChatEntryBody
+import io.github.shiroel.aries.core.ChatImage
+import io.github.shiroel.aries.core.ChatResponseMetadata
 import io.github.shiroel.aries.core.ChatSnapshot
 import io.github.shiroel.aries.core.ChatStatus
 import io.github.shiroel.aries.core.ChatToolStatus
@@ -428,7 +431,6 @@ fun ChatScreen(
     val entries = snapshot?.entries.orEmpty()
     val markdown by rememberChatMarkdown(entries)
     val transcript = remember(chat) { ChatTranscript() }
-    remember(transcript, entries, markdown) { transcript.update(entries, markdown) }
     var searchOpen by remember(chat) { mutableStateOf(false) }
     var query by remember(chat) { mutableStateOf("") }
     var selected by remember(chat) { mutableStateOf<ChatSearchMatch?>(null) }
@@ -444,6 +446,27 @@ fun ChatScreen(
         }.sortedBy { it.call.atMs }
     }.orEmpty()
     val scroll = rememberChatScrollState(chat, entries, agentCalls.map { "call:${it.key}" }, markdown, followEnabled = !searchOpen)
+    val transcriptContent: LazyListScope.() -> Unit = if (scroll.following) {
+        // Following coordinates content changes and immediate scrolling through
+        // one lazy provider. Independent row-state updates split those measures.
+        remember(entries, markdown, chat, readAloud, agentCalls, calls) {
+            followingChatContent(entries, markdown, chat, readAloud, agentCalls, calls)
+        }
+    } else {
+        // While reading history, unrelated streamed updates must not invalidate
+        // the visible items or their lazy provider.
+        remember(transcript, entries, markdown) { transcript.update(entries, markdown) }
+        remember<LazyListScope.() -> Unit>(transcript, chat, readAloud, agentCalls, calls) {
+            {
+                items(transcript.rows, key = { it.key }, contentType = { it.contentType }) { row ->
+                    ChatTranscriptRowView(row, chat, readAloud)
+                }
+                items(agentCalls, key = { "call:${it.key}" }, contentType = { "call" }) { entry ->
+                    if (calls != null) ConsoleChatCall(entry, calls)
+                }
+            }
+        }
+    }
     LaunchedEffect(active) {
         if (active != null) {
             val body = entries.find { it.id == active.field.entryId }?.body
@@ -472,14 +495,8 @@ fun ChatScreen(
                 LazyColumn(
                     Modifier.weight(1f).fillMaxWidth().chatImeAnchor(scroll.list).testTag("chat-transcript"),
                     state = scroll.list,
-                ) {
-                    items(transcript.rows, key = { it.key }, contentType = { it.contentType }) { row ->
-                        ChatTranscriptRowView(row, chat, readAloud)
-                    }
-                    items(agentCalls, key = { "call:${it.key}" }, contentType = { "call" }) { entry ->
-                        if (calls != null) ConsoleChatCall(entry, calls)
-                    }
-                }
+                    content = transcriptContent,
+                )
                 if (!searchOpen && !scroll.following && (entries.isNotEmpty() || agentCalls.isNotEmpty())) {
                     // Reserve the button's measured height so bringing a Choice or
                     // message into view never leaves its tap target under Latest.
@@ -521,6 +538,35 @@ fun ChatScreen(
     }
 }
 
+/** Keep the original follow path: no independent state publication before a forced scroll measure. */
+private fun followingChatContent(
+    entries: List<ChatEntry>,
+    markdown: Map<String, ChatMarkdownDocument>,
+    chat: ChatModel,
+    readAloud: io.github.shiroel.aries.speech.ReadAloudState,
+    agentCalls: List<CallEntry>,
+    calls: CallsModel?,
+): LazyListScope.() -> Unit = {
+    entries.forEach { entry ->
+        val body = entry.body
+        val source = body.markdownSource()
+        item(key = "transcript:${entry.id}") {
+            CompositionLocalProvider(LocalChatSearchEntry provides entry.id) {
+                ChatEntryHeader(entry, chat, readAloud)
+            }
+        }
+        if (source != null) {
+            chatMarkdownItems(entry.id, markdown[entry.id], thinking = body is ChatEntryBody.Thinking)
+            item(key = "transcript:${entry.id}:footer") {
+                ChatEntryFooter((body as? ChatEntryBody.User)?.images.orEmpty(), (body as? ChatEntryBody.Agent)?.metadata, chat)
+            }
+        }
+    }
+    items(agentCalls, key = { "call:${it.key}" }) { entry ->
+        if (calls != null) ConsoleChatCall(entry, calls)
+    }
+}
+
 @Composable
 private fun ChatTranscriptRowView(
     row: ChatTranscriptRow,
@@ -529,34 +575,39 @@ private fun ChatTranscriptRowView(
 ) {
     CompositionLocalProvider(LocalChatSearchEntry provides row.entryId) {
         when (val content = row.content) {
-            is ChatTranscriptContent.Header -> {
-                val entry = content.entry
-                val body = entry.body
-                if (body is ChatEntryBody.Question) {
-                    QuestionView(chat, entry.id, body)
-                } else {
-                    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (body is ChatEntryBody.Agent) 0.dp else 12.dp)) {
-                        ChatEntryView(entry, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image, readAloud) { chat.toggle(entry.id) }
-                    }
-                    if (body.markdownSource() == null) HorizontalDivider()
-                }
-            }
+            is ChatTranscriptContent.Header -> ChatEntryHeader(content.entry, chat, readAloud)
             is ChatTranscriptContent.Markdown -> ChatMarkdownItem(content.source, content.block, content.index, content.thinking)
-            is ChatTranscriptContent.Footer -> {
-                if (content.images.isNotEmpty()) {
-                    Column(Modifier.padding(horizontal = 16.dp)) {
-                        content.images.forEach { ChatImageView(it, chat::image) }
-                    }
-                }
-                content.metadata?.let { metadata ->
-                    Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                        ChatResponseMetadataView(metadata)
-                    }
-                }
-                HorizontalDivider(Modifier.padding(top = 8.dp))
-            }
+            is ChatTranscriptContent.Footer -> ChatEntryFooter(content.images, content.metadata, chat)
         }
     }
+}
+
+@Composable
+private fun ChatEntryHeader(entry: ChatEntry, chat: ChatModel, readAloud: io.github.shiroel.aries.speech.ReadAloudState) {
+    val body = entry.body
+    if (body is ChatEntryBody.Question) {
+        QuestionView(chat, entry.id, body)
+    } else {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (body is ChatEntryBody.Agent) 0.dp else 12.dp)) {
+            ChatEntryView(entry, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image, readAloud) { chat.toggle(entry.id) }
+        }
+        if (body.markdownSource() == null) HorizontalDivider()
+    }
+}
+
+@Composable
+private fun ChatEntryFooter(images: List<ChatImage>, metadata: ChatResponseMetadata?, chat: ChatModel) {
+    if (images.isNotEmpty()) {
+        Column(Modifier.padding(horizontal = 16.dp)) {
+            images.forEach { ChatImageView(it, chat::image) }
+        }
+    }
+    metadata?.let {
+        Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            ChatResponseMetadataView(it)
+        }
+    }
+    HorizontalDivider(Modifier.padding(top = 8.dp))
 }
 
 @Composable
