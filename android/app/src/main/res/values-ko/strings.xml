@@ -715,6 +715,18 @@
     <string name="chat_send_button">보내기</string>
     <string name="chat_sent">메시지를 보냈습니다</string>
     <string name="chat_sending">보내는 중…</string>
+    <!-- Shared first load and Chat activity -->
+    <string name="chat_loading">대화 불러오는 중…</string>
+    <string name="hosts_loading">Host 불러오는 중…</string>
+    <string name="loading_slow">불러오기가 오래 걸리고 있습니다. Host 연결을 확인한 뒤 다시 시도해 주세요.</string>
+    <string name="chat_working">작업 중</string>
+    <!-- Chat delivery status -->
+    <string name="chat_delivery_entered">Terminal에 입력됨</string>
+    <string name="chat_delivery_received">Agent가 받음</string>
+    <string name="chat_delivery_failed">보내지 못함</string>
+    <string name="chat_delivery_retry_button">다시 보내기</string>
+    <string name="chat_delivery_restore_button">입력창으로 되돌리기</string>
+    <string name="chat_delivery_resend_title">메시지를 다시 보낼까요?</string>
     <!-- Phone-local Chat queue -->
     <string name="chat_queue_waiting">대기 중</string>
     <string name="chat_queue_agent">Agent에 전달됨 · 차례 대기 중</string>

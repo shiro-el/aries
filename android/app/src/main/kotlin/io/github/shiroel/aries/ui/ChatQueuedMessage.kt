@@ -11,10 +11,16 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -22,8 +28,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import io.github.shiroel.aries.R
 import java.util.UUID
 
-/** Only Waiting belongs to the phone. Every other phase may already have typed input. */
-enum class QueuedMessagePhase { Waiting, Agent, Uncertain }
+/** Waiting is phone-local; Agent/Uncertain may have typed input. Failed means rejected. */
+enum class QueuedMessagePhase { Waiting, Agent, Uncertain, Failed }
 
 data class QueuedChatMessage(
     val id: String = UUID.randomUUID().toString(),
@@ -32,25 +38,43 @@ data class QueuedChatMessage(
     val text: String,
     val before: Set<String>,
     val phase: QueuedMessagePhase = QueuedMessagePhase.Waiting,
+    /** A successful sendMessage confirms Terminal input, not Agent receipt. */
     val confirmed: Boolean = false,
     /** Progress only: herdr-core is waiting for a person to stop typing. */
     val heldForTyping: Boolean = false,
+    val error: String? = null,
 )
 
 @Composable
 internal fun QueuedMessageBubble(message: QueuedChatMessage, chat: ChatModel) {
+    var confirmRetry by remember(message.id) { mutableStateOf(false) }
+    if (confirmRetry) AlertDialog(
+        onDismissRequest = { confirmRetry = false },
+        title = { Text(stringResource(R.string.chat_delivery_resend_title)) },
+        text = { Text(stringResource(R.string.chat_queue_uncertain)) },
+        confirmButton = { TextButton(onClick = { confirmRetry = false; chat.retryMessage(message.id) }) {
+            Text(stringResource(R.string.chat_delivery_retry_button))
+        } },
+        dismissButton = { TextButton(onClick = { confirmRetry = false }) { Text(stringResource(R.string.cancel_button)) } },
+    )
     Surface(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).alpha(0.65f),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
     ) {
         Column(Modifier.padding(start = 12.dp, end = 4.dp, bottom = 12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(painterResource(when {
+                    message.confirmed -> R.drawable.ic_check
+                    message.phase == QueuedMessagePhase.Uncertain || message.phase == QueuedMessagePhase.Failed -> R.drawable.ic_circle_dot
+                    else -> R.drawable.ic_send
+                }), contentDescription = null, modifier = Modifier.padding(end = 8.dp).size(16.dp))
                 Text(
                     stringResource(if (message.heldForTyping) R.string.chat_send_held else when (message.phase) {
                         QueuedMessagePhase.Waiting -> R.string.chat_queue_waiting
-                        QueuedMessagePhase.Agent -> R.string.chat_queue_agent
+                        QueuedMessagePhase.Agent -> if (message.confirmed) R.string.chat_delivery_entered else R.string.chat_sending
                         QueuedMessagePhase.Uncertain -> R.string.chat_queue_uncertain
+                        QueuedMessagePhase.Failed -> R.string.chat_delivery_failed
                     }),
                     Modifier.weight(1f).padding(vertical = 12.dp),
                     style = MaterialTheme.typography.labelMedium,
@@ -58,6 +82,20 @@ internal fun QueuedMessageBubble(message: QueuedChatMessage, chat: ChatModel) {
                 if (message.phase == QueuedMessagePhase.Waiting) {
                     IconButton(onClick = { chat.cancelQueuedMessage(message.id) }) {
                         Icon(painterResource(R.drawable.ic_x), stringResource(R.string.chat_queue_cancel_button))
+                    }
+                }
+            }
+            message.error?.takeIf { it.isNotBlank() }?.let {
+                Text(stringResource(R.string.chat_send_failed, it), color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall)
+            }
+            if (message.phase == QueuedMessagePhase.Uncertain || message.phase == QueuedMessagePhase.Failed) {
+                Row {
+                    TextButton(onClick = {
+                        if (message.phase == QueuedMessagePhase.Uncertain) confirmRetry = true else chat.retryMessage(message.id)
+                    }, enabled = chat.canRetryMessage) { Text(stringResource(R.string.chat_delivery_retry_button)) }
+                    TextButton(onClick = { chat.restoreFailedMessage(message.id) }) {
+                        Text(stringResource(R.string.chat_delivery_restore_button))
                     }
                 }
             }
@@ -100,7 +138,7 @@ internal fun ChatOutboxState.encode(): String? {
                 .put("id", message.id).put("draft", message.draft).put("text", message.text)
                 .put("attachments", attachmentsJson(message.attachments))
                 .put("before", org.json.JSONArray(message.before.toList())).put("phase", message.phase.name)
-                .put("confirmed", message.confirmed)) }
+                .put("confirmed", message.confirmed).put("error", message.error)) }
         }).toString()
 }
 
@@ -115,6 +153,7 @@ internal fun decodeChatOutbox(content: String): ChatOutboxState {
             QueuedChatMessage(message.getString("id"), message.getString("draft"),
                 readAttachments(message.getJSONArray("attachments")), message.getString("text"),
                 (0 until before.length()).map { i -> before.getString(i) }.toSet(),
-                QueuedMessagePhase.valueOf(message.getString("phase")), message.optBoolean("confirmed", false))
+                QueuedMessagePhase.valueOf(message.getString("phase")), message.optBoolean("confirmed", false),
+                error = message.optString("error").takeIf { it.isNotEmpty() && it != "null" })
         })
 }

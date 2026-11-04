@@ -213,11 +213,17 @@ fun BrowseScreen(
             )
         }
         val line = browser.link?.state
-        browser.link?.let { ConnectionNotice(it) }
+        browser.link?.let { ConnectionNotice(it, firstLoad = browser.structure == null) }
+        if (browser.structure != null && !browser.hasTerminalList && line == LinkState.Up) {
+            ScreenLoading(stringResource(R.string.hosts_loading), compact = true,
+                onRetry = { browser.link?.networkChanged() })
+        }
         if (browser.closed && line == LinkState.Up) Notice(stringResource(R.string.structure_connection_closed))
         browser.structure?.problem?.let { Notice(problemText(it)) }
         when {
-            browser.structure == null -> Text(stringResource(R.string.connecting, browser.host.name))
+            browser.structure == null -> if (line == null || line == LinkState.Up) {
+                ScreenLoading(stringResource(R.string.hosts_loading), onRetry = { browser.link?.networkChanged() })
+            }
             else -> HostTreeList(browser, browser.structure!!, hostSections, onOpen, onPin, onNewTerminal, current)
         }
     }

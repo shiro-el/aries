@@ -155,8 +155,9 @@ private fun ScreenContent(model: HostsModel, settings: ThemeSettings, terminalDi
             val cached = s.cachedBrowser
             if (cached != null) {
                 BrowseScreen(cached, onBack = model::back, showHeader = false, hostSections = authorization)
-            } else Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                ConnectionNotice(s.link)
+            } else Column(if (s.link.state == LinkState.Reconnecting) Modifier.fillMaxSize()
+                else Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                ConnectionNotice(s.link, firstLoad = true)
                 authorization()
             }
         }

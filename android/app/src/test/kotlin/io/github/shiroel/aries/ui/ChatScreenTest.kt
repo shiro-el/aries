@@ -87,7 +87,7 @@ class ChatScreenTest {
         openChat(core)
         assertEquals(listOf("h1" to "t1"), core.chatsOpened)
         compose.onNode(hasTestTag("console-top-bar") and hasAnyDescendant(hasText("claude"))).assertExists()
-        compose.onNodeWithText(str(R.string.chat_status_connecting)).assertExists()
+        compose.onNodeWithText(str(R.string.chat_loading)).assertExists()
 
         core.pushChat(
             ChatSnapshot(
@@ -107,7 +107,7 @@ class ChatScreenTest {
         compose.onNodeWithText("Create hello.txt").assertExists()
         compose.onNodeWithText(str(R.string.chat_thinking)).assertExists()
         compose.onNodeWithText("Write").assertExists()
-        compose.onNodeWithText(str(R.string.chat_status_connecting)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.chat_loading)).assertDoesNotExist()
 
         // Live: the reply and an error arrive later.
         core.pushChat(
