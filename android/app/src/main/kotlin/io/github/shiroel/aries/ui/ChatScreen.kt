@@ -690,7 +690,7 @@ fun ChatScreen(
                                 }
                             }
                         }
-                        items(agentCalls, key = { "call:${it.key}" }) { entry ->
+                        items(agentCalls, key = { "call:${it.key}" }, contentType = { "call" }) { entry ->
                             if (calls != null) ConsoleChatCall(entry, calls)
                         }
                     }
