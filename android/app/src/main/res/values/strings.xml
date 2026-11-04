@@ -935,7 +935,12 @@
     <string name="tasks_plan_completed">Done</string>
     <string name="tasks_plan_in_progress">In progress</string>
     <string name="tasks_plan_pending">Pending</string>
+    <string name="tasks_plan_paused">Paused</string>
+    <string name="tasks_plan_stopped">Stopped</string>
+    <string name="tasks_plan_error">Error</string>
+    <string name="tasks_plan_last_known">Last known: in progress</string>
     <string name="tasks_view_request">View request</string>
+    <string name="tasks_answer_history">Answer past question</string>
     <string name="tasks_tool_read">Read</string>
     <string name="tasks_tool_search">Searched</string>
     <string name="tasks_tool_edit">Edited</string>
