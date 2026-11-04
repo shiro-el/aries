@@ -11,17 +11,20 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -29,17 +32,30 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.Stable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import io.github.shiroel.aries.R
 
 /**
@@ -58,68 +74,97 @@ internal fun ChatTextActions(
     showIndication: Boolean = true,
     content: @Composable (Modifier) -> Unit,
 ) {
-    var menu by remember { mutableStateOf(false) }
     // Freeze the selected text even while the Agent streams more of its reply.
     val sharedDialogs = LocalChatDialogs.current
     val dialogs = sharedDialogs ?: remember { ChatDialogState() }
-    val context = LocalContext.current
-    val copyLabel = stringResource(R.string.chat_copy_all)
+    var bounds by remember { mutableStateOf(Rect.Zero) }
+    val openMenu = rememberUpdatedState { dialogs.textMenu = ChatTextMenu(text, bounds) }
     val actionsLabel = stringResource(R.string.chat_text_actions)
     Box {
         val gestures = if (interceptChildLongPress && text.isNotEmpty()) {
-            Modifier.childLongPress { menu = true }
+            Modifier.childLongPress { openMenu.value() }
         } else Modifier
-        content(gestures.combinedClickable(
+        content(gestures.onGloballyPositioned { bounds = it.boundsInWindow() }.combinedClickable(
             interactionSource = null,
             indication = if (showIndication) LocalIndication.current else null,
             onClick = onClick,
             onClickLabel = onClickLabel,
             onLongClickLabel = actionsLabel,
-            onLongClick = if (text.isEmpty()) null else { { menu = true } },
+            onLongClick = if (text.isEmpty()) null else { { openMenu.value() } },
         ))
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-            // Build the list only when requested; long transcripts stay cheap while streaming.
-            if (menu) chatWebUrls(text).map { it.second }.distinct().forEach { url ->
-                ActionMenuItem(
-                    label = stringResource(R.string.chat_link_copy, url), icon = R.drawable.ic_link,
-                    onClick = {
-                        context.getSystemService(ClipboardManager::class.java)
-                            .setPrimaryClip(ClipData.newPlainText(copyLabel, url))
-                        menu = false
-                    },
-                )
-                ActionMenuItem(
-                    label = stringResource(R.string.chat_link_share, url), icon = R.drawable.ic_share_2,
-                    onClick = {
-                        menu = false
-                        try {
-                            context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_TEXT, url)
-                            }, null))
-                        } catch (_: ActivityNotFoundException) {
-                            Toast.makeText(context, R.string.chat_link_share_failed, Toast.LENGTH_SHORT).show()
-                        } catch (_: SecurityException) {
-                            Toast.makeText(context, R.string.chat_link_share_failed, Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                )
-            }
-            ActionMenuItem(
-                label = copyLabel, icon = R.drawable.ic_copy,
-                onClick = {
-                    context.getSystemService(ClipboardManager::class.java)
-                        .setPrimaryClip(ClipData.newPlainText(copyLabel, text))
-                    menu = false
-                },
-            )
-            ActionMenuItem(
-                label = stringResource(R.string.chat_select_text), icon = R.drawable.ic_text_select,
-                onClick = { dialogs.selection = text; menu = false },
-            )
-        }
     }
     if (sharedDialogs == null) ChatDialogs(dialogs)
+}
+
+/** The popup is owned by the screen; its frozen anchor can outlive a recycled lazy row. */
+@Composable
+private fun ChatTextMenuView(menu: ChatTextMenu, dialogs: ChatDialogState) {
+    val text = menu.text
+    val context = LocalContext.current
+    val copyLabel = stringResource(R.string.chat_copy_all)
+    val actionsLabel = stringResource(R.string.chat_text_actions)
+    val position = remember(menu) {
+        object : PopupPositionProvider {
+            override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize,
+                layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset {
+                val x = if (layoutDirection == LayoutDirection.Ltr) menu.bounds.left.toInt()
+                    else menu.bounds.right.toInt() - popupContentSize.width
+                val below = menu.bounds.bottom.toInt()
+                val y = if (below + popupContentSize.height <= windowSize.height) below
+                    else menu.bounds.top.toInt() - popupContentSize.height
+                return IntOffset(x.coerceIn(0, (windowSize.width - popupContentSize.width).coerceAtLeast(0)),
+                    y.coerceIn(0, (windowSize.height - popupContentSize.height).coerceAtLeast(0)))
+            }
+        }
+    }
+    Popup(popupPositionProvider = position, onDismissRequest = { dialogs.textMenu = null },
+        properties = PopupProperties(focusable = true)) {
+        Surface(shape = MenuDefaults.shape, color = MenuDefaults.containerColor,
+            tonalElevation = MenuDefaults.TonalElevation, shadowElevation = MenuDefaults.ShadowElevation) {
+            Column(Modifier.width(IntrinsicSize.Max).widthIn(min = 240.dp, max = 320.dp).verticalScroll(rememberScrollState()).padding(vertical = 8.dp)
+                .semantics { paneTitle = actionsLabel }) {
+                // Build the list only when requested; long transcripts stay cheap while streaming.
+                chatWebUrls(text).map { it.second }.distinct().forEach { url ->
+                    ActionMenuItem(
+                        label = stringResource(R.string.chat_link_copy, url), icon = R.drawable.ic_link,
+                        onClick = {
+                            context.getSystemService(ClipboardManager::class.java)
+                                .setPrimaryClip(ClipData.newPlainText(copyLabel, url))
+                            dialogs.textMenu = null
+                        },
+                    )
+                    ActionMenuItem(
+                        label = stringResource(R.string.chat_link_share, url), icon = R.drawable.ic_share_2,
+                        onClick = {
+                            dialogs.textMenu = null
+                            try {
+                                context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_TEXT, url)
+                                }, null))
+                            } catch (_: ActivityNotFoundException) {
+                                Toast.makeText(context, R.string.chat_link_share_failed, Toast.LENGTH_SHORT).show()
+                            } catch (_: SecurityException) {
+                                Toast.makeText(context, R.string.chat_link_share_failed, Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                    )
+                }
+                ActionMenuItem(
+                    label = copyLabel, icon = R.drawable.ic_copy,
+                    onClick = {
+                        context.getSystemService(ClipboardManager::class.java)
+                            .setPrimaryClip(ClipData.newPlainText(copyLabel, text))
+                        dialogs.textMenu = null
+                    },
+                )
+                ActionMenuItem(
+                    label = stringResource(R.string.chat_select_text), icon = R.drawable.ic_text_select,
+                    onClick = { dialogs.selection = text; dialogs.textMenu = null },
+                )
+            }
+        }
+    }
 }
 
 /** Leave taps and scrolling to child links / the list; consume only a held press. */
@@ -149,17 +194,22 @@ private fun Modifier.childLongPress(onLongPress: () -> Unit): Modifier = pointer
 /** Screen-owned requests survive disposal or replacement of their originating lazy row. */
 @Stable
 internal class ChatDialogState {
+    var textMenu by mutableStateOf<ChatTextMenu?>(null)
+    var tasksRequest by mutableStateOf<TasksRequest?>(null)
     var selection by mutableStateOf<String?>(null)
     var image by mutableStateOf<ByteArray?>(null)
     var diagram by mutableStateOf<String?>(null)
-    val isOpen: Boolean get() = selection != null || image != null || diagram != null
+    val isOpen: Boolean get() = textMenu != null || tasksRequest != null || selection != null || image != null || diagram != null
 }
+
+internal data class ChatTextMenu(val text: String, val bounds: Rect)
 
 internal val LocalChatDialogs = staticCompositionLocalOf<ChatDialogState?> { null }
 internal val LocalChatImageRevision = staticCompositionLocalOf { 0 }
 
 @Composable
 internal fun ChatDialogs(dialogs: ChatDialogState) {
+    dialogs.textMenu?.let { ChatTextMenuView(it, dialogs) }
     dialogs.selection?.let { selected ->
         Dialog(onDismissRequest = { dialogs.selection = null }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
             Surface(Modifier.fillMaxSize()) {

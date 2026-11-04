@@ -74,7 +74,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         network = NetworkWatch(this) {
-            if (!app.appLock.locked) model?.networkChanged()
+            model?.networkChanged()
         }.also { it.start() }
     }
 
@@ -156,7 +156,8 @@ class MainActivity : AppCompatActivity() {
         // Preserve the received credential (or its absence); recreation must never sign an external entry.
         outState.putParcelable("pending-launch-target", savedLaunchIntent)
         outState.putBoolean("pending-tile-target", tileRequested)
-        outState.putParcelable("pending-share-intent", shareIntent)
+        // openShare hands ownership to the Agent picker; its unconsumed envelope must survive death too.
+        outState.putParcelable("pending-share-intent", shareIntent ?: model?.pendingShareIntent)
         super.onSaveInstanceState(outState)
     }
 

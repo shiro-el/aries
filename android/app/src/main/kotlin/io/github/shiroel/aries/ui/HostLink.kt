@@ -26,6 +26,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 /** Where a Host's line stands. */
 sealed interface LinkState {
     data object Up : LinkState
+    data object Closed : LinkState
 
     /** The line dropped; the app is connecting again on its own. */
     data object Reconnecting : LinkState
@@ -113,7 +114,7 @@ class HostLink(
     /** Waits for foreground reconnection without replaying the caller's operation. */
     suspend fun awaitConnection(): HostConnection = withTimeoutOrNull(30_000L) {
         val (state, connection) = snapshotFlow { state to connection }.first { (state, connection) ->
-            state is LinkState.Down || (state == LinkState.Up && connection != null)
+            state is LinkState.Down || state == LinkState.Closed || (state == LinkState.Up && connection != null)
         }
         if (state is LinkState.Down) throw state.error
         connection
@@ -177,7 +178,7 @@ class HostLink(
         if (closed || current.value !== conn) return
         current.value = null
         state = LinkState.Reconnecting
-        scope.launch(NonCancellable) { conn.disconnect() }
+        disconnectAfterSends(conn)
         if (!paused) reconnecting = scope.launch { reconnect() }
     }
 
@@ -250,6 +251,7 @@ class HostLink(
         reconnecting?.cancel()
         val conn = current.value
         current.value = null
+        state = LinkState.Closed
         // ViewModel clearing cancels the owner scope before onCleared releases its links.
         conn?.let(::disconnectAfterSends)
     }

@@ -152,10 +152,11 @@ class CallHistoryTest {
         }
         val initial = CompletableDeferred<Unit>()
         val caller = CompletableDeferred<Unit>()
-        var connects = 0
+        // The pending caller reuses this Host's connecting line; delay its lookup RPC.
+        core.terminalListHolds["h1"] = caller
         val api = object : AriesCoreInterface by core {
             override suspend fun connect(hostId: String): HostConnection {
-                if (++connects == 1) initial.await() else caller.await()
+                initial.await()
                 return core.connect(hostId)
             }
         }
@@ -167,7 +168,10 @@ class CallHistoryTest {
         compose.onNodeWithTag("call-inbox-panel").assertExists()
         compose.runOnIdle { assertTrue(model.screen is Screen.Browse); caller.complete(Unit) }
         compose.onNodeWithTag("call-inbox-panel").assertDoesNotExist()
-        compose.runOnIdle { assertTrue(model.screen is Screen.Chat) }
+        compose.runOnIdle {
+            assertTrue(model.screen is Screen.Chat)
+            assertEquals(listOf("h1"), core.connectAttempts)
+        }
     }
 
     // D29: cached Connecting uses the Browse menu, and automatic completion leaves its drawer open.
