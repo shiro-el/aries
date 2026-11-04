@@ -54,9 +54,10 @@ class QuestionNotificationAnswerTest {
         core.ensureKey()
     }
 
+    private var pushedAt = 0uL
     private fun push(question: PushQuestion? = PushQuestion("q1", "Which color?", listOf("Red", "Blue", "Green"))) =
         PushNotice(hostId, "box", PushContent.Status("remote/t3", "Agent", null, true,
-            AgentStatus.Blocked(BlockedReason.QUESTION, "Which color?"), 1uL, null, question, null))
+            AgentStatus.Blocked(BlockedReason.QUESTION, "Which color?"), ++pushedAt, null, question, null))
 
     private fun shown(): Notification = manager.activeNotifications.single { it.tag == "remote/t3" }.notification
     private fun buttons() = shown().actions.orEmpty().map { it.title.toString() }

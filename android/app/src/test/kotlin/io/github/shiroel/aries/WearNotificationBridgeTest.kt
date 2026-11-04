@@ -88,7 +88,8 @@ class WearNotificationBridgeTest {
         val actions = wearable(shown())
         assertEquals(listOf(context.getString(R.string.call_notify_try_again), context.getString(R.string.call_notify_open_app)),
             actions.map { it.title.toString() })
-        assertEquals(original, actions.first().actionIntent)
+        // A retry is a new accepted attempt; the previous watch action must stay consumed.
+        assertNotEquals(original, actions.first().actionIntent)
         CallNotifications.post(context, notice, CallView.Done("Sent"))
         assertTrue(wearable(shown()).isEmpty())
     }
