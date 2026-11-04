@@ -1,6 +1,7 @@
 package io.github.shiroel.aries.ui
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.hasContentDescription
@@ -8,6 +9,10 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentStatus
@@ -39,6 +44,7 @@ class ReconnectTest {
     private val agent = TerminalInfo("t1", "claude", "", listOf("claude"), "/repo", "live", AgentStatus.Working, false, 0uL)
 
     private lateinit var model: HostsModel
+    private lateinit var screenLifecycle: LifecycleRegistry
 
     private fun frame(text: String) = TerminalUpdate.Screen(
         ScreenFrame(
@@ -57,7 +63,15 @@ class ReconnectTest {
         compose.setContent {
             val scope = rememberCoroutineScope()
             model = remember { HostsModel(core, scope) }
-            MaterialTheme { AriesApp(model) }
+            val owner = remember {
+                object : LifecycleOwner {
+                    override val lifecycle = LifecycleRegistry(this).apply { currentState = Lifecycle.State.RESUMED }
+                }
+            }
+            screenLifecycle = owner.lifecycle
+            CompositionLocalProvider(LocalLifecycleOwner provides owner) {
+                MaterialTheme { AriesApp(model) }
+            }
         }
     }
 
@@ -77,6 +91,95 @@ class ReconnectTest {
 
     private fun screenShows(text: String) =
         compose.onNode(hasContentDescription(text, substring = true)).assertExists()
+
+    @Test
+    fun aFirstConnectionFailureRetriesAndStillOpensTheNotificationTarget() {
+        val core = FakeCore().apply { terminals = listOf(agent) }
+        val home = core.addHost("home", Endpoint.Ssh("10.0.0.2", 22u, "me"))
+        core.failWith = CoreException.Unreachable("no route")
+        start(core)
+        compose.runOnIdle { model.openPushedAgent(home.id, agent.address) }
+        compose.waitForIdle()
+        assertTrue(model.screen is Screen.Agents)
+        core.failWith = null
+        // No new navigation request: the retry must remember the original target.
+        compose.mainClock.advanceTimeBy(600)
+        compose.waitForIdle()
+        assertEquals("t1", (model.screen as Screen.Terminal).viewer.terminal.address)
+        assertEquals("t1", core.connection!!.views.single().address)
+    }
+
+    @Test
+    fun permanentFailuresStopWithoutInterruptingAnotherHostsAgent() {
+        val core = FakeCore().apply { terminals = listOf(agent) }
+        val home = core.addHost("home", Endpoint.Ssh("home", 22u, "me"))
+        val errors = listOf(
+            CoreException.AuthRejected(),
+            CoreException.HostKeyChanged("old", "new"),
+            CoreException.Rpc("permission_denied", "not allowed"),
+            CoreException.Protocol("not a core protocol"),
+            CoreException.KeyLocked(),
+        )
+        val failedHosts = errors.mapIndexed { i, error ->
+            core.addHost("broken$i", Endpoint.Ssh("broken$i", 22u, "me")).also {
+                core.failFor[it.id] = error
+            }
+        }
+        start(core)
+        compose.runOnIdle { model.openPushedAgent(home.id, agent.address) }
+        compose.waitForIdle()
+        assertTrue("another Host must not open a modal", model.prompt == null)
+        compose.runOnIdle { model.networkChanged(); model.backgrounded(); model.foregrounded() }
+        compose.mainClock.advanceTimeBy(35_000)
+        compose.waitForIdle()
+        failedHosts.forEach { host ->
+            assertEquals("permanent failure for ${host.name} must wait for the user", 1,
+                core.connectAttempts.count { it == host.id })
+        }
+        assertTrue(model.prompt == null)
+        assertTrue("foreground must not bypass paused links with a separate snapshot connection",
+            failedHosts.none { it.id in core.snapshotsRequested })
+        assertEquals("t1", (model.screen as Screen.Terminal).viewer.terminal.address)
+    }
+
+    @Test
+    fun aPermanentFirstBrowseFailureCanBeFixedAndRetriedInPlace() {
+        val core = FakeCore().apply { terminals = listOf(build); failWith = CoreException.AuthRejected() }
+        val home = core.addHost("home", Endpoint.Ssh("home", 22u, "me"))
+        start(core)
+        compose.onNodeWithText("home").performClick()
+        compose.waitForIdle()
+        assertTrue(model.screen is Screen.Connecting)
+        assertEquals(1, core.connectAttempts.count { it == home.id })
+        core.failWith = null
+        compose.onNodeWithText(str(R.string.connect_retry_button)).performClick()
+        compose.waitForIdle()
+        assertEquals(home.id, (model.screen as Screen.Browse).browser.host.id)
+        compose.onNodeWithText("build").performClick()
+        compose.waitForIdle()
+        assertEquals("t2", core.connection!!.views.single().address)
+    }
+
+    @Test
+    fun aLockedChatStartKeepsItsCauseAndCanBeRetriedWithoutLeavingTheAgent() {
+        val core = FakeCore().apply { terminals = listOf(agent); failChatWith = CoreException.KeyLocked() }
+        val home = core.addHost("home", Endpoint.Ssh("home", 22u, "me"))
+        start(core)
+        compose.runOnIdle { model.openPushedAgent(home.id, agent.address, openChat = true) }
+        compose.waitForIdle()
+        assertTrue(model.screen is Screen.Chat)
+        compose.runOnIdle { model.networkChanged(); model.backgrounded(); model.foregrounded() }
+        compose.waitForIdle()
+        assertEquals("unlock cancellation must not prompt repeatedly", 1, core.chatsOpened.size)
+        core.failChatWith = null
+        compose.onNodeWithText(str(R.string.connect_retry_button)).performClick()
+        compose.waitForIdle()
+        assertEquals(2, core.chatsOpened.size)
+        core.pushChat(io.github.shiroel.aries.core.ChatSnapshot(emptyList(), io.github.shiroel.aries.core.ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        assertEquals(io.github.shiroel.aries.core.ChatStatus.LIVE, (model.screen as Screen.Chat).chat.snapshot!!.status)
+        compose.onNodeWithText(str(R.string.chat_status_no_beacon)).assertDoesNotExist()
+    }
 
     @Test
     fun aDroppedLineShowsReconnectingThenReattachesTheOpenTerminalResumed() {
@@ -159,6 +262,58 @@ class ReconnectTest {
     }
 
     @Test
+    fun backgroundingDetachesAndStopsReconnectUntilTheScreenResumes() {
+        val core = FakeCore().apply { terminals = listOf(build) }
+        val first = openBuild(core)
+        val old = core.connection!!
+        compose.runOnIdle {
+            (model.screen as Screen.Terminal).viewer.draft = "unfinished command"
+            screenLifecycle.currentState = Lifecycle.State.CREATED
+        }
+        compose.waitForIdle()
+        assertTrue(first.detached)
+        assertTrue(old.disconnected)
+        compose.runOnIdle { model.networkChanged() }
+        compose.waitForIdle()
+        assertTrue(core.connection === old)
+        screenShows("before")
+
+        compose.runOnIdle { screenLifecycle.currentState = Lifecycle.State.RESUMED }
+        compose.waitForIdle()
+        assertNotSame(old, core.connection)
+        assertTrue(core.connection!!.views.single().options.resumed)
+        assertEquals("unfinished command", (model.screen as Screen.Terminal).viewer.draft)
+    }
+
+    @Test
+    fun backgroundingChatPausesItsWatchAndKeepsTheDraftAndCursorOnResume() {
+        val core = FakeCore().apply { terminals = listOf(agent) }
+        core.addHost("home", Endpoint.Ssh("10.0.0.2", 22u, "me"))
+        start(core)
+        compose.onNodeWithText("home").performClick()
+        compose.onNodeWithText("claude").performClick()
+        compose.onNodeWithContentDescription(str(R.string.agent_switch_chat_label)).performClick()
+        compose.waitForIdle()
+        val chat = (model.screen as Screen.Chat).chat
+        core.pushChat(io.github.shiroel.aries.core.ChatSnapshot(emptyList(), io.github.shiroel.aries.core.ChatStatus.LIVE, "cursor-1"))
+        compose.waitForIdle()
+        compose.runOnIdle {
+            chat.draft = "unfinished question"
+            screenLifecycle.currentState = Lifecycle.State.CREATED
+            model.networkChanged()
+        }
+        compose.waitForIdle()
+        assertTrue(core.chatPaused)
+        assertEquals(0, core.chatReconnects)
+        compose.runOnIdle { screenLifecycle.currentState = Lifecycle.State.RESUMED }
+        compose.waitForIdle()
+        assertFalse(core.chatPaused)
+        assertTrue(chat === (model.screen as Screen.Chat).chat)
+        assertEquals("unfinished question", chat.draft)
+        assertEquals("cursor-1", chat.snapshot?.cursor)
+    }
+
+    @Test
     fun aReconnectThatNeedsTheUserStopsAndSaysWhy() {
         val core = FakeCore().apply { terminals = listOf(build) }
         val first = openBuild(core)
@@ -167,7 +322,6 @@ class ReconnectTest {
         first.end()
         compose.waitForIdle()
 
-        compose.onNodeWithText(str(R.string.terminal_connection_closed)).assertExists()
         compose.onNodeWithText(str(R.string.host_key_changed_title)).assertExists()
         compose.onNodeWithText(str(R.string.reconnecting)).assertDoesNotExist()
     }

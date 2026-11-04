@@ -138,7 +138,7 @@ object CallNotifications {
                 Uri.Builder().scheme("aries-call").authority(notice.hostId)
                     .appendPath(notice.call.id).appendPath(choice.toString()).build(),
             )
-            .putExtra(ChoiceReceiver.EXTRA_NOTICE, notice.toJson())
+            .putExtra(ChoiceReceiver.EXTRA_NOTICE, NotificationPayloads.seal(context, notice.toJson()))
             .putExtra(ChoiceReceiver.EXTRA_CHOICE, choice)
         return PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }

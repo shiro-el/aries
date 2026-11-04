@@ -561,6 +561,38 @@ async fn a_chat_image_cache_keeps_newest_images_within_its_size_cap() {
 }
 
 #[tokio::test]
+async fn pausing_chat_stops_host_reads_and_resumes_the_same_transcript_after_its_cursor() {
+    let env = Env::new();
+    let core = env.core();
+    let host = env.host(&core, "pause");
+    let args = env.beacon_printing("pause", FIRST);
+    let watch = watch(&core, &host);
+    wait_for(&watch, "first", |s| s.status == ChatStatus::Live).await;
+    watch.pause();
+    // A pending snapshot can still be delivered. The Host must not be
+    // reopened even when a network-change signal arrives while paused.
+    tokio::time::sleep(Duration::from_millis(150)).await;
+    watch.reconnect();
+    watch.retry_now();
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert_eq!(std::fs::read_to_string(&args).unwrap().lines().count(), 1);
+    std::fs::write(env.dir.path().join("lines-pause"), AFTER).unwrap();
+    watch.resume();
+    let resumed = wait_for(&watch, "resumed", |s| s.entries.len() == 3).await;
+    assert_eq!(
+        resumed.entries[0].id, "u1",
+        "old transcript survived the pause"
+    );
+    assert_eq!(resumed.cursor.as_deref(), Some("cc:s:40"));
+    assert!(
+        std::fs::read_to_string(args)
+            .unwrap()
+            .contains("--cursor cc:s:20")
+    );
+    watch.stop();
+}
+
+#[tokio::test]
 async fn connection_setting_edits_stop_chat_watches_without_erasing_cached_chat() {
     for change in ["endpoint", "jump", "key"] {
         let env = Env::new();

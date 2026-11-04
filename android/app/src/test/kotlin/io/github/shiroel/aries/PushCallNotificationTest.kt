@@ -9,12 +9,14 @@ import io.github.shiroel.aries.core.PushContent
 import io.github.shiroel.aries.core.PushNotice
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.robolectric.annotation.Config
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 /** What an opened Call push shows, and on which channel. */
 @RunWith(RobolectricTestRunner::class)
+@Config(application = FakeCoreApp::class)
 class PushCallNotificationTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val manager = context.getSystemService(NotificationManager::class.java)

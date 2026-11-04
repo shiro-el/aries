@@ -26,6 +26,7 @@ mod input_history;
 mod last_known_state;
 mod launch;
 mod layout_edit;
+mod private_content;
 mod push;
 mod push_ownership;
 mod push_replay;
@@ -81,7 +82,7 @@ pub use push::{
     PushPairing, PushPolicy, PushProgress, PushQuestion, PushStep,
 };
 pub use push_ownership::PushVerificationState;
-pub use send::{HELD_AFTER, SendListener, SendOutcome};
+pub use send::{HELD_AFTER, InterruptOutcome, SendListener, SendOutcome};
 pub use settings::{AgentView, AttachMode};
 pub use structure::{HostStructure, PaneInfo, SpaceInfo, StructureProblem, TabInfo};
 pub use terminal::{
@@ -268,12 +269,19 @@ fn runtime() -> &'static tokio::runtime::Runtime {
 async fn on_runtime<T: Send + 'static>(
     fut: impl std::future::Future<Output = Result<T, CoreError>> + Send + 'static,
 ) -> Result<T, CoreError> {
-    runtime()
-        .spawn(fut)
-        .await
-        .map_err(|e| CoreError::Protocol {
-            detail: format!("core task failed: {e}"),
-        })?
+    // A JoinHandle normally detaches on drop. The caller (including UniFFI's
+    // cancelled future) owns this work until its result has been collected.
+    struct AbortOnDrop(tokio::task::AbortHandle);
+    impl Drop for AbortOnDrop {
+        fn drop(&mut self) {
+            self.0.abort();
+        }
+    }
+    let task = runtime().spawn(fut);
+    let _owner = AbortOnDrop(task.abort_handle());
+    task.await.map_err(|e| CoreError::Protocol {
+        detail: format!("core task failed: {e}"),
+    })?
 }
 
 #[derive(uniffi::Object)]
@@ -297,6 +305,9 @@ impl AriesCore {
     pub fn new(data_dir: String, vault: Arc<dyn KeyVault>) -> Result<Arc<Self>, CoreError> {
         let store = Store::open(&PathBuf::from(data_dir))?;
         let saved = store.load()?;
+        for host in &saved.hosts {
+            private_content::upgrade(&store.host_dir(&host.id), vault.as_ref())?;
+        }
         let chat_cache = chat_cache::ChatCache::new(
             store.root(),
             vault.clone(),
@@ -495,7 +506,8 @@ impl AriesCore {
         if !hosts.iter().any(|host| host.id == host_id) {
             return Err(CoreError::UnknownHost { id: host_id });
         }
-        input_history::InputHistory::new(self.store.host_dir(&host_id)).list(&terminal)
+        input_history::InputHistory::new(self.store.host_dir(&host_id), self.vault.as_ref())
+            .list(&terminal)
     }
 
     /// Records one composer submission verbatim. Call after sending succeeds.
@@ -510,7 +522,8 @@ impl AriesCore {
         if !hosts.iter().any(|host| host.id == host_id) {
             return Err(CoreError::UnknownHost { id: host_id });
         }
-        input_history::InputHistory::new(self.store.host_dir(&host_id)).remember(terminal, text)
+        input_history::InputHistory::new(self.store.host_dir(&host_id), self.vault.as_ref())
+            .remember(terminal, text)
     }
 
     /// Deletes only this Terminal's phone-local composer history.
@@ -519,7 +532,8 @@ impl AriesCore {
         if !hosts.iter().any(|host| host.id == host_id) {
             return Err(CoreError::UnknownHost { id: host_id });
         }
-        input_history::InputHistory::new(self.store.host_dir(&host_id)).clear(&terminal)
+        input_history::InputHistory::new(self.store.host_dir(&host_id), self.vault.as_ref())
+            .clear(&terminal)
     }
 
     /// Trusts `fingerprint` as `host_id`'s Host key, after the user compared
@@ -811,9 +825,16 @@ impl AriesCore {
                     jumps: self.ssh_hops(host.jumps)?,
                 }),
             };
-            let client =
-                on_runtime(async move { HcClient::handshake(transport.open().await?).await })
-                    .await?;
+            let client = on_runtime(async move {
+                tokio::time::timeout(std::time::Duration::from_secs(20), async {
+                    HcClient::handshake(transport.open().await?).await
+                })
+                .await
+                .map_err(|_| CoreError::Unreachable {
+                    detail: "Host connection timed out".into(),
+                })?
+            })
+            .await?;
             let client = Arc::new(client);
             if !self.register_client(&host_id, revision, &client) {
                 on_runtime(async move {
@@ -824,6 +845,7 @@ impl AriesCore {
                 return Err(CoreError::Closed);
             }
             Ok(Arc::new(HostConnection {
+                vault: self.vault.clone(),
                 last_known: self.last_known.clone(),
                 sessions: self.sessions.clone(),
                 revision,
@@ -1670,6 +1692,7 @@ fn ssh_for_saved_host(
 /// A live connection to one Host's herdr-core.
 #[derive(uniffi::Object)]
 pub struct HostConnection {
+    vault: Arc<dyn KeyVault>,
     sessions: host_edit::HostSessions,
     revision: u64,
     last_known: last_known_state::States,
@@ -1876,6 +1899,13 @@ impl HostConnection {
         let client = self.client.clone();
         on_runtime(async move { send::send(&client, &address, &text, || listener.on_held()).await })
             .await
+    }
+
+    /// Interrupts a Working Agent through herdr-core's stop-key policy. Checks
+    /// live status first; never retries, submits a message, or kills a Terminal.
+    pub async fn interrupt_agent(&self, address: String) -> Result<InterruptOutcome, CoreError> {
+        let client = self.client.clone();
+        on_runtime(async move { send::interrupt(&client, &address).await }).await
     }
 
     /// Saves an attachment beside this Terminal on its Host, returning the
