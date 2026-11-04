@@ -17,6 +17,8 @@ import io.github.shiroel.aries.ui.agentFamily
 import io.github.shiroel.aries.ui.orderAgents
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.retryWhen
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /** Shared projection of persisted SSH pulls. Reading it never connects to a Host. */
 object AgentSurfaces {
@@ -43,6 +45,7 @@ object AgentSurfaces {
 class AgentTileService : TileService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var listening: Job? = null
+    private val refreshLock = Mutex()
     private val core get() = (application as HasCore).core
 
     override fun onStartListening() {
@@ -61,9 +64,9 @@ class AgentTileService : TileService() {
         }
     }
 
-    suspend fun refreshTile(nowMs: Long = System.currentTimeMillis()) {
+    suspend fun refreshTile(nowMs: Long = System.currentTimeMillis()) = refreshLock.withLock {
         val context = AppLanguage.context(this)
-        val tile = qsTile ?: return
+        val tile = qsTile ?: return@withLock
         val (count, oldest, complete) = try {
             withContext(Dispatchers.IO) {
                 val states = core.lastKnownStates()
@@ -73,7 +76,7 @@ class AgentTileService : TileService() {
                 }, states.filter { state -> hosts.any { it.id == state.hostId } }.minOfOrNull { it.fetchedAtMs },
                     hosts.isNotEmpty() && hosts.all { host -> states.any { it.hostId == host.id } })
             }
-        } catch (_: CoreException) { return } // Retain the displayed value until a successful read.
+        } catch (_: CoreException) { return@withLock } // Retain the displayed value until a successful read.
         val age = if (!complete || oldest == null) context.getString(R.string.surfaces_age_unknown)
             else context.getString(R.string.surfaces_age_minutes, ((nowMs.coerceAtLeast(0).toULong().coerceAtLeast(oldest) - oldest) / 60_000uL).toLong())
         tile.label = context.getString(R.string.qs_waiting_label, count)
