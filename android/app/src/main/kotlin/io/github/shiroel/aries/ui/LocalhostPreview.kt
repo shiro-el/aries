@@ -22,6 +22,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import io.github.shiroel.aries.R
+import io.github.shiroel.aries.core.ChatEntry
+import io.github.shiroel.aries.core.ChatEntryBody
 import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.PreviewForward
 import kotlinx.coroutines.NonCancellable
@@ -52,6 +54,29 @@ internal fun rememberLocalhostPreview(link: HostLink?, output: String, address: 
             // Missing tools and Hosts which forbid machine.exec quietly skip this source.
             try { preview.ports = (preview.ports + connection.previewListeningPorts()).distinct().take(24) }
             catch (_: io.github.shiroel.aries.core.CoreException) { }
+        }
+    }
+    return preview
+}
+
+/** Parse changed entries independently; never concatenate or rescan the transcript per token. */
+@Composable
+internal fun rememberChatLocalhostPreview(link: HostLink?, entries: List<ChatEntry>, address: String): LocalhostPreview {
+    val preview = rememberLocalhostPreview(link, "", address)
+    val parsed = remember(link) { mutableMapOf<String, String>() }
+    val connection = link?.connection
+    LaunchedEffect(preview, connection, entries) {
+        if (link?.host?.endpoint !is Endpoint.Ssh || address.contains('/') || connection == null) return@LaunchedEffect
+        val recent = entries.takeLast(100)
+        parsed.keys.retainAll(recent.mapTo(mutableSetOf()) { it.id })
+        for (entry in recent) {
+            val body = entry.body
+            val output = if (body is ChatEntryBody.Tool) body.output else body.markdownSource()
+            if (output != null && parsed[entry.id] != output) {
+                val ports = withContext(kotlinx.coroutines.Dispatchers.Default) { connection.previewPorts(output) }
+                parsed[entry.id] = output
+                preview.ports = (preview.ports + ports).distinct().take(24)
+            }
         }
     }
     return preview

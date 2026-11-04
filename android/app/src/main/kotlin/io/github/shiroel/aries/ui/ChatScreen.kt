@@ -537,11 +537,7 @@ fun ChatScreen(
     }
     val snapshot = chat.snapshot
     val rawEntries = snapshot?.entries.orEmpty()
-    val previewOutput = remember(rawEntries) { rawEntries.takeLast(100).joinToString("\n") { entry ->
-        val body = entry.body
-        if (body is ChatEntryBody.Tool) body.output.orEmpty() else body.markdownSource().orEmpty()
-    } }
-    val preview = rememberLocalhostPreview(chat.link, previewOutput, chat.terminal.address)
+    val preview = rememberChatLocalhostPreview(chat.link, rawEntries, chat.terminal.address)
     val markdownState = rememberChatMarkdown(rawEntries)
     val markdown by markdownState
     val rendered = remember(chat) { ChatRenderedEntries() }
