@@ -22,6 +22,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -101,17 +103,16 @@ internal fun TasksHome(model: HostsModel, board: AgentBoard) {
                 Text(stringResource(R.string.agents_no_hosts), Modifier.padding(16.dp))
                 TextButton(onClick = LocalTasksHosts.current) { Text(stringResource(R.string.console_add_host)) }
             }
-            if (board.loadingHosts.isNotEmpty()) item(key = "loading") {
-                ScreenLoading(stringResource(R.string.connect_host_reconnecting, board.loadingHosts.joinToString(", ") { it.name }), compact = true,
-                    onRetry = { board.loadingHosts.forEach { board.links[it.id]?.retryNow() } })
-            }
             board.hosts.forEach { host ->
                 val link = board.links[host.id]
-                if (link != null && link.state != LinkState.Up) item(key = "connection:${host.id}") { ConnectionNotice(link) }
-                board.watchErrors[host.id]?.let { error -> if (link != null) item(key = "watch:${host.id}") { WatchFailureNotice(link, error) } }
-                board.unavailable[host.id]?.let { message -> item(key = "unavailable:${host.id}") {
-                    Text(messageText(message), Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error)
-                } }
+                val error = board.watchErrors[host.id] ?: (link?.state as? LinkState.Down)?.error
+                val unavailable = board.unavailable[host.id]
+                if (link?.state != LinkState.Up || host in board.loadingHosts || error != null || unavailable != null) {
+                    item(key = "connection:${host.id}") {
+                        TasksHostConnection(host, link, loading = host in board.loadingHosts,
+                            lastUpdatedMs = board.lastUpdatedMs(host.id), error = error, unavailable = unavailable)
+                    }
+                }
             }
             // Calls precede all Agents, so an urgent Call can never disappear below a pinned family.
             if (filter == TasksFilter.ALL || filter == TasksFilter.NEEDS) items(calls, key = { "call:${it.key}" }) { entry ->
@@ -122,11 +123,8 @@ internal fun TasksHome(model: HostsModel, board: AgentBoard) {
                     item(key = "host:${host.id}") {
                         TextButton(onClick = { model.openHost(host) }, modifier = Modifier.fillMaxWidth()) {
                             Text(host.name, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-                            Text(stringResource(when (board.links[host.id]?.state) {
-                                LinkState.Up -> R.string.tasks_host_connected
-                                null -> R.string.tasks_host_not_connected
-                                else -> R.string.tasks_offline
-                            }),
+                            if (board.links[host.id]?.state != LinkState.Up) Text(
+                                stringResource(if (host in board.loadingHosts) R.string.reconnecting else R.string.tasks_offline),
                                 style = MaterialTheme.typography.labelSmall)
                         }
                     }
@@ -138,7 +136,7 @@ internal fun TasksHome(model: HostsModel, board: AgentBoard) {
                         showHost = false, canPin = model::canPin)
                 }
             } else items(visible, key = { "task:${it.key.hostId}:${it.key.address}" }) { entry ->
-                TasksTaskRow(entry, model.taskTranscript(entry.key), stats = model.taskChangeStats(entry.key, entry.terminal), onOpen = {
+                TasksTaskRow(entry, model.taskPreview(entry), stats = model.taskChangeStats(entry.key, entry.terminal), showHost = board.hosts.size > 1, onOpen = {
                     val need = needs.filterIsInstance<TaskNeed.Agent>().firstOrNull { it.entry.key == entry.key }
                     if (filter == TasksFilter.NEEDS && need != null) openNeed(need) else model.selectListedAgent(board, entry)
                 })
@@ -156,15 +154,16 @@ internal fun tasksAttentionColor(): Color = if (MaterialTheme.colorScheme.backgr
 
 @Composable
 internal fun TasksTaskRow(entry: AgentEntry, transcript: ChatSnapshot? = null, stats: TaskChangeStats? = null,
-    onLongClick: (() -> Unit)? = null, onOpen: () -> Unit) {
+    onLongClick: (() -> Unit)? = null, showHost: Boolean = true, showSpace: Boolean = true, onOpen: () -> Unit) {
     val status = entry.terminal.agentStatus
     val blocked = status as? AgentStatus.Blocked
-    val lastTool = transcript?.entries?.lastOrNull { it.body is ChatEntryBody.Tool }?.body as? ChatEntryBody.Tool
+    val entries = transcript?.entries.orEmpty().let { all -> all.drop(all.indexOfLast { it.body is ChatEntryBody.User } + 1) }
+    val lastTool = entries.lastOrNull { it.body is ChatEntryBody.Tool }?.body as? ChatEntryBody.Tool
     val summary = when (status) {
         is AgentStatus.Blocked -> status.message?.takeIf(String::isNotBlank)
-            ?: (transcript?.entries?.lastOrNull { it.body is ChatEntryBody.Question }?.body as? ChatEntryBody.Question)?.questions?.firstOrNull()?.text
+            ?: (entries.lastOrNull { (it.body as? ChatEntryBody.Question)?.status == ChatToolStatus.RUNNING }?.body as? ChatEntryBody.Question)?.questions?.firstOrNull()?.text
         is AgentStatus.Error -> status.message?.takeIf(String::isNotBlank)
-            ?: (transcript?.entries?.lastOrNull { it.body is ChatEntryBody.AgentError }?.body as? ChatEntryBody.AgentError)?.detail
+            ?: (entries.lastOrNull { it.body is ChatEntryBody.AgentError }?.body as? ChatEntryBody.AgentError)?.detail
         AgentStatus.Working -> lastTool?.title?.takeIf(String::isNotBlank)
         else -> stats?.let { stringResource(R.string.tasks_change_stats, it.added, it.removed) }
     }
@@ -184,8 +183,8 @@ internal fun TasksTaskRow(entry: AgentEntry, transcript: ChatSnapshot? = null, s
     TasksRow(displayName(entry.terminal), stringResource(label), accent, false,
         Modifier.testTag("task-row:${entry.host.id}:${entry.terminal.address}"), onOpen,
         metadata = {
-            val meta = listOfNotNull(entry.terminal.argv.firstOrNull()?.substringAfterLast('/'), entry.space?.name,
-                entry.host.name).filter { it.isNotBlank() }.joinToString(" · ")
+            val meta = listOfNotNull(entry.terminal.argv.firstOrNull()?.substringAfterLast('/')?.takeUnless { it == displayName(entry.terminal) },
+                entry.space?.name?.takeIf { showSpace }, entry.host.name.takeIf { showHost }).filter { it.isNotBlank() }.joinToString(" · ")
             Text(meta, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
             if (entry.live && entry.terminal.statusMs != null) AgentElapsedTime(entry.terminal.statusMs)
@@ -234,4 +233,30 @@ private fun TasksRow(title: String, label: String, accent: Color, urgent: Boolea
         }
     }
     HorizontalDivider()
+}
+
+/** One compact row owns both first-load and reconnection status for this Host. */
+@Composable
+internal fun TasksHostConnection(host: Host, link: HostLink?, loading: Boolean = false,
+    lastUpdatedMs: Long? = null, error: CoreException? = (link?.state as? LinkState.Down)?.error,
+    unavailable: Message? = null) {
+    val connecting = loading || link?.state == LinkState.Reconnecting
+    val problem = error?.let(::problemFor)
+    val reason = unavailable?.let { messageText(it) } ?: problem?.let { messageText(it.body) }
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag("tasks-host-connection:${host.id}"),
+        verticalAlignment = Alignment.CenterVertically) {
+        val label = listOfNotNull(host.name,
+            stringResource(if (connecting) R.string.reconnecting else R.string.tasks_offline),
+            lastUpdatedMs?.let { agentLastSeen(it) }).joinToString(" · ")
+        Text(label, Modifier.weight(1f).semantics { reason?.let { stateDescription = it } },
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
+        if (link != null) {
+            TextButton(onClick = link::retryNow) { Text(stringResource(R.string.connect_retry_button)) }
+            if (error != null) IconButton(onClick = { link.settings(error) }) {
+                Icon(painterResource(R.drawable.file_type_settings), stringResource(R.string.connect_settings_button),
+                    Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
 }

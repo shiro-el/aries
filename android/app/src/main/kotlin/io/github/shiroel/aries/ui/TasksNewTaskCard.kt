@@ -26,17 +26,17 @@ internal fun TasksNewTaskCard(model: HostsModel, board: AgentBoard) {
         ?: board.hosts.firstOrNull { board.links[it.id]?.state == LinkState.Up }
         ?: board.hosts.firstOrNull()
     val task = model.task?.takeIf { it.link.host.id == host?.id }
-    LaunchedEffect(expanded, host?.id, board.links[host?.id]?.state) {
+    val link = host?.let { board.links[it.id] }
+    LaunchedEffect(expanded, host?.id, link?.state) {
         if (expanded && task == null) host?.let { board.links[it.id] }?.let { model.prepareTask(it, showDialog = false) }
     }
     val editable = task == null || (!task.form.busy && task.terminal == null && !task.launchUnknown && !task.deliveryUnknown)
     val expandLabel = stringResource(R.string.tasks_expand_label)
     val open: (Boolean) -> Unit = { full ->
-        val link = host?.let { board.links[it.id] }
         if (link != null) model.prepareTask(link, showDialog = full)
         expanded = true
     }
-    Surface(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+    Surface(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp).testTag("tasks-new-card"),
         shape = RoundedCornerShape(LocalLayoutTokens.current.cornerRadius),
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         color = MaterialTheme.colorScheme.surfaceContainer) {
@@ -44,13 +44,13 @@ internal fun TasksNewTaskCard(model: HostsModel, board: AgentBoard) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { if (expanded) expanded = false else open(false) },
                     modifier = Modifier.weight(1f).testTag("tasks-new-task")) {
-                    Icon(painterResource(R.drawable.ic_plus), null, Modifier.size(16.dp))
+                    Icon(painterResource(if (expanded) R.drawable.ic_chevron_up else R.drawable.ic_plus), null, Modifier.size(16.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.tasks_prompt_hint), Modifier.weight(1f), maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
+                    Text(stringResource(if (expanded) R.string.new_task_title else R.string.tasks_prompt_hint), Modifier.weight(1f), maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
                 }
                 IconButton(onClick = { open(true) }, enabled = host != null,
                     modifier = Modifier.testTag("tasks-new-expand")) {
-                    Icon(painterResource(R.drawable.ic_external_link), expandLabel, Modifier.size(20.dp))
+                    Icon(painterResource(R.drawable.ic_expand), expandLabel, Modifier.size(20.dp))
                 }
             }
             if (expanded) {
@@ -70,7 +70,7 @@ internal fun TasksNewTaskCard(model: HostsModel, board: AgentBoard) {
                     }
                     Box {
                         AssistChip(onClick = { menu = "folder" }, enabled = task != null && editable,
-                            label = { Text(task?.form?.cwd?.substringAfterLast('/')?.ifBlank { task.form.cwd }
+                            label = { Text(task?.form?.cwd?.takeIf(String::isNotBlank)?.let { it.substringAfterLast('/').ifBlank { it } }
                                 ?: stringResource(R.string.launch_cwd), maxLines = 1, overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.widthIn(max = 160.dp)) })
                         DropdownMenu(expanded = menu == "folder", onDismissRequest = { menu = null }) {
@@ -90,6 +90,7 @@ internal fun TasksNewTaskCard(model: HostsModel, board: AgentBoard) {
                         }
                     }
                 }
+                if (host != null && link?.state != LinkState.Up) TasksHostConnection(host, link)
                 if (task != null) {
                     OutlinedTextField(task.input, { task.input = it }, enabled = !task.form.busy && !task.sent,
                         placeholder = { Text(stringResource(R.string.tasks_prompt_hint)) }, minLines = 1, maxLines = 4,
@@ -104,7 +105,12 @@ internal fun TasksNewTaskCard(model: HostsModel, board: AgentBoard) {
                             Text(stringResource(R.string.new_task_open_chat))
                         }
                     }
-                } else TextButton(onClick = LocalTasksHosts.current) { Text(stringResource(R.string.agents_empty_hosts_button)) }
+                } else if (host == null) {
+                    TextButton(onClick = LocalTasksHosts.current) { Text(stringResource(R.string.agents_empty_hosts_button)) }
+                } else if (link?.state == LinkState.Up) {
+                    Text(stringResource(R.string.tasks_preparing), Modifier.padding(vertical = 12.dp),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
     }

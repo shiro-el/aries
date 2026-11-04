@@ -1572,6 +1572,9 @@ class HostsModel(
     /** Read already available transcript facts; the task list never opens per-row SSH watches. */
     internal fun taskTranscript(key: AgentKey) = conversations[key]?.snapshot
 
+    internal fun taskPreview(entry: AgentEntry) = if (entry.live)
+        conversations[entry.key]?.currentTranscript(entry.terminal) else null
+
     private val taskChanges = mutableMapOf<AgentKey, TasksChangesState>()
     internal fun taskChanges(key: AgentKey) = taskChanges.getOrPut(key) { TasksChangesState() }
     internal fun taskChangeStats(key: AgentKey, terminal: TerminalInfo) = taskChanges[key]?.takeIf {

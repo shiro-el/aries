@@ -9,6 +9,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -62,11 +64,10 @@ internal fun TasksPlan(entries: List<ChatEntry>) {
                     TaskPlanStatus.IN_PROGRESS -> R.string.tasks_plan_in_progress
                     TaskPlanStatus.PENDING -> R.string.tasks_plan_pending
                 })
-                if (item.status == TaskPlanStatus.IN_PROGRESS) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                else Checkbox(checked = item.status == TaskPlanStatus.COMPLETED, onCheckedChange = null, modifier = Modifier.size(20.dp))
+                val status = Modifier.semantics { stateDescription = description }
+                if (item.status == TaskPlanStatus.IN_PROGRESS) CircularProgressIndicator(status.size(16.dp), strokeWidth = 2.dp)
+                else Checkbox(checked = item.status == TaskPlanStatus.COMPLETED, onCheckedChange = null, modifier = status.size(20.dp))
                 Text(item.text, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                Text(description, style = MaterialTheme.typography.labelSmall,
-                    color = if (item.status == TaskPlanStatus.IN_PROGRESS) tasksAttentionColor() else MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
