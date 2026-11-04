@@ -832,6 +832,7 @@
 
     <!-- Host connection status and recovery -->
     <string name="reconnecting">Connecting…</string>
+    <string name="connect_host_reconnecting">%1$s · Connecting…</string>
     <string name="connect_host_status">%1$s · connection</string>
     <string name="connect_retry_button">Try again</string>
     <string name="connect_settings_button">Connection settings</string>

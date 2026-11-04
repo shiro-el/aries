@@ -37,7 +37,7 @@ fun ConnectionNotice(link: HostLink, state: LinkState = link.state, onRetry: () 
         Column(Modifier.fillMaxWidth()) {
             LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp), color = colors.primary)
             if (showLabel) {
-                AnnouncedText(stringResource(R.string.reconnecting),
+                AnnouncedText(stringResource(R.string.connect_host_reconnecting, link.host.name),
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                     style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
             }

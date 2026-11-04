@@ -123,7 +123,7 @@ class AgentsAcrossHostsTest {
         assertEquals("t1", core.connectionsOf.getValue("h2").views.single().address)
         compose.onNodeWithText(str(R.string.agent_open_button)).assertDoesNotExist()
         assertEquals(listOf("h2 t1 seen=3"), core.labelWrites)
-        compose.onNodeWithText(str(R.string.agent_status_idle)).assertExists()
+        compose.onNodeWithContentDescription(str(R.string.agent_status_idle), useUnmergedTree = true).assertExists()
 
         // Viewing a Working Agent joins the shared seen rules even at turn zero.
         compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
@@ -163,8 +163,13 @@ class AgentsAcrossHostsTest {
     fun aHostThatCannotBeReachedIsNamedWhileTheOthersStillShow() {
         val core = twoHosts().apply { failFor["h2"] = CoreException.Unreachable("timed out") }
         openAgents(core)
+        compose.mainClock.autoAdvance = false
 
-        compose.onNodeWithText(str(R.string.connect_host_status, "server")).assertExists()
+        compose.onNodeWithText(str(R.string.connect_host_reconnecting, "server")).assertDoesNotExist()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.onNodeWithText(str(R.string.connect_host_reconnecting, "server")).assertDoesNotExist()
+        compose.mainClock.advanceTimeBy(600)
+        compose.onNodeWithText(str(R.string.connect_host_reconnecting, "server")).assertExists()
         compose.onNodeWithText("claude").assertExists()
         compose.onNodeWithText("pi").assertDoesNotExist()
     }
