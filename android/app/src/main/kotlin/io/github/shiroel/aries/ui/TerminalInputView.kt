@@ -101,7 +101,9 @@ class TerminalInputView(context: Context, viewer: TerminalViewer) : View(context
  */
 class TerminalInputConnection(view: View, private val viewer: TerminalViewer) : BaseInputConnection(view, true) {
     private val connection = viewer.link?.connection
-    private fun currentLine(): Boolean = viewer.canInput && viewer.link?.connection === connection
+    private val generation = viewer.inputGeneration
+    private fun currentLine(): Boolean = viewer.canInput && viewer.link?.connection === connection &&
+        viewer.inputGeneration == generation
 
     override fun commitText(text: CharSequence, newCursorPosition: Int): Boolean {
         if (!currentLine()) return true
