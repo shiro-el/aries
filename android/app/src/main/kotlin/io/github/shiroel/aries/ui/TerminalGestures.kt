@@ -343,7 +343,6 @@ fun TerminalLookBar(viewer: TerminalViewer, look: TerminalLook, onSendToAgent: (
                     Modifier.padding(horizontal = 8.dp),
                     style = MaterialTheme.typography.bodySmall,
                 )
-                ActionIcon(R.drawable.ic_arrow_down_to_line, R.string.terminal_back_to_live, viewer::scrollToLive)
             }
         }
     }
