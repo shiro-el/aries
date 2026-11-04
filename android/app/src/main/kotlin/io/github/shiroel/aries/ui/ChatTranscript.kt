@@ -9,6 +9,32 @@ import io.github.shiroel.aries.core.ChatEntryBody
 import io.github.shiroel.aries.core.ChatImage
 import io.github.shiroel.aries.core.ChatResponseMetadata
 
+/** Publish the header/actions and parsed body together, and preserve equal native wrappers.
+ * A raw snapshot can arrive before its Markdown. Replacing the provider at that point
+ * schedules a layout with the old document followed by another when parsing completes.
+ */
+internal class ChatRenderedEntries {
+    private var current = emptyList<ChatEntry>()
+    private var byId = emptyMap<String, ChatEntry>()
+
+    fun update(entries: List<ChatEntry>, markdown: Map<String, ChatMarkdownDocument>): List<ChatEntry> {
+        val next = entries.map { entry ->
+            val previous = byId[entry.id]
+            val source = entry.body.markdownSource()
+            when {
+                previous != null && source != null && markdown[entry.id]?.source != source &&
+                    previous.body::class == entry.body::class -> previous
+                previous == entry -> previous!!
+                else -> entry
+            }
+        }
+        if (next.size == current.size && next.indices.all { next[it] === current[it] }) return current
+        current = next
+        byId = next.associateBy { it.id }
+        return current
+    }
+}
+
 /** UniFFI replaces every wrapper on each snapshot. Observe changes at lazy-row granularity
  * so streaming below the viewport does not invalidate the rows being read.
  * The list changes only when row keys/types change; payloads have independent snapshot state.

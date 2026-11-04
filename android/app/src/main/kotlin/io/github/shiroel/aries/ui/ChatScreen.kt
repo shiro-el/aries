@@ -428,8 +428,10 @@ fun ChatScreen(
         readAloud.notice?.let { android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_LONG).show() }
     }
     val snapshot = chat.snapshot
-    val entries = snapshot?.entries.orEmpty()
-    val markdown by rememberChatMarkdown(entries)
+    val rawEntries = snapshot?.entries.orEmpty()
+    val markdown by rememberChatMarkdown(rawEntries)
+    val rendered = remember(chat) { ChatRenderedEntries() }
+    val entries = remember(rendered, rawEntries, markdown) { rendered.update(rawEntries, markdown) }
     val transcript = remember(chat) { ChatTranscript() }
     var searchOpen by remember(chat) { mutableStateOf(false) }
     var query by remember(chat) { mutableStateOf("") }

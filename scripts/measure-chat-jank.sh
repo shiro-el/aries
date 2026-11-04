@@ -47,6 +47,7 @@ for scenario in $scenarios; do
     fi
     call shell am broadcast -a "$package.PROFILE" -p "$package" --es command dump > /dev/null
     call shell dumpsys gfxinfo "$package" > "$out/$scenario-gfxinfo.txt"
+    call shell dumpsys gfxinfo "$package" framestats > "$out/$scenario-framestats.txt"
     # Keep the latest reset/dump window without clearing other lanes' logcat buffers.
     call logcat -d -s ChatProfile:I '*:S' | awk '/ READY$/ { buffer="" } { buffer=buffer $0 "\n" } END { printf "%s", buffer }' > "$out/$scenario-composition.txt"
     rg -q ' DONE$' "$out/$scenario-composition.txt"
