@@ -63,6 +63,8 @@ class LocalhostPreviewTest {
             }
             val error = android.webkit.PreviewWebResourceError()
             web.webViewClient.onReceivedError(web, request, error)
+            // WebView finishes failed navigations too; that must not erase the error.
+            web.webViewClient.onPageFinished(web, request.url.toString())
         }
         compose.onNodeWithText("Retry").assertIsDisplayed().performClick()
         compose.onNodeWithText("Retry").assertDoesNotExist()
@@ -76,6 +78,26 @@ class LocalhostPreviewTest {
             findWebView(view.getChildAt(i))?.let { return it }
         }
         return null
+    }
+
+    /** Regression: a silent TCP service sends no WebView error and must still time out. */
+    @Test fun unresponsivePageTimesOutAndStillOffersRetryAndClose() {
+        val connection = object : HostConnection(NoHandle) {
+            override suspend fun openPreview(port: UShort) = object : PreviewForward(NoHandle) {
+                override fun url() = "http://127.0.0.1:49152/"
+                override suspend fun stop() {}
+            }
+        }
+        val host = FakeCore().addHost("fixture", Endpoint.Ssh("host", 22u, "me"))
+        val link = HostLink(host, connection, CoroutineScope(Dispatchers.Main), { connection })
+        val preview = LocalhostPreview().apply { selected = 5173u }
+        compose.setContent { MaterialTheme { LocalhostPreviewBrowser(preview, link, Modifier.fillMaxSize()) } }
+        compose.onNodeWithText("Loading preview…").assertIsDisplayed()
+        compose.mainClock.advanceTimeBy(10_100)
+        compose.onNodeWithText("The preview did not respond within 10 seconds. Check the development server and try again.").assertIsDisplayed()
+        compose.onNodeWithText("Retry").assertIsDisplayed()
+        compose.onNodeWithText("Close preview").assertIsDisplayed().performClick()
+        compose.runOnIdle { assertNull(preview.selected) }
     }
 
     /** Regression: detected ports must not reserve a transcript row until preview is opened. */
