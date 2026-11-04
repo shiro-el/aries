@@ -614,6 +614,18 @@
     <string name="chat_select_text">Select text</string>
     <string name="chat_thinking">Thinking</string>
     <!-- Thread Chat -->
+    <!-- Thread navigation and task shell -->
+    <string name="thread_home_empty_title">Start a conversation</string>
+    <string name="thread_home_empty_body">Choose a task below, or open a conversation from the menu.</string>
+    <string name="thread_new_body">Choose a Host, folder and Agent, then describe your task.</string>
+    <string name="thread_host_online">%1$s · Connected</string>
+    <string name="thread_search_hint">Search conversations</string>
+    <string name="thread_section_needs">Needs an answer</string>
+    <string name="thread_section_working">In progress</string>
+    <string name="thread_section_today">Today</string>
+    <string name="thread_section_earlier">Earlier</string>
+    <string name="thread_urgent_call">Urgent Call</string>
+
     <string name="thread_tools_summary">%1$s · %2$s</string>
     <string name="thread_tools_separator">", "</string>
     <string name="thread_tool_running">%1$s · %2$s</string>

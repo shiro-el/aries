@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -22,12 +21,6 @@ import java.io.File
 @Composable
 fun AttachmentControls(chat: ChatModel) {
     val context = LocalContext.current
-    LaunchedEffect(chat, chat.pendingShare, chat.inputUnavailable) {
-        chat.pendingShare?.takeUnless { chat.inputUnavailable }?.let {
-            chat.pendingShare = null
-            chat.attach(context.applicationContext, it)
-        }
-    }
     val files = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNotEmpty()) chat.attach(context.applicationContext, SharedContent(uris))
     }

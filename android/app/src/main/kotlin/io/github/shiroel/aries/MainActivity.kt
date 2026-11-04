@@ -132,18 +132,18 @@ class MainActivity : AppCompatActivity() {
         savedLaunchIntent?.let {
             savedLaunchIntent = null
             m.openSavedLaunch(this, it)
-            m.start()
+            m.start(layout = ThemeSettings.from(this).layout)
             return
         }
         if (tileRequested) {
             tileRequested = false
             m.openTile()
-            m.start()
+            m.start(layout = ThemeSettings.from(this).layout)
             return
         }
         val target = pushTarget
         pushTarget = null
-        m.start(target)
+        m.start(target, layout = ThemeSettings.from(this).layout)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {

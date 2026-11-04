@@ -34,6 +34,28 @@ import kotlinx.coroutines.launch
 internal val LocalThreadChat = staticCompositionLocalOf<HostsModel?> { null }
 
 internal object ThreadScreens : LayoutScreens() {
+    override val usesListPane = false
+    @Composable override fun Shell(model: HostsModel, content: @Composable () -> Unit) = ThreadShell(model, content)
+    @Composable override fun Header(model: HostsModel, screen: Screen) = ThreadSecondaryHeader(model, screen)
+    @Composable override fun Agents(model: HostsModel, board: AgentBoard) = ThreadEmptyHome(model, board)
+    @Composable override fun Hosts(model: HostsModel) = HostListScreen(model, tasks = true)
+    @Composable override fun Home(model: HostsModel, browser: HostBrowser) {
+        BrowseScreen(browser, showHeader = false, onBack = model::back,
+            onOpen = { terminal ->
+                if (terminal.agentStatus != null) model.openPushedAgent(browser.host.id, terminal.address, openChat = true)
+                else model.selectListedTerminal(browser, terminal)
+            }, current = model.currentAgentKey, onPin = model::pin,
+            onNewTerminal = { model.newTerminal(browser) }, onRunSaved = { model.runSaved(browser, it) },
+            hostSections = {
+                if (model.beacon.ui == BeaconUi.Known(BeaconState.NotInstalled)) TextButton(
+                    onClick = { model.openHostSettings(browser.host) }, modifier = Modifier.testTag("browse-host-settings:${browser.host.id}")) {
+                    Text(stringResource(R.string.settings_beacon_missing))
+                }
+            })
+    }
+    @Composable override fun NewTask(task: NewTask, onStart: () -> Unit, onOpenChat: () -> Unit, onDismiss: () -> Unit) =
+        ThreadNewTaskScreen(task, onStart, onOpenChat, onDismiss)
+
     @Composable override fun Chat(model: HostsModel, chat: ChatModel) {
         CompositionLocalProvider(LocalThreadChat provides model) {
             ChatScreen(chat, onBack = model::closeChat, onOpenTerminal = { model.openTerminal(chat.terminal) },
@@ -223,7 +245,11 @@ internal fun ThreadChatHeader(chat: ChatModel, onBack: () -> Unit, onTerminal: (
     if (github?.shown == true) GithubDialog(chat.link, chat.terminal, github::dismiss)
     if (showUsage) AgentUsageSheet(usage) { showUsage = false }
     Row(Modifier.fillMaxWidth().heightIn(min = 64.dp), verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = onBack) { Icon(painterResource(R.drawable.ic_arrow_left), stringResource(R.string.back_button)) }
+        val openMenu = LocalConsoleMenu.current
+        IconButton(onClick = openMenu ?: onBack, modifier = Modifier.testTag("console-menu")) {
+            Icon(painterResource(if (openMenu != null) R.drawable.ic_menu else R.drawable.ic_arrow_left),
+                stringResource(if (openMenu != null) R.string.console_open_drawer else R.string.back_button), Modifier.size(20.dp))
+        }
         Column(Modifier.weight(1f).clickable(role = Role.Button) { menu = true }.padding(vertical = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(displayName(chat.terminal), Modifier.weight(1f, fill = false), maxLines = 1,
@@ -235,6 +261,7 @@ internal fun ThreadChatHeader(chat: ChatModel, onBack: () -> Unit, onTerminal: (
             Text(status, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+        LocalThreadChat.current?.let { ThreadNewTaskButton(it) }
         Box {
             val menuLabel = stringResource(R.string.agent_actions_label)
             IconButton(onClick = { menu = true }, modifier = Modifier.testTag("agent-actions").semantics { contentDescription = menuLabel }) {
@@ -284,10 +311,15 @@ internal fun ThreadConnectionGuidance(chat: ChatModel) {
 
 @Composable
 internal fun ThreadComposer(chat: ChatModel, compact: Boolean) {
-    if (!compact) ChatCatalogControls(chat)
-    Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
-        MessageInput(chat, compact)
+    ChatCatalogControls(chat) { openTools ->
+        Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceContainer,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Column {
+                MessageInput(chat, compact, leading = {
+                    ActionIcon(R.drawable.ic_plus, R.string.chat_input_tools_button, openTools, enabled = chat.canEdit)
+                })
+            }
+        }
     }
 }
 

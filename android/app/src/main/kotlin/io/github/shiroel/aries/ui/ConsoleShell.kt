@@ -91,7 +91,14 @@ private fun ConsoleMark() {
 
 /** Modal drawer owns navigation only; entering a destination goes through model cleanup. */
 @Composable
-internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit) {
+internal fun ConsoleShell(
+    model: HostsModel,
+    content: @Composable () -> Unit,
+    drawerContent: (@Composable ((() -> Unit) -> Unit) -> Unit)? = null,
+    showAttentionBanner: Boolean = true,
+    onHome: (() -> Unit)? = null,
+    isHome: (Screen) -> Boolean = { it == Screen.Hosts },
+) {
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val screen = model.screen
@@ -121,7 +128,9 @@ internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit) {
                 drawerTonalElevation = 0.dp,
                 windowInsets = WindowInsets(0, 0, 0, 0),
             ) {
-                if (drawer.isOpen || drawer.targetValue == DrawerValue.Open) ConsoleDrawer(model, navigate)
+                if (drawer.isOpen || drawer.targetValue == DrawerValue.Open) {
+                    if (drawerContent != null) drawerContent(navigate) else ConsoleDrawer(model, navigate)
+                }
             }
         },
     ) {
@@ -161,7 +170,7 @@ internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit) {
                 val inboxVisible = model.callInboxOpen && drawer.isClosed && drawer.targetValue == DrawerValue.Closed
                 val compactHeight = maxHeight < 480.dp || WindowInsets.ime.getBottom(density) > 0
                 Column(Modifier.fillMaxSize().semantics { if (inboxVisible) hideFromAccessibility() }) {
-                    if (!inboxVisible && !compactHeight) model.calls.banner?.let { entry ->
+                    if (showAttentionBanner && !inboxVisible && !compactHeight) model.calls.banner?.let { entry ->
                         CallAttentionBanner(entry, model.callCallerName(entry), model::openCallInbox, model.calls::dismissBanner)
                     }
                     Box(Modifier.weight(1f)) { content() }
@@ -172,9 +181,10 @@ internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit) {
     }
     if (model.quickOpenVisible) QuickOpenDialog(model)
     // One owner avoids screen handlers registered later taking precedence over overlays.
-    BackHandler(drawer.isOpen || model.callInboxOpen || screen != Screen.Hosts) {
+    BackHandler(drawer.isOpen || model.callInboxOpen || !isHome(screen)) {
         if (drawer.isOpen) scope.launch { drawer.close() }
         else if (model.callInboxOpen) model.closeCallInbox()
+        else if (onHome != null && screen !is Screen.Chat && screen !is Screen.Terminal && screen != Screen.Settings && screen !is Screen.JumpHosts) onHome()
         else consoleBack(model)?.invoke() ?: model.back()
     }
 }

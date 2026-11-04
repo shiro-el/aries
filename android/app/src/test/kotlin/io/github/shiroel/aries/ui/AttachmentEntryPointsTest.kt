@@ -24,10 +24,12 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /** System picker/camera results cross the same UI -> fake core seam as incoming shares. */
 @RunWith(RobolectricTestRunner::class)
+@Config(qualifiers = "h1200dp")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class AttachmentEntryPointsTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
