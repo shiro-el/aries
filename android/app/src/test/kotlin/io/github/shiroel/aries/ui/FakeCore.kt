@@ -75,9 +75,12 @@ class FakeCore : AriesCoreInterface {
             (hostId == null || it.hostId == hostId) && (!failuresOnly || it.error != null) }
 
     private val outboxes = mutableMapOf<Pair<String, String>, String>()
+    /** Durable checkpoints at which a process could disappear. */
+    val outboxWrites = mutableListOf<Triple<String, String, String?>>()
     override fun chatOutbox(hostId: String, terminal: String): String? = outboxes[hostId to terminal]
     override fun saveChatOutbox(hostId: String, terminal: String, content: String?) {
         if (content == null) outboxes.remove(hostId to terminal) else outboxes[hostId to terminal] = content
+        outboxWrites += Triple(hostId, terminal, content)
     }
 
     private val inputs = mutableMapOf<Pair<String, String>, List<String>>()
@@ -844,9 +847,17 @@ class FakeConnection(
     override suspend fun openWorktree(folder: String, spaceId: String?, preset: io.github.shiroel.aries.core.AgentPreset?): io.github.shiroel.aries.core.WorktreeOpen {
         openedWorktrees += Triple(folder, spaceId, preset)
         worktreeFailure?.let { throw it }
+        val terminal = TerminalInfo("t9", "worktree", "", listOf("sh"), folder, "live")
+        core?.let { core ->
+            val next = (core.terminalsOf[hostId] ?: core.terminals) + terminal
+            if (hostId in core.terminalsOf) core.push(hostId, next) else core.push(next)
+        }
         return if (spaceId != null) io.github.shiroel.aries.core.WorktreeOpen.Tab(spaceId, "tb2", "t9")
         else io.github.shiroel.aries.core.WorktreeOpen.Terminal("t9")
     }
+    override suspend fun machineExec(argv: List<String>, cwd: String?, timeoutSeconds: UInt) =
+        io.github.shiroel.aries.core.ExecOutput(0, null, "/home/me".toByteArray(), byteArrayOf(), false, false)
+
     var fileDirectory = io.github.shiroel.aries.core.RemoteDirectory("/repo", emptyList())
     override suspend fun listFiles(address: String, path: String?) = fileDirectory
     var fileReader: (String, String, ULong, UInt) -> io.github.shiroel.aries.core.RemoteFilePage = { _, _, _, _ ->
@@ -917,7 +928,7 @@ class FakeConnection(
     override suspend fun terminals(): List<TerminalInfo> {
         calls += "terminals"
         if (dead) throw CoreException.Closed()
-        return list
+        return core?.let { it.terminalsOf[hostId] ?: it.terminals } ?: list
     }
 
     override suspend fun watchTerminals(): TerminalWatch =
@@ -943,6 +954,8 @@ class FakeConnection(
 
     /** When set, `launch` fails with it. */
     var launchFailWith: CoreException? = null
+    var launchReplyHold: CompletableDeferred<Unit>? = null
+    var launchReplyFailure: CoreException? = null
 
     var recentCwds: List<String> = emptyList()
 
@@ -979,6 +992,8 @@ class FakeConnection(
             if (hostId in core.terminalsOf) core.push(hostId, next) else core.push(next)
         }
         push(current.copy(spaces = placed, unplaced = if (inTab) current.unplaced else current.unplaced + t))
+        launchReplyHold?.await()
+        launchReplyFailure?.let { throw it }
         return t
     }
 

@@ -41,6 +41,7 @@ class HerdrInstallModel(
         private set
 
     fun load(host: Host) {
+        if (busy) return
         this.host = host
         if (host.endpoint !is Endpoint.Ssh) return
         refresh()
@@ -51,6 +52,8 @@ class HerdrInstallModel(
         if (busy) return
         busy = true
         problem = null
+        step = null
+        output = ""
         scope.launch {
             try {
                 state = withContext(keyWork) { core.herdrCoreStatus(host.id) }

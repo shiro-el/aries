@@ -31,19 +31,26 @@ android {
     }
 
     buildTypes {
-        getByName("dogfood") { proguardFiles("proguard-rules.pro") }
+        getByName("release") { buildConfigField("boolean", "ARIES_DEV_UPDATES", "false") }
+        getByName("debug") { buildConfigField("boolean", "ARIES_DEV_UPDATES", "true") }
+        getByName("dogfood") {
+            proguardFiles("proguard-rules.pro")
+            buildConfigField("boolean", "ARIES_DEV_UPDATES", "true")
+        }
         // Capture unobfuscated ART rules from the real app (API 34+).
         // Never publish this APK; scripts/collect-baseline-profile.sh uses it.
         create("baselineCapture") {
             initWith(getByName("dogfood"))
             isMinifyEnabled = false
             isShrinkResources = false
+            buildConfigField("boolean", "ARIES_DEV_UPDATES", "false")
         }
         // Shares dogfood's optimization settings, but keeps the inert workload
         // and separate app ID: it must never replace the real Application/core.
         create("chatProfile") {
             initWith(getByName("dogfood"))
             applicationIdSuffix = ".chatprofile"
+            buildConfigField("boolean", "ARIES_DEV_UPDATES", "false")
         }
     }
 

@@ -4,6 +4,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -84,7 +85,7 @@ class BrowseScreenTest {
         open(core)
         compose.onNodeWithContentDescription(str(R.string.agent_status_working), useUnmergedTree = true).assertExists()
         compose.onNodeWithContentDescription(str(R.string.agent_status_idle), useUnmergedTree = true).assertDoesNotExist()
-        assertEquals(2, compose.onAllNodesWithText("home:/repo").fetchSemanticsNodes().size)
+        assertEquals(2, compose.onAllNodesWithText("/repo").fetchSemanticsNodes().size)
         compose.onNodeWithText("build-shell").performClick()
         compose.waitForIdle()
         assertEquals("t3", core.connection!!.views.single().address)
@@ -157,11 +158,27 @@ class BrowseScreenTest {
     }
 
     @Test
-    fun showsAPaneWhoseTerminalIsGone() {
-        val core = FakeCore().apply { structure = desktop }
+    fun endedPanesWithReusedIdsCanBeBrowsedAndAUniquePaneCanBeClosed() {
+        val core = FakeCore().apply {
+            structure = desktop.copy(spaces = desktop.spaces + SpaceInfo("s3", "old", null, listOf(
+                TabInfo("tab4", "old", listOf(PaneInfo("p9", "t98", null), PaneInfo("", "t97", null), PaneInfo("", "t96", null))),
+                TabInfo("tab5", "finished", listOf(PaneInfo("unique", "t95", null))),
+            )))
+        }
         open(core)
-
-        compose.onNodeWithText(str(R.string.pane_terminal_gone, "t99")).assertExists()
+        compose.onNodeWithTag("host-layout-context").performClick()
+        compose.onNodeWithTag("host-context-close-pane:s3:tab5:0").performScrollTo().performClick()
+        assertTrue(core.connection!!.edits.isEmpty())
+        compose.onNodeWithText(str(R.string.layout_confirm_button)).performClick()
+        compose.waitForIdle()
+        assertEquals(io.github.shiroel.aries.core.LayoutEdit.ClosePane("unique"), core.connection!!.edits.single())
+        // A delayed live inventory can revive this Pane before its confirmation.
+        compose.onNodeWithTag("host-layout-context").performClick()
+        compose.onNodeWithTag("host-context-close-pane:s3:tab5:0").performScrollTo().performClick()
+        core.push(core.terminals + term("t95", "revived"))
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.layout_confirm_button)).assertIsNotEnabled()
+        assertEquals(1, core.connection!!.edits.size)
     }
 
     @Test

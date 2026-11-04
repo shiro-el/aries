@@ -14,6 +14,7 @@ import io.github.shiroel.aries.core.Host
 import io.github.shiroel.aries.core.Linger
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -52,6 +53,11 @@ class BeaconModel(
     var autoUpdate by mutableStateOf(true)
         private set
 
+    var busy by mutableStateOf(false)
+        private set
+    var problem by mutableStateOf<Message?>(null)
+        private set
+
     /** The Host has a Beacon installed (as last read). */
     val installed: Boolean
         get() = (ui as? BeaconUi.Known)?.state is BeaconState.Installed
@@ -64,6 +70,8 @@ class BeaconModel(
      * out-of-date one unless automatic updates are off.
      */
     fun load(host: Host) {
+        if (busy) return
+        if (this.host?.id != host.id) ui = BeaconUi.Loading
         this.host = host
         autoUpdate = core.beaconAutoUpdate()
         update = BeaconUpdate.NotNeeded
@@ -71,7 +79,6 @@ class BeaconModel(
             ui = BeaconUi.Unavailable(Message(R.string.beacon_needs_ssh))
             return
         }
-        ui = BeaconUi.Loading
         run {
             val check = onKey { core.checkBeacon(host.id, fetcher) }
             update = check.update
@@ -82,7 +89,7 @@ class BeaconModel(
 
     fun install() {
         val host = host ?: return
-        ui = BeaconUi.Working
+        if (busy || host.endpoint !is Endpoint.Ssh) return
         run {
             val result = onKey { core.installBeacon(host.id, fetcher) }
             update = BeaconUpdate.NotNeeded
@@ -92,11 +99,13 @@ class BeaconModel(
     }
 
     fun changeAutoUpdate(on: Boolean) {
+        if (busy) return
+        problem = null
         try {
             core.setBeaconAutoUpdate(on)
             autoUpdate = on
         } catch (e: CoreException) {
-            prompt = problemFor(e)
+            problem = problemFor(e).body
         }
     }
 
@@ -111,13 +120,14 @@ class BeaconModel(
     }
 
     fun askRemove() {
+        if (busy) return
         confirmRemove = true
     }
 
     fun remove() {
         confirmRemove = false
         val host = host ?: return
-        ui = BeaconUi.Working
+        if (busy || host.endpoint !is Endpoint.Ssh) return
         run {
             val state = onKey {
                 core.uninstallBeacon(host.id)
@@ -136,12 +146,20 @@ class BeaconModel(
     private suspend fun <T> onKey(block: suspend () -> T): T = withContext(keyWork) { block() }
 
     private fun run(block: suspend () -> BeaconState) {
+        if (busy) return
+        busy = true
+        problem = null
         scope.launch {
-            ui = try {
-                BeaconUi.Known(block())
+            try {
+                ui = BeaconUi.Known(block())
+            } catch (e: CancellationException) {
+                if (ui !is BeaconUi.Known) ui = BeaconUi.Unavailable(Message(R.string.beacon_status_unknown))
+                throw e
             } catch (e: CoreException) {
-                prompt = beaconProblem(e)
-                BeaconUi.Unavailable(Message(R.string.beacon_status_unknown))
+                problem = beaconProblem(e).body
+                if (ui !is BeaconUi.Known) ui = BeaconUi.Unavailable(Message(R.string.beacon_status_unknown))
+            } finally {
+                busy = false
             }
         }
     }

@@ -75,7 +75,7 @@ class HostListScreenTest {
         show(core)
 
         compose.onNodeWithText("home").assertExists()
-        compose.onNodeWithText("me@10.0.0.2:22").assertExists()
+        compose.onNodeWithText("me@10.0.0.2").assertExists()
         compose.onNodeWithText("work").assertExists()
         compose.onNodeWithText("dev@work.example:2222").assertExists()
     }

@@ -59,6 +59,7 @@ sealed interface LayoutEndTarget {
     data class Space(val id: String) : LayoutEndTarget
     data class Tab(val id: String) : LayoutEndTarget
     data class Terminal(val info: TerminalInfo) : LayoutEndTarget
+    data class Pane(val spaceId: String, val tabId: String, val paneId: String, val address: String) : LayoutEndTarget
 }
 
 data class LayoutImpact(val name: String, val terminals: List<TerminalInfo>) {
@@ -72,10 +73,17 @@ class LayoutEditor(private val browser: HostBrowser, private val scope: Coroutin
         private set
     var busy by mutableStateOf(false)
         private set
-    var error by mutableStateOf<Message?>(null)
-        private set
-    var ending by mutableStateOf<LayoutEndTarget?>(null)
-    var naming by mutableStateOf<LayoutNameForm?>(null)
+    private var operationError by mutableStateOf<Message?>(null)
+    private var availabilityError by mutableStateOf<Message?>(null)
+    val error: Message? get() = operationError ?: availabilityError
+    private var endTarget by mutableStateOf<LayoutEndTarget?>(null)
+    var ending: LayoutEndTarget?
+        get() = endTarget
+        set(value) { operationError = null; availabilityError = null; endTarget = value }
+    private var nameForm by mutableStateOf<LayoutNameForm?>(null)
+    var naming: LayoutNameForm?
+        get() = nameForm
+        set(value) { operationError = null; availabilityError = null; nameForm = value }
 
     /** Recomputed from the latest layout and status watches while the dialog
      * is open, including pane-less descendants herdr-app will clean up. */
@@ -92,12 +100,24 @@ class LayoutEditor(private val browser: HostBrowser, private val scope: Coroutin
             is LayoutEndTarget.Terminal -> browser.findTerminal(target.info.address)?.let {
                 LayoutImpact(displayName(it), listOf(it))
             }
+            is LayoutEndTarget.Pane -> endedPane(target)?.let {
+                LayoutImpact(it.terminalAddress, it.subAgents.map(browser::current))
+            }
         }
+    }
+
+    /** herdr-app addresses Panes by ID alone. Never close an empty or ambiguous ID,
+     * or a Pane that acquired a Terminal while the confirmation was open. */
+    fun endedPane(target: LayoutEndTarget.Pane): PaneInfo? {
+        val spaces = browser.structure?.spaces ?: return null
+        if (target.paneId.isBlank() || spaces.flatMap { it.tabs }.flatMap { it.panes }.count { it.id == target.paneId } != 1) return null
+        return spaces.find { it.id == target.spaceId }?.tabs?.find { it.id == target.tabId }?.panes
+            ?.singleOrNull { it.id == target.paneId && it.terminalAddress == target.address && it.terminal == null && browser.findTerminal(it.terminalAddress) == null }
     }
 
     fun requireAvailable(): Boolean {
         if (available) return true
-        error = Message(R.string.layout_app_unavailable)
+        availabilityError = Message(R.string.layout_app_unavailable)
         return false
     }
 
@@ -106,13 +126,13 @@ class LayoutEditor(private val browser: HostBrowser, private val scope: Coroutin
         val conn = browser.link?.connection ?: return
         if (busy || !requireAvailable()) return
         busy = true
-        error = null
+        operationError = null
         scope.launch {
             try {
                 conn.editLayout(form.request())
                 naming = null
             } catch (e: CoreException) {
-                error = problemFor(e).body
+                operationError = problemFor(e).body
             } finally {
                 busy = false
             }
@@ -120,12 +140,14 @@ class LayoutEditor(private val browser: HostBrowser, private val scope: Coroutin
     }
 
     suspend fun check() {
-        val conn = browser.link?.connection ?: run { available = false; return }
+        val link = browser.link
+        val conn = link?.takeIf { it.state == LinkState.Up }?.connection ?: run { available = false; return }
         try {
             available = conn.herdrAppAvailable()
+            if (available) availabilityError = null
         } catch (e: CoreException) {
             available = false
-            error = problemFor(e).body
+            if (link.state == LinkState.Up) availabilityError = problemFor(e).body
         }
     }
 
@@ -136,17 +158,18 @@ class LayoutEditor(private val browser: HostBrowser, private val scope: Coroutin
         val conn = browser.link?.connection ?: return
         if (busy || (target !is LayoutEndTarget.Terminal && !requireAvailable())) return
         busy = true
-        error = null
+        operationError = null
         scope.launch {
             try {
                 when (target) {
                     is LayoutEndTarget.Terminal -> conn.killTerminal(target.info.address)
                     is LayoutEndTarget.Space -> conn.editLayout(LayoutEdit.CloseSpace(target.id))
                     is LayoutEndTarget.Tab -> conn.editLayout(LayoutEdit.CloseTab(target.id))
+                    is LayoutEndTarget.Pane -> conn.editLayout(LayoutEdit.ClosePane(target.paneId))
                 }
                 ending = null
             } catch (e: CoreException) {
-                error = problemFor(e).body
+                operationError = problemFor(e).body
             } finally {
                 busy = false
             }
