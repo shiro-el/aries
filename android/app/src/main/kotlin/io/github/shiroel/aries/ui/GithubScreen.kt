@@ -65,15 +65,15 @@ internal fun GithubDialog(link: HostLink?, terminal: TerminalInfo, onDismiss: ()
                 if (opened != null) {
                     GithubConversation(connection, repository!!, opened, revision, { writing = it }, prFile, { prFile = it }, Modifier.weight(1f))
                 } else {
-                Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     GithubKind.entries.forEach { value ->
-                        FilterChip(selected = kind == value, onClick = { kind = value; page = 1 },
+                        SingleChoiceChip(selected = kind == value, onClick = { kind = value; page = 1 },
                             label = { Text(stringResource(if (value == GithubKind.ISSUE) R.string.github_issues else R.string.github_prs)) })
                     }
                 }
-                Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     GithubState.entries.forEach { value ->
-                        FilterChip(selected = state == value, onClick = { state = value; page = 1 }, label = { Text(stringResource(when (value) {
+                        SingleChoiceChip(selected = state == value, onClick = { state = value; page = 1 }, label = { Text(stringResource(when (value) {
                             GithubState.OPEN -> R.string.github_open
                             GithubState.CLOSED -> R.string.github_closed
                             GithubState.ALL -> R.string.github_all

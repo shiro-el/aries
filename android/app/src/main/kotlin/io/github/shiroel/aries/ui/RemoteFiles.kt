@@ -131,8 +131,8 @@ fun RemoteFilesScreen(
         if (file != null && !showingDiff) FileExportControls(connection, address, file!!, actions = header)
         else header(null, null, false)
         if (markupFile && !showingDiff) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = preview, onClick = { preview = true }, label = { Text(stringResource(R.string.files_markup_preview)) })
-            FilterChip(selected = !preview, onClick = { preview = false }, label = { Text(stringResource(R.string.files_markup_source)) })
+            SingleChoiceChip(selected = preview, onClick = { preview = true }, label = { Text(stringResource(R.string.files_markup_preview)) })
+            SingleChoiceChip(selected = !preview, onClick = { preview = false }, label = { Text(stringResource(R.string.files_markup_source)) })
         }
         when {
             !changesLoaded || loading -> Text(stringResource(R.string.files_loading))

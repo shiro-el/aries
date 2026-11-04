@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -83,14 +82,12 @@ internal fun TerminalSearchBar(viewer: TerminalViewer, open: Boolean, onClose: (
             )
             ActionIcon(R.drawable.ic_x, R.string.terminal_search_close, { focus.clearFocus(); onClose() })
         }
+        SwitchRow(stringResource(R.string.terminal_search_case), caseSensitive, { caseSensitive = it })
+        SwitchRow(stringResource(R.string.terminal_search_regex), regex, { regex = it })
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            FilterChip(selected = caseSensitive, onClick = { caseSensitive = !caseSensitive },
-                label = { Text(stringResource(R.string.terminal_search_case)) })
-            FilterChip(selected = regex, onClick = { regex = !regex },
-                label = { Text(stringResource(R.string.terminal_search_regex)) })
             val canMove = !busy && !invalid && query.isNotEmpty() && searcher != null && (viewer.search?.total ?: 0u) > 0u
             for (backwards in listOf(true, false)) {
                 ActionIcon(

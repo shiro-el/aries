@@ -80,10 +80,10 @@ internal fun WorktreeControls(browser: HostBrowser, unplaced: TerminalInfo? = nu
                 else if (target.entries.isEmpty() && target.error == null) Text(stringResource(R.string.worktrees_empty))
                 LazyColumn(Modifier.fillMaxWidth().heightIn(max = 280.dp)) {
                     items(target.entries, key = { it.path }) { entry ->
-                        ConsoleChoice(
+                        SingleChoiceRow(
                             selected = target.selected == entry,
                             onClick = { target.selected = entry },
-                            modifier = Modifier.testTag("worktree:" + entry.path),
+                            modifier = Modifier.fillMaxWidth().testTag("worktree:" + entry.path),
                             enabled = !target.busy && !entry.bare && entry.prunable == null,
                         ) { Column {
                             Text(entry.path)
