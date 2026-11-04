@@ -9,6 +9,13 @@ import androidx.compose.ui.test.assert
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.hapticfeedback.HapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.assertIsDisplayed
@@ -34,6 +41,8 @@ import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.KeyProtection
 import io.github.shiroel.aries.core.TerminalInfo
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -79,13 +88,16 @@ class CallHistoryTest {
 
     private lateinit var model: HostsModel
     private lateinit var back: androidx.activity.OnBackPressedDispatcher
+    private val haptics = mutableListOf<HapticFeedbackType>()
 
     private fun show(core: AriesCoreInterface) {
         compose.setContent {
             back = androidx.activity.compose.LocalOnBackPressedDispatcherOwner.current!!.onBackPressedDispatcher
             val scope = rememberCoroutineScope()
             model = remember { HostsModel(core, scope) }
-            MaterialTheme { AriesApp(model) }
+            CompositionLocalProvider(LocalHapticFeedback provides object : HapticFeedback {
+                override fun performHapticFeedback(hapticFeedbackType: HapticFeedbackType) { haptics += hapticFeedbackType }
+            }) { MaterialTheme { AriesApp(model) } }
         }
         compose.waitForIdle()
     }
@@ -382,11 +394,15 @@ class CallHistoryTest {
         openCalls()
         compose.onNodeWithTag("call-inbox-panel").assertExists()
         compose.onNodeWithTag("console-top-bar").assert(hasAnyDescendant(hasText("home")))
+        // Regression: the modal inbox must hide the whole underlying screen from TalkBack, then restore it.
+        val hiddenBackground = hasAnyAncestor(SemanticsMatcher.keyIsDefined(SemanticsProperties.HideFromAccessibility))
+        compose.onNodeWithTag("console-top-bar").assert(hiddenBackground)
         compose.onNodeWithTag("call-c1").assertExists()
         screenshot("waiting-and-unconfirmed")
-        compose.onNodeWithTag("console-inbox").performClick()
+        compose.onNodeWithTag("call-inbox-close").performClick()
         compose.onNodeWithTag("call-inbox-panel").assertDoesNotExist()
         compose.onNodeWithTag("console-top-bar").assert(hasAnyDescendant(hasText("home")))
+        compose.onNodeWithTag("console-top-bar").assert(hiddenBackground.not())
     }
 
     @Test
@@ -419,19 +435,58 @@ class CallHistoryTest {
     }
 
     @Test
-    fun aNewCallUpdatesTheInboxWithoutCoveringTheScreenWithABanner() {
+    fun aNewCallWithoutChoicesCanBeOpenedFromItsBanner() {
         val core = twoHosts()
         show(core)
         compose.onNodeWithTag("console-inbox-count", useUnmergedTree = true).assertDoesNotExist()
-        core.sendCall(call("h2", "c1", "Deploy failed", 5_000uL, choices = listOf("Retry")))
+        core.sendCall(call("h2", "c1", "Deploy failed", 5_000uL))
         compose.waitForIdle()
+        compose.onNodeWithTag("call_banner").assertIsDisplayed()
+        compose.onNodeWithText("Deploy failed").assertExists()
+        screenshot("attention-check")
+        compose.onNodeWithTag("call_banner").performClick()
         compose.onNodeWithTag("call_banner").assertDoesNotExist()
-        compose.onNodeWithTag("console-inbox-count", useUnmergedTree = true).assertTextEquals("1")
-        compose.onNodeWithText("Deploy failed").assertDoesNotExist()
-        openCalls()
+        compose.onNodeWithTag("call-inbox-panel").assertExists()
         compose.onNodeWithText("Deploy failed").assertExists()
         compose.onNodeWithTag("call-inbox-scrim").performClick()
         compose.onNodeWithTag("call-inbox-panel").assertDoesNotExist()
+    }
+
+    // Regression: snapshot refreshes must not replay attention; an answer arriving elsewhere must retire the banner.
+    @Test
+    fun newCallsGiveDistinctUrgencyHapticsAndAnExternalAnswerRetiresAttention() {
+        val core = twoHosts()
+        show(core)
+        assertTrue(haptics.isEmpty())
+        for ((index, urgency) in listOf(CallUrgency.CHECK, CallUrgency.URGENT, CallUrgency.EMERGENCY).withIndex()) {
+            val fresh = call("h1", "c$index", "Attention $urgency", (index + 1).toULong(), urgency = urgency)
+            compose.runOnIdle { core.sendCall(fresh) }
+            compose.onNodeWithText(fresh.title).assertExists()
+            screenshot("attention-${urgency.name.lowercase()}")
+            compose.runOnIdle { core.callListeners.getValue("h1").onCalls(core.callsOf.getValue("h1")) }
+            compose.waitForIdle()
+            assertEquals(index + 1, haptics.size)
+        }
+        assertEquals(3, haptics.toSet().size)
+        // Both arrivals precede the next frame; replacing the visible banner must not swallow a haptic.
+        compose.runOnIdle {
+            core.sendCall(call("h1", "burst-1", "First request", 4uL))
+            core.sendCall(call("h1", "burst-2", "Second request", 5uL))
+        }
+        compose.onNodeWithText("Second request").assertExists()
+        assertEquals(5, haptics.size)
+        compose.runOnIdle {
+            core.callListeners.getValue("h1").onCalls(core.callsOf.getValue("h1").map {
+                it.copy(answer = CallAnswer(0u, "Seen", CallAnswerState.DELIVERED, 10uL, null))
+            })
+        }
+        compose.onNodeWithTag("call_banner").assertDoesNotExist()
+        compose.runOnIdle {
+            core.sendCall(call("h1", "already-answered", "Old request", 20uL,
+                answer = CallAnswer(0u, "Seen", CallAnswerState.DELIVERED, 21uL, null)))
+        }
+        compose.onNodeWithTag("call_banner").assertDoesNotExist()
+        assertEquals(5, haptics.size)
     }
 
     @Test
@@ -439,21 +494,36 @@ class CallHistoryTest {
         val core = twoHosts()
         show(core)
         compose.onNodeWithText("home").performClick()
+        val hostScreen = model.screen
+        val connection = core.connection!!
         openCalls()
         compose.runOnIdle { back.onBackPressed() }
         compose.onNodeWithTag("call-inbox-panel").assertDoesNotExist()
         compose.onNodeWithTag("console-top-bar").assert(hasAnyDescendant(hasText("home")))
         openCalls()
+        compose.onNodeWithTag("call-inbox-close").performClick()
         compose.openConsoleDrawer()
         compose.onNodeWithTag("call-inbox-panel").assertDoesNotExist()
         compose.onNodeWithTag("settings-open").performClick()
         compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
+        compose.runOnIdle {
+            assertSame(hostScreen, model.screen)
+            assertSame(connection, core.connection)
+            assertFalse(connection.disconnected)
+        }
         openCalls()
         compose.onNodeWithTag("console-drawer").assertIsNotDisplayed()
         compose.onNodeWithTag("call-inbox-panel").assertExists()
         compose.runOnIdle { back.onBackPressed() }
         compose.onNodeWithTag("call-inbox-panel").assertDoesNotExist()
+        compose.onNodeWithTag("console-top-bar").assert(hasAnyDescendant(hasText("home")))
+        compose.runOnIdle {
+            assertSame(hostScreen, model.screen)
+            assertFalse(connection.disconnected)
+            back.onBackPressed()
+        }
         compose.onNodeWithText("me@10.0.0.2").assertExists()
+        compose.runOnIdle { assertTrue(connection.disconnected) }
     }
 
     @Test
@@ -509,11 +579,6 @@ class CallHistoryTest {
         }
         show(core)
         openCalls()
-        val panel = compose.onNodeWithTag("call-inbox-panel").fetchSemanticsNode().boundsInRoot
-        val bar = compose.onNodeWithTag("console-top-bar").fetchSemanticsNode().boundsInRoot
-        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
-        assertTrue(panel.top >= bar.bottom)
-        assertTrue(panel.height <= root.height * .7f)
         val top = { tag: String -> compose.onNodeWithTag(tag).fetchSemanticsNode().positionInRoot.y }
         assertTrue(top("call-question") < top("call-past-20"))
         compose.onNodeWithTag("call-inbox-list").performScrollToNode(hasTestTag("call-past-2"))

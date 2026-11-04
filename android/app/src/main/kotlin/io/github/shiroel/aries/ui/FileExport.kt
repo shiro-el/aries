@@ -27,7 +27,7 @@ import java.io.File
 import java.util.Locale
 import java.util.UUID
 
-private const val EXPORT_LIMIT = 64L * 1024 * 1024
+internal const val EXPORT_LIMIT = 64L * 1024 * 1024
 private const val EXPORT_CHUNK = 1_048_576u
 private const val SHARE_LIFETIME_MS = 24L * 60 * 60 * 1000
 internal class ExportTooLarge : Exception()
@@ -136,11 +136,11 @@ private fun FileExportActions(
             Text(when {
                 saving -> stringResource(R.string.files_export_saving)
                 total == null -> stringResource(R.string.files_export_starting)
-                else -> stringResource(R.string.files_export_progress, completed, total!!)
+                else -> stringResource(R.string.files_export_progress, messageText(fileSize(completed)), messageText(fileSize(total!!)))
             })
             TextButton(onClick = { job?.cancel() }) { Text(stringResource(R.string.cancel_button)) }
         } else if (status != 0) {
-            Text(stringResource(status), color = if (status == R.string.files_export_failed || status == R.string.files_export_too_large)
+            Text(if (status == R.string.files_export_too_large) stringResource(status, EXPORT_LIMIT / (1024 * 1024)) else stringResource(status), color = if (status == R.string.files_export_failed || status == R.string.files_export_too_large)
                 MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
         }
     }
@@ -204,4 +204,12 @@ private suspend fun saveExport(context: Context, tree: Uri, file: File, name: St
             runCatching { DocumentsContract.deleteDocument(resolver, created) }
         }
     }
+}
+
+private fun fileSize(bytes: Long): Message {
+    if (bytes < 1024) return Message(R.string.files_size_bytes, listOf(bytes))
+    val divisor = if (bytes < 1024 * 1024) 1024 else 1024 * 1024
+    val value = java.text.NumberFormat.getNumberInstance().apply { maximumFractionDigits = 2 }
+        .format(bytes.toDouble() / divisor)
+    return Message(if (divisor == 1024) R.string.files_size_kib else R.string.files_size_mib, listOf(value))
 }

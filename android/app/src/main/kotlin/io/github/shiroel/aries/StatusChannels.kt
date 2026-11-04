@@ -32,6 +32,11 @@ internal object StatusChannels {
             }
             manager.createNotificationChannel(channel)
         }
+        // Renaming an existing channel preserves its user-selected sound and importance.
+        manager.getNotificationChannel(DONE)?.let { channel ->
+            channel.name = context.getString(R.string.push_channel_done)
+            manager.createNotificationChannel(channel)
+        }
         manager.createNotificationChannel(NotificationChannel(
             ATTENTION, context.getString(R.string.push_channel_attention), NotificationManager.IMPORTANCE_HIGH,
         ).apply {

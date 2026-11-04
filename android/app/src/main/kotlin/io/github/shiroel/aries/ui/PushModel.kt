@@ -253,7 +253,7 @@ class PushModel(
             } catch (e: CoreException) {
                 problem = pushProblem(e)
             } catch (e: Exception) {
-                problem = Message(R.string.push_unavailable, listOf(e.message.orEmpty()))
+                problem = Message(R.string.push_unavailable)
             } finally {
                 if (problem != null) {
                     failedSteps = (ui as? PushUi.Enabling)?.steps.orEmpty().map { (step, state) ->
@@ -295,7 +295,7 @@ class PushModel(
             } catch (e: CoreException) {
                 problem = pushProblem(e)
             } catch (e: Exception) {
-                problem = Message(R.string.push_unavailable, listOf(e.message.orEmpty()))
+                problem = Message(R.string.push_unavailable)
             } finally {
                 testing = false
                 busy = false
@@ -325,7 +325,7 @@ class PushModel(
             } catch (e: CoreException) {
                 problem = pushProblem(e)
             } catch (e: Exception) {
-                problem = Message(R.string.push_unavailable, listOf(e.message.orEmpty()))
+                problem = Message(R.string.push_unavailable)
             } finally {
                 ui = previous
                 try { refresh() } finally { busy = false }
@@ -348,11 +348,11 @@ fun stepLabel(step: PushStep): Int = when (step) {
 }
 
 fun pushProblem(e: CoreException): Message = when (e) {
-    is CoreException.PushFailed -> Message(R.string.push_failed, listOf(Message(stepLabel(e.step)), e.detail))
+    is CoreException.PushFailed -> Message(R.string.push_failed, listOf(Message(stepLabel(e.step)), errorMessage(e)))
     else -> problemFor(e).body
 }
 
 private fun policyFailed(e: CoreException): Message = when (e) {
-    is CoreException.BeaconStep -> Message(R.string.push_policy_failed, listOf(e.detail))
+    is CoreException.BeaconStep -> Message(R.string.push_policy_failed, listOf(errorMessage(e)))
     else -> problemFor(e).body
 }

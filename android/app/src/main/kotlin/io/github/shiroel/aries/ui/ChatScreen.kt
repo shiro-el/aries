@@ -283,7 +283,7 @@ class ChatModel(
     var refused by mutableStateOf(false)
         private set
     /** Why the last message could not be sent, other than a refusal. */
-    var sendError by mutableStateOf<String?>(null)
+    var sendError by mutableStateOf<Message?>(null)
         private set
 
     var interrupting by mutableStateOf(false)
@@ -307,7 +307,7 @@ class ChatModel(
                 val notice = interruptMessage(connection.interruptAgent(address))
                 if (noticeRevision == revision) interruptNotice = notice
             } catch (e: CoreException) {
-                if (noticeRevision == revision) interruptNotice = Message(R.string.chat_interrupt_failed, listOf(e.message ?: e.toString()))
+                if (noticeRevision == revision) interruptNotice = Message(R.string.chat_interrupt_failed, listOf(errorMessage(e)))
             } finally {
                 interrupting = false
                 drainQueue()
@@ -335,8 +335,11 @@ class ChatModel(
     private var uploadJob: Job? = null
 
     fun attachmentFailed(error: Exception) {
+        if (error is AttachmentTooLarge || (error is CoreException.Rpc && error.kind == "attachment_too_large")) {
+            attachmentError = Message(R.string.attachments_too_large, listOf(MAX_ATTACHMENT_BYTES / (1024 * 1024)))
+            return
+        }
         attachmentError = Message(when {
-            error is AttachmentTooLarge || (error is CoreException.Rpc && error.kind == "attachment_too_large") -> R.string.attachments_too_large
             error is CoreException.Closed || error is CoreException.Unreachable -> R.string.attachments_connection_failed
             error is java.io.IOException || error is SecurityException -> R.string.attachments_read_failed
             else -> R.string.attachments_failed
@@ -425,7 +428,7 @@ class ChatModel(
             core.saveChatOutbox(host.id, terminal.address, state.encode())
             true
         } catch (e: CoreException) {
-            sendError = e.message
+            sendError = errorMessage(e)
             false
         }
     }
@@ -450,7 +453,7 @@ class ChatModel(
         } catch (e: Exception) {
             // Leave an unreadable/newer journal intact. Never overwrite or dispatch it.
             recoveryFailed = true
-            sendError = e.message
+            sendError = errorMessage(e)
         } finally {
             recoveryLoaded = true
         }
@@ -582,7 +585,7 @@ class ChatModel(
         if (scope == null || !canSend) return
         val connection = link?.connection
         if (connection == null) {
-            sendError = CoreException.Closed().message
+            sendError = errorMessage(CoreException.Closed())
             return
         }
         if (queuedMessages.any { it.phase == QueuedMessagePhase.Waiting } && connection !== waitingConnection) {
@@ -990,9 +993,9 @@ fun answerProblem(e: CoreException): Message = when (e) {
         AnswerProblem.UNSUPPORTED -> Message(R.string.chat_answer_unsupported)
         AnswerProblem.NO_BEACON -> Message(R.string.chat_status_no_beacon)
         AnswerProblem.NO_CORE -> Message(R.string.chat_answer_no_core)
-        AnswerProblem.FAILED -> Message(R.string.chat_answer_failed, listOf(e.detail))
+        AnswerProblem.FAILED -> Message(R.string.chat_answer_failed, listOf(errorMessage(e)))
     }
-    else -> Message(R.string.chat_answer_failed, listOf(e.message ?: ""))
+    else -> Message(R.string.chat_answer_failed, listOf(errorMessage(e)))
 }
 
 @Composable
@@ -1188,7 +1191,7 @@ fun ChatScreen(
                     if (!answerable || chat.refused) BlockedNotice(it, refused = chat.refused, onOpenTerminal)
                 }
                 chat.sendError?.let {
-                    AnnouncedText(stringResource(R.string.chat_send_failed, it), color = MaterialTheme.colorScheme.error)
+                    AnnouncedText(stringResource(R.string.chat_send_failed, messageText(it)), color = MaterialTheme.colorScheme.error)
                 }
                 if (chat.uploading) {
                     LinearProgressIndicator(Modifier.fillMaxWidth())

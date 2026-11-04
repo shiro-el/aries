@@ -200,6 +200,10 @@ class PushService : FirebaseMessagingService() {
                     Triple(CALL_EMERGENCY, R.string.push_call_channel_emergency, NotificationManager.IMPORTANCE_HIGH)
             }
             val channel = NotificationChannel(id, context.getString(name), importance)
+            if (urgency == CallUrgency.URGENT) {
+                channel.enableVibration(true)
+                channel.vibrationPattern = longArrayOf(0, 300, 150, 300)
+            }
             if (urgency == CallUrgency.EMERGENCY) {
                 channel.enableVibration(true)
                 channel.vibrationPattern = longArrayOf(0, 600, 300, 600, 300, 600)

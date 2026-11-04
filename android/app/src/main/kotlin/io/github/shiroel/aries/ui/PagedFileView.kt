@@ -27,6 +27,8 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.withContext
 
+internal const val LARGE_FILE_BYTES = 2 * 1024 * 1024
+
 /** Reading controls outlive the Dialog without retaining file bytes or RPC work. */
 internal class FileReadingState(initialLine: ULong) {
     val scroll = LazyListState((initialLine.toInt() - 1).coerceAtLeast(0))
@@ -52,7 +54,7 @@ internal fun ColumnScope.RemoteTextFile(
         if (!inspected) {
             try {
                 val probe = checkNotNull(connection).readFileBytes(address, path, 0u, 1u)
-                large = probe.totalSize >= 2uL * 1024u * 1024u
+                large = probe.totalSize >= LARGE_FILE_BYTES.toULong()
             } catch (e: CancellationException) { throw e }
             catch (_: Exception) { /* Some Hosts allow file.read without machine.exec. */ }
             inspected = true
@@ -69,7 +71,7 @@ internal fun ColumnScope.RemoteTextFile(
                 start
             }
             if ('\u0000' in first!!.text) { first = null; error = R.string.files_not_text }
-            else if (first!!.text.toByteArray(Charsets.UTF_8).size >= 2 * 1024 * 1024) large = true
+            else if (first!!.text.toByteArray(Charsets.UTF_8).size >= LARGE_FILE_BYTES) large = true
         } catch (e: CancellationException) { throw e }
         catch (e: Exception) {
             error = when {
@@ -92,7 +94,7 @@ internal fun ColumnScope.RemoteTextFile(
 
 @Composable
 internal fun LargeFileNotice(onOpen: () -> Unit) {
-    Text(stringResource(R.string.files_large_warning))
+    Text(stringResource(R.string.files_large_warning, LARGE_FILE_BYTES / (1024 * 1024)))
     TextButton(onClick = onOpen) { Text(stringResource(R.string.files_large_open)) }
 }
 
@@ -281,7 +283,7 @@ private fun ColumnScope.PagedFileLines(
                     onSend(quotedFileReference(path) + ":$number\n" + line)
                 }.semantics { contentDescription = label }).padding(vertical = 6.dp)) {
                 Text(number.toString(), Modifier.widthIn(min = 48.dp), fontFamily = FontFamily.Monospace, color = colors.onSurfaceVariant)
-                Text(highlighted ?: AnnotatedString(stringResource(R.string.files_loading)),
+                Text(highlighted ?: AnnotatedString(""),
                     modifier = if (wrap) Modifier.weight(1f) else Modifier, fontFamily = FontFamily.Monospace, softWrap = wrap)
             }
         }

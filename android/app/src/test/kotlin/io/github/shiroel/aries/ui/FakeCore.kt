@@ -69,6 +69,7 @@ val inKeyWork = ThreadLocal<Boolean>()
 
 /** In-memory stand-in for the Rust core, for UI tests. */
 class FakeCore : AriesCoreInterface {
+    override fun minimumCoreVersion(): String = "0.1.17"
     var diagnosticEntries = emptyList<io.github.shiroel.aries.core.DiagnosticEntry>()
     override fun diagnostics(source: io.github.shiroel.aries.core.DiagnosticSource?, hostId: String?, failuresOnly: Boolean) =
         diagnosticEntries.filter { (source == null || it.source == source) &&
@@ -896,7 +897,11 @@ class FakeConnection(
     var gitFiles = io.github.shiroel.aries.core.GitChanges("/repo", emptyList(), false, false)
     var gitPatch = io.github.shiroel.aries.core.GitDiff(emptyList(), false, false)
     override suspend fun gitChanges(address: String) = gitFiles
-    override suspend fun gitDiff(address: String, cwd: String, path: String, kind: io.github.shiroel.aries.core.GitDiffKind) = gitPatch
+    var gitDiffFailure: CoreException? = null
+    override suspend fun gitDiff(address: String, cwd: String, path: String, kind: io.github.shiroel.aries.core.GitDiffKind): io.github.shiroel.aries.core.GitDiff {
+        gitDiffFailure?.let { throw it }
+        return gitPatch
+    }
     val edits = mutableListOf<io.github.shiroel.aries.core.LayoutEdit>()
     var editFailure: CoreException? = null
     override suspend fun editLayout(edit: io.github.shiroel.aries.core.LayoutEdit): String {

@@ -36,7 +36,7 @@ internal fun interruptMessage(outcome: InterruptOutcome): Message = Message(when
 internal fun ChatInterruptNotice(chat: ChatModel, modifier: Modifier = Modifier) {
     chat.interruptNotice?.let { message ->
         AnnouncedText(
-            stringResource(message.res, *message.args.toTypedArray()),
+            messageText(message),
             modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             style = MaterialTheme.typography.bodySmall,
         )
