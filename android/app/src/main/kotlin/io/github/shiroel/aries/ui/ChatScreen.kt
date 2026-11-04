@@ -169,6 +169,32 @@ class ChatModel(
     var sendError by mutableStateOf<String?>(null)
         private set
 
+    var interrupting by mutableStateOf(false)
+        private set
+    var interruptNotice by mutableStateOf<Message?>(null)
+        private set
+    val canInterrupt: Boolean get() = terminal.state == "live" && terminal.agentStatus == AgentStatus.Working &&
+        link?.connection != null && !interrupting && sending == null
+
+    /** One confirmed attempt, with no reconnect queue or automatic retry. */
+    fun interrupt() {
+        val scope = scope ?: return
+        if (!canInterrupt) return
+        val connection = link?.connection ?: return
+        val address = terminal.address
+        interrupting = true
+        interruptNotice = null
+        scope.launch {
+            try {
+                interruptNotice = interruptMessage(connection.interruptAgent(address))
+            } catch (e: CoreException) {
+                interruptNotice = Message(R.string.chat_interrupt_failed, listOf(e.message ?: e.toString()))
+            } finally {
+                interrupting = false
+            }
+        }
+    }
+
     var pendingShare by mutableStateOf<SharedContent?>(null)
     var attachments by mutableStateOf<List<DraftAttachment>>(emptyList())
         private set
@@ -231,7 +257,7 @@ class ChatModel(
         if (now.agentStatus !is AgentStatus.Blocked) refused = false
     }
 
-    val canSend: Boolean get() = link != null && sending == null && !uploading && pendingShare == null &&
+    val canSend: Boolean get() = link != null && sending == null && !interrupting && !uploading && pendingShare == null &&
         (draft.isNotBlank() || attachments.isNotEmpty())
 
     /**
@@ -651,6 +677,7 @@ private fun MessageInput(chat: ChatModel) {
         lineHeight = 20.sp,
     )
     HorizontalDivider()
+    ChatInterruptControls(chat)
     DraftAttachments(chat)
     io.github.shiroel.aries.dictation.DictationInput(
         names = listOf(chat.host.name, displayName(chat.terminal), chat.terminal.cwd.orEmpty().trimEnd('/').substringAfterLast('/')),

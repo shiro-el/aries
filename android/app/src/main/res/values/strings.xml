@@ -595,6 +595,19 @@
     <string name="chat_send_held">Someone is typing in this Terminal. The message goes in once they pause.</string>
     <string name="chat_send_refused">Not sent: the Agent is Blocked and waits for you in the Terminal.</string>
     <string name="chat_send_failed">Could not send the message: %1$s</string>
+
+    <!-- Chat interruption -->
+    <string name="chat_interrupt_button">Interrupt</string>
+    <string name="chat_interrupt_title">Interrupt Agent?</string>
+    <string name="chat_interrupt_body">Stop the current work in %1$s? You can send another message afterwards.</string>
+    <string name="chat_interrupt_confirm_button">Interrupt Agent</string>
+    <string name="chat_interrupt_pending">Interrupting…</string>
+    <string name="chat_interrupt_stopped">The Agent stopped working.</string>
+    <string name="chat_interrupt_exited">The Agent exited.</string>
+    <string name="chat_interrupt_still_working">The stop key was sent, but the Agent is still working.</string>
+    <string name="chat_interrupt_unknown">The stop key was sent. Check the Terminal to see whether the Agent stopped.</string>
+    <string name="chat_interrupt_not_working">The Agent is no longer working. No stop key was sent.</string>
+    <string name="chat_interrupt_failed">Could not confirm interruption: %1$s. Check the Terminal before trying again.</string>
     <string name="chat_blocked_permission">The Agent asks for permission. Approve or deny it in the Terminal.</string>
     <string name="chat_blocked_question">The Agent asks you a question in the Terminal.</string>
     <string name="chat_blocked_auth">The Agent needs you to sign in, in the Terminal.</string>

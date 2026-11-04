@@ -595,6 +595,19 @@
     <string name="chat_send_held">누군가 이 Terminal에 입력하고 있어요. 입력이 멈추면 메시지를 넣을게요.</string>
     <string name="chat_send_refused">보내지 않았어요. Agent가 Blocked 상태라 Terminal에서 응답을 기다리고 있어요.</string>
     <string name="chat_send_failed">메시지를 보내지 못했어요: %1$s</string>
+
+    <!-- Chat interruption -->
+    <string name="chat_interrupt_button">중단</string>
+    <string name="chat_interrupt_title">Agent를 중단할까요?</string>
+    <string name="chat_interrupt_body">%1$s의 현재 작업을 중단할까요? 이후에 새 메시지를 보낼 수 있어요.</string>
+    <string name="chat_interrupt_confirm_button">Agent 중단</string>
+    <string name="chat_interrupt_pending">중단하는 중…</string>
+    <string name="chat_interrupt_stopped">Agent가 작업을 중단했어요.</string>
+    <string name="chat_interrupt_exited">Agent가 종료되었어요.</string>
+    <string name="chat_interrupt_still_working">중단 키를 보냈지만 Agent가 아직 작업 중이에요.</string>
+    <string name="chat_interrupt_unknown">중단 키를 보냈어요. 중단되었는지 Terminal에서 확인하세요.</string>
+    <string name="chat_interrupt_not_working">Agent가 더 이상 작업 중이 아니므로 중단 키를 보내지 않았어요.</string>
+    <string name="chat_interrupt_failed">중단 여부를 확인하지 못했어요: %1$s. 다시 시도하기 전에 Terminal을 확인하세요.</string>
     <string name="chat_blocked_permission">Agent가 권한을 요청하고 있어요. Terminal에서 허용하거나 거부해 주세요.</string>
     <string name="chat_blocked_question">Agent가 Terminal에서 질문하고 있어요.</string>
     <string name="chat_blocked_auth">Agent가 로그인을 기다리고 있어요. Terminal에서 로그인해 주세요.</string>

@@ -81,7 +81,7 @@ pub use push::{
     PushPairing, PushPolicy, PushProgress, PushQuestion, PushStep,
 };
 pub use push_ownership::PushVerificationState;
-pub use send::{HELD_AFTER, SendListener, SendOutcome};
+pub use send::{HELD_AFTER, InterruptOutcome, SendListener, SendOutcome};
 pub use settings::{AgentView, AttachMode};
 pub use structure::{HostStructure, PaneInfo, SpaceInfo, StructureProblem, TabInfo};
 pub use terminal::{
@@ -1845,6 +1845,13 @@ impl HostConnection {
         let client = self.client.clone();
         on_runtime(async move { send::send(&client, &address, &text, || listener.on_held()).await })
             .await
+    }
+
+    /// Interrupts a Working Agent through herdr-core's stop-key policy. Checks
+    /// live status first; never retries, submits a message, or kills a Terminal.
+    pub async fn interrupt_agent(&self, address: String) -> Result<InterruptOutcome, CoreError> {
+        let client = self.client.clone();
+        on_runtime(async move { send::interrupt(&client, &address).await }).await
     }
 
     /// Saves an attachment beside this Terminal on its Host, returning the
