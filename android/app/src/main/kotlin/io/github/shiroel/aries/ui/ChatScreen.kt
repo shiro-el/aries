@@ -43,9 +43,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.structuralEqualityPolicy
@@ -94,6 +97,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
@@ -131,6 +136,9 @@ class ChatModel(
     var terminal by mutableStateOf(terminal)
         private set
     var snapshot by mutableStateOf<ChatSnapshot?>(null)
+        private set
+    /** Image rows retry missing bytes when their watch or its delivery generation changes. */
+    var imageRevision by mutableIntStateOf(0)
         private set
     /** Typed failures survive initial watch creation and later SSH reconnects. */
     var connectionError by mutableStateOf<CoreException?>(null)
@@ -764,6 +772,7 @@ class ChatModel(
                 }
             }
             watch = w
+            imageRevision++
             if (paused) w.pause()
             val entries = LinkedHashMap<String, ChatEntry>().apply {
                 snapshot?.entries?.forEach { put(it.id, it) }
@@ -771,6 +780,7 @@ class ChatModel(
             while (true) {
                 try {
                     val update = w.nextUpdate()
+                    if (update.reset || snapshot?.status != update.status) imageRevision++
                     if (update.reset) entries.clear()
                     update.upserts.forEach { entries[it.id] = it }
                     entries.keys.retainAll(update.order.toSet())
@@ -1009,9 +1019,14 @@ fun ChatScreen(
     }
     val entries by entriesState
     val transcript = remember(chat, entriesState, markdownState) { ChatTranscript(entriesState, markdownState) }
+    val dialogs = remember(chat) { ChatDialogState() }
+    val horizontalScrolls = remember(chat) { ChatMarkdownScrolls() }
+    SideEffect { horizontalScrolls.retain(rawEntries.mapTo(mutableSetOf()) { it.id }) }
     var searchOpen by rememberSaveable(chat) { mutableStateOf(false) }
     var query by rememberSaveable(chat) { mutableStateOf("") }
     var selected by chat::selectedSearchMatch
+    var searchRequest by rememberSaveable(chat) { mutableIntStateOf(0) }
+    val searchNavigation = remember(query, searchRequest) { ChatSearchNavigation() }
     val matches by rememberChatSearch(entries, markdown, query)
     val selectedIndex = selectedChatSearchIndex(matches, selected)
     val active = matches.getOrNull(selectedIndex)
@@ -1024,22 +1039,30 @@ fun ChatScreen(
         }.sortedBy { it.call.atMs }
     }.orEmpty()
     val scroll = rememberChatScrollState(chat, entries, agentCalls.map { "call:${it.key}" } + chat.queuedMessages.map { "queued:${it.id}" } +
-        if (chat.showWorking) listOf("working") else emptyList(), markdown, followEnabled = !searchOpen)
+        if (chat.showWorking) listOf("working") else emptyList(), markdown, followEnabled = !searchOpen && !dialogs.isOpen)
     val toggleTool = remember(chat, scroll) {
         { id: String -> scroll.readTool(); chat.toggle(id) }
     }
-    LaunchedEffect(active) {
-        if (active != null) {
-            val body = entries.find { it.id == active.field.entryId }?.body
-            if (body is ChatEntryBody.Tool && active.field.entryId !in chat.expanded) chat.toggle(active.field.entryId)
-            scroll.following = false
-            scroll.list.scrollToItem(active.field.itemIndex)
-        }
+    val currentActive by rememberUpdatedState(active)
+    val currentEntries by rememberUpdatedState(entries)
+    LaunchedEffect(query, searchRequest) {
+        if (query.isEmpty()) return@LaunchedEffect
+        val target = snapshotFlow { currentActive }.filterNotNull().first()
+        searchNavigation.target = target
+        selected = target
+        val body = currentEntries.find { it.id == target.field.entryId }?.body
+        if (body is ChatEntryBody.Tool && target.field.entryId !in chat.expanded) chat.toggle(target.field.entryId)
+        scroll.following = false
+        scroll.list.scrollToItem(target.field.itemIndex)
     }
     val searchRanges = remember(matches) { matches.flatMap { it.ranges }.groupBy { it.field.entryId to it.field.key } }
-    val searchDecoration = remember(searchRanges, active) { ChatSearchDecoration(searchRanges, active) }
-    CompositionLocalProvider(LocalChatSearch provides searchDecoration,
+    val searchDecoration = remember(searchRanges, active, searchNavigation) { ChatSearchDecoration(searchRanges, active, searchNavigation) }
+    CompositionLocalProvider(
+        LocalChatSearch provides searchDecoration, LocalChatDialogs provides dialogs,
+        LocalChatMarkdownScrolls provides horizontalScrolls,
+        LocalChatImageRevision provides chat.imageRevision,
         androidx.compose.ui.platform.LocalUriHandler provides rememberAgentUriHandler(preview, chat.link, chat.terminal.address)) {
+        ChatDialogs(dialogs)
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))) {
             AgentScreenHeader(chat.terminal, chat.host.name, onBack, AgentView.CHAT, onView,
                 preview = preview, usage = snapshot?.usage, link = chat.link, onTerminalUpdate = { chat.update(listOf(it)) }, onSearch = { searchOpen = true })
@@ -1056,7 +1079,7 @@ fun ChatScreen(
             } else {
                 ChatSearchBar(searchOpen, query, selectedIndex + 1, matches.size,
                     onQuery = { query = it; selected = null },
-                    onMove = { selected = navigateChatSearch(matches, active, it) },
+                    onMove = { selected = navigateChatSearch(matches, active, it); searchRequest++ },
                     onClose = ::closeSearch,
                 )
                 val chatLink = chat.link
