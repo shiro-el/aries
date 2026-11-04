@@ -19,6 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
@@ -58,8 +59,8 @@ internal fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question
     val open = !answered && !cancelled && mode in setOf(ChatModel.QuestionMode.Live,
         ChatModel.QuestionMode.History, ChatModel.QuestionMode.LivePending, ChatModel.QuestionMode.Reconnecting)
     val enabled = state != AnswerState.Sending && state != AnswerState.Held && mode in setOf(ChatModel.QuestionMode.Live, ChatModel.QuestionMode.History)
-    var confirmingAlways by remember(id, q) { mutableStateOf(false) }
-    var confirmingRetry by remember(id, q) { mutableStateOf(false) }
+    var confirmingAlways by rememberSaveable(id, q) { mutableStateOf(false) }
+    var confirmingRetry by rememberSaveable(id, q) { mutableStateOf(false) }
     val recorded = questionAnswers(q)
     val colors = MaterialTheme.colorScheme
     val accent = when {

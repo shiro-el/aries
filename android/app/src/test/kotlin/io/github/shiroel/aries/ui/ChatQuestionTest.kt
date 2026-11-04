@@ -1,10 +1,17 @@
 package io.github.shiroel.aries.ui
 
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.StateRestorationTester
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import org.junit.After
 import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.*
@@ -26,18 +33,31 @@ class ChatQuestionTest {
         ChatEntryBody.Question(name, prompt, listOf(ChatQuestionPart(prompt, null, false,
             listOf(ChatQuestionOption("Red", null), ChatQuestionOption("Blue", null)))), ChatToolStatus.RUNNING, null))
 
-    private fun open(core: FakeCore, status: AgentStatus = AgentStatus.Blocked(BlockedReason.QUESTION, null)) {
+    private lateinit var retainedModel: HostsModel
+    private var retainedScope: CoroutineScope? = null
+    @After fun stopRetainedModel() { retainedScope?.cancel() }
+
+    private val restoration = StateRestorationTester(compose)
+
+    private fun open(core: FakeCore, status: AgentStatus = AgentStatus.Blocked(BlockedReason.QUESTION, null), retainForRestoration: Boolean = false) {
         core.terminals = listOf(TerminalInfo("t1", "claude", "", listOf("claude"), "/repo", "live", status, true, 0uL))
         core.savedView = AgentView.CHAT
         core.addHost("home", Endpoint.Ssh("host", 22u, "me"))
-        compose.setContent {
+        val retained = if (retainForRestoration) {
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+            retainedScope = scope
+            HostsModel(core, scope)
+        } else null
+        val content: @Composable () -> Unit = {
             val scope = rememberCoroutineScope()
-            val model = remember { HostsModel(core, scope) }
+            val model = retained ?: remember { HostsModel(core, scope) }
+            retainedModel = model
             val theme = remember { ThemeSettings.from(context).apply {
                 chooseMode(if (System.getenv("ARIES_QUESTION_DARK") == "1") ThemeMode.DARK else ThemeMode.LIGHT)
             } }
             AriesTheme(theme) { AriesApp(model) }
         }
+        if (retainForRestoration) restoration.setContent(content) else compose.setContent(content)
         compose.onNodeWithText("home").performClick()
         compose.waitForIdle()
         compose.onNodeWithText("claude").performClick()
@@ -82,7 +102,7 @@ class ChatQuestionTest {
     // permission until explicitly confirmed, and cancellation must send nothing.
     @Test fun onlyAlwaysAllowRequiresConfirmationAndCancelSendsNothing() {
         val core = FakeCore()
-        open(core, AgentStatus.Blocked(BlockedReason.PERMISSION, null))
+        open(core, AgentStatus.Blocked(BlockedReason.PERMISSION, null), retainForRestoration = true)
         fun permission(id: String) = ChatEntry(id, null, ChatEntryBody.Question("permission", "Allow Write?",
             listOf(ChatQuestionPart("Create /repo/file.txt?", null, false, listOf(
                 ChatQuestionOption("Allow", null), ChatQuestionOption("Allow always", "Allow all edits in /repo during this session"),
@@ -93,6 +113,7 @@ class ChatQuestionTest {
         always.performClick()
         compose.waitForIdle()
         assertTrue(core.answers.isEmpty())
+        restoration.emulateSavedInstanceStateRestore()
         compose.onNode(isDialog()).assertExists()
         screenshot("always-confirm", dialog = true)
         compose.onNodeWithText(str(R.string.cancel_button)).performClick()
@@ -108,6 +129,24 @@ class ChatQuestionTest {
         assertEquals(listOf(listOf(0u)), core.answers.last().third)
         assertEquals(2, core.answers.size)
         compose.onNode(isDialog()).assertDoesNotExist()
+    }
+
+    // D125: uncertain sends must keep the explicit resend decision across recreation.
+    @Test fun queuedMessageRetryConfirmationSurvivesRecreation() {
+        val core = FakeCore()
+        open(core, AgentStatus.Idle, retainForRestoration = true)
+        core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, null))
+        core.connection!!.sendFailWith = CoreException.Closed()
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).performTextInput("Check these results")
+        compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
+        compose.onNodeWithText(str(R.string.chat_delivery_retry_button)).performClick()
+        compose.onNode(isDialog()).assertExists()
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNode(isDialog()).assertExists()
+        compose.onNodeWithText(str(R.string.cancel_button)).performClick()
+        compose.runOnIdle {
+            assertEquals(QueuedMessagePhase.Uncertain, (retainedModel.screen as Screen.Chat).chat.queuedMessages.single().phase)
+        }
     }
 
     // D24: losing the live key-delivery receipt must not let the user press the same answer twice.
@@ -211,7 +250,7 @@ class ChatQuestionTest {
     // D15: losing only the terminal.send response must require confirmation before another answer.
     @Test fun aLostHistoryAnswerResponseRequiresAnExplicitResendConfirmation() {
         val core = FakeCore()
-        open(core, AgentStatus.Idle)
+        open(core, AgentStatus.Idle, retainForRestoration = true)
         val response = kotlinx.coroutines.CompletableDeferred<Unit>()
         core.connection!!.sendAfterTypingReply = response
         core.connection!!.sendAfterTypingFailure = CoreException.Closed()
@@ -227,6 +266,8 @@ class ChatQuestionTest {
         compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue")).assertDoesNotExist()
         screenshot("history-unconfirmed")
         compose.onNodeWithText(str(R.string.chat_delivery_retry_button)).performClick()
+        compose.onNode(isDialog()).assertExists()
+        restoration.emulateSavedInstanceStateRestore()
         compose.onNode(isDialog()).assertExists()
         screenshot("history-resend-confirm", dialog = true)
         compose.onNodeWithText(str(R.string.cancel_button)).performClick()
@@ -362,6 +403,10 @@ class ChatQuestionTest {
         val waiting = ChatEntry("queued-user", null, ChatEntryBody.User("Inspect the other file too.", queued = true))
         core.pushChat(ChatSnapshot(listOf(question("q1"), waiting), ChatStatus.LIVE, null))
         compose.waitForIdle()
+        compose.waitUntil(5_000) {
+            compose.waitForIdle()
+            compose.onAllNodesWithContentDescription(str(R.string.chat_question_option_label, "Blue")).fetchSemanticsNodes().isNotEmpty()
+        }
         compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue")).performClick()
         compose.waitForIdle()
         assertEquals("q1", core.answers.single().second)

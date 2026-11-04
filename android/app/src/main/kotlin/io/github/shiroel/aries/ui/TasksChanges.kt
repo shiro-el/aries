@@ -159,7 +159,7 @@ internal fun ColumnScope.TasksChanges(state: TasksChangesState, link: HostLink?,
         state.observe(connection, terminal)
         if (connection != null) state.load(connection, terminal, force = revision > 0)
     }
-    BackHandler(state.selected != null) { state.selected = null }
+    BackHandler(state.selected != null && !LocalConsoleOverlayOpen.current) { state.selected = null }
     link?.let { ConnectionNotice(it) }
     val gutter = LocalLayoutTokens.current.contentPadding
     val colors = tasksDiffColors()

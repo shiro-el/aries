@@ -168,7 +168,8 @@ internal fun ConsoleShell(
             model.closeCallInbox()
             scope.launch { drawer.open() }
         }
-        CompositionLocalProvider(LocalCallAttentionEnabled provides (drawer.isClosed && drawer.targetValue == DrawerValue.Closed),
+        CompositionLocalProvider(LocalConsoleOverlayOpen provides (!drawer.isClosed || drawer.targetValue != DrawerValue.Closed || model.callInboxOpen),
+            LocalCallAttentionEnabled provides (drawer.isClosed && drawer.targetValue == DrawerValue.Closed),
             LocalConsoleHeaderMeasured provides { measuredHeaderHeight = it },
             LocalConsoleMenu provides openDrawer.takeIf { drawerEnabled }, LocalQuickOpen provides {
             navigate(model::openQuickOpen)
@@ -205,15 +206,18 @@ internal fun ConsoleShell(
         }
     }
     if (model.quickOpenVisible) QuickOpenDialog(model)
-    // One owner avoids screen handlers registered later taking precedence over overlays.
-    BackHandler(drawer.isOpen || model.callInboxOpen || !isHome(screen)) {
-        if (drawer.isOpen) scope.launch { drawer.close() }
+    // Screen Back handlers are suspended while these navigation overlays are visible.
+    BackHandler(!drawer.isClosed || drawer.targetValue != DrawerValue.Closed || model.callInboxOpen || !isHome(screen)) {
+        if (!drawer.isClosed || drawer.targetValue != DrawerValue.Closed) scope.launch { drawer.close() }
         else if (model.callInboxOpen) model.closeCallInbox()
         else if (onHostBack != null && (screen is Screen.Browse || screen is Screen.Connecting)) onHostBack()
         else if (onHome != null && screen !is Screen.Chat && screen !is Screen.Terminal && screen != Screen.Settings && screen !is Screen.JumpHosts) onHome()
         else consoleBack(model)?.invoke() ?: model.back()
     }
 }
+
+/** Nested screens defer Back to navigation overlays, independent of registration order. */
+internal val LocalConsoleOverlayOpen = compositionLocalOf { false }
 
 /** Pane headers stay with their list, including while an Agent occupies detail. */
 internal val LocalConsoleMenu = compositionLocalOf<(() -> Unit)?> { null }

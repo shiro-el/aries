@@ -17,7 +17,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -69,7 +69,7 @@ internal fun QueuedChatMessage.matchesTranscript(text: String): Boolean {
 
 @Composable
 internal fun QueuedMessageBubble(message: QueuedChatMessage, chat: ChatModel) {
-    var confirmRetry by remember(message.id) { mutableStateOf(false) }
+    var confirmRetry by rememberSaveable(message.id) { mutableStateOf(false) }
     if (confirmRetry) AlertDialog(
         onDismissRequest = { confirmRetry = false },
         title = { Text(stringResource(R.string.chat_delivery_resend_title)) },
