@@ -105,6 +105,21 @@ class GithubScreenTest {
         compose.runOnIdle { assertEquals(1, conn.githubComments.size) }
     }
 
+    // D85: replacing a failed line must let its already submitted GitHub comment finish once before disconnecting.
+    @Test fun aLostLineWaitsForItsSubmittedComment() {
+        val reply = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val conn = open { it.githubCommentReply = reply }
+        compose.onNodeWithText("Issue title").performClick()
+        compose.onNodeWithTag("github-comment").performTextInput("Post exactly once")
+        compose.onNodeWithText(str(R.string.github_send)).performClick()
+        compose.waitUntil(5_000) { conn.githubComments.size == 1 }
+        compose.runOnIdle { model.networkChanged() }
+        compose.waitForIdle()
+        compose.runOnIdle { assertFalse(conn.disconnected); reply.complete(Unit) }
+        compose.waitUntil(5_000) { conn.disconnected }
+        compose.runOnIdle { assertEquals(1, conn.githubComments.size) }
+    }
+
     // Regression: delayed refreshes must leave the last readable thread/list on screen.
     @Test fun refreshKeepsThreadAndListReadableAndBackDoesNotRefetch() {
         val conn = open()
