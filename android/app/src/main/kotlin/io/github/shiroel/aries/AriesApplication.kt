@@ -21,6 +21,7 @@ open class AriesApplication : Application(), HasCore, Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        RemovedDictation.upgrade(this)
         PlaintextCopies.upgrade(this)
         registerActivityLifecycleCallbacks(notificationVisibility)
         LastKnownStates.schedule(this)
