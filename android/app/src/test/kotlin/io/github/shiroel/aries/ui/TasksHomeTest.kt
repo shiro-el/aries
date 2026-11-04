@@ -31,8 +31,10 @@ class TasksHomeTest {
     @get:Rule val compose = createComposeRule()
     private val context = ApplicationProvider.getApplicationContext<Context>()
 
+    private val callTime = System.currentTimeMillis().toULong() - 60_000uL
+
     private fun call(id: String, terminal: String, urgency: CallUrgency) = CallInfo(
-        "h1", id, 1000uL, terminal, true, id, "Decide $id", urgency, listOf("Continue", "Wait"), null, true)
+        "h1", id, callTime, terminal, true, id, "Decide $id", urgency, listOf("Continue", "Wait"), null, true)
 
     private fun show(core: FakeCore) {
         val prefs = context.getSharedPreferences("tasks-home-test", Context.MODE_PRIVATE)

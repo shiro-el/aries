@@ -55,6 +55,12 @@ internal fun TasksHome(model: HostsModel, board: AgentBoard) {
     }
     val folds = rememberTreeFolds("tasks-hosts")
     Column(Modifier.fillMaxSize().testTag("tasks-home")) {
+        if (queue == null) model.calls.banner?.let { entry ->
+            CallAttentionBanner(entry, model.callCallerName(entry), onOpen = {
+                needs.firstOrNull { it is TaskNeed.Call && it.entry.key == entry.key }?.let(openNeed)
+                model.calls.dismissBanner()
+            }, onDismiss = model.calls::dismissBanner)
+        }
         if (model.pendingShare != null) {
             Text(stringResource(R.string.attachments_choose_agent), Modifier.padding(12.dp))
             TextButton(onClick = model::cancelShare) { Text(stringResource(R.string.cancel_button)) }
@@ -128,7 +134,7 @@ internal fun TasksHome(model: HostsModel, board: AgentBoard) {
                     if (filter == TasksFilter.NEEDS && need != null) openNeed(need) else model.selectListedAgent(board, entry)
                 })
             }
-            if (board.isEmpty || (visible.isEmpty() && calls.isEmpty() && board.loadingHosts.isEmpty() && board.hosts.isNotEmpty())) item {
+            if (visible.isEmpty() && calls.isEmpty() && board.loadingHosts.isEmpty() && board.hosts.isNotEmpty()) item {
                 Text(stringResource(R.string.tasks_empty), Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }

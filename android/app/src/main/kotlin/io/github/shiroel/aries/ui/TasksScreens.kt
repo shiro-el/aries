@@ -40,6 +40,7 @@ private fun TasksShell(model: HostsModel, content: @Composable () -> Unit) {
     }
     CompositionLocalProvider(LocalTasksHosts provides { hostsOpen = true; model.back() }) {
         if (screen is Screen.Agents || screen == Screen.Hosts) {
+            CallAttentionEffect(model.calls)
             Column(Modifier.fillMaxSize()) {
                 Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 12.dp),
                     verticalAlignment = Alignment.CenterVertically) {

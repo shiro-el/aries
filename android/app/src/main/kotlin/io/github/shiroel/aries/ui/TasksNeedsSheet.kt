@@ -30,7 +30,11 @@ internal class TasksNeedsQueue(val items: List<TaskNeed>, start: Int = 0, privat
         private set
     val current get() = items.getOrNull(position)
     fun next() { position++ }
-    fun resolve() { current?.let { onResolved(it.key) }; next() }
+    fun resolve(key: String) {
+        if (current?.key != key) return
+        onResolved(key)
+        next()
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -54,7 +58,7 @@ internal fun TasksNeedsSheet(model: HostsModel, board: AgentBoard, queue: TasksN
                     is TaskNeed.Call -> {
                         val entry = model.calls.calls.find { it.key == current.entry.key } ?: current.entry.copy(live = false)
                         val delivered = entry.call.answer?.state == CallAnswerState.DELIVERED
-                        LaunchedEffect(delivered) { if (delivered) queue.resolve() }
+                        LaunchedEffect(delivered) { if (delivered) queue.resolve(current.key) }
                         ConsoleChatCall(entry, model.calls)
                         if (!entry.live) Text(stringResource(R.string.tasks_offline), Modifier.padding(16.dp))
                         if (entry.call.terminal != null) TextButton(onClick = {
@@ -62,7 +66,7 @@ internal fun TasksNeedsSheet(model: HostsModel, board: AgentBoard, queue: TasksN
                             model.openPushedAgent(entry.host.id, entry.call.terminal!!, openChat = true)
                         }) { Text(stringResource(R.string.call_open_chat)) }
                     }
-                    is TaskNeed.Agent -> TasksQuestion(model, board, current.entry, onAnswered = queue::resolve, onDismiss = onDismiss)
+                    is TaskNeed.Agent -> TasksQuestion(model, board, current.entry, onAnswered = { queue.resolve(current.key) }, onDismiss = onDismiss)
                 }
                 TextButton(onClick = queue::next, modifier = Modifier.testTag("tasks-needs-next")) {
                     Text(stringResource(R.string.tasks_needs_next))
