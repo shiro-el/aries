@@ -105,79 +105,91 @@ private fun AriesContent(model: HostsModel, settings: ThemeSettings, terminalDis
         Box(Modifier.padding(padding).fillMaxSize()) {
             ConsoleShell(model) {
                 RemoteFilesAccess(model) {
-                    when (val s = model.screen) {
-                        Screen.Hosts -> HostListScreen(model)
-                        Screen.Settings -> {
-                            SettingsScreen(
-                                model, settings, onBack = model::back, showHeader = false,
-                                terminalDisplay = terminalDisplay,
-                                hostEditor = { host -> if (host.endpoint is Endpoint.Ssh) HostEditSection(model, host) },
-                            )
-                        }
-                        is Screen.Connecting -> ConnectionNotice(s.link)
-                        is Screen.Browse -> {
-                            BrowseScreen(
-                                s.browser,
-                                showHeader = false,
-                                onBack = model::back,
-                                onOpen = model::openTerminal,
-                                onPin = model::pin,
-                                onNewTerminal = { model.newTerminal(s.browser) },
-                                onLaunch = { model.launch(s.browser, it) },
-                                onSaveLaunch = { model.saveLaunch(s.browser, it) },
-                                onDeleteLaunch = { form, saved -> model.deleteSavedLaunch(s.browser, form, saved) },
-                                onRunSaved = { model.runSaved(s.browser, it) },
-                                hostSections = {
-                                    if (model.beacon.ui == BeaconUi.Known(io.github.shiroel.aries.core.BeaconState.NotInstalled)) {
-                                        TextButton(
-                                            onClick = { model.openHostSettings(s.browser.host) },
-                                            modifier = Modifier.testTag("browse-host-settings:${s.browser.host.id}"),
-                                        ) { Text(stringResource(R.string.settings_beacon_missing), maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                                    }
-                                },
-                            )
-                        }
-                        is Screen.Terminal -> {
-                            TerminalScreen(
-                                s.viewer,
-                                onBack = model::closeTerminal,
-                                onView = model::switchView.takeIf { s.viewer.terminal.agentStatus != null },
-                                displaySettings = terminalDisplay,
-                                onSelectionSend = model::sendTerminalSelectionToDraft,
-                            )
-                        }
-                        is Screen.JumpHosts -> {
-                            JumpHostsScreen(model, s.host, s.jumps, s.hostKeyId, showHeader = false)
-                        }
-                        is Screen.Agents -> {
-                            Column {
-                                if (model.pendingShare != null) {
-                                    Text(stringResource(R.string.attachments_choose_agent), Modifier.padding(12.dp))
-                                    TextButton(onClick = model::cancelShare) { Text(stringResource(R.string.cancel_button)) }
-                                }
-                                AgentsScreen(
-                                    s.board,
-                                    showHeader = false,
-                                    onBack = model::back,
-                                    onOpen = { model.openAgent(s.board, it) },
-                                    onPin = { entry, pinned -> model.pin(s.board, entry, pinned) },
-                                )
-                            }
-                        }
-                        is Screen.Chat -> {
-                            ChatScreen(
-                                s.chat,
-                                onBack = model::closeChat,
-                                onOpenTerminal = { model.openTerminal(s.chat.terminal) },
-                                onView = model::switchView,
-                                calls = model.calls,
-                            )
-                        }
-                    }
+                    AdaptiveHostLayout(
+                        listScreen = model.listScreen,
+                        hasDetail = model.screen is Screen.Chat || model.screen is Screen.Terminal,
+                        listContent = { ScreenContent(model, settings, terminalDisplay, it) },
+                        detailContent = { ScreenContent(model, settings, terminalDisplay, model.screen) },
+                    )
                 }
             }
         }
         model.prompt?.let { PromptDialog(it, model) }
+    }
+}
+
+@Composable
+private fun ScreenContent(model: HostsModel, settings: ThemeSettings, terminalDisplay: TerminalDisplaySettings, screen: Screen) {
+    when (val s = screen) {
+        Screen.Hosts -> HostListScreen(model)
+        Screen.Settings -> {
+            SettingsScreen(
+                model, settings, onBack = model::back, showHeader = false,
+                terminalDisplay = terminalDisplay,
+                hostEditor = { host -> if (host.endpoint is Endpoint.Ssh) HostEditSection(model, host) },
+            )
+        }
+        is Screen.Connecting -> ConnectionNotice(s.link)
+        is Screen.Browse -> {
+            BrowseScreen(
+                s.browser,
+                showHeader = false,
+                onBack = model::back,
+                onOpen = { model.selectListedTerminal(s.browser, it) },
+                current = model.currentAgentKey,
+                onPin = model::pin,
+                onNewTerminal = { model.newTerminal(s.browser) },
+                onLaunch = { model.launch(s.browser, it) },
+                onSaveLaunch = { model.saveLaunch(s.browser, it) },
+                onDeleteLaunch = { form, saved -> model.deleteSavedLaunch(s.browser, form, saved) },
+                onRunSaved = { model.runSaved(s.browser, it) },
+                hostSections = {
+                    if (model.beacon.ui == BeaconUi.Known(io.github.shiroel.aries.core.BeaconState.NotInstalled)) {
+                        TextButton(
+                            onClick = { model.openHostSettings(s.browser.host) },
+                            modifier = Modifier.testTag("browse-host-settings:${s.browser.host.id}"),
+                        ) { Text(stringResource(R.string.settings_beacon_missing), maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                    }
+                },
+            )
+        }
+        is Screen.Terminal -> {
+            TerminalScreen(
+                s.viewer,
+                onBack = model::closeTerminal,
+                onView = model::switchView.takeIf { s.viewer.terminal.agentStatus != null },
+                displaySettings = terminalDisplay,
+                onSelectionSend = model::sendTerminalSelectionToDraft,
+            )
+        }
+        is Screen.JumpHosts -> {
+            JumpHostsScreen(model, s.host, s.jumps, s.hostKeyId, showHeader = false)
+        }
+        is Screen.Agents -> {
+            Column {
+                if (model.pendingShare != null) {
+                    Text(stringResource(R.string.attachments_choose_agent), Modifier.padding(12.dp))
+                    TextButton(onClick = model::cancelShare) { Text(stringResource(R.string.cancel_button)) }
+                }
+                AgentsScreen(
+                    s.board,
+                    showHeader = false,
+                    onBack = model::back,
+                    onOpen = { model.selectListedAgent(s.board, it) },
+                    current = model.currentAgentKey,
+                    onPin = { entry, pinned -> model.pin(s.board, entry, pinned) },
+                )
+            }
+        }
+        is Screen.Chat -> {
+            ChatScreen(
+                s.chat,
+                onBack = model::closeChat,
+                onOpenTerminal = { model.openTerminal(s.chat.terminal) },
+                onView = model::switchView,
+                calls = model.calls,
+            )
+        }
     }
 }
 
@@ -205,7 +217,7 @@ private fun ConsoleHostRow(model: HostsModel, host: Host) {
     val color = if (host.endpoint is Endpoint.Local) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.width(3.dp).height(48.dp).background(color))
-        Column(Modifier.weight(1f).clickable { model.connect(host) }.padding(horizontal = 12.dp, vertical = 6.dp)) {
+        Column(Modifier.weight(1f).clickable { model.openHost(host) }.padding(horizontal = 12.dp, vertical = 6.dp)) {
             Text(host.name, fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             val where = when (val endpoint = host.endpoint) {
                 is Endpoint.Ssh -> stringResource(R.string.host_ssh_address, endpoint.user, endpoint.address, endpoint.port.toInt())
@@ -222,7 +234,7 @@ private fun ConsoleHostRow(model: HostsModel, host: Host) {
             fontSize = 11.sp, lineHeight = 15.sp, color = color,
         )
         val taskLabel = stringResource(R.string.new_task_on_host, host.name)
-        ActionIcon(R.drawable.ic_plus, R.string.new_task_title, { model.newTask(host) },
+        ActionIcon(R.drawable.ic_plus, R.string.new_task_title, { model.back(); model.newTask(host) },
             modifier = Modifier.testTag("host-new-task").semantics {
                 contentDescription = taskLabel
             })

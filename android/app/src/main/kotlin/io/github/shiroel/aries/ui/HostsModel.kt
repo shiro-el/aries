@@ -218,6 +218,28 @@ class HostsModel(
 
     val quickOpenBrowser: HostBrowser? get() = (quickOpenBase() as? Screen.Browse)?.browser
 
+    /** The live list under detail; layout changes never create another list or connection. */
+    val listScreen: Screen? get() = quickOpenBase().takeIf {
+        it == Screen.Hosts || it is Screen.Browse || it is Screen.Agents
+    }
+
+    /** Replace detail from the visible list, retaining its original navigation/connection owner. */
+    fun selectListedAgent(board: AgentBoard, entry: AgentEntry) {
+        val list = listScreen as? Screen.Agents ?: return
+        if (list.board !== board || board.find(entry.key) == null || currentAgentKey == entry.key) return
+        returnToQuickOpenBase()
+        openAgent(board, entry)
+    }
+
+    fun selectListedTerminal(browser: HostBrowser, terminal: TerminalInfo) {
+        val list = listScreen as? Screen.Browse ?: return
+        if (list.browser !== browser) return
+        val current = browser.findTerminal(terminal.address) ?: return
+        if (currentAgentKey == AgentKey(browser.host.id, current.address)) return
+        returnToQuickOpenBase()
+        openTerminal(current)
+    }
+
     /** No connections are started by search. Existing live watches take precedence per Host. */
     val quickOpenSources: List<QuickOpenSource>
         get() {

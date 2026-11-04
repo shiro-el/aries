@@ -195,6 +195,7 @@ fun BrowseScreen(
     onRunSaved: (SavedLaunch) -> Unit = {},
     hostSections: @Composable () -> Unit = {},
     showHeader: Boolean = true,
+    current: AgentKey? = null,
 ) {
     val context = LocalContext.current
     val editor = rememberLayoutEditor(browser)
@@ -227,7 +228,7 @@ fun BrowseScreen(
         browser.structure?.problem?.let { Notice(problemText(it)) }
         when {
             browser.structure == null -> Text(stringResource(R.string.connecting, browser.host.name))
-            else -> HostTreeList(browser, browser.structure!!, hostSections, onOpen, onPin)
+            else -> HostTreeList(browser, browser.structure!!, hostSections, onOpen, onPin, current)
         }
     }
 }
@@ -256,6 +257,7 @@ private fun HostTreeList(
     hostSections: @Composable () -> Unit,
     onOpen: (TerminalInfo) -> Unit,
     onPin: (AgentEntry, Boolean) -> Unit,
+    current: AgentKey?,
 ) {
     val folds = rememberTreeFolds("host:${browser.host.id}")
     val agentFolds = rememberTreeFolds("agents")
@@ -279,14 +281,14 @@ private fun HostTreeList(
     LazyColumn {
         if (browser.terminals.isEmpty()) item { Text(stringResource(R.string.terminals_empty)) }
         agentTreeItems(agents, agentFolds, { onOpen(it.terminal) }, onPin, tag = "host-agent",
-            sectionNamespace = "all", actions = actions)
+            sectionNamespace = "all", actions = actions, current = current)
         if (plain.isNotEmpty()) {
             item {
                 TreeSectionRow(stringResource(R.string.terminals_plain_group, plain.size), 0, folds.contains(plainKey),
                     { folds.toggle(plainKey) }, Modifier.testTag("host-plain-terminals"))
             }
             if (!folds.contains(plainKey)) agentTreeItems(orderAgents(plain), agentFolds,
-                { onOpen(it.terminal) }, onPin, tag = "host-terminal", sections = false, actions = actions)
+                { onOpen(it.terminal) }, onPin, tag = "host-terminal", sections = false, actions = actions, current = current)
         }
         val missing = structure.spaces.flatMap { it.tabs }.flatMap { it.panes }.filter { it.terminal == null }
         items(missing, key = { "gone:${it.id}" }) { pane ->

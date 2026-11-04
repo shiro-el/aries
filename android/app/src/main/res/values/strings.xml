@@ -5,6 +5,9 @@
   Add every new string to values-ko/strings.xml too (TranslationsTest checks it).
 -->
 <resources>
+    <!-- Tablet and foldable list/detail layout. -->
+    <string name="adaptive_choose_detail">Choose a Host, Agent or Terminal from the list.</string>
+
     <!-- Host localhost preview -->
     <string name="preview_auto_refresh">Auto refresh after Agent updates</string>
     <string name="preview_title">Preview</string>

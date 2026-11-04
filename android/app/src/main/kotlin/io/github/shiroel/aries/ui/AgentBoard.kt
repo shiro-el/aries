@@ -123,6 +123,7 @@ fun AgentsScreen(
     onOpen: (AgentEntry) -> Unit,
     onPin: (AgentEntry, Boolean) -> Unit,
     showHeader: Boolean = true,
+    current: AgentKey? = null,
 ) {
     val folds = rememberTreeFolds("agents")
     Column(Modifier.fillMaxSize()) {
@@ -145,7 +146,7 @@ fun AgentsScreen(
             }
             val agents = board.agents
             if (board.isEmpty) item { Text(stringResource(R.string.agents_empty)) }
-            agentTreeItems(agents, folds, onOpen, onPin)
+            agentTreeItems(agents, folds, onOpen, onPin, current = current)
         }
     }
 }
