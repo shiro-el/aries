@@ -187,10 +187,22 @@ class LocalhostPreviewTest {
         var visible by mutableStateOf(true)
         val preview = LocalhostPreview().apply { selected = 5173u }
         assertFalse(preview.autoRefresh)
+        // Regression: WebView gestures must use the same failure-reporting browser boundary as Chat.
+        val openedUris = mutableListOf<String>()
+        val unavailableBrowser = object : androidx.compose.ui.platform.UriHandler {
+            override fun openUri(uri: String) {
+                openedUris += uri
+                throw android.content.ActivityNotFoundException()
+            }
+        }
         compose.setContent {
-            CompositionLocalProvider(LocalLifecycleOwner provides owner) {
-                MaterialTheme {
-                    if (visible) LocalhostPreviewBrowser(preview, link, Modifier.fillMaxSize())
+            CompositionLocalProvider(LocalLifecycleOwner provides owner,
+                androidx.compose.ui.platform.LocalUriHandler provides unavailableBrowser) {
+                val handler = rememberAgentUriHandler(preview, link, "t1")
+                CompositionLocalProvider(androidx.compose.ui.platform.LocalUriHandler provides handler) {
+                    MaterialTheme {
+                        if (visible) LocalhostPreviewBrowser(preview, link, Modifier.fillMaxSize())
+                    }
                 }
             }
         }
@@ -233,9 +245,9 @@ class LocalhostPreviewTest {
                 assertEquals(403, client.shouldInterceptRequest(web, request(url))!!.statusCode)
             }
             assertTrue(client.shouldOverrideUrlLoading(web, request("https://example.org/docs")))
-            val intent = org.robolectric.Shadows.shadowOf(compose.activity).nextStartedActivity
-            assertEquals(android.content.Intent.ACTION_VIEW, intent.action)
-            assertEquals("https://example.org/docs", intent.data.toString())
+            assertEquals(listOf("http://127.0.0.1.evil:49152/", "https://example.org/docs"), openedUris)
+            assertEquals(compose.activity.getString(R.string.chat_link_open_failed),
+                org.robolectric.shadows.ShadowToast.getTextOfLatestToast())
         }
         assertFalse(disconnected)
     }

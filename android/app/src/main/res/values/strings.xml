@@ -587,7 +587,7 @@
     <string name="chat_link_share_failed">Could not share the link.</string>
     <string name="chat_link_copy">Copy link · %1$s</string>
     <string name="chat_link_share">Share link · %1$s</string>
-    <string name="chat_link_open_failed">Could not open the link. Check that a browser is available.</string>
+    <string name="chat_link_open_failed">Could not open the link.</string>
 
     <!-- Chat text selection and clipboard actions. -->
     <string name="chat_text_actions">Text actions</string>
