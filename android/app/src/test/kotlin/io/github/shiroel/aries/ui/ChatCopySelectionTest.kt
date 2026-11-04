@@ -84,7 +84,7 @@ class ChatCopySelectionTest {
         }
         compose.onNodeWithText("home").performClick()
         compose.onNodeWithText("claude").performClick()
-        compose.onNodeWithText(str(R.string.agent_view_chat)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.agent_switch_chat_label)).performClick()
     }
 
     private fun show(body: ChatEntryBody, rendered: String? = null) {

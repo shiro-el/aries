@@ -213,6 +213,15 @@
     <string name="files_send_file_button">Send file to Agent</string>
     <string name="files_send_line_label">Send line %1$d to Agent</string>
     <string name="files_not_text">Cannot preview this file: binary or non-UTF-8 text.</string>
+    <!-- Continuous file and diff reader (152) -->
+    <string name="files_large_warning">This file is at least 2 MiB. Opening and searching may take longer.</string>
+    <string name="files_large_open">Open file</string>
+    <string name="files_find_hint">Find in file</string>
+    <string name="files_find_previous">Previous matching line</string>
+    <string name="files_find_next">Next matching line</string>
+    <string name="files_find_searching">Searching the whole file…</string>
+    <string name="files_find_no_matches">No matching lines</string>
+
     <string name="files_loading">Loading files…</string>
     <string name="files_failed">Could not load this folder or file. Check the connection, path and permissions, then retry.</string>
     <string name="files_empty_folder">This folder is empty.</string>
@@ -418,6 +427,8 @@
     <string name="agent_open_button">Open</string>
     <string name="agent_view_terminal">term</string>
     <string name="agent_view_chat">chat</string>
+    <string name="agent_switch_terminal_label">Switch to Terminal</string>
+    <string name="agent_switch_chat_label">Switch to Chat</string>
     <!-- Terminal and Chat input history (108) -->
     <string name="input_history_title">Input history</string>
     <string name="input_history_empty">No input history yet.</string>

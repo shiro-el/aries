@@ -27,7 +27,6 @@ internal fun ColumnScope.GitFileDiff(
     }) }
     var diff by remember(selectedFile, kind) { mutableStateOf<GitDiff?>(null) }
     var error by remember(selectedFile, kind) { mutableStateOf<String?>(null) }
-    var visible by remember(selectedFile, kind) { mutableIntStateOf(200) }
     var selection by remember(selectedFile, kind) { mutableStateOf<IntRange?>(null) }
     LaunchedEffect(connection, address, cwd, selectedFile, kind, revision) {
         diff = null
@@ -47,7 +46,7 @@ internal fun ColumnScope.GitFileDiff(
     if (onSend != null) {
         Row {
             val path = "${cwd.trimEnd('/')}/${selectedFile.path}"
-            ActionIcon(R.drawable.ic_file, R.string.git_send_file, { onSend(formatGitReference(path, diff?.lines.orEmpty().take(visible))) })
+            ActionIcon(R.drawable.ic_file, R.string.git_send_file, { onSend(formatGitReference(path, diff?.lines.orEmpty())) })
             ActionIcon(R.drawable.ic_send, R.string.git_send_selection, enabled = selection != null && diff != null, onClick = {
                 val range = selection ?: return@ActionIcon
                 val lines = diff?.lines ?: return@ActionIcon
@@ -58,7 +57,7 @@ internal fun ColumnScope.GitFileDiff(
     val patch = diff
     if (patch == null && error == null) Text(stringResource(R.string.git_loading), Modifier.padding(12.dp))
     if (patch != null) {
-        GitDiffView(patch, Modifier.weight(1f), visible, { visible += 200 }, selection,
+        GitDiffView(patch, Modifier.weight(1f), selection,
             if (onSend == null) null else { index ->
                 val first = selection
                 selection = if (first == null || first.first != first.last) index..index else minOf(first.first, index)..maxOf(first.first, index)

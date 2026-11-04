@@ -216,6 +216,15 @@
     <string name="files_send_file_button">Agent에게 파일 보내기</string>
     <string name="files_send_line_label">%1$d번째 줄을 Agent에게 보내기</string>
     <string name="files_not_text">바이너리 파일이거나 UTF-8 텍스트가 아니라서 미리 볼 수 없어요.</string>
+    <!-- Continuous file and diff reader (152) -->
+    <string name="files_large_warning">2 MiB 이상인 파일입니다. 열기와 검색에 시간이 걸릴 수 있습니다.</string>
+    <string name="files_large_open">파일 열기</string>
+    <string name="files_find_hint">파일에서 찾기</string>
+    <string name="files_find_previous">이전 일치 줄</string>
+    <string name="files_find_next">다음 일치 줄</string>
+    <string name="files_find_searching">전체 파일 검색 중…</string>
+    <string name="files_find_no_matches">일치하는 줄 없음</string>
+
     <string name="files_loading">파일 불러오는 중…</string>
     <string name="files_failed">폴더나 파일을 불러오지 못했어요. 연결, 경로, 권한을 확인하고 다시 시도해 주세요.</string>
     <string name="files_empty_folder">빈 폴더예요.</string>
@@ -418,6 +427,8 @@
     <string name="agent_open_button">열기</string>
     <string name="agent_view_terminal">term</string>
     <string name="agent_view_chat">chat</string>
+    <string name="agent_switch_terminal_label">Terminal로 전환</string>
+    <string name="agent_switch_chat_label">Chat으로 전환</string>
     <!-- Terminal and Chat input history (108) -->
     <string name="input_history_title">입력 기록</string>
     <string name="input_history_empty">입력 기록이 없어요.</string>
