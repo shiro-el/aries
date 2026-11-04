@@ -235,7 +235,7 @@ class ChatSendTest {
         compose.onNodeWithText(str(R.string.terminal_open_button)).performClick()
         compose.waitForIdle()
 
-        compose.onNodeWithText(str(R.string.agent_view_chat)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.agent_switch_chat_label)).performClick()
         compose.waitForIdle()
         compose.onNodeWithText(str(R.string.console_agent_host_prefix, "home") + "claude").assertExists()
         assertEquals("the Chat stayed live, not reopened", 1, core.chatsOpened.size)

@@ -73,7 +73,7 @@ class ChatScreenTest {
         compose.waitForIdle()
         compose.onNodeWithText("claude").performClick()
         compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.agent_view_chat)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.agent_switch_chat_label)).performClick()
         compose.waitForIdle()
     }
 
@@ -341,7 +341,7 @@ class ChatScreenTest {
         compose.waitForIdle()
         compose.onNodeWithText("claude").performClick()
         compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.agent_view_chat)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.agent_switch_chat_label)).performClick()
         compose.waitForIdle()
         assertEquals(listOf("h2" to "t1"), core.chatsOpened)
         compose.onNodeWithText(str(R.string.console_agent_host_prefix, "server") + "claude").assertExists()

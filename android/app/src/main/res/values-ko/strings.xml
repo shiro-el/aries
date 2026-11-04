@@ -418,6 +418,8 @@
     <string name="agent_open_button">열기</string>
     <string name="agent_view_terminal">term</string>
     <string name="agent_view_chat">chat</string>
+    <string name="agent_switch_terminal_label">Terminal로 전환</string>
+    <string name="agent_switch_chat_label">Chat으로 전환</string>
     <!-- Terminal and Chat input history (108) -->
     <string name="input_history_title">입력 기록</string>
     <string name="input_history_empty">입력 기록이 없어요.</string>

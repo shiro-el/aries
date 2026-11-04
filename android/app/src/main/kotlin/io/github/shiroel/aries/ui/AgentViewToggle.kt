@@ -12,10 +12,10 @@ import androidx.compose.ui.unit.sp
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentView
 
-/** Test tag of the Terminal/Chat toggle, at the end of both screens' title row. */
+/** Test tag shared by the Agent view switch and Settings default-view selector. */
 const val AGENT_VIEW_TOGGLE = "agent_view_toggle"
 
-/** Switches an open Agent between its Terminal and its Chat; [current] is the one showing. */
+/** Explicit default-view selection in Settings; open Agents use [AgentViewSwitch]. */
 @Composable
 fun AgentViewToggle(current: AgentView, onView: (AgentView) -> Unit) {
     ConsoleSegments(
