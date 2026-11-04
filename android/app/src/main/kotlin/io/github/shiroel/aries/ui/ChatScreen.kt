@@ -233,15 +233,19 @@ class ChatModel(
     private var uploadJob: Job? = null
 
     fun attachmentFailed(error: Exception) {
-        attachmentError = if (error is AttachmentTooLarge) Message(R.string.attachments_too_large)
-            else Message(R.string.attachments_failed, listOf(error.message ?: ""))
+        attachmentError = Message(when {
+            error is AttachmentTooLarge || (error is CoreException.Rpc && error.kind == "attachment_too_large") -> R.string.attachments_too_large
+            error is CoreException.Closed || error is CoreException.Unreachable -> R.string.attachments_connection_failed
+            error is java.io.IOException || error is SecurityException -> R.string.attachments_read_failed
+            else -> R.string.attachments_failed
+        })
     }
 
     /** Saves bytes and adds attachment chips to the current draft; never calls sendMessage. */
     fun attach(context: Context, content: SharedContent, cleanup: () -> Unit = {}): Boolean {
         val scope = scope ?: run { cleanup(); return false }
         if (inputUnavailable || uploading || sending != null) { cleanup(); return false }
-        val connection = link?.connection ?: run { attachmentFailed(CoreException.Closed()); cleanup(); return false }
+        val link = link ?: run { attachmentFailed(CoreException.Closed()); cleanup(); return false }
         val resize = AttachmentSettings.from(context).resizeImages
         attachmentError = null
         uploading = true
@@ -253,8 +257,16 @@ class ChatModel(
             try {
                 for (uri in content.uris) {
                     val attachment = withContext(Dispatchers.IO) { prepareAttachment(context, uri, resize) }
+                    // The picker/camera may stop the Activity and release its Host connection.
+                    // Wait for its replacement after reading the URI; never retry a put itself.
+                    val connection = link.awaitConnection()
                     if (inputUnavailable) break
-                    val path = connection.uploadAttachment(terminal.address, attachment.name, attachment.bytes)
+                    val path = try {
+                        connection.uploadAttachment(terminal.address, attachment.name, attachment.bytes)
+                    } catch (e: CoreException.Closed) {
+                        link.lost(connection)
+                        throw e
+                    }
                     attachments = attachments + DraftAttachment(path, attachment.name, attachment.bytes.size,
                         attachment.bytes.takeIf { remoteMediaKind(attachment.name) == RemoteMediaKind.IMAGE })
                 }
