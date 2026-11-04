@@ -73,7 +73,7 @@ class ChatJournalTest {
                 runCurrent()
                 repeat(4) { androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications(); runCurrent() }
                 assertEquals(QueuedMessagePhase.Failed, chat.queuedMessages.single().phase)
-                assertEquals("disk full", chat.queuedMessages.single().error)
+                assertEquals(QueuedMessageProblem.Storage.name, chat.queuedMessages.single().error)
                 assertNotNull(chat.journalError)
                 assertTrue(connection.typed.isEmpty())
                 chat.stop()

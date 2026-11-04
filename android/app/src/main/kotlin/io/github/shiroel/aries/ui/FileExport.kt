@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.webkit.MimeTypeMap
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
@@ -15,10 +16,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.core.content.FileProvider
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.viewModelScope
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.HostConnection
 import kotlinx.coroutines.*
@@ -31,7 +37,7 @@ private const val EXPORT_CHUNK = 1_048_576u
 private const val SHARE_LIFETIME_MS = 24L * 60 * 60 * 1000
 internal class ExportTooLarge : Exception()
 
-/** Disposing the file/Host panel cancels its transfer, including partial output cleanup. */
+/** File/Host navigation cancels transfers; Activity recreation retains them. */
 @Composable
 internal fun FileExportControls(
     connection: HostConnection?, address: String, path: String,
@@ -50,22 +56,88 @@ private fun FileExportActions(
     connection: HostConnection?, address: String, path: String,
     actions: @Composable ((() -> Unit)?, (() -> Unit)?, Boolean) -> Unit,
 ) {
-    val context = LocalContext.current
-    val shareTitle by rememberUpdatedState(stringResource(R.string.files_share_title))
-    val scope = rememberCoroutineScope()
-    var job by remember { mutableStateOf<Job?>(null) }
-    var busy by remember { mutableStateOf(false) }
-    var picking by remember { mutableStateOf(false) }
-    var saving by remember { mutableStateOf(false) }
-    var completed by remember { mutableLongStateOf(0) }
-    var total by remember { mutableStateOf<Long?>(null) }
-    var status by remember { mutableIntStateOf(0) }
-    val name = path.substringAfterLast('/').takeIf { it.isNotBlank() && it != "." && it != ".." } ?: "download.bin"
-    val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(name.substringAfterLast('.', "").lowercase(Locale.ROOT))
-        ?: "application/octet-stream"
-
+    val activity = checkNotNull(LocalActivity.current)
+    val owner = activity as ViewModelStoreOwner
+    val exports = remember(owner) { ViewModelProvider(owner)[FileExportsViewModel::class.java] }
+    val transfer = remember(exports, connection, address, path) { exports.transfer(connection, address, path) }
+    val context = LocalContext.current.applicationContext
+    val shareTitle = stringResource(R.string.files_share_title)
+    var picking by rememberSaveable { mutableStateOf(false) }
+    val busy = transfer.busy
+    val saving = transfer.saving
+    val completed = transfer.completed
+    val total = transfer.total
+    val status = transfer.status
+    DisposableEffect(exports, connection, address, path, activity) {
+        onDispose {
+            // Leaving a file still cancels it; recreation hands the same job to the new UI.
+            if (!activity.isChangingConfigurations) exports.leave(connection, address, path)
+        }
+    }
     fun start(tree: Uri?) {
-        val host = connection ?: return
+        connection?.let { transfer.start(context, it, address, path, tree, shareTitle) }
+    }
+
+    val folders = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
+        picking = false
+        if (tree != null) start(tree)
+    }
+    Column {
+        actions({
+            try { picking = true; folders.launch(null) }
+            catch (_: Exception) { picking = false; transfer.pickerFailed() }
+        }, { start(null) }, connection != null && !busy && !picking)
+        if (busy) {
+            if (saving || total == null) ConsoleProgress(Modifier.fillMaxWidth())
+            else ConsoleProgress(progress = { if (total == 0L) 1f else completed.toFloat() / total.toFloat() }, modifier = Modifier.fillMaxWidth())
+            Text(when {
+                saving -> stringResource(R.string.files_export_saving)
+                total == null -> stringResource(R.string.files_export_starting)
+                else -> stringResource(R.string.files_export_progress, messageText(fileSize(completed)), messageText(fileSize(total)))
+            })
+            TextButton(onClick = transfer::cancel) { Text(stringResource(R.string.cancel_button)) }
+        } else if (status != 0) {
+            Text(if (status == R.string.files_export_too_large) stringResource(status, EXPORT_LIMIT / (1024 * 1024)) else stringResource(status), color = if (status == R.string.files_export_failed || status == R.string.files_export_too_large)
+                MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
+        }
+    }
+}
+
+private data class ExportTarget(val connection: HostConnection?, val address: String, val path: String)
+
+/** Retains transfers across Activity recreation; all jobs end when its ViewModel clears. */
+internal class FileExportsViewModel : ViewModel() {
+    private val transfers = mutableMapOf<ExportTarget, FileExportState>()
+
+    internal fun transfer(connection: HostConnection?, address: String, path: String): FileExportState =
+        transfers.getOrPut(ExportTarget(connection, address, path)) { FileExportState(viewModelScope) }
+
+    internal fun leave(connection: HostConnection?, address: String, path: String) {
+        transfers.remove(ExportTarget(connection, address, path))?.cancel()
+    }
+}
+
+internal class FileExportState(private val scope: CoroutineScope) {
+    private var job: Job? = null
+    var busy by mutableStateOf(false)
+        private set
+    var saving by mutableStateOf(false)
+        private set
+    var completed by mutableLongStateOf(0)
+        private set
+    var total by mutableStateOf<Long?>(null)
+        private set
+    var status by mutableIntStateOf(0)
+        private set
+
+    fun cancel() { job?.cancel() }
+    fun pickerFailed() { status = R.string.files_export_failed }
+
+    fun start(context: Context, connection: HostConnection, address: String, path: String, tree: Uri?, shareTitle: String) {
+        val name = path.substringAfterLast('/').takeIf { it.isNotBlank() && it != "." && it != ".." } ?: "download.bin"
+        val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(name.substringAfterLast('.', "").lowercase(Locale.ROOT))
+            ?: "application/octet-stream"
+        if (busy) return
         busy = true
         saving = false
         completed = 0
@@ -83,7 +155,7 @@ private fun FileExportActions(
                     cached = File(File(root, UUID.randomUUID().toString()).apply { check(mkdirs()) }, name)
                 }
                 val local = checkNotNull(cached)
-                downloadExport(host, address, path, local) { count, size ->
+                downloadExport(connection, address, path, local) { count, size ->
                     withContext(Dispatchers.Main) { completed = count; total = size }
                 }
                 ensureActive()
@@ -112,35 +184,13 @@ private fun FileExportActions(
             } catch (_: Exception) {
                 status = R.string.files_export_failed
             } finally {
-                withContext(NonCancellable + Dispatchers.IO) {
-                    if (!shared) cached?.parentFile?.deleteRecursively()
+                withContext(NonCancellable) {
+                    withContext(Dispatchers.IO) {
+                        if (!shared) cached?.parentFile?.deleteRecursively()
+                    }
+                    busy = false
                 }
-                busy = false
             }
-        }
-    }
-
-    val folders = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
-        picking = false
-        if (tree != null) start(tree)
-    }
-    Column {
-        actions({
-            try { picking = true; folders.launch(null) }
-            catch (_: Exception) { picking = false; status = R.string.files_export_failed }
-        }, { start(null) }, connection != null && !busy && !picking)
-        if (busy) {
-            if (saving || total == null) ConsoleProgress(Modifier.fillMaxWidth())
-            else ConsoleProgress(progress = { if (total == 0L) 1f else completed.toFloat() / total!!.toFloat() }, modifier = Modifier.fillMaxWidth())
-            Text(when {
-                saving -> stringResource(R.string.files_export_saving)
-                total == null -> stringResource(R.string.files_export_starting)
-                else -> stringResource(R.string.files_export_progress, messageText(fileSize(completed)), messageText(fileSize(total!!)))
-            })
-            TextButton(onClick = { job?.cancel() }) { Text(stringResource(R.string.cancel_button)) }
-        } else if (status != 0) {
-            Text(if (status == R.string.files_export_too_large) stringResource(status, EXPORT_LIMIT / (1024 * 1024)) else stringResource(status), color = if (status == R.string.files_export_failed || status == R.string.files_export_too_large)
-                MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
         }
     }
 }

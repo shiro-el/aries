@@ -17,6 +17,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
 import org.robolectric.shadows.ShadowContentResolver
 import android.net.Uri
+import androidx.activity.compose.setContent
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.*
@@ -40,6 +41,7 @@ class FileExportTest {
 
     @Before fun clearExportsFromPreviousTests() {
         File(compose.activity.cacheDir, "file-exports").deleteRecursively()
+        attachExportProvider(compose.activity)
     }
 
     private fun waitFor(condition: () -> Boolean) {
@@ -60,7 +62,7 @@ class FileExportTest {
         openFile(conn, "한글 'report.zip")
         compose.onNodeWithContentDescription(str(R.string.files_actions_label)).performClick()
         compose.onNodeWithText(str(R.string.files_share_button)).performClick()
-        compose.waitUntil(5_000) { shadowOf(compose.activity).peekNextStartedActivity() != null }
+        compose.waitUntil(5_000) { compose.waitForIdle(); shadowOf(compose.activity).peekNextStartedActivity() != null }
         val chooser = shadowOf(compose.activity).nextStartedActivity
         assertEquals(Intent.ACTION_CHOOSER, chooser.action)
         @Suppress("DEPRECATION")
@@ -94,7 +96,7 @@ class FileExportTest {
     }
 
     private fun waitForStatus(id: Int) {
-        compose.waitUntil(5_000) { compose.onAllNodesWithText(str(id)).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(5_000) { compose.waitForIdle(); compose.onAllNodesWithText(str(id)).fetchSemanticsNodes().isNotEmpty() }
     }
 
     private fun chooseFolder(configure: (ExportDocumentsProvider) -> Unit = {}): ExportDocumentsProvider {
@@ -306,4 +308,66 @@ class ExportDocumentsProvider : DocumentsProvider() {
         return ParcelFileDescriptor.open(output, ParcelFileDescriptor.MODE_READ_WRITE or ParcelFileDescriptor.MODE_TRUNCATE)
     }
     override fun deleteDocument(documentId: String) { check(documentId == "new-file"); deleted = true; output.delete() }
+}
+
+/** Uses real Activity recreation so transfer cancellation cannot hide behind restored UI state. */
+class ExportRotationActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: android.os.Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            MaterialTheme { FileExportControls(connection, "box/t7", "/repo/report.bin") }
+        }
+    }
+    companion object { lateinit var connection: HostConnection }
+}
+
+@RunWith(RobolectricTestRunner::class)
+@Config(qualifiers = "h1200dp")
+class FileExportRotationTest {
+    @get:Rule val compose = androidx.compose.ui.test.junit4.createEmptyComposeRule()
+
+    // D121: a suspended remote read must finish and publish complete bytes after rotation.
+    @Test fun rotatingDuringDownloadKeepsTheTransferAndItsProgress() {
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val cancelled = CompletableDeferred<Unit>()
+        ExportRotationActivity.connection = object : HostConnection(NoHandle) {
+            override suspend fun readFileBytes(address: String, path: String, offset: ULong, length: UInt): RemoteFileBytes {
+                if (offset == 0uL) return RemoteFileBytes(byteArrayOf(0, -1), 0u, 4u, false)
+                entered.complete(Unit)
+                try { release.await() } catch (e: kotlinx.coroutines.CancellationException) { cancelled.complete(Unit); throw e }
+                return RemoteFileBytes(byteArrayOf(1, 2), 2u, 4u, true)
+            }
+        }
+        val controller = org.robolectric.Robolectric.buildActivity(ExportRotationActivity::class.java).setup()
+        try {
+            val context = controller.get()
+            attachExportProvider(context)
+            compose.onNodeWithContentDescription(context.getString(R.string.files_share_button)).performClick()
+            compose.waitUntil(5_000) { compose.waitForIdle(); entered.isCompleted }
+            controller.recreate()
+            compose.waitForIdle()
+            assertFalse("configuration changes must not cancel the remote read", cancelled.isCompleted)
+            compose.onNodeWithText(context.getString(R.string.files_export_progress, "2 B", "4 B")).assertIsDisplayed()
+            compose.runOnIdle { release.complete(Unit) }
+            compose.waitUntil(5_000) { compose.waitForIdle(); shadowOf(controller.get()).peekNextStartedActivity() != null }
+            val chooser = shadowOf(controller.get()).nextStartedActivity
+            assertEquals(Intent.ACTION_CHOOSER, chooser.action)
+            @Suppress("DEPRECATION")
+            val send = chooser.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
+            @Suppress("DEPRECATION")
+            val uri = send.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)!!
+            assertArrayEquals(byteArrayOf(0, -1, 1, 2), context.contentResolver.openInputStream(uri)!!.use { it.readBytes() })
+        } finally {
+            release.complete(Unit)
+            controller.pause().stop().destroy()
+        }
+    }
+}
+
+/** Match Android's provider lifecycle when Robolectric replaces cacheDir between tests. */
+private fun attachExportProvider(context: android.content.Context) {
+    val info = context.packageManager.resolveContentProvider(
+        "${context.packageName}.attachments", android.content.pm.PackageManager.GET_META_DATA)!!
+    androidx.core.content.FileProvider().attachInfo(context, info)
 }
