@@ -41,6 +41,7 @@ class LastLocationTest {
     private val pushTarget = mutableStateOf<PushTarget?>(null)
     private var incomingShare: Intent? = null
     private lateinit var model: HostsModel
+    private lateinit var settings: ThemeSettings
     private val terminal = TerminalInfo("box/t1", "shell", "", listOf("sh"), "/repo", "live", null)
 
     private fun core() = FakeCore().apply {
@@ -64,7 +65,8 @@ class LastLocationTest {
                     incomingShare?.let(model::receiveShare)
                     model.start(pushTarget.value)
                 }
-                AriesApp(model)
+                settings = remember { ThemeSettings.from(context) }
+                AriesApp(model, settings)
             }
         }
         compose.waitForIdle()
@@ -141,11 +143,17 @@ class LastLocationTest {
         }
         compose.waitForIdle()
 
-        restart()
-
+        // Regression: a saved layout must not replace the restored route with its own home.
+        for (layout in AppLayout.entries) {
+            compose.runOnIdle { settings.chooseLayout(layout) }
+            restart()
+            compose.runOnIdle {
+                assertEquals(layout, settings.layout)
+                assertEquals("box/t1", (model.screen as Screen.Chat).chat.terminal.address)
+                assertEquals(AgentView.TERMINAL, model.agentView)
+            }
+        }
         compose.runOnIdle {
-            assertEquals("box/t1", (model.screen as Screen.Chat).chat.terminal.address)
-            assertEquals(AgentView.TERMINAL, model.agentView)
             model.closeChat()
             assertEquals("tab2", (model.screen as Screen.Browse).browser.tab?.id)
         }
