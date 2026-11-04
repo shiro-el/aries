@@ -672,6 +672,7 @@
     <string name="chat_cache_failed">Chat 캐시를 변경하지 못했어요.</string>
     <string name="chat_image">이미지</string>
     <string name="chat_image_loading">이미지 불러오는 중…</string>
+    <string name="chat_image_unavailable">이미지를 불러올 수 없어요. 다시 연결해 주세요.</string>
     <string name="chat_image_unreadable">표시할 수 없는 이미지예요.</string>
     <string name="chat_image_too_large">이미지가 너무 커서 표시하지 않았어요(%1$s MB)</string>
 
@@ -693,16 +694,21 @@
     <string name="chat_permission_label">권한 요청</string>
     <string name="chat_permission_allow">허용</string>
     <string name="chat_permission_allow_always">항상 허용</string>
+    <string name="chat_permission_always_title">이 요청을 항상 허용할까요?</string>
     <string name="chat_permission_deny">거부</string>
 
     <string name="chat_question_label">질문</string>
     <string name="chat_question_option_label">답변: %1$s</string>
     <string name="chat_question_text_label">질문에 직접 답하기: %1$s</string>
     <string name="chat_question_text_hint">답변 직접 입력</string>
+    <string name="chat_question_asking_now">Agent가 지금 질문하고 있어요. 질문 선택지로 다시 답해 주세요.</string>
+    <string name="chat_question_live_pending">Agent 질문 준비 기다리는 중…</string>
+    <string name="chat_question_reconnecting">다시 연결 중 · 연결되면 답할 수 있어요</string>
     <string name="chat_question_queued">대기 중인 질문</string>
     <string name="chat_question_history">지난 질문</string>
     <string name="chat_question_send">답변 보내기</string>
     <string name="chat_question_sending">보내는 중…</string>
+    <string name="chat_question_waiting">보냄 · Agent 응답 기다리는 중</string>
     <string name="chat_question_sent">답변 완료</string>
     <string name="chat_question_cancelled">취소됨</string>
     <string name="chat_question_expired">만료됨</string>
@@ -710,6 +716,7 @@
     <string name="chat_question_notes">메모</string>
     <!-- Notification question answers -->
     <string name="question_notify_open_app">앱에서 답하기</string>
+    <string name="question_notify_confirm_in_app">앱에서 항상 허용을 확인해 주세요.</string>
     <string name="question_notify_sent">“%1$s” 보냄</string>
     <string name="question_notify_unknown">답변이 전달됐을 수도 있어요. 다시 답하기 전에 Chat에서 확인해 주세요.</string>
 
@@ -1061,6 +1068,7 @@
     <string name="agent_watch_label">진행 알림</string>
     <string name="agent_watch_error">진행 상황 알림을 바꾸지 못했어요: %1$s</string>
     <string name="push_progress_channel">Agent 진행 상황</string>
+    <string name="push_progress_elapsed">%1$d분 경과</string>
     <string name="push_progress_body">%1$d분 경과 · 하위 Agent %2$d개</string>
 
     <string name="push_test_title">%1$s 푸시 알림 테스트</string>
@@ -1074,6 +1082,7 @@
     <string name="push_call_channel_emergency">비상 Call</string>
     <string name="push_no_firebase">이 빌드에는 Firebase 설정이 없어요</string>
     <!-- Inline notification actions -->
+    <string name="notification_updates_channel">답장 결과</string>
     <string name="notification_reply_button">답장</string>
     <string name="notification_reply_hint">Agent에게 메시지</string>
     <string name="notification_seen_button">확인함</string>

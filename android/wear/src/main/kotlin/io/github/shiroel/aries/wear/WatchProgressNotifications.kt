@@ -17,9 +17,11 @@ internal object WatchProgressNotifications {
     private const val ID = 191
     private const val CHANNEL = "agent_progress"
 
-    fun show(context: Context, progress: WatchProgress, summary: WatchSummary) {
+    fun show(context: Context, progress: WatchProgress, summary: WatchSummary, remainingMs: Long) {
         val manager = context.getSystemService(NotificationManager::class.java)
-        if (progress.cancelled) { manager.cancel(ID); return }
+        val id = progress.dataPath.hashCode()
+        if (progress.cancelled || remainingMs == 0L) { clear(context, progress); return }
+        manager.cancel(ID) // Replace the single-Agent notification from an older installation.
         if (context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
         val localized = summary.localizedContext(context)
         manager.createNotificationChannel(NotificationChannel(CHANNEL,
@@ -43,13 +45,18 @@ internal object WatchProgressNotifications {
             .setContentText(localized.getString(R.string.wear_progress_body, progress.childAgents))
             .setContentIntent(tap)
             .setWhen(progress.startedAtMs).setUsesChronometer(true)
+            .setTimeoutAfter(remainingMs)
             .setOngoing(true).setLocalOnly(true).setSilent(true).setOnlyAlertOnce(true)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
-        OngoingActivity.Builder(context, ID, builder)
+        OngoingActivity.Builder(context, id, builder)
             .setStaticIcon(R.drawable.ic_aries_outline).setTouchIntent(tap).setStatus(status)
             .build().apply(context)
-        manager.notify(ID, builder.build())
+        manager.notify(progress.dataPath, id, builder.build())
     }
 
-    fun clear(context: Context) = context.getSystemService(NotificationManager::class.java).cancel(ID)
+    fun clear(context: Context, progress: WatchProgress) {
+        val manager = context.getSystemService(NotificationManager::class.java)
+        manager.cancel(progress.dataPath, progress.dataPath.hashCode())
+        manager.cancel(ID) // Retire the previous single-Agent notification after an upgrade.
+    }
 }

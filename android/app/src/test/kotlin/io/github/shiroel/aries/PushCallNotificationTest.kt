@@ -30,12 +30,14 @@ class PushCallNotificationTest {
 
     @Test
     fun aCallShowsItsTitleHostBodyAndChoices() {
+        (context as FakeCoreApp).core.storedStates["h1"] = io.github.shiroel.aries.core.LastKnownState("h1",
+            listOf(io.github.shiroel.aries.core.TerminalInfo("t3", "Builder", "", emptyList(), null, "live")), 1uL)
         PushService.show(context, call("c1", CallUrgency.URGENT))
 
         val n = shown().single()
         assertEquals("Review ready", text(n, Notification.EXTRA_TITLE))
         assertEquals("Tests pass.", text(n, Notification.EXTRA_TEXT))
-        assertEquals("box", text(n, Notification.EXTRA_SUB_TEXT))
+        assertEquals("Builder on box", text(n, Notification.EXTRA_SUB_TEXT))
         assertEquals(
             "Tests pass.\n" + context.getString(R.string.call_choices, "Merge / Wait"),
             text(n, Notification.EXTRA_BIG_TEXT),

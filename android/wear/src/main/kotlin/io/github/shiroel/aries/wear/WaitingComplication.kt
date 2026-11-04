@@ -15,8 +15,11 @@ object WaitingComplication {
         val synced = summary.fetchedAtMs != 0L
         val description = if (!synced) context.getString(R.string.wear_not_synced)
         else context.getString(R.string.wear_complication_description, summary.waiting, WatchTile.age(context, summary, now))
+        val staleHosts = summary.hostFetchedAtMs.values.count { it == 0L || now - it > WatchTile.STALE_AFTER_MS }
+        val fullDescription = if (staleHosts == 0) description else context.getString(R.string.wear_row_age,
+            description, context.getString(R.string.wear_hosts_stale, staleHosts))
         val title = if (!synced) context.getString(R.string.wear_waiting_label)
-        else context.getString(R.string.wear_age_compact, ((now - summary.fetchedAtMs).coerceAtLeast(0) / 60_000))
+        else WatchTile.age(context, summary.fetchedAtMs, now, compact = true)
         val icon = Icon.createWithResource(context,
             if (!synced || summary.waiting == 0) R.drawable.ic_aries_outline else R.drawable.ic_aries)
         val image = MonochromaticImage.Builder(icon).build()
@@ -24,21 +27,23 @@ object WaitingComplication {
         return when (type) {
             ComplicationType.SHORT_TEXT -> ShortTextComplicationData.Builder(
                 text(if (!synced) context.getString(R.string.wear_unknown_count) else summary.waiting.toString()),
-                text(description),
+                text(fullDescription),
             ).setTitle(text(title)).setMonochromaticImage(image).setTapAction(open).build()
             ComplicationType.LONG_TEXT -> {
                 val agent = summary.agents.firstOrNull()
                 val label = agent?.let { context.getString(R.string.wear_complication_agent,
-                    WatchConsole.code(context, it.status), it.name, it.hostId) }
+                    WatchConsole.code(context, it.status), it.name, it.hostName.ifBlank { it.hostId }) }
                     ?: context.getString(if (!synced) R.string.wear_not_synced else R.string.wear_no_agents)
-                LongTextComplicationData.Builder(text(label), text(context.getString(R.string.wear_complication_agent_description, label, description)))
-                    .setTitle(text(title)).setMonochromaticImage(image)
+                val agentAge = agent?.let { WatchTile.age(context, summary.fetchedAt(it.hostId), now, compact = true) } ?: title
+                LongTextComplicationData.Builder(text(label), text(context.getString(R.string.wear_complication_agent_description,
+                    label, context.getString(R.string.wear_row_age, agentAge, fullDescription))))
+                    .setTitle(text(agentAge)).setMonochromaticImage(image)
                     .setTapAction(WatchNavigation.pendingIntent(context, agent)).build()
             }
-            ComplicationType.MONOCHROMATIC_IMAGE -> MonochromaticImageComplicationData.Builder(image, text(description))
+            ComplicationType.MONOCHROMATIC_IMAGE -> MonochromaticImageComplicationData.Builder(image, text(fullDescription))
                 .setTapAction(open).build()
             ComplicationType.SMALL_IMAGE -> SmallImageComplicationData.Builder(
-                SmallImage.Builder(icon, SmallImageType.ICON).build(), text(description),
+                SmallImage.Builder(icon, SmallImageType.ICON).build(), text(fullDescription),
             ).setTapAction(open).build()
             else -> null
         }

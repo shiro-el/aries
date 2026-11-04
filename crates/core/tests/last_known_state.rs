@@ -6,6 +6,106 @@ use aries_test_support::HcSession;
 use common::{core_in, local_endpoint, wait_state};
 
 #[tokio::test]
+async fn adding_an_unfetched_host_notifies_surfaces_without_fabricating_state() {
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    let changes = core.watch_last_known_states();
+    assert!(changes.next().await.unwrap().is_empty());
+    core.add_host("offline".into(), common::script_endpoint("exit 1"))
+        .unwrap();
+    let states = tokio::time::timeout(std::time::Duration::from_secs(5), changes.next())
+        .await
+        .expect("surfaces must see the newly unknown Host")
+        .unwrap();
+    assert!(states.is_empty());
+    assert_eq!(core.hosts().len(), 1);
+    changes.stop();
+}
+
+#[tokio::test]
+async fn snapshot_waiting_for_structure_cannot_overwrite_a_newer_live_list() {
+    let hc = HcSession::start();
+    let agent = hc.run_fake_agent("writer", "status working\nwait\nstatus done\nwait\n");
+    wait_state(&hc, &agent.address, "working");
+    let data = tempfile::tempdir().unwrap();
+    let marker = data.path().join("structure-read");
+    let release = data.path().join("release");
+    // Gate only the first structure request, forwarding the real core protocol.
+    let bridge = r#"
+import os, subprocess, sys, threading, time, json, struct
+p = subprocess.Popen(sys.argv[3:], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+def output():
+    while True:
+        b = os.read(p.stdout.fileno(), 65536)
+        if not b: return
+        sys.stdout.buffer.write(b); sys.stdout.buffer.flush()
+try:
+    p.stdin.write(sys.stdin.buffer.readline()); p.stdin.flush()
+    sys.stdout.buffer.write(p.stdout.readline()); sys.stdout.buffer.flush()
+    threading.Thread(target=output, daemon=True).start()
+    while True:
+        header = sys.stdin.buffer.read(9)
+        if len(header) != 9: break
+        channel, kind, length = struct.unpack('<IBI', header)
+        body = sys.stdin.buffer.read(length)
+        if channel == 0 and json.loads(body).get('method') == 'doc.get' and not os.path.exists(sys.argv[1]):
+            open(sys.argv[1], 'w').close()
+            while not os.path.exists(sys.argv[2]): time.sleep(0.01)
+        p.stdin.write(header + body); p.stdin.flush()
+finally:
+    p.kill(); p.wait()
+"#;
+    let mut argv = vec![
+        "python3".into(),
+        "-c".into(),
+        bridge.into(),
+        marker.to_string_lossy().into_owned(),
+        release.to_string_lossy().into_owned(),
+    ];
+    argv.extend(hc.connect_argv());
+    let core = core_in(data.path());
+    let host = core
+        .add_host(
+            "dev".into(),
+            aries_core::Endpoint::Local {
+                argv,
+                env: hc.env().into_iter().collect(),
+            },
+        )
+        .unwrap();
+    let snapshot = tokio::spawn(core.clone().snapshot(host.id.clone()));
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        while !marker.exists() {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    hc.hc(&["send", &agent.address, "finish"]);
+    wait_state(&hc, &agent.address, "done");
+    let live = core.connect(host.id.clone()).await.unwrap();
+    live.terminals().await.unwrap();
+    let stored = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        loop {
+            if let Some(state) = core.last_known_state(host.id.clone()).unwrap()
+                && state.agents[0].agent_status == Some(AgentStatus::Done)
+            {
+                break state;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    std::fs::write(release, "").unwrap();
+    let refreshed = snapshot.await.unwrap().unwrap();
+    assert_eq!(refreshed.agents, stored.agents);
+    assert_eq!(refreshed.fetched_at_ms, stored.fetched_at_ms);
+    assert!(refreshed.structure_fetched_at_ms.unwrap() >= stored.fetched_at_ms);
+    live.disconnect().await;
+}
+
+#[tokio::test]
 async fn snapshot_persists_agents_and_fetch_time_and_removal_cleans_it() {
     let hc = HcSession::start();
     let plain = hc.run_bg("plain", &["sleep", "300"]);

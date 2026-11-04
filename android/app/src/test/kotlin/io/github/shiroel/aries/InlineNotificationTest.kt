@@ -33,8 +33,9 @@ import org.robolectric.shadows.ShadowNetworkCapabilities
 class InlineNotificationTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val manager = context.getSystemService(NotificationManager::class.java)
+    private var pushedAt = 0uL
     private fun status(status: AgentStatus = AgentStatus.Done, turn: ULong? = 7uL) =
-        PushNotice("h1", "box", PushContent.Status("t1", "agent", null, true, status, 1uL, turn, null, "All tests passed."))
+        PushNotice("h1", "box", PushContent.Status("t1", "agent", null, true, status, ++pushedAt, turn, null, "All tests passed."))
     private fun shown(tag: String = "t1") = manager.activeNotifications.single { it.tag == tag }.notification
 
     private val core get() = (context as FakeCoreApp).core
@@ -196,6 +197,21 @@ class InlineNotificationTest {
         alarm.operation!!.send()
         shadowOf(Looper.getMainLooper()).idle()
         assertTrue(text().contains("newer error"))
+    }
+
+    // Regression: checking only active cards revives an old snooze after the newer card was swiped.
+    @Test
+    fun aSnoozedCardDoesNotReturnAfterANewerCardWasSwiped() {
+        PushService.show(context, status())
+        shown().actions.single { it.title == context.getString(R.string.notification_snooze_button) }.actionIntent.send()
+        shadowOf(Looper.getMainLooper()).idle()
+        val alarm = shadowOf(context.getSystemService(AlarmManager::class.java)).nextScheduledAlarm!!
+        PushService.show(context, status(AgentStatus.Error("newer error")))
+        shown().deleteIntent.send()
+        shadowOf(Looper.getMainLooper()).idle()
+        alarm.operation!!.send()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(manager.activeNotifications.isEmpty())
     }
 
     @Test

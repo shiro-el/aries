@@ -22,6 +22,29 @@ import org.robolectric.annotation.Config
 class WatchProgressPhoneTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
 
+    @Test fun independentAgentsSurviveWorkerPublicationAndCompletingOneDoesNotEraseTheOther() = runBlocking {
+        val published = mutableListOf<WatchProgress>()
+        val paths = mutableListOf<String?>()
+        val factory = object : WorkerFactory() {
+            override fun createWorker(appContext: Context, workerClassName: String, workerParameters: WorkerParameters) =
+                WatchProgressWorker(appContext, workerParameters) { request ->
+                    published += requireNotNull(WatchProgress.fromBytes(request.data))
+                    paths += request.uri.path
+                }
+        }
+        WorkManagerTestInitHelper.initializeTestWorkManager(context,
+            androidx.work.Configuration.Builder().setWorkerFactory(factory).build())
+        WatchProgressPhone.progress(context, "h1", PushContent.Progress("t1", "One", 10uL, 0u, 100uL, false))
+        WatchProgressPhone.progress(context, "h2", PushContent.Progress("t1", "Two", 10uL, 0u, 90uL, false))
+        WatchProgressPhone.completed(context, "h1", "t1", 101uL)
+        TestListenableWorkerBuilder<WatchProgressWorker>(context).setWorkerFactory(factory).build().doWork()
+        assertEquals(setOf("h1", "h2"), published.map { it.hostId }.toSet())
+        assertTrue(published.last { it.hostId == "h1" }.cancelled)
+        assertFalse(published.last { it.hostId == "h2" }.cancelled)
+        assertEquals(2, published.map { it.dataPath }.toSet().size)
+        assertTrue(paths.contains(WatchProgress.DATA_PATH))
+    }
+
     @Test fun foregroundProgressAndCompletionPublishDurablyWithoutOldProgressResurrectingTheWatch() = runBlocking {
         val published = mutableListOf<WatchProgress>()
         val factory = object : WorkerFactory() {

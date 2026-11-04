@@ -13,14 +13,14 @@ class WatchDataService : WearableListenerService() {
         for (event in events) {
             val item = event.dataItem
             val phone = item.uri.host ?: continue
-            when (item.uri.path) {
-                WatchSummary.DATA_PATH -> when (event.type) {
+            when {
+                item.uri.path == WatchSummary.DATA_PATH -> when (event.type) {
                     DataEvent.TYPE_CHANGED -> store.accept(phone, item.data)
                     DataEvent.TYPE_DELETED -> store.clear(phone)
                 }
-                WatchProgress.DATA_PATH -> when (event.type) {
-                    DataEvent.TYPE_CHANGED -> store.acceptProgress(phone, item.data)
-                    DataEvent.TYPE_DELETED -> store.clearProgress(phone)
+                WatchProgress.isDataPath(item.uri.path) -> when (event.type) {
+                    DataEvent.TYPE_CHANGED -> store.acceptProgress(phone, item.data, item.uri.path)
+                    DataEvent.TYPE_DELETED -> store.clearProgress(phone, item.uri.path)
                 }
             }
         }
