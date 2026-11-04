@@ -317,6 +317,8 @@ class TerminalViewer(terminal: TerminalInfo, private val composer: TerminalCompo
         if (delivered && draft == paste.text) draft = ""
     }
 
+    internal var rewindPicker by mutableStateOf(false)
+
     var keyBarVisible by mutableStateOf(true)
         private set
 
@@ -587,7 +589,8 @@ fun TerminalScreen(
             input = { compact ->
                 if (preview.selected == null) {
                     TerminalComposer(viewer, compact)
-                    if (!compact && viewer.typing && viewer.keyBarVisible) TerminalKeyBar(viewer)
+                    if (viewer.rewindPicker) TerminalRewindControls(viewer)
+                    else if (!compact && viewer.typing && viewer.keyBarVisible) TerminalKeyBar(viewer)
                 }
             },
         ) { compact ->

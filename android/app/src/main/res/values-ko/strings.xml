@@ -630,6 +630,17 @@
     <string name="chat_link_open_failed">링크를 열 수 없어요.</string>
 
     <!-- Chat text selection and clipboard actions. -->
+    <!-- Chat rewind: selection is completed in Terminal. -->
+    <string name="chat_rewind_enter_key">ENTER</string>
+    <string name="chat_rewind_here">여기로 되감기</string>
+    <string name="chat_rewind_title">대화를 되감을까요?</string>
+    <string name="chat_rewind_body">Terminal에서 이 메시지를 고르세요. 되감으면 이 메시지와 그 뒤 대화가 삭제돼요. Terminal에서 Esc를 누르면 취소할 수 있어요.</string>
+    <string name="chat_rewind_open_button">되감기 선택기 열기</string>
+    <string name="chat_rewind_stop_first">먼저 중단하세요</string>
+    <string name="chat_rewind_unavailable">지금은 되감을 수 없어요. Agent를 중단하고 Chat이 다시 연결된 뒤 시도하세요.</string>
+    <string name="chat_rewind_picker_hint">화살표로 메시지를 고른 뒤 Enter를 누르세요. Esc로 취소할 수 있어요.</string>
+    <string name="chat_rewind_controls_close">되감기 키 숨기기</string>
+
     <string name="chat_text_actions">텍스트 메뉴</string>
     <string name="chat_copy_all">모두 복사</string>
     <string name="chat_select_text">텍스트 선택</string>

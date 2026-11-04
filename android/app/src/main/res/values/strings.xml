@@ -630,6 +630,17 @@
     <string name="chat_link_open_failed">Could not open the link.</string>
 
     <!-- Chat text selection and clipboard actions. -->
+    <!-- Chat rewind: selection is completed in Terminal. -->
+    <string name="chat_rewind_enter_key">ENTER</string>
+    <string name="chat_rewind_here">Rewind here</string>
+    <string name="chat_rewind_title">Rewind conversation?</string>
+    <string name="chat_rewind_body">Choose this message in Terminal. Rewinding removes it and the conversation after it. Press Esc in Terminal to cancel.</string>
+    <string name="chat_rewind_open_button">Open rewind picker</string>
+    <string name="chat_rewind_stop_first">Stop first</string>
+    <string name="chat_rewind_unavailable">Rewind is unavailable. Stop the Agent and wait for Chat to reconnect before trying again.</string>
+    <string name="chat_rewind_picker_hint">Choose the message with the arrows, then press Enter. Esc cancels.</string>
+    <string name="chat_rewind_controls_close">Hide rewind controls</string>
+
     <string name="chat_text_actions">Text actions</string>
     <string name="chat_copy_all">Copy all</string>
     <string name="chat_select_text">Select text</string>

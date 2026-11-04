@@ -48,7 +48,7 @@ internal fun TasksChatDetail(model: HostsModel, chat: ChatModel) {
             CallAttentionSlot()
             TasksChanges(changes, chat.link, chat.terminal) { text -> chat.appendDraft(text); changesOpen = false }
         } else ChatScreen(chat, onBack = model::closeChat, onOpenTerminal = { model.switchView(AgentView.TERMINAL) },
-            onView = model::switchView, calls = model.calls)
+            onView = model::switchView, calls = model.calls, onRewind = model::rewindChat)
     }
 }
 
