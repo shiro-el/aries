@@ -31,7 +31,8 @@ internal val LocalStartTask = compositionLocalOf<((TaskIssue?) -> Unit)?> { null
 
 /** A launch is performed once. Only a positive readiness observation permits the first send.
  * Reads may be retried, writes never are: a lost write reply is an uncertain outcome. */
-internal class NewTask(var link: HostLink, val form: LaunchForm, prompt: String) {
+internal class NewTask(link: HostLink, val form: LaunchForm, prompt: String) {
+    var link by mutableStateOf(link)
     var input by mutableStateOf(TextFieldValue(prompt, TextRange(prompt.length)))
     val prompt: String get() = input.text
     var terminal by mutableStateOf<TerminalInfo?>(null)
@@ -45,7 +46,7 @@ internal class NewTask(var link: HostLink, val form: LaunchForm, prompt: String)
     var waiting by mutableStateOf(false)
         private set
 
-    val canStart get() = link.state == LinkState.Up && !form.busy && !deliveryUnknown && !launchUnknown && !sent &&
+    val canStart get() = link.state == LinkState.Up && link.connection != null && !form.busy && !deliveryUnknown && !launchUnknown && !sent &&
         prompt.isNotBlank() && form.cwd.startsWith('/') && form.preset in taskPresets
 
     suspend fun start(onReady: (TerminalInfo, String) -> Unit) {

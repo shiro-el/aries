@@ -441,7 +441,16 @@ class ChatModel(
     private var connectionJob: Job? = null
     var waitingReturned by mutableStateOf(false)
         private set
-    private var transcriptReady = false
+    private var transcriptReady by mutableStateOf(false)
+    private var transcriptTerminal by mutableStateOf<TerminalInfo?>(null)
+
+    /** Home previews must come from an active, caught-up watch of this exact turn/status. */
+    internal fun currentTranscript(current: TerminalInfo): ChatSnapshot? = snapshot?.takeIf {
+        transcriptReady && (link == null || link?.state == LinkState.Up) &&
+            transcriptTerminal?.let { source ->
+                source.turn == current.turn && source.statusMs == current.statusMs && source.agentStatus == current.agentStatus
+            } == true
+    }
     private var stopped = false
     private var terminalRevision = 0L
     private var recoveryLoaded = false
@@ -905,6 +914,7 @@ class ChatModel(
                     if (snapshot?.status != update.status) clearSendNotices()
                     snapshot = ChatSnapshot(update.order.mapNotNull { entries[it] }, update.status, update.cursor, update.usage)
                     connectionError = null
+                    transcriptTerminal = terminal
                     transcriptReady = update.status == ChatStatus.LIVE
                     if (update.status in setOf(ChatStatus.ENDED, ChatStatus.NO_TERMINAL, ChatStatus.NO_AGENT)) {
                         returnWaitingToDraft()

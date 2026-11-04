@@ -77,7 +77,7 @@ internal fun TasksHostContent(model: HostsModel, browser: HostBrowser, hostSecti
             items(entries, key = { "agent:${it.terminal.address}" }) { entry ->
                 var menu by remember(entry.key) { mutableStateOf(false) }
                 Box {
-                    TasksTaskRow(entry, onLongClick = { menu = true }) { model.selectListedTerminal(browser, entry.terminal) }
+                    TasksTaskRow(entry, onLongClick = { menu = true }, showHost = false, showSpace = false) { model.selectListedTerminal(browser, entry.terminal) }
                     DropdownMenu(menu, onDismissRequest = { menu = false }) {
                         ActionMenuItem(stringResource(if (entry.terminal.pinned) R.string.menu_unpin else R.string.menu_pin),
                             R.drawable.agent_pin, enabled = enabled && entry.live,
