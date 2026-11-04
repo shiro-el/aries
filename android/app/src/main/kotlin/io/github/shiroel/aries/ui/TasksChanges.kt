@@ -8,6 +8,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -186,11 +189,31 @@ internal fun ColumnScope.TasksChanges(state: TasksChangesState, link: HostLink?,
         }
     } else LazyColumn(Modifier.weight(1f).testTag("tasks-changes-files")) {
         items(git?.files.orEmpty(), key = { it.path }) { changed ->
-            Row(Modifier.fillMaxWidth().clickable(enabled = current) { state.selected = changed.path }.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            val label = stringResource(R.string.git_file_accessibility_label, gitStatusDescription(changed.status), changed.path)
+            Row(Modifier.fillMaxWidth().clickable(enabled = current, role = Role.Button) { state.selected = changed.path }
+                .semantics { contentDescription = label }.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(changed.status, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.primary)
                 Text(changed.path, Modifier.weight(1f), fontFamily = FontFamily.Monospace)
             }
             HorizontalDivider()
         }
     }
+}
+
+@Composable
+private fun gitStatusDescription(status: String): String {
+    val labels = when (status) {
+        "??" -> listOf(R.string.git_untracked)
+        "!!" -> listOf(R.string.git_status_changed)
+        "DD", "AU", "UD", "UA", "DU", "AA", "UU" -> listOf(R.string.git_status_conflicted)
+        else -> status.filterNot(Char::isWhitespace).map { code -> when (code) {
+            'M', 'T' -> R.string.git_status_modified
+            'A' -> R.string.git_status_added
+            'D' -> R.string.git_status_deleted
+            'R' -> R.string.git_status_renamed
+            'C' -> R.string.git_status_copied
+            else -> R.string.git_status_changed
+        } }.distinct().ifEmpty { listOf(R.string.git_status_changed) }
+    }
+    return labels.map { stringResource(it) }.joinToString(", ")
 }

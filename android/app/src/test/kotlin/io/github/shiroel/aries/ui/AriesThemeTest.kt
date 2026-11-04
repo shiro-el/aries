@@ -96,6 +96,31 @@ class AriesThemeTest {
         }
     }
 
+    // D107: layout-specific/custom accent containers can obscure selected answer text and radio marks; lint does not evaluate runtime palettes.
+    @Test fun selectedAnswersMeetTextAndControlContrast() {
+        for (layout in AppLayout.entries) for (dark in listOf(false, true)) {
+            for (accent in listOf(Brand.Saffron, Color(0xFFE66B4E), Color(0xFF5BAE89),
+                Color(0xFF54A8B8), Color(0xFF8C7CF0), Color(0xFFDA7BA0), Color.Black, Color.White, Color(0xFF123456))) {
+                val colors = schemeFor(accent, dark, layout)
+                assertTrue("$layout dark=$dark accent=$accent selected text", contrast(colors.onPrimaryContainer, colors.primaryContainer) >= 4.5f)
+                assertTrue("$layout dark=$dark accent=$accent selected control", contrast(colors.primary, colors.primaryContainer) >= 3f)
+            }
+        }
+    }
+
+    // D112: small Tasks status text must meet AA after tint compositing, which lint cannot evaluate.
+    @Test fun tasksStatusChipsMeetSmallTextContrast() {
+        for (dark in listOf(false, true)) {
+            val colors = schemeFor(Brand.Saffron, dark, AppLayout.TASKS)
+            val accents = if (dark) listOf(Brand.Saffron, Color(0xFF7CC891), colors.onSurfaceVariant, colors.error)
+                else listOf(Color(0xFF8F5E06), Color(0xFF2E7D4A), colors.onSurfaceVariant, colors.error)
+            for (surface in listOf(colors.background, colors.surfaceContainer)) for (accent in accents) for (urgent in listOf(false, true)) {
+                val chip = taskStatusChipColors(accent, urgent, surface)
+                assertTrue("dark=$dark accent=$accent urgent=$urgent chip text", contrast(chip.foreground, chip.background) >= 4.5f)
+            }
+        }
+    }
+
     private fun contrast(a: Color, b: Color): Float =
         (maxOf(a.luminance(), b.luminance()) + .05f) / (minOf(a.luminance(), b.luminance()) + .05f)
 

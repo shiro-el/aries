@@ -9,6 +9,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -75,11 +77,14 @@ private fun ThreadTaskForm(task: NewTask, model: HostsModel?, onStart: () -> Uni
     Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             AssistChip(onClick = { picker = "host" }, enabled = editable && model != null,
+                modifier = Modifier.pickerDescription(stringResource(R.string.creation_host_label), task.link.host.name),
                 label = { Text(task.link.host.name, maxLines = 1, overflow = TextOverflow.Ellipsis) })
             AssistChip(onClick = { picker = "folder" }, enabled = editable,
+                modifier = Modifier.pickerDescription(stringResource(R.string.launch_cwd), form.cwd),
                 label = { Text(form.cwd.substringAfterLast('/').ifBlank { stringResource(R.string.launch_cwd) },
                     modifier = Modifier.widthIn(max = 180.dp), maxLines = 1, overflow = TextOverflow.Ellipsis) })
             AssistChip(onClick = { picker = "agent" }, enabled = editable,
+                modifier = Modifier.pickerDescription(stringResource(R.string.tasks_agent), form.preset?.let { stringResource(it.label) }.orEmpty()),
                 label = { Text(form.preset?.let { stringResource(it.label) } ?: stringResource(R.string.new_task_title)) })
         }
         Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
@@ -106,9 +111,9 @@ private fun ThreadTaskForm(task: NewTask, model: HostsModel?, onStart: () -> Uni
             OutlinedTextField(form.command, { form.command = it }, enabled = editable,
                 label = { Text(stringResource(R.string.launch_preset_args)) }, modifier = Modifier.fillMaxWidth())
         }
-        if (task.waiting) Text(stringResource(R.string.new_task_waiting), style = MaterialTheme.typography.bodySmall)
-        if (form.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-        form.error?.let { Text(messageText(it), color = MaterialTheme.colorScheme.error) }
+        NewTaskStatus(task)
+        val starting = stringResource(R.string.new_task_starting)
+        if (form.busy) LinearProgressIndicator(Modifier.fillMaxWidth().semantics { contentDescription = starting })
         if (task.terminal != null && !form.busy) TextButton(onClick = onOpenChat) { Text(stringResource(R.string.new_task_open_chat)) }
     }
     if (picker != null) ModalBottomSheet(onDismissRequest = { picker = null }) {
