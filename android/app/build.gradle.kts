@@ -30,6 +30,20 @@ android {
         resValues = true
     }
 
+    // Fake-core workload only; the Activity and tracing code never ship in release.
+    buildTypes {
+        create("chatProfile") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".chatprofile"
+            isDebuggable = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += "release"
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+        }
+    }
+
     // Keep Android Settings and the in-app picker limited to shipped translations.
     androidResources { generateLocaleConfig = false }
     // Both picker choices must stay available in Play-delivered bundles, even offline.
@@ -233,7 +247,9 @@ val thirdPartyNotices = tasks.register<RustNotices>("thirdPartyNotices") {
 androidComponents {
     onVariants { variant ->
         variant.sources.java?.addGeneratedSourceDirectory(uniffiBindings, UniffiBindings::outputDir)
-        variant.sources.jniLibs?.addGeneratedSourceDirectory(cargoNdk, CargoNdk::outputDir)
+        if (variant.buildType != "chatProfile") {
+            variant.sources.jniLibs?.addGeneratedSourceDirectory(cargoNdk, CargoNdk::outputDir)
+        }
         // Release only, so debug builds don't need cargo-about installed.
         if (variant.buildType == "release") {
             variant.sources.assets?.addGeneratedSourceDirectory(thirdPartyNotices, RustNotices::outputDir)
