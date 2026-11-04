@@ -317,7 +317,7 @@ class TasksHomeTest {
         compose.onNodeWithTag("tasks-new-start").performClick()
         compose.runOnIdle { core.push(core.terminals.map { it.copy(agentStatus = AgentStatus.Idle) }) }
         compose.waitUntil { core.connection!!.typed.isNotEmpty() }
-        compose.onNodeWithContentDescription(context.getString(R.string.chat_input_label)).assertExists()
+        compose.onNodeWithContentDescription(context.getString(R.string.chat_message_input_label)).assertExists()
         compose.runOnIdle {
             assertEquals(1, core.connection!!.launched.size)
             assertEquals(listOf("t101" to "Fix the queue"), core.connection!!.typed)

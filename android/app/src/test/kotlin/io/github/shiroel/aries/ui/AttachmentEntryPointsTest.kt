@@ -79,7 +79,7 @@ class AttachmentEntryPointsTest {
 
     private fun filePickerKeepsDraft(compact: Boolean = false, thread: Boolean = false) {
         val connection = openChat(thread)
-        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).performTextInput("keep this")
+        compose.onNodeWithContentDescription(str(if (thread) R.string.chat_message_input_label else R.string.chat_input_label)).performTextInput("keep this")
         captureAttachmentScreenshot(compose, if (compact) "compact-composer" else "portrait-composer")
         if (compact || thread) {
             compose.onNodeWithContentDescription(str(R.string.chat_input_tools_button)).performClick()
@@ -97,7 +97,7 @@ class AttachmentEntryPointsTest {
         compose.waitUntil(5_000) {
             compose.onAllNodesWithText(compose.activity.getString(R.string.attachments_too_large, MAX_ATTACHMENT_BYTES / (1024 * 1024))).fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("keep this")
+        compose.onNodeWithContentDescription(str(if (thread) R.string.chat_message_input_label else R.string.chat_input_label)).assertTextEquals("keep this")
         assertTrue(connection.uploads.isEmpty())
         assertTrue(connection.typed.isEmpty())
     }

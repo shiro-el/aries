@@ -326,8 +326,8 @@ class ChatModel(
             try {
                 val notice = interruptMessage(connection.interruptAgent(address))
                 if (interruptRevision == revision) interruptNotice = notice
-            } catch (e: CoreException) {
-                if (interruptRevision == revision) interruptNotice = Message(R.string.chat_interrupt_failed, listOf(errorMessage(e)))
+            } catch (_: CoreException) {
+                if (interruptRevision == revision) interruptNotice = Message(R.string.chat_interrupt_failed)
             } finally {
                 interrupting = false
                 drainQueue()
@@ -1527,7 +1527,7 @@ private fun ChatEntryFooter(images: List<ChatImage>, metadata: ChatResponseMetad
 internal fun MessageInput(chat: ChatModel, compact: Boolean = false, leading: (@Composable () -> Unit)? = null) {
     var tools by remember(chat) { mutableStateOf(false) }
     if (tools) ChatInputToolsDialog(chat) { tools = false }
-    val inputLabel = stringResource(R.string.chat_input_label)
+    val inputLabel = stringResource(LocalLayoutScreens.current.messageInputLabel)
     val inputStyle = MaterialTheme.typography.bodyLarge.copy(
         fontFamily = if (LocalThreadChat.current != null) FontFamily.SansSerif else FontFamily.Monospace,
         fontSize = 14.sp,
@@ -1669,7 +1669,7 @@ internal fun ChatEntryView(
                 )
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Icon(painterResource(R.drawable.ic_check), contentDescription = null, modifier = Modifier.size(14.dp))
-                    Text(stringResource(if (b.queued) R.string.chat_queue_agent else R.string.chat_delivery_received),
+                    Text(stringResource(if (b.queued) LocalLayoutScreens.current.messageQueuedLabel else LocalLayoutScreens.current.messageReceivedLabel),
                         style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 ChatAttachmentCards(attachments, chat)
@@ -1776,16 +1776,22 @@ private fun ToolContent(
                     contentDescription = null, modifier = Modifier.size(14.dp),
                     tint = MaterialTheme.colorScheme.primary,
                 )
-                if (LocalTasksDetail.current != null && !expanded) {
-                    Text(tasksToolVerb(tool.name), Modifier.widthIn(max = 100.dp), style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                val taskTool = LocalTasksDetail.current != null && !expanded
+                val verb = if (taskTool) tasksToolVerb(tool.name) else null
+                if (taskTool) {
+                    Text(verb ?: stringResource(R.string.tasks_tool_other), Modifier.widthIn(max = 100.dp), style = MaterialTheme.typography.labelMedium, maxLines = 1)
                 } else SearchableChatText(tool.name, "tool-name", Modifier.widthIn(max = 120.dp), style = MaterialTheme.typography.labelMedium,
                     fontFamily = FontFamily.Monospace, maxLines = 1)
-                SearchableChatText(
-                    title, "tool-title", Modifier.weight(1f),
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 1, fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Column(Modifier.weight(1f)) {
+                    if (taskTool && verb == null) SearchableChatText(tool.name, "tool-name",
+                        style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace, maxLines = 1)
+                    SearchableChatText(
+                        title, "tool-title",
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1, fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 val patch = if (LocalTasksDetail.current != null) tool.diff?.takeUnless { it.truncated } else null
                 val patchStats = remember(patch) {
                     patch?.hunks?.flatMap { it.lines }?.let { lines ->

@@ -30,6 +30,7 @@ class ChatSearchUiTest {
     private val speech = FakeSpeechEngine()
     private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
     private fun str(id: Int, vararg args: Any) = context.getString(id, *args)
+    private fun countText(current: Int, count: Int) = context.resources.getQuantityString(R.plurals.chat_search_count, count, current, count)
     private fun entry(id: String, body: ChatEntryBody) = ChatEntry(id, null, body)
 
     private fun openChat(core: FakeCore) {
@@ -53,7 +54,7 @@ class ChatSearchUiTest {
     }
 
     private fun waitForCount(current: Int, count: Int) {
-        compose.waitUntil(5_000) { compose.onAllNodesWithText(str(R.string.chat_search_count, current, count)).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(5_000) { compose.onAllNodesWithText(countText(current, count)).fetchSemanticsNodes().isNotEmpty() }
     }
 
     private fun assertHighlight(text: String, needle: String, active: Boolean) {
@@ -93,20 +94,20 @@ class ChatSearchUiTest {
         compose.waitUntil(5_000) { compose.onAllNodesWithText("end of the cached Chat").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).performTextInput("my unsent draft")
         search("needle")
-        compose.onNodeWithText(str(R.string.chat_search_count, 1, 3)).assertExists()
+        compose.onNodeWithText(countText(1, 3)).assertExists()
         assertHighlight("Find needle in the old answer.", "needle", true)
         compose.onNodeWithContentDescription(str(R.string.chat_search_next)).performClick()
-        compose.onNodeWithText(str(R.string.chat_search_count, 2, 3)).assertExists()
+        compose.onNodeWithText(countText(2, 3)).assertExists()
         compose.onNodeWithText("a NEEDLE in the result").assertIsDisplayed()
         assertHighlight("a NEEDLE in the result", "NEEDLE", true)
         compose.onNodeWithContentDescription(str(R.string.chat_search_next)).performClick()
-        compose.onNodeWithText(str(R.string.chat_search_count, 3, 3)).assertExists()
+        compose.onNodeWithText(countText(3, 3)).assertExists()
         assertHighlight("+last needle", "needle", true)
         assertMatchVisible("+last needle", "needle")
         compose.onNodeWithContentDescription(str(R.string.chat_search_next)).performClick()
-        compose.onNodeWithText(str(R.string.chat_search_count, 1, 3)).assertExists()
+        compose.onNodeWithText(countText(1, 3)).assertExists()
         compose.onNodeWithContentDescription(str(R.string.chat_search_previous)).performClick()
-        compose.onNodeWithText(str(R.string.chat_search_count, 3, 3)).assertExists()
+        compose.onNodeWithText(countText(3, 3)).assertExists()
         compose.onNodeWithContentDescription(str(R.string.chat_search_close)).performClick()
         compose.onNodeWithContentDescription(str(R.string.chat_search_hint)).assertDoesNotExist()
         compose.onNodeWithText("my unsent draft").assertExists()
@@ -120,7 +121,7 @@ class ChatSearchUiTest {
         core.pushChat(ChatSnapshot(listOf(entry("long", ChatEntryBody.Agent(first + " across tail"))), ChatStatus.RECONNECTING, null))
         compose.waitUntil(5_000) { compose.onAllNodesWithText(" across tail").fetchSemanticsNodes().isNotEmpty() }
         search("needle across", 1)
-        compose.onNodeWithText(str(R.string.chat_search_count, 1, 1)).assertExists()
+        compose.onNodeWithText(countText(1, 1)).assertExists()
         assertHighlight(first, "needle", true)
         assertMatchVisible(first, "needle")
         assertHighlight(" across tail", " across", true)

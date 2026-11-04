@@ -241,19 +241,19 @@ internal fun NewTaskDialog(task: NewTask, onStart: () -> Unit, onOpenChat: () ->
                 Text(stringResource(R.string.launch_stop_tracking_body))
                 TextButton(onClick = { owner?.stopTrackingTask() }) { Text(stringResource(R.string.launch_stop_tracking_button)) }
             }
-            if (task.terminal != null && !form.busy) TextButton(onClick = onOpenChat) { Text(stringResource(R.string.new_task_open_chat)) }
+            if (task.terminal != null && !form.busy) TextButton(onClick = onOpenChat) { Text(stringResource(LocalLayoutScreens.current.openTaskLabel)) }
         }
     }
     val start: @Composable () -> Unit = {
         ConsoleButton(onClick = onStart, enabled = task.canStart, modifier = if (fullScreen) Modifier.fillMaxWidth() else Modifier) {
-            Text(stringResource(if (task.terminal == null) R.string.new_task_start else R.string.new_task_wait_again))
+            Text(stringResource(if (task.terminal == null) LocalLayoutScreens.current.startTaskLabel else R.string.new_task_wait_again))
         }
     }
     if (fullScreen) androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss,
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize().testTag("new-task-dialog"), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize().imePadding()) {
-                ConsoleTopBar(stringResource(R.string.new_task_title), onMenu = {}, onBack = onDismiss,
+                ConsoleTopBar(stringResource(LocalLayoutScreens.current.newTaskTitle), onMenu = {}, onBack = onDismiss,
                     showMark = false, showNavigationActions = false)
                 Box(Modifier.weight(1f).padding(LocalLayoutTokens.current.contentPadding)) { fields() }
                 HorizontalDivider()
@@ -261,9 +261,9 @@ internal fun NewTaskDialog(task: NewTask, onStart: () -> Unit, onOpenChat: () ->
             }
         }
     } else AlertDialog(onDismissRequest = onDismiss, modifier = Modifier.testTag("new-task-dialog"),
-        title = { Text(stringResource(R.string.new_task_title)) }, text = fields,
+        title = { Text(stringResource(LocalLayoutScreens.current.newTaskTitle)) }, text = fields,
         confirmButton = { TextButton(onClick = onStart, enabled = task.canStart) {
-            Text(stringResource(if (task.terminal == null) R.string.new_task_start else R.string.new_task_wait_again))
+            Text(stringResource(if (task.terminal == null) LocalLayoutScreens.current.startTaskLabel else R.string.new_task_wait_again))
         } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel_button)) } })
     if (browsing) TaskFolderDialog(task.link.connection, form.cwd.ifBlank { "/" },

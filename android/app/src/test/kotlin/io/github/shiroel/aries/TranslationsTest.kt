@@ -54,6 +54,25 @@ class TranslationsTest {
         assertTrue("use %1\$s-style arguments in: $problems", problems.isEmpty())
     }
 
+    // D118: phone and watch additions must keep the same 해요체 voice; lint only checks translation structure.
+    @Test
+    fun koreanCopyKeepsTheConversationalVoiceOnPhoneAndWatch() {
+        val formalEnding = Regex("[가-힣]+(니다|십시오)")
+        val problems = listOf(res.resolve("values-ko"), File("../wear/src/main/res/values-ko"))
+            .flatMap { dir -> dir.listFiles { file -> file.extension == "xml" }.orEmpty().toList() }
+            .flatMap { file ->
+                val nodes = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(file)
+                    .documentElement.childNodes
+                (0 until nodes.length).mapNotNull { index ->
+                    val element = nodes.item(index) as? Element ?: return@mapNotNull null
+                    formalEnding.find(element.textContent)?.let {
+                        "${file.path}: ${element.getAttribute("name")}: ${it.value}"
+                    }
+                }
+            }
+        assertTrue("Use 해요체:\n${problems.joinToString("\n")}", problems.isEmpty())
+    }
+
     @Test
     fun uiTextComesFromStringResources() {
         val problems = kotlin.walkTopDown().filter { it.extension == "kt" }.flatMap { file ->

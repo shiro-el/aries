@@ -95,8 +95,14 @@ internal fun CallAttentionBanner(entry: CallEntry, callerName: String?, onOpen: 
         CallUrgency.URGENT -> statusColor(io.github.shiroel.aries.core.AgentStatus.Blocked(null, null))
         CallUrgency.EMERGENCY -> colors.error
     }
+    val urgency = stringResource(when (entry.call.urgency) {
+        CallUrgency.RECORD -> R.string.call_banner_record
+        CallUrgency.CHECK -> R.string.call_banner_check
+        CallUrgency.URGENT -> R.string.call_banner_urgent
+        CallUrgency.EMERGENCY -> R.string.call_banner_emergency
+    })
     val caller = stringResource(R.string.call_inbox_caller, callerName ?: stringResource(R.string.call_caller_unknown), entry.host.name)
-    val meta = stringResource(R.string.call_banner_meta, urgencyLabel(entry.call.urgency), caller)
+    val meta = stringResource(R.string.call_banner_meta, urgency, caller)
     val announcement = "$meta. ${entry.call.title}"
     val open = stringResource(R.string.call_banner_open)
     Row(
@@ -107,7 +113,7 @@ internal fun CallAttentionBanner(entry: CallEntry, callerName: String?, onOpen: 
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f).padding(vertical = if (compact) 0.dp else 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            if (compact) Text(stringResource(R.string.call_banner_meta, urgencyLabel(entry.call.urgency), entry.call.title),
+            if (compact) Text(stringResource(R.string.call_banner_meta, urgency, entry.call.title),
                 Modifier.semantics { contentDescription = announcement },
                 color = accent, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             else {

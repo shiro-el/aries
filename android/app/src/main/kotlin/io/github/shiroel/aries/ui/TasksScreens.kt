@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
@@ -22,6 +23,13 @@ import io.github.shiroel.aries.R
 
 /** Tasks presentation reuses the shared navigation and operation owners. */
 internal object TasksScreens : LayoutScreens() {
+    override val messageInputLabel = R.string.chat_message_input_label
+    override val messageReceivedLabel = R.string.chat_message_received
+    override val messageQueuedLabel = R.string.chat_message_queued
+    override val startTaskLabel = R.string.tasks_start_task
+    override val openTaskLabel = R.string.new_task_open_task
+    override val defaultViewLabel = R.string.settings_task_view
+    override val chatViewLabel = R.string.tasks_activity
     @Composable override fun Shell(model: HostsModel, content: @Composable () -> Unit) = TasksShell(model, content)
     @Composable override fun Header(model: HostsModel, screen: Screen) {
         when (screen) {
@@ -84,7 +92,7 @@ private fun TasksHomeHeader(model: HostsModel, screen: Screen) {
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             val board = (screen as Screen.Agents).board
             val connected = model.hosts.count { board.links[it.id]?.state == LinkState.Up }
-            val hostsLabel = stringResource(R.string.tasks_hosts_count, connected, model.hosts.size)
+            val hostsLabel = pluralStringResource(R.plurals.tasks_hosts_count, model.hosts.size, connected, model.hosts.size)
             val openHosts = LocalTasksHosts.current
             Row(Modifier.heightIn(min = 48.dp).widthIn(min = 48.dp).testTag("tasks-hosts")
                 .clickable(role = Role.Button, onClick = openHosts)

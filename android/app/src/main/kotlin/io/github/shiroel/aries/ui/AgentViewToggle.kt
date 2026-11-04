@@ -23,6 +23,6 @@ fun AgentViewToggle(current: AgentView, onView: (AgentView) -> Unit) {
         textStyle = MaterialTheme.typography.bodyMedium,
         inactiveColor = MaterialTheme.colorScheme.onSurfaceVariant,
     ) { view ->
-        stringResource(if (view == AgentView.TERMINAL) R.string.agent_view_terminal else R.string.agent_view_chat)
+        stringResource(if (view == AgentView.TERMINAL) R.string.agent_view_terminal else LocalLayoutScreens.current.chatViewLabel)
     }
 }

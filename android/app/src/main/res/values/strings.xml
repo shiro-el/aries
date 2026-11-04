@@ -508,7 +508,10 @@
     <string name="terminal_accessibility_summary">Terminal, %1$d columns, %2$d rows</string>
     <string name="terminal_accessibility_cursor">Cursor line %1$d: %2$s</string>
     <string name="terminal_connection_closed">The connection to the Terminal closed. What you see may be out of date.</string>
-    <string name="terminal_scrolled_back">%1$d lines back</string>
+    <plurals name="terminal_scrolled_back">
+        <item quantity="one">%1$d line back</item>
+        <item quantity="other">%1$d lines back</item>
+    </plurals>
     <string name="terminal_back_to_live">Back to live</string>
     <string name="terminal_zoom_reset">Zoom %1$d%% · Reset</string>
     <string name="terminal_copy">Copy</string>
@@ -539,7 +542,7 @@
     <string name="agents_host_scope">Showing only %1$s</string>
     <string name="agents_show_all">Show all</string>
     <string name="agents_host_not_connected">%1$s · Not connected</string>
-    <string name="agents_watch_stopped">%1$s · Stopped: %2$s</string>
+    <string name="agents_watch_stopped">%1$s · Could not receive the list</string>
     <string name="agents_host_offline">%1$s · Offline</string>
     <string name="agents_last_known_group">Last-known · %1$d</string>
     <string name="agents_last_seen">Last seen %1$s</string>
@@ -578,7 +581,10 @@
     <!-- Chat search -->
     <string name="chat_search_button">Search Chat</string>
     <string name="chat_search_hint">Search cached Chat</string>
-    <string name="chat_search_count">%1$d of %2$d matches</string>
+    <plurals name="chat_search_count">
+        <item quantity="one">%1$d of %2$d match</item>
+        <item quantity="other">%1$d of %2$d matches</item>
+    </plurals>
     <string name="chat_search_previous">Previous</string>
     <string name="chat_search_next">Next</string>
     <string name="chat_search_close">Close search</string>
@@ -589,12 +595,12 @@
 
     <string name="chat_empty">No messages yet.</string>
     <string name="chat_status_connecting">Connecting to the Beacon…</string>
-    <string name="chat_input_agent_ended">The Agent has ended or is no longer in this Terminal. Chat input is disabled. Your draft is kept. Open Terminal to continue.</string>
+    <string name="chat_input_agent_ended">Messages can no longer be sent here for this Terminal. Your draft is kept. Open Terminal to continue.</string>
     <string name="chat_status_reconnecting">Connection lost. Reconnecting…</string>
     <string name="chat_status_no_terminal">This Terminal no longer exists.</string>
-    <string name="chat_status_no_beacon">Chat needs Beacon on this Host. Install it in Host settings to read the conversation.</string>
+    <string name="chat_status_no_beacon">Install Beacon in this Host’s settings to read the messages.</string>
     <string name="chat_status_no_core">The Beacon cannot reach herdr-core on this Host. Retrying…</string>
-    <string name="chat_status_incompatible">The Beacon on this Host is newer than this app. Update Aries to read the Chat.</string>
+    <string name="chat_status_incompatible">The Beacon on this Host is newer than this app. Update Aries to read the messages.</string>
     <string name="chat_you">You</string>
     <!-- Markdown and Mermaid file previews (141) -->
     <string name="files_markup_preview">Preview</string>
@@ -622,12 +628,12 @@
     <!-- Thread Chat -->
     <!-- Thread navigation and task shell -->
     <string name="thread_home_empty_title">Start a conversation</string>
-    <string name="thread_home_empty_body">Choose a task below, or open a conversation from the menu.</string>
+    <string name="thread_home_empty_body">Enter a prompt below, or open a conversation from the menu.</string>
     <string name="thread_new_body">Choose a Host, folder and Agent, then describe your task.</string>
     <string name="thread_host_online">%1$s · Connected</string>
     <string name="thread_search_hint">Search conversations</string>
-    <string name="thread_section_needs">Needs attention</string>
-    <string name="thread_section_working">In progress</string>
+    <string name="thread_section_needs">Needs you</string>
+    <string name="thread_section_working">Working</string>
     <string name="thread_section_today">Today</string>
     <string name="thread_section_earlier">Earlier</string>
     <string name="thread_urgent_call">Urgent Call</string>
@@ -635,8 +641,8 @@
     <string name="thread_tools_summary">%1$s · %2$s</string>
     <string name="thread_tools_separator">", "</string>
     <string name="thread_tool_running">%1$s · %2$s</string>
-    <string name="thread_waiting_single">%1$s needs attention ›</string>
-    <string name="thread_waiting_urgent_single">Urgent · %1$s needs attention ›</string>
+    <string name="thread_waiting_single">Needs you · %1$s ›</string>
+    <string name="thread_waiting_urgent_single">Urgent · Needs you · %1$s ›</string>
     <plurals name="thread_tools_read">
         <item quantity="one">%1$d file read</item>
         <item quantity="other">%1$d files read</item>
@@ -658,27 +664,28 @@
         <item quantity="other">%1$d searches</item>
     </plurals>
     <string name="thread_permission_waiting">Permission request · waiting for your answer</string>
-    <string name="thread_previous_waiting">Previous waiting conversation</string>
-    <string name="thread_next_waiting_button">Next waiting conversation</string>
+    <string name="thread_previous_waiting">Previous conversation that needs you</string>
+    <string name="thread_next_waiting_button">Next conversation that needs you</string>
     <string name="thread_question_waiting">Question · waiting for your answer</string>
     <string name="thread_chat_subtitle">%1$s · %2$s</string>
     <string name="thread_chat_menu">⋯</string>
     <plurals name="thread_waiting">
-        <item quantity="one">%1$s and %2$d other need attention ›</item>
-        <item quantity="other">%1$s and %2$d others need attention ›</item>
+        <item quantity="one">Needs you · %1$s and %2$d other ›</item>
+        <item quantity="other">Needs you · %1$s and %2$d others ›</item>
     </plurals>
     <plurals name="thread_waiting_urgent">
-        <item quantity="one">Urgent · %1$s and %2$d other need attention ›</item>
-        <item quantity="other">Urgent · %1$s and %2$d others need attention ›</item>
+        <item quantity="one">Urgent · Needs you · %1$s and %2$d other ›</item>
+        <item quantity="other">Urgent · Needs you · %1$s and %2$d others ›</item>
     </plurals>
     <string name="thread_waiting_position">%1$d/%2$d</string>
     <string name="thread_previous">‹</string>
     <string name="thread_next">›</string>
     <string name="thread_call_dismiss">Close Call</string>
     <string name="thread_open_conversation">Open conversation</string>
+    <string name="thread_start_conversation">Start conversation</string>
     <string name="thread_next_waiting">Next · %1$s</string>
     <string name="thread_waiting_empty">All caught up</string>
-    <string name="thread_waiting_open_required">Open the conversation to connect and answer this Agent.</string>
+    <string name="thread_waiting_open_required">Open this conversation to connect and reply.</string>
 
     <string name="chat_tool_done">done</string>
     <string name="chat_tool_running">running</string>
@@ -762,7 +769,10 @@
     <string name="image_viewer_export_failed">Could not save or share this image. Try again.</string>
     <string name="image_viewer_saved">Image saved</string>
     <string name="image_viewer_exporting">Preparing image…</string>
-    <string name="chat_diff_more">%1$d more lines</string>
+    <plurals name="chat_diff_more">
+        <item quantity="one">%1$d more line</item>
+        <item quantity="other">%1$d more lines</item>
+    </plurals>
     <string name="chat_diff_truncated">The diff is too large; the rest is not shown.</string>
     <!-- Permission requests -->
     <string name="chat_permission_label">Permission request</string>
@@ -793,14 +803,14 @@
     <string name="question_notify_open_app">Answer in app</string>
     <string name="question_notify_confirm_in_app">Confirm “Allow always” in the app.</string>
     <string name="question_notify_sent">Sent “%1$s”</string>
-    <string name="question_notify_unknown">The answer may have been sent. Check the Chat before answering again.</string>
+    <string name="question_notify_unknown">The answer may have been sent. Check the messages before answering again.</string>
 
     <string name="chat_answer_answered">This question was already answered.</string>
     <string name="chat_answer_gone">The Agent is no longer asking this question.</string>
     <string name="chat_answer_invalid">That answer does not fit the question.</string>
-    <string name="chat_answer_unsupported">This Agent\'s questions cannot be answered from the Chat. Answer in the Terminal.</string>
+    <string name="chat_answer_unsupported">This question cannot be answered here. Answer in the Terminal.</string>
     <string name="chat_answer_no_core">The Beacon cannot reach herdr-core on this Host.</string>
-    <string name="chat_answer_failed">The answer could not be sent: %1$s</string>
+    <string name="chat_answer_failed">Answer delivery · %1$s</string>
     <!-- Chat Agent command and skill catalog -->
     <string name="chat_commands_title">Agent commands</string>
     <string name="chat_skills_button">Skills</string>
@@ -812,6 +822,9 @@
     <string name="chat_catalog_builtin">Built-in command</string>
 
     <string name="chat_input_label">Message to the Agent</string>
+    <string name="chat_message_input_label">Message</string>
+    <string name="chat_message_received">Received</string>
+    <string name="chat_message_queued">Passed on · waiting for its turn</string>
     <string name="chat_input_tools_button">Input tools</string>
     <string name="chat_send_button">Send</string>
     <string name="chat_sent">Message sent</string>
@@ -831,7 +844,7 @@
     <!-- Phone-local Chat queue -->
     <string name="chat_queue_waiting">Queued</string>
     <string name="chat_queue_agent">Passed to Agent · waiting for its turn</string>
-    <string name="chat_queue_uncertain">Delivery unconfirmed · check the conversation before resending</string>
+    <string name="chat_queue_uncertain">Delivery unconfirmed · Check the messages before sending again</string>
     <string name="chat_queue_cancel_button">Cancel queued message</string>
     <!-- Chat draft recovery -->
     <string name="chat_drafts_read_failed">Saved drafts could not be read. Discard this Host’s saved drafts to continue. Your current input will be kept.</string>
@@ -856,7 +869,7 @@
     <string name="chat_interrupt_still_working">The stop key was sent, but the Agent is still working.</string>
     <string name="chat_interrupt_unknown">The stop key was sent. Check the Terminal to see whether the Agent stopped.</string>
     <string name="chat_interrupt_not_working">The Agent is no longer working. No stop key was sent.</string>
-    <string name="chat_interrupt_failed">Could not confirm interruption. %1$s Check the Terminal before trying again.</string>
+    <string name="chat_interrupt_failed">Could not confirm interruption. Check the Terminal before trying again.</string>
     <string name="chat_blocked_permission">The Agent asks for permission. Approve or deny it in the Terminal.</string>
     <string name="chat_blocked_question">The Agent asks you a question in the Terminal.</string>
     <string name="chat_blocked_auth">The Agent needs you to sign in, in the Terminal.</string>
@@ -901,8 +914,11 @@
     <string name="new_task_folder_hint">Choose an absolute folder on this Host, or browse to select one.</string>
     <!-- Tasks home and needs queue -->
     <string name="tasks_home">Tasks</string>
-    <string name="tasks_hosts_count">Hosts %1$d/%2$d</string>
-    <string name="tasks_prompt_hint">What should the Agent do?</string>
+    <plurals name="tasks_hosts_count">
+        <item quantity="one">%1$d of %2$d Host connected</item>
+        <item quantity="other">%1$d of %2$d Hosts connected</item>
+    </plurals>
+    <string name="tasks_prompt_hint">What needs doing?</string>
     <string name="tasks_preparing">Preparing new task…</string>
     <string name="tasks_expand_label">Open new task full screen</string>
     <string name="tasks_agent">Agent</string>
@@ -919,13 +935,16 @@
     <string name="tasks_host_preview_direct_ssh">Preview requires a Terminal directly on this SSH Host.</string>
 
     <string name="tasks_host_view">Group by Host</string>
-    <string name="tasks_offline">Disconnected</string>
+    <string name="tasks_offline">Offline</string>
     <string name="tasks_reconnecting">Reconnecting…</string>
     <string name="tasks_host_connected">Connected</string>
     <string name="tasks_host_not_connected">Not connected</string>
-    <string name="tasks_needs_position">Need %2$d of %1$d</string>
-    <string name="tasks_needs_next">Later · Next</string>
-    <string name="tasks_needs_open">Open Chat to inspect this request.</string>
+    <string name="tasks_needs_position">Needs you · %2$d of %1$d</string>
+    <string name="tasks_needs_next">Skip</string>
+    <string name="tasks_needs_open">Open this task to see what needs you.</string>
+    <string name="tasks_needs_error">This task reported an error. Open it to see what happened.</string>
+    <string name="tasks_open_task">Open task</string>
+    <string name="tasks_start_task">Start task</string>
     <string name="tasks_empty">No tasks in this view.</string>
     <string name="tasks_answer_needed">Answer needed</string>
     <string name="tasks_urgent_call">ϟ Urgent Call</string>
@@ -952,8 +971,9 @@
     <string name="tasks_tool_read">Read</string>
     <string name="tasks_tool_search">Searched</string>
     <string name="tasks_tool_edit">Edited</string>
-    <string name="tasks_tool_write">Created</string>
+    <string name="tasks_tool_write">Wrote</string>
     <string name="tasks_tool_run">Ran</string>
+    <string name="tasks_tool_other">Tool</string>
 
 
     <string name="new_task_title">New task</string>
@@ -965,12 +985,15 @@
     <string name="new_task_browse">Browse folders</string>
     <string name="new_task_use_folder">Use this folder</string>
     <string name="new_task_options">Launch options</string>
-    <string name="new_task_waiting">Waiting for the Agent to be ready…</string>
-    <string name="new_task_not_ready">The Agent is not ready yet. Your prompt is kept. Check its Terminal or wait again.</string>
-    <string name="new_task_delivery_unknown">The send could not be confirmed. Your prompt is kept. Check Chat before sending it again.</string>
-    <string name="new_task_launch_unknown">The launch could not be confirmed. Check the Host’s Agents before starting again. Your prompt is kept.</string>
+    <string name="new_task_waiting">Waiting until ready…</string>
+    <string name="new_task_not_ready">Not ready yet. Your prompt is kept. Check the Terminal or wait again.</string>
+    <string name="new_task_delivery_unknown">The send could not be confirmed. Your prompt is kept. Check the messages before sending it again.</string>
+    <string name="new_task_launch_unknown">The launch could not be confirmed. Check what is running on the Host before starting again. Your prompt is kept.</string>
     <string name="new_task_open_chat">Open Agent Chat</string>
-    <string name="new_task_wait_again">Wait for Agent</string>
+    <string name="new_task_open_conversation">Open conversation</string>
+    <string name="new_task_open_task">Open task</string>
+    <string name="new_task_conversation_title">New conversation</string>
+    <string name="new_task_wait_again">Wait again</string>
     <string name="new_task_nested_host">Add this computer as a Host to start an Agent there.</string>
 
     <string name="launch_starting">Starting Terminal…</string>
@@ -1312,6 +1335,9 @@
     <string name="layout_console">Console</string>
     <string name="layout_thread">Thread</string>
     <string name="layout_tasks">Tasks</string>
+    <string name="layout_console_description">Console: Browse Hosts, Agents and Terminals.</string>
+    <string name="layout_thread_description">Thread: Read and reply in conversations.</string>
+    <string name="layout_tasks_description">Tasks: Review work and handle what needs you.</string>
     <string name="theme_title">Theme</string>
     <string name="theme_system">System</string>
     <string name="theme_light">Light</string>
@@ -1344,7 +1370,11 @@
 
     <!-- Call inbox -->
     <string name="call_inbox_label">Calls · Needs you %1$d</string>
-    <string name="call_banner_meta">%1$s Call · %2$s</string>
+    <string name="call_banner_meta">%1$s · %2$s</string>
+    <string name="call_banner_check">Call to check</string>
+    <string name="call_banner_urgent">Urgent Call</string>
+    <string name="call_banner_emergency">Emergency Call</string>
+    <string name="call_banner_record">Recorded Call</string>
     <string name="call_banner_open">View Calls</string>
     <string name="call_banner_dismiss">Dismiss Call banner</string>
 
@@ -1384,11 +1414,17 @@
     <string name="settings_keys_open">Phone SSH keys</string>
     <string name="settings_hosts_title">Host settings</string>
     <string name="settings_agent_view">Default Agent view</string>
+    <string name="settings_conversation_view">Default conversation view</string>
+    <string name="settings_task_view">Default task view</string>
+    <string name="thread_view_conversation">Conversation</string>
     <string name="settings_beacon_missing">Beacon not installed · Host settings</string>
 
     <!-- Beacon aries-call-human skill diagnostics. -->
     <string name="beacon_skill_summary_ready">Call skill: ready</string>
-    <string name="beacon_skill_summary_problems">Call skill: %1$d paths need attention</string>
+    <plurals name="beacon_skill_summary_problems">
+        <item quantity="one">Call skill: %1$d path needs you</item>
+        <item quantity="other">Call skill: %1$d paths need you</item>
+    </plurals>
     <string name="beacon_skill_title">aries-call-human skill</string>
     <string name="beacon_skill_unknown">This Beacon did not report aries-call-human skill status. The Aries Call connection cannot be verified.</string>
     <string name="beacon_skill_foreign">Another tool’s skill was kept. Agents using this path cannot send Calls to Aries.</string>

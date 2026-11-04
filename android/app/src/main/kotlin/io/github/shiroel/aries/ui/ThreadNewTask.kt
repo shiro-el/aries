@@ -35,7 +35,7 @@ internal fun ThreadNewTaskEntry(model: HostsModel, board: AgentBoard) {
     else Column(Modifier.fillMaxWidth().padding(16.dp)) {
         ConsoleButton(onClick = { if (host == null) model.startAddingHost() else model.beginThreadTask(host) },
             modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(if (host == null) R.string.console_add_host else R.string.new_task_title))
+            Text(stringResource(if (host == null) R.string.console_add_host else LocalLayoutScreens.current.newTaskTitle))
         }
     }
 }
@@ -49,7 +49,7 @@ internal fun ThreadNewTaskScreen(task: NewTask, onStart: () -> Unit, onOpenChat:
                 Column(Modifier.fillMaxSize()) {
                     Row(Modifier.fillMaxWidth().heightIn(min = 56.dp), verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = onDismiss) { Icon(painterResource(R.drawable.ic_arrow_left), stringResource(R.string.back_button)) }
-                        Text(stringResource(R.string.new_task_title), style = MaterialTheme.typography.titleLarge)
+                        Text(stringResource(LocalLayoutScreens.current.newTaskTitle), style = MaterialTheme.typography.titleLarge)
                     }
                     Box(Modifier.weight(1f).fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
                         Text(stringResource(R.string.thread_new_body), style = MaterialTheme.typography.bodyLarge,
@@ -80,7 +80,7 @@ private fun ThreadTaskForm(task: NewTask, model: HostsModel?, onStart: () -> Uni
                 label = { Text(form.cwd.substringAfterLast('/').ifBlank { stringResource(R.string.launch_cwd) },
                     modifier = Modifier.widthIn(max = 180.dp), maxLines = 1, overflow = TextOverflow.Ellipsis) })
             AssistChip(onClick = { picker = "agent" }, enabled = editable,
-                label = { Text(form.preset?.let { stringResource(it.label) } ?: stringResource(R.string.new_task_title)) })
+                label = { Text(form.preset?.let { stringResource(it.label) } ?: stringResource(LocalLayoutScreens.current.newTaskTitle)) })
         }
         Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
             Column {
@@ -92,7 +92,7 @@ private fun ThreadTaskForm(task: NewTask, model: HostsModel?, onStart: () -> Uni
                     TextButton(onClick = { options = !options }, enabled = editable) { Text(stringResource(R.string.new_task_options)) }
                     Spacer(Modifier.weight(1f))
                     IconButton(onClick = onStart, enabled = task.canStart, modifier = Modifier.testTag("thread-task-start")) {
-                        Icon(painterResource(R.drawable.ic_send), stringResource(if (task.terminal == null) R.string.new_task_start else R.string.new_task_wait_again))
+                        Icon(painterResource(R.drawable.ic_send), stringResource(if (task.terminal == null) LocalLayoutScreens.current.startTaskLabel else R.string.new_task_wait_again))
                     }
                 }
             }
@@ -109,7 +109,7 @@ private fun ThreadTaskForm(task: NewTask, model: HostsModel?, onStart: () -> Uni
         if (task.waiting) Text(stringResource(R.string.new_task_waiting), style = MaterialTheme.typography.bodySmall)
         if (form.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         form.error?.let { Text(messageText(it), color = MaterialTheme.colorScheme.error) }
-        if (task.terminal != null && !form.busy) TextButton(onClick = onOpenChat) { Text(stringResource(R.string.new_task_open_chat)) }
+        if (task.terminal != null && !form.busy) TextButton(onClick = onOpenChat) { Text(stringResource(LocalLayoutScreens.current.openTaskLabel)) }
     }
     if (picker != null) ModalBottomSheet(onDismissRequest = { picker = null }) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {

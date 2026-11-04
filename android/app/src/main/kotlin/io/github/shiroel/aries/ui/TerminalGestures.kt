@@ -28,6 +28,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.ScreenLine
@@ -345,7 +346,7 @@ fun TerminalLookBar(viewer: TerminalViewer, look: TerminalLook, onSendToAgent: (
             }
             if (viewer.scrolled > 0) {
                 Text(
-                    stringResource(R.string.terminal_scrolled_back, viewer.scrolled),
+                    pluralStringResource(R.plurals.terminal_scrolled_back, viewer.scrolled, viewer.scrolled),
                     Modifier.padding(horizontal = 8.dp),
                     style = MaterialTheme.typography.bodySmall,
                 )

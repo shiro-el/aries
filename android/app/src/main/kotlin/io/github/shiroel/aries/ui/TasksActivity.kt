@@ -164,11 +164,11 @@ internal fun TasksCallTrace(entry: CallEntry) {
 }
 
 @Composable
-internal fun tasksToolVerb(name: String): String = when (name.substringAfterLast('.')) {
+internal fun tasksToolVerb(name: String): String? = when (name.substringAfterLast('.')) {
     "Read", "read_file" -> stringResource(R.string.tasks_tool_read)
     "Grep", "Glob", "search", "search_query" -> stringResource(R.string.tasks_tool_search)
     "Edit", "MultiEdit", "apply_patch" -> stringResource(R.string.tasks_tool_edit)
     "Write", "write_file" -> stringResource(R.string.tasks_tool_write)
     "Bash", "exec", "exec_command", "shell", "shell_command" -> stringResource(R.string.tasks_tool_run)
-    else -> name
+    else -> null
 }

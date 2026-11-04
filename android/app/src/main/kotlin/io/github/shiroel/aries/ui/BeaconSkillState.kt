@@ -9,6 +9,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -36,7 +37,7 @@ fun BeaconSkillState(skills: List<BeaconSkillRoot>?) {
         if (!currentSkills.isNullOrEmpty()) {
             Text(
                 if (issues.isEmpty()) stringResource(R.string.beacon_skill_summary_ready)
-                else stringResource(R.string.beacon_skill_summary_problems, issues.size),
+                else pluralStringResource(R.plurals.beacon_skill_summary_problems, issues.size, issues.size),
                 style = MaterialTheme.typography.bodySmall,
             )
         }

@@ -15,6 +15,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
@@ -201,7 +202,7 @@ internal fun ChatSearchBar(
             ActionIcon(R.drawable.ic_x, R.string.chat_search_close, onClose)
         }
         Row {
-            Text(stringResource(R.string.chat_search_count, current, count), Modifier.weight(1f).padding(12.dp))
+            Text(pluralStringResource(R.plurals.chat_search_count, count, current, count), Modifier.weight(1f).padding(12.dp))
             ActionIcon(R.drawable.ic_chevron_up, R.string.chat_search_previous, { onMove(-1) }, enabled = count > 0)
             ActionIcon(R.drawable.ic_chevron_down, R.string.chat_search_next, { onMove(1) }, enabled = count > 0)
         }

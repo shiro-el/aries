@@ -40,7 +40,7 @@
 
     <!-- Watch Inbox -->
     <string name="wear_inbox_title">INBOX</string>
-    <string name="wear_inbox_attention">WAITING</string>
+    <string name="wear_inbox_attention">Needs you</string>
     <string name="wear_inbox_agents">AGENTS</string>
     <string name="wear_inbox_refresh">REFRESH</string>
     <string name="wear_inbox_refreshing">SYNC…</string>
@@ -55,8 +55,8 @@
 
     <!-- Console Tile and complication types -->
     <string name="wear_complication_agent_description">%1$s · %2$s</string>
-    <string name="wear_tile_waiting">ARIES · %1$d WAITING</string>
-    <string name="wear_tile_all_clear">ALL CLEAR</string>
+    <string name="wear_tile_waiting">ARIES · Needs you %1$d</string>
+    <string name="wear_tile_all_clear">Nothing needs you</string>
     <string name="wear_tile_unknown">ARIES · --</string>
     <string name="wear_tile_working">Working · %1$d (top Agents)</string>
     <string name="wear_tile_stale">STALE · %1$s</string>
@@ -79,7 +79,7 @@
 
     <!-- Companion state surfaces -->
     <string name="app_name" translatable="false">Aries</string>
-    <string name="wear_waiting_label">Waiting</string>
+    <string name="wear_waiting_label">Needs you</string>
     <string name="wear_age_minutes">%1$d min ago</string>
     <string name="wear_age_compact">%1$dm ago</string>
     <string name="wear_not_synced">Not synced yet</string>
@@ -93,6 +93,6 @@
     <string name="wear_status_idle">Idle</string>
     <string name="wear_connect_phone">Connect your phone and try again</string>
     <string name="wear_opening_phone">Opening on phone</string>
-    <string name="wear_complication_description">%1$d waiting · %2$s</string>
+    <string name="wear_complication_description">Needs you %1$d · %2$s</string>
     <string name="wear_unknown_count" translatable="false">--</string>
 </resources>

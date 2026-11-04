@@ -46,7 +46,7 @@ internal fun TasksNewTaskCard(model: HostsModel, board: AgentBoard) {
                     modifier = Modifier.weight(1f).testTag("tasks-new-task")) {
                     Icon(painterResource(if (expanded) R.drawable.ic_chevron_up else R.drawable.ic_plus), null, Modifier.size(16.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text(stringResource(if (expanded) R.string.new_task_title else R.string.tasks_prompt_hint), Modifier.weight(1f), maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
+                    Text(stringResource(if (expanded) LocalLayoutScreens.current.newTaskTitle else R.string.tasks_prompt_hint), Modifier.weight(1f), maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
                 }
                 IconButton(onClick = { open(true) }, enabled = host != null,
                     modifier = Modifier.testTag("tasks-new-expand")) {
@@ -100,9 +100,9 @@ internal fun TasksNewTaskCard(model: HostsModel, board: AgentBoard) {
                         else task.form.error?.let { Text(messageText(it),
                             Modifier.weight(1f), color = MaterialTheme.colorScheme.error) } ?: Spacer(Modifier.weight(1f))
                         TextButton(onClick = model::startInlineTask, enabled = task.canStart,
-                            modifier = Modifier.testTag("tasks-new-start")) { Text(stringResource(R.string.new_task_start)) }
+                            modifier = Modifier.testTag("tasks-new-start")) { Text(stringResource(LocalLayoutScreens.current.startTaskLabel)) }
                         if (task.terminal != null) TextButton(onClick = model::openCreatedTask) {
-                            Text(stringResource(R.string.new_task_open_chat))
+                            Text(stringResource(LocalLayoutScreens.current.openTaskLabel))
                         }
                     }
                 } else if (host == null) {
