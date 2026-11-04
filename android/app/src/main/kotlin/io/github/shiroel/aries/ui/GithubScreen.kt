@@ -260,7 +260,7 @@ private fun GithubConversation(
                 }
             }
             draftError?.let {
-                Text(stringResource(it), Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.error)
+                Text(if (it == R.string.github_draft_limit) stringResource(it, GITHUB_DRAFT_BYTES / 1024) else stringResource(it), Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.error)
                 if (it != R.string.github_draft_limit) TextButton(onClick = model::retryDraft, enabled = !busy,
                     modifier = Modifier.testTag("github-draft-retry")) { Text(stringResource(R.string.github_draft_retry)) }
             }

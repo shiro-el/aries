@@ -27,7 +27,7 @@ internal fun ColumnScope.GitFileDiff(
         else -> GitDiffKind.STAGED
     }) }
     var diff by remember(selectedFile, kind) { mutableStateOf<GitDiff?>(null) }
-    var error by remember(selectedFile, kind) { mutableStateOf<String?>(null) }
+    var error by remember(selectedFile, kind) { mutableStateOf<Message?>(null) }
     var selection by remember(selectedFile, kind) { mutableStateOf<IntRange?>(null) }
     LaunchedEffect(connection, address, cwd, selectedFile, kind, revision) {
         diff = null
@@ -36,9 +36,9 @@ internal fun ColumnScope.GitFileDiff(
         try {
             diff = (connection ?: throw CoreException.Closed()).gitDiff(address, cwd, selectedFile.path, kind)
         } catch (e: CancellationException) { throw e }
-        catch (e: Exception) { error = e.message ?: e.toString() }
+        catch (e: Exception) { error = errorMessage(e) }
     }
-    error?.let { Text(stringResource(R.string.git_error, it), color = MaterialTheme.colorScheme.error) }
+    error?.let { Text(stringResource(R.string.git_error, messageText(it)), color = MaterialTheme.colorScheme.error) }
     Row {
         if (selectedFile.staged) SingleChoiceChip(selected = kind == GitDiffKind.STAGED, onClick = { kind = GitDiffKind.STAGED }, label = { Text(stringResource(R.string.git_staged)) })
         if (selectedFile.unstaged) SingleChoiceChip(selected = kind == GitDiffKind.UNSTAGED, onClick = { kind = GitDiffKind.UNSTAGED }, label = { Text(stringResource(R.string.git_unstaged)) })
