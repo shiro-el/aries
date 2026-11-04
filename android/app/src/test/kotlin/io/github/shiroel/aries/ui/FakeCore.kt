@@ -1082,7 +1082,11 @@ class FakeConnection(
     var uploadHold: CompletableDeferred<Unit>? = null
     var uploadFailWith: CoreException? = null
     var uploadPaths: List<String> = emptyList()
+    var uploadDelays: List<Long> = emptyList()
+    var uploadStarted = 0
     override suspend fun uploadAttachment(terminal: String, name: String, bytes: ByteArray): String {
+        val index = uploadStarted++
+        uploadDelays.getOrNull(index)?.let { kotlinx.coroutines.delay(it) }
         uploadHold?.await()
         uploadFailWith?.let { throw it }
         uploads += Triple(terminal, name, bytes)

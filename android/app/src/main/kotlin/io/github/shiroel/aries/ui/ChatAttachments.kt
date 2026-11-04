@@ -62,10 +62,21 @@ internal fun chatAttachments(text: String): ChatAttachments {
 /** A horizontal strip keeps multiple attachments from consuming the entire composer. */
 @Composable
 internal fun DraftAttachments(chat: ChatModel) {
-    if (chat.attachments.isEmpty() && chat.capturedPhotos.isEmpty()) return
+    if (chat.attachments.isEmpty() && chat.capturedPhotos.isEmpty() && chat.failedAttachments.isEmpty()) return
     val context = LocalContext.current
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        chat.failedAttachments.forEach { name ->
+            Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.errorContainer) {
+                Row(Modifier.widthIn(max = 280.dp).padding(start = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.attachments_failed_file, name), Modifier.weight(1f, fill = false).padding(8.dp),
+                        maxLines = 2, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onErrorContainer)
+                    IconButton(onClick = { chat.removeFailedAttachment(name) }) {
+                        Icon(painterResource(R.drawable.ic_x), stringResource(R.string.attachments_remove_button, name))
+                    }
+                }
+            }
+        }
         chat.capturedPhotos.forEach { photo -> key(photo.path) {
             val file = File(photo.path)
             Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.surfaceContainerHigh) {

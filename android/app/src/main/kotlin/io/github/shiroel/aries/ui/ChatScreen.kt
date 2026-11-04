@@ -7,6 +7,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.TimeoutCancellationException
 
 import androidx.compose.foundation.background
@@ -358,6 +359,22 @@ class ChatModel(
     }
 
     var pendingShare by mutableStateOf<SharedContent?>(null)
+    private var pendingShareConsumed: (() -> Unit)? = null
+
+    internal fun offerShare(content: SharedContent, consumed: () -> Unit) {
+        pendingShare = content
+        pendingShareConsumed = consumed
+    }
+
+    internal fun consumePendingShare(context: Context) {
+        val content = pendingShare ?: return
+        val consumed = pendingShareConsumed
+        if (attach(context, content, onUploaded = { consumed?.invoke() })) {
+            pendingShare = null
+            pendingShareConsumed = null
+        }
+    }
+
     private var draftAttachments by mutableStateOf<List<DraftAttachment>>(emptyList())
     var attachments: List<DraftAttachment>
         get() = draftAttachments
@@ -405,6 +422,15 @@ class ChatModel(
     var attachmentError by mutableStateOf<Message?>(null)
         private set
     private var uploadJob: Job? = null
+    private var uploadRevision = 0L
+    private var uploadCameraPath: String? = null
+    var failedAttachments by mutableStateOf<List<String>>(emptyList())
+        private set
+
+    fun removeFailedAttachment(name: String) {
+        val index = failedAttachments.indexOf(name)
+        failedAttachments = failedAttachments.filterIndexed { i, _ -> i != index }
+    }
     private var uploadRemaining: List<String> = emptyList()
     var attachmentNotice by mutableStateOf<Message?>(null)
         private set
@@ -414,7 +440,13 @@ class ChatModel(
         if (!uploading) return
         attachmentRevision++
         attachmentNotice = Message(R.string.attachments_canceled, listOf(uploadRemaining.joinToString(", ")))
-        uploadJob?.cancel()
+        if (uploadCameraPath == null) failedAttachments = failedAttachments + uploadRemaining
+        uploadRemaining = emptyList()
+        uploadRevision++
+        uploading = false
+        val canceled = uploadJob
+        uploadJob = null
+        canceled?.cancel()
     }
 
     fun attachmentFailed(error: Exception) {
@@ -438,33 +470,38 @@ class ChatModel(
         val resize = AttachmentSettings.from(context).resizeImages
         clearAttachmentNotice()
         uploading = true
+        uploadCameraPath = cameraPath
         uploadRemaining = content.uris.map { it.lastPathSegment ?: "attachment" }
         fun append(value: String) {
             appendDraft(value, separator = if (draft.isEmpty() || draft.last().isWhitespace()) "" else " ")
         }
         content.text?.let(::append)
         val revision = attachmentRevision
+        val uploadRevision = ++this.uploadRevision
         // Retain the current line before even reading camera bytes. Leaving the Host
-        // can then finish this bounded batch before disconnecting, without replaying a put.
+        // can then finish each bounded file before disconnecting, without replaying a put.
         val initialConnection = link.connection
         val upload: suspend (HostConnection) -> Unit = { connection ->
             try {
                 for (uri in content.uris) {
-                    val attachment = withContext(Dispatchers.IO) { prepareAttachment(context, uri, resize) }
-                    uploadRemaining = listOf(attachment.name) + uploadRemaining.drop(1)
-                    if (inputUnavailable) throw CoreException.Closed()
-                    val path = try {
-                        connection.uploadAttachment(terminal.address, attachment.name, attachment.bytes)
-                    } catch (e: CoreException.Closed) {
-                        link.lost(connection)
-                        throw e
+                    withTimeout(30_000L) {
+                        val attachment = prepareAttachmentCancellable(context, uri, resize)
+                        uploadRemaining = listOf(attachment.name) + uploadRemaining.drop(1)
+                        if (inputUnavailable) throw CoreException.Closed()
+                        val path = try {
+                            connection.uploadAttachment(terminal.address, attachment.name, attachment.bytes)
+                        } catch (e: CoreException.Closed) {
+                            link.lost(connection)
+                            throw e
+                        }
+                        kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                        if (cameraPath != null) capturedPhotos = capturedPhotos.map {
+                            if (it.path == cameraPath) it.copy(uploadedPath = path) else it
+                        }
+                        attachments = attachments + DraftAttachment(path, attachment.name, attachment.bytes.size,
+                            attachment.bytes.takeIf { remoteMediaKind(attachment.name) == RemoteMediaKind.IMAGE })
+                        uploadRemaining = uploadRemaining.drop(1)
                     }
-                    if (cameraPath != null) capturedPhotos = capturedPhotos.map {
-                        if (it.path == cameraPath) it.copy(uploadedPath = path) else it
-                    }
-                    attachments = attachments + DraftAttachment(path, attachment.name, attachment.bytes.size,
-                        attachment.bytes.takeIf { remoteMediaKind(attachment.name) == RemoteMediaKind.IMAGE })
-                    uploadRemaining = uploadRemaining.drop(1)
                 }
                 // An uploaded path is recoverable only after its encrypted journal
                 // checkpoint. In particular, camera callers may now delete the source.
@@ -472,31 +509,37 @@ class ChatModel(
                 saveOutbox { saved.complete(it) }
                 if (saved.await()) onUploaded()
             } catch (e: TimeoutCancellationException) {
-                if (attachmentRevision == revision) attachmentFailed(CoreException.Closed())
+                if (this@ChatModel.uploadRevision == uploadRevision && cameraPath == null)
+                    failedAttachments = failedAttachments + uploadRemaining
+                if (attachmentRevision == revision) attachmentError = Message(R.string.attachments_timeout)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                if (this@ChatModel.uploadRevision == uploadRevision && cameraPath == null)
+                    failedAttachments = failedAttachments + uploadRemaining
                 if (attachmentRevision == revision) attachmentFailed(e)
             } finally {
-                uploading = false
+                if (this@ChatModel.uploadRevision == uploadRevision) uploading = false
                 cleanup()
             }
         }
         uploadJob = if (initialConnection != null) {
-            link.finishBeforeDisconnect(initialConnection) { upload(initialConnection) }
+            link.finishUploadsBeforeDisconnect(initialConnection) { upload(initialConnection) }
         } else scope.launch(start = CoroutineStart.UNDISPATCHED) {
             // A picker/camera may release the old line. Acquire and retain its
             // replacement before preparing bytes; never retry a put itself.
             try {
                 val connection = link.awaitConnection()
-                uploadJob = link.finishBeforeDisconnect(connection) { upload(connection) }
+                uploadJob = link.finishUploadsBeforeDisconnect(connection) { upload(connection) }
             } catch (e: CancellationException) {
-                uploading = false
+                if (this@ChatModel.uploadRevision == uploadRevision) uploading = false
                 cleanup()
                 throw e
             } catch (e: Exception) {
+                if (this@ChatModel.uploadRevision == uploadRevision && cameraPath == null)
+                    failedAttachments = failedAttachments + uploadRemaining
                 if (attachmentRevision == revision) attachmentFailed(e)
-                uploading = false
+                if (this@ChatModel.uploadRevision == uploadRevision) uploading = false
                 cleanup()
             }
         }
@@ -1325,9 +1368,7 @@ fun ChatScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
     // Every layout and input panel shares this owner, including compact Chat and live answers.
     LaunchedEffect(chat, chat.pendingShare, chat.inputUnavailable, chat.uploading) {
-        chat.pendingShare?.takeUnless { chat.inputUnavailable || chat.uploading }?.let { content ->
-            if (chat.attach(context.applicationContext, content)) chat.pendingShare = null
-        }
+        if (!chat.inputUnavailable && !chat.uploading) chat.consumePendingShare(context.applicationContext)
     }
     LaunchedEffect(readAloud.notice) {
         readAloud.notice?.let { android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_LONG).show() }

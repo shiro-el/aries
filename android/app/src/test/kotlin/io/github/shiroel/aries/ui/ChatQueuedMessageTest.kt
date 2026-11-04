@@ -23,7 +23,6 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
 import android.net.Uri
-import java.io.ByteArrayInputStream
 import org.robolectric.Shadows.shadowOf
 import kotlinx.coroutines.CompletableDeferred
 
@@ -68,7 +67,7 @@ class ChatQueuedMessageTest {
         val connection = open(core)
         val chat = compose.runOnIdle { (hosts.screen as Screen.Chat).chat }
         val uri = Uri.parse("content://documents/note.txt")
-        shadowOf(context.contentResolver).registerInputStream(uri, ByteArrayInputStream("notes".toByteArray()))
+        registerAttachmentInput(context, uri, "notes".toByteArray())
         compose.runOnIdle { chat.attach(context, SharedContent(listOf(uri))) }
         compose.waitUntil(5_000) { !chat.uploading }
         connection.sendFailWith = CoreException.Closed()
@@ -307,7 +306,7 @@ class ChatQueuedMessageTest {
         val core = FakeCore()
         val connection = open(core)
         val uri = Uri.parse("content://documents/note.txt")
-        shadowOf(context.contentResolver).registerInputStream(uri, ByteArrayInputStream("notes".toByteArray()))
+        registerAttachmentInput(context, uri, "notes".toByteArray())
         compose.runOnIdle { (hosts.screen as Screen.Chat).chat.attach(context, SharedContent(listOf(uri))) }
         compose.waitUntil(5_000) { connection.uploads.isNotEmpty() }
         compose.waitForIdle()
