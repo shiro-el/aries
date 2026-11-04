@@ -2394,8 +2394,8 @@ class HostsModel(
 
     /** Resolve against exactly one Host. Pending trust retries this same action on this same link. */
     private fun openAgentTarget(host: Host, address: String, openChat: Boolean = false, callKey: String? = null) {
-        navigationIntent()
         val fromInbox = callKey != null
+        if (fromInbox) navigationIntent() else userNavigation()
         openingCall = callKey
         val version = navigationVersion
         val request = agentOpenRequest
