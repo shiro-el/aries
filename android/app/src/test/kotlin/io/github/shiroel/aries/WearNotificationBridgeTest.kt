@@ -13,6 +13,7 @@ import io.github.shiroel.aries.core.PushNotice
 import io.github.shiroel.aries.core.PushQuestion
 import org.junit.Assert.*
 import org.junit.Test
+import org.junit.Before
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -24,6 +25,10 @@ import org.robolectric.Shadows.shadowOf
 class WearNotificationBridgeTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val manager = context.getSystemService(NotificationManager::class.java)
+
+    @Before fun initializeWorkManager() {
+        androidx.work.testing.WorkManagerTestInitHelper.initializeTestWorkManager(context)
+    }
 
     private fun call(choices: List<String> = listOf("Continue", "Stop")) =
         PushNotice("h1", "box", PushContent.Call("c1", "t1", true, "Review", "Ready",

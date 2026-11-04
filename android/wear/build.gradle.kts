@@ -34,6 +34,7 @@ dependencies {
     implementation(libs.wear.protolayout.material3)
     implementation(libs.wear.complications)
     implementation(libs.wear.remote)
+    implementation("androidx.wear:wear-ongoing:1.1.0")
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.play.services)
     testImplementation(libs.junit)
