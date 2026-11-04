@@ -19,6 +19,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -37,7 +38,7 @@ private const val MAX_PRIVATE_KEY_BYTES = 64 * 1024
 
 @Composable
 fun KeyImportButton(model: HostsModel) {
-    var importing by remember { mutableStateOf(false) }
+    var importing by rememberSaveable { mutableStateOf(false) }
     TextButton(onClick = { importing = true }) { Text(stringResource(R.string.key_import_button)) }
     if (importing) KeyImportDialog(model) { importing = false }
 }
@@ -46,7 +47,7 @@ fun KeyImportButton(model: HostsModel) {
 @Composable
 fun KeyImportDialog(model: HostsModel, replacementKeyId: String? = null, onDismiss: () -> Unit) {
     val needsLabel = model.key != null && replacementKeyId == null
-    var label by remember { mutableStateOf("") }
+    var label by rememberSaveable { mutableStateOf("") }
     var privateKey by remember { mutableStateOf("") }
     var passphrase by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
