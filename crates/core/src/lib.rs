@@ -861,6 +861,7 @@ impl AriesCore {
                 client,
                 names: Default::default(),
                 catalogs: Default::default(),
+                preview_cache: Default::default(),
                 recent: launch::RecentCwds::in_host_dir(self.store.host_dir(&host.id)),
                 saved: launch::SavedLaunches::in_host_dir(self.store.host_dir(&host.id)),
             }))
@@ -1708,6 +1709,7 @@ pub struct HostConnection {
     client: Arc<HcClient>,
     names: Arc<tokio::sync::Mutex<structure::Names>>,
     catalogs: tokio::sync::Mutex<agent_catalog::CatalogCache>,
+    preview_cache: tokio::sync::Mutex<Option<preview::Discovery>>,
     recent: launch::RecentCwds,
     saved: launch::SavedLaunches,
 }

@@ -12,12 +12,16 @@
     <string name="preview_auto_refresh">Auto refresh after Agent updates</string>
     <string name="preview_title">Preview</string>
     <string name="preview_open_port">Open preview · %1$d</string>
-    <string name="preview_address">Host · http://127.0.0.1:%1$d</string>
+    <string name="preview_address">localhost:%1$d preview</string>
     <string name="preview_reload">Reload</string>
     <string name="preview_mobile">Mobile view</string>
     <string name="preview_desktop">Desktop view</string>
     <string name="preview_close">Close preview</string>
     <string name="preview_failed">Could not open the preview. Check the Host connection and development server.</string>
+    <string name="preview_loading">Loading preview…</string>
+    <string name="preview_page_failed">The server did not return a web page. Check that it serves HTTP and is still running.</string>
+    <string name="preview_timeout">The preview did not respond within 10 seconds. Check the development server and try again.</string>
+    <string name="preview_http_failed">The server returned HTTP %1$d. Check the development server and try again.</string>
     <string name="preview_retry">Retry</string>
 
     <!-- Preview capture and annotation -->
