@@ -1,0 +1,9 @@
+{"type":"user","uuid":"root","parentUuid":null,"message":{"content":"Start here"}}
+{"type":"assistant","uuid":"discarded","parentUuid":"root","message":{"content":[{"type":"text","text":"Old answer"},{"type":"thinking","thinking":"Old reasoning"},{"type":"tool_use","id":"old-tool","name":"Read","input":{"file_path":"old.txt"}}]}}
+{"type":"user","uuid":"old-result","parentUuid":"discarded","message":{"content":[{"type":"tool_result","tool_use_id":"old-tool","content":"Old output"}]}}
+{"type":"user","uuid":"old-user","parentUuid":"old-result","message":{"content":"Old follow-up"}}
+{"type":"assistant","uuid":"old-answer","parentUuid":"old-user","message":{"content":[{"type":"text","text":"Old follow-up answer"}]}}
+{"type":"user","uuid":"replacement","parentUuid":"root","message":{"content":"Try another way"}}
+{"type":"user","uuid":"meta","parentUuid":"replacement","isMeta":true,"message":{"content":"Hidden context"}}
+{"type":"assistant","uuid":"replacement-answer","parentUuid":"meta","message":{"content":[{"type":"text","text":"New answer"}]}}
+{"type":"assistant","uuid":"sidechain","parentUuid":"old-answer","isSidechain":true,"message":{"content":[{"type":"text","text":"Unrelated subagent"}]}}
