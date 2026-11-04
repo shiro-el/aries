@@ -111,6 +111,35 @@ class TerminalSelectionToChatTest {
     }
 
     @Test
+    fun agentTerminalCaptureReturnsToItsOwnChatAndKeepsTheExistingDraft() {
+        open(terminal.copy(agentStatus = AgentStatus.Idle))
+        compose.onNodeWithContentDescription(str(R.string.agent_switch_chat_label)).performClick()
+        compose.runOnIdle { (model.screen as Screen.Chat).chat.draft = "Existing draft" }
+        compose.onNodeWithContentDescription(str(R.string.agent_switch_terminal_label)).performClick()
+        val file = java.io.File(context.cacheDir, "preview-routing.png")
+        android.graphics.Bitmap.createBitmap(20, 10, android.graphics.Bitmap.Config.ARGB_8888).apply {
+            file.outputStream().use { compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+            recycle()
+        }
+        val captureContext = "Preview: http://127.0.0.1:5173/settings\nView mode: Desktop view\n\nFix the spacing"
+        compose.runOnIdle {
+            assertTrue(model.attachPreviewToChat(context, SharedContent(listOf(android.net.Uri.fromFile(file)), captureContext)) { file.delete() })
+        }
+        compose.waitUntil(5_000) { core.connection!!.uploads.isNotEmpty() }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            val chat = (model.screen as Screen.Chat).chat
+            assertEquals("h1", chat.host.id)
+            assertEquals("remote/t7", chat.terminal.address)
+            assertEquals("Existing draft $captureContext", chat.draft)
+            assertEquals("remote/t7", core.connection!!.uploads.single().first)
+            assertEquals(1, chat.attachments.size)
+            assertTrue(core.connection!!.typed.isEmpty())
+            assertTrue(!file.exists())
+        }
+    }
+
+    @Test
     fun multilineSelectionKeepsIndentationAndUsesAFenceLongerThanItsContents() {
         val view = open()
         val lines = listOf("failure", "```", "  details").mapIndexed { row, text ->
