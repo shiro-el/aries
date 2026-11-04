@@ -33,6 +33,24 @@ class TasksChangesInteractionTest {
     private val state = TasksChangesState()
     private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
 
+    // D55: rotation must keep the user's staged choice when a file has both
+    // index and working-tree changes, instead of silently displaying another patch.
+    @Test fun recreationKeepsTheSelectedStagedDiff() {
+        conn.gitFiles = conn.gitFiles.copy(files = listOf(GitFile("file.kt", null, "MM", true, true, false)))
+        val restoration = StateRestorationTester(compose)
+        restoration.setContent {
+            val scope = rememberCoroutineScope()
+            val link = remember { HostLink(Host("h", "Host", Endpoint.Ssh("unused", 22u, "me"), null), conn, scope, { conn }) }
+            MaterialTheme { Column(Modifier.fillMaxSize()) { TasksChanges(state, link, terminal) {} } }
+        }
+        compose.onNodeWithText("file.kt").performClick()
+        compose.onNodeWithText(context.getString(R.string.git_staged)).performClick().assertIsSelected()
+        compose.runOnIdle { assertEquals(GitDiffKind.STAGED, conn.gitDiffKinds.last()) }
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNodeWithText(context.getString(R.string.git_staged)).assertIsSelected()
+        compose.runOnIdle { assertEquals(GitDiffKind.STAGED, conn.gitDiffKinds.last()) }
+    }
+
     /** D48: while the new folder is delayed, old rows cannot open diffs or append stale references. */
     @Test fun previousFolderDisablesDiffAndSendUntilTheNewFolderArrives() {
         var current by mutableStateOf(terminal)

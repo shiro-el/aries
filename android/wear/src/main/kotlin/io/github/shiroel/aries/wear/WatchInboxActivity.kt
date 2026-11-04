@@ -73,7 +73,7 @@ class WatchInboxActivity : ComponentActivity() {
         setContent {
             CompositionLocalProvider(LocalContext provides summary.localizedContext(this)) {
                 val selected = summary.inbox.firstOrNull { it.hostId == target?.first && it.terminal == target?.second }
-                LaunchedEffect(target, selected?.stateToken, selected?.contentHidden) {
+                LaunchedEffect(target, selected?.stateToken, selected?.requestId, selected?.contentHidden) {
                     selected?.let { details.load(it) }
                 }
                 WatchInbox(summary, now, target, { target = it }, refreshing, notice, ::refresh, ::openPhone,
