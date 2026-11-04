@@ -6,9 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentView
 
@@ -22,7 +20,7 @@ fun AgentViewToggle(current: AgentView, onView: (AgentView) -> Unit) {
         options = listOf(AgentView.TERMINAL, AgentView.CHAT), selected = current, onSelect = onView,
         modifier = Modifier.fillMaxWidth().testTag(AGENT_VIEW_TOGGLE),
         height = 48.dp,
-        textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp),
+        textStyle = MaterialTheme.typography.bodyMedium,
         inactiveColor = MaterialTheme.colorScheme.onSurfaceVariant,
     ) { view ->
         stringResource(if (view == AgentView.TERMINAL) R.string.agent_view_terminal else R.string.agent_view_chat)

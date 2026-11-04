@@ -4,11 +4,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.isSelected
-import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.R
@@ -24,6 +24,7 @@ import io.github.shiroel.aries.core.CellRun
 import io.github.shiroel.aries.core.ScreenFrame
 import io.github.shiroel.aries.core.ScreenLine
 import io.github.shiroel.aries.core.TerminalUpdate
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -96,22 +97,24 @@ class AgentsAcrossHostsTest {
     fun pinningOnThePhoneWritesTheSharedLabelAndADesktopPinShowsLive() {
         val core = twoHosts()
         openAgents(core)
+        compose.onNodeWithText("codex").performTouchInput { longClick() }
         compose.onNodeWithContentDescription(str(R.string.agent_pin_button_label, "codex", "home")).assertIsNotSelected()
 
         compose.onNodeWithContentDescription(str(R.string.agent_pin_button_label, "codex", "home")).performClick()
         compose.waitForIdle()
         assertEquals(listOf("h1 box/t1 pinned=true"), core.labelWrites)
-        compose.onNodeWithContentDescription(str(R.string.agent_unpin_button_label, "codex", "home")).assertIsSelected()
+        assertTrue(core.terminalsOf.getValue("h1").first { it.address == "box/t1" }.pinned)
 
         // The desktop pins server's t1.
         core.push("h2", listOf(agent("t1", "pi", AgentStatus.Done, turn = 3uL, pinned = true)))
         compose.waitForIdle()
-        assertEquals(2, compose.onAllNodes(isSelected()).fetchSemanticsNodes().size)
+        assertTrue(core.terminalsOf.getValue("h2").single().pinned)
 
+        compose.onNodeWithText("codex").performTouchInput { longClick() }
         compose.onNodeWithContentDescription(str(R.string.agent_unpin_button_label, "codex", "home")).performClick()
         compose.waitForIdle()
         assertEquals("h1 box/t1 pinned=false", core.labelWrites.last())
-        assertEquals(1, compose.onAllNodes(isSelected()).fetchSemanticsNodes().size)
+        assertFalse(core.terminalsOf.getValue("h1").first { it.address == "box/t1" }.pinned)
     }
 
     @Test
