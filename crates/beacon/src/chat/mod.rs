@@ -16,6 +16,7 @@ mod follow;
 mod jsonl;
 pub mod media;
 pub mod opencode;
+pub mod permission;
 pub mod pi;
 mod question;
 mod source;

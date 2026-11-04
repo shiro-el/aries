@@ -44,8 +44,8 @@ fun KeyImportButton(model: HostsModel) {
 
 /** Secret drafts live only in this composition, never saved instance state. */
 @Composable
-fun KeyImportDialog(model: HostsModel, onDismiss: () -> Unit) {
-    val needsLabel = model.key != null
+fun KeyImportDialog(model: HostsModel, replacementKeyId: String? = null, onDismiss: () -> Unit) {
+    val needsLabel = model.key != null && replacementKeyId == null
     var label by remember { mutableStateOf("") }
     var privateKey by remember { mutableStateOf("") }
     var passphrase by remember { mutableStateOf("") }
@@ -94,6 +94,7 @@ fun KeyImportDialog(model: HostsModel, onDismiss: () -> Unit) {
         title = { Text(stringResource(R.string.key_import_title)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (replacementKeyId != null) Text(stringResource(R.string.key_recover_replace_body))
                 if (needsLabel) OutlinedTextField(
                     label, { label = it }, enabled = !busy, singleLine = true,
                     label = { Text(stringResource(R.string.key_new_label)) },
@@ -136,7 +137,8 @@ fun KeyImportDialog(model: HostsModel, onDismiss: () -> Unit) {
                     problem = null
                     scope.launch {
                         try {
-                            model.importKey(label, privateKey, passphrase)
+                            if (replacementKeyId == null) model.importKey(label, privateKey, passphrase)
+                            else model.recoverKey(replacementKeyId, privateKey, passphrase)
                             close()
                         } catch (e: CoreException) {
                             // Permit a retry, but don't retain a failed passphrase.
@@ -147,7 +149,7 @@ fun KeyImportDialog(model: HostsModel, onDismiss: () -> Unit) {
                         }
                     }
                 },
-            ) { Text(stringResource(R.string.key_import_button)) }
+            ) { Text(stringResource(if (replacementKeyId == null) R.string.key_import_button else R.string.key_recover_replace_button)) }
         },
         dismissButton = {
             TextButton(enabled = !busy, onClick = ::close) { Text(stringResource(R.string.cancel_button)) }

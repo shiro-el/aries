@@ -109,3 +109,62 @@ fn keeps_last_fifty_submissions_and_clear_is_persistent_and_terminal_local() {
         ["keep me"]
     );
 }
+
+#[test]
+fn upgrade_and_new_submissions_leave_no_plaintext_input_files() {
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    let host = core
+        .add_host(
+            "home".into(),
+            Endpoint::Ssh {
+                address: "offline.invalid".into(),
+                port: 22,
+                user: "me".into(),
+            },
+        )
+        .unwrap();
+    let dir = data.path().join("hosts").join(&host.id);
+    std::fs::create_dir_all(dir.join("github-drafts")).unwrap();
+    std::fs::write(
+        dir.join("input-history.json"),
+        br#"{"t1":["legacy-secret-input"]}"#,
+    )
+    .unwrap();
+    std::fs::write(dir.join("input-history.json.tmp"), "interrupted-secret").unwrap();
+    std::fs::write(dir.join("github-drafts/old.txt"), "legacy-secret-draft").unwrap();
+    std::fs::write(dir.join("github-drafts/old.tmp"), "interrupted-secret").unwrap();
+    drop(core);
+    let core = core_in(data.path());
+    assert_eq!(
+        core.input_history(host.id.clone(), "t1".into()).unwrap(),
+        ["legacy-secret-input"]
+    );
+    core.remember_input(host.id.clone(), "t1".into(), "new-secret-input".into())
+        .unwrap();
+    fn inspect(path: &std::path::Path) {
+        for entry in std::fs::read_dir(path).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                inspect(&path);
+            } else {
+                let bytes = std::fs::read(&path).unwrap();
+                for secret in [
+                    "legacy-secret-input",
+                    "new-secret-input",
+                    "legacy-secret-draft",
+                    "interrupted-secret",
+                ] {
+                    assert!(
+                        !bytes.windows(secret.len()).any(|w| w == secret.as_bytes()),
+                        "plaintext in {}",
+                        path.display()
+                    );
+                }
+            }
+        }
+    }
+    inspect(data.path());
+    assert!(!dir.join("input-history.json.tmp").exists());
+    assert!(!dir.join("github-drafts/old.tmp").exists());
+}

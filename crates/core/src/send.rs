@@ -29,6 +29,42 @@ pub enum SendOutcome {
     },
 }
 
+/// What herdr-core observed after pressing the Agent's stop key.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, uniffi::Enum)]
+#[serde(rename_all = "snake_case")]
+pub enum InterruptOutcome {
+    Stopped,
+    Exited,
+    StillWorking,
+    Unknown,
+    /// The Agent was no longer Working when checked; no input was sent.
+    NotWorking,
+}
+
+pub(crate) async fn interrupt(
+    client: &HcClient,
+    address: &str,
+) -> Result<InterruptOutcome, CoreError> {
+    let terminal = client
+        .call("terminal.get", json!({ "terminal": address }))
+        .await?;
+    let info = crate::terminal_info(&terminal);
+    if info.state != "live" || info.agent_status != Some(AgentStatus::Working) {
+        return Ok(InterruptOutcome::NotWorking);
+    }
+    // herdr-core owns stop-key overrides and terminal key encoding. Never
+    // retry: a lost reply may still mean the key reached the Agent.
+    let reply = client
+        .call(
+            "terminal.interrupt",
+            json!({ "terminal": address, "timeout": 5 }),
+        )
+        .await?;
+    serde_json::from_value(reply["outcome"].clone()).map_err(|e| CoreError::Protocol {
+        detail: format!("invalid interrupt outcome: {e}"),
+    })
+}
+
 /// Hears about a send in progress.
 #[uniffi::export(with_foreign)]
 pub trait SendListener: Send + Sync {
@@ -43,10 +79,14 @@ pub(crate) async fn send(
     text: &str,
     on_held: impl FnOnce(),
 ) -> Result<SendOutcome, CoreError> {
-    let call = client.call(
-        "terminal.send",
-        json!({ "terminal": address, "text": text }),
-    );
+    let state = require_agent(client, address).await?;
+    let mut params = json!({ "terminal": address, "text": text });
+    // These are the statuses herdr-core accepts for its atomic precondition.
+    // Recheck after a held send too, so an Agent exit cannot type into its shell.
+    if matches!(state.as_str(), "idle" | "working") {
+        params["if"] = json!(state);
+    }
+    let call = client.call("terminal.send", params);
     tokio::pin!(call);
     let result = tokio::select! {
         r = &mut call => r,
@@ -60,6 +100,24 @@ pub(crate) async fn send(
         Err(CoreError::Rpc { kind, .. }) if kind == "blocked" => Ok(blocked(client, address).await),
         Err(e) => Err(e),
     }
+}
+
+/// A live Terminal may now be a shell. Never use Chat's cached transcript
+/// or the Terminal's launch argv as proof that an Agent is still there.
+pub(crate) async fn require_agent(client: &HcClient, address: &str) -> Result<String, CoreError> {
+    let terminal = client
+        .call("terminal.get", json!({ "terminal": address }))
+        .await?;
+    if terminal["state"] != "live" || crate::host_model::status_of(&terminal).0.is_none() {
+        return Err(CoreError::Rpc {
+            kind: "no_agent".into(),
+            detail: "the Agent has ended; open Terminal to continue".into(),
+        });
+    }
+    Ok(terminal["status"]["state"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned())
 }
 
 /// Why the Agent is Blocked, as it reports it now.

@@ -54,6 +54,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.shiroel.aries.PERMISSION_TOOL
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AnswerProblem
 import io.github.shiroel.aries.core.AgentStatus
@@ -119,24 +120,33 @@ class ChatModel(
 
     /**
      * Transcript Running means unresolved, not necessarily a live menu.
-     * Only a caught-up Chat and question-blocked Terminal expose live keys.
+     * Only a caught-up Chat and a matching Blocked reason expose live keys.
+     * Permission projections never become historical message replies.
      * Codex requests queue FIFO within the current user turn; Claude's newest
      * tool supersedes interrupted older ones. The Beacon rechecks before input.
      * With no live question, only the latest unresolved history may send a
      * normal message, through terminal.send's Blocked gate.
      */
     fun questionMode(id: String): QuestionMode {
+        if (inputUnavailable) return QuestionMode.ReadOnly
         val snap = snapshot ?: return QuestionMode.ReadOnly
         if (snap.status != ChatStatus.LIVE) return QuestionMode.ReadOnly
         val entries = snap.entries
         val pending = entries.drop(entries.indexOfLast { (it.body as? ChatEntryBody.User)?.queued == false } + 1)
             .filter { (it.body as? ChatEntryBody.Question)?.status == ChatToolStatus.RUNNING }
         val blocked = terminal.agentStatus as? AgentStatus.Blocked
+        val permission = (entries.find { it.id == id }?.body as? ChatEntryBody.Question)?.name == PERMISSION_TOOL
+        if (permission) {
+            return if (terminal.state == "live" && blocked?.reason == BlockedReason.PERMISSION &&
+                pending.lastOrNull { (it.body as? ChatEntryBody.Question)?.name == PERMISSION_TOOL }?.id == id)
+                QuestionMode.Live else QuestionMode.ReadOnly
+        }
         if (blocked?.reason == BlockedReason.QUESTION) {
-            val codex = pending.firstOrNull()?.body.let { (it as? ChatEntryBody.Question)?.name == "request_user_input" }
-            val current = if (codex) pending.firstOrNull() else pending.lastOrNull()
+            val questions = pending.filter { (it.body as? ChatEntryBody.Question)?.name != PERMISSION_TOOL }
+            val codex = questions.firstOrNull()?.body.let { (it as? ChatEntryBody.Question)?.name == "request_user_input" }
+            val current = if (codex) questions.firstOrNull() else questions.lastOrNull()
             if (current?.id == id) return QuestionMode.Live
-            return if (codex && pending.any { it.id == id }) QuestionMode.Queued else QuestionMode.ReadOnly
+            return if (codex && questions.any { it.id == id }) QuestionMode.Queued else QuestionMode.ReadOnly
         }
         if (blocked != null || terminal.state != "live") return QuestionMode.ReadOnly
         val latestIndex = entries.indexOfLast { it.body is ChatEntryBody.Question }
@@ -169,6 +179,32 @@ class ChatModel(
     var sendError by mutableStateOf<String?>(null)
         private set
 
+    var interrupting by mutableStateOf(false)
+        private set
+    var interruptNotice by mutableStateOf<Message?>(null)
+        private set
+    val canInterrupt: Boolean get() = terminalAvailable && terminal.agentStatus == AgentStatus.Working &&
+        link?.connection != null && !interrupting && sending == null
+
+    /** One confirmed attempt, with no reconnect queue or automatic retry. */
+    fun interrupt() {
+        val scope = scope ?: return
+        if (!canInterrupt) return
+        val connection = link?.connection ?: return
+        val address = terminal.address
+        interrupting = true
+        interruptNotice = null
+        scope.launch {
+            try {
+                interruptNotice = interruptMessage(connection.interruptAgent(address))
+            } catch (e: CoreException) {
+                interruptNotice = Message(R.string.chat_interrupt_failed, listOf(e.message ?: e.toString()))
+            } finally {
+                interrupting = false
+            }
+        }
+    }
+
     var pendingShare by mutableStateOf<SharedContent?>(null)
     var attachments by mutableStateOf<List<DraftAttachment>>(emptyList())
         private set
@@ -190,6 +226,7 @@ class ChatModel(
     /** Saves bytes and adds attachment chips to the current draft; never calls sendMessage. */
     fun attach(context: Context, content: SharedContent, cleanup: () -> Unit = {}) {
         val scope = scope ?: return
+        if (inputUnavailable) { cleanup(); return }
         if (uploading || sending != null) return
         val connection = link?.connection ?: run { attachmentFailed(CoreException.Closed()); return }
         val resize = AttachmentSettings.from(context).resizeImages
@@ -203,6 +240,7 @@ class ChatModel(
             try {
                 for (uri in content.uris) {
                     val attachment = withContext(Dispatchers.IO) { prepareAttachment(context, uri, resize) }
+                    if (inputUnavailable) break
                     val path = connection.uploadAttachment(terminal.address, attachment.name, attachment.bytes)
                     attachments = attachments + DraftAttachment(path, attachment.name, attachment.bytes.size,
                         attachment.bytes.takeIf { remoteMediaKind(attachment.name) == RemoteMediaKind.IMAGE })
@@ -223,15 +261,23 @@ class ChatModel(
     private var watch: ChatWatch? = null
     private var job: Job? = null
     private var scope: CoroutineScope? = null
+    private var terminalPresent by mutableStateOf(true)
+
+    val terminalAvailable: Boolean get() = terminalPresent && terminal.state == "live" && snapshot?.status != ChatStatus.NO_TERMINAL
+    /** The transcript can outlive its Agent, and may lag the pane returning to a shell. */
+    val inputUnavailable: Boolean get() = !terminalAvailable || terminal.agentStatus == null ||
+        snapshot?.status == ChatStatus.ENDED || snapshot?.status == ChatStatus.NO_AGENT
+    val canEdit: Boolean get() = !inputUnavailable && sending == null
 
     /** The Host's Terminals changed: follow this Agent's status. */
     fun update(terminals: List<TerminalInfo>) {
+        terminalPresent = terminals.any { it.address == terminal.address }
         val now = terminals.find { it.address == terminal.address } ?: return
         terminal = now
         if (now.agentStatus !is AgentStatus.Blocked) refused = false
     }
 
-    val canSend: Boolean get() = link != null && sending == null && !uploading && pendingShare == null &&
+    val canSend: Boolean get() = link != null && canEdit && !interrupting && !uploading && pendingShare == null &&
         (draft.isNotBlank() || attachments.isNotEmpty())
 
     /**
@@ -272,7 +318,9 @@ class ChatModel(
                     }
                 }
             } catch (e: CoreException) {
-                sendError = e.message ?: e.toString()
+                if (e is CoreException.Rpc && e.kind == "no_agent") {
+                    terminal = terminal.copy(agentStatus = null)
+                } else sendError = e.message ?: e.toString()
             } finally {
                 sending = null
             }
@@ -561,8 +609,8 @@ fun ChatScreen(
                 (chat.terminal.agentStatus as? AgentStatus.Blocked)?.let {
                     // A question the Chat shows open is answered with its own buttons;
                     // the Terminal notice is for what the Chat cannot answer.
-                    val answerable = it.reason == BlockedReason.QUESTION && entries.any { e ->
-                        (e.body as? ChatEntryBody.Question)?.status == ChatToolStatus.RUNNING
+                    val answerable = entries.any { e ->
+                        e.body is ChatEntryBody.Question && chat.questionMode(e.id) == ChatModel.QuestionMode.Live
                     }
                     if (!answerable || chat.refused) BlockedNotice(it, refused = chat.refused, onOpenTerminal)
                 }
@@ -579,6 +627,14 @@ fun ChatScreen(
                     ChatNotice(stringResource(R.string.attachments_uploading))
                 }
                 chat.attachmentError?.let { Text(stringResource(it.res, *it.args.toTypedArray()), color = MaterialTheme.colorScheme.error) }
+                if (chat.inputUnavailable) {
+                    ConsoleChatCallSurface {
+                        Text(stringResource(if (chat.terminalAvailable) R.string.chat_input_agent_ended else R.string.chat_status_no_terminal))
+                        ConsoleButton(onClick = if (chat.terminalAvailable) onOpenTerminal else onBack) {
+                            Text(stringResource(if (chat.terminalAvailable) R.string.terminal_open_button else R.string.back_button))
+                        }
+                    }
+                }
                 if (chat.link != null) {
                     ChatCatalogControls(chat)
                     MessageInput(chat)
@@ -662,12 +718,13 @@ private fun MessageInput(chat: ChatModel) {
         lineHeight = 20.sp,
     )
     HorizontalDivider()
+    ChatInterruptControls(chat)
     DraftAttachments(chat)
     io.github.shiroel.aries.dictation.DictationInput(
         names = listOf(chat.host.name, displayName(chat.terminal), chat.terminal.cwd.orEmpty().trimEnd('/').substringAfterLast('/')),
         lastResponse = chat.snapshot?.entries?.asReversed()?.firstNotNullOfOrNull { (it.body as? ChatEntryBody.Agent)?.text }.orEmpty(),
         onTranscript = { text -> chat.draft = if (chat.draft.isBlank()) text else chat.draft + " " + text },
-        enabled = chat.sending == null,
+        enabled = chat.canEdit,
     )
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
         BasicTextField(
@@ -680,7 +737,7 @@ private fun MessageInput(chat: ChatModel) {
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
             maxLines = 6,
-            enabled = chat.sending == null,
+            enabled = chat.canEdit,
             decorationBox = { field ->
                 Box(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
                     if (chat.draft.isEmpty()) {
@@ -703,9 +760,8 @@ private fun MessageInput(chat: ChatModel) {
 }
 
 /**
- * The Agent is Blocked: say why and send the user to the Terminal. A
- * permission request is only shown here, never answered: approving happens
- * in the Terminal.
+ * The Agent is Blocked and Chat has no recognized actionable menu.
+ * Keep the Terminal available for unsupported or incomplete prompts.
  */
 @Composable
 private fun BlockedNotice(status: AgentStatus.Blocked, refused: Boolean, onOpenTerminal: () -> Unit) {

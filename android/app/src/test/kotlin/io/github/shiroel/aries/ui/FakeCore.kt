@@ -291,6 +291,15 @@ class FakeCore : AriesCoreInterface {
         return createKey(label)
     }
 
+    override fun recoverKey(keyId: String, privateKey: String?, passphrase: String): KeyInfo {
+        signsIn("recoverKey")
+        importFailure?.let { throw it }
+        val replacement = KeyInfo(keyId, keys().first { it.id == keyId }.label, "$PUBLIC_KEY recovered", "SHA256:recovered")
+        if (keyId == "default") key = PublicKeyInfo(replacement.openssh, replacement.fingerprint)
+        else extraKeys[extraKeys.indexOfFirst { it.id == keyId }] = replacement
+        return replacement
+    }
+
     override fun keys(): List<KeyInfo> =
         listOfNotNull(key?.let { KeyInfo("default", "", it.openssh, it.fingerprint) }) + extraKeys
 
@@ -961,6 +970,17 @@ class FakeConnection(
 
     /** The fake Agents' input record: (address, text) of each message typed in. */
     val typed = mutableListOf<Pair<String, String>>()
+
+    val interrupted = mutableListOf<String>()
+    var interruptHold: CompletableDeferred<Unit>? = null
+    var interruptFailWith: CoreException? = null
+    var interruptOutcome = io.github.shiroel.aries.core.InterruptOutcome.STOPPED
+    override suspend fun interruptAgent(address: String): io.github.shiroel.aries.core.InterruptOutcome {
+        interrupted += address
+        interruptHold?.await()
+        interruptFailWith?.let { throw it }
+        return interruptOutcome
+    }
 
     /** How `sendMessage` ends: typed in ([SendOutcome.Sent]), refused, or this error. */
     var sendOutcome: SendOutcome = SendOutcome.Sent

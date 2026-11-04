@@ -26,11 +26,16 @@ import kotlinx.coroutines.withTimeout
 class QuestionChoiceReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != ACTION) return
-        val notice = intent.getStringExtra(EXTRA_NOTICE)?.let { QuestionNotice.fromJson(it) } ?: return
+        val notice = NotificationPayloads.open(context, intent.getStringExtra(EXTRA_NOTICE))?.let { QuestionNotice.fromJson(it) } ?: return
         val choice = intent.getIntExtra(EXTRA_CHOICE, -1)
         if (notice.question.options.size !in 1..3 || choice !in notice.question.options.indices) return
         QuestionNotifications.post(context, notice, QuestionView.Sending(choice))
-        QuestionReplyWorker.enqueue(context, notice, choice)
+        try {
+            QuestionReplyWorker.enqueue(context, notice, choice)
+        } catch (_: Exception) {
+            QuestionNotifications.post(context, notice, QuestionView.Done(
+                AppLanguage.context(context).getString(R.string.notification_action_failed), openApp = true))
+        }
     }
 
     companion object {
@@ -43,7 +48,7 @@ class QuestionChoiceReceiver : BroadcastReceiver() {
 /** One-shot expedited work, using only saved Host settings; no foreground HostConnection. */
 class QuestionReplyWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
-        val notice = inputData.getString(KEY_NOTICE)?.let { QuestionNotice.fromJson(it) } ?: return Result.failure()
+        val notice = NotificationPayloads.open(applicationContext, inputData.getString(KEY_NOTICE))?.let { QuestionNotice.fromJson(it) } ?: return Result.failure()
         val choice = inputData.getInt(KEY_CHOICE, -1)
         if (notice.question.options.size !in 1..3 || choice !in notice.question.options.indices) return Result.failure()
         val core = (applicationContext as? HasCore)?.core ?: return Result.failure()
@@ -69,12 +74,12 @@ class QuestionReplyWorker(context: Context, params: WorkerParameters) : Coroutin
         private const val KEY_CHOICE = "choice"
         private const val CHANNEL = "question_replies"
 
-        fun input(notice: QuestionNotice, choice: Int) = workDataOf(KEY_NOTICE to notice.toJson(), KEY_CHOICE to choice)
+        fun input(context: Context, notice: QuestionNotice, choice: Int) = workDataOf(KEY_NOTICE to NotificationPayloads.seal(context, notice.toJson()), KEY_CHOICE to choice)
 
         fun enqueue(context: Context, notice: QuestionNotice, choice: Int) {
             val request = OneTimeWorkRequestBuilder<QuestionReplyWorker>()
                 .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
-                .setInputData(input(notice, choice)).build()
+                .setInputData(input(context, notice, choice)).build()
             WorkManager.getInstance(context).enqueueUniqueWork(
                 "question-reply:${notice.hostId}/${notice.terminal}/${notice.question.id}", ExistingWorkPolicy.KEEP, request)
         }
@@ -93,12 +98,12 @@ object QuestionReplies {
                     core.answerQuestionBackground(notice.hostId, notice.terminal, notice.question.id, listOf(listOf(choice.toUInt())))
                 }
             }
-            QuestionView.Done(context.getString(R.string.question_notify_sent, notice.question.options[choice]), openApp = false)
+            QuestionView.Done(context.getString(R.string.question_notify_sent, notice.choiceLabel(context, choice)), openApp = false)
         } catch (_: TimeoutCancellationException) {
             QuestionView.Done(context.getString(R.string.question_notify_unknown))
         } catch (e: CoreException) {
             val line = when (e) {
-                is CoreException.KeyLocked, is CoreException.BiometricUnavailable -> context.getString(R.string.call_notify_key_locked)
+                is CoreException.KeyLocked, is CoreException.KeyInvalidated, is CoreException.BiometricUnavailable -> context.getString(R.string.call_notify_key_locked)
                 is CoreException.Unreachable -> context.getString(R.string.call_notify_unreachable)
                 is CoreException.AuthRejected, is CoreException.JumpAuthRejected -> context.getString(R.string.call_notify_key_rejected)
                 is CoreException.HostKeyUnknown, is CoreException.HostKeyChanged,
