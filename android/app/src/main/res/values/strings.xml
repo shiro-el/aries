@@ -379,9 +379,8 @@
     <string name="terminal_input_hint">Type in Terminal</string>
     <string name="terminal_input_typing">Typing into the Terminal</string>
     <!-- Terminal extra-key rows -->
-    <string name="terminal_keys_locked">Locked</string>
-    <string name="terminal_keys_once">Next key</string>
-    <string name="terminal_keys_lock_action">Lock modifier</string>
+    <string name="terminal_keys_on">On</string>
+    <string name="terminal_keys_off">Off</string>
     <string name="key_slash">/</string>
     <string name="key_dash">-</string>
     <string name="terminal_keys_hide_button">Hide extra keys</string>
