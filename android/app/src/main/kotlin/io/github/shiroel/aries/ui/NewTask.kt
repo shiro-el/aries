@@ -26,6 +26,7 @@ internal data class AgentCreationAccess(
     val runSaved: (AgentBoard, HostLink, SavedLaunch) -> Unit,
 )
 internal val LocalAgentCreation = compositionLocalOf<AgentCreationAccess?> { null }
+internal val LocalTaskOwner = staticCompositionLocalOf<HostsModel?> { null }
 internal val LocalStartTask = compositionLocalOf<((TaskIssue?) -> Unit)?> { null }
 
 /** A launch is performed once. Only a positive readiness observation permits the first send.
@@ -150,7 +151,7 @@ internal fun NewTaskAccess(model: HostsModel, content: @Composable () -> Unit) {
             start(null)
         }
     }
-    CompositionLocalProvider(LocalShowWorktrees provides model::showWorktrees,
+    CompositionLocalProvider(LocalTaskOwner provides model, LocalShowWorktrees provides model::showWorktrees,
         LocalStartTask provides start,
         LocalCreationHostHistory provides history,
         LocalAgentCreation provides AgentCreationAccess({ startOnLink(it, null) }, model::runSavedFromAgents)) {
@@ -264,7 +265,7 @@ internal fun NewTaskDialog(task: NewTask, onStart: () -> Unit, onOpenChat: () ->
 
 /** Explicit paths use list_files on the Host without needing an existing Terminal. */
 @Composable
-private fun TaskFolderDialog(connection: HostConnection?, initial: String, onSelect: (String) -> Unit, onDismiss: () -> Unit) {
+internal fun TaskFolderDialog(connection: HostConnection?, initial: String, onSelect: (String) -> Unit, onDismiss: () -> Unit) {
     var path by remember { mutableStateOf(initial) }
     var directory by remember { mutableStateOf<RemoteDirectory?>(null) }
     var error by remember { mutableStateOf(false) }

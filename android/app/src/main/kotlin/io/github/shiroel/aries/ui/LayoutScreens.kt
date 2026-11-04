@@ -39,6 +39,7 @@ private object ConsoleScreens : LayoutScreens()
 
 /** Console defaults are reusable individually, without duplicating model or navigation logic. */
 internal open class LayoutScreens {
+    open val usesListPane: Boolean = true
     @Composable open fun Shell(model: HostsModel, content: @Composable () -> Unit) = ConsoleShell(model, content)
 
     @Composable open fun Header(model: HostsModel, screen: Screen) {

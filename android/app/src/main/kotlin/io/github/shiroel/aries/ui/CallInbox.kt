@@ -58,15 +58,15 @@ internal fun ConsoleInboxAction() {
 internal fun CallInboxOverlay(model: HostsModel, modifier: Modifier = Modifier) {
     val title = stringResource(R.string.calls_title)
     val close = stringResource(R.string.call_inbox_close)
-    val tasks = LocalLayoutTokens.current == tokensFor(AppLayout.TASKS)
+    val sheet = LocalLayoutTokens.current != tokensFor(AppLayout.CONSOLE)
     BoxWithConstraints(modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize().testTag("call-inbox-scrim")
             .background(MaterialTheme.colorScheme.scrim.copy(alpha = .45f))
             .semantics { contentDescription = close }
             .clickable(role = Role.Button, onClick = model::closeCallInbox))
         Column(Modifier.fillMaxWidth().heightIn(max = maxHeight * .7f)
-            .then(if (tasks) Modifier.align(Alignment.BottomCenter).clip(RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp)) else Modifier)
-            .background(if (tasks) MaterialTheme.colorScheme.surfaceContainer else MaterialTheme.colorScheme.surface).testTag("call-inbox-panel")
+            .then(if (sheet) Modifier.align(Alignment.BottomCenter).clip(RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp)) else Modifier)
+            .background(if (sheet) MaterialTheme.colorScheme.surfaceContainer else MaterialTheme.colorScheme.surface).testTag("call-inbox-panel")
             .semantics { paneTitle = title }) {
             Row(Modifier.fillMaxWidth().padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 AnnouncedText(stringResource(R.string.call_inbox_label, model.calls.calls.count { it.answerable || it.needsUrgentAttention }),

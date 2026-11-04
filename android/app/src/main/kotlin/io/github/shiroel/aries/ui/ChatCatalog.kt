@@ -42,7 +42,17 @@ private fun insertSkill(input: TextFieldValue, token: String): TextFieldValue {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun ChatCatalogControls(chat: ChatModel) {
+internal fun ChatCatalogControls(chat: ChatModel,
+    composer: (@Composable (openTools: () -> Unit) -> Unit)? = null) {
+    var showTools by rememberSaveable(chat) { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    // Shared content is consumed even while Thread's secondary input tools are folded.
+    LaunchedEffect(chat, chat.pendingShare, chat.inputUnavailable) {
+        chat.pendingShare?.takeUnless { chat.inputUnavailable }?.let {
+            chat.pendingShare = null
+            chat.attach(context.applicationContext, it)
+        }
+    }
     val connection = chat.link?.connection
     val process = chat.terminal.foreground
     val cwd = process?.cwd ?: chat.terminal.cwd
@@ -98,11 +108,22 @@ internal fun ChatCatalogControls(chat: ChatModel) {
             }
         }
     }
-    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-        AttachmentControls(chat)
-        InputHistoryButton(chat.inputHistory, enabled = enabled, onSelect = chat::appendDraft)
-        ActionIcon(R.drawable.ic_library, R.string.chat_skills_button,
-            { query = ""; showSkills = true }, enabled = enabled)
+    val tools: @Composable () -> Unit = {
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+            AttachmentControls(chat)
+            InputHistoryButton(chat.inputHistory, enabled = enabled, onSelect = chat::appendDraft)
+            ActionIcon(R.drawable.ic_library, R.string.chat_skills_button,
+                { query = ""; showTools = false; showSkills = true }, enabled = enabled)
+        }
+    }
+    if (composer == null) tools()
+    else {
+        composer { showTools = true }
+        if (showTools) ModalBottomSheet(onDismissRequest = { showTools = false }) {
+            Text(stringResource(R.string.chat_input_tools_button), Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
+            tools()
+            Spacer(Modifier.height(24.dp))
+        }
     }
     if (showSkills) {
         ConsoleSheet(onDismissRequest = { showSkills = false }) {

@@ -1309,7 +1309,7 @@ private fun ChatEntryFooter(images: List<ChatImage>, metadata: ChatResponseMetad
 }
 
 @Composable
-internal fun MessageInput(chat: ChatModel, compact: Boolean = false) {
+internal fun MessageInput(chat: ChatModel, compact: Boolean = false, leading: (@Composable () -> Unit)? = null) {
     var tools by remember(chat) { mutableStateOf(false) }
     if (tools) ChatInputToolsDialog(chat) { tools = false }
     val inputLabel = stringResource(R.string.chat_input_label)
@@ -1331,7 +1331,7 @@ internal fun MessageInput(chat: ChatModel, compact: Boolean = false) {
             }
         }
     }
-    HorizontalDivider()
+    if (leading == null) HorizontalDivider()
     if (!compact) ChatInterruptNotice(chat, Modifier.focusRequester(noticeFocus).onFocusChanged {
         // Follow a removed result back to the composer, but do not pull focus
         // back after the user has deliberately moved elsewhere.
@@ -1340,6 +1340,7 @@ internal fun MessageInput(chat: ChatModel, compact: Boolean = false) {
     }.focusable())
 
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+        leading?.invoke()
         BasicTextField(
             value = chat.input,
             onValueChange = { chat.input = it },
@@ -1360,7 +1361,7 @@ internal fun MessageInput(chat: ChatModel, compact: Boolean = false) {
                 }
             },
         )
-        if (compact) ActionIcon(R.drawable.ic_plus, R.string.chat_input_tools_button,
+        if (compact && leading == null) ActionIcon(R.drawable.ic_plus, R.string.chat_input_tools_button,
             { tools = true }, enabled = chat.canEdit)
         val showInterrupt = chat.draft.isEmpty() && chat.attachments.isEmpty() &&
             ((chat.terminalAvailable && chat.terminal.agentStatus == AgentStatus.Working &&
@@ -1376,7 +1377,8 @@ internal fun MessageInput(chat: ChatModel, compact: Boolean = false) {
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
             ) {
                 if (chat.interrupting) ChatInterruptProgress()
-                Text(stringResource(R.string.chat_send_button), style = inputStyle)
+                if (leading != null) Icon(painterResource(R.drawable.ic_send), stringResource(R.string.chat_send_button), Modifier.size(20.dp))
+                else Text(stringResource(R.string.chat_send_button), style = inputStyle)
             }
         }
     }
