@@ -44,6 +44,7 @@ internal fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question
     val mode = chat.questionMode(id)
     val state = chat.answers[id]
     val cancelled = q.status == ChatToolStatus.FAILED
+    val unconfirmed = state == AnswerState.Unconfirmed && q.status == ChatToolStatus.RUNNING
     val submitted = state == AnswerState.Sent || state == AnswerState.Unconfirmed
     val answered = !cancelled && (q.status == ChatToolStatus.DONE || submitted)
     val entries = chat.snapshot?.entries.orEmpty()
@@ -57,9 +58,11 @@ internal fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question
         ChatModel.QuestionMode.History, ChatModel.QuestionMode.LivePending, ChatModel.QuestionMode.Reconnecting)
     val enabled = state != AnswerState.Sending && state != AnswerState.Held && mode in setOf(ChatModel.QuestionMode.Live, ChatModel.QuestionMode.History)
     var confirmingAlways by remember(id, q) { mutableStateOf(false) }
+    var confirmingRetry by remember(id, q) { mutableStateOf(false) }
     val recorded = questionAnswers(q)
     val colors = MaterialTheme.colorScheme
     val accent = when {
+        unconfirmed -> colors.error
         answered -> colors.primary
         cancelled -> colors.error
         expired -> colors.onSurfaceVariant
@@ -68,6 +71,7 @@ internal fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question
     val label = when {
         cancelled -> R.string.chat_question_cancelled
         q.status == ChatToolStatus.DONE -> R.string.chat_question_sent
+        unconfirmed -> R.string.chat_question_unconfirmed
         submitted -> R.string.chat_question_waiting
         expired -> R.string.chat_question_expired
         mode == ChatModel.QuestionMode.LivePending -> R.string.chat_question_live_pending
@@ -79,7 +83,7 @@ internal fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question
     }
     ConsoleChatCallSurface(accent) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (answered || cancelled) Icon(
+            if ((answered && !unconfirmed) || cancelled) Icon(
                 painterResource(if (answered) R.drawable.ic_check else R.drawable.ic_x),
                 contentDescription = null, tint = accent, modifier = Modifier.size(18.dp),
             )
@@ -158,12 +162,30 @@ internal fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question
                 Text(stringResource(R.string.chat_question_send))
             }
         }
+        if (unconfirmed) {
+            AnnouncedText(stringResource(R.string.chat_queue_uncertain), style = MaterialTheme.typography.bodySmall, color = colors.error)
+            if (mode == ChatModel.QuestionMode.History) {
+                TextButton(onClick = { confirmingRetry = true }) { Text(stringResource(R.string.chat_delivery_retry_button)) }
+            }
+        }
         when {
             state == AnswerState.Held -> AnnouncedText(stringResource(R.string.chat_send_held), style = MaterialTheme.typography.bodySmall)
             state == AnswerState.Sending -> AnnouncedText(stringResource(R.string.chat_question_sending), style = MaterialTheme.typography.bodySmall)
             state is AnswerState.Failed -> AnnouncedText(messageText(state.why),
                 style = MaterialTheme.typography.bodySmall, color = colors.error)
         }
+    }
+    if (confirmingRetry && state == AnswerState.Unconfirmed && mode == ChatModel.QuestionMode.History && q.status == ChatToolStatus.RUNNING) {
+        AlertDialog(
+            onDismissRequest = { confirmingRetry = false },
+            title = { Text(stringResource(R.string.chat_delivery_resend_title)) },
+            text = { Text(stringResource(R.string.chat_queue_uncertain)) },
+            confirmButton = { TextButton(onClick = {
+                confirmingRetry = false
+                chat.retryHistoryAnswer(id, q)
+            }) { Text(stringResource(R.string.chat_delivery_retry_button)) } },
+            dismissButton = { TextButton(onClick = { confirmingRetry = false }) { Text(stringResource(R.string.cancel_button)) } },
+        )
     }
     if (confirmingAlways && open && enabled) {
         val alwaysPart = q.questions.indexOfFirst { part -> part.options.any { it.label == "Allow always" } }

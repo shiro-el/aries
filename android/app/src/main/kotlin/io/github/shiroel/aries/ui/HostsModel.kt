@@ -1,5 +1,6 @@
 package io.github.shiroel.aries.ui
 
+import io.github.shiroel.aries.core.CallAnswerState
 import io.github.shiroel.aries.core.HerdrCoreState
 import androidx.annotation.StringRes
 import androidx.compose.runtime.getValue
@@ -153,7 +154,7 @@ class HostsModel(
     private val http: HttpClient = HttpRelayClient(),
     private val onSavedLaunchesChanged: () -> Unit = {},
     private val locationStore: LastLocationStore? = null,
-    private val onCallAnswered: (Host, String) -> Unit = { _, _ -> },
+    private val onCallAnswered: (Host, String, CallAnswerState) -> Unit = { _, _, _ -> },
 ) {
     internal val pairingReview = QrPairingReview()
     /** Current Host's settings models; a previous Host's pending work keeps its own state. */
@@ -165,16 +166,25 @@ class HostsModel(
         private set
 
     private data class HostSettings(
+        val connection: Triple<Endpoint, List<JumpHost>, String?>,
         val beacon: BeaconModel,
         val herdr: HerdrInstallModel,
         val push: PushModel,
     )
     private val hostSettings = mutableMapOf<String, HostSettings>()
 
-    private fun loadHostSettings(host: Host) {
+    private fun loadHostSettings(requestedHost: Host) {
+        val host = hosts.firstOrNull { it.id == requestedHost.id } ?: return
+        val connection = Triple(host.endpoint, core.jumpHosts(host.id), core.hostSshKey(host.id))
+        hostSettings[host.id]?.takeIf { it.connection != connection }?.let { old ->
+            old.beacon.invalidate()
+            old.herdr.invalidate()
+            hostSettings.remove(host.id)
+        }
         val settings = hostSettings.getOrPut(host.id) {
             val hostPush = PushModel(core, scope, pushPlatform, http, keyWork)
             HostSettings(
+                connection,
                 BeaconModel(core, scope, beaconFetcher, onRemoved = {
                     flushPushRevocations()
                     hostPush.load(host)
@@ -661,11 +671,37 @@ class HostsModel(
         recoveringKeys = true
     }
 
-    suspend fun recoverKey(keyId: String, privateKey: String? = null, passphrase: String = "") = modelOperation {
-        withContext(keyWork) { core.recoverKey(keyId, privateKey, passphrase) }
-        key = core.publicKey()
-        keyProtection = core.keyProtection()
-        keys = core.keys()
+    internal var generatingKeyId by mutableStateOf<String?>(null)
+    var recoveringKeyId by mutableStateOf<String?>(null)
+        private set
+    var keyRecoveryProblem by mutableStateOf<Message?>(null)
+        private set
+
+    internal fun confirmKeyRecovery() {
+        val id = generatingKeyId ?: return
+        scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+            try { recoverKey(id) } catch (_: CoreException) { /* Retained below the key list. */ }
+        }
+    }
+
+    suspend fun recoverKey(keyId: String, privateKey: String? = null, passphrase: String = "") {
+        if (recoveringKeyId != null) return
+        recoveringKeyId = keyId
+        keyRecoveryProblem = null
+        modelOperation {
+            try {
+                withContext(keyWork) { core.recoverKey(keyId, privateKey, passphrase) }
+                key = core.publicKey()
+                keyProtection = core.keyProtection()
+                keys = core.keys()
+            } catch (e: CoreException) {
+                keyRecoveryProblem = problemFor(e).body
+                throw e
+            } finally {
+                generatingKeyId = null
+                recoveringKeyId = null
+            }
+        }
     }
 
     /** Re-seals every SSH key with or without a biometric requirement. */
@@ -709,6 +745,7 @@ class HostsModel(
         core.setJumpHosts(host.id, jumps)
         core.setHostSshKey(host.id, hostKeyId)
         refreshRoutes()
+        loadHostSettings(hosts.first { it.id == host.id })
         screen = Screen.Settings
     }
 
@@ -739,6 +776,36 @@ class HostsModel(
 
     fun inspectPairingQr(qr: String) = core.inspectPairingQr(qr)
 
+    internal fun pairReviewedHost(connectAfterPair: Boolean = false) {
+        val review = pairingReview
+        if (review.busy) return
+        val credential = review.qr ?: return
+        val name = review.name
+        val revision = review.revision
+        // Consume locally before dispatching; a lost reply never re-enables this credential.
+        review.qr = null
+        review.busy = true
+        review.error = null
+        scope.launch {
+            try {
+                val host = pairHostQr(name, credential, connectAfterPair)
+                if (review.revision == revision) {
+                    review.details = null
+                    review.name = ""
+                    review.paired = host
+                }
+            } catch (e: CoreException) {
+                if (review.revision == revision) review.error = when (e) {
+                    is CoreException.InvalidPairingQr -> R.string.host_pair_invalid
+                    is CoreException.HostKeyChanged -> R.string.host_pair_key_changed
+                    else -> R.string.host_pair_refused
+                }
+            } finally {
+                if (review.revision == revision) review.busy = false
+            }
+        }
+    }
+
     suspend fun pairHostQr(name: String, qr: String, connectAfterPair: Boolean = false): Host = modelOperation {
         val origin = screen
         val revision = setupRevision
@@ -763,7 +830,12 @@ class HostsModel(
             }
             hosts = core.hosts()
             refreshRoutes()
-            if (previous.endpoint != endpoint) calls.stopAll()
+            val saved = hosts.first { it.id == host.id }
+            if (settingsHost?.id == host.id) settingsHost = saved
+            if (previous.endpoint != endpoint) {
+                calls.stopAll()
+                loadHostSettings(saved)
+            }
             hostsChanged()
             true
         } catch (e: CoreException) {
@@ -903,6 +975,15 @@ class HostsModel(
         taskVisible = false
         // Dismissal cancels only the readiness read. Launch and send outcomes must finish once.
         task?.takeIf { it.waiting }?.let { taskJobs[it]?.cancel() }
+    }
+
+    /** Retire only the tracking record. The uncertain remote launch is never replayed. */
+    internal fun stopTrackingTask() {
+        val current = task ?: return
+        if (current.form.busy || !current.launchUnknown) return
+        tasks.remove(current.link.host.id)
+        taskVisible = false
+        task = null
     }
 
     internal fun openCreatedTask() {
@@ -1154,6 +1235,13 @@ class HostsModel(
 
     internal fun dismissLaunch() { activeLaunch = null }
 
+    internal fun stopTrackingLaunch() {
+        val flow = activeLaunch ?: return
+        if (flow.form.busy || !flow.form.launchUnknown) return
+        launches.remove(flow.link.host.id)
+        activeLaunch = null
+    }
+
     internal fun launchActive(again: Boolean = false) {
         val flow = activeLaunch ?: return
         if (again && !flow.form.busy && flow.link.state == LinkState.Up && flow.link.connection != null) {
@@ -1216,9 +1304,16 @@ class HostsModel(
         }
     }
 
-    fun showKeyQr() = guard {
-        val k = key ?: return@guard
-        core.publicKeyQr()?.let { prompt = Prompt.KeyQr(k, it) }
+    fun authorizationKey(host: Host): KeyInfo? = keys.find { it.id == (core.hostSshKey(host.id) ?: "default") }
+
+    fun showKeyQr(selected: PublicKeyInfo? = key) = guard {
+        val k = selected ?: return@guard
+        val matrix = com.google.zxing.qrcode.QRCodeWriter().encode(k.openssh,
+            com.google.zxing.BarcodeFormat.QR_CODE, 1, 1,
+            mapOf(com.google.zxing.EncodeHintType.MARGIN to 0,
+                com.google.zxing.EncodeHintType.ERROR_CORRECTION to com.google.zxing.qrcode.decoder.ErrorCorrectionLevel.M))
+        prompt = Prompt.KeyQr(k, QrMatrix(matrix.width.toUInt(),
+            (0 until matrix.height).flatMap { y -> (0 until matrix.width).map { x -> matrix[x, y] } }))
     }
 
     fun askPassword(host: Host) {

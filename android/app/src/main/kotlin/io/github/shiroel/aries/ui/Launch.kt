@@ -166,6 +166,7 @@ fun LaunchDialog(
     onPin: ((SavedLaunch) -> Unit)? = null,
     onUndoDelete: () -> Unit = {},
     onLaunchAgain: () -> Unit = {},
+    onStopTracking: () -> Unit = {},
     connected: Boolean = true,
 ) {
     var confirmAgain by remember(form) { mutableStateOf(false) }
@@ -193,6 +194,8 @@ fun LaunchDialog(
                 }
                 if (form.launchUnknown && !form.busy) {
                     Text(stringResource(R.string.launch_unknown_body), color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.launch_stop_tracking_body))
+                    TextButton(onClick = onStopTracking) { Text(stringResource(R.string.launch_stop_tracking_button)) }
                     TextButton(onClick = { confirmAgain = true }, enabled = connected) { Text(stringResource(R.string.launch_review_button)) }
                 }
                 form.removedLaunch?.let { removed ->

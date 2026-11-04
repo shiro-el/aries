@@ -236,18 +236,18 @@ internal fun KeySection(model: HostsModel) {
 }
 
 @Composable
-private fun PublicKeyDetails(model: HostsModel) {
-    val key = model.key ?: return
+private fun PublicKeyDetails(model: HostsModel, selected: io.github.shiroel.aries.core.PublicKeyInfo? = model.key, label: String = "") {
+    val key = selected ?: return
     val context = LocalContext.current
     val clipLabel = stringResource(R.string.key_clip_label)
-    Text(stringResource(R.string.key_title), style = MaterialTheme.typography.titleMedium)
+    Text(label.ifBlank { stringResource(R.string.key_title) }, style = MaterialTheme.typography.titleMedium)
     Text(key.openssh, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
     Text(stringResource(R.string.key_fingerprint, key.fingerprint), style = MaterialTheme.typography.bodySmall)
     ConsoleButton(onClick = {
         context.getSystemService(ClipboardManager::class.java)
             ?.setPrimaryClip(ClipData.newPlainText(clipLabel, key.openssh))
     }) { Text(stringResource(R.string.key_copy_button)) }
-    ConsoleButton(onClick = model::showKeyQr) { Text(stringResource(R.string.key_qr_button)) }
+    ConsoleButton(onClick = { model.showKeyQr(key) }) { Text(stringResource(R.string.key_qr_button)) }
 }
 
 @Composable
@@ -308,7 +308,10 @@ private fun HostConnectionForm(model: HostsModel) {
 @Composable
 internal fun HostKeyAuthorization(model: HostsModel, host: Host) {
     Text(stringResource(R.string.onboarding_manual_key_body))
-    KeySection(model)
+    val key = model.authorizationKey(host)
+    if (key == null) Text(stringResource(R.string.key_missing))
+    else PublicKeyDetails(model, io.github.shiroel.aries.core.PublicKeyInfo(key.openssh, key.fingerprint), key.label)
+    TextButton(onClick = model::openKeyRecovery) { Text(stringResource(R.string.key_recover_button)) }
     TextButton(onClick = { model.askPassword(host) }) { Text(stringResource(R.string.host_install_key_button)) }
 }
 

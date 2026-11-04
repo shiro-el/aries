@@ -39,7 +39,7 @@ sealed interface ReplyNote {
     data class NotSent(val detail: String) : ReplyNote
 
     /** The Beacon answered with [outcome] (anything but a plain delivery). */
-    data class Outcome(val outcome: CallReplyOutcome) : ReplyNote
+    data class Outcome(val outcome: CallReplyOutcome, val detail: String? = null) : ReplyNote
 }
 
 /**
@@ -55,7 +55,7 @@ class CallsModel(
     private val core: AriesCoreInterface,
     private val scope: CoroutineScope,
     private val keyWork: CoroutineContext = EmptyCoroutineContext,
-    private val onAnswered: (Host, String) -> Unit = { _, _ -> },
+    private val onAnswered: (Host, String, CallAnswerState) -> Unit = { _, _, _ -> },
 ) {
     /** All Hosts' Calls, newest first. */
     var calls by mutableStateOf<List<CallEntry>>(emptyList())
@@ -126,7 +126,7 @@ class CallsModel(
                 }
                 when (r.outcome) {
                     CallReplyOutcome.DELIVERED -> null
-                    else -> ReplyNote.Outcome(r.outcome)
+                    else -> ReplyNote.Outcome(r.outcome, r.detail)
                 }
             } catch (e: CoreException) {
                 ReplyNote.NotSent(e.message.orEmpty())
@@ -144,7 +144,7 @@ class CallsModel(
 
     private val watches = mutableMapOf<String, Slot>()
     private val confirmedFinals = mutableSetOf<String>()
-    private val recalled = mutableSetOf<String>()
+    private val recalled = mutableMapOf<String, CallAnswerState>()
     private val liveHosts = mutableSetOf<String>()
     private val checkedAt = mutableMapOf<String, Long>()
     private val perHost = mutableMapOf<String, List<CallInfo>>()
@@ -246,10 +246,14 @@ class CallsModel(
     private fun publish() {
         calls = perHost.flatMap { (id, list) -> hosts[id]?.let { h -> list.map { CallEntry(h, it, id in liveHosts, checkedAt[id]) } }.orEmpty() }
             .sortedByDescending { it.call.atMs }
-        recalled.retainAll(calls.map { it.key }.toSet())
-        calls.filter { it.call.answer != null && recalled.add(it.key) }.forEach {
-            onAnswered(it.host, it.call.id)
-            if (banner?.key == it.key) banner = null
+        recalled.keys.retainAll(calls.map { it.key }.toSet())
+        calls.forEach { entry ->
+            val answer = entry.call.answer ?: return@forEach
+            if (banner?.key == entry.key) banner = null
+            if (answer.state != CallAnswerState.CLAIMED && recalled[entry.key] != answer.state) {
+                recalled[entry.key] = answer.state
+                onAnswered(entry.host, entry.call.id, answer.state)
+            }
         }
     }
 

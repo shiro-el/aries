@@ -1,5 +1,6 @@
 package io.github.shiroel.aries
 
+import io.github.shiroel.aries.core.CallAnswerState
 import android.app.Notification
 import android.app.NotificationManager
 import android.app.NotificationChannel
@@ -51,12 +52,20 @@ object NotificationGroups {
     }
 
     @Synchronized
-    fun answeredCall(context: Context, hostId: String, hostName: String, callId: String) {
+    fun answeredCall(context: Context, hostId: String, hostName: String, callId: String,
+        state: CallAnswerState = CallAnswerState.DELIVERED) {
+        if (state == CallAnswerState.CLAIMED) return
+        val manager = context.getSystemService(NotificationManager::class.java)
+        // The notification worker owns its in-flight result. A feed failure
+        // must leave room for that result, while a swipe still wins.
+        if (state != CallAnswerState.DELIVERED && manager.activeNotifications.any {
+            it.id == hostId.hashCode() && it.tag == "call:$callId" &&
+                it.notification.extras.getBoolean(InlineNotifications.ACTION_UPDATE)
+        }) return
         val tag = "call:$callId"
         val saved = record(context, hostId, tag) ?: JSONObject()
         saved.put("resolved", true).put("hidden", true)
         records(context).edit().putString(key(hostId, tag), saved.toString()).apply()
-        val manager = context.getSystemService(NotificationManager::class.java)
         manager.cancel(tag, hostId.hashCode())
         refresh(context, manager, hostId, hostName)
     }

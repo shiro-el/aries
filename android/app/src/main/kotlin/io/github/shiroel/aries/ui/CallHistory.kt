@@ -190,7 +190,7 @@ private fun CallRow(
                 }
             }
         }
-        note?.let { replyNoteText(it) }?.let { text ->
+        note?.let { replyNoteText(it, call.answer) }?.let { text ->
             AnnouncedText(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         }
         call.terminal?.let {
