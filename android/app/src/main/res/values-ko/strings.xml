@@ -199,6 +199,8 @@
     <!-- Remote file browser (90) -->
     <string name="files_open_button">파일</string>
     <string name="files_changed_heading">변경된 파일</string>
+    <string name="files_parent_folder_entry">..</string>
+    <string name="files_parent_folder_button">상위 폴더</string>
     <string name="files_folders_heading">폴더</string>
     <string name="files_diff_button">Diff</string>
     <string name="files_full_button">전체 파일</string>
@@ -416,6 +418,8 @@
     <string name="agent_open_button">열기</string>
     <string name="agent_view_terminal">term</string>
     <string name="agent_view_chat">chat</string>
+    <string name="agent_switch_terminal_label">Terminal로 전환</string>
+    <string name="agent_switch_chat_label">Chat으로 전환</string>
     <!-- Terminal and Chat input history (108) -->
     <string name="input_history_title">입력 기록</string>
     <string name="input_history_empty">입력 기록이 없어요.</string>

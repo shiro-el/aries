@@ -196,6 +196,8 @@
     <!-- Remote file browser (90) -->
     <string name="files_open_button">Files</string>
     <string name="files_changed_heading">Changed</string>
+    <string name="files_parent_folder_entry">..</string>
+    <string name="files_parent_folder_button">Parent folder</string>
     <string name="files_folders_heading">Folders</string>
     <string name="files_diff_button">Diff</string>
     <string name="files_full_button">Full file</string>
@@ -416,6 +418,8 @@
     <string name="agent_open_button">Open</string>
     <string name="agent_view_terminal">term</string>
     <string name="agent_view_chat">chat</string>
+    <string name="agent_switch_terminal_label">Switch to Terminal</string>
+    <string name="agent_switch_chat_label">Switch to Chat</string>
     <!-- Terminal and Chat input history (108) -->
     <string name="input_history_title">Input history</string>
     <string name="input_history_empty">No input history yet.</string>

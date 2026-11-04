@@ -3,6 +3,9 @@ package io.github.shiroel.aries.ui
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithText
@@ -34,6 +37,90 @@ class RemoteFilesTest {
     @get:Rule val compose = createComposeRule()
     private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
     private fun str(id: Int) = context.getString(id)
+
+    private fun screenshot(name: String) {
+        System.getenv("ARIES_FILES_RENDER_DIR")?.let { directory ->
+            java.io.File(directory).mkdirs()
+            java.io.File(directory, "$name.png").outputStream().use {
+                compose.onRoot().captureToImage().asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+            }
+        }
+    }
+
+    @Test fun parentEntryBrowsesAboveTheStartingFolderToTheHostRoot() {
+        val requests = mutableListOf<String?>()
+        val conn = object : HostConnection(NoHandle) {
+            override suspend fun gitChanges(address: String) = GitChanges("/home/me/repo", emptyList(), false, true)
+            override suspend fun listFiles(address: String, path: String?): RemoteDirectory {
+                assertEquals("box/t7", address)
+                requests += path
+                return RemoteDirectory(path ?: "/home/me/repo", emptyList())
+            }
+        }
+        compose.setContent { MaterialTheme { RemoteFilesScreen(conn, "box/t7", {}) } }
+        screenshot("starting-folder")
+        compose.onNodeWithText("..").performClick()
+        compose.runOnIdle { assertEquals(listOf(null, "/home/me"), requests) }
+        compose.onNodeWithText("..").performClick()
+        compose.runOnIdle { assertEquals("/home", requests.last()) }
+        compose.onNodeWithText("..").performClick()
+        compose.runOnIdle { assertEquals(listOf(null, "/home/me", "/home", "/"), requests) }
+        screenshot("root")
+    }
+
+    @Test fun toolbarAndSystemBackClimbFoldersAndCloseAtTheStartingFolder() {
+        val requests = mutableListOf<String?>()
+        val conn = object : HostConnection(NoHandle) {
+            override suspend fun gitChanges(address: String) = GitChanges("/repo", emptyList(), false, true)
+            override suspend fun listFiles(address: String, path: String?): RemoteDirectory {
+                requests += path
+                return when (path) {
+                    null, "/repo" -> RemoteDirectory("/repo", listOf(RemoteFileEntry("src", true)))
+                    "/repo/src" -> RemoteDirectory(path, listOf(RemoteFileEntry("deep", true)))
+                    "/repo/src/deep" -> RemoteDirectory(path, listOf(RemoteFileEntry("a.kt", false)))
+                    else -> error("Unexpected folder: $path")
+                }
+            }
+            override suspend fun readFilePage(address: String, path: String, offset: ULong, limit: UInt) =
+                RemoteFilePage("source", 1u, 1u, 1u)
+        }
+        var closed = 0
+        lateinit var back: androidx.activity.OnBackPressedDispatcher
+        compose.setContent {
+            back = androidx.activity.compose.LocalOnBackPressedDispatcherOwner.current!!.onBackPressedDispatcher
+            MaterialTheme { RemoteFilesScreen(conn, "box/t7", { closed++ }) }
+        }
+        compose.onNodeWithText("src/").performClick()
+        compose.onNodeWithText("deep/").performClick()
+        compose.onNodeWithText("a.kt").performClick()
+        compose.onNodeWithContentDescription(context.getString(R.string.files_open_folder_label, "/repo/src/deep")).performClick()
+        compose.runOnIdle { assertEquals("/repo/src/deep", requests.last()) }
+        screenshot("nested-folder")
+        compose.onNodeWithTag("files-back").performClick()
+        compose.runOnIdle { assertEquals("/repo/src", requests.last()); assertEquals(0, closed) }
+        compose.runOnIdle { back.onBackPressed() }
+        compose.runOnIdle { assertEquals("/repo", requests.last()); assertEquals(0, closed) }
+        compose.runOnIdle { back.onBackPressed() }
+        compose.runOnIdle { assertEquals(1, closed) }
+    }
+
+    @Test fun failedParentListingCanContinueUpWithoutReusingTheOldDirectory() {
+        val requests = mutableListOf<String?>()
+        val conn = object : HostConnection(NoHandle) {
+            override suspend fun gitChanges(address: String) = GitChanges("/restricted/repo", emptyList(), false, true)
+            override suspend fun listFiles(address: String, path: String?): RemoteDirectory {
+                requests += path
+                if (path == "/restricted") throw CoreException.Rpc("file_listing_failed", "Permission denied")
+                return RemoteDirectory(path ?: "/restricted/repo", emptyList())
+            }
+        }
+        compose.setContent { MaterialTheme { RemoteFilesScreen(conn, "box/t7", {}) } }
+        compose.onNodeWithText("..").performClick()
+        compose.runOnIdle { assertEquals("/restricted", requests.last()) }
+        screenshot("denied-parent")
+        compose.onNodeWithText("..").performClick()
+        compose.runOnIdle { assertEquals(listOf(null, "/restricted", "/"), requests) }
+    }
 
     @Test fun browsesFoldersPagesAndReturnsALineForTheDraft() {
         val requests = mutableListOf<Triple<String, ULong, UInt>>()
@@ -142,7 +229,7 @@ class RemoteFilesTest {
         assertEquals(emptyList<Pair<String, String>>(), core.connection!!.typed)
 
         // The same action from Terminal keeps the previous Chat draft and appends another reference.
-        compose.onNodeWithText(str(R.string.agent_view_terminal)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.agent_switch_terminal_label)).performClick()
         compose.onNodeWithTag("agent-actions").performClick()
         compose.onNodeWithTag("files-open").performClick()
         compose.onNodeWithText("a'b.kt").performClick()

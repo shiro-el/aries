@@ -2,7 +2,6 @@ package io.github.shiroel.aries.ui
 
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -52,13 +51,11 @@ class AgentConsoleScreenTest {
         compose.onNodeWithText("claude").performClick()
         compose.onNodeWithTag("console-top-bar").assertExists()
         compose.onNodeWithText("/repo").assertExists()
-        compose.onNodeWithText(str(R.string.agent_view_terminal)).assertIsSelected()
         core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle, cwd = "/updated")))
         compose.waitForIdle()
         compose.onNodeWithText(str(R.string.agent_status_idle)).assertExists()
         compose.onNodeWithText("/updated").assertExists()
-        compose.onNodeWithText(str(R.string.agent_view_chat)).performClick()
-        compose.onNodeWithText(str(R.string.agent_view_chat)).assertIsSelected()
+        compose.onNodeWithContentDescription(str(R.string.agent_switch_chat_label)).performClick()
         compose.onNodeWithText("/updated").assertExists()
     }
 
