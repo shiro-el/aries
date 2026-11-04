@@ -425,6 +425,7 @@
     <string name="key_install_write_failed">로그인은 됐지만 Host의 ~/.ssh/authorized_keys에 쓰지 못했어요: %1$s\n\n~/.ssh 소유자와 쓰기 권한을 확인해 주세요.</string>
 
     <string name="host_ssh_address">%1$s@%2$s:%3$d</string>
+    <string name="host_ssh_default_address">%1$s@%2$s</string>
     <string name="host_local_address">로컬 프로세스</string>
     <!-- QR Host pairing -->
     <string name="host_pair_scan_button">Host QR 스캔</string>
@@ -642,6 +643,8 @@
     <string name="chat_response_cache_read_tokens">캐시 읽기 %1$s</string>
     <string name="chat_response_cache_write_tokens">캐시 쓰기 %1$s</string>
     <string name="chat_response_duration">%1$s ms</string>
+    <string name="chat_response_duration_seconds">%1$s s</string>
+    <string name="chat_response_details_button">응답 상세</string>
     <string name="chat_response_complete">완료</string>
     <string name="chat_response_interrupted">중단됨</string>
     <string name="chat_response_error">오류</string>
@@ -1227,6 +1230,7 @@
     <string name="layout_folder_label">폴더 (선택)</string>
     <string name="layout_close_space_button">Space 닫기</string>
     <string name="layout_close_tab_button">Tab 닫기</string>
+    <string name="layout_close_pane_button">Pane 닫기</string>
     <string name="layout_target_gone">이미 닫힌 항목이에요.</string>
     <!-- Shared searchable language picker -->
     <string name="language_picker_auto">자동 감지</string>

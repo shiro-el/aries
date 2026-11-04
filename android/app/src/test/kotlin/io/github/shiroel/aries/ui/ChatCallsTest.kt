@@ -69,7 +69,8 @@ class ChatCallsTest {
 
     private fun openInboxFromChat() {
         compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
-        compose.onNodeWithTag("console-inbox").performClick()
+        compose.openConsoleDrawer()
+        compose.onNodeWithTag("drawer-calls").performClick()
     }
 
     private fun assertNoCallId() {

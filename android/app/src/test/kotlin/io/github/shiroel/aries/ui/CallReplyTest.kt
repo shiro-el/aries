@@ -56,7 +56,8 @@ class CallReplyTest {
             MaterialTheme { AriesApp(model) }
         }
         compose.waitForIdle()
-        compose.onNodeWithTag("console-inbox").performClick()
+        compose.openConsoleDrawer()
+        compose.onNodeWithTag("drawer-calls").performClick()
         compose.waitForIdle()
     }
 

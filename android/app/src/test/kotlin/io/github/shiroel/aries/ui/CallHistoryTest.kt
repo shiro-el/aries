@@ -87,7 +87,8 @@ class CallHistoryTest {
     }
 
     private fun openCalls() {
-        compose.onNodeWithTag("console-inbox").performClick()
+        compose.openConsoleDrawer()
+        compose.onNodeWithTag("drawer-calls").performClick()
         compose.waitForIdle()
     }
 
@@ -287,12 +288,13 @@ class CallHistoryTest {
         compose.openConsoleDrawer()
         compose.onNodeWithTag("call-inbox-panel").assertDoesNotExist()
         compose.onNodeWithTag("settings-open").performClick()
+        compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         openCalls()
         compose.onNodeWithTag("console-drawer").assertIsNotDisplayed()
         compose.onNodeWithTag("call-inbox-panel").assertExists()
-        compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
+        compose.runOnIdle { back.onBackPressed() }
         compose.onNodeWithTag("call-inbox-panel").assertDoesNotExist()
-        compose.onNodeWithText("me@10.0.0.2:22").assertExists()
+        compose.onNodeWithText("me@10.0.0.2").assertExists()
     }
 
     @Test
@@ -394,7 +396,7 @@ class CallHistoryTest {
         show(delayed)
         openCalls()
         compose.onNodeWithContentDescription(str(R.string.call_open_chat_label, "t3", "Review ready")).performClick()
-        compose.onNodeWithTag("console-inbox").performClick()
+        compose.onNodeWithTag("call-inbox-scrim").performClick()
         openCalls()
         compose.runOnIdle { ready.complete(Unit) }
         compose.onNodeWithTag("call-inbox-panel").assertExists()

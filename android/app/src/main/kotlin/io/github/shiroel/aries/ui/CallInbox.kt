@@ -31,6 +31,7 @@ internal val LocalCallInbox = staticCompositionLocalOf<CallInboxAction?> { null 
 internal fun ConsoleInboxAction() {
     val action = LocalCallInbox.current ?: return
     val count = action.calls.calls.count { it.answerable }
+    if (count == 0) return
     val label = stringResource(R.string.call_inbox_label, count)
     val state = stringResource(if (action.open) R.string.call_inbox_expanded else R.string.call_inbox_collapsed)
     val ink = MaterialTheme.colorScheme.onSurfaceVariant
