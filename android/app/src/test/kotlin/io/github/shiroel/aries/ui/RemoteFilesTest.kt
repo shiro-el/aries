@@ -148,6 +148,27 @@ class RemoteFilesTest {
         compose.runOnIdle { org.junit.Assert.assertTrue(reads.all { it >= 700uL }) }
     }
 
+    // Regression: extending an absent query must not reread the whole Host file on every keystroke.
+    @Test fun refiningAMissingQueryReusesAlreadyScannedRanges() {
+        var reads = 0
+        val conn = object : HostConnection(NoHandle) {
+            override suspend fun readFilePage(address: String, path: String, offset: ULong, limit: UInt): RemoteFilePage {
+                reads++
+                val last = minOf(4000uL, offset + limit - 1u)
+                return RemoteFilePage((offset..last).joinToString("\n") { "line $it" }, offset, last, 4000u)
+            }
+        }
+        compose.setContent { MaterialTheme { RemoteFilesScreen(conn, "t1", {}, initialLocation = FileLocation("/a.txt")) } }
+        compose.onNodeWithText(str(R.string.files_find_hint)).performTextInput("absent")
+        compose.waitUntil(5000) { compose.onAllNodesWithText(str(R.string.files_find_no_matches)).fetchSemanticsNodes().isNotEmpty() }
+        val scanned = compose.runOnIdle { reads }
+        compose.onNodeWithText(str(R.string.files_find_hint)).performTextInput("More")
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(300)
+        compose.waitUntil(5000) { compose.onAllNodesWithText(str(R.string.files_find_no_matches)).fetchSemanticsNodes().isNotEmpty() }
+        compose.runOnIdle { assertEquals(scanned, reads) }
+    }
+
     // Regression: comments spanning a page boundary must not turn into executable-looking code.
     @Test fun blockCommentHighlightContinuesAcrossPageBoundary() {
         val conn = object : HostConnection(NoHandle) {

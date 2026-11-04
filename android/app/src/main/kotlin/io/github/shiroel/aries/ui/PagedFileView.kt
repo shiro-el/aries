@@ -178,9 +178,16 @@ private fun ColumnScope.PagedFileLines(
     var match by remember { mutableStateOf<Int?>(null) }
     var searching by remember { mutableStateOf(false) }
     var noMatch by remember { mutableStateOf(false) }
-    val searchIndex = remember(query, first) { mutableListOf<SearchPage>() }
+    val searchIndex = remember(first) { mutableListOf<SearchPage>() }
+    var indexedQuery by remember(first) { mutableStateOf("") }
     LaunchedEffect(query, step, ready) {
         if (!ready || query.isEmpty()) { match = null; noMatch = false; searching = false; return@LaunchedEffect }
+        if (indexedQuery != query) {
+            // A more specific literal cannot match a range where its earlier query was absent.
+            if (indexedQuery.isEmpty() || !query.contains(indexedQuery, ignoreCase = true)) searchIndex.clear()
+            else searchIndex.removeAll { it.matches.isNotEmpty() }
+            indexedQuery = query
+        }
         searching = true
         noMatch = false
         if (step == 0) delay(250)
