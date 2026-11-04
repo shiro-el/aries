@@ -64,25 +64,38 @@ object WatchPhone {
                 val entries = try { core.cachedChat(agent.hostId, agent.terminal)?.entries.orEmpty() }
                 catch (cancelled: CancellationException) { throw cancelled }
                 catch (_: Exception) { emptyList() }
-                val question = if (agent.requestKind == "question") entries.lastOrNull {
-                    val body = it.body
-                    body is ChatEntryBody.Question && body.status == ChatToolStatus.RUNNING
-                } else null
-                val body = question?.body as? ChatEntryBody.Question
-                val command = if (agent.requestKind == "permission") entries.lastOrNull {
-                    val tool = it.body
-                    tool is ChatEntryBody.Tool && tool.status == ChatToolStatus.RUNNING
-                }?.body as? ChatEntryBody.Tool else null
-                agent.copy(
-                    requestBody = (body?.questions?.joinToString("\n") { it.text }
-                        ?: command?.details?.command ?: agent.requestBody),
-                    requestId = question?.id.orEmpty(),
-                    choices = body?.questions?.flatMap { it.options.map { option -> option.label } }.orEmpty(),
-                    conversationSummary = entries.mapNotNull { (it.body as? ChatEntryBody.Agent)?.text }
-                        .lastOrNull().orEmpty(),
-                )
+                val detailed = withEntries(agent, entries)
+                detailed.copy(canAnswerOnWatch = core.canAnswerInBackground(agent.hostId) &&
+                    agent.requestKind != "permission" && detailed.canAnswerOnWatch)
             }
         })
+
+    /** Both cached questions and the one-shot live permission projection use the same shape. */
+    fun withEntries(agent: WatchAgent, entries: List<io.github.shiroel.aries.core.ChatEntry>): WatchAgent {
+        val question = entries.lastOrNull {
+            val body = it.body
+            body is ChatEntryBody.Question && body.status == ChatToolStatus.RUNNING &&
+                (body.name == PERMISSION_TOOL) == (agent.requestKind == "permission")
+        }
+        val body = question?.body as? ChatEntryBody.Question
+        val part = body?.questions?.singleOrNull()
+        val permission = agent.requestKind == "permission"
+        // Unknown permission forms and all command execution require the phone.
+        val safePermission = body?.title == "Would you like to make the following edits?" ||
+            body?.title?.startsWith("Do you want to make this edit to ") == true ||
+            body?.title?.startsWith("Do you want to create ") == true
+        val supported = agent.status == "blocked" && agent.requestKind in listOf("question", "permission") && part != null && !part.multi &&
+            part.options.size in 1..4 && (!permission ||
+                (question.id.startsWith(PERMISSION_ID_PREFIX) && safePermission &&
+                    part.options.map { it.label } in listOf(listOf("Allow", "Deny"), listOf("Allow", "Allow always", "Deny"))))
+        return agent.copy(
+            requestBody = body?.questions?.joinToString("\n") { it.text } ?: agent.requestBody,
+            requestId = question?.id.orEmpty(),
+            choices = part?.options?.map { it.label }.orEmpty(),
+            canAnswerOnWatch = supported,
+            conversationSummary = entries.mapNotNull { (it.body as? ChatEntryBody.Agent)?.text }.lastOrNull().orEmpty(),
+        )
+    }
 
     fun summary(hosts: List<Host>, states: List<LastKnownState>): WatchSummary {
         val byHost = states.associateBy { it.hostId }
@@ -101,6 +114,8 @@ object WatchPhone {
                 AgentStatus.Working -> "working"
                 else -> "idle"
             }, hostName = entry.host.name,
+                stateToken = java.security.MessageDigest.getInstance("SHA-256").digest(
+                    "${terminal.agentStatus}|${terminal.statusMs}|${terminal.turn}".toByteArray()).joinToString("") { "%02x".format(it) },
                 project = entry.space?.name ?: terminal.foreground?.cwd ?: terminal.cwd.orEmpty(),
                 requestBody = blocked?.message.orEmpty(), requestKind = when (blocked?.reason) {
                     BlockedReason.PERMISSION -> "permission"
