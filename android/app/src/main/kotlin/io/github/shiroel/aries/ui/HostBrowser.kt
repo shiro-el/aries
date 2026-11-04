@@ -1,13 +1,11 @@
 package io.github.shiroel.aries.ui
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -201,17 +199,9 @@ fun BrowseScreen(
     val editor = rememberLayoutEditor(browser)
     Column(Modifier.fillMaxSize()) {
         if (showHeader) ConsoleTopBar(browser.host.name, onMenu = {}, onBack = onBack,
-            showMark = false, inbox = {}, actions = { HostActions(browser, onNewTerminal) })
+            showMark = false, inbox = {}, actions = { HostActions(browser, onRunSaved, onNewTerminal) },
+            titleContent = { HostContextTitle(browser, Modifier.weight(1f)) })
         LayoutEditControls(browser, editor)
-        if (onNewTerminal != null && browser.structure != null && !browser.closed && browser.savedLaunches.isNotEmpty()) {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(browser.savedLaunches, key = { "saved:" + it.id }) { s ->
-                    TextButton(modifier = Modifier.testTag("saved_run:" + s.id), onClick = { onRunSaved(s) }) {
-                        Text(s.name, style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-            }
-        }
         browser.launchForm?.let { form ->
             LaunchDialog(
                 form,
@@ -271,7 +261,7 @@ private fun HostTreeList(
         if (browser.revealRequest != null) folds.expand(plainKey)
     }
     val actions: @Composable ColumnScope.(AgentEntry, () -> Unit) -> Unit = { entry, close ->
-        // Selecting context here retains Space/Tab edits without adding tree levels.
+        // Keep navigation local to the phone; layout edits are in the title's context sheet.
         if (entry.space != null) ActionMenuItem(stringResource(R.string.menu_switch_context), R.drawable.ic_panels, onClick = {
             selectTerminalContext(browser, entry.terminal.address)
             close()
