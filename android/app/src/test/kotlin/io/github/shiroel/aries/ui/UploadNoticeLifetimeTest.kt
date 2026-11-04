@@ -100,6 +100,7 @@ class UploadNoticeLifetimeTest {
             compose.waitUntil(5_000) { !chat.uploading }
             assertTrue("Canceled captures must remain on the phone", photo.exists())
             compose.onNodeWithText(compose.activity.getString(R.string.attachments_canceled, photo.name)).assertExists()
+            compose.onNodeWithText(photo.name).assertExists()
             connection.uploadHold!!.complete(Unit)
             compose.waitForIdle()
             assertTrue(chat.attachments.isEmpty())

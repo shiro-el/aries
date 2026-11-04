@@ -2034,11 +2034,11 @@ class HostsModel(
         get() = agentLinks.mapNotNull { (id, link) -> link.connection?.let { id to it } }.toMap()
     private val agentJobs = mutableListOf<Job>()
 
-    private data class ShareRequest(val intent: android.content.Intent, val content: SharedContent)
+    private data class ShareRequest(val intent: android.content.Intent, val content: SharedContent, val assigned: Boolean = false)
 
-    /** Keep the original URI grant envelope until an Agent takes ownership (or the user cancels). */
+    /** Keep the URI grant envelope until Chat durably consumes it (or the user cancels). */
     private var shareRequest by mutableStateOf<ShareRequest?>(null)
-    val pendingShare: SharedContent? get() = shareRequest?.content
+    val pendingShare: SharedContent? get() = shareRequest?.takeUnless { it.assigned }?.content
     val pendingShareIntent: android.content.Intent? get() = shareRequest?.intent?.let { android.content.Intent(it) }
 
     /** Both cold and warm ACTION_SEND routes use the existing multi-Host Agent list. */
@@ -2050,6 +2050,15 @@ class HostsModel(
     }
 
     fun cancelShare() { shareRequest = null }
+
+    private fun offerShare(chat: ChatModel) {
+        val request = shareRequest?.copy(assigned = true) ?: return
+        shareRequest = request
+        chat.offerShare(request.content) {
+            // A slow upload cannot consume a newer ACTION_SEND envelope.
+            if (shareRequest === request) shareRequest = null
+        }
+    }
 
     /** Warm navigation returns to the retained home without applying the startup location again. */
     fun openThreadHome() = openAgents()
@@ -2261,8 +2270,7 @@ class HostsModel(
         if (shared != null) {
             if (t.agentStatus == null || t.state != "live") return
             chat(link, t, agents)
-            (screen as Screen.Chat).chat.pendingShare = shared
-            cancelShare()
+            offerShare((screen as Screen.Chat).chat)
         } else if (openChat) chat(link, t, agents) else show(link, t, agents)
     }
 
@@ -2775,8 +2783,7 @@ class HostsModel(
                 if (forceTerminal) observe(target, terminal, screen)
                 else if (shared != null && terminal.agentStatus != null) {
                     chat(target, terminal, screen)
-                    (screen as Screen.Chat).chat.pendingShare = shared
-                    cancelShare()
+                    offerShare((screen as Screen.Chat).chat)
                 } else if (openChat) chat(target, terminal, screen) else show(target, terminal, screen)
                 closeCallInbox()
             } catch (e: CoreException) {

@@ -12,7 +12,6 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.*
-import java.io.ByteArrayInputStream
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.*
 import org.junit.Rule
@@ -46,8 +45,8 @@ class ShareAttachmentTest {
             AriesApp(model)
         }
         val uris = arrayListOf(Uri.parse("content://shared/a"), Uri.parse("content://shared/b"))
-        shadowOf(context.contentResolver).registerInputStream(uris[0], ByteArrayInputStream(byteArrayOf(1, 2)))
-        shadowOf(context.contentResolver).registerInputStream(uris[1], ByteArrayInputStream(byteArrayOf(3)))
+        registerAttachmentInput(context, uris[0], byteArrayOf(1, 2))
+        registerAttachmentInput(context, uris[1], byteArrayOf(3))
         val intent = Intent(Intent.ACTION_SEND_MULTIPLE).setType("*/*")
             .putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris).putExtra(Intent.EXTRA_TEXT, "please inspect")
         compose.runOnIdle { model.receiveShare(intent) }
@@ -67,9 +66,12 @@ class ShareAttachmentTest {
         core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, null))
         compose.waitForIdle()
         compose.onNodeWithText(str(R.string.attachments_uploading)).assertExists()
+        assertNull("A selected share must not be offered to another Agent", model.pendingShare)
+        assertNotNull("The envelope survives until the draft checkpoint", model.pendingShareIntent)
         compose.onNodeWithText(str(R.string.chat_send_button)).assertIsNotEnabled()
         hold.complete(Unit)
         compose.waitUntil(5_000) { !(model.screen as Screen.Chat).chat.uploading }
+        assertNull(model.pendingShareIntent)
         compose.waitForIdle()
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("please inspect")
         assertEquals(listOf("box/t1", "box/t1"), connection.uploads.map { it.first })

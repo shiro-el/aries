@@ -10,7 +10,6 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.*
-import java.io.ByteArrayInputStream
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -64,7 +63,7 @@ class ShareOwnershipTest {
         compose.waitForIdle()
         val chat = (model.screen as Screen.Chat).chat
         val uri = Uri.parse("content://shared/review")
-        shadowOf(context.contentResolver).registerInputStream(uri, ByteArrayInputStream(byteArrayOf(2, 6, 1)))
+        registerAttachmentInput(context, uri, byteArrayOf(2, 6, 1))
         compose.runOnIdle { model.receiveShare(Intent(Intent.ACTION_SEND).setType("application/octet-stream")
             .putExtra(Intent.EXTRA_STREAM, uri)) }
         compose.onNodeWithTag(if (panel == null) "agent-row:h1:t1" else "thread-agent:h1:t1").performClick()

@@ -16,7 +16,6 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.*
 import java.io.File
-import java.io.ByteArrayInputStream
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.*
 import org.junit.Rule
@@ -98,7 +97,7 @@ class AttachmentEntryPointsTest {
         assertEquals(Intent.ACTION_OPEN_DOCUMENT, request.intent.action)
         assertTrue(request.intent.getBooleanExtra(Intent.EXTRA_ALLOW_MULTIPLE, false))
         val uri = Uri.parse("content://documents/oversize")
-        shadowOf(compose.activity.contentResolver).registerInputStream(uri, ByteArrayInputStream(ByteArray(8 * 1024 * 1024 + 1)))
+        registerAttachmentInput(compose.activity, uri, ByteArray(8 * 1024 * 1024 + 1))
         compose.runOnIdle { shadowOf(compose.activity).receiveResult(request.intent, Activity.RESULT_OK, Intent().setData(uri)) }
         compose.waitUntil(5_000) {
             compose.onAllNodesWithText(compose.activity.getString(R.string.attachments_too_large, MAX_ATTACHMENT_BYTES / (1024 * 1024))).fetchSemanticsNodes().isNotEmpty()
@@ -122,7 +121,7 @@ class AttachmentEntryPointsTest {
         compose.runOnIdle { model.resumeScreens() }
         val chat = (model.screen as Screen.Chat).chat
         val uri = Uri.parse("content://documents/returned-file")
-        shadowOf(compose.activity.contentResolver).registerInputStream(uri, ByteArrayInputStream(byteArrayOf(4, 2)))
+        registerAttachmentInput(compose.activity, uri, byteArrayOf(4, 2))
         compose.runOnIdle { shadowOf(compose.activity).receiveResult(request.intent, Activity.RESULT_OK, Intent().setData(uri)) }
         compose.waitForIdle()
         assertTrue("The picker result must survive foreground reconnection", chat.uploading)
