@@ -295,7 +295,8 @@ private fun ConsoleDrawer(model: HostsModel, navigate: (() -> Unit) -> Unit) {
             item(key = "host:${host.id}") {
                 DrawerRow(host.name, hostId == host.id, Modifier.testTag("drawer-host:${host.id}"), onClick = { navigate { model.openHost(host) } })
             }
-            val hostAgents = agents.filter { it.host.id == host.id }
+            // The home board stays live behind Browse; selecting a Host scopes only this tree.
+            val hostAgents = agents.filter { it.host.id == host.id && (hostId == null || hostId == host.id) }
             agentTreeItems(hostAgents, folds,
                 onOpen = { entry -> navigate { model.openDrawerAgent(entry) } },
                 onPin = model::pin, tag = "drawer-agent", current = currentAgent, sectionNamespace = host.id,
