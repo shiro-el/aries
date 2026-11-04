@@ -9,6 +9,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.layout.Column
 import io.github.shiroel.aries.weardata.WatchCommand
 import io.github.shiroel.aries.weardata.OpenWatchAgent
+import androidx.activity.result.contract.ActivityResultContracts
+import android.Manifest
+import android.content.pm.PackageManager
+import android.annotation.SuppressLint
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -31,6 +35,11 @@ import kotlinx.coroutines.withTimeout
 class WatchInboxActivity : ComponentActivity() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val store by lazy { WatchStateStore(this) }
+    // Direct ComponentActivity: the lint rule guards old FragmentActivity permission forwarding.
+    @SuppressLint("InvalidFragmentVersionForActivityResult")
+    private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+        store.refreshProgress()
+    }
     private var summary by mutableStateOf(WatchSummary.EMPTY)
     private var now by mutableStateOf(System.currentTimeMillis())
     private var refreshing by mutableStateOf(false)
@@ -52,6 +61,10 @@ class WatchInboxActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED &&
+            !shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
         summary = store.summary()
         target = if (savedInstanceState != null) savedInstanceState.let { state ->
             state.getString("host")?.let { it to state.getString("terminal").orEmpty() }
