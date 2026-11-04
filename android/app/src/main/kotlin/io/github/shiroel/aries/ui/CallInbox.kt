@@ -58,6 +58,7 @@ internal fun ConsoleInboxAction() {
 internal fun CallInboxOverlay(model: HostsModel, modifier: Modifier = Modifier) {
     val title = stringResource(R.string.calls_title)
     val close = stringResource(R.string.call_inbox_close)
+    val thread = LocalLayoutTokens.current == tokensFor(AppLayout.THREAD)
     val sheet = LocalLayoutTokens.current != tokensFor(AppLayout.CONSOLE)
     BoxWithConstraints(modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize().testTag("call-inbox-scrim")
@@ -79,8 +80,14 @@ internal fun CallInboxOverlay(model: HostsModel, modifier: Modifier = Modifier) 
             }
             CallInboxPanel(model.calls, model::openCallChat, modifier = Modifier.weight(1f, fill = false), callerName = model::callCallerName,
                 onInstallBeacon = model::openHostSettings, onFeedSettings = model::callFeedSettings, openingCall = model.openingCall,
-                blockedAgents = model.drawerAgents.count { it.terminal.agentStatus is AgentStatus.Blocked },
-                onWaitingAgents = { model.closeCallInbox(); model.openAgents() })
+                blockedAgents = model.drawerAgents.count { isWaiting(it.terminal.agentStatus) },
+                onWaitingAgents = {
+                    model.closeCallInbox()
+                    val waiting = model.drawerAgents.firstOrNull { isWaiting(it.terminal.agentStatus) }
+                    if (thread && waiting != null)
+                        model.openPushedAgent(waiting.host.id, waiting.terminal.address, openChat = true)
+                    else model.openAgents()
+                })
         }
     }
 }
