@@ -46,13 +46,44 @@ fn imports_openssh_keys_and_preserves_their_public_identity_after_restart() {
             core.ensure_key().unwrap();
             let imported = core
                 .import_key("existing".into(), private, passphrase.into())
-                .unwrap();
+                .unwrap_or_else(|error| {
+                    panic!(
+                        "{kind}-{bits} (encrypted={}): {error}",
+                        !passphrase.is_empty()
+                    )
+                });
             assert_eq!(imported.openssh, public.trim());
             assert_eq!(imported.label, "existing");
             drop(core);
             let again = core_in(data.path());
             assert_eq!(again.keys().unwrap()[1], imported);
         }
+    }
+}
+
+// Regression: OpenSSH mpints omit leading zero bytes. This independently
+// generated P-256 test identity has a 31-byte private scalar, below the old
+// decoder's minimum. These disposable fixtures are public; never authorize them.
+#[test]
+fn imports_openssh_p256_with_a_short_scalar_plain_and_encrypted() {
+    let public = include_str!("fixtures/key_import/p256-short-scalar.pub").trim();
+    for (private, passphrase) in [
+        (include_str!("fixtures/key_import/p256-short-scalar"), ""),
+        (
+            include_str!("fixtures/key_import/p256-short-scalar-encrypted"),
+            "test import passphrase",
+        ),
+    ] {
+        let data = tempfile::tempdir().unwrap();
+        let core = core_in(data.path());
+        let imported = core
+            .import_key("existing".into(), private.into(), passphrase.into())
+            .unwrap();
+        assert_eq!(imported.openssh, public);
+        drop(core);
+        let again = core_in(data.path());
+        assert_eq!(again.keys().unwrap(), [imported]);
+        assert_eq!(again.ensure_key().unwrap().openssh, public);
     }
 }
 
