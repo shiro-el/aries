@@ -31,6 +31,7 @@ internal fun GitDiffView(
     selection: IntRange? = null,
     onSelect: ((Int) -> Unit)? = null,
     wrap: Boolean = false,
+    colors: DiffColors = DiffColors(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.error),
 ) {
     var approved by remember(patch) { mutableStateOf(false) }
     val large = remember(patch) { patch.lines.sumOf { it.text.toByteArray(Charsets.UTF_8).size.toLong() } >= LARGE_FILE_BYTES }
@@ -80,8 +81,8 @@ internal fun GitDiffView(
                     Text(markFileMatches(AnnotatedString(line.text), query, MaterialTheme.colorScheme),
                         modifier = if (wrap) Modifier.weight(1f) else Modifier,
                         softWrap = wrap, fontFamily = FontFamily.Monospace, color = when {
-                        line.newLine != null && line.oldLine == null -> MaterialTheme.colorScheme.primary
-                        line.oldLine != null && line.newLine == null -> MaterialTheme.colorScheme.error
+                        line.newLine != null && line.oldLine == null -> colors.added
+                        line.oldLine != null && line.newLine == null -> colors.removed
                         else -> MaterialTheme.colorScheme.onSurface
                     })
                 }

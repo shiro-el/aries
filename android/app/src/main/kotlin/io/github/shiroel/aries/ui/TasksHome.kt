@@ -23,6 +23,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -182,7 +183,9 @@ internal fun TasksTaskRow(entry: AgentEntry, transcript: ChatSnapshot? = null, s
                 color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
             if (entry.live && entry.terminal.statusMs != null) AgentElapsedTime(entry.terminal.statusMs)
             else if (!entry.live) entry.lastUpdatedMs?.let { Text(agentLastSeen(it), style = MaterialTheme.typography.bodySmall) }
-        }, summary = summary, mono = blocked?.reason == BlockedReason.PERMISSION, onLongClick = onLongClick)
+        }, summary = summary, mono = blocked?.reason == BlockedReason.PERMISSION, onLongClick = onLongClick,
+        styledSummary = if (status !is AgentStatus.Blocked && status !is AgentStatus.Error && status != AgentStatus.Working)
+            stats?.let { tasksChangeText(it) } else null)
 }
 
 @Composable
@@ -203,7 +206,7 @@ private fun TasksCallRow(entry: CallEntry, onOpen: () -> Unit) {
 @Composable
 private fun TasksRow(title: String, label: String, accent: Color, urgent: Boolean, modifier: Modifier,
     onOpen: () -> Unit, metadata: @Composable RowScope.() -> Unit, summary: String?, mono: Boolean = false,
-    onLongClick: (() -> Unit)? = null) {
+    onLongClick: (() -> Unit)? = null, styledSummary: AnnotatedString? = null) {
     Column(modifier.fillMaxWidth().then(if (urgent) Modifier.background(Brand.Saffron.copy(alpha = .07f))
         .drawBehind { drawLine(Brand.Saffron, Offset(1.5.dp.toPx(), 0f), Offset(1.5.dp.toPx(), size.height), 3.dp.toPx()) } else Modifier)
         .combinedClickable(role = Role.Button, onClick = onOpen, onLongClick = onLongClick,
@@ -218,7 +221,7 @@ private fun TasksRow(title: String, label: String, accent: Color, urgent: Boolea
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), content = metadata)
         summary?.takeIf(String::isNotBlank)?.let {
-            Text(it.lineSequence().first(), style = MaterialTheme.typography.bodySmall,
+            Text(styledSummary ?: AnnotatedString(it.lineSequence().first()), style = MaterialTheme.typography.bodySmall,
                 color = accent, fontFamily = if (mono) FontFamily.Monospace else FontFamily.SansSerif,
                 maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
         }

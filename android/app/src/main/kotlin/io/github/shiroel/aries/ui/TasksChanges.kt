@@ -11,12 +11,38 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.*
 import kotlinx.coroutines.CancellationException
 
 internal data class TaskChangeStats(val added: Int, val removed: Int)
+
+@Composable
+internal fun tasksDiffColors(): DiffColors {
+    val tokens = LocalLayoutTokens.current
+    val palette = if (MaterialTheme.colorScheme.background.luminance() < .5f) tokens.dark else tokens.light
+    return palette.diff ?: DiffColors(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.error)
+}
+
+@Composable
+internal fun tasksChangeText(stats: TaskChangeStats): AnnotatedString {
+    val label = stringResource(R.string.tasks_change_stats, stats.added, stats.removed)
+    val colors = tasksDiffColors()
+    return remember(label, colors) {
+        buildAnnotatedString {
+            append(label)
+            Regex("[+−]\\p{Nd}+").findAll(label).forEach { part ->
+                addStyle(SpanStyle(color = if (part.value.startsWith('+')) colors.added else colors.removed),
+                    part.range.first, part.range.last + 1)
+            }
+        }
+    }
+}
 
 /** Read only on opening Changes. Keep the result across tabs and visits, scoped to this Agent. */
 internal class TasksChangesState {
@@ -96,9 +122,10 @@ internal fun ColumnScope.TasksChanges(state: TasksChangesState, link: HostLink?,
     }
     BackHandler(selected != null) { selected = null }
     link?.let { ConnectionNotice(it) }
-    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-        state.stats?.let { Text(stringResource(R.string.tasks_change_stats, it.added, it.removed),
-            Modifier.weight(1f).padding(vertical = 12.dp), color = statusColor(AgentStatus.Done)) }
+    val gutter = LocalLayoutTokens.current.contentPadding
+    val colors = tasksDiffColors()
+    Row(Modifier.fillMaxWidth().padding(horizontal = gutter)) {
+        state.stats?.let { Text(tasksChangeText(it), Modifier.weight(1f).padding(vertical = 12.dp)) }
         TextButton(onClick = { selected = null; revision++ }, enabled = connection != null && !state.loading) {
             Text(stringResource(R.string.files_refresh_button))
         }
@@ -112,10 +139,12 @@ internal fun ColumnScope.TasksChanges(state: TasksChangesState, link: HostLink?,
     if (state.partial) Text(stringResource(R.string.git_truncated), Modifier.padding(16.dp))
     val file = git?.files?.find { it.path == selected }
     if (file != null) {
-        TextButton(onClick = { selected = null }) { Text(stringResource(R.string.tasks_changes)) }
-        Text(file.path, Modifier.padding(horizontal = 16.dp), fontFamily = FontFamily.Monospace)
-        GitFileDiff(connection, terminal.address, git.cwd, file, revision, wrap = true, onSend = onSend,
-            cachedDiffs = state.patches.filterKeys { it.first == file.path }.mapKeys { it.key.second })
+        Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal = gutter)) {
+            TextButton(onClick = { selected = null }) { Text(stringResource(R.string.tasks_changes)) }
+            Text(file.path, fontFamily = FontFamily.Monospace)
+            GitFileDiff(connection, terminal.address, git.cwd, file, revision, wrap = true, onSend = onSend,
+                cachedDiffs = state.patches.filterKeys { it.first == file.path }.mapKeys { it.key.second }, colors = colors)
+        }
     } else LazyColumn(Modifier.weight(1f).testTag("tasks-changes-files")) {
         items(git?.files.orEmpty(), key = { it.path }) { changed ->
             Row(Modifier.fillMaxWidth().clickable { selected = changed.path }.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {

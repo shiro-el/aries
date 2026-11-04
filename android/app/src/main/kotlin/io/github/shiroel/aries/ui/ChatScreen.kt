@@ -66,6 +66,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
@@ -1578,7 +1579,7 @@ private fun ToolContent(
                 }
                 Text(
                     if (LocalTasksDetail.current != null && patchStats != null)
-                        stringResource(R.string.tasks_change_stats, patchStats.added, patchStats.removed) else status,
+                        tasksChangeText(patchStats) else AnnotatedString(status),
                     modifier = Modifier.clearAndSetSemantics {}, style = MaterialTheme.typography.labelSmall,
                     color = when (tool.status) {
                         ChatToolStatus.FAILED -> MaterialTheme.colorScheme.error

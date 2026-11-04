@@ -111,7 +111,7 @@ internal fun TasksDetailTabs(presentation: TasksDetailPresentation, terminal: Te
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(label, maxLines = 1)
                         if (tab == TasksDetailTab.CHANGES && fresh) presentation.changes.stats?.let {
-                            Text(stringResource(R.string.tasks_change_stats, it.added, it.removed), style = MaterialTheme.typography.labelSmall)
+                            Text(tasksChangeText(it), style = MaterialTheme.typography.labelSmall)
                         }
                     }
                 })

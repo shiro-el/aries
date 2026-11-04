@@ -21,6 +21,7 @@ internal fun ColumnScope.GitFileDiff(
     wrap: Boolean,
     onSend: ((String) -> Unit)?,
     cachedDiffs: Map<GitDiffKind, GitDiff> = emptyMap(),
+    colors: DiffColors = DiffColors(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.error),
 ) {
     var kind by remember(selectedFile) { mutableStateOf(when {
         selectedFile.untracked -> GitDiffKind.UNTRACKED
@@ -63,6 +64,6 @@ internal fun ColumnScope.GitFileDiff(
             if (onSend == null) null else { index ->
                 val first = selection
                 selection = if (first == null || first.first != first.last) index..index else minOf(first.first, index)..maxOf(first.first, index)
-            }, wrap = wrap)
+            }, wrap = wrap, colors = colors)
     }
 }
