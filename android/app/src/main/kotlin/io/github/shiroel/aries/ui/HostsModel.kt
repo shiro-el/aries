@@ -385,6 +385,7 @@ class HostsModel(
             when (error) {
                 is CoreException.HostKeyUnknown -> prompt = Prompt.TrustHostKey(host, error.fingerprint)
                 is CoreException.JumpHostKeyUnknown -> prompt = Prompt.TrustJumpHostKey(host, error.hop, error.address, error.fingerprint)
+                is CoreException.KeyInvalidated -> openKeyRecovery()
                 is CoreException.NoKey, is CoreException.KeyLocked -> openKeySettings()
                 else -> openHostSettings(host)
             }

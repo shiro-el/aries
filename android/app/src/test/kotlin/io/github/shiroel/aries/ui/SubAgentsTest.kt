@@ -86,7 +86,7 @@ class SubAgentsTest {
         assertEquals("t1", core.connectionsOf.getValue("h1").views.single().address)
     }
 
-    @Test fun agentsAndDrawerGroupChildrenWithoutCountingThemAsWaiting() {
+    @Test fun agentsAndDrawerGroupChildrenAndCountTheirWaitingRequests() {
         val core = FakeCore().apply {
             addHost("home", Endpoint.Ssh("home.test", 22u, "me"))
             terminalsOf["h1"] = listOf(child, grandchild, parent)
@@ -100,7 +100,8 @@ class SubAgentsTest {
         assertUnder("child", "parent")
         assertUnder("grandchild", "child")
         compose.openConsoleDrawer()
-        compose.onNodeWithText(context.getString(R.string.console_agents_waiting, 0)).assertExists()
+        // A child with Error still needs attention, even under a Working parent.
+        compose.onNodeWithText(context.getString(R.string.console_agents_waiting, 1)).assertExists()
         val root = compose.onNodeWithTag("drawer-agent:h1:t1").fetchSemanticsNode().boundsInRoot
         val sub = compose.onNodeWithTag("drawer-agent:h1:t2").fetchSemanticsNode().boundsInRoot
         assertTrue(root.top < sub.top)

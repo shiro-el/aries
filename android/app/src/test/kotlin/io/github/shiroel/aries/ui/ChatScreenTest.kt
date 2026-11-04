@@ -449,12 +449,12 @@ class ChatScreenTest {
         core.pushChat(ChatSnapshot(listOf(color(ChatToolStatus.RUNNING)), ChatStatus.LIVE, null))
         compose.waitForIdle()
         core.answerFailure = CoreException.AnswerRefused(AnswerProblem.ANSWERED, "")
-        compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Red")).performClick()
+        compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Red")).performScrollTo().assertIsDisplayed().performClick()
         compose.waitForIdle()
         compose.onNodeWithText(str(R.string.chat_answer_answered)).assertExists()
 
         core.answerFailure = CoreException.AnswerRefused(AnswerProblem.GONE, "")
-        compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Red")).performClick()
+        compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Red")).performScrollTo().assertIsDisplayed().performClick()
         compose.waitForIdle()
         compose.onNodeWithText(str(R.string.chat_answer_gone)).assertExists()
     }

@@ -39,7 +39,7 @@ class KeyRecoveryTest {
         }
         compose.onNodeWithText("home").performClick()
         compose.onNodeWithText(str(R.string.key_invalidated_body)).assertExists()
-        compose.onNodeWithText(str(R.string.key_recover_button)).performClick()
+        compose.onNodeWithText(str(R.string.connect_settings_button)).performClick()
         compose.onNodeWithTag("key-recover-generate-default").performScrollTo().performClick()
         // Cancelling must leave the stored key intact.
         compose.onNodeWithText(str(R.string.cancel_button)).performClick()
