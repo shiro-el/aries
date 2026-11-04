@@ -158,6 +158,7 @@ class HostsModel(
     private val locationStore: LastLocationStore? = null,
     private val onCallAnswered: (Host, String, CallAnswerState) -> Unit = { _, _, _ -> },
     private val elapsedRealtime: () -> Long = android.os.SystemClock::elapsedRealtime,
+    private val threadCallPreferences: android.content.SharedPreferences? = null,
 ) {
     internal val pairingReview = QrPairingReview()
     /** Current Host's settings models; a previous Host's pending work keeps its own state. */
@@ -211,7 +212,7 @@ class HostsModel(
     }
 
     /** Every Host's Calls for the inbox; see [resumeCalls]. */
-    val calls = CallsModel(core, scope, keyWork, onCallAnswered)
+    val calls = CallsModel(core, scope, keyWork, onCallAnswered, preferences = threadCallPreferences)
     /** Chat cache retention and per-Host clearing (ticket 44). */
     val chatCache = ChatCacheModel(core, scope, keyWork)
     val diagnosticHistory = DiagnosticsModel(core, scope, keyWork)
