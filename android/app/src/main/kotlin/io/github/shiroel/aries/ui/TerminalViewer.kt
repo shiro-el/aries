@@ -3,9 +3,6 @@ package io.github.shiroel.aries.ui
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.RowScope
-import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.WindowInsets
@@ -23,7 +20,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -44,7 +40,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.drawText
@@ -219,12 +214,30 @@ class TerminalViewer(terminal: TerminalInfo) {
         draft = ""
     }
 
-    /** Ctrl from the key bar, held for the next key only. */
+    var keyBarVisible by mutableStateOf(true)
+        private set
+
+    fun toggleKeyBar() {
+        keyBarVisible = !keyBarVisible
+        if (!keyBarVisible) {
+            ctrl = false
+            alt = false
+            ctrlLocked = false
+            altLocked = false
+        }
+    }
+
+    /** Ctrl from the key bar, applied once unless locked by a long press. */
     var ctrl by mutableStateOf(false)
         private set
 
-    /** Alt from the key bar, held for the next key only. */
+    /** Alt from the key bar, applied once unless locked by a long press. */
     var alt by mutableStateOf(false)
+        private set
+
+    var ctrlLocked by mutableStateOf(false)
+        private set
+    var altLocked by mutableStateOf(false)
         private set
 
     /** What was typed, in order, until the model sends it. */
@@ -237,11 +250,25 @@ class TerminalViewer(terminal: TerminalInfo) {
     fun toggleCtrl() {
         interruptComposition()
         ctrl = !ctrl
+        ctrlLocked = false
     }
 
     fun toggleAlt() {
         interruptComposition()
         alt = !alt
+        altLocked = false
+    }
+
+    fun lockCtrl() {
+        interruptComposition()
+        ctrl = true
+        ctrlLocked = true
+    }
+
+    fun lockAlt() {
+        interruptComposition()
+        alt = true
+        altLocked = true
     }
 
     /**
@@ -296,7 +323,7 @@ class TerminalViewer(terminal: TerminalInfo) {
         onCompositionInterrupted?.invoke()
     }
 
-    /** Types [text]; a newline is Enter. Held modifiers apply to the first character. */
+    /** Types [text]; a newline is Enter. Unlocked modifiers apply to the first character. */
     fun type(text: String) {
         interruptComposition()
         typeNow(text)
@@ -322,7 +349,7 @@ class TerminalViewer(terminal: TerminalInfo) {
         }
     }
 
-    /** Presses [key] with held modifiers (then releases them) and any extra [mods]. */
+    /** Presses [key] with held modifiers (then releases any unlocked ones) and extra [mods]. */
     fun press(key: TerminalKey, mods: KeyMods = NoMods) {
         interruptComposition()
         pressNow(key, mods)
@@ -330,8 +357,8 @@ class TerminalViewer(terminal: TerminalInfo) {
 
     private fun pressNow(key: TerminalKey, mods: KeyMods) {
         send(TerminalInput.Key(key, mods.copy(ctrl = mods.ctrl || ctrl, alt = mods.alt || alt)))
-        ctrl = false
-        alt = false
+        ctrl = ctrlLocked
+        alt = altLocked
     }
 
     /** Typing while scrolled back returns to the live screen, as terminals do. */
@@ -411,8 +438,8 @@ fun TerminalScreen(
                 )
             }
         }
-        if (viewer.typing) KeyBar(viewer)
         TerminalComposer(viewer)
+        if (viewer.typing && viewer.keyBarVisible) TerminalKeyBar(viewer)
     }
 }
 
@@ -439,52 +466,6 @@ internal fun TerminalInput(viewer: TerminalViewer, modifier: Modifier = Modifier
             Modifier.padding(horizontal = 12.dp),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
-        )
-    }
-}
-
-/** Keys a phone keyboard lacks; modifiers apply to the next key only. */
-@Composable
-private fun KeyBar(viewer: TerminalViewer) {
-    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant)) {
-        Row(Modifier.fillMaxWidth()) {
-            BarKey(R.string.key_esc) { viewer.press(TerminalKey.Escape) }
-            BarKey(R.string.key_tab) { viewer.press(TerminalKey.Tab) }
-            BarKey(R.string.key_ctrl, held = viewer.ctrl, onClick = viewer::toggleCtrl)
-            BarKey(R.string.key_alt, held = viewer.alt, onClick = viewer::toggleAlt)
-            BarKey(R.string.key_home) { viewer.press(TerminalKey.Home) }
-            BarKey(R.string.key_end) { viewer.press(TerminalKey.End) }
-            BarKey(R.string.key_interrupt) {
-                viewer.press(TerminalKey.Char("c"), KeyMods(ctrl = true, alt = false, shift = false))
-            }
-        }
-        Row(Modifier.fillMaxWidth()) {
-            BarKey(R.string.key_up) { viewer.press(TerminalKey.Up) }
-            BarKey(R.string.key_down) { viewer.press(TerminalKey.Down) }
-            BarKey(R.string.key_left) { viewer.press(TerminalKey.Left) }
-            BarKey(R.string.key_right) { viewer.press(TerminalKey.Right) }
-            BarKey(R.string.key_page_up) { viewer.press(TerminalKey.PageUp) }
-            BarKey(R.string.key_page_down) { viewer.press(TerminalKey.PageDown) }
-        }
-    }
-}
-
-@Composable
-private fun RowScope.BarKey(label: Int, held: Boolean? = null, onClick: () -> Unit) {
-    val colors = MaterialTheme.colorScheme
-    Box(
-        Modifier.weight(1f).height(48.dp).padding(2.dp)
-            .background(if (held == true) colors.primary else colors.surface)
-            .border(1.dp, colors.outlineVariant)
-            .semantics { if (held != null) selected = held }
-            .clickable(role = Role.Button, onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            stringResource(label),
-            color = if (held == true) colors.onPrimary else colors.onSurface,
-            style = MaterialTheme.typography.labelLarge,
-            maxLines = 1,
         )
     }
 }
