@@ -256,6 +256,26 @@ class ChatCopySelectionTest {
         compose.onNode(isDialog()).assertDoesNotExist()
         compose.onNodeWithText("alpha beta gamma delta").assertExists()
     }
+
+    // Regression: disposing the originating lazy row must not discard an open selection.
+    @Test
+    fun selectionSurvivesRemovalOfItsTranscriptRow() {
+        open()
+        show(ChatEntryBody.Agent("Keep this selection"))
+        compose.onNodeWithText("Keep this selection").performTouchInput { longClick() }
+        compose.onNodeWithText(str(R.string.chat_select_text)).performClick()
+        core.pushChat(ChatSnapshot(listOf(ChatEntry("replacement", null, ChatEntryBody.Agent("New transcript"))), ChatStatus.LIVE, "new"))
+        compose.waitForIdle()
+        compose.onNode(hasText("Keep this selection") and hasAnyAncestor(isDialog()), useUnmergedTree = true).assertExists()
+        val shot = java.io.File("/tmp/aries-mvp-run/lanes/231-shots/selection.png")
+        shot.parentFile?.mkdirs()
+        shot.outputStream().use { output ->
+            compose.onNode(isDialog()).captureToImage().asAndroidBitmap()
+                .compress(android.graphics.Bitmap.CompressFormat.PNG, 100, output)
+        }
+        compose.onNode(hasText(str(R.string.back_button)) and hasAnyAncestor(isDialog())).performClick()
+        compose.onNodeWithText("New transcript").assertExists()
+    }
 }
 
 /** Robolectric has no Surface for Android's selection magnifier to draw into. */

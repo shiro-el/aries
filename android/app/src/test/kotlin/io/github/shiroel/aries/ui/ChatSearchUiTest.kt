@@ -170,6 +170,25 @@ class ChatSearchUiTest {
         compose.onNodeWithText("raw needle").assertIsDisplayed()
         assertHighlight("raw needle", "needle", true)
     }
+
+    // Regression: streaming updates must not undo a user's collapsed search result or scroll back to it.
+    @Test
+    fun streamingSearchDoesNotReopenACollapsedToolUntilNavigation() {
+        val core = FakeCore()
+        openChat(core)
+        fun tool(output: String) = entry("tool", ChatEntryBody.Tool("Read", "result", "{}", ChatToolStatus.RUNNING, output))
+        core.pushChat(ChatSnapshot(listOf(tool("needle first")), ChatStatus.LIVE, "one"))
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("result").fetchSemanticsNodes().isNotEmpty() }
+        search("needle", 1)
+        compose.onNodeWithText("needle first").assertIsDisplayed()
+        compose.onNodeWithContentDescription(str(R.string.chat_tool_expand_label, "Read")).performClick()
+        core.pushChat(ChatSnapshot(listOf(tool("needle first second")), ChatStatus.LIVE, "two"))
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription(str(R.string.chat_tool_expand_label, "Read")).assertExists()
+        compose.onNodeWithText("needle first second").assertDoesNotExist()
+        compose.onNodeWithContentDescription(str(R.string.chat_search_next)).performClick()
+        compose.onNodeWithText("needle first second").assertIsDisplayed()
+    }
     @Test
     fun searchAndReadAloudRemainAvailableTogetherWithoutRestartingSpeech() {
         val core = FakeCore()

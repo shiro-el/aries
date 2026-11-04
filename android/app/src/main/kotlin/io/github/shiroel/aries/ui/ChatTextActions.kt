@@ -30,6 +30,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.Stable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -57,7 +59,8 @@ internal fun ChatTextActions(
 ) {
     var menu by remember { mutableStateOf(false) }
     // Freeze the selected text even while the Agent streams more of its reply.
-    var selection by remember { mutableStateOf<String?>(null) }
+    val sharedDialogs = LocalChatDialogs.current
+    val dialogs = sharedDialogs ?: remember { ChatDialogState() }
     val context = LocalContext.current
     val copyLabel = stringResource(R.string.chat_copy_all)
     val actionsLabel = stringResource(R.string.chat_text_actions)
@@ -110,26 +113,11 @@ internal fun ChatTextActions(
             )
             ActionMenuItem(
                 label = stringResource(R.string.chat_select_text), icon = R.drawable.ic_text_select,
-                onClick = { selection = text; menu = false },
+                onClick = { dialogs.selection = text; menu = false },
             )
         }
     }
-    selection?.let { selected ->
-        Dialog(onDismissRequest = { selection = null }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-            Surface(Modifier.fillMaxSize()) {
-                Column(Modifier.fillMaxSize().safeDrawingPadding()) {
-                    Row {
-                        TextButton(onClick = { selection = null }) { Text(stringResource(R.string.back_button)) }
-                        Text(stringResource(R.string.chat_select_text), Modifier.padding(12.dp), style = MaterialTheme.typography.titleMedium)
-                    }
-                    HorizontalDivider()
-                    SelectionContainer(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp)) {
-                        Text(selected, Modifier.fillMaxWidth())
-                    }
-                }
-            }
-        }
-    }
+    if (sharedDialogs == null) ChatDialogs(dialogs)
 }
 
 /** Leave taps and scrolling to child links / the list; consume only a held press. */
@@ -154,4 +142,38 @@ private fun Modifier.childLongPress(onLongPress: () -> Unit): Modifier = pointer
             } while (event.changes.any { it.pressed })
         }
     }
+}
+
+/** Screen-owned requests survive disposal or replacement of their originating lazy row. */
+@Stable
+internal class ChatDialogState {
+    var selection by mutableStateOf<String?>(null)
+    var image by mutableStateOf<ByteArray?>(null)
+    var diagram by mutableStateOf<String?>(null)
+    val isOpen: Boolean get() = selection != null || image != null || diagram != null
+}
+
+internal val LocalChatDialogs = staticCompositionLocalOf<ChatDialogState?> { null }
+internal val LocalChatImageRevision = staticCompositionLocalOf { 0 }
+
+@Composable
+internal fun ChatDialogs(dialogs: ChatDialogState) {
+    dialogs.selection?.let { selected ->
+        Dialog(onDismissRequest = { dialogs.selection = null }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+            Surface(Modifier.fillMaxSize()) {
+                Column(Modifier.fillMaxSize().safeDrawingPadding()) {
+                    Row {
+                        TextButton(onClick = { dialogs.selection = null }) { Text(stringResource(R.string.back_button)) }
+                        Text(stringResource(R.string.chat_select_text), Modifier.padding(12.dp), style = MaterialTheme.typography.titleMedium)
+                    }
+                    HorizontalDivider()
+                    SelectionContainer(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp)) {
+                        Text(selected, Modifier.fillMaxWidth())
+                    }
+                }
+            }
+        }
+    }
+    dialogs.image?.let { ImageViewer(it, onDismiss = { dialogs.image = null }) }
+    dialogs.diagram?.let { MermaidDialog(it, onDismiss = { dialogs.diagram = null }) }
 }

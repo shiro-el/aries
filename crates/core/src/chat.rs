@@ -913,11 +913,13 @@ impl ChatWatch {
     pub(crate) fn start(
         host: ChatHost,
         terminal: String,
-        cursor: Option<String>,
+        _cursor: Option<String>,
         cache: Option<CacheSlot>,
         retry: Duration,
     ) -> Self {
-        let model = ChatModel::new(cursor);
+        // A cursor alone cannot seed this new model's history. Resume only
+        // from the snapshot actually loaded below; without one, replay in full.
+        let model = ChatModel::new(None);
         let (tx, rx) = watch::channel(Ok(Some(model.shared_snapshot())));
         let images = model.images.clone();
         let wake = Arc::new(Wake::default());
@@ -926,8 +928,6 @@ impl ChatWatch {
             let mut model = model;
             if let Some(slot) = &cache
                 && let Some(cached) = slot.load(&terminal).await
-                // An explicit cursor wins unless it is the cached one.
-                && (model.cursor.is_none() || model.cursor == cached.cursor)
             {
                 model.seed(cached);
                 if tx.send(Ok(Some(model.shared_snapshot()))).is_err() {

@@ -659,6 +659,7 @@
     <string name="chat_cache_failed">Chat 캐시를 변경하지 못했어요.</string>
     <string name="chat_image">이미지</string>
     <string name="chat_image_loading">이미지 불러오는 중…</string>
+    <string name="chat_image_unavailable">이미지를 불러올 수 없어요. 다시 연결해 주세요.</string>
     <string name="chat_image_unreadable">표시할 수 없는 이미지예요.</string>
     <string name="chat_image_too_large">이미지가 너무 커서 표시하지 않았어요(%1$s MB)</string>
 
