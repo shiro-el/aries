@@ -23,6 +23,20 @@
     <string name="preview_failed">미리보기를 열 수 없습니다. Host 연결과 개발 서버를 확인해 주세요.</string>
     <string name="preview_retry">다시 시도</string>
 
+    <!-- Preview capture and annotation -->
+    <string name="preview_capture_button">캡처</string>
+    <string name="preview_capture_title">미리보기에 표시</string>
+    <string name="preview_capture_canvas">캡처한 미리보기. 선택한 도구로 끌어서 표시하세요.</string>
+    <string name="preview_capture_pen">펜</string>
+    <string name="preview_capture_rectangle">사각형</string>
+    <string name="preview_capture_undo">실행 취소</string>
+    <string name="preview_capture_note">짧은 메모</string>
+    <string name="preview_capture_attach">Agent Chat에 추가</string>
+    <string name="preview_capture_preparing">준비 중…</string>
+    <string name="preview_capture_failed">미리보기를 캡처하지 못했습니다. 페이지가 로드된 후 다시 시도하세요.</string>
+    <string name="preview_capture_attach_failed">캡처를 추가하지 못했습니다. Agent 연결을 확인한 후 다시 시도하세요.</string>
+    <string name="preview_capture_context">미리보기: %1$s\n보기 모드: %2$s</string>
+
     <!-- Action menus -->
     <string name="menu_switch">위치 선택</string>
     <string name="menu_current">현재</string>

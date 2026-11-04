@@ -1076,6 +1076,23 @@ class HostsModel(
         }
     }
 
+    /** An Agent Terminal's preview uses that same Agent's Chat and existing attachment path. */
+    fun attachPreviewToChat(context: android.content.Context, content: SharedContent, cleanup: () -> Unit): Boolean {
+        val s = screen as? Screen.Terminal ?: run { cleanup(); return false }
+        if (s.viewer.terminal.agentStatus == null || s.viewer.terminal.state != "live") {
+            cleanup()
+            return false
+        }
+        val existing = (s.returnTo as? Screen.Chat)?.chat
+        if (existing != null && (!existing.canEdit || existing.uploading)) {
+            cleanup()
+            return false
+        }
+        switchView(AgentView.CHAT)
+        val chat = (screen as? Screen.Chat)?.chat ?: run { cleanup(); return false }
+        return chat.attach(context.applicationContext, content, cleanup)
+    }
+
     /** Adds output to an editable draft, never to the Terminal input stream. */
     fun sendTerminalSelectionToDraft(text: String) {
         val s = screen as? Screen.Terminal ?: return

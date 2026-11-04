@@ -94,7 +94,7 @@ private fun AriesContent(
     guidance: io.github.shiroel.aries.guidance.AppGuidanceState? = null,
     allowNotifications: suspend () -> Boolean = { false },
 ) {
-    val activity = androidx.activity.compose.LocalActivity.current
+    val activity = androidx.activity.compose.LocalActivity.current.applicationContext
     // Screen connections and the Call banner follow the visible lifecycle.
     LifecycleStartEffect(model) {
         model.resumeScreens()
@@ -128,6 +128,7 @@ private fun AriesContent(
 
 @Composable
 private fun ScreenContent(model: HostsModel, settings: ThemeSettings, terminalDisplay: TerminalDisplaySettings, screen: Screen) {
+    val context = LocalContext.current
     when (val s = screen) {
         Screen.Hosts -> HostListScreen(model)
         Screen.Settings -> {
@@ -176,6 +177,7 @@ private fun ScreenContent(model: HostsModel, settings: ThemeSettings, terminalDi
                 onView = model::switchView.takeIf { s.viewer.terminal.agentStatus != null },
                 displaySettings = terminalDisplay,
                 onSelectionSend = model::sendTerminalSelectionToDraft,
+                onPreviewCapture = { content, cleanup -> model.attachPreviewToChat(context, content, cleanup) },
             )
         }
         is Screen.JumpHosts -> {
