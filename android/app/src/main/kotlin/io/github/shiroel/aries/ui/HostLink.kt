@@ -155,12 +155,18 @@ class HostLink(
         }
     }
 
-    /** Releases screen streams and retries while retaining their models. */
-    fun pause() {
-        if (closed || paused) return
+    /** A brief background visit keeps live streams but must not open another SSH connection. */
+    fun suspendRetries() {
+        if (closed) return
         paused = true
         probing?.cancel()
         reconnecting?.cancel()
+    }
+
+    /** Releases screen streams and retries while retaining their models. */
+    fun pause() {
+        if (closed) return
+        suspendRetries()
         val conn = current.value
         current.value = null
         if (state !is LinkState.Down) state = LinkState.Reconnecting
@@ -170,7 +176,7 @@ class HostLink(
     fun resume() {
         if (closed || !paused) return
         paused = false
-        if (state !is LinkState.Down) reconnecting = scope.launch { reconnect() }
+        if (current.value == null && state !is LinkState.Down) reconnecting = scope.launch { reconnect() }
     }
 
     /** Stops for good (the user left the Host) and disconnects. */
@@ -207,8 +213,8 @@ class HostLink(
                     return
                 }
             }
-            withTimeoutOrNull(retryDelays[minOf(attempt, retryDelays.lastIndex)]) { poke.receive() }
-            attempt++
+            val woken = withTimeoutOrNull(retryDelays[minOf(attempt, retryDelays.lastIndex)]) { poke.receive() }
+            attempt = if (woken != null) 0 else attempt + 1
         }
     }
 }

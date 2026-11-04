@@ -167,6 +167,27 @@ class ChatSendTest {
     }
 
     @Test
+    fun reconnectingChatKeepsTheDraftAndRequiresAnExplicitSendAfterRecovery() {
+        val core = FakeCore()
+        val conn = openChat(core)
+        val input = compose.onNodeWithContentDescription(str(R.string.chat_input_label))
+        input.performTextInput("please run the tests")
+        core.pushChat(ChatSnapshot(emptyList(), ChatStatus.RECONNECTING, "cursor-1"))
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.chat_send_button)).assertIsNotEnabled()
+        compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
+        assertTrue(conn.typed.isEmpty())
+        input.assertTextEquals("please run the tests")
+
+        core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, "cursor-2"))
+        compose.waitForIdle()
+        assertTrue("recovery must not replay a draft automatically", conn.typed.isEmpty())
+        compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
+        compose.waitForIdle()
+        assertEquals(listOf("t1" to "please run the tests"), conn.typed)
+    }
+
+    @Test
     fun endedChatPreservesTheDraftAndNeverSendsItToTheShell() {
         val core = FakeCore()
         val conn = openChat(core)
