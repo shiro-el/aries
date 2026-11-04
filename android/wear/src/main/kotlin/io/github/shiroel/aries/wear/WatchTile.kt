@@ -1,68 +1,124 @@
 package io.github.shiroel.aries.wear
 
 import android.content.Context
-import androidx.wear.protolayout.ActionBuilders
 import androidx.wear.protolayout.ColorBuilders.argb
+import androidx.wear.protolayout.DeviceParametersBuilders.DeviceParameters
 import androidx.wear.protolayout.DimensionBuilders.*
 import androidx.wear.protolayout.LayoutElementBuilders.*
 import androidx.wear.protolayout.ModifiersBuilders
+import androidx.wear.protolayout.ResourceBuilders
 import androidx.wear.protolayout.TimelineBuilders
+import androidx.wear.protolayout.material3.ColorScheme
+import androidx.wear.protolayout.material3.materialScope
+import androidx.wear.protolayout.material3.primaryLayout
+import androidx.wear.protolayout.material3.text
+import androidx.wear.protolayout.material3.textEdgeButton
+import androidx.wear.protolayout.types.argb as layoutColor
+import androidx.wear.protolayout.types.layoutString
 import androidx.wear.tiles.TileBuilders
 import io.github.shiroel.aries.weardata.WatchAgent
 import io.github.shiroel.aries.weardata.WatchSummary
 
 object WatchTile {
+    private const val RESOURCES_VERSION = "console-1"
+
     fun age(context: Context, summary: WatchSummary, now: Long): String {
         val localized = summary.localizedContext(context)
         return if (summary.fetchedAtMs == 0L) localized.getString(R.string.wear_not_synced)
         else localized.getString(R.string.wear_age_minutes, ((now - summary.fetchedAtMs).coerceAtLeast(0) / 60_000))
     }
 
-    fun render(context: Context, summary: WatchSummary, now: Long): TileBuilders.Tile {
+    fun render(context: Context, summary: WatchSummary, now: Long,
+        device: DeviceParameters = DeviceParameters.Builder().setScreenWidthDp(192).setScreenHeightDp(192)
+            .setScreenDensity(1f).setFontScale(1f).build(),
+    ): TileBuilders.Tile {
         val context = summary.localizedContext(context)
-        val column = Column.Builder().setWidth(expand())
-            .setHorizontalAlignment(HORIZONTAL_ALIGN_CENTER)
-            .addContent(text(context.getString(R.string.wear_waiting_count, summary.waiting), 18f))
-        if (summary.agents.isEmpty()) {
-            column.addContent(text(context.getString(if (summary.fetchedAtMs == 0L) R.string.wear_open_phone else R.string.wear_no_agents), 12f))
-        } else summary.agents.forEach { agent ->
-            val state = context.getString(when (agent.status) {
-                "blocked" -> R.string.wear_status_blocked
-                "error" -> R.string.wear_status_error
-                "done" -> R.string.wear_status_done
-                "working" -> R.string.wear_status_working
-                else -> R.string.wear_status_idle
-            })
-            column.addContent(agentRow(context, agent, context.getString(R.string.wear_agent_row, state, agent.name)))
+        val synced = summary.fetchedAtMs != 0L
+        val stale = synced && now - summary.fetchedAtMs > 6 * 60_000
+        val title = when {
+            !synced -> context.getString(R.string.wear_tile_unknown)
+            summary.waiting == 0 -> context.getString(R.string.wear_tile_all_clear)
+            else -> context.getString(R.string.wear_tile_waiting, summary.waiting)
         }
-        column.addContent(text(age(context, summary, now), 12f))
-        val root = Box.Builder().setWidth(expand()).setHeight(expand())
-            .setModifiers(ModifiersBuilders.Modifiers.Builder()
-                .setBackground(ModifiersBuilders.Background.Builder().setColor(argb(0xff101820.toInt())).build())
-                .setPadding(ModifiersBuilders.Padding.Builder().setStart(dp(16f)).setEnd(dp(16f)).build()).build())
-            .addContent(column.build()).build()
-        return TileBuilders.Tile.Builder().setResourcesVersion("1")
+        val age = age(context, summary, now)
+        val ageLabel = if (stale) context.getString(R.string.wear_tile_stale, age) else age
+        val rows = if (device.screenWidthDp >= 225 && device.screenHeightDp >= 225) 3 else 2
+        val root = materialScope(context, device, allowDynamicTheme = false,
+            defaultColorScheme = ColorScheme(
+                primary = WatchConsole.SAFFRON.layoutColor, onPrimary = WatchConsole.NIGHT.layoutColor,
+                background = WatchConsole.NIGHT.layoutColor, onBackground = WatchConsole.TEXT.layoutColor,
+                surfaceContainer = WatchConsole.CARD.layoutColor, onSurface = WatchConsole.TEXT.layoutColor,
+            ),
+        ) {
+            primaryLayout(
+                titleSlot = { label(title, 12f, WatchConsole.SAFFRON) },
+                mainSlot = {
+                    Column.Builder().setWidth(expand()).setHorizontalAlignment(HORIZONTAL_ALIGN_CENTER).apply {
+                        if (!synced || summary.agents.isEmpty()) {
+                            addContent(label(context.getString(if (!synced) R.string.wear_open_phone else R.string.wear_no_agents), 12f))
+                        } else if (summary.waiting == 0) {
+                            addContent(label(context.getString(R.string.wear_tile_working,
+                                summary.agents.count { it.status == "working" }), 12f, WatchConsole.MUTED))
+                        } else {
+                            summary.agents.take(rows).forEachIndexed { index, agent ->
+                                if (index > 0) addContent(Spacer.Builder().setHeight(dp(3f)).build())
+                                addContent(agentRow(context, agent))
+                            }
+                        }
+                        addContent(Spacer.Builder().setHeight(dp(4f)).build())
+                        addContent(label(ageLabel, 10f, if (stale) WatchConsole.ERROR else WatchConsole.MUTED))
+                    }.build()
+                },
+                bottomSlot = { textEdgeButton(onClick = WatchNavigation.clickable(context)) {
+                    text(context.getString(R.string.wear_tile_open).layoutString)
+                } },
+            )
+        }
+        val background = Box.Builder().setWidth(expand()).setHeight(expand())
+            .setModifiers(ModifiersBuilders.Modifiers.Builder().setBackground(
+                ModifiersBuilders.Background.Builder().setColor(argb(WatchConsole.NIGHT)).build()).build())
+            .addContent(root).build()
+        return TileBuilders.Tile.Builder().setResourcesVersion(RESOURCES_VERSION)
             .setFreshnessIntervalMillis(60_000)
             .setTileTimeline(TimelineBuilders.Timeline.Builder().addTimelineEntry(
-                TimelineBuilders.TimelineEntry.Builder().setLayout(Layout.Builder().setRoot(root).build()).build(),
+                TimelineBuilders.TimelineEntry.Builder().setLayout(Layout.Builder().setRoot(background).build()).build(),
             ).build()).build()
     }
 
-    private fun agentRow(context: Context, agent: WatchAgent, label: String): Box =
-        Box.Builder().setWidth(expand()).setHeight(dp(48f))
-            .setModifiers(ModifiersBuilders.Modifiers.Builder().setClickable(ModifiersBuilders.Clickable.Builder()
-                .setId("${agent.hostId}/${agent.terminal}")
-                .setOnClick(ActionBuilders.LaunchAction.Builder().setAndroidActivity(
-                    ActionBuilders.AndroidActivity.Builder().setPackageName(context.packageName)
-                        .setClassName("io.github.shiroel.aries.wear.OpenOnPhoneActivity")
-                        .addKeyToExtraMapping("host", ActionBuilders.stringExtra(agent.hostId))
-                        .addKeyToExtraMapping("terminal", ActionBuilders.stringExtra(agent.terminal))
-                        .build(),
-                ).build()).build()).build())
-            .addContent(text(label, 12f)).build()
+    fun resources(): ResourceBuilders.Resources = ResourceBuilders.Resources.Builder()
+        .setVersion(RESOURCES_VERSION).apply {
+            listOf("blocked", "error", "working", "done", "idle").forEach { status ->
+                addIdToImageMapping(status, ResourceBuilders.ImageResource.Builder()
+                    .setAndroidResourceByResId(ResourceBuilders.AndroidImageResourceByResId.Builder()
+                        .setResourceId(WatchConsole.icon(status)).build()).build())
+            }
+        }.build()
 
-    private fun text(value: String, size: Float): Text =
-        Text.Builder().setText(value).setMaxLines(1)
-            .setFontStyle(FontStyle.Builder().setSize(sp(size)).setColor(argb(0xfff2f4f5.toInt())).build())
-            .build()
+    private fun agentRow(context: Context, agent: WatchAgent): Box {
+        val status = agent.status.takeIf { it in setOf("blocked", "error", "working", "done") } ?: "idle"
+        val color = WatchConsole.color(status)
+        val code = WatchConsole.code(context, status)
+        val content = Row.Builder().setWidth(expand()).setVerticalAlignment(VERTICAL_ALIGN_CENTER)
+            .addContent(Image.Builder().setResourceId(status).setWidth(dp(14f)).setHeight(dp(14f))
+                .setColorFilter(ColorFilter.Builder().setTint(argb(color)).build()).build())
+            .addContent(Spacer.Builder().setWidth(dp(5f)).build())
+            .addContent(label(code, 11f, color))
+            .addContent(Spacer.Builder().setWidth(dp(6f)).build())
+            .addContent(Box.Builder().setWidth(expand()).setHorizontalAlignment(HORIZONTAL_ALIGN_START)
+                .addContent(label(agent.name, 12f)).build()).build()
+        return Box.Builder().setWidth(expand()).setHeight(dp(32f))
+            .setModifiers(ModifiersBuilders.Modifiers.Builder()
+                .setClickable(WatchNavigation.clickable(context, agent))
+                .setSemantics(ModifiersBuilders.Semantics.Builder().setContentDescription(
+                    context.getString(R.string.wear_agent_row, WatchConsole.status(context, status), agent.name)).build())
+                .setPadding(ModifiersBuilders.Padding.Builder().setStart(dp(8f)).setEnd(dp(8f)).build())
+                .setBackground(ModifiersBuilders.Background.Builder().setColor(argb(WatchConsole.CARD))
+                    .setCorner(ModifiersBuilders.Corner.Builder().setRadius(dp(2f)).build()).build()).build())
+            .addContent(content).build()
+    }
+
+    private fun label(value: String, size: Float, color: Int = WatchConsole.TEXT): Text =
+        Text.Builder().setText(value).setMaxLines(1).setOverflow(TEXT_OVERFLOW_ELLIPSIZE_END)
+            .setFontStyle(FontStyle.Builder().setSize(sp(size)).setColor(argb(color))
+                .setSettings(FontSetting.tabularNum()).build()).build()
 }

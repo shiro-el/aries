@@ -47,7 +47,7 @@ class WaitingComplicationTest {
         )
         assertTrue(service.exported)
         assertEquals("com.google.android.wearable.permission.BIND_COMPLICATION_PROVIDER", service.permission)
-        assertEquals("SHORT_TEXT", service.metaData.getString("android.support.wearable.complications.SUPPORTED_TYPES"))
+        assertEquals("SHORT_TEXT,LONG_TEXT,MONOCHROMATIC_IMAGE,SMALL_IMAGE", service.metaData.getString("android.support.wearable.complications.SUPPORTED_TYPES"))
         assertTrue(service.metaData.getInt("android.support.wearable.complications.UPDATE_PERIOD_SECONDS") >= 300)
         val tile = context.packageManager.getServiceInfo(ComponentName(context, AgentsTileService::class.java), PackageManager.GET_META_DATA)
         assertEquals("com.google.android.wearable.permission.BIND_TILE_PROVIDER", tile.permission)
