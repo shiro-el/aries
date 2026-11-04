@@ -124,12 +124,12 @@ class ReconnectTest {
         compose.onNodeWithText(str(R.string.connect_settings_button)).assertDoesNotExist()
         compose.onNodeWithText(str(R.string.connect_failed_title)).assertDoesNotExist()
         compose.onNode(hasProgressBarRangeInfo(ProgressBarRangeInfo.Indeterminate)).assertExists()
-        compose.onNodeWithText(str(R.string.reconnecting)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.connect_host_reconnecting, "home")).assertDoesNotExist()
         screenshot("initial")
         compose.mainClock.advanceTimeBy(1_000)
-        compose.onNodeWithText(str(R.string.reconnecting)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.connect_host_reconnecting, "home")).assertDoesNotExist()
         compose.mainClock.advanceTimeBy(600)
-        compose.onNodeWithText(str(R.string.reconnecting)).assertExists()
+        compose.onNodeWithText(str(R.string.connect_host_reconnecting, "home")).assertExists()
         screenshot("delayed")
 
         core.failWith = CoreException.AuthRejected()
@@ -148,7 +148,7 @@ class ReconnectTest {
         compose.waitForIdle()
         assertTrue(model.screen is Screen.Browse)
         compose.onNodeWithText(str(R.string.connect_retry_button)).assertDoesNotExist()
-        compose.onNodeWithText(str(R.string.reconnecting)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.connect_host_reconnecting, "home")).assertDoesNotExist()
         compose.onNode(hasProgressBarRangeInfo(ProgressBarRangeInfo.Indeterminate)).assertDoesNotExist()
         screenshot("connected")
 
@@ -157,14 +157,14 @@ class ReconnectTest {
         compose.runOnIdle { model.networkChanged() }
         compose.mainClock.advanceTimeByFrame()
         compose.onNode(hasProgressBarRangeInfo(ProgressBarRangeInfo.Indeterminate)).assertExists()
-        compose.onNodeWithText(str(R.string.reconnecting)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.connect_host_reconnecting, "home")).assertDoesNotExist()
         compose.mainClock.advanceTimeBy(1_600)
-        compose.onNodeWithText(str(R.string.reconnecting)).assertExists()
+        compose.onNodeWithText(str(R.string.connect_host_reconnecting, "home")).assertExists()
         core.failWith = null
         compose.runOnIdle { model.networkChanged() }
         compose.mainClock.advanceTimeByFrame()
         compose.onNode(hasProgressBarRangeInfo(ProgressBarRangeInfo.Indeterminate)).assertDoesNotExist()
-        compose.onNodeWithText(str(R.string.reconnecting)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.connect_host_reconnecting, "home")).assertDoesNotExist()
     }
 
     @Test
@@ -266,7 +266,7 @@ class ReconnectTest {
         first.end()
         compose.waitForIdle()
         compose.mainClock.advanceTimeBy(1_600)
-        compose.onNodeWithText(str(R.string.reconnecting)).assertExists()
+        compose.onNodeWithText(str(R.string.connect_host_reconnecting, "home")).assertExists()
         screenShows("before")
         assertTrue("the dead line is let go", dropped.disconnected)
 
@@ -284,7 +284,7 @@ class ReconnectTest {
         view.push(frame("after"))
         compose.waitForIdle()
         screenShows("after")
-        compose.onNodeWithText(str(R.string.reconnecting)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.connect_host_reconnecting, "home")).assertDoesNotExist()
         compose.onNodeWithText(str(R.string.terminal_connection_closed)).assertDoesNotExist()
     }
 
@@ -475,7 +475,7 @@ class ReconnectTest {
         compose.waitForIdle()
 
         compose.onNodeWithText(str(R.string.host_key_changed_title)).assertExists()
-        compose.onNodeWithText(str(R.string.reconnecting)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.connect_host_reconnecting, "home")).assertDoesNotExist()
     }
 
     @Test
@@ -497,7 +497,7 @@ class ReconnectTest {
         model.networkChanged()
         compose.waitForIdle()
         compose.mainClock.advanceTimeBy(1_600)
-        compose.onNodeWithText(str(R.string.reconnecting)).assertExists()
+        compose.onNodeWithText(str(R.string.connect_host_reconnecting, "home")).assertExists()
 
         core.failWith = null
         model.networkChanged()
