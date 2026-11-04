@@ -68,7 +68,7 @@ class AttachmentEntryPointsTest {
         assertTrue(connection.typed.isEmpty())
     }
 
-    @Test fun cameraGetsAFullSizeOutputUriThenAppendsTheUploadedPhotoPath() {
+    @Test fun cameraGetsAFullSizeOutputUriThenKeepsTheUploadedPhotoOutsideTheTextField() {
         shadowOf(compose.activity.application).denyPermissions(Manifest.permission.CAMERA)
         val connection = openChat()
         compose.onNodeWithContentDescription(str(R.string.attachments_camera_button)).performClick()
@@ -103,8 +103,13 @@ class AttachmentEntryPointsTest {
         assertEquals(2048, decoded.width)
         assertEquals(682, decoded.height)
         decoded.recycle()
-        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("'/host/it'\"'\"'s file.jpg'")
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assert(SemanticsMatcher.expectValue(
+            androidx.compose.ui.semantics.SemanticsProperties.EditableText, androidx.compose.ui.text.AnnotatedString("")))
+        captureAttachmentScreenshot(compose, "camera-draft")
         assertTrue(connection.typed.isEmpty())
+        compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
+        compose.waitForIdle()
+        assertEquals(listOf("t1" to "'/host/it'\"'\"'s file.jpg'"), connection.typed)
         assertTrue("temporary capture removed", File(compose.activity.cacheDir, "attachments").listFiles().orEmpty().isEmpty())
     }
 }

@@ -91,7 +91,7 @@ internal class MarkdownCode(val source: String, val language: String) {
 
 /** Visible prose from Agent histories shares one rendering, search and scrolling path. */
 internal fun ChatEntryBody.markdownSource(): String? = when (this) {
-    is ChatEntryBody.User -> text
+    is ChatEntryBody.User -> chatAttachments(text).text
     is ChatEntryBody.Agent -> text
     is ChatEntryBody.Thinking -> text
     else -> null

@@ -170,6 +170,12 @@ class ChatModel(
         private set
 
     var pendingShare by mutableStateOf<SharedContent?>(null)
+    var attachments by mutableStateOf<List<DraftAttachment>>(emptyList())
+        private set
+
+    fun removeAttachment(attachment: DraftAttachment) {
+        if (sending == null) attachments = attachments - attachment
+    }
     var uploading by mutableStateOf(false)
         private set
     var attachmentError by mutableStateOf<Message?>(null)
@@ -181,7 +187,7 @@ class ChatModel(
             else Message(R.string.attachments_failed, listOf(error.message ?: ""))
     }
 
-    /** Saves bytes and appends paths to the current draft; never calls sendMessage. */
+    /** Saves bytes and adds attachment chips to the current draft; never calls sendMessage. */
     fun attach(context: Context, content: SharedContent, cleanup: () -> Unit = {}) {
         val scope = scope ?: return
         if (uploading || sending != null) return
@@ -198,7 +204,8 @@ class ChatModel(
                 for (uri in content.uris) {
                     val attachment = withContext(Dispatchers.IO) { prepareAttachment(context, uri, resize) }
                     val path = connection.uploadAttachment(terminal.address, attachment.name, attachment.bytes)
-                    append(shellQuote(path))
+                    attachments = attachments + DraftAttachment(path, attachment.name, attachment.bytes.size,
+                        attachment.bytes.takeIf { remoteMediaKind(attachment.name) == RemoteMediaKind.IMAGE })
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -224,7 +231,8 @@ class ChatModel(
         if (now.agentStatus !is AgentStatus.Blocked) refused = false
     }
 
-    val canSend: Boolean get() = link != null && sending == null && !uploading && pendingShare == null && draft.isNotBlank()
+    val canSend: Boolean get() = link != null && sending == null && !uploading && pendingShare == null &&
+        (draft.isNotBlank() || attachments.isNotEmpty())
 
     /**
      * Types [draft] into the Agent's Terminal. It stays in the input until it
@@ -239,7 +247,11 @@ class ChatModel(
             sendError = CoreException.Closed().let { it.message ?: it.toString() }
             return
         }
-        val text = draft
+        val sentDraft = draft
+        val sentAttachments = attachments
+        val text = sentAttachments.fold(sentDraft) { message, attachment ->
+            message + (if (message.isEmpty() || message.last().isWhitespace()) "" else " ") + shellQuote(attachment.path)
+        }
         sending = Sending.Sending
         refused = false
         sendError = null
@@ -248,7 +260,8 @@ class ChatModel(
                 when (val outcome = conn.sendMessage(terminal.address, text, HeldListener())) {
                     SendOutcome.Sent -> {
                         inputHistory.remember(text)
-                        if (draft == text) draft = ""
+                        if (draft == sentDraft) draft = ""
+                        attachments = attachments - sentAttachments.toSet()
                     }
                     is SendOutcome.Blocked -> {
                         refused = true
@@ -493,7 +506,7 @@ fun ChatScreen(
                                         QuestionView(chat, entry.id, body)
                                     } else {
                                         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (body is ChatEntryBody.Agent) 0.dp else 12.dp)) {
-                                            ChatEntryView(entry, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image, readAloud) { chat.toggle(entry.id) }
+                                            ChatEntryView(entry, chat, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image, readAloud) { chat.toggle(entry.id) }
                                         }
                                         if (source == null) HorizontalDivider()
                                     }
@@ -607,7 +620,7 @@ private fun ChatEntryHeader(entry: ChatEntry, chat: ChatModel, readAloud: io.git
         QuestionView(chat, entry.id, body)
     } else {
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (body is ChatEntryBody.Agent) 0.dp else 12.dp)) {
-            ChatEntryView(entry, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image, readAloud) { chat.toggle(entry.id) }
+            ChatEntryView(entry, chat, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image, readAloud) { chat.toggle(entry.id) }
         }
         if (body.markdownSource() == null) HorizontalDivider()
     }
@@ -637,6 +650,7 @@ private fun MessageInput(chat: ChatModel) {
         lineHeight = 20.sp,
     )
     HorizontalDivider()
+    DraftAttachments(chat)
     io.github.shiroel.aries.dictation.DictationInput(
         names = listOf(chat.host.name, displayName(chat.terminal), chat.terminal.cwd.orEmpty().trimEnd('/').substringAfterLast('/')),
         lastResponse = chat.snapshot?.entries?.asReversed()?.firstNotNullOfOrNull { (it.body as? ChatEntryBody.Agent)?.text }.orEmpty(),
@@ -729,6 +743,7 @@ private fun ChatNotice(text: String) {
 @Composable
 private fun ChatEntryView(
     entry: ChatEntry,
+    chat: ChatModel,
     agentName: String,
     expanded: Boolean,
     image: (String) -> ByteArray?,
@@ -745,6 +760,7 @@ private fun ChatEntryView(
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary,
                 )
+                ChatAttachmentCards(b.text, chat)
             }
         }
         is ChatEntryBody.Agent -> Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

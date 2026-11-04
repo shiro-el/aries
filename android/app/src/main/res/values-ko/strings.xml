@@ -952,6 +952,7 @@
     <string name="attachments_failed">첨부하지 못했어요: %1$s</string>
     <string name="attachments_file_button">파일 첨부</string>
     <string name="attachments_camera_button">사진 찍기</string>
+    <string name="attachments_remove_button">첨부 파일 제거: %1$s</string>
     <string name="attachments_resize_label">이미지를 2048px로 줄이기</string>
 
     <!-- Camera access: shared by Chat capture and Host QR scanning. -->

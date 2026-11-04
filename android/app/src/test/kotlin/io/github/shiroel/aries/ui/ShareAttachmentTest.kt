@@ -18,9 +18,13 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /** Seam 3: incoming Android share -> existing Agent list -> draft, against the fake core. */
 @RunWith(RobolectricTestRunner::class)
+@Config(qualifiers = "h1200dp")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ShareAttachmentTest {
     @get:Rule val compose = createComposeRule()
     private val context = ApplicationProvider.getApplicationContext<Context>()
@@ -60,15 +64,26 @@ class ShareAttachmentTest {
         hold.complete(Unit)
         compose.waitUntil(5_000) { !(model.screen as Screen.Chat).chat.uploading }
         compose.waitForIdle()
-        val draft = "please inspect '/host/it'\"'\"'s file.jpg' '/host/it'\"'\"'s file.jpg'"
-        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals(draft)
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("please inspect")
         assertEquals(listOf("box/t1", "box/t1"), connection.uploads.map { it.first })
         assertArrayEquals(byteArrayOf(1, 2), connection.uploads[0].third)
         assertArrayEquals(byteArrayOf(3), connection.uploads[1].third)
         assertTrue(connection.typed.isEmpty())
         assertTrue(core.connectionsOf.getValue("h1").uploads.isEmpty())
+        captureAttachmentScreenshot(compose, "files-draft")
+        connection.sendFailWith = CoreException.Closed()
         compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
         compose.waitForIdle()
-        assertEquals(listOf("box/t1" to draft), connection.typed)
+        assertTrue(connection.typed.isEmpty())
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("please inspect")
+        val remove = context.getString(R.string.attachments_remove_button, "attachment")
+        compose.onAllNodesWithContentDescription(remove).assertCountEquals(2)
+        compose.onAllNodesWithContentDescription(remove)[0].performClick()
+        compose.onAllNodesWithContentDescription(remove).assertCountEquals(1)
+        connection.sendFailWith = null
+        compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
+        compose.waitForIdle()
+        assertEquals(listOf("box/t1" to "please inspect '/host/it'\"'\"'s file.jpg'"), connection.typed)
+        compose.onAllNodesWithContentDescription(remove).assertCountEquals(0)
     }
 }
