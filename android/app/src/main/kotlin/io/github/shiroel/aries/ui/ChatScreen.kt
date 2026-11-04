@@ -1366,8 +1366,9 @@ fun ChatScreen(
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     // Scrollable clearance, rather than a footer that shrinks the viewport.
                     val transcriptPadding = PaddingValues(bottom = if (scroll.following || searchOpen) 0.dp else 64.dp)
+                    // Calls have their own feed and remain usable before a transcript arrives.
                     val transcriptModifier = Modifier.fillMaxSize().chatImeAnchor(scroll.list)
-                        .then(if (scroll.positioned) Modifier else Modifier.graphicsLayer { alpha = 0f }.clearAndSetSemantics { })
+                        .then(if (scroll.positioned || entries.isEmpty()) Modifier else Modifier.graphicsLayer { alpha = 0f }.clearAndSetSemantics { })
                         .testTag("chat-transcript")
                     val historyContent = remember(chat, transcript, readAloud, agentCalls, calls, toggleTool, onOpenTerminal) {
                         chatHistoryContent(transcript, chat, readAloud, agentCalls, calls, toggleTool, onOpenTerminal)
