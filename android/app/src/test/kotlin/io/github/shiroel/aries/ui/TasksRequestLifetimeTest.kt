@@ -22,13 +22,13 @@ class TasksRequestLifetimeTest {
     private val core = FakeCore()
     private val generation = androidx.compose.runtime.mutableIntStateOf(0)
     private val base = listOf(ChatEntry("prompt", null, ChatEntryBody.User("Review this task")))
-    private fun open() {
+    private fun open(status: AgentStatus = AgentStatus.Working) {
         val host = core.addHost("home", Endpoint.Ssh("home.test", 22u, "me"))
         core.ensureKey()
         compose.setContent {
             val scope = rememberCoroutineScope()
             val chat = remember { ChatModel(core, host,
-                TerminalInfo("t1", "claude", "", listOf("claude"), "/repo", "live", AgentStatus.Working))
+                TerminalInfo("t1", "claude", "", listOf("claude"), "/repo", "live", status))
                 .also { it.start(scope) } }
             val calls = remember { CallsModel(core, scope).also { it.watch(listOf(host), everyHost = true) } }
             DisposableEffect(chat) { onDispose { chat.stop(); calls.stopAll() } }
@@ -43,6 +43,25 @@ class TasksRequestLifetimeTest {
     private fun push(entries: List<ChatEntry>) {
         core.pushChat(ChatSnapshot(entries, ChatStatus.LIVE, null))
         compose.waitForIdle()
+    }
+
+    // D53: a second live request arriving behind an open sheet must open when that sheet closes.
+    @Test fun nextLiveQuestionOpensAfterDismissingThePreviousRequest() {
+        open(AgentStatus.Blocked(BlockedReason.QUESTION, null))
+        val first = ChatEntry("first", null, ChatEntryBody.Question("request_user_input", "First request",
+            listOf(ChatQuestionPart("First live question", null, false, listOf(ChatQuestionOption("North", null)))), ChatToolStatus.RUNNING, null))
+        val second = first.copy(id = "second", body = (first.body as ChatEntryBody.Question).copy(
+            title = "Second request", questions = listOf(ChatQuestionPart("Second live question", null, false,
+                listOf(ChatQuestionOption("South", null))))))
+        push(base + first)
+        compose.onNodeWithText("First live question").assertIsDisplayed()
+        push(base + first.copy(body = (first.body as ChatEntryBody.Question).copy(status = ChatToolStatus.DONE)) + second)
+        compose.onNodeWithText("First live question").assertIsDisplayed()
+        compose.onNodeWithText("Second live question").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Close sheet").performClick()
+        compose.onNodeWithText("Second live question").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Answer South").performClick()
+        compose.runOnIdle { org.junit.Assert.assertEquals("second", core.answers.single().second) }
     }
 
     // D45: a historical question's sheet must pause follow and survive removal of the question row.

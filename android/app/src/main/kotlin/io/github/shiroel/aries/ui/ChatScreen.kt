@@ -459,12 +459,17 @@ class ChatModel(
     private var transcriptReady by mutableStateOf(false)
     private var transcriptTerminal by mutableStateOf<TerminalInfo?>(null)
 
-    /** Home previews must come from an active, caught-up watch of this exact turn/status. */
-    internal fun currentTranscript(current: TerminalInfo): ChatSnapshot? = snapshot?.takeIf {
-        transcriptReady && (link == null || link?.state == LinkState.Up) &&
+    /** Completion facts survive closing a sheet, but never a newer turn/status. */
+    internal fun taskTranscript(current: TerminalInfo): ChatSnapshot? = snapshot?.takeIf {
+        it.status == ChatStatus.LIVE &&
             transcriptTerminal?.let { source ->
                 source.turn == current.turn && source.statusMs == current.statusMs && source.agentStatus == current.agentStatus
             } == true
+    }
+
+    /** Home previews must come from an active, caught-up watch of this exact turn/status. */
+    internal fun currentTranscript(current: TerminalInfo): ChatSnapshot? = taskTranscript(current)?.takeIf {
+        transcriptReady && (link == null || link?.state == LinkState.Up)
     }
     private var stopped = false
     private var terminalRevision = 0L
@@ -1230,7 +1235,7 @@ fun ChatScreen(
             chat.questionMode(it.id) == ChatModel.QuestionMode.Live &&
             chat.answers[it.id] !in setOf(AnswerState.Sending, AnswerState.Held, AnswerState.Sent, AnswerState.Unconfirmed)
     } else null
-    LaunchedEffect(chat, liveTaskQuestion?.id) {
+    LaunchedEffect(chat, liveTaskQuestion?.id, dialogs.tasksRequest) {
         if (dialogs.tasksRequest == null) liveTaskQuestion?.let { dialogs.tasksRequest = TasksRequest.Question(it.id, it.body as ChatEntryBody.Question) }
     }
     val horizontalScrolls = remember(chat) { ChatMarkdownScrolls() }
