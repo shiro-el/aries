@@ -86,13 +86,17 @@ private fun rememberThemeSettings(): ThemeSettings {
 
 @Composable
 private fun AriesContent(model: HostsModel, settings: ThemeSettings, terminalDisplay: TerminalDisplaySettings) {
+    val activity = LocalContext.current as? android.app.Activity
     // Screen connections and the Call banner follow the visible lifecycle.
     LifecycleStartEffect(model) {
         model.resumeScreens()
         model.resumeCalls()
         onStopOrDispose {
-            model.backgrounded()
-            model.pauseCalls()
+            // A replacement Activity keeps the same sessions. Home/app lock still release them.
+            if (activity?.isChangingConfigurations != true) {
+                model.backgrounded()
+                model.pauseCalls()
+            }
         }
     }
     Scaffold { padding ->
