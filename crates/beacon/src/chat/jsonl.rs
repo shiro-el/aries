@@ -72,12 +72,21 @@ impl JsonlSource {
     }
 
     pub fn position(&self) -> String {
-        format!("{}.{}", self.offset, digest(&self.checkpoint))
+        self.position_at(self.offset)
+    }
+
+    fn position_at(&self, offset: u64) -> String {
+        format!(
+            "{}{offset}.{}",
+            self.interpreter.cursor_tag(),
+            digest(&self.checkpoint)
+        )
     }
 
     /// A resume point binds the entire consumed prefix, so rewrites of an
     /// equal or longer file cannot silently reuse an old offset.
     pub fn holds(&self, position: &str) -> Option<u64> {
+        let position = position.strip_prefix(self.interpreter.cursor_tag())?;
         let (offset, digest) = position.split_once('.')?;
         let offset = offset.parse::<u64>().ok()?;
         let file = std::fs::File::open(&self.path).ok()?;
@@ -150,7 +159,7 @@ impl JsonlSource {
             let produced = self.interpreter.line(&String::from_utf8_lossy(line));
             self.checkpoint.update(&self.partial[start..start + nl + 1]);
             if end > self.quiet_until {
-                let position = format!("{end}.{}", digest(&self.checkpoint));
+                let position = self.position_at(end);
                 events.extend(produced.into_iter().map(|e| (e, position.clone())));
             }
             start += nl + 1;
