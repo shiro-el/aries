@@ -115,7 +115,7 @@ internal fun ChatCatalogControls(chat: ChatModel) {
                         label = { Text(searchLabel) }, singleLine = true)
                     CatalogStatus(loading, failed)
                     val skills = catalog?.skills.orEmpty().filter { entry ->
-                        listOf(entry.name, entry.description, entry.source.orEmpty()).any { it.contains(query.trim(), ignoreCase = true) }
+                        listOf(entry.name, entry.description).any { it.contains(query.trim(), ignoreCase = true) }
                     }
                     PullToRefreshBox(isRefreshing = loading, onRefresh = { revision++ }, modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp)) {
                         LazyColumn(Modifier.fillMaxWidth().heightIn(min = 160.dp, max = 360.dp)) {
@@ -151,8 +151,6 @@ private fun CatalogRow(entry: AgentCatalogEntry, enabled: Boolean, onClick: () -
         if (entry.argumentHint.isNotEmpty()) Text(entry.argumentHint, style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
         if (entry.description.isNotEmpty()) Text(entry.description, style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        Text(entry.source ?: stringResource(R.string.chat_catalog_builtin), style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }
