@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Material Icon Theme, MIT; see assets/licenses/material-icon-theme.txt. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24.0" android:viewportHeight="24.0">
+  <path android:pathData="M 9.86 2 A 2.86 2.86 0 0 0 7 4.86 v 1.68 h 4.29 c .39 0 .71 .57 .71 .96 H 4.86 A 2.86 2.86 0 0 0 2 10.36 v 3.781 a 2.86 2.86 0 0 0 2.86 2.86 h 1.18 v -2.68 a 2.85 2.85 0 0 1 2.85 -2.86 h 5.25 c 1.58 0 2.86 -1.271 2.86 -2.851 V 4.86 A 2.86 2.86 0 0 0 14.14 2 z m -.72 1.61 c .4 0 .72 .12 .72 .71 s -.32 .891 -.72 .891 c -.39 0 -.71 -.3 -.71 -.89 s .32 -.711 .71 -.711" android:fillColor="#0288d1" />
+  <path android:pathData="M 17.959 7 v 2.68 a 2.85 2.85 0 0 1 -2.85 2.859 H 9.86 A 2.85 2.85 0 0 0 7 15.389 v 3.75 a 2.86 2.86 0 0 0 2.86 2.86 h 4.28 A 2.86 2.86 0 0 0 17 19.14 v -1.68 h -4.291 c -.39 0 -.709 -.57 -.709 -.96 h 7.14 A 2.86 2.86 0 0 0 22 13.64 V 9.86 A 2.86 2.86 0 0 0 19.14 7 z M 8.32 11.513 l -.004 .004 l .038 -.004 z m 6.54 7.276 c .39 0 .71 .3 .71 .89 a .71 .71 0 0 1 -.71 .71 c -.4 0 -.72 -.12 -.72 -.71 s .32 -.89 .72 -.89" android:fillColor="#fdd835" />
+</vector>
