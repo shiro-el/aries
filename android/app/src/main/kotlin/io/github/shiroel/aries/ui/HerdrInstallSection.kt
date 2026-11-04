@@ -23,7 +23,7 @@ import io.github.shiroel.aries.core.HerdrCoreState
 import io.github.shiroel.aries.core.HerdrInstallStep
 
 @Composable
-fun HerdrInstallSection(model: HerdrInstallModel, connect: () -> Unit) {
+fun HerdrInstallSection(model: HerdrInstallModel, showDialogs: Boolean = true, connect: () -> Unit) {
     if (model.host?.endpoint !is Endpoint.Ssh) return
     var advanced by rememberSaveable(model.host?.id) { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -78,6 +78,11 @@ fun HerdrInstallSection(model: HerdrInstallModel, connect: () -> Unit) {
             SelectionContainer { Text(model.output, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(4.dp)) }
         }
     }
+    if (showDialogs) HerdrInstallDialog(model)
+}
+
+@Composable
+internal fun HerdrInstallDialog(model: HerdrInstallModel) {
     if (model.confirm) {
         AlertDialog(
             onDismissRequest = model::cancel,

@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -35,7 +36,7 @@ internal val TerminalFont.family: FontFamily
     get() = if (this == TerminalFont.JETBRAINS_MONO) JetBrainsMono else FontFamily.Monospace
 
 @Composable
-internal fun TerminalDisplaySection(settings: TerminalDisplaySettings) {
+internal fun TerminalDisplaySection(settings: TerminalDisplaySettings, onShowLicense: (() -> Unit)? = null) {
     Text(stringResource(R.string.terminal_display_font_label), style = MaterialTheme.typography.bodySmall)
     ConsoleSegments(TerminalFont.entries, settings.font, settings::chooseFont) {
         stringResource(if (it == TerminalFont.SYSTEM) R.string.terminal_display_font_system else R.string.terminal_display_font_jetbrains)
@@ -52,22 +53,25 @@ internal fun TerminalDisplaySection(settings: TerminalDisplaySettings) {
         R.string.terminal_display_contrast_label,
         settings.minimumContrast, settings::chooseMinimumContrast,
     )
-    var showLicense by remember { mutableStateOf(false) }
-    TextButton(onClick = { showLicense = true }) { Text(stringResource(R.string.terminal_display_license_button)) }
-    if (showLicense) {
-        val context = LocalContext.current
-        val license = remember(context) {
-            context.assets.open("licenses/JetBrainsMono-OFL.txt").bufferedReader().use { it.readText() }
-        }
-        AlertDialog(
-            onDismissRequest = { showLicense = false },
-            title = { Text(stringResource(R.string.terminal_display_license_button)) },
-            text = {
-                SelectionContainer {
-                    Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) { Text(license) }
-                }
-            },
-            confirmButton = { TextButton(onClick = { showLicense = false }) { Text(stringResource(R.string.ok_button)) } },
-        )
+    var showLicense by rememberSaveable { mutableStateOf(false) }
+    TextButton(onClick = { onShowLicense?.invoke() ?: run { showLicense = true } }) { Text(stringResource(R.string.terminal_display_license_button)) }
+    if (showLicense) TerminalFontLicenseDialog { showLicense = false }
+}
+
+@Composable
+internal fun TerminalFontLicenseDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val license = remember(context) {
+        context.assets.open("licenses/JetBrainsMono-OFL.txt").bufferedReader().use { it.readText() }
     }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.terminal_display_license_button)) },
+        text = {
+            SelectionContainer {
+                Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) { Text(license) }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ok_button)) } },
+    )
 }
