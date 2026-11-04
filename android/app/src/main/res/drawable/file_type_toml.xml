@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Material Icon Theme, MIT; see assets/licenses/material-icon-theme.txt. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="16.0" android:viewportHeight="16.0">
+  <path android:pathData="M 4 6 V 4 h 8 v 2 H 9 v 7 H 7 V 6 z" android:fillColor="#cfd8dc" />
+  <path android:pathData="M 4 1 v 1 H 2 v 12 h 2 v 1 H 1 V 1 z m 8 0 v 1 h 2 v 12 h -2 v 1 h 3 V 1 z" android:fillColor="#ef5350" />
+</vector>

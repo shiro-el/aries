@@ -2,6 +2,8 @@ package io.github.shiroel.aries.ui
 
 import androidx.annotation.StringRes
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -12,6 +14,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
@@ -61,7 +64,10 @@ private fun Detail(@StringRes label: Int, value: String, filePath: Boolean = fal
         if (filePath) annotateChatFileLinks(chatToolPathText(text, value), open, color) else AnnotatedString(text)
     }
     ChatTextActions(text) { modifier ->
-        Text(annotated, modifier, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            if (filePath) FileTypeIcon(value, Modifier.padding(end = 4.dp))
+            Text(annotated, modifier, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+        }
     }
 }
 
