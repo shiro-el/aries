@@ -276,7 +276,7 @@ class CallHistoryTest {
         compose.onNodeWithTag("call-inbox-panel").assertDoesNotExist()
         compose.onNodeWithTag("host-actions:h2").assertExists()
         compose.onNodeWithText(str(R.string.beacon_install_button)).performScrollTo().assertIsDisplayed().performClick()
-        compose.onNodeWithText(str(R.string.beacon_version, "0.1.0")).assertExists()
+        compose.onNodeWithText(str(R.string.beacon_ready)).assertExists()
         assertEquals(listOf("h2"), installs)
     }
 

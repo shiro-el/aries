@@ -173,4 +173,58 @@ class AgentOpenLinkTest {
         }
     }
 
+    // Regression: another stored drawer Agent must open while notification focus waits, and closing it must not revive that focus.
+    @Test fun openingAnotherDrawerAgentSupersedesDelayedNotificationFocus() {
+        val hold = CompletableDeferred<Unit>()
+        val core = core().apply { firstTerminalListHolds["h2"] = hold }
+        show(core)
+        compose.runOnIdle { model.openPushedAgent("h2", agent.address, openChat = true) }
+        compose.waitForIdle()
+        compose.runOnIdle { model.openDrawerAgent(AgentEntry(model.hosts[0], agent)) }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals(AgentKey("h1", agent.address), model.currentAgentKey)
+            model.closeTerminal()
+            hold.complete(Unit)
+        }
+        compose.waitForIdle()
+        compose.runOnIdle { assertTrue(model.screen is Screen.Agents) }
+    }
+
+    // Regression: replacing Browse directly must stop the previous Terminal stream and release its connection.
+    @Test fun connectingAnotherHostReleasesThePreviousViewAndLine() {
+        val core = core()
+        show(core)
+        compose.runOnIdle { model.connect(model.hosts[0]) }
+        compose.waitForIdle()
+        compose.runOnIdle { model.openTerminal(agent) }
+        compose.waitForIdle()
+        val home = core.connectionsOf.getValue("h1")
+        compose.runOnIdle { model.connect(model.hosts[1]) }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertTrue(home.views.single().detached)
+            assertTrue(home.disconnected)
+            assertEquals("h2", (model.screen as Screen.Browse).browser.host.id)
+        }
+    }
+
+    // Regression: confirming a jump Host key must resume the pending caller Chat, just like the final Host's trust flow.
+    @Test fun trustingACallersJumpHostResumesItsChat() {
+        val core = core().apply {
+            setJumpHosts("h2", listOf(JumpHost("jump.test", 22u, "me", null, null)))
+            requireJumpTrust = "SHA256:jump"
+        }
+        show(core)
+        compose.runOnIdle { model.openCallInbox(); model.openCallChat(caller()) }
+        compose.waitForIdle()
+        compose.runOnIdle { model.trust(model.prompt as Prompt.TrustJumpHostKey) }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals(AgentKey("h2", agent.address), model.currentAgentKey)
+            assertTrue(model.screen is Screen.Chat)
+            assertFalse(model.callInboxOpen)
+        }
+    }
+
 }

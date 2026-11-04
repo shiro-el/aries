@@ -1969,7 +1969,7 @@ class HostsModel(
     /** Uses whole Host/address identity and the existing saved-view/notification route. */
     fun openDrawerAgent(entry: AgentEntry) {
         val board = (screen as? Screen.Agents)?.board
-        if (board != null) {
+        if (board?.find(entry.key) != null && agentLinks[entry.host.id]?.state == LinkState.Up) {
             openAgent(board, entry)
         } else {
             openPushedAgent(entry.host.id, entry.terminal.address)
@@ -2025,7 +2025,7 @@ class HostsModel(
         agentView = core.agentView()
     }
 
-    /** The connection owned by a Chat opened from the inbox. */
+    /** A detail owns this line when no Browse or Agent list owns its Host. */
     private var callLink: HostLink? = null
     private var callStatus: Job? = null
     var openingCall by mutableStateOf<String?>(null)
@@ -2080,7 +2080,10 @@ class HostsModel(
             if (current()) prompt = when (error) {
                 is CoreException.HostKeyUnknown -> Prompt.TrustHostKey(host, error.fingerprint)
                 is CoreException.JumpHostKeyUnknown -> Prompt.TrustJumpHostKey(host, error.hop, error.address, error.fingerprint)
-                else -> problemFor(error)
+                else -> {
+                    cancelAgentOpen()
+                    problemFor(error)
+                }
             }
         }
         agentOpeningFromInbox = fromInbox
