@@ -27,7 +27,7 @@ private data class ThreadWaiting(val key: AgentKey, val name: String, val agent:
 internal fun ThreadWaitingPill(model: HostsModel, chat: ChatModel) {
     val current = AgentKey(chat.host.id, chat.terminal.address)
     val otherAgents = model.drawerAgents.filter { it.key != current }
-    val agents = otherAgents.filter { isWaiting(it.terminal.agentStatus) }
+    val agents = otherAgents.filter { it.live && isWaiting(it.terminal.agentStatus) }
     val calls = model.calls.calls.filter { model.calls.isThreadWaiting(it) && it.call.terminal != null &&
         AgentKey(it.host.id, it.call.terminal!!) != current }
     val waiting = (calls.map { call ->

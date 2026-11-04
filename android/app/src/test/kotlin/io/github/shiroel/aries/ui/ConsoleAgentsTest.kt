@@ -1,16 +1,19 @@
 package io.github.shiroel.aries.ui
 
 import androidx.compose.runtime.remember
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.input.key.Key
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
-import androidx.compose.ui.test.hasTestTag
-import androidx.compose.ui.test.hasAnyAncestor
 import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentStatus
@@ -42,12 +45,14 @@ class ConsoleAgentsTest {
             androidx.compose.material3.MaterialTheme { AriesApp(model) }
         }
         compose.openConsoleDrawer()
+        compose.onNodeWithTag("drawer-agent:${host.id}:t1").performTouchInput { longClick() }
         compose.onNodeWithTag("agent-pin:${host.id}:t1").assertIsNotEnabled()
+        compose.onNodeWithTag("drawer-agent:${host.id}:t1").performKeyInput { pressKey(Key.Back) }
         compose.onNodeWithTag("drawer-host:${host.id}").performClick()
         compose.waitForIdle()
         compose.openConsoleDrawer()
-        compose.onNode(hasTestTag("agent-pin:${host.id}:t1") and hasAnyAncestor(hasTestTag("console-drawer")))
-            .assertIsEnabled().performClick()
+        compose.onNodeWithTag("drawer-agent:${host.id}:t1").performTouchInput { longClick() }
+        compose.onNodeWithTag("agent-pin:${host.id}:t1").assertIsEnabled().performClick()
         compose.waitForIdle()
         assertEquals(listOf("${host.id} t1 pinned=true"), core.labelWrites)
     }
@@ -78,10 +83,13 @@ class ConsoleAgentsTest {
         assertTrue("herdr-app puts pinned Agents first", work < waiting)
         compose.onNodeWithText("Please retry").assertExists()
         compose.onNodeWithText("home:/repo/build").assertExists()
+        compose.onNodeWithText("review").performTouchInput { longClick() }
         compose.onNodeWithContentDescription(str(R.string.agent_pin_button_label, "review", "home")).performClick()
         compose.waitForIdle()
         assertEquals(listOf("h1 t2 pinned=true"), core.labelWrites)
+        compose.onNodeWithText("review").performTouchInput { longClick() }
         compose.onNodeWithContentDescription(str(R.string.agent_unpin_button_label, "review", "home")).assertExists()
+        compose.onNodeWithText("review").performKeyInput { pressKey(Key.Back) }
         assertTrue("Pinning keeps the list open", core.connectionsOf.getValue("h1").views.isEmpty())
         compose.onNodeWithText("review").performClick()
         compose.waitForIdle()

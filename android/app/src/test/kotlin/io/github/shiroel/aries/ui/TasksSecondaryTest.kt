@@ -22,6 +22,52 @@ class TasksSecondaryTest {
     @get:Rule val compose = createComposeRule()
     private val context = ApplicationProvider.getApplicationContext<Context>()
 
+    // D52: Activity recreation must keep the pinned Terminal, open file and expanded folder.
+    @Test fun hostFilesKeepTheirPinnedTargetAndLocationAcrossRecreation() {
+        val terminal = TerminalInfo("t1", "Build", "", listOf("sh"), "/repo", "live")
+        val other = terminal.copy(address = "t2", cwd = "/other")
+        val reads = mutableListOf<Pair<String, String>>()
+        val connection = object : HostConnection(NoHandle) {
+            override suspend fun gitChanges(address: String) = GitChanges("/repo", emptyList(), false, false)
+            override suspend fun listFiles(address: String, path: String?) = if (path == null || path == "/repo")
+                RemoteDirectory("/repo", listOf(RemoteFileEntry("src", true)))
+            else RemoteDirectory(path, listOf(RemoteFileEntry("notes.txt", false)))
+            override suspend fun readFilePage(address: String, path: String, offset: ULong, limit: UInt): RemoteFilePage {
+                reads += address to path
+                val last = minOf(600uL, offset + limit - 1u)
+                return RemoteFilePage((offset..last).joinToString("\n") {
+                    if (it == 1uL) "reading pinned file" else "line $it"
+                }, offset, last, 600u)
+            }
+        }
+        val host = Host("h1", "home", Endpoint.Ssh("home.test", 22u, "me"), null)
+        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main)
+        val browser = HostBrowser(host).apply {
+            link = HostLink(host, connection, scope, { connection })
+            updateTerminals(listOf(terminal, other))
+        }
+        val restoration = androidx.compose.ui.test.junit4.StateRestorationTester(compose)
+        restoration.setContent {
+            androidx.compose.material3.MaterialTheme { TasksHostContent(remember { HostsModel(FakeCore(), scope) }, browser) }
+        }
+        compose.onNodeWithTag("tasks-host-files").performClick()
+        compose.onNodeWithText("src/").performClick()
+        compose.onNodeWithText("notes.txt").performClick()
+        compose.onNodeWithText("reading pinned file").assertExists()
+        compose.onNodeWithTag("files-lines").performScrollToIndex(450)
+        compose.onNodeWithText("line 451").assertExists()
+        // A new Host snapshot changes the default target while this panel is pinned.
+        compose.runOnIdle { browser.updateTerminals(listOf(other, terminal)) }
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNodeWithText("line 451").assertExists()
+        compose.runOnIdle { assertTrue(reads.all { it == "t1" to "/repo/src/notes.txt" }) }
+        compose.onNodeWithTag("files-back").performClick()
+        compose.onNodeWithText("notes.txt").assertExists()
+        compose.onNodeWithTag("files-back").performClick()
+        compose.onNodeWithTag("tasks-host-content").assertExists()
+        scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
+    }
+
     @Test fun hostFilesUseTheCurrentTerminalAndReturnToTheSameConnectionWithoutSending() {
         val core = FakeCore().apply {
             addHost("home", Endpoint.Ssh("home.test", 22u, "me"))
@@ -55,7 +101,7 @@ class TasksSecondaryTest {
             assertSame(original, model.screen)
             assertSame(connection, original.browser.link!!.connection)
             assertFalse((connection as FakeConnection).disconnected)
-            assertEquals(listOf("t2" to null), connection.fileListings)
+            assertEquals(listOf("t2" to "/review"), connection.fileListings)
             assertTrue(connection.typed.isEmpty())
             assertTrue(connection.launched.isEmpty())
         }
