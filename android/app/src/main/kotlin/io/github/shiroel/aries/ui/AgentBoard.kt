@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateMapOf
@@ -70,7 +69,7 @@ class AgentBoard(val hosts: List<Host>) {
 
     val isEmpty: Boolean
         get() = hosts.isNotEmpty() && hosts.all { it.id in lists } && unavailable.isEmpty() &&
-            closed.values.none { it } && agents.isEmpty()
+            closed.values.none { it } && links.values.none { it.state != LinkState.Up } && agents.isEmpty()
 
     /** Shared ordering, including descendant urgency and global pins. */
     val agents: List<AgentEntry>
@@ -141,26 +140,8 @@ fun AgentsScreen(
                     Text(stringResource(R.string.agents_loading_hosts, board.loadingHosts.size))
                 }
             }
-            items(board.hosts.filter { it.id in board.unavailable }, key = { "down:" + it.id }) { host ->
-                Column {
-                    Text(
-                        stringResource(R.string.agents_host_unavailable, host.name),
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    board.unavailable[host.id]?.let { Text(stringResource(it.res, *it.args.toTypedArray()), style = MaterialTheme.typography.bodySmall) }
-                }
-            }
-            items(board.hosts.filter { board.links[it.id]?.state == LinkState.Reconnecting }, key = { "again:" + it.id }) { host ->
-                Text(stringResource(R.string.agents_host_reconnecting, host.name), style = MaterialTheme.typography.bodySmall)
-            }
-            val down = { h: Host -> board.closed[h.id] == true || board.links[h.id]?.state is LinkState.Down }
-            items(board.hosts.filter(down), key = { "closed:" + it.id }) { host ->
-                Text(
-                    stringResource(R.string.agents_host_closed, host.name),
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
-                )
+            items(board.hosts.filter { board.links[it.id]?.state != LinkState.Up }, key = { "connection:" + it.id }) { host ->
+                board.links[host.id]?.let { ConnectionNotice(it) }
             }
             val agents = board.agents
             if (board.isEmpty) item { Text(stringResource(R.string.agents_empty)) }
