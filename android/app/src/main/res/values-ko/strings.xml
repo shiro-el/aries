@@ -26,7 +26,7 @@
     <string name="github_number">#%1$d</string>
     <string name="github_branches">%1$s → %2$s</string>
     <string name="github_open_browser">브라우저로 열기</string>
-    <string name="github_item_actions">Issue 작업</string>
+    <string name="github_item_actions">이슈 작업</string>
     <string name="github_checks_passed">검사 통과</string>
     <string name="github_checks_failed">검사 실패</string>
     <string name="github_checks_pending">검사 대기 중</string>

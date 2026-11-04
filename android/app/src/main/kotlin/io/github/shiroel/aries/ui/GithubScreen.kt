@@ -65,10 +65,14 @@ internal fun GithubDialog(link: HostLink?, terminal: TerminalInfo, onDismiss: ()
             Column(Modifier.fillMaxSize().safeDrawingPadding().imePadding()) {
                 Row(Modifier.fillMaxWidth().height(56.dp), verticalAlignment = Alignment.CenterVertically) {
                     ActionIcon(R.drawable.ic_arrow_left, R.string.back_button, ::back, enabled = !writing, modifier = Modifier.testTag("github-back"))
-                    Column(Modifier.weight(1f)) {
-                        Text(stringResource(R.string.github_button), style = MaterialTheme.typography.titleMedium)
-                        repository?.let { Text(it.nameWithOwner, style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                    Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(painterResource(R.drawable.ic_github), null, Modifier.size(20.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(stringResource(R.string.github_button), style = MaterialTheme.typography.titleMedium)
+                            repository?.let { Text(it.nameWithOwner, style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                        }
                     }
                     repository?.let { repo ->
                         ActionIcon(R.drawable.ic_external_link, R.string.github_open_browser, {
