@@ -94,10 +94,10 @@ class PushService : FirebaseMessagingService() {
                 return
             }
             if (content is PushContent.Status) {
-                if (!ProgressNotifications.acceptStatus(context, notice.hostId, content.terminal, content.at)) return
+                if (!ProgressNotifications.acceptStatus(context, notice.hostId, content.terminal, content.at, content.atMs)) return
                 // Delivery can be suppressed while progress is hidden by the app.
                 // Still retire older progress, including for a Watched child.
-                ProgressNotifications.completed(context, notice.hostId, content.terminal, content.at)
+                ProgressNotifications.completed(context, notice.hostId, content.terminal, content.at, content.atMs)
             }
             // A child explicitly watched by the user can complete its local card.
             val wasWatched = content is PushContent.Status && manager.activeNotifications.any {
@@ -160,12 +160,12 @@ class PushService : FirebaseMessagingService() {
                 val phase = NotificationGroups.phase(content.status)
                 builder.addExtras(android.os.Bundle().apply {
                     putString(NotificationGroups.PHASE, phase)
-                    putLong(NotificationGroups.AT_MS, content.at.toLong() * 1000)
+                    putLong(NotificationGroups.AT_MS, ProgressNotifications.statusMillis(content.at, content.atMs))
                     putString(NotificationGroups.TURN, content.turn?.toString())
                     putString(NotificationGroups.QUESTION, content.question?.id)
                 })
                 NotificationGroups.decorate(context, builder, notice.hostId, notice.hostName, tag, content.terminal,
-                    generation = "${content.at}/${content.turn}/$phase/${content.question?.id}")
+                    generation = "${content.at}/${content.turn}/$phase/${content.question?.id}" + (content.atMs?.let { "/$it" } ?: ""))
                 val status = content.status
                 if (status == AgentStatus.Done || status is AgentStatus.Error) {
                     InlineNotifications.add(context, builder, notice.hostId, notice.hostName, content.terminal, tag,

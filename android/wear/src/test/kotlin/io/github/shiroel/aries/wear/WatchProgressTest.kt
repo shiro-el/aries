@@ -25,7 +25,31 @@ class WatchProgressTest {
         shadowOf(context as android.app.Application).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
     }
     private fun progress(at: Long = 100_000, cancelled: Boolean = false, terminal: String = "remote/t7") =
-        WatchProgress("host", terminal, "Builder", 50_000, 2, at, cancelled)
+        WatchProgress("host", terminal, "Builder", 50_000, 2, at, cancelled, observedAtMs = at)
+
+    // D79: a Host's ahead/behind clock cannot block a phone pull or extend a watch-local timeout.
+    @Test fun recallAndExpiryDoNotCompareTheHostClockToDeviceClocks() {
+        var now = 120_000L
+        val store = WatchStateStore(context) { now }
+        for (hostAt in listOf(10_000L, 3_700_000L)) {
+            store.accept("phone", WatchSummary.EMPTY.toRequest().data)
+            fun payload(at: Long): ByteArray {
+                val p = WatchProgress("host", "t$hostAt", "Builder", at - 5_000, 0, at)
+                return com.google.android.gms.wearable.DataMap.fromByteArray(p.toRequest().data!!)
+                    .apply { putLong("observed_at_ms", 100_000) }.toByteArray()
+            }
+            store.acceptProgress("phone", payload(hostAt))
+            assertEquals(1, manager.activeNotifications.size)
+            now += WatchProgress.MAX_AGE_MS + 1
+            store.refreshProgress()
+            assertTrue(manager.activeNotifications.isEmpty())
+            store.acceptProgress("phone", payload(hostAt + 1))
+            val done = WatchAgent("host", "t$hostAt", "Builder", "done")
+            store.accept("phone", WatchSummary(0, emptyList(), 130_000, inbox = listOf(done),
+                hostFetchedAtMs = mapOf("host" to 130_000)).toRequest().data)
+            assertTrue(manager.activeNotifications.isEmpty())
+        }
+    }
 
     @Test fun completingOneAgentLeavesTheOtherRunningAfterRestartAndOutOfOrderDelivery() {
         val store = WatchStateStore(context) { 120_000L }
@@ -60,12 +84,12 @@ class WatchProgressTest {
         var now = 120_000L
         val store = WatchStateStore(context) { now }
         store.acceptProgress("phone", progress().toRequest().data)
-        now = 1_900_001
+        now = 1_920_001
         store.refreshProgress()
         assertTrue(manager.activeNotifications.isEmpty())
         val working = WatchAgent("host", "remote/t7", "Builder", "working")
-        store.accept("phone", WatchSummary(0, emptyList(), 1_900_000, inbox = listOf(working),
-            hostFetchedAtMs = mapOf("host" to 1_900_000)).toRequest().data)
+        store.accept("phone", WatchSummary(0, emptyList(), 1_920_000, inbox = listOf(working),
+            hostFetchedAtMs = mapOf("host" to 1_920_000)).toRequest().data)
         assertEquals(1, manager.activeNotifications.size)
         assertTrue(manager.activeNotifications.single().notification.timeoutAfter > 0)
     }

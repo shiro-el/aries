@@ -29,7 +29,7 @@ class WatchDetailFlowTest {
     // plus stale permission menus surviving a privacy or turn change.
     @Test fun livePermissionSurvivesRepublishingButNotPrivacyOrANewTurn() {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-        val live = row.copy(requestId = "permission:edit", choices = listOf("Allow", "Deny"), canAnswerOnWatch = true)
+        var live = row.copy(requestId = "permission:edit", choices = listOf("Allow", "Deny"), canAnswerOnWatch = true)
         val session = WatchDetailSession(scope, { _, _ -> WatchCommand(live).toBytes() })
         compose.setContent { WatchInbox(session.summary, 1, row.hostId to row.terminal, {}, false, null, {}, {}, detailActions = { WatchAnswerActions(it, session) }) }
         compose.runOnIdle { session.merge(summary(row)); session.load(row) }
@@ -39,6 +39,14 @@ class WatchDetailFlowTest {
         screenshot("permission-actions")
         compose.runOnIdle { session.merge(summary(row)) }
         compose.onNodeWithText("Deny").assertExists()
+        // A refreshed live permission must also replace the old live override.
+        compose.runOnIdle {
+            live = live.copy(requestId = "permission:second-edit")
+            session.recover(session.summary.inbox.single())
+        }
+        compose.waitForIdle()
+        compose.runOnIdle { session.merge(summary(row)) }
+        assertEquals("permission:second-edit", session.summary.inbox.single().requestId)
         compose.runOnIdle { session.merge(summary(row.copy(contentHidden = true))) }
         compose.onNodeWithText("Deny").assertDoesNotExist()
         compose.runOnIdle { session.merge(summary(row.copy(stateToken = "turn2"))) }
@@ -51,25 +59,27 @@ class WatchDetailFlowTest {
     @Test fun onlyPendingAnswerSurvivesAReplacementRequestAndDetailReentry() {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         val reply = CompletableDeferred<ByteArray>()
-        val session = WatchDetailSession(scope, { _, _ -> reply.await() })
-        var showing by mutableStateOf(true)
         val question = row.copy(requestKind = "question", requestId = "q1", choices = listOf("Blue"), canAnswerOnWatch = true)
-        compose.runOnIdle { session.merge(summary(question)) }
+        val session = WatchDetailSession(scope, { path, _ ->
+            if (path == WatchCommand.DETAILS_PATH) WatchCommand(question).toBytes() else reply.await()
+        })
+        var showing by mutableStateOf(true)
+        compose.runOnIdle { session.merge(summary(question)); session.load(question) }
         compose.setContent { if (showing) WatchInbox(session.summary, 1, row.hostId to row.terminal, {}, false, null, {}, {}, detailActions = { WatchAnswerActions(it, session) }) }
         compose.onNode(hasScrollAction()).performScrollToNode(hasText("Blue"))
         compose.onNodeWithText("Blue").performClick()
         compose.onNode(hasScrollAction()).performScrollToNode(hasText("Sending…"))
         compose.onNodeWithText("Sending…").assertExists()
         screenshot("answer-sending")
-        compose.runOnIdle { showing = false; session.merge(summary(question.copy(stateToken = "turn2", requestId = "q2"))) }
+        compose.runOnIdle { showing = false; session.merge(summary(question.copy(requestId = "q2", choices = listOf("Green")))) }
         compose.runOnIdle { showing = true }
         compose.onNode(hasScrollAction()).performScrollToNode(hasText("Sending…"))
         compose.onNodeWithText("Sending…").assertExists()
         compose.onNodeWithText("Blue").assertDoesNotExist()
         compose.runOnIdle { reply.complete(WatchResult.SENT.toBytes()) }
-        compose.onNode(hasScrollAction()).performScrollToNode(hasText("Blue"))
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("Green"))
         compose.onNodeWithText("Sent").assertDoesNotExist()
-        compose.onNodeWithText("Blue").assertHasClickAction().performClick()
+        compose.onNodeWithText("Green").assertHasClickAction().performClick()
         compose.onNode(hasScrollAction()).performScrollToNode(hasText("Sent"))
         compose.onNodeWithText("Sent").assertExists()
         screenshot("answer-sent-for-current-turn")
@@ -78,6 +88,11 @@ class WatchDetailFlowTest {
         compose.onNode(hasScrollAction()).performScrollToNode(hasText("Sent"))
         compose.onNodeWithText("Sent").assertExists()
         compose.onNodeWithText("Blue").assertDoesNotExist()
+        // A different request with the same terminal metadata must replace the live menu.
+        compose.runOnIdle { session.merge(summary(question.copy(requestId = "q3", choices = listOf("Red")))) }
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("Red"))
+        compose.onNodeWithText("Sent").assertDoesNotExist()
+        compose.onNodeWithText("Red").assertHasClickAction()
         // Even a new token with the same request ID must have fresh actions.
         compose.runOnIdle { session.merge(summary(question.copy(stateToken = "turn3", requestId = "q2"))) }
         compose.onNode(hasScrollAction()).performScrollToNode(hasText("Blue"))
