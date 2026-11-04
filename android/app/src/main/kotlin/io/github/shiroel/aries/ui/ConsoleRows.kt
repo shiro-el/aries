@@ -209,7 +209,7 @@ internal fun TreeBackButton(onBack: () -> Unit) {
 }
 
 @Composable
-private fun agentLastSeen(updatedAt: Long?): String {
+internal fun agentLastSeen(updatedAt: Long?): String {
     val now by androidx.compose.runtime.produceState(System.currentTimeMillis(), updatedAt) {
         if (updatedAt != null) while (true) {
             kotlinx.coroutines.delay(30_000)
