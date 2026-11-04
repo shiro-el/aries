@@ -1,6 +1,8 @@
 package io.github.shiroel.aries
 
 import android.content.Context
+import android.content.Intent
+import android.content.pm.ShortcutInfo
 import android.content.pm.ShortcutManager
 import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.core.*
@@ -22,6 +24,86 @@ class LaunchShortcutsTest {
     private val core get() = (context as FakeCoreApp).core
     private val manager get() = context.getSystemService(ShortcutManager::class.java)
     private fun saved(id: String) = SavedLaunch(id, "Codex $id", LaunchRequest("--model fast", "/repo", null, null, AgentPreset.CODEX))
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test @Config(sdk = [28, 32])
+    fun anExternalSavedLaunchMustBeConfirmedBeforeItCanRun() = runTest {
+        val host = core.addHost("home", Endpoint.Ssh("home", 22u, "me"))
+        core.savedLaunchesOf[host.id] = mutableListOf(saved("1"))
+        val intent = SavedLaunchTarget(host.id, "1").intent(context)
+        val model = HostsModel(core, backgroundScope)
+        model.openSavedLaunch(context, intent)
+        model.start()
+        runCurrent()
+        assertTrue(core.connection!!.launched.isEmpty())
+        val canceled = model.prompt as Prompt.ConfirmSavedLaunch
+        model.dismiss()
+        model.confirmSavedLaunch(canceled)
+        core.connection!!.push(HostStructure(emptyList(), emptyList(), null))
+        runCurrent()
+        assertTrue(core.connection!!.launched.isEmpty())
+        model.openSavedLaunch(context, intent)
+        runCurrent()
+        val approval = model.prompt as Prompt.ConfirmSavedLaunch
+        model.confirmSavedLaunch(approval)
+        model.confirmSavedLaunch(approval)
+        runCurrent()
+        assertEquals(listOf(saved("1").request), core.connection!!.launched)
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test @Config(sdk = [28, 32])
+    fun aPublishedCredentialCannotAuthorizeAnotherHostOrSavedLaunch() = runTest {
+        val host = core.addHost("home", Endpoint.Ssh("home", 22u, "me"))
+        val other = core.addHost("work", Endpoint.Ssh("work", 22u, "me"))
+        core.savedLaunchesOf[host.id] = mutableListOf(saved("1"), saved("2"))
+        core.savedLaunchesOf[other.id] = mutableListOf(saved("1"))
+        LaunchShortcuts.sync(context, core)
+        val genuine = manager.dynamicShortcuts.first { SavedLaunchTarget.from(it.intent) == SavedLaunchTarget(host.id, "1") }.intent!!
+        val model = HostsModel(core, backgroundScope)
+        for (forged in listOf(
+            Intent(genuine).putExtra("host_id", other.id),
+            Intent(genuine).putExtra("saved_launch_id", "2"),
+            Intent(genuine).putExtra("saved_launch_auth_v1", "A".repeat(44)),
+        )) {
+            model.openSavedLaunch(context, forged)
+            runCurrent()
+            assertTrue(core.connection!!.launched.isEmpty())
+            val approval = model.prompt as Prompt.ConfirmSavedLaunch
+            // Leaving the Host invalidates a callback from its old confirmation dialog.
+            model.back()
+            model.confirmSavedLaunch(approval)
+            runCurrent()
+            assertTrue(core.connection!!.launched.isEmpty())
+        }
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test fun anUpgradeRefreshesUnsignedPinnedAndDynamicShortcutsWithoutChangingTheirIds() = runTest {
+        val host = core.addHost("home", Endpoint.Ssh("home", 22u, "me"))
+        core.savedLaunchesOf[host.id] = mutableListOf(saved("1"), saved("2"))
+        LaunchShortcuts.sync(context, core)
+        val published = manager.dynamicShortcuts.sortedBy { it.rank }
+        val legacy = published.map { shortcut ->
+            ShortcutInfo.Builder(context, shortcut.id)
+                .setShortLabel(shortcut.shortLabel!!).setLongLabel(shortcut.longLabel!!)
+                .setRank(shortcut.rank).setIntent(SavedLaunchTarget.from(shortcut.intent)!!.intent(context)).build()
+        }
+        manager.dynamicShortcuts = legacy
+        shadowOf(manager).setIsRequestPinShortcutSupported(true)
+        manager.requestPinShortcut(legacy[1], null)
+        LaunchShortcuts.sync(context, core)
+        val model = HostsModel(core, backgroundScope)
+        // The shadow moves a pinned record out of its dynamic collection.
+        assertEquals(published.map { it.id }.toSet(), (manager.dynamicShortcuts + manager.pinnedShortcuts).map { it.id }.toSet())
+        for (updated in listOf(manager.dynamicShortcuts.single(), manager.pinnedShortcuts.single())) {
+            model.openSavedLaunch(context, updated.intent!!)
+            runCurrent()
+            assertNull(model.prompt)
+            assertEquals(listOf(saved("1").request), core.connection!!.launched)
+            model.back()
+        }
+    }
 
     @Test fun publishesFourStableHostScopedShortcutsAndUpdatesAndDisablesPinnedCopies() {
         val first = core.addHost("home", Endpoint.Ssh("home", 22u, "me"))
@@ -54,13 +136,16 @@ class LaunchShortcutsTest {
         val host = core.addHost("home", Endpoint.Ssh("home", 22u, "me"))
         val other = core.addHost("work", Endpoint.Ssh("work", 22u, "me"))
         val latest = saved("1").copy(request = saved("1").request.copy(command = "--model latest"))
-        core.savedLaunchesOf[host.id] = mutableListOf(latest)
+        core.savedLaunchesOf[host.id] = mutableListOf(saved("1"))
         core.savedLaunchesOf[other.id] = mutableListOf(saved("1"))
+        LaunchShortcuts.sync(context, core)
+        val intent = manager.dynamicShortcuts.first { SavedLaunchTarget.from(it.intent)?.hostId == host.id }.intent!!
+        // Credentials authorize the saved ID, not a stale copy of the command in a launcher.
+        core.savedLaunchesOf[host.id] = mutableListOf(latest)
         core.ensureKey()
         core.setKeyProtection(KeyProtection.BIOMETRIC)
         val model = HostsModel(core, backgroundScope, keyWork = inKeyWork.asContextElement(true))
-        val target = SavedLaunchTarget.from(SavedLaunchTarget(host.id, "1").intent(context))!!
-        model.openSavedLaunch(target.hostId, target.launchId)
+        model.openSavedLaunch(context, intent)
         runCurrent()
         assertEquals(listOf(latest.request), core.connection!!.launched)
         assertEquals(host.id, (model.screen as Screen.Browse).browser.host.id)
@@ -72,7 +157,7 @@ class LaunchShortcutsTest {
         model.back()
         runCurrent()
         core.failWith = CoreException.KeyLocked()
-        model.openSavedLaunch(host.id, "1")
+        model.openSavedLaunch(context, intent)
         runCurrent()
         assertTrue(model.screen is Screen.Hosts)
         assertTrue(model.prompt is Prompt.Problem)
@@ -85,7 +170,7 @@ class LaunchShortcutsTest {
         val store = LastLocationStore.from(context)
         store.save(LastLocation(hostId = host.id))
         val model = HostsModel(core, backgroundScope, locationStore = store)
-        model.openSavedLaunch("removed", "1")
+        model.openSavedLaunch(context, SavedLaunchTarget("removed", "1").intent(context))
         model.start()
         runCurrent()
         assertTrue(model.screen is Screen.Hosts)
