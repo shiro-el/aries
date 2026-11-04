@@ -767,8 +767,7 @@ fun ChatScreen(
     CompositionLocalProvider(LocalChatSearch provides searchDecoration) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))) {
             AgentScreenHeader(chat.terminal, chat.host.name, onBack, AgentView.CHAT, onView,
-                preview = preview, link = chat.link, onTerminalUpdate = { chat.update(listOf(it)) }, onSearch = { searchOpen = true })
-            AgentUsageHeader(snapshot?.usage)
+                preview = preview, usage = snapshot?.usage, link = chat.link, onTerminalUpdate = { chat.update(listOf(it)) }, onSearch = { searchOpen = true })
             PreviewChips(preview)
             if (preview.selected != null) {
                 LocalhostPreviewBrowser(preview, chat.link, Modifier.weight(1f).fillMaxWidth(),
@@ -975,7 +974,7 @@ private fun MessageInput(chat: ChatModel) {
         lineHeight = 20.sp,
     )
     HorizontalDivider()
-    ChatInterruptControls(chat)
+    ChatInterruptNotice(chat)
     DraftAttachments(chat)
     io.github.shiroel.aries.dictation.DictationInput(
         names = listOf(chat.host.name, displayName(chat.terminal), chat.terminal.cwd.orEmpty().trimEnd('/').substringAfterLast('/')),
@@ -1004,14 +1003,21 @@ private fun MessageInput(chat: ChatModel) {
                 }
             },
         )
-        TextButton(
-            onClick = chat::send,
-            enabled = chat.canSend,
-            modifier = Modifier.heightIn(min = 48.dp),
-            shape = RectangleShape,
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
-        ) {
-            Text(stringResource(R.string.chat_send_button), style = inputStyle)
+        val showInterrupt = chat.draft.isEmpty() && chat.attachments.isEmpty() &&
+            ((chat.terminalAvailable && chat.terminal.agentStatus == AgentStatus.Working) || chat.interrupting)
+        if (showInterrupt) {
+            ChatInterruptButton(chat)
+        } else {
+            TextButton(
+                onClick = chat::send,
+                enabled = chat.canSend,
+                modifier = Modifier.heightIn(min = 48.dp),
+                shape = RectangleShape,
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+            ) {
+                if (chat.interrupting) ChatInterruptProgress()
+                Text(stringResource(R.string.chat_send_button), style = inputStyle)
+            }
         }
     }
 }

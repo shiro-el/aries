@@ -3,10 +3,14 @@ package io.github.shiroel.aries.ui
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.R
@@ -70,13 +74,13 @@ class AgentViewToggleTest {
         browseHome(core)
         click("claude")
         compose.onNodeWithTag("agent-actions").performClick()
-        compose.onNodeWithTag("agent-watch").performClick()
+        compose.onNodeWithTag("agent-watch").performScrollTo().performClick()
         compose.waitForIdle()
         assertEquals(listOf("h1 t1 watched=true"), core.labelWrites.filter { it.contains("watched=") })
         compose.onNodeWithContentDescription(str(R.string.agent_switch_chat_label)).performClick()
         compose.waitForIdle()
         compose.onNodeWithTag("agent-actions").performClick()
-        compose.onNodeWithTag("agent-watch").performClick()
+        compose.onNodeWithTag("agent-watch").performScrollTo().performClick()
         compose.waitForIdle()
         assertEquals(listOf("h1 t1 watched=true", "h1 t1 watched=false"), core.labelWrites.filter { it.contains("watched=") })
     }
@@ -97,7 +101,7 @@ class AgentViewToggleTest {
 
         compose.onNodeWithContentDescription(str(R.string.agent_switch_chat_label)).performClick()
         compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.console_agent_host_prefix, "home") + "claude").assertExists()
+        compose.onNode(hasTestTag("console-top-bar") and hasAnyDescendant(hasText("claude"))).assertExists()
         assertEquals(listOf("h1" to "t1"), core.chatsOpened)
         assertTrue("the Terminal let go", view.detached)
         assertEquals(AgentView.CHAT, core.savedView)

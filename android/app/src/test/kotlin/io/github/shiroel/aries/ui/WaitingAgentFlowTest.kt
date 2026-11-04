@@ -86,6 +86,7 @@ class WaitingAgentFlowTest {
         val board = (model().screen as Screen.Terminal).returnTo
         val oldView = core.connectionsOf.getValue("h1").views.single()
         val nextChild = context.getString(R.string.agents_next_waiting, "Blocked child", "work")
+        compose.onNodeWithTag("agent-actions").performClick()
         compose.onNodeWithText(nextChild).performClick()
         compose.runOnIdle {
             val screen = model().screen as Screen.Terminal
@@ -95,16 +96,21 @@ class WaitingAgentFlowTest {
             assertFalse(core.connectionsOf.getValue("h1").disconnected)
         }
         screenshot("terminal-next")
-        compose.onNodeWithTag("console-inbox").performClick()
+        compose.onNodeWithTag("console-inbox").assertDoesNotExist()
+        compose.onNodeWithTag("agent-actions").performClick()
+        compose.onNodeWithTag("agent-inbox-menu").performClick()
         compose.onNodeWithTag("call-inbox-panel").assertIsDisplayed()
-        compose.onNodeWithTag("console-inbox").performClick()
+        compose.onNodeWithTag("call-inbox-scrim").performClick()
         core.push("h2", listOf(parent, child.copy(agentStatus = AgentStatus.Working)))
+        compose.onNodeWithTag("agent-actions").performClick()
         compose.onNodeWithText(context.getString(R.string.agents_next_waiting, "Newer error", "home")).performClick()
         compose.runOnIdle { assertEquals(AgentKey("h1", "remote/t1"), model().currentAgentKey) }
         compose.onNodeWithContentDescription(context.getString(R.string.agent_switch_chat_label)).performClick()
-        compose.onNodeWithTag("console-inbox").performClick()
+        compose.onNodeWithTag("console-inbox").assertDoesNotExist()
+        compose.onNodeWithTag("agent-actions").performClick()
+        compose.onNodeWithTag("agent-inbox-menu").performClick()
         compose.onNodeWithTag("call-inbox-panel").assertIsDisplayed()
-        compose.onNodeWithTag("console-inbox").performClick()
+        compose.onNodeWithTag("call-inbox-scrim").performClick()
         screenshot("chat-next")
         compose.onNodeWithTag("console-back").performClick()
         compose.runOnIdle { assertSame(board, model().screen) }
@@ -126,6 +132,7 @@ class WaitingAgentFlowTest {
         val browse = model().screen
         val home = core.connectionsOf.getValue("h1")
         compose.onNodeWithText("Current").performClick()
+        compose.onNodeWithTag("agent-actions").performClick()
         compose.onNodeWithText(context.getString(R.string.agents_next_waiting, "Remote question", "work")).performClick()
         compose.runOnIdle {
             assertEquals(AgentKey("h2", "remote/t1"), model().currentAgentKey)
