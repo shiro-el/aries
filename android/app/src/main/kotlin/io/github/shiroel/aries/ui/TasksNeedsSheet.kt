@@ -101,7 +101,13 @@ private fun TasksQuestion(model: HostsModel, board: AgentBoard, need: TaskNeed.A
     val entry = board.find(original.key) ?: original.copy(live = false)
     val link = board.links[entry.host.id]
     val connection = link?.connection
-    val chat = remember(entry.key, entry.live, connection) { model.taskQuestion(board, entry.key) }
+    var retainedChat by remember(entry.key) { mutableStateOf(model.taskQuestion(board, entry.key)) }
+    // A sheet opened from last-known state can acquire its owner once live.
+    // List freshness and replacement SSH connections do not replace that owner.
+    LaunchedEffect(entry.key, entry.live, connection) {
+        if (retainedChat == null) retainedChat = model.taskQuestion(board, entry.key)
+    }
+    val chat = retainedChat
     val sharedWithDetail = chat != null && model.isViewedChat(chat)
     DisposableEffect(chat, sharedWithDetail) {
         if (!sharedWithDetail && chat != null) model.startTaskQuestion(chat)
@@ -124,6 +130,7 @@ private fun TasksQuestion(model: HostsModel, board: AgentBoard, need: TaskNeed.A
     Text(displayName(entry.terminal), Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.titleMedium)
     Text(entry.host.name, Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall)
     when {
+        link?.state == LinkState.Reconnecting -> Text(stringResource(R.string.tasks_reconnecting), Modifier.padding(16.dp))
         !entry.live -> Text(stringResource(R.string.tasks_offline), Modifier.padding(16.dp))
         entry.terminal.agentStatus is AgentStatus.Error -> {
             Text(stringResource(R.string.agents_waiting_error), Modifier.padding(16.dp))

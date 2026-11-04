@@ -189,7 +189,7 @@ fun AgentsScreen(
             showMark = false, inbox = {}, actions = { AgentActions(board) })
         LazyColumn(Modifier.weight(1f).then(presentation.modifier), state = listState) {
             if (board.hosts.isEmpty()) item {
-                Text(stringResource(R.string.agents_no_hosts))
+                Text(stringResource(R.string.agents_no_hosts), Modifier.padding(LocalLayoutTokens.current.contentPadding))
                 onAddHost?.let { add ->
                     TextButton(onClick = add) { Text(stringResource(R.string.console_add_host)) }
                 }
@@ -207,7 +207,7 @@ fun AgentsScreen(
                     } })
             }
             if (board.isEmpty) item {
-                Text(stringResource(R.string.agents_empty))
+                Text(stringResource(R.string.agents_empty), Modifier.padding(LocalLayoutTokens.current.contentPadding))
                 onOpenHosts?.let { open ->
                     TextButton(onClick = open) { Text(stringResource(R.string.agents_empty_hosts_button)) }
                 }

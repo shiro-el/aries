@@ -64,22 +64,22 @@ internal fun LazyListScope.agentTreeItems(
                         compact = compact,
                         selected = current == entry.key,
                         live = entry.live, lastUpdatedMs = entry.lastUpdatedMs,
-                        onLongClick = if (actions != null || compact && entry.terminal.agentStatus != null) ({ menu = true }) else null,
+                        onLongClick = if (actions != null || entry.terminal.agentStatus != null) ({ menu = true }) else null,
                         trailing = {
                             if (!compact) {
                                 AgentFoldButton(entry, descendants, folds.contains(entry.key.foldKey)) { folds.toggle(entry.key.foldKey) }
-                                if (entry.terminal.agentStatus != null) AgentPinButton(entry, enabled = canPin(entry)) { onPin(entry, it) }
                             }
                             Box {
                                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                                    if (compact && entry.live && entry.terminal.agentStatus != null) {
+                                    if (entry.terminal.agentStatus != null) {
                                         val pinDescription = pinLabel(entry)
                                         ActionMenuItem(
                                             label = stringResource(if (entry.terminal.pinned) R.string.menu_unpin else R.string.menu_pin),
                                             icon = if (entry.terminal.pinned) R.drawable.agent_pin_off else R.drawable.agent_pin,
-                                            modifier = Modifier.semantics { contentDescription = pinDescription },
+                                            modifier = Modifier.testTag("agent-pin:${entry.host.id}:${entry.terminal.address}")
+                                                .semantics { contentDescription = pinDescription; selected = entry.terminal.pinned },
                                             onClick = { menu = false; onPin(entry, !entry.terminal.pinned) },
-                                            enabled = canPin(entry),
+                                            enabled = entry.live && canPin(entry),
                                         )
                                     }
                                     actions?.invoke(this, entry) { menu = false }

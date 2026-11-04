@@ -174,3 +174,28 @@ internal fun ConsoleSheet(
             }
         }, content = content)
 }
+
+/** Square visual parts, with Material's drag, keyboard and accessibility behavior. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun ConsoleSlider(
+    value: Float, onValueChange: (Float) -> Unit, modifier: Modifier = Modifier,
+    valueRange: ClosedFloatingPointRange<Float> = 0f..1f, steps: Int = 0,
+    onValueChangeFinished: (() -> Unit)? = null,
+) {
+    val colors = MaterialTheme.colorScheme
+    val rtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
+    Slider(value, onValueChange, modifier.heightIn(min = 48.dp),
+        valueRange = valueRange, steps = steps, onValueChangeFinished = onValueChangeFinished,
+        thumb = {
+            Box(Modifier.size(16.dp, 20.dp).background(colors.primary).border(1.dp, colors.onSurface))
+        },
+        track = { state ->
+            Canvas(Modifier.fillMaxWidth().height(4.dp)) {
+                val fraction = ((state.value - valueRange.start) / (valueRange.endInclusive - valueRange.start)).coerceIn(0f, 1f)
+                drawRect(colors.outlineVariant)
+                val activeWidth = size.width * fraction
+                drawRect(colors.primary, Offset(if (rtl) size.width - activeWidth else 0f, 0f), Size(activeWidth, size.height))
+            }
+        })
+}
