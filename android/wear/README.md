@@ -74,9 +74,22 @@ certificate; use matching builds. Do not uninstall another user's install as a
 workaround. No Firebase/Cloudflare deployment is needed for this companion.
 
 `WatchInboxActivity` accepts `host` and `terminal` extras for local detail links.
-`WatchInbox` exposes a composable `detailActions(WatchAgent)` slot; Answer, Stop,
-and progress are disabled placeholders until their dedicated action tickets land.
+`WatchInbox` exposes a composable `detailActions(WatchAgent)` slot; Answer and Stop
+are placeholders until their dedicated action tickets land. Select Watched Agents
+on the phone; the watch's progress selection action remains a placeholder.
 The existing Tile/complication implementations remain separate.
+
+Watched Agent Progress pushes also publish a durable `/aries/progress` DataItem.
+The watch shows one silent Ongoing Activity for the latest Progress, with a local
+stopwatch and a tap into that Agent's Inbox detail. Grant notification permission
+when opening the watch app. Completion, cancellation, a newer non-Working Inbox
+snapshot, or deletion removes the activity. Delayed Progress cannot revive its
+completion after restart. This works independently of foreground phone notification
+suppression and leaves the phone's channels and vibration behavior unchanged.
+No continuous connection or watch foreground service is used. A disconnected watch
+keeps its last activity until it receives newer data; the stopwatch continues locally.
+Verify the watch-face icon and Recents presentation on a paired Galaxy Watch, since
+those surfaces depend on its face and OS.
 
 References: [Wear Compose](https://developer.android.com/jetpack/androidx/releases/wear-compose),
 [Data Layer](https://developer.android.com/training/wearables/data/overview),

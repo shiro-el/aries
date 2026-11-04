@@ -34,6 +34,7 @@ internal object ProgressNotifications {
         val key = stampKey(host, terminal)
         val old = prefs.getLong(key, 0).toULong()
         if (at >= old) prefs.edit().putLong(key, at.toLong()).apply()
+        WatchProgressPhone.completed(context, host, terminal, at)
     }
 
     fun post(context: Context, notice: PushNotice, p: PushContent.Progress) {
@@ -47,6 +48,7 @@ internal object ProgressNotifications {
             if (existing?.notification?.channelId == CHANNEL) manager.cancel(p.terminal, notice.hostId.hashCode())
             return
         }
+        WatchProgressPhone.progress(context, notice.hostId, p)
         if (NotificationVisibility.from(context)?.foreground == true) {
             if (existing?.notification?.channelId == CHANNEL) manager.cancel(p.terminal, notice.hostId.hashCode())
             return

@@ -1,4 +1,9 @@
 <resources>
+    <!-- Watched Agent Ongoing Activity -->
+    <string name="wear_progress_channel">Agent progress</string>
+    <string name="wear_progress_status">#name# · #time# elapsed · #children# subagents</string>
+    <string name="wear_progress_body">Working · %1$d subagents</string>
+
     <!-- Watch Inbox -->
     <string name="wear_inbox_title">Inbox</string>
     <string name="wear_inbox_attention">Needs you</string>
