@@ -4,12 +4,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,16 +29,13 @@ fun AppLockSettings(session: AppLockSession) {
         AppLockNotice(session)
         if (lock.enabled) {
             Text(stringResource(R.string.app_lock_delay_label))
-            Row(Modifier.fillMaxWidth().selectableGroup()) {
+            Column(Modifier.fillMaxWidth().selectableGroup()) {
                 LockDelay.entries.forEach { delay ->
-                    val selected = lock.delay == delay
-                    Column(
-                        Modifier.weight(1f).testTag("app-lock-delay-${delay.name}")
-                            .selectable(selected, enabled = !session.busy, role = Role.RadioButton, onClick = { lock.chooseDelay(delay) })
-                            .padding(vertical = 8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
+                    io.github.shiroel.aries.ui.SingleChoiceRow(
+                        selected = lock.delay == delay,
+                        onClick = { lock.chooseDelay(delay) }, enabled = !session.busy,
+                        modifier = Modifier.fillMaxWidth().testTag("app-lock-delay-${delay.name}"),
                     ) {
-                        RadioButton(selected, onClick = null)
                         Text(stringResource(when (delay) {
                             LockDelay.IMMEDIATE -> R.string.app_lock_delay_immediate
                             LockDelay.ONE_MINUTE -> R.string.app_lock_delay_one_minute

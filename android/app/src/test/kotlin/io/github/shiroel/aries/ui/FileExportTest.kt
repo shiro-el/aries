@@ -51,7 +51,7 @@ class FileExportTest {
     @Test fun sharesExactBinaryBytesThroughAReadOnlyContentUri() {
         val bytes = byteArrayOf(0, -1, -128, 13, 10, 42)
         val conn = object : ExportConnection("한글 'report.zip") {
-            override suspend fun readFileBytes(address: String, path: String, offset: ULong, length: UInt): RemoteFileBytes {
+            override suspend fun readExportBytes(address: String, path: String, offset: ULong, length: UInt): RemoteFileBytes {
                 assertEquals("box/t7", address)
                 assertEquals("/repo/한글 'report.zip", path)
                 return RemoteFileBytes(bytes, 0u, 6u, true)
@@ -76,6 +76,12 @@ class FileExportTest {
         assertArrayEquals(bytes, compose.activity.contentResolver.openInputStream(uri)!!.use { it.readBytes() })
     }
     private open class ExportConnection(private val name: String = "report.bin") : HostConnection(NoHandle) {
+        // The preview's bounded size probe is independent of the transfer under test.
+        final override suspend fun readFileBytes(address: String, path: String, offset: ULong, length: UInt): RemoteFileBytes =
+            if (length == 1u) RemoteFileBytes(byteArrayOf(), 0u, 0u, true)
+            else readExportBytes(address, path, offset, length)
+        protected open suspend fun readExportBytes(address: String, path: String, offset: ULong, length: UInt): RemoteFileBytes =
+            throw CoreException.Rpc("not_found", "missing")
         override suspend fun listFiles(address: String, path: String?) =
             RemoteDirectory("/repo", listOf(RemoteFileEntry(name, false)))
         override suspend fun readFilePage(address: String, path: String, offset: ULong, limit: UInt): RemoteFilePage =
@@ -116,7 +122,7 @@ class FileExportTest {
         val next = CompletableDeferred<Unit>()
         val offsets = mutableListOf<ULong>()
         val conn = object : ExportConnection() {
-            override suspend fun readFileBytes(address: String, path: String, offset: ULong, length: UInt): RemoteFileBytes {
+            override suspend fun readExportBytes(address: String, path: String, offset: ULong, length: UInt): RemoteFileBytes {
                 offsets += offset
                 return if (offset == 0uL) RemoteFileBytes(byteArrayOf(0, -1), 0u, 4u, false)
                 else { next.await(); RemoteFileBytes(byteArrayOf(1, 2), 2u, 4u, true) }
@@ -152,7 +158,7 @@ class FileExportTest {
         val cancelled = CompletableDeferred<Unit>()
         val reads = AtomicInteger()
         val conn = object : ExportConnection() {
-            override suspend fun readFileBytes(address: String, path: String, offset: ULong, length: UInt): RemoteFileBytes {
+            override suspend fun readExportBytes(address: String, path: String, offset: ULong, length: UInt): RemoteFileBytes {
                 if (reads.incrementAndGet() == 1) return RemoteFileBytes(byteArrayOf(0, 1), 0u, 4u, false)
                 entered.complete(Unit)
                 try { awaitCancellation() } finally { cancelled.complete(Unit) }
@@ -175,7 +181,7 @@ class FileExportTest {
     @Test fun rejectsFilesOver64MiBBeforeReadingTheRestOrSharing() {
         val reads = AtomicInteger()
         val conn = object : ExportConnection() {
-            override suspend fun readFileBytes(address: String, path: String, offset: ULong, length: UInt): RemoteFileBytes {
+            override suspend fun readExportBytes(address: String, path: String, offset: ULong, length: UInt): RemoteFileBytes {
                 reads.incrementAndGet()
                 return RemoteFileBytes(byteArrayOf(0), 0u, 67_108_865u, false)
             }
@@ -190,7 +196,7 @@ class FileExportTest {
 
     @Test fun changedFileSizeDoesNotPublishPartialContent() {
         val conn = object : ExportConnection() {
-            override suspend fun readFileBytes(address: String, path: String, offset: ULong, length: UInt) =
+            override suspend fun readExportBytes(address: String, path: String, offset: ULong, length: UInt) =
                 if (offset == 0uL) RemoteFileBytes(byteArrayOf(0, 1), 0u, 4u, false)
                 else RemoteFileBytes(byteArrayOf(2, 3, 4), 2u, 5u, true)
         }
@@ -203,7 +209,7 @@ class FileExportTest {
 
     @Test fun deniedFolderWriteDeletesTheNewDocument() {
         val conn = object : ExportConnection() {
-            override suspend fun readFileBytes(address: String, path: String, offset: ULong, length: UInt) =
+            override suspend fun readExportBytes(address: String, path: String, offset: ULong, length: UInt) =
                 RemoteFileBytes(byteArrayOf(0, -1), 0u, 2u, true)
         }
         openFile(conn)
@@ -217,7 +223,7 @@ class FileExportTest {
     @Test fun cancellingWhileSavingDeletesTheNewSafDocument() {
         val release = CountDownLatch(1)
         val conn = object : ExportConnection() {
-            override suspend fun readFileBytes(address: String, path: String, offset: ULong, length: UInt) =
+            override suspend fun readExportBytes(address: String, path: String, offset: ULong, length: UInt) =
                 RemoteFileBytes(byteArrayOf(0, -1), 0u, 2u, true)
         }
         openFile(conn)
@@ -235,7 +241,7 @@ class FileExportTest {
     @Test fun dismissingFolderPickerDoesNotStartATransfer() {
         val reads = AtomicInteger()
         val conn = object : ExportConnection() {
-            override suspend fun readFileBytes(address: String, path: String, offset: ULong, length: UInt): RemoteFileBytes {
+            override suspend fun readExportBytes(address: String, path: String, offset: ULong, length: UInt): RemoteFileBytes {
                 reads.incrementAndGet()
                 return RemoteFileBytes(byteArrayOf(), 0u, 0u, true)
             }
@@ -256,7 +262,7 @@ class FileExportTest {
         val entered = CompletableDeferred<Unit>()
         val cancelled = CompletableDeferred<Unit>()
         val conn = object : ExportConnection() {
-            override suspend fun readFileBytes(address: String, path: String, offset: ULong, length: UInt): RemoteFileBytes {
+            override suspend fun readExportBytes(address: String, path: String, offset: ULong, length: UInt): RemoteFileBytes {
                 entered.complete(Unit)
                 try { awaitCancellation() } finally { cancelled.complete(Unit) }
             }

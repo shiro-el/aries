@@ -1,6 +1,6 @@
 package io.github.shiroel.aries.dictation
 
-import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -53,8 +53,10 @@ fun DictationSettings(store: DictationStore? = null) {
             onSelect = { save(options.copy(language = it)) },
         )
         Text(stringResource(R.string.dictation_model_label))
-        DictationModel.entries.forEach { model ->
-            ModelRow(model, options.model == model) { save(options.copy(model = model)) }
+        Column(Modifier.selectableGroup()) {
+            DictationModel.entries.forEach { model ->
+                ModelRow(model, options.model == model) { save(options.copy(model = model)) }
+            }
         }
         OutlinedTextField(
             value = options.vocabulary, onValueChange = { save(options.copy(vocabulary = it)) },
@@ -68,12 +70,7 @@ fun DictationSettings(store: DictationStore? = null) {
 
 @Composable
 private fun ModelRow(model: DictationModel, selected: Boolean, onClick: () -> Unit) {
-    androidx.compose.foundation.layout.Row(
-        Modifier.fillMaxWidth().testTag("dictation-model:${model.name}")
-            .selectable(selected = selected, role = androidx.compose.ui.semantics.Role.RadioButton, onClick = onClick),
-        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-    ) {
-        androidx.compose.material3.RadioButton(selected = selected, onClick = null)
-        Text(model.apiName) // i18n-ok: Groq model identifiers
-    }
+    io.github.shiroel.aries.ui.SingleChoiceRow(
+        selected, onClick, Modifier.fillMaxWidth().testTag("dictation-model:${model.name}"),
+    ) { Text(model.apiName) } // i18n-ok: Groq model identifiers
 }

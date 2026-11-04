@@ -21,7 +21,7 @@ fun AgentViewToggle(current: AgentView, onView: (AgentView) -> Unit) {
     ConsoleSegments(
         options = listOf(AgentView.TERMINAL, AgentView.CHAT), selected = current, onSelect = onView,
         modifier = Modifier.padding(end = 8.dp).testTag(AGENT_VIEW_TOGGLE),
-        height = 32.dp, segmentWidth = 60.dp, underlineHeight = 2.dp,
+        height = 48.dp, segmentWidth = 104.dp,
         textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp),
         inactiveColor = MaterialTheme.colorScheme.onSurfaceVariant,
     ) { view ->

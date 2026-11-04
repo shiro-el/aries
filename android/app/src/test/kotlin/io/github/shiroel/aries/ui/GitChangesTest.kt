@@ -86,7 +86,7 @@ class GitChangesTest {
         compose.onNodeWithText(str(R.string.git_clean)).assertExists()
     }
 
-    @Test fun largeDiffRevealsAnotherChunkAndShowsTheHostLimit() {
+    @Test fun largeDiffScrollsPastTwoHundredLinesAndShowsTheHostLimit() {
         val (core, _) = openAgent()
         compose.runOnIdle {
             core.connection!!.gitPatch = GitDiff((1..205).map { GitDiffLine("+line $it", null, it.toUInt()) }, false, true)
@@ -96,8 +96,6 @@ class GitChangesTest {
         compose.onNodeWithText("x").performClick()
         compose.onNodeWithText(str(R.string.git_truncated)).assertExists()
         compose.onNodeWithText("+line 205").assertDoesNotExist()
-        compose.onNodeWithTag("git-diff-lines").performScrollToIndex(200)
-        compose.onNodeWithText(str(R.string.git_more_button)).performClick()
         compose.onNodeWithTag("git-diff-lines").performScrollToIndex(204)
         compose.onNodeWithText("+line 205").assertExists()
     }
