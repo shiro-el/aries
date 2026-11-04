@@ -566,6 +566,7 @@
     <string name="chat_copy_all">모두 복사</string>
     <string name="chat_select_text">텍스트 선택</string>
     <string name="chat_thinking">생각 과정</string>
+    <string name="chat_tool_done">완료</string>
     <string name="chat_tool_running">실행 중</string>
     <string name="chat_tool_failed">실패</string>
     <!-- Agent usage and context (193) -->

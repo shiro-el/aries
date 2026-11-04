@@ -251,11 +251,13 @@ class ChatScreenTest {
     )
 
     @Test
-    fun anEditShowsAsItsDiffWithoutExpanding() {
+    fun anEditShowsItsDiffWhenExpanded() {
         val core = FakeCore()
         openChat(core)
         core.pushChat(ChatSnapshot(listOf(edit(listOf(" keep", "-hi", "+hello"))), ChatStatus.LIVE, null))
         compose.waitForIdle()
+        compose.onNodeWithText("-hi", substring = true).assertDoesNotExist()
+        compose.onNodeWithContentDescription(str(R.string.chat_tool_expand_label, "Edit")).performClick()
         compose.onNodeWithText("-hi", substring = true).assertExists()
         compose.onNodeWithText("+hello", substring = true).assertExists()
         compose.onNodeWithText("@@ -1 +1 @@", substring = true).assertExists()
@@ -264,15 +266,14 @@ class ChatScreenTest {
     }
 
     @Test
-    fun aHugeDiffShowsAPreviewUntilTapped() {
+    fun aHugeDiffKeepsAllRecordedLinesAvailableWhenExpanded() {
         val core = FakeCore()
         openChat(core)
         val lines = (1..2000).map { "+line $it" }
         core.pushChat(ChatSnapshot(listOf(edit(lines, truncated = true)), ChatStatus.LIVE, null))
         compose.waitForIdle()
-        compose.onNodeWithText("+line 1\n", substring = true).assertExists()
+        compose.onNodeWithText("+line 1\n", substring = true).assertDoesNotExist()
         compose.onNodeWithText("+line 2000", substring = true).assertDoesNotExist()
-        compose.onNodeWithText(str(R.string.chat_diff_more, 2000 - 12)).assertExists()
 
         compose.onNodeWithContentDescription(str(R.string.chat_tool_expand_label, "Edit")).performClick()
         compose.waitForIdle()
