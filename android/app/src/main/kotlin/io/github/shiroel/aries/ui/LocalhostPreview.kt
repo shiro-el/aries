@@ -102,7 +102,14 @@ internal fun PreviewChips(preview: LocalhostPreview) {
 
 /** The browser only exists while STARTED; disposal waits for tunnel cancellation. */
 @Composable
-internal fun LocalhostPreviewBrowser(preview: LocalhostPreview, link: HostLink?, modifier: Modifier = Modifier, change: Any? = null) {
+internal fun LocalhostPreviewBrowser(
+    preview: LocalhostPreview,
+    link: HostLink?,
+    modifier: Modifier = Modifier,
+    change: Any? = null,
+    captureEnabled: Boolean = true,
+    onAttachCapture: ((SharedContent, () -> Unit) -> Boolean)? = null,
+) {
     val port = preview.selected ?: return
     BackHandler { preview.selected = null }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -116,6 +123,8 @@ internal fun LocalhostPreviewBrowser(preview: LocalhostPreview, link: HostLink?,
     var failed by remember(port, link?.connection) { mutableStateOf(false) }
     var retry by remember { mutableIntStateOf(0) }
     val connection = link?.connection
+    var capture by remember(port, connection) { mutableStateOf<PreviewCapture?>(null) }
+    var captureFailed by remember(port, connection) { mutableStateOf(false) }
     LaunchedEffect(lifecycle, port, connection, retry) {
         if (connection == null) return@LaunchedEffect
         // Cancel directly on STOP; a stopped Activity may no longer recompose.
@@ -143,13 +152,36 @@ internal fun LocalhostPreviewBrowser(preview: LocalhostPreview, link: HostLink?,
         }
         link?.let { ConnectionNotice(it) }
         Text(stringResource(R.string.preview_address, port.toInt()), Modifier.padding(horizontal = 12.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TextButton(onClick = { webView?.reload() }, enabled = forward != null) { Text(stringResource(R.string.preview_reload)) }
             TextButton(onClick = { preview.desktop = !preview.desktop }) {
                 Text(stringResource(if (preview.desktop) R.string.preview_mobile else R.string.preview_desktop))
             }
+            if (onAttachCapture != null) {
+                TextButton(enabled = captureEnabled && webView != null && forward != null, onClick = {
+                    captureFailed = false
+                    try {
+                        val view = checkNotNull(webView)
+                        val origin = checkNotNull(forward).url()
+                        val url = view.url ?: origin
+                        check(previewOriginAllows(origin, url))
+                        check(view.width > 0 && view.height > 0)
+                        val bitmap = android.graphics.Bitmap.createBitmap(view.width, view.height, android.graphics.Bitmap.Config.ARGB_8888)
+                        bitmap.eraseColor(android.graphics.Color.WHITE)
+                        try { view.draw(android.graphics.Canvas(bitmap)) }
+                        catch (e: Exception) { bitmap.recycle(); throw e }
+                        val page = java.net.URI(url)
+                        // The Agent cannot reach the phone's ephemeral tunnel port.
+                        val hostUrl = "http://127.0.0.1:$port" + page.rawPath.orEmpty().ifEmpty { "/" } +
+                            (page.rawQuery?.let { "?$it" } ?: "") + (page.rawFragment?.let { "#$it" } ?: "")
+                        capture = PreviewCapture(bitmap, hostUrl, preview.desktop)
+                    } catch (_: Exception) { captureFailed = true }
+                }) { Text(stringResource(R.string.preview_capture_button)) }
+            }
             TextButton(onClick = { preview.selected = null }) { Text(stringResource(R.string.preview_close)) }
         }
+        if (captureFailed) Text(stringResource(R.string.preview_capture_failed), Modifier.padding(horizontal = 12.dp),
+            color = MaterialTheme.colorScheme.error)
         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             Text(stringResource(R.string.preview_auto_refresh), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
             Switch(checked = preview.autoRefresh, onCheckedChange = { preview.autoRefresh = it })
@@ -165,6 +197,9 @@ internal fun LocalhostPreviewBrowser(preview: LocalhostPreview, link: HostLink?,
         } else if (started) {
             CircularProgressIndicator(Modifier.padding(12.dp))
         }
+    }
+    capture?.let { image ->
+        if (onAttachCapture != null) PreviewCaptureEditor(image, onDismiss = { capture = null }, onAttach = onAttachCapture)
     }
 }
 
