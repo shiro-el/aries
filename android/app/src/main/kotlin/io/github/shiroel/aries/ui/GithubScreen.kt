@@ -7,6 +7,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,38 +24,41 @@ import androidx.compose.ui.window.DialogProperties
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.*
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.launch
 
 /** A repository is resolved once per opening. All later requests use that pinned identity. */
 @Composable
 internal fun GithubDialog(link: HostLink?, terminal: TerminalInfo, onDismiss: () -> Unit) {
-    var repository by remember { mutableStateOf<GithubRepository?>(null) }
-    var kind by remember { mutableStateOf(GithubKind.ISSUE) }
-    var state by remember { mutableStateOf(GithubState.OPEN) }
-    var input by remember { mutableStateOf("") }
-    var search by remember { mutableStateOf("") }
-    var page by remember { mutableIntStateOf(1) }
-    var revision by remember { mutableIntStateOf(0) }
-    var result by remember { mutableStateOf<GithubPage?>(null) }
-    var error by remember { mutableStateOf<Int?>(null) }
-    var loading by remember { mutableStateOf(true) }
-    var selected by remember { mutableStateOf<GithubItem?>(null) }
-    var prFile by remember(selected?.number) { mutableStateOf<GithubPrFile?>(null) }
-    var writing by remember { mutableStateOf(false) }
+    val fallbackScope = rememberCoroutineScope()
+    val model = link?.github(terminal.address) ?: remember { GithubModel(fallbackScope) }
+    var repository by model::repository
+    var kind by model::kind
+    var state by model::state
+    var input by model::input
+    var search by model::search
+    var page by model::page
+    var revision by model::revision
+    var result by model::result
+    var error by model::error
+    var loading by model::loading
+    var selected by model::selected
+    var prFile by model::prFile
+    val writing = repository?.let { repo -> selected?.let { model.conversation(repo, it.number).busy } } == true
+    val listScroll = rememberLazyListState()
     val uriHandler = LocalUriHandler.current
     val connection = if (link?.state == LinkState.Up) link.connection else null
     fun back() { if (!writing) {
         if (prFile != null) prFile = null else if (selected != null) selected = null else onDismiss()
     } }
-    LaunchedEffect(connection, kind, state, search, page, revision, selected?.number) {
-        if (selected != null) { loading = false; return@LaunchedEffect }
+    LaunchedEffect(connection, kind, state, search, page, revision) {
         error = null
-        result = null
+        val query = GithubQuery(kind, state, search, page)
+        if (model.resultQuery != query) result = null
         loading = true
         try {
             val conn = connection ?: throw CoreException.Closed()
             val repo = repository ?: conn.githubRepository(terminal.address).also { repository = it }
             result = conn.githubList(repo, kind, state, search, page.toUInt())
+            model.resultQuery = query
         } catch (e: CancellationException) { throw e
         } catch (e: CoreException) { error = githubError(e)
         } finally { loading = false }
@@ -63,7 +67,7 @@ internal fun GithubDialog(link: HostLink?, terminal: TerminalInfo, onDismiss: ()
         BackHandler(onBack = ::back)
         Surface(Modifier.fillMaxSize().testTag("github-dialog")) {
             Column(Modifier.fillMaxSize().safeDrawingPadding().imePadding()) {
-                Row(Modifier.fillMaxWidth().height(56.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().heightIn(min = 56.dp), verticalAlignment = Alignment.CenterVertically) {
                     ActionIcon(R.drawable.ic_arrow_left, R.string.back_button, ::back, enabled = !writing, modifier = Modifier.testTag("github-back"))
                     Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -86,7 +90,7 @@ internal fun GithubDialog(link: HostLink?, terminal: TerminalInfo, onDismiss: ()
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 val opened = selected
                 if (opened != null) {
-                    GithubConversation(connection, repository!!, opened, revision, { writing = it }, prFile, { prFile = it }, Modifier.weight(1f))
+                    GithubConversation(model.conversation(repository!!, opened.number), connection, repository!!, opened, revision, prFile, { prFile = it }, Modifier.weight(1f))
                 } else {
                     SecondaryTabRow(selectedTabIndex = kind.ordinal) {
                         GithubKind.entries.forEach { value ->
@@ -122,7 +126,7 @@ internal fun GithubDialog(link: HostLink?, terminal: TerminalInfo, onDismiss: ()
                     error?.let { Text(stringResource(it), Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error) }
                     if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
                     if (result?.limited == true) Text(stringResource(R.string.github_limited), Modifier.padding(12.dp))
-                    LazyColumn(Modifier.weight(1f).testTag("github-items")) {
+                    LazyColumn(Modifier.weight(1f).testTag("github-items"), state = listScroll) {
                         if (result?.items?.isEmpty() == true) item { Text(stringResource(R.string.github_empty), Modifier.padding(16.dp)) }
                         items(result?.items.orEmpty(), key = { it.number.toString() }) { item ->
                             GithubItemHeading(item, Modifier.fillMaxWidth().clickable { selected = item }.padding(16.dp))
@@ -143,75 +147,33 @@ internal fun GithubDialog(link: HostLink?, terminal: TerminalInfo, onDismiss: ()
 /** Conversation and draft are independent of list filters, pages, and preview state. */
 @Composable
 private fun GithubConversation(
-    connection: HostConnection?, repo: GithubRepository, selected: GithubItem,
-    refresh: Int, onWriting: (Boolean) -> Unit,
+    model: GithubConversationModel, connection: HostConnection?, repo: GithubRepository, selected: GithubItem,
+    refresh: Int,
     prFile: GithubPrFile?, onPrFile: (GithubPrFile?) -> Unit, modifier: Modifier,
 ) {
     var tab by remember(selected.number) { mutableStateOf(GithubPrTab.Conversation) }
-    var detail by remember(selected.number) { mutableStateOf<GithubDetail?>(null) }
-    var error by remember(selected.number) { mutableStateOf<Int?>(null) }
-    var draftError by remember(selected.number) { mutableStateOf<Int?>(null) }
-    var success by remember(selected.number) { mutableStateOf<Int?>(null) }
-    var draft by remember(selected.number) { mutableStateOf("") }
-    var draftReady by remember(selected.number) { mutableStateOf(false) }
-    var preview by remember(selected.number) { mutableStateOf(false) }
-    var busy by remember { mutableStateOf(false) }
-    var revision by remember { mutableIntStateOf(0) }
-    val scope = rememberCoroutineScope()
+    var detail by model::detail
+    var detailError by model::readError
+    val error = model.error ?: detailError
+    val draftError = model.draftError
+    val success = model.success
+    val draft = model.draft
+    val draftReady = model.draftReady
+    var preview by model::preview
+    val busy = model.busy
+    val revision = model.revision
     val startTask = LocalStartTask.current
-    LaunchedEffect(connection, repo, selected.number) {
-        draftReady = false
-        try {
-            val conn = connection ?: throw CoreException.Closed()
-            draft = conn.githubLoadDraft(repo, selected.number)
-            draftError = null
-            draftReady = true
-        } catch (e: CoreException) { draftError = R.string.github_draft_failed }
-    }
+    LaunchedEffect(connection, model) { model.attach(connection) }
+    LaunchedEffect(connection, repo, selected.number, refresh) { onPrFile(null) }
     LaunchedEffect(connection, repo, selected.number, refresh, revision) {
-        onPrFile(null)
-        error = null
-        detail = null
+        detailError = null
+        model.refreshing = true
         try {
             val conn = connection ?: throw CoreException.Closed()
             detail = conn.githubDetail(repo, selected.number)
         } catch (e: CancellationException) { throw e
-        } catch (e: CoreException) { error = githubError(e) }
-    }
-    fun changeDraft(text: String) {
-        if (text.toByteArray(Charsets.UTF_8).size > 65536) { draftError = R.string.github_draft_limit; return }
-        draft = text
-        draftError = null
-        try { connection?.githubSaveDraft(repo, selected.number, text) ?: throw CoreException.Closed()
-        } catch (e: CoreException) { draftError = R.string.github_draft_failed }
-    }
-    fun write(comment: Boolean) {
-        val conn = connection ?: return
-        val current = detail ?: return
-        if (busy) return
-        busy = true
-        onWriting(true)
-        error = null
-        success = null
-        scope.launch {
-            try {
-                if (comment) {
-                    conn.githubComment(repo, current.item.kind, selected.number, draft)
-                    changeDraft("")
-                    preview = false
-                    success = R.string.github_sent
-                } else {
-                    conn.githubSetIssueClosed(repo, selected.number, current.item.state == "open")
-                    success = R.string.github_state_updated
-                }
-                revision++
-            } catch (e: CancellationException) { throw e
-            } catch (e: CoreException) {
-                // Reads may reconnect/retry; writes never do. A lost reply may
-                // mean GitHub accepted the comment, so preserve it and explain.
-                error = if (e is CoreException.Rpc && e.kind in listOf("github_missing", "github_auth")) githubError(e) else R.string.github_unknown
-            } finally { busy = false; onWriting(false) }
-        }
+        } catch (e: CoreException) { detailError = githubError(e)
+        } finally { model.refreshing = false }
     }
     val entries = remember(detail, preview, draft) {
         if (preview) listOf(ChatEntry("preview", null, ChatEntryBody.Agent(draft)))
@@ -244,7 +206,7 @@ private fun GithubConversation(
                     val closed = detail?.item?.state != "open"
                     ActionMenuItem(stringResource(if (closed) R.string.github_reopen_issue else R.string.github_close_issue),
                         if (closed) R.drawable.ic_history else R.drawable.ic_x,
-                        { actions = false; write(false) }, enabled = detail != null && !busy && connection != null)
+                        { actions = false; model.write(connection, false) }, enabled = detail != null && !busy && connection != null)
                 }
             }
         }
@@ -270,7 +232,7 @@ private fun GithubConversation(
         } else {
             error?.let { Text(stringResource(it), Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.error) }
             success?.let { Text(stringResource(it), Modifier.padding(horizontal = 16.dp)) }
-            if (detail == null && error == null || busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (model.refreshing || busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             val thread = detail
             LazyColumn(Modifier.weight(1f).testTag("github-conversation")) {
                 if (preview) {
@@ -293,14 +255,18 @@ private fun GithubConversation(
                     }
                 }
             }
-            draftError?.let { Text(stringResource(it), Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.error) }
-            if (!preview) OutlinedTextField(value = draft, onValueChange = ::changeDraft,
+            draftError?.let {
+                Text(stringResource(it), Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.error)
+                if (it != R.string.github_draft_limit) TextButton(onClick = model::retryDraft, enabled = !busy,
+                    modifier = Modifier.testTag("github-draft-retry")) { Text(stringResource(R.string.github_draft_retry)) }
+            }
+            if (!preview) OutlinedTextField(value = draft, onValueChange = model::changeDraft,
                 enabled = draftReady && !busy && connection != null, minLines = 2, maxLines = 5,
                 label = { Text(stringResource(R.string.github_comment_hint)) },
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag("github-comment"))
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                 TextButton(onClick = { preview = !preview }, enabled = draftReady && !busy) { Text(stringResource(if (preview) R.string.github_edit else R.string.github_preview)) }
-                Button(onClick = { write(true) }, enabled = draftReady && draft.isNotBlank() && detail != null && connection != null && !busy, modifier = Modifier.padding(8.dp)) {
+                Button(onClick = { model.write(connection, true) }, enabled = draftReady && draft.isNotBlank() && detail != null && connection != null && !busy, modifier = Modifier.padding(8.dp)) {
                     Text(stringResource(R.string.github_send))
                 }
             }
