@@ -58,8 +58,7 @@ internal fun FilesHeader(
                     enabled = exportEnabled, onClick = { menu = false; action() }) }
                 onShare?.let { action -> DropdownMenuItem(text = { Text(stringResource(R.string.files_share_button)) },
                     enabled = exportEnabled, onClick = { menu = false; action() }) }
-                onWrap?.let { action -> DropdownMenuItem(text = { Text(stringResource(R.string.files_wrap_lines)) },
-                    leadingIcon = { if (wrap) Icon(painterResource(R.drawable.ic_check), null, Modifier.size(20.dp)) },
+                onWrap?.let { action -> SwitchMenuItem(checked = wrap, text = { Text(stringResource(R.string.files_wrap_lines)) },
                     onClick = { menu = false; action() }) }
                 DropdownMenuItem(text = { Text(stringResource(R.string.files_close_button)) }, onClick = { menu = false; onClose() })
             }

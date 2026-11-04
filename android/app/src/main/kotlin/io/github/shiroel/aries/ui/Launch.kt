@@ -223,13 +223,13 @@ fun LaunchDialog(
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (folder != null) {
                             item(key = "folder") {
-                                TextButton(onClick = { form.cwd = folder }) {
+                                ConsoleChoice(selected = form.cwd == folder, onClick = { form.cwd = folder }) {
                                     Text(stringResource(R.string.launch_cwd_space_folder, folder))
                                 }
                             }
                         }
                         items(form.recentCwds.filter { it != folder }, key = { "recent:$it" }) { dir ->
-                            TextButton(onClick = { form.cwd = dir }) { Text(dir) }
+                            ConsoleChoice(selected = form.cwd == dir, onClick = { form.cwd = dir }) { Text(dir) }
                         }
                     }
                 }

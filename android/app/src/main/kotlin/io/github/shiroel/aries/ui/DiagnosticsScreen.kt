@@ -81,9 +81,9 @@ fun DiagnosticsScreen(history: DiagnosticsModel, hosts: List<Host>) {
 
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         Text(title, Modifier.padding(top = 16.dp), style = MaterialTheme.typography.titleMedium)
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             (listOf(null) + DiagnosticSource.entries).forEach { option ->
-                FilterChip(selected = source == option, onClick = { source = option; notice = 0 },
+                SingleChoiceChip(selected = source == option, onClick = { source = option; notice = 0 },
                     label = { Text(stringResource(option?.label() ?: R.string.diagnostics_all)) },
                     modifier = Modifier.testTag("diagnostics-source:${option ?: "ALL"}"))
             }
@@ -94,17 +94,17 @@ fun DiagnosticsScreen(history: DiagnosticsModel, hosts: List<Host>) {
                     Text(hostId?.let { names[it] } ?: stringResource(R.string.diagnostics_all_hosts))
                 }
                 DropdownMenu(expanded = choosingHost, onDismissRequest = { choosingHost = false }) {
-                    DropdownMenuItem(text = { Text(stringResource(R.string.diagnostics_all_hosts)) },
+                    SingleChoiceMenuItem(selected = hostId == null, text = { Text(stringResource(R.string.diagnostics_all_hosts)) },
                         onClick = { hostId = null; choosingHost = false; notice = 0 })
                     hosts.forEach { host ->
-                        DropdownMenuItem(text = { Text(host.name) }, modifier = Modifier.testTag("diagnostics-host:${host.id}"),
+                        SingleChoiceMenuItem(selected = hostId == host.id, text = { Text(host.name) }, modifier = Modifier.testTag("diagnostics-host:${host.id}"),
                             onClick = { hostId = host.id; choosingHost = false; notice = 0 })
                     }
                 }
             }
-            Checkbox(checked = failures, onCheckedChange = { failures = it; notice = 0 }, modifier = Modifier.testTag("diagnostics-failures").semantics { contentDescription = failuresLabel })
-            Text(failuresLabel, style = MaterialTheme.typography.bodySmall)
         }
+        SwitchRow(failuresLabel, failures, { failures = it; notice = 0 },
+            Modifier.fillMaxWidth().testTag("diagnostics-failures"))
         Row {
             TextButton(onClick = { history.refresh(); notice = 0 }, enabled = !history.loading) {
                 Text(stringResource(R.string.diagnostics_refresh))

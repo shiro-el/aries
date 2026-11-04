@@ -5,6 +5,9 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.material3.RadioButton
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,8 +25,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -45,14 +46,18 @@ internal fun statusMessage(status: AgentStatus?): String? = when (status) {
     else -> null
 }
 
-/** Square selection used by Browse Tabs and the Launch form. */
+/** Compact single choices in Browse, worktrees and Launch. */
 @Composable
 internal fun ConsoleChoice(selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, label: @Composable () -> Unit) {
-    val accent = MaterialTheme.colorScheme.primary
-    TextButton(onClick = onClick, enabled = enabled, shape = RectangleShape,
-        modifier = modifier.semantics { this.selected = selected }.drawBehind {
-            if (selected) drawLine(accent, Offset(0f, size.height), Offset(size.width, size.height), 3.dp.toPx())
-        }) { label() }
+    Row(
+        modifier.heightIn(min = 48.dp).selectable(selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        label()
+        RadioButton(selected, onClick = null, enabled = enabled, modifier = Modifier.size(24.dp))
+    }
 }
 
 /** Parents retain context; descendants read as one compact program/name/status line. */

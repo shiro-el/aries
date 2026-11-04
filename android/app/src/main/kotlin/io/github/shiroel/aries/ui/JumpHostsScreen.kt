@@ -13,7 +13,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -137,9 +136,9 @@ private fun KeyPicker(labelRes: Int, keys: List<KeyInfo>, selected: String?, onP
     Box {
         TextButton(onClick = { open = true }) { Text(stringResource(labelRes, nameOf(selected))) }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            DropdownMenuItem(text = { Text(defaultLabel) }, onClick = { onPick(null); open = false })
+            SingleChoiceMenuItem(selected = selected == null, text = { Text(defaultLabel) }, onClick = { onPick(null); open = false })
             keys.filter { it.label.isNotEmpty() }.forEach { k ->
-                DropdownMenuItem(text = { Text(k.label) }, onClick = { onPick(k.id); open = false })
+                SingleChoiceMenuItem(selected = selected == k.id, text = { Text(k.label) }, onClick = { onPick(k.id); open = false })
             }
         }
     }

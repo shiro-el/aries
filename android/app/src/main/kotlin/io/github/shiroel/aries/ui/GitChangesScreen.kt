@@ -40,8 +40,8 @@ internal fun ColumnScope.GitFileDiff(
     }
     error?.let { Text(stringResource(R.string.git_error, it), color = MaterialTheme.colorScheme.error) }
     Row {
-        if (selectedFile.staged) FilterChip(selected = kind == GitDiffKind.STAGED, onClick = { kind = GitDiffKind.STAGED }, label = { Text(stringResource(R.string.git_staged)) })
-        if (selectedFile.unstaged) FilterChip(selected = kind == GitDiffKind.UNSTAGED, onClick = { kind = GitDiffKind.UNSTAGED }, label = { Text(stringResource(R.string.git_unstaged)) })
+        if (selectedFile.staged) SingleChoiceChip(selected = kind == GitDiffKind.STAGED, onClick = { kind = GitDiffKind.STAGED }, label = { Text(stringResource(R.string.git_staged)) })
+        if (selectedFile.unstaged) SingleChoiceChip(selected = kind == GitDiffKind.UNSTAGED, onClick = { kind = GitDiffKind.UNSTAGED }, label = { Text(stringResource(R.string.git_unstaged)) })
         if (selectedFile.untracked) Text(stringResource(R.string.git_untracked), Modifier.padding(12.dp))
     }
     if (onSend != null) {

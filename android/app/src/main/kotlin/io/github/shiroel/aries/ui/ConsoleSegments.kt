@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -26,7 +27,6 @@ fun <T> ConsoleSegments(
     modifier: Modifier = Modifier.fillMaxWidth(),
     height: Dp = 48.dp,
     segmentWidth: Dp? = null,
-    underlineHeight: Dp = 3.dp,
     textStyle: TextStyle = MaterialTheme.typography.labelLarge,
     inactiveColor: Color = MaterialTheme.colorScheme.onSurface,
     label: @Composable (T) -> String,
@@ -37,15 +37,17 @@ fun <T> ConsoleSegments(
             if (index > 0) Box(Modifier.width(1.dp).height(height).background(colors.outline))
             val active = selected == option
             val width = if (segmentWidth == null) Modifier.weight(1f) else Modifier.width(segmentWidth)
-            Box(
-                width.height(height)
+            Row(
+                width.heightIn(min = height)
                     .background(if (active) colors.surfaceContainerHighest else colors.surface)
-                    .selectable(active, role = Role.RadioButton, onClick = { if (!active) onSelect(option) }),
-                contentAlignment = Alignment.Center,
+                    .selectable(active, role = Role.RadioButton, onClick = { if (!active) onSelect(option) })
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Text(label(option), color = if (active) colors.primary else inactiveColor,
+                Text(label(option), Modifier.weight(1f), color = if (active) colors.primary else inactiveColor,
                     style = textStyle, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal)
-                if (active) Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(underlineHeight).background(colors.primary))
+                RadioButton(active, onClick = null, modifier = Modifier.size(24.dp))
             }
         }
     }

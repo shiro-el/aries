@@ -3,7 +3,6 @@ package io.github.shiroel.aries.speech
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -101,5 +100,5 @@ fun ReadAloudSettings(state: ReadAloudState) {
 
 @Composable
 private fun VoiceRow(label: String, selected: Boolean, onClick: () -> Unit) {
-    Text(label, Modifier.fillMaxWidth().selectable(selected, role = Role.RadioButton, onClick = onClick).padding(vertical = 12.dp))
+    io.github.shiroel.aries.ui.SingleChoiceRow(selected, onClick) { Text(label) }
 }

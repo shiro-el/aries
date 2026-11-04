@@ -5,7 +5,6 @@ import android.icu.util.ULocale
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -15,7 +14,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
 import java.util.Locale
@@ -96,12 +94,5 @@ private fun String.languageSearchKey() = filterNot { it.isWhitespace() }.lowerca
 
 @Composable
 private fun LanguageRow(label: String, selected: Boolean, onClick: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().heightIn(min = 48.dp)
-            .selectable(selected, role = Role.RadioButton, onClick = onClick).padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        RadioButton(selected = selected, onClick = null)
-        Text(label, Modifier.padding(end = 8.dp))
-    }
+    SingleChoiceRow(selected, onClick) { Text(label) }
 }

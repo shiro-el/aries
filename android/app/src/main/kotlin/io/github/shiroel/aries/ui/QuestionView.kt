@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -78,7 +80,7 @@ internal fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question
                 question.options.forEachIndexed { i, option ->
                     ConsoleChatChoice(i + 1, option.label, option.description,
                         stringResource(R.string.chat_question_option_label, option.label),
-                        enabled = enabled, selected = chat.picks[id]?.getOrNull(part)?.contains(i) == true,
+                        enabled = enabled, multi = question.multi, selected = chat.picks[id]?.getOrNull(part)?.contains(i) == true,
                         onClick = { chat.pick(id, q, part, i) })
                 }
                 val inputLabel = stringResource(R.string.chat_question_text_label, question.text)
@@ -107,11 +109,13 @@ internal fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        if (selected) Icon(painterResource(R.drawable.ic_check), contentDescription = null,
-                            tint = colors.onPrimaryContainer, modifier = Modifier.size(18.dp))
-                        SearchableChatText(option.label, "question:$part:option:$i",
-                            style = if (selected) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall,
-                            color = if (selected) colors.onPrimaryContainer else colors.onSurfaceVariant.copy(alpha = .65f))
+                        Column(Modifier.weight(1f)) {
+                            SearchableChatText(option.label, "question:$part:option:$i",
+                                style = if (selected) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall,
+                                color = if (selected) colors.onPrimaryContainer else colors.onSurfaceVariant.copy(alpha = .65f))
+                        }
+                        if (question.multi) Checkbox(selected, onCheckedChange = null, modifier = Modifier.size(24.dp))
+                        else RadioButton(selected, onClick = null, modifier = Modifier.size(24.dp))
                     }
                 }
                 answer?.text?.let { text ->
