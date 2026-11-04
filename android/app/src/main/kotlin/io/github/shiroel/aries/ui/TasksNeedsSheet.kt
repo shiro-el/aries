@@ -85,6 +85,10 @@ internal class TasksNeedsQueue(items: List<TaskNeed>, start: Int = 0) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun TasksNeedsSheet(model: HostsModel, board: AgentBoard, queue: TasksNeedsQueue, onDismiss: () -> Unit) {
+    // These observers outlive keyed cards and run before completion advances the cursor.
+    val questionChats = remember(queue) { mutableStateListOf<ChatModel>() }
+    CallReplyAnnouncements(model.calls, keys = queue.items.filterIsInstance<TaskNeed.Call>().map { it.entry.key }.toSet())
+    questionChats.forEach { chat -> key(chat) { QuestionAnnouncements(chat, queueCompletion = true) } }
     val current = queue.current
     // Home appends arrivals in its SideEffect before this completion effect runs.
     LaunchedEffect(current) { if (queue.current == null) onDismiss() }
@@ -108,7 +112,7 @@ internal fun TasksNeedsSheet(model: HostsModel, board: AgentBoard, queue: TasksN
                         val resolved = entry.call.answer?.state == CallAnswerState.DELIVERED ||
                             entry.call.answer == null && !model.calls.isTaskWaiting(entry, caller)
                         LaunchedEffect(resolved) { if (resolved) queue.resolve(current.key) }
-                        ConsoleChatCall(entry, model.calls, announce = true)
+                        ConsoleChatCall(entry, model.calls)
                         if (entry.call.choices.isEmpty() && entry.call.answer == null) TextButton(onClick = {
                             model.calls.closeThreadCall(entry)
                             queue.resolve(current.key)
@@ -119,7 +123,8 @@ internal fun TasksNeedsSheet(model: HostsModel, board: AgentBoard, queue: TasksN
                             model.openPushedAgent(entry.host.id, entry.call.terminal!!, openChat = true)
                         }) { Text(stringResource(R.string.tasks_open_task)) }
                     }
-                    is TaskNeed.Agent -> TasksQuestion(model, board, current, onAnswered = { queue.resolve(current.key) })
+                    is TaskNeed.Agent -> TasksQuestion(model, board, current, onChat = { if (it !in questionChats) questionChats.add(it) },
+                        onAnswered = { queue.resolve(current.key) })
                 }
                 TextButton(onClick = queue::next, modifier = Modifier.testTag("tasks-needs-next")) {
                     Text(stringResource(R.string.tasks_needs_next))
@@ -131,7 +136,7 @@ internal fun TasksNeedsSheet(model: HostsModel, board: AgentBoard, queue: TasksN
 
 @Composable
 private fun TasksQuestion(model: HostsModel, board: AgentBoard, need: TaskNeed.Agent,
-    onAnswered: () -> Unit) {
+    onChat: (ChatModel) -> Unit, onAnswered: () -> Unit) {
     val original = need.entry
     val entry = board.find(original.key) ?: original.copy(live = false)
     val link = board.links[entry.host.id]
@@ -144,7 +149,7 @@ private fun TasksQuestion(model: HostsModel, board: AgentBoard, need: TaskNeed.A
     }
     val chat = retainedChat
     LaunchedEffect(chat) {
-        if (chat == null) model.stopTaskQuestion() else model.startTaskQuestion(chat)
+        if (chat == null) model.stopTaskQuestion() else { onChat(chat); model.startTaskQuestion(chat) }
     }
     // A key receipt is not confirmation. Keep the displayed question (and its
     // Unconfirmed recovery UI) until transcript completion or a live status change.
@@ -170,7 +175,7 @@ private fun TasksQuestion(model: HostsModel, board: AgentBoard, need: TaskNeed.A
                 Text(it, Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.error)
             }
         }
-        question != null && chat != null -> QuestionView(chat, question.id, question.body as ChatEntryBody.Question, announce = true)
+        question != null && chat != null -> QuestionView(chat, question.id, question.body as ChatEntryBody.Question)
         snapshot == null -> ScreenLoading(stringResource(R.string.chat_loading), compact = true, onRetry = { chat?.retryConnection() })
         else -> {
             Text(stringResource(R.string.tasks_needs_open), Modifier.padding(16.dp))

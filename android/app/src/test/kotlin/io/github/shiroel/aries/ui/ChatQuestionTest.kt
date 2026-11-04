@@ -84,6 +84,10 @@ class ChatQuestionTest {
                 ChatQuestionOption("Deny", null)))), ChatToolStatus.RUNNING, null))
         core.pushChat(ChatSnapshot(listOf(permission), ChatStatus.LIVE, null))
         compose.waitForIdle()
+        // D104: activating a lone permission choice sends an answer immediately.
+        compose.onNode(hasContentDescription(str(R.string.chat_question_option_label, str(R.string.chat_permission_allow)), substring = true) and hasText(str(R.string.chat_permission_allow)))
+            .assert(SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.Role,
+                androidx.compose.ui.semantics.Role.Button))
         System.getenv("ARIES_PERMISSION_RENDER_DIR")?.let { directory ->
             java.io.File(directory).mkdirs()
             java.io.File(directory, "permission-card.png").outputStream().use {
