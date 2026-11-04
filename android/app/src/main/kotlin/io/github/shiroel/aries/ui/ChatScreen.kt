@@ -1006,6 +1006,7 @@ fun ChatScreen(
     onView: (AgentView) -> Unit = {},
     calls: CallsModel? = null,
 ) {
+    val thread = LocalThreadChat.current
     val readAloud = io.github.shiroel.aries.speech.rememberReadAloud(chat)
     val context = androidx.compose.ui.platform.LocalContext.current
     LaunchedEffect(readAloud.notice) {
@@ -1022,6 +1023,8 @@ fun ChatScreen(
     }
     val entries by entriesState
     val transcript = remember(chat, entriesState, markdownState) { ChatTranscript(entriesState, markdownState) }
+    val toolGroups = if (thread != null) threadToolGroups(transcript.contents) else emptyList()
+    val answerQuestion = if (thread != null) threadAnswerQuestion(chat) else null
     val dialogs = remember(chat) { ChatDialogState() }
     val horizontalScrolls = remember(chat) { ChatMarkdownScrolls() }
     SideEffect { horizontalScrolls.retain(rawEntries.mapTo(mutableSetOf()) { it.id }) }
@@ -1038,7 +1041,8 @@ fun ChatScreen(
     val agentCalls = calls?.let { model ->
         model.calls.filter {
             it.host.id == chat.host.id && it.call.terminal == chat.terminal.address &&
-                (it.key in model.replying || it.live && (it.answerable || it.key in model.replyNotes))
+                (it.key in model.replying || it.live && (it.answerable || it.key in model.replyNotes ||
+                    thread != null && it.call.pushesByDefault && it.call.answer == null))
         }.sortedBy { it.call.atMs }
     }.orEmpty()
     val scroll = rememberChatScrollState(chat, entries, agentCalls.map { "call:${it.key}" } + chat.queuedMessages.map { "queued:${it.id}" } +
@@ -1055,6 +1059,9 @@ fun ChatScreen(
         selected = target
         val body = currentEntries.find { it.id == target.field.entryId }?.body
         if (body is ChatEntryBody.Tool && target.field.entryId !in chat.expanded) chat.toggle(target.field.entryId)
+        if (thread != null) toolGroups.firstOrNull { group -> group.entries.any { it.id == target.field.entryId } }?.let {
+            if (it.key !in chat.expanded) chat.toggle(it.key)
+        }
         scroll.following = false
         scroll.list.scrollToItem(target.field.itemIndex)
     }
@@ -1068,13 +1075,17 @@ fun ChatScreen(
         ChatDialogs(dialogs)
         AgentViewport(
             header = {
-                AgentScreenHeader(chat.terminal, chat.host.name, onBack, AgentView.CHAT, onView,
+                if (thread != null) ThreadChatHeader(chat, onBack, onOpenTerminal, { searchOpen = true }, preview, snapshot?.usage)
+                else AgentScreenHeader(chat.terminal, chat.host.name, onBack, AgentView.CHAT, onView,
                     preview = preview, usage = snapshot?.usage, link = chat.link, onTerminalUpdate = { chat.update(listOf(it)) }, onSearch = { searchOpen = true })
             },
             input = { compact ->
-                if (preview.selected == null && chat.link != null) {
-                    if (!compact) ChatCatalogControls(chat)
-                    MessageInput(chat, compact)
+                if (preview.selected == null) {
+                    if (thread != null) ThreadChatInput(thread, chat, agentCalls, calls, answerQuestion, compact)
+                    else if (chat.link != null) {
+                        if (!compact) ChatCatalogControls(chat)
+                        MessageInput(chat, compact)
+                    }
                 }
             },
         ) { compact ->
@@ -1099,7 +1110,7 @@ fun ChatScreen(
                 val loading = snapshot == null || snapshot.status in setOf(ChatStatus.CONNECTING, ChatStatus.RECONNECTING, ChatStatus.NO_CORE)
                 val firstLoading = loading && entries.isEmpty() && chat.queuedMessages.isEmpty()
                 val chatProblem = chat.connectionError ?: if (snapshot?.status == ChatStatus.NO_BEACON) CoreException.BeaconNotInstalled() else null
-                chatLink?.let { link ->
+                if (thread == null) chatLink?.let { link ->
                     val state = when {
                         link.state != LinkState.Up -> link.state
                         chatProblem != null && !chatProblem.retryableConnection() -> LinkState.Down(chatProblem)
@@ -1113,7 +1124,7 @@ fun ChatScreen(
                         ScreenLoading(stringResource(R.string.chat_loading), compact = true, onRetry = chat::retryConnection)
                     }
                 }
-                if (!loading && (chatLink == null || (chatLink.state == LinkState.Up && !reconnecting && chatProblem == null))) {
+                if (thread == null && !loading && (chatLink == null || (chatLink.state == LinkState.Up && !reconnecting && chatProblem == null))) {
                     statusText(snapshot?.status ?: ChatStatus.CONNECTING)?.let { ChatNotice(it) }
                 }
                 if (snapshot != null && entries.isEmpty() && chat.queuedMessages.isEmpty() && snapshot.status in setOf(ChatStatus.LIVE, ChatStatus.WAITING)) {
@@ -1163,7 +1174,8 @@ fun ChatScreen(
                     }
                     LazyColumn(
                         transcriptModifier, state = scroll.list, contentPadding = transcriptPadding,
-                        content = if (scroll.following) followingContent else historyContent,
+                        content = if (thread != null) threadHistoryContent(transcript, toolGroups, chat, readAloud,
+                            answerQuestion?.id, agentCalls, toggleTool, scroll) else if (scroll.following) followingContent else historyContent,
                     )
                     if (!searchOpen && !scroll.following && (entries.isNotEmpty() || agentCalls.isNotEmpty() || chat.queuedMessages.isNotEmpty())) {
                         LatestButton(
@@ -1227,7 +1239,7 @@ private fun chatHistoryContent(
     queuedChatMessages(chat)
 }
 
-private fun LazyListScope.queuedChatMessages(chat: ChatModel) {
+internal fun LazyListScope.queuedChatMessages(chat: ChatModel) {
     items(chat.queuedMessages, key = { "queued:${it.id}" }, contentType = { "queued" }) { QueuedMessageBubble(it, chat) }
     if (chat.showWorking) item(key = "working", contentType = "working") {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -1245,7 +1257,7 @@ private fun LazyListScope.queuedChatMessages(chat: ChatModel) {
 }
 
 @Composable
-private fun ChatTranscriptRowView(
+internal fun ChatTranscriptRowView(
     row: ChatTranscriptRow,
     chat: ChatModel,
     readAloud: io.github.shiroel.aries.speech.ReadAloudState,
@@ -1297,12 +1309,12 @@ private fun ChatEntryFooter(images: List<ChatImage>, metadata: ChatResponseMetad
 }
 
 @Composable
-private fun MessageInput(chat: ChatModel, compact: Boolean) {
+internal fun MessageInput(chat: ChatModel, compact: Boolean = false) {
     var tools by remember(chat) { mutableStateOf(false) }
     if (tools) ChatInputToolsDialog(chat) { tools = false }
     val inputLabel = stringResource(R.string.chat_input_label)
     val inputStyle = MaterialTheme.typography.bodyLarge.copy(
-        fontFamily = FontFamily.Monospace,
+        fontFamily = if (LocalThreadChat.current != null) FontFamily.SansSerif else FontFamily.Monospace,
         fontSize = 14.sp,
         lineHeight = 20.sp,
     )
@@ -1351,7 +1363,8 @@ private fun MessageInput(chat: ChatModel, compact: Boolean) {
         if (compact) ActionIcon(R.drawable.ic_plus, R.string.chat_input_tools_button,
             { tools = true }, enabled = chat.canEdit)
         val showInterrupt = chat.draft.isEmpty() && chat.attachments.isEmpty() &&
-            ((chat.terminalAvailable && chat.terminal.agentStatus == AgentStatus.Working) || chat.interrupting)
+            ((chat.terminalAvailable && chat.terminal.agentStatus == AgentStatus.Working &&
+                (LocalThreadChat.current == null || chat.showWorking && chat.connectionError == null)) || chat.interrupting)
         if (showInterrupt) {
             ChatInterruptButton(chat, onConfirmed = { returningFromInterrupt = true })
         } else {
@@ -1419,7 +1432,7 @@ private fun ChatNotice(text: String) {
 }
 
 @Composable
-private fun ChatEntryView(
+internal fun ChatEntryView(
     entry: ChatEntry,
     attachments: ChatAttachments?,
     chat: ChatModel,

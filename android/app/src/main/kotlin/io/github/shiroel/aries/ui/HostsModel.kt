@@ -1994,6 +1994,19 @@ class HostsModel(
                 isWaiting(it.terminal.agentStatus)
         } }
 
+    /** A sheet owns this watch and disposes it when leaving. Reuses the normal draft/answer owner.
+     * Only existing live connections may answer in place; other Hosts use the normal unlock route.
+     */
+    internal fun previewWaitingChat(entry: AgentEntry): ChatModel? {
+        val line = links.firstOrNull { it.host.id == entry.host.id && it.state == LinkState.Up } ?: return null
+        return conversation(line, entry.terminal)
+    }
+
+    /** Retire the sheet's watch before navigation starts this same conversation owner again. */
+    internal fun releaseWaitingChat(key: AgentKey) {
+        conversations[key]?.takeIf { it !== liveChat }?.stop()
+    }
+
     /** Switch in place over the original list, using the same entry path as drawer and inbox. */
     fun openNextWaitingAgent() {
         val next = nextWaitingAgent ?: return
