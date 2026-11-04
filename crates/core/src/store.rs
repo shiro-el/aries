@@ -7,6 +7,7 @@
 //! state goes under `hosts/<id>/`
 //! ([`Store::host_dir`]), which Host removal deletes.
 
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -186,24 +187,82 @@ impl Store {
         self.write_atomic("keys.json", &bytes)
     }
 
-    /// App settings; defaults if `settings.json` is missing or unreadable.
-    pub fn read_settings(&self) -> Settings {
-        std::fs::read(self.dir.join("settings.json"))
-            .ok()
-            .and_then(|b| serde_json::from_slice(&b).ok())
-            .unwrap_or_default()
+    /// Only a missing file means defaults. Never overwrite unreadable settings.
+    pub fn read_settings(&self) -> Result<Settings, CoreError> {
+        read_json(&self.dir.join("settings.json"))
     }
 
-    pub fn write_settings(&self, settings: &Settings) -> Result<(), CoreError> {
-        let bytes = serde_json::to_vec_pretty(settings).map_err(storage)?;
-        self.write_atomic("settings.json", &bytes)
+    /// Serializes the entire transaction, including publishing any in-memory
+    /// policy after a successful write. Independent core handles share the lock.
+    pub fn update_settings(
+        &self,
+        update: impl FnOnce(&mut Settings),
+        publish: impl FnOnce(&Settings),
+    ) -> Result<(), CoreError> {
+        let _guard = lock_file(&self.dir.join("settings.lock"))?;
+        let mut settings = self.read_settings()?;
+        update(&mut settings);
+        self.write_atomic(
+            "settings.json",
+            &serde_json::to_vec_pretty(&settings).map_err(storage)?,
+        )?;
+        publish(&settings);
+        Ok(())
     }
 
     pub(crate) fn write_atomic(&self, name: &str, bytes: &[u8]) -> Result<(), CoreError> {
-        let tmp = self.dir.join(format!(".{name}.tmp"));
-        std::fs::write(&tmp, bytes).map_err(storage)?;
-        std::fs::rename(&tmp, self.dir.join(name)).map_err(storage)
+        write_atomic(&self.dir.join(name), bytes)
     }
+}
+
+/// A stable lock file, separate from the file replaced by rename. Dropping the
+/// returned handle releases the OS lock, including between independent handles.
+pub(crate) fn lock_file(path: &Path) -> Result<std::fs::File, CoreError> {
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(path)
+        .map_err(storage)?;
+    file.lock().map_err(storage)?;
+    Ok(file)
+}
+
+pub(crate) fn read_json<T: serde::de::DeserializeOwned + Default>(
+    path: &Path,
+) -> Result<T, CoreError> {
+    match std::fs::read(path) {
+        Ok(bytes) => serde_json::from_slice(&bytes).map_err(storage),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(T::default()),
+        Err(e) => Err(storage(e)),
+    }
+}
+
+/// Readers see the old or new complete file. Each writer owns its temporary
+/// file; failures remove it without disturbing another writer's replacement.
+pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), CoreError> {
+    let dir = path.parent().expect("storage directory");
+    let (tmp, mut file) = loop {
+        let tmp = dir.join(format!(".{}.tmp", crate::new_id()));
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&tmp)
+        {
+            Ok(file) => break (tmp, file),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(storage(e)),
+        }
+    };
+    let result = (|| {
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        std::fs::rename(&tmp, path)
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    result.map_err(storage)
 }
 
 pub(crate) struct Identity {
