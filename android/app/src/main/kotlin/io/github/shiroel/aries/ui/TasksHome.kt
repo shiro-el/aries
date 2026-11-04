@@ -41,10 +41,6 @@ private enum class TasksFilter(val label: Int, val tag: String) {
 
 @Composable
 internal fun TasksHome(model: HostsModel, board: AgentBoard) {
-    androidx.lifecycle.compose.LifecycleStartEffect(model) {
-        model.beginTaskNeeds()
-        onStopOrDispose { model.endTaskNeeds() }
-    }
     var filter by rememberSaveable { mutableStateOf(TasksFilter.ALL) }
     var grouped by rememberSaveable { mutableStateOf(false) }
     var queue by board::needsQueue
@@ -148,7 +144,7 @@ internal fun TasksHome(model: HostsModel, board: AgentBoard) {
             }
         }
     }
-    queue?.let { current -> TasksNeedsSheet(model, board, current, onDismiss = { queue = null }) }
+    queue?.let { current -> TasksNeedsSheet(model, board, current, onDismiss = { model.closeTaskNeeds(board) }) }
 }
 
 @Composable
@@ -257,13 +253,17 @@ internal fun TasksHostConnection(host: Host, link: HostLink?, loading: Boolean =
     Row(modifier.fillMaxWidth().testTag("tasks-host-connection:${host.id}"),
         verticalAlignment = Alignment.CenterVertically) {
         val label = listOfNotNull(host.name.takeIf { showHost },
-            stringResource(if (connecting) R.string.reconnecting else R.string.tasks_offline),
+            stringResource(when {
+                connecting -> R.string.reconnecting
+                error is CoreException.KeyLocked -> R.string.key_locked_title
+                else -> R.string.tasks_offline
+            }),
             lastUpdatedMs?.let { agentLastSeen(it) }).joinToString(" · ")
         Text(label, Modifier.weight(1f).semantics { reason?.let { stateDescription = it } },
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
         if (link != null) {
-            TextButton(onClick = link::retryNow) { Text(stringResource(R.string.connect_retry_button)) }
+            TextButton(onClick = link::retryNow) { Text(stringResource(if (error is CoreException.KeyLocked) R.string.key_unlock_button else R.string.connect_retry_button)) }
             if (error != null) IconButton(onClick = { link.settings(error) }) {
                 Icon(painterResource(R.drawable.file_type_settings), stringResource(R.string.connect_settings_button),
                     Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)

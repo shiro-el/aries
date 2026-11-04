@@ -421,7 +421,7 @@ async fn run_watch(
         let result = async {
             // Bound the entire initial sync, including reconnects and streams that keep
             // sending heartbeats or partial history without ever reaching Synced.
-            let (mut feed, mut calls) = tokio::time::timeout(SNAPSHOT_WAIT, async {
+            let (mut feed, mut calls) = crate::network_timeout::timeout(SNAPSHOT_WAIT, async {
                 let mut feed = Feed::new(runner.open(&command(&["calls", "--follow"])).await?);
                 let calls = feed.snapshot().await?;
                 Ok::<_, CoreError>((feed, calls))

@@ -20,6 +20,9 @@ class HostsViewModel(application: Application) : AndroidViewModel(application) {
         onCallAnswered = { host, callId, state -> NotificationGroups.answeredCall(application, host.id, host.name, callId, state) },
     )
 
+    /** Consumed once per real foreground visit, retained across configuration changes. */
+    var foregroundRefreshPending = true
+
     val guidance = io.github.shiroel.aries.guidance.AppGuidanceState(
         application.getSharedPreferences("app-guidance", android.content.Context.MODE_PRIVATE),
         BuildConfig.VERSION_CODE, BuildConfig.VERSION_NAME, hasHosts = model.hosts.isNotEmpty(),
