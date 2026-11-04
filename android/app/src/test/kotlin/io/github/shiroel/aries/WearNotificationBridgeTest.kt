@@ -73,6 +73,8 @@ class WearNotificationBridgeTest {
         assertTrue(shadowOf(always.actionIntent).isActivity)
         assertEquals(listOf(notification.actions[0].actionIntent, notification.actions[2].actionIntent),
             wearable(notification).map { it.actionIntent })
+        NotificationGroups.opened(context, shadowOf(always.actionIntent).savedIntent)
+        assertTrue(manager.activeNotifications.none { it.tag == "t1" })
         // An ordinary answer with the same text must remain available on the watch.
         val ordinary = status(AgentStatus.Blocked(BlockedReason.QUESTION, null))
         PushService.show(context, ordinary.copy(content = (ordinary.content as PushContent.Status).copy(

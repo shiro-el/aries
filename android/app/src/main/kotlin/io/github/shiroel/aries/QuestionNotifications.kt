@@ -66,7 +66,8 @@ object QuestionNotifications {
                 val label = if (permission) permissionChoiceResource(label)?.let(context::getString) ?: label else label
                 // Persistent grants require the phone card's explicit confirmation.
                 // Allow/Deny keep their existing background path and original indices.
-                val intent = if (always) PushTarget(notice.hostId, status.terminal, chat = true).pendingIntent(context)
+                val intent = if (always) NotificationGroups.openApp(context, notice.hostId, notice.hostName,
+                    status.terminal, status.terminal, chat = true, generation = builder.extras.getString(NotificationGroups.GENERATION))
                     else choiceIntent(context, q, choice)
                 val action = Notification.Action.Builder(null, NotificationMarkdown.render(label).plain, intent)
                 if (always) action.addExtras(android.os.Bundle().apply { putBoolean(WearNotificationBridge.PHONE_ONLY, true) })
