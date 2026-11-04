@@ -13,6 +13,7 @@ import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
@@ -49,6 +50,32 @@ class JumpHostsScreenTest {
     }
 
     private fun field(label: Int) = compose.onAllNodes(hasSetTextAction() and hasText(str(label)))
+
+    // Regression: restoring the UI must not discard unsubmitted hop edits/key
+    // selection or write them to the Host before the user taps Save.
+    @Test fun restoresUnsubmittedHopEditsAndSelectedKey() {
+        val core = FakeCore().apply { ensureKey(); createKey("outer") }
+        val host = core.addHost("work", Endpoint.Ssh("10.1.0.5", 22u, "me"))
+        val outer = core.keys()[1].id
+        val restoration = StateRestorationTester(compose)
+        restoration.setContent {
+            val scope = rememberCoroutineScope()
+            val model = remember { HostsModel(core, scope) }
+            MaterialTheme { JumpHostsScreen(model, host, emptyList(), null) }
+        }
+        compose.onNodeWithText(str(R.string.jumps_add_button)).performClick()
+        field(R.string.host_add_address).onFirst().performTextInput("bastion.example")
+        field(R.string.host_add_port).onFirst().performTextReplacement("2222")
+        field(R.string.host_add_user).onFirst().performTextInput("jump")
+        compose.onNodeWithText(str(R.string.jumps_key_label, str(R.string.key_default_label))).performScrollTo().performClick()
+        compose.onNodeWithText("outer").performClick()
+
+        restoration.emulateSavedInstanceStateRestore()
+
+        assertEquals(emptyList<JumpHost>(), core.jumpHosts(host.id))
+        compose.onNodeWithText(str(R.string.jumps_save_button)).performScrollTo().performClick()
+        assertEquals(listOf(JumpHost("bastion.example", 2222u, "jump", outer, null)), core.jumpHosts(host.id))
+    }
 
     @Test
     fun createsAnotherKeyWithALabel() {

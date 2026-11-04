@@ -49,6 +49,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.structuralEqualityPolicy
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -111,6 +112,9 @@ class ChatModel(
     /** Runs the calls that sign in to the Host (see [HostsModel]). */
     private val keyWork: CoroutineContext = EmptyCoroutineContext,
 ) {
+    internal val files = RemoteFilesPanel()
+    internal val preview = LocalhostPreview()
+    internal var selectedSearchMatch by mutableStateOf<ChatSearchMatch?>(null)
     var link by mutableStateOf(link)
         private set
 
@@ -961,7 +965,7 @@ fun ChatScreen(
     }
     val snapshot = chat.snapshot
     val rawEntries = snapshot?.entries.orEmpty()
-    val preview = rememberChatLocalhostPreview(chat.link, rawEntries, chat.terminal.address)
+    val preview = rememberChatLocalhostPreview(chat.link, rawEntries, chat.terminal.address, chat.preview)
     val markdownState = rememberChatMarkdown(rawEntries)
     val markdown by markdownState
     val rendered = remember(chat) { ChatRenderedEntries() }
@@ -973,10 +977,10 @@ fun ChatScreen(
     val dialogs = remember(chat) { ChatDialogState() }
     val horizontalScrolls = remember(chat) { ChatMarkdownScrolls() }
     SideEffect { horizontalScrolls.retain(rawEntries.mapTo(mutableSetOf()) { it.id }) }
-    var searchOpen by remember(chat) { mutableStateOf(false) }
-    var query by remember(chat) { mutableStateOf("") }
-    var selected by remember(chat) { mutableStateOf<ChatSearchMatch?>(null) }
-    var searchRequest by remember(chat) { mutableIntStateOf(0) }
+    var searchOpen by rememberSaveable(chat) { mutableStateOf(false) }
+    var query by rememberSaveable(chat) { mutableStateOf("") }
+    var selected by chat::selectedSearchMatch
+    var searchRequest by rememberSaveable(chat) { mutableIntStateOf(0) }
     val searchNavigation = remember(query, searchRequest) { ChatSearchNavigation() }
     val matches by rememberChatSearch(entries, markdown, query)
     val selectedIndex = selectedChatSearchIndex(matches, selected)

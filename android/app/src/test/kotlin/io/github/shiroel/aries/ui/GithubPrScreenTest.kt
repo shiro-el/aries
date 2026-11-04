@@ -4,6 +4,10 @@ import android.graphics.Bitmap
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -26,6 +30,7 @@ class GithubPrScreenTest {
     @get:Rule val compose = createComposeRule()
     private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
     private fun str(id: Int) = context.getString(id)
+    private var visible by mutableStateOf(true)
 
     private fun open(): FakeConnection {
         val core = FakeCore()
@@ -34,7 +39,8 @@ class GithubPrScreenTest {
         compose.setContent {
             val scope = rememberCoroutineScope()
             val model = remember { HostsModel(core, scope) }
-            MaterialTheme { AriesApp(model) }
+            val saved = rememberSaveableStateHolder()
+            MaterialTheme { if (visible) saved.SaveableStateProvider("unlocked") { AriesApp(model) } }
         }
         compose.onNodeWithText("home").performClick()
         compose.onNodeWithText("claude").performClick()
@@ -76,6 +82,12 @@ class GithubPrScreenTest {
         compose.onNodeWithText("src/새 이름.rs").performClick()
         compose.onNodeWithText("+새 코드").assertExists()
         screenshot("patch")
+        // Regression: restoring a locked composition must retain both the PR tab
+        // and opened patch; initial read effects must not discard that selection.
+        compose.runOnIdle { visible = false }
+        compose.runOnIdle { visible = true }
+        screenshot("patch-after-unlock")
+        compose.onNodeWithText("+새 코드").assertExists()
         compose.onNodeWithTag("github-back").performClick()
         compose.onNodeWithText("image.png").performClick()
         compose.onNodeWithText(str(R.string.github_pr_patch_unavailable)).assertExists()

@@ -10,6 +10,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -18,14 +19,15 @@ import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Endpoint
-import io.github.shiroel.aries.core.KeyInfo
 import kotlinx.coroutines.launch
 
 /** Key IDs stay stable, including on jump routes. Re-registration is always explicit. */
 @Composable
 internal fun KeyRecoverySection(model: HostsModel) {
-    var generating by remember { mutableStateOf<KeyInfo?>(null) }
-    var importing by remember { mutableStateOf<KeyInfo?>(null) }
+    var generatingId by rememberSaveable { mutableStateOf<String?>(null) }
+    var importingId by rememberSaveable { mutableStateOf<String?>(null) }
+    val generating = model.keys.find { it.id == generatingId }
+    val importing = model.keys.find { it.id == importingId }
     var busy by remember { mutableStateOf(false) }
     var problem by remember { mutableStateOf<Message?>(null) }
     val scope = rememberCoroutineScope()
@@ -43,10 +45,10 @@ internal fun KeyRecoverySection(model: HostsModel) {
                 context.getSystemService(ClipboardManager::class.java)
                     ?.setPrimaryClip(ClipData.newPlainText(clipLabel, key.openssh))
             }) { Text(stringResource(R.string.key_copy_button)) }
-            TextButton(enabled = !busy, onClick = { generating = key }, modifier = Modifier.testTag("key-recover-generate-${key.id}")) {
+            TextButton(enabled = !busy, onClick = { generatingId = key.id }, modifier = Modifier.testTag("key-recover-generate-${key.id}")) {
                 Text(stringResource(R.string.key_recover_generate_button))
             }
-            TextButton(enabled = !busy, onClick = { importing = key }, modifier = Modifier.testTag("key-recover-import-${key.id}")) {
+            TextButton(enabled = !busy, onClick = { importingId = key.id }, modifier = Modifier.testTag("key-recover-import-${key.id}")) {
                 Text(stringResource(R.string.key_import_button))
             }
         }
@@ -60,7 +62,7 @@ internal fun KeyRecoverySection(model: HostsModel) {
     }
     generating?.let { key ->
         AlertDialog(
-            onDismissRequest = { if (!busy) generating = null },
+            onDismissRequest = { if (!busy) generatingId = null },
             title = { Text(stringResource(R.string.key_recover_title)) },
             text = { Text(stringResource(R.string.key_recover_replace_body)) },
             confirmButton = {
@@ -73,16 +75,16 @@ internal fun KeyRecoverySection(model: HostsModel) {
                         } catch (e: CoreException) {
                             problem = problemFor(e).body
                         } finally {
-                            generating = null
+                            generatingId = null
                             busy = false
                         }
                     }
                 }) { Text(stringResource(R.string.key_recover_replace_button)) }
             },
             dismissButton = {
-                TextButton(enabled = !busy, onClick = { generating = null }) { Text(stringResource(R.string.cancel_button)) }
+                TextButton(enabled = !busy, onClick = { generatingId = null }) { Text(stringResource(R.string.cancel_button)) }
             },
         )
     }
-    importing?.let { key -> KeyImportDialog(model, replacementKeyId = key.id) { importing = null } }
+    importing?.let { key -> KeyImportDialog(model, replacementKeyId = key.id) { importingId = null } }
 }

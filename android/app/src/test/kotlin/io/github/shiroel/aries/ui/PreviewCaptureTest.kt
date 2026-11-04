@@ -6,6 +6,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.*
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -32,6 +35,7 @@ class PreviewCaptureTest {
     @Test fun mobileCaptureSendsItsPageContextAndNoteToItsAgent() = captureAndSend(desktop = false)
 
     private fun captureAndSend(desktop: Boolean) {
+        var visible by mutableStateOf(true)
         val core = FakeCore()
         val host = core.addHost("home", Endpoint.Ssh("host", 22u, "me"))
         val terminal = TerminalInfo("t7", "claude", "", listOf("claude"), "/repo", "live", AgentStatus.Idle)
@@ -58,7 +62,7 @@ class PreviewCaptureTest {
             val link = remember { HostLink(host, connection, scope, { connection }) }
             val chat = remember { ChatModel(core, host, terminal, link).apply { start(scope) } }
             DisposableEffect(chat) { onDispose { chat.stop() } }
-            MaterialTheme { ChatScreen(chat, onBack = {}) }
+            MaterialTheme { if (visible) ChatScreen(chat, onBack = {}) }
         }
         compose.onNodeWithContentDescription("Preview").performClick()
         if (desktop) compose.onNodeWithText("Desktop view").performClick()
@@ -92,6 +96,14 @@ class PreviewCaptureTest {
             canvas.performTouchInput { swipe(Offset(width * .3f, height * .55f), Offset(width * .7f, height * .7f)) }
         }
         compose.onNodeWithText("Short note").performTextInput("Fix the spacing here")
+        // Regression: lock removes Chat's composition; reopening must retain the
+        // frozen capture, editable note and drawn annotations through upload.
+        if (desktop) {
+            compose.runOnIdle { visible = false }
+            compose.runOnIdle { visible = true }
+            compose.onNodeWithText("Fix the spacing here").assertExists()
+            compose.onNodeWithText("Undo").assertIsEnabled()
+        }
         screenshot(if (desktop) "desktop-note" else "mobile-note")
         compose.onNodeWithText("Add to Agent Chat").performClick()
         compose.waitUntil(10_000) { uploads.isNotEmpty() }
