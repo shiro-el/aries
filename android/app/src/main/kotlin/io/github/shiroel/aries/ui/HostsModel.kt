@@ -148,6 +148,7 @@ class HostsModel(
     private val onSavedLaunchesChanged: () -> Unit = {},
     private val locationStore: LastLocationStore? = null,
 ) {
+    internal val pairingReview = QrPairingReview()
     /** Current Host's settings models; a previous Host's pending work keeps its own state. */
     var beacon by mutableStateOf(BeaconModel(core, scope, beaconFetcher, keyWork = keyWork))
         private set
@@ -242,6 +243,7 @@ class HostsModel(
     private var setupRevision = 0
 
     fun startAddingHost(method: HostAddMethod = HostAddMethod.MANUAL) {
+        pairingReview.clear()
         if (screen != Screen.Hosts) back()
         addedHost = null
         setupHostId = null
@@ -249,7 +251,7 @@ class HostsModel(
         hostAddMethod = method
     }
 
-    fun closeAddingHost() { setupRevision++; hostAddMethod = null; addedHost = null }
+    fun closeAddingHost() { pairingReview.clear(); setupRevision++; hostAddMethod = null; addedHost = null }
 
     /** The open Host's connection and structure watch, while [Screen.Browse] shows (the latest line after a reconnect). */
     private var open: Pair<HostConnection, StructureWatch?>? = null
