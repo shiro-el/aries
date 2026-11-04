@@ -24,6 +24,8 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import io.github.shiroel.aries.PERMISSION_TOOL
+import io.github.shiroel.aries.permissionChoiceResource
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.core.ChatEntryBody
@@ -33,6 +35,7 @@ import io.github.shiroel.aries.core.ChatToolStatus
 
 @Composable
 internal fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question) {
+    val permission = q.name == PERMISSION_TOOL
     val mode = chat.questionMode(id)
     val state = chat.answers[id]
     val cancelled = q.status == ChatToolStatus.FAILED
@@ -60,6 +63,7 @@ internal fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question
         expired -> R.string.chat_question_expired
         mode == ChatModel.QuestionMode.Queued -> R.string.chat_question_queued
         mode == ChatModel.QuestionMode.History -> R.string.chat_question_history
+        permission -> R.string.chat_permission_label
         else -> R.string.chat_question_label
     }
     ConsoleChatCallSurface(accent) {
@@ -78,20 +82,23 @@ internal fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question
             SearchableChatText(question.text, "question:$part")
             if (open) {
                 question.options.forEachIndexed { i, option ->
-                    ConsoleChatChoice(i + 1, option.label, option.description,
-                        stringResource(R.string.chat_question_option_label, option.label),
+                    val label = if (permission) permissionChoiceResource(option.label)?.let { stringResource(it) } ?: option.label else option.label
+                    ConsoleChatChoice(i + 1, label, option.description,
+                        stringResource(R.string.chat_question_option_label, label),
                         enabled = enabled, multi = question.multi, selected = chat.picks[id]?.getOrNull(part)?.contains(i) == true,
                         onClick = { chat.pick(id, q, part, i) })
                 }
-                val inputLabel = stringResource(R.string.chat_question_text_label, question.text)
-                OutlinedTextField(
-                    value = chat.questionText[id]?.getOrNull(part).orEmpty(),
-                    onValueChange = { chat.writeAnswer(id, q, part, it) },
-                    label = { Text(stringResource(R.string.chat_question_text_hint)) },
-                    modifier = Modifier.fillMaxWidth().semantics { contentDescription = inputLabel },
-                    enabled = enabled, singleLine = true, shape = RectangleShape,
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
-                )
+                if (!permission) {
+                    val inputLabel = stringResource(R.string.chat_question_text_label, question.text)
+                    OutlinedTextField(
+                        value = chat.questionText[id]?.getOrNull(part).orEmpty(),
+                        onValueChange = { chat.writeAnswer(id, q, part, it) },
+                        label = { Text(stringResource(R.string.chat_question_text_hint)) },
+                        modifier = Modifier.fillMaxWidth().semantics { contentDescription = inputLabel },
+                        enabled = enabled, singleLine = true, shape = RectangleShape,
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                    )
+                }
             } else if (answered) {
                 // The transcript is authoritative. Until its update arrives,
                 // keep the successful phone submission visible in place.
@@ -110,7 +117,8 @@ internal fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(Modifier.weight(1f)) {
-                            SearchableChatText(option.label, "question:$part:option:$i",
+                            val label = if (permission) permissionChoiceResource(option.label)?.let { stringResource(it) } ?: option.label else option.label
+                            SearchableChatText(label, "question:$part:option:$i",
                                 style = if (selected) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall,
                                 color = if (selected) colors.onPrimaryContainer else colors.onSurfaceVariant.copy(alpha = .65f))
                         }

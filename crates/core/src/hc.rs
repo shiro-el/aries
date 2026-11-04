@@ -12,8 +12,7 @@ use std::time::Duration;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
-use tokio::sync::{Mutex, mpsc, oneshot};
-use tokio::task::JoinHandle;
+use tokio::sync::{Mutex, MutexGuard, mpsc, oneshot, watch};
 
 use crate::error::{CoreError, Incompatibility, protocol};
 use crate::transport::Stream;
@@ -70,7 +69,67 @@ pub(crate) struct Hello {
 
 type Pending =
     Arc<std::sync::Mutex<Option<HashMap<u64, oneshot::Sender<Result<Value, CoreError>>>>>>;
-type Writer = Arc<Mutex<Box<dyn tokio::io::AsyncWrite + Send + Unpin>>>;
+type Output = Option<Box<dyn tokio::io::AsyncWrite + Send + Unpin>>;
+type Writer = Arc<FramedWriter>;
+
+struct FramedWriter {
+    io: Mutex<Output>,
+    closed: watch::Sender<bool>,
+    pending: Pending,
+    channels: SharedChannels,
+    reader: tokio::task::AbortHandle,
+    guard: std::sync::Mutex<Option<Box<dyn Send + Sync>>>,
+}
+
+impl FramedWriter {
+    async fn shutdown(&self) {
+        let _ = tokio::time::timeout(Duration::from_secs(2), async {
+            let mut io = self.io.lock().await;
+            if let Some(mut writer) = io.take() {
+                let _ = writer.shutdown().await;
+            }
+        })
+        .await;
+    }
+
+    fn end(&self) {
+        self.closed.send_replace(true);
+        self.reader.abort();
+        self.guard.lock().expect("transport guard lock").take();
+        fail_all(&self.pending);
+        let mut channels = self.channels.lock().expect("channels lock");
+        channels.closed = true;
+        channels.open.clear();
+        channels.early.clear();
+    }
+}
+
+/// Cancelling partway through a frame discards the writer and the entire
+/// connection: a following RPC must never append to a truncated frame.
+struct FrameWrite<'a> {
+    io: MutexGuard<'a, Output>,
+    owner: &'a FramedWriter,
+    complete: bool,
+}
+impl Drop for FrameWrite<'_> {
+    fn drop(&mut self) {
+        if !self.complete {
+            self.io.take();
+            self.owner.end();
+        }
+    }
+}
+
+/// Cancellation, timeout and every error path remove the pending request.
+struct PendingCall<'a> {
+    client: &'a HcClient,
+    id: u64,
+}
+impl Drop for PendingCall<'_> {
+    fn drop(&mut self) {
+        self.client.forget(self.id);
+    }
+}
 
 /// Stream channels (non-zero) and frames that arrived for a channel before
 /// its opener registered it (the reply and the first frames race).
@@ -89,13 +148,17 @@ pub(crate) struct HcClient {
     pending: Pending,
     channels: SharedChannels,
     next_id: AtomicU64,
-    reader: JoinHandle<()>,
-    _guard: Box<dyn Send + Sync>,
 }
 
 impl HcClient {
     /// Says `hello`, checks compatibility and switches to framed mode.
     pub async fn handshake(stream: Stream) -> Result<Self, CoreError> {
+        tokio::time::timeout(HELLO_TIMEOUT, Self::handshake_inner(stream))
+            .await
+            .map_err(|_| protocol("hello timed out"))?
+    }
+
+    async fn handshake_inner(stream: Stream) -> Result<Self, CoreError> {
         let Stream {
             reader,
             mut writer,
@@ -129,12 +192,17 @@ impl HcClient {
         let reader = tokio::spawn(read_frames(reader, pending.clone(), channels.clone()));
         Ok(Self {
             hello,
-            writer: Arc::new(Mutex::new(writer)),
+            writer: Arc::new(FramedWriter {
+                io: Mutex::new(Some(writer)),
+                closed: watch::channel(false).0,
+                pending: pending.clone(),
+                channels: channels.clone(),
+                reader: reader.abort_handle(),
+                guard: std::sync::Mutex::new(Some(guard)),
+            }),
             pending,
             channels,
             next_id: AtomicU64::new(1),
-            reader,
-            _guard: guard,
         })
     }
 
@@ -151,23 +219,18 @@ impl HcClient {
             let map = guard.as_mut().ok_or(CoreError::Closed)?;
             map.insert(id, tx);
         }
-        let msg = json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params });
-        let payload = serde_json::to_vec(&msg).map_err(|e| protocol(e.to_string()))?;
-        if send_frame(&self.writer, 0, KIND_DATA, &payload)
-            .await
-            .is_err()
-        {
-            self.forget(id);
-            return Err(CoreError::Closed);
-        }
-        match tokio::time::timeout(CALL_TIMEOUT, rx).await {
-            Ok(Ok(result)) => result,
-            Ok(Err(_)) => Err(CoreError::Closed),
-            Err(_) => {
-                self.forget(id);
-                Err(protocol(format!("{method} timed out")))
-            }
-        }
+        let _pending = PendingCall { client: self, id };
+        // One deadline includes writer contention, write, flush and the reply.
+        tokio::time::timeout(CALL_TIMEOUT, async {
+            let msg = json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params });
+            let payload = serde_json::to_vec(&msg).map_err(|e| protocol(e.to_string()))?;
+            send_frame(&self.writer, 0, KIND_DATA, &payload)
+                .await
+                .map_err(|_| CoreError::Closed)?;
+            rx.await.map_err(|_| CoreError::Closed)?
+        })
+        .await
+        .map_err(|_| protocol(format!("{method} timed out; its result is unknown")))?
     }
 
     /// `events.subscribe` with `params`: returns the reply (`seq`,
@@ -251,33 +314,23 @@ impl HcClient {
         }
     }
 
-    /// Revoke the client synchronously, including from Host settings/removal.
-    /// Transport shutdown runs on the core runtime; no caller has to block it.
+    /// Revoke synchronously for Host edits/removal, using the same local
+    /// cancellation path as partial writes and asynchronous disconnect.
     pub fn close_now(&self) {
-        self.reader.abort();
-        fail_all(&self.pending);
-        // Aborting the reader skips its normal stream cleanup. Wake every
-        // Terminal/structure watch as well as pending RPC callers.
-        let mut channels = self.channels.lock().expect("channels lock");
-        channels.closed = true;
-        channels.open.clear();
-        channels.early.clear();
-        drop(channels);
+        self.writer.end();
         let writer = self.writer.clone();
-        crate::runtime().spawn(async move {
-            let _ = writer.lock().await.shutdown().await;
-        });
+        crate::runtime().spawn(async move { writer.shutdown().await });
     }
 
     pub async fn close(&self) {
-        self.close_now();
-        let _ = self.writer.lock().await.shutdown().await;
+        self.writer.end();
+        self.writer.shutdown().await;
     }
 }
 
 impl Drop for HcClient {
     fn drop(&mut self) {
-        self.reader.abort();
+        self.writer.end();
     }
 }
 
@@ -411,9 +464,27 @@ async fn send_frame(
     frame.push(kind);
     frame.extend_from_slice(&(payload.len() as u32).to_le_bytes());
     frame.extend_from_slice(payload);
-    let mut w = writer.lock().await;
-    w.write_all(&frame).await?;
-    w.flush().await
+    let closed_error = || std::io::Error::from(std::io::ErrorKind::BrokenPipe);
+    let mut closed = writer.closed.subscribe();
+    if *closed.borrow() {
+        return Err(closed_error());
+    }
+    tokio::time::timeout(CALL_TIMEOUT, async {
+        tokio::select! {
+            _ = closed.changed() => Err(closed_error()),
+            result = async {
+                let io = writer.io.lock().await;
+                let mut writing = FrameWrite { io, owner: writer, complete: false };
+                let out = writing.io.as_mut().ok_or_else(closed_error)?;
+                out.write_all(&frame).await?;
+                out.flush().await?;
+                writing.complete = true;
+                Ok(())
+            } => result,
+        }
+    })
+    .await
+    .map_err(|_| std::io::Error::from(std::io::ErrorKind::TimedOut))?
 }
 
 async fn read_frames<R: tokio::io::AsyncRead + Unpin>(

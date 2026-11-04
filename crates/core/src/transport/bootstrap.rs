@@ -27,6 +27,28 @@ impl PasswordLogin {
     /// Logs in with the password and installs `public_key` (an OpenSSH line)
     /// unless the same key is already authorized.
     pub async fn install_key(self, public_key: &str) -> Result<KeyInstall, CoreError> {
+        let mut submitted = false;
+        tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            self.install_key_within(public_key, &mut submitted),
+        )
+        .await
+        .map_err(|_| {
+            if submitted {
+                CoreError::KeyInstallFailed {
+                    detail: "key installation timed out; its result is unknown".into(),
+                }
+            } else {
+                unreachable_err("SSH key installation sign-in timed out")
+            }
+        })?
+    }
+
+    async fn install_key_within(
+        self,
+        public_key: &str,
+        submitted: &mut bool,
+    ) -> Result<KeyInstall, CoreError> {
         let script = install_script(public_key)?;
         // The jump sessions carry the Host's, so they stay bound until the end.
         let (_jumps, mut session) =
@@ -40,6 +62,7 @@ impl PasswordLogin {
             .map_err(unreachable_err)?;
         // `sh -s` reads the script from stdin, so it runs the same under any
         // login shell (fish, csh) and needs no quoting.
+        *submitted = true;
         channel.exec(true, "sh -s").await.map_err(unreachable_err)?;
         channel
             .data(script.as_bytes())

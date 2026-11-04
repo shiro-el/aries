@@ -87,7 +87,7 @@ object InlineNotifications {
     internal fun snooze(context: Context, target: InlineTarget, notification: Notification) {
         val intent = Intent(context, InlineActionReceiver::class.java).setAction(RESTORE)
             .setData(Uri.Builder().scheme("aries-inline-snooze").authority(target.hostId).appendPath(target.tag).build())
-            .putExtra(TARGET, target.toJson()).putExtra(NOTIFICATION, notification)
+            .putExtra(TARGET, target.toJson()).putExtra(NOTIFICATION, NotificationPayloads.sealReminder(context, notification))
         val operation = PendingIntent.getBroadcast(context, 0, intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         // A window starting in one hour: no exact-alarm permission or Doze exemption.
@@ -115,7 +115,8 @@ class InlineActionReceiver : BroadcastReceiver() {
         val target = intent.getStringExtra(InlineNotifications.TARGET)?.let(InlineTarget::fromJson) ?: return
         if (intent.action == InlineNotifications.RESTORE) {
             @Suppress("DEPRECATION")
-            val notification = intent.getParcelableExtra<Notification>(InlineNotifications.NOTIFICATION) ?: return
+            val shell = intent.getParcelableExtra<Notification>(InlineNotifications.NOTIFICATION) ?: return
+            val notification = NotificationPayloads.openReminder(context, shell) ?: return
             val manager = context.getSystemService(android.app.NotificationManager::class.java)
             // A reminder must not replace a newer card for the same Terminal/Call.
             synchronized(NotificationGroups) {
@@ -129,7 +130,11 @@ class InlineActionReceiver : BroadcastReceiver() {
         if (original.extras.getBoolean("inline_consumed")) return
         val action = intent.action ?: return
         if (action == InlineNotifications.SNOOZE) {
-            InlineNotifications.snooze(context, target, original)
+            try {
+                InlineNotifications.snooze(context, target, original)
+            } catch (_: Exception) {
+                InlineNotifications.update(context, target, context.getString(R.string.notification_action_failed))
+            }
             return
         }
         val text = if (action == InlineNotifications.REPLY) {
@@ -145,9 +150,9 @@ class InlineActionReceiver : BroadcastReceiver() {
             if (action == InlineNotifications.REPLY) R.string.chat_sending else R.string.notification_marking_seen))
         try {
             InlineActionWorker.enqueue(context, target, action, text)
-        } catch (_: IllegalStateException) {
-            // WorkManager has a 10 KiB input limit; a long RemoteInput must
-            // fail visibly instead of crashing the receiver at Sending.
+        } catch (_: Exception) {
+            // Encryption failure or WorkManager's 10 KiB limit must fail
+            // visibly instead of crashing the receiver at Sending.
             InlineNotifications.update(context, target, context.getString(R.string.notification_action_failed))
         }
     }
