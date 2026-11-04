@@ -236,8 +236,8 @@ private fun HoldToEnd(target: Any, enabled: Boolean, onHeld: () -> Unit) {
 @Composable
 internal fun EndTerminalButton(editor: LayoutEditor, terminal: TerminalInfo, onOpen: () -> Unit = {}) {
     val label = stringResource(R.string.layout_kill_label, displayName(terminal))
-    TextButton(onClick = { onOpen(); editor.ending = LayoutEndTarget.Terminal(terminal) }, enabled = !editor.busy,
-        modifier = Modifier.semantics { contentDescription = label }) {
-        Text(stringResource(R.string.layout_kill_button))
-    }
+    MenuDivider()
+    ActionMenuItem(stringResource(R.string.layout_kill_button), R.drawable.ic_x,
+        destructive = true, onClick = { onOpen(); editor.ending = LayoutEndTarget.Terminal(terminal) }, enabled = !editor.busy,
+        modifier = Modifier.semantics { contentDescription = label })
 }

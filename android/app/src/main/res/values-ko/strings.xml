@@ -8,6 +8,18 @@
   Error, Done, Idle. Everything else follows standard Android / One UI Korean.
 -->
 <resources>
+    <!-- Action menus -->
+    <string name="menu_switch">위치 선택</string>
+    <string name="menu_current">현재</string>
+    <string name="menu_switch_context">위치 선택</string>
+    <string name="menu_state_on">켜짐</string>
+    <string name="menu_state_off">꺼짐</string>
+    <string name="menu_program_label">프로그램</string>
+    <string name="menu_open_files">파일 열기</string>
+    <string name="menu_search">검색</string>
+    <string name="menu_pin">고정</string>
+    <string name="menu_unpin">고정 해제</string>
+
     <!-- GitHub Issues and PR conversations (113) -->
     <string name="github_button">GitHub</string>
     <string name="github_issues">이슈</string>
@@ -185,7 +197,7 @@
 
 
     <!-- Host file downloads and sharing (112) -->
-    <string name="files_save_button">휴대폰에 저장</string>
+    <string name="files_save_button">파일 저장</string>
     <string name="files_share_button">공유</string>
     <string name="files_share_title">Host 파일 공유</string>
     <string name="files_export_starting">다운로드 시작 중…</string>
@@ -213,7 +225,7 @@
     <string name="files_up_button">상위 폴더</string>
     <string name="files_refresh_button">새로고침</string>
     <string name="files_back_folder_button">폴더로 돌아가기</string>
-    <string name="files_send_file_button">Agent에게 파일 보내기</string>
+    <string name="files_send_file_button">파일 보내기</string>
     <string name="files_send_line_label">%1$d번째 줄을 Agent에게 보내기</string>
     <string name="files_not_text">바이너리 파일이거나 UTF-8 텍스트가 아니라서 미리 볼 수 없어요.</string>
     <!-- Continuous file and diff reader (152) -->
@@ -789,7 +801,7 @@
     <string name="push_off_host_unreachable">푸시를 끄고 Relay에서 페어링을 삭제했어요. Host에 연결할 수 없어서 Host 쪽 페어링 정보는 다음 페어링 때까지 남지만, 더는 쓰이지 않아요.</string>
     <!-- Watched Agent progress -->
     <string name="agent_actions_label">Agent 메뉴</string>
-    <string name="agent_watch_label">진행 상황 알림 받기</string>
+    <string name="agent_watch_label">진행 알림</string>
     <string name="agent_watch_error">진행 상황 알림을 바꾸지 못했어요: %1$s</string>
     <string name="push_progress_channel">Agent 진행 상황</string>
     <string name="push_progress_body">%1$d분 경과 · 하위 Agent %2$d개</string>

@@ -16,7 +16,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -66,16 +65,16 @@ internal fun ChatTextActions(
             onLongClick = if (text.isEmpty()) null else { { menu = true } },
         ))
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-            DropdownMenuItem(
-                text = { Text(copyLabel) },
+            ActionMenuItem(
+                label = copyLabel, icon = R.drawable.ic_copy,
                 onClick = {
                     context.getSystemService(ClipboardManager::class.java)
                         .setPrimaryClip(ClipData.newPlainText(copyLabel, text))
                     menu = false
                 },
             )
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.chat_select_text)) },
+            ActionMenuItem(
+                label = stringResource(R.string.chat_select_text), icon = R.drawable.ic_text_select,
                 onClick = { selection = text; menu = false },
             )
         }

@@ -20,6 +20,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentPreset
@@ -40,7 +42,7 @@ private class WorktreeForm(val cwd: String, val spaceId: String?) {
 /** Uses the phone's focused Terminal, never the desktop's current Space.
  * Nested-machine folders must not accidentally be executed on the Host. */
 @Composable
-internal fun WorktreeControls(browser: HostBrowser, unplaced: TerminalInfo? = null) {
+internal fun WorktreeControls(browser: HostBrowser, unplaced: TerminalInfo? = null, asMenuItem: Boolean = false) {
     val scope = rememberCoroutineScope()
     var form by remember(browser) { mutableStateOf<WorktreeForm?>(null) }
     val space = browser.openSpace
@@ -66,11 +68,16 @@ internal fun WorktreeControls(browser: HostBrowser, unplaced: TerminalInfo? = nu
             }
         }
     }
-    ActionIcon(R.drawable.ic_folder, R.string.worktrees_button, enabled = cwd != null && connection != null && !browser.closed, onClick = {
-        val target = WorktreeForm(cwd ?: return@ActionIcon, space?.id)
+    fun openWorktrees() {
+        val target = WorktreeForm(cwd ?: return, space?.id)
         form = target
         load(target)
-    })
+    }
+    val enabled = cwd != null && connection != null && !browser.closed
+    val label = stringResource(R.string.worktrees_button)
+    if (asMenuItem) ActionMenuItem(label, R.drawable.ic_folder,
+        modifier = Modifier.semantics { contentDescription = label }, enabled = enabled, onClick = ::openWorktrees)
+    else ActionIcon(R.drawable.ic_folder, R.string.worktrees_button, enabled = enabled, onClick = ::openWorktrees)
     form?.let { target ->
         AlertDialog(
             onDismissRequest = { if (!target.busy) form = null },

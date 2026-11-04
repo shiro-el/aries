@@ -268,11 +268,11 @@ private fun HostTreeList(
     }
     val actions: @Composable ColumnScope.(AgentEntry, () -> Unit) -> Unit = { entry, close ->
         // Selecting context here retains Space/Tab edits without adding tree levels.
-        if (entry.space != null) TextButton(onClick = {
+        if (entry.space != null) ActionMenuItem(stringResource(R.string.menu_switch_context), R.drawable.ic_panels, onClick = {
             selectTerminalContext(browser, entry.terminal.address)
             close()
-        }) { Text(stringResource(R.string.hosts_layout_context_button)) }
-        if (entry.space == null) WorktreeControls(browser, entry.terminal)
+        })
+        if (entry.space == null) WorktreeControls(browser, entry.terminal, asMenuItem = true)
         browser.layoutEditor?.let { EndTerminalButton(it, entry.terminal, close) }
     }
     LazyColumn {

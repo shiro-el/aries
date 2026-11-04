@@ -36,6 +36,7 @@ internal fun WatchAgentMenuItem(terminal: TerminalInfo, link: HostLink?, onChang
         checked = terminal.watched,
         text = { Text(watchLabel) },
         enabled = link?.connection != null && !saving,
+        leadingIcon = { MenuIcon(R.drawable.ic_eye) },
         onClick = ::changeWatch,
         modifier = Modifier.testTag("agent-watch"),
     )
