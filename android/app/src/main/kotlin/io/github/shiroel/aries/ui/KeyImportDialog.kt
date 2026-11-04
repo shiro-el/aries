@@ -12,11 +12,10 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
@@ -27,67 +26,31 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
-import io.github.shiroel.aries.core.CoreException
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-
-internal const val MAX_PRIVATE_KEY_BYTES = 64 * 1024
 
 @Composable
 fun KeyImportButton(model: HostsModel) {
     var importing by rememberSaveable { mutableStateOf(false) }
-    TextButton(onClick = { importing = true }) { Text(stringResource(R.string.key_import_button)) }
+    TextButton(onClick = { model.keyImport.clear(); importing = true }) { Text(stringResource(R.string.key_import_button)) }
     if (importing) KeyImportDialog(model) { importing = false }
 }
 
-/** Secret drafts live only in this composition, never saved instance state. */
+/** Secret drafts and submitted work stay in the retained model, never saved instance state. */
 @Composable
 fun KeyImportDialog(model: HostsModel, replacementKeyId: String? = null, onDismiss: () -> Unit) {
     val needsLabel = model.key != null && replacementKeyId == null
     var label by rememberSaveable { mutableStateOf("") }
-    var privateKey by remember { mutableStateOf("") }
-    var passphrase by remember { mutableStateOf("") }
-    var busy by remember { mutableStateOf(false) }
-    var problem by remember { mutableStateOf<Message?>(null) }
-    val scope = rememberCoroutineScope()
-    val resolver = LocalContext.current.contentResolver
+    val importer = model.keyImport
+    val busy = importer.busy
+    val problem = importer.problem
+    val resolver = LocalContext.current.applicationContext.contentResolver
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            busy = true
-            problem = null
-            scope.launch {
-                try {
-                    privateKey = withContext(Dispatchers.IO) {
-                        resolver.openInputStream(uri)?.use { input ->
-                            val bytes = ByteArray(MAX_PRIVATE_KEY_BYTES + 1)
-                            var size = 0
-                            while (size < bytes.size) {
-                                val read = input.read(bytes, size, bytes.size - size)
-                                if (read < 0) break
-                                size += read
-                            }
-                            require(size <= MAX_PRIVATE_KEY_BYTES)
-                            String(bytes, 0, size, Charsets.UTF_8)
-                        } ?: error("document unavailable")
-                    }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (_: Exception) {
-                    privateKey = ""
-                    problem = Message(R.string.key_import_file_error, listOf(MAX_PRIVATE_KEY_BYTES / 1024))
-                } finally {
-                    busy = false
-                }
-            }
-        }
+        if (uri != null) importer.readDocument { resolver.openInputStream(uri) }
     }
     fun close() {
-        privateKey = ""
-        passphrase = ""
+        importer.clear()
         onDismiss()
     }
+    LaunchedEffect(importer.completed) { if (importer.completed) close() }
     val passwordKeyboard = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false)
     AlertDialog(
         onDismissRequest = { if (!busy) close() },
@@ -104,22 +67,14 @@ fun KeyImportDialog(model: HostsModel, replacementKeyId: String? = null, onDismi
                     Text(stringResource(R.string.key_import_file_button))
                 }
                 ConsoleField(
-                    privateKey, {
-                        if (it.toByteArray(Charsets.UTF_8).size <= MAX_PRIVATE_KEY_BYTES) {
-                            privateKey = it
-                        } else {
-                            // A rejected paste must not leave an older masked key ready to import.
-                            privateKey = ""
-                            problem = Message(R.string.key_import_too_large, listOf(MAX_PRIVATE_KEY_BYTES / 1024))
-                        }
-                    },
+                    importer.privateKey, importer::editPrivateKey,
                     enabled = !busy, minLines = 3, maxLines = 5,
                     label = { Text(stringResource(R.string.key_import_private_label)) },
                     keyboardOptions = passwordKeyboard, visualTransformation = PasswordVisualTransformation(),
                     modifier = Modifier.fillMaxWidth().testTag("key-import-private"),
                 )
                 ConsoleField(
-                    passphrase, { passphrase = it }, enabled = !busy, singleLine = true,
+                    importer.passphrase, { importer.passphrase = it }, enabled = !busy, singleLine = true,
                     label = { Text(stringResource(R.string.key_import_passphrase_label)) },
                     keyboardOptions = passwordKeyboard, visualTransformation = PasswordVisualTransformation(),
                     modifier = Modifier.fillMaxWidth().testTag("key-import-passphrase"),
@@ -130,25 +85,9 @@ fun KeyImportDialog(model: HostsModel, replacementKeyId: String? = null, onDismi
         },
         confirmButton = {
             TextButton(
-                enabled = !busy && (!needsLabel || label.isNotBlank()) && privateKey.isNotBlank(),
+                enabled = !busy && (!needsLabel || label.isNotBlank()) && importer.privateKey.isNotBlank(),
                 modifier = Modifier.testTag("key-import-save"),
-                onClick = {
-                    busy = true
-                    problem = null
-                    scope.launch {
-                        try {
-                            if (replacementKeyId == null) model.importKey(label, privateKey, passphrase)
-                            else model.recoverKey(replacementKeyId, privateKey, passphrase)
-                            close()
-                        } catch (e: CoreException) {
-                            // Permit a retry, but don't retain a failed passphrase.
-                            passphrase = ""
-                            problem = problemFor(e).body
-                        } finally {
-                            busy = false
-                        }
-                    }
-                },
+                onClick = { importer.submit(label, replacementKeyId) },
             ) { Text(stringResource(if (replacementKeyId == null) R.string.key_import_button else R.string.key_recover_replace_button)) }
         },
         dismissButton = {

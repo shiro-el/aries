@@ -98,6 +98,10 @@ fun SettingsScreen(
         return
     }
     var customAccent by rememberSaveable { mutableStateOf(false) }
+    var fontLicense by rememberSaveable { mutableStateOf(false) }
+    var voicePicker by rememberSaveable { mutableStateOf(false) }
+    var quietPicker by rememberSaveable { mutableStateOf<Boolean?>(null) }
+    val quietHours = rememberQuietHoursSettings()
     val readAloud = io.github.shiroel.aries.speech.rememberReadAloud(model)
     Column(Modifier.fillMaxSize()) {
         if (showHeader) {
@@ -148,11 +152,11 @@ fun SettingsScreen(
                 }
             }
             item(key = "terminal-display") {
-                SettingsField(R.string.terminal_display_title) { TerminalDisplaySection(terminalDisplay) }
+                SettingsField(R.string.terminal_display_title) { TerminalDisplaySection(terminalDisplay, onShowLicense = { fontLicense = true }) }
             }
-            item(key = "read-aloud") { SettingsField { io.github.shiroel.aries.speech.ReadAloudSettings(readAloud) } }
+            item(key = "read-aloud") { SettingsField { io.github.shiroel.aries.speech.ReadAloudSettings(readAloud, onPickVoice = { voicePicker = true }) } }
             item { SettingsHeading(R.string.settings_notifications_section) }
-            item(key = "quiet-hours") { SettingsField { QuietHoursSection() } }
+            item(key = "quiet-hours") { SettingsField { QuietHoursSection(quietHours, onEditTime = { quietPicker = it }) } }
             item { SettingsHeading(R.string.settings_connections_section) }
             item {
                 Text(
@@ -194,6 +198,9 @@ fun SettingsScreen(
         }
     }
     if (customAccent) CustomAccentSheet(settings, onDismiss = { customAccent = false })
+    if (fontLicense) TerminalFontLicenseDialog { fontLicense = false }
+    if (voicePicker) io.github.shiroel.aries.speech.ReadAloudVoicePicker(readAloud) { voicePicker = false }
+    quietPicker?.let { start -> QuietHoursTimePicker(quietHours, start) { quietPicker = null } }
 }
 
 /** Keep the three names readable with the same enlarged-text threshold as Agent rows. */
@@ -249,10 +256,13 @@ internal fun HostSettingsScreen(model: HostsModel, host: Host, hostEditor: @Comp
                 }
             }
         }
-        item(key = "herdr-install") { SettingsField { HerdrInstallSection(model.herdrInstall) { model.openHost(host) } } }
-        item(key = "beacon") { SettingsField { BeaconSection(model.beacon) } }
-        item(key = "push") { SettingsField { PushSection(model.push, beaconState = model.beacon.ui) } }
+        item(key = "herdr-install") { SettingsField { HerdrInstallSection(model.herdrInstall, showDialogs = false) { model.openHost(host) } } }
+        item(key = "beacon") { SettingsField { BeaconSection(model.beacon, showDialogs = false) } }
+        item(key = "push") { SettingsField { PushSection(model.push, beaconState = model.beacon.ui, showDialogs = false) } }
     }
+    HerdrInstallDialog(model.herdrInstall)
+    BeaconDialogs(model.beacon)
+    PushDialogs(model.push)
 }
 
 @Composable

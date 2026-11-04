@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
@@ -58,12 +59,12 @@ private fun ReadAloudSpeed(state: ReadAloudState) {
 }
 
 @Composable
-fun ReadAloudSettings(state: ReadAloudState) {
-    var picker by remember { mutableStateOf(false) }
+fun ReadAloudSettings(state: ReadAloudState, onPickVoice: (() -> Unit)? = null) {
+    var picker by rememberSaveable { mutableStateOf(false) }
     Text(stringResource(R.string.read_aloud_title), style = MaterialTheme.typography.titleSmall)
     ReadAloudSpeed(state)
     val selected = state.voices.find { it.id == state.voice }
-    TextButton(onClick = { picker = true }, enabled = state.ready, modifier = Modifier.testTag("read-aloud-voice")) {
+    TextButton(onClick = { onPickVoice?.invoke() ?: run { picker = true } }, enabled = state.ready, modifier = Modifier.testTag("read-aloud-voice")) {
         Text(stringResource(R.string.read_aloud_voice, selected?.let { "${it.name} (${it.languageTag})" } ?: stringResource(R.string.read_aloud_default_voice)))
     }
     val context = LocalContext.current
@@ -80,14 +81,19 @@ fun ReadAloudSettings(state: ReadAloudState) {
         enabled = state.ready, modifier = Modifier.testTag("read-aloud-preview"),
     ) { Text(stringResource(if (state.activeId != null) R.string.read_aloud_stop else R.string.read_aloud_preview)) }
     ReadAloudPlayback(state, showSpeed = false)
-    if (picker) AlertDialog(
-        onDismissRequest = { picker = false },
+    if (picker) ReadAloudVoicePicker(state) { picker = false }
+}
+
+@Composable
+fun ReadAloudVoicePicker(state: ReadAloudState, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.read_aloud_voice_title)) },
         text = {
             LazyColumn(Modifier.heightIn(max = 400.dp).selectableGroup()) {
                 item {
                     VoiceRow(stringResource(R.string.read_aloud_default_voice), state.voice == null) {
-                        state.chooseVoice(null); picker = false
+                        state.chooseVoice(null); onDismiss()
                     }
                 }
                 items(state.voices, key = { it.id }) { voice ->
@@ -95,11 +101,11 @@ fun ReadAloudSettings(state: ReadAloudState) {
                         R.string.read_aloud_voice_label, voice.name, voice.languageTag,
                         stringResource(if (voice.network) R.string.read_aloud_voice_network else R.string.read_aloud_voice_local),
                     )
-                    VoiceRow(label, state.voice == voice.id) { state.chooseVoice(voice.id); picker = false }
+                    VoiceRow(label, state.voice == voice.id) { state.chooseVoice(voice.id); onDismiss() }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { picker = false }) { Text(stringResource(R.string.back_button)) } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.back_button)) } },
     )
 }
 

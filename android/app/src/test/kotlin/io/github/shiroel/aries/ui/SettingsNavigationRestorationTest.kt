@@ -19,6 +19,7 @@ class SettingsNavigationRestorationTest {
     private val generation = mutableIntStateOf(0)
     private var saved: Bundle? = null
     private var target: PushTarget? = null
+    private var startupLayout = AppLayout.CONSOLE
     private lateinit var model: HostsModel
     private val terminal = TerminalInfo("box/t1", "agent", "", listOf("claude"), "/repo", "live", AgentStatus.Working)
     private val core = FakeCore().apply {
@@ -35,7 +36,7 @@ class SettingsNavigationRestorationTest {
             key(generation.intValue) {
                 val scope = rememberCoroutineScope()
                 model = remember { HostsModel(api, scope).also { it.restoreSettingsState(saved) } }
-                LaunchedEffect(model) { model.start(target) }
+                LaunchedEffect(model) { model.start(target, layout = startupLayout) }
             }
         }
         compose.waitForIdle()
@@ -150,6 +151,47 @@ class SettingsNavigationRestorationTest {
             assertTrue(model.screen is Screen.Chat)
             model.closeChat()
             assertEquals(listOf("h1"), (model.screen as Screen.Agents).board.hosts.map { it.id })
+        }
+    }
+
+    // D116: a fresh Settings owner must return to the home selected after process restoration.
+    @Test fun restoredSettingsRemapsHomeInBothLayoutDirections() {
+        show()
+        compose.runOnIdle { model.openSettings() }
+        restart()
+        compose.runOnIdle {
+            model.homeLayoutChanged(AppLayout.CONSOLE, AppLayout.THREAD)
+            model.settingsBack()
+            assertTrue(model.screen is Screen.Agents)
+            model.openSettings()
+        }
+        restart()
+        compose.runOnIdle {
+            model.homeLayoutChanged(AppLayout.THREAD, AppLayout.CONSOLE)
+            model.settingsBack()
+            assertEquals(Screen.Hosts, model.screen)
+        }
+    }
+
+    // D124: process restoration must keep the Add Host method and the saved Host's authorization step.
+    @Test fun addHostProgressSurvivesSavedStateRestoration() {
+        show()
+        compose.runOnIdle {
+            model.startAddingHost(HostAddMethod.QR)
+            startupLayout = AppLayout.TASKS
+        }
+        restart()
+        compose.runOnIdle {
+            assertEquals(HostAddMethod.QR, model.hostAddMethod)
+            assertEquals(Screen.Hosts, model.screen)
+            model.startAddingHost(HostAddMethod.MANUAL)
+            model.addHost("work", "work.test", 22, "me")
+        }
+        restart()
+        compose.runOnIdle {
+            assertEquals(HostAddMethod.MANUAL, model.hostAddMethod)
+            assertEquals("work", model.addedHost?.name)
+            assertEquals(model.addedHost?.id, model.setupHostId)
         }
     }
 

@@ -28,7 +28,7 @@ import io.github.shiroel.aries.core.BeaconUpdate
 
 /** The Host's Beacon: version, service health, install and remove. */
 @Composable
-fun BeaconSection(model: BeaconModel) {
+fun BeaconSection(model: BeaconModel, showDialogs: Boolean = true) {
     val host = model.host ?: return
     var advanced by rememberSaveable(host.id) { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -113,6 +113,12 @@ fun BeaconSection(model: BeaconModel) {
             }
         }
     }
+    if (showDialogs) BeaconDialogs(model)
+}
+
+@Composable
+internal fun BeaconDialogs(model: BeaconModel) {
+    val host = model.host ?: return
     if (model.confirmRemove) {
         AlertDialog(
             onDismissRequest = model::dismiss,
