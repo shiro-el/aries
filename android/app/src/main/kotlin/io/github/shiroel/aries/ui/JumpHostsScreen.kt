@@ -22,7 +22,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -39,10 +40,16 @@ import io.github.shiroel.aries.core.KeyInfo
 /** One jump host being edited. `keyId == null` is the default key. */
 private data class HopDraft(val address: String, val port: String, val user: String, val keyId: String?) {
     val portNumber get() = port.toIntOrNull()?.takeIf { it in 1..65535 }
-    val valid get() = address.isNotBlank() && user.isNotBlank() && portNumber != null
+    val valid get() = validHostToken(address.trim()) && validHostToken(user.trim()) && portNumber != null
 
     fun toJumpHost() = JumpHost(address.trim(), portNumber!!.toUShort(), user.trim(), keyId, null)
 }
+
+// Only editable endpoint text and key IDs are saved, never keys or trust decisions.
+private val HopDraftsSaver = listSaver<SnapshotStateList<HopDraft>, ArrayList<String?>>(
+    save = { drafts -> drafts.map { arrayListOf(it.address, it.port, it.user, it.keyId) } },
+    restore = { saved -> mutableStateListOf(*saved.map { HopDraft(it[0]!!, it[1]!!, it[2]!!, it[3]) }.toTypedArray()) },
+)
 
 /** "via a → b" under a Host row, or nothing for a direct Host. */
 @Composable
@@ -80,10 +87,10 @@ fun ExtraKeysSection(model: HostsModel) {
 
 @Composable
 fun JumpHostsScreen(model: HostsModel, host: Host, jumps: List<JumpHost>, hostKeyId: String?, showHeader: Boolean = true) {
-    val drafts = remember(host.id) {
+    val drafts = rememberSaveable(host.id, saver = HopDraftsSaver) {
         mutableStateListOf(*jumps.map { HopDraft(it.address, it.port.toString(), it.user, it.keyId) }.toTypedArray())
     }
-    var targetKey by remember(host.id) { mutableStateOf(hostKeyId) }
+    var targetKey by rememberSaveable(host.id) { mutableStateOf(hostKeyId) }
     // A plain scrolling Column: a route has a handful of hops, and every field stays composed.
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -99,15 +106,21 @@ fun JumpHostsScreen(model: HostsModel, host: Host, jumps: List<JumpHost>, hostKe
                 OutlinedTextField(
                     d.address, { drafts[i] = d.copy(address = it) },
                     label = { Text(stringResource(R.string.host_add_address)) }, singleLine = true,
+                    isError = d.address.isNotEmpty() && !validHostToken(d.address.trim()),
+                    supportingText = hostInputSupport(R.string.host_input_address_error.takeUnless { validHostToken(d.address.trim()) }),
                 )
                 OutlinedTextField(
                     d.port, { drafts[i] = d.copy(port = it) },
                     label = { Text(stringResource(R.string.host_add_port)) }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    isError = d.portNumber == null,
+                    supportingText = hostInputSupport(R.string.host_input_port_error.takeIf { d.portNumber == null }),
                 )
                 OutlinedTextField(
                     d.user, { drafts[i] = d.copy(user = it) },
                     label = { Text(stringResource(R.string.host_add_user)) }, singleLine = true,
+                    isError = d.user.isNotEmpty() && !validHostToken(d.user.trim()),
+                    supportingText = hostInputSupport(R.string.host_input_user_error.takeUnless { validHostToken(d.user.trim()) }),
                 )
                 Row {
                     KeyPicker(R.string.jumps_key_label, model.keys, d.keyId) { drafts[i] = d.copy(keyId = it) }
@@ -130,7 +143,7 @@ fun JumpHostsScreen(model: HostsModel, host: Host, jumps: List<JumpHost>, hostKe
 /** A button showing the chosen key; tapping it lists every key. `null` is the default key. */
 @Composable
 private fun KeyPicker(labelRes: Int, keys: List<KeyInfo>, selected: String?, onPick: (String?) -> Unit) {
-    var open by remember { mutableStateOf(false) }
+    var open by rememberSaveable { mutableStateOf(false) }
     val defaultLabel = stringResource(R.string.key_default_label)
     fun nameOf(id: String?) = keys.find { it.id == id && it.label.isNotEmpty() }?.label ?: defaultLabel
     Box {

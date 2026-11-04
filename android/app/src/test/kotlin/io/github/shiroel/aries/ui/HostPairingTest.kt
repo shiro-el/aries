@@ -3,6 +3,9 @@ package io.github.shiroel.aries.ui
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.core.app.ApplicationProvider
@@ -23,12 +26,13 @@ class HostPairingTest {
     private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
     private fun str(id: Int) = context.getString(id)
     private val details = HostPairingDetails("dev.tailnet", 2222u, "dev", "SHA256:host-pin", 9999999999u)
+    private var visible by mutableStateOf(true)
 
     private fun show(core: FakeCore) {
         compose.setContent {
             val scope = rememberCoroutineScope()
             val model = remember { HostsModel(core, scope) }
-            MaterialTheme { QrHostPairing(model, scanQr = { scanned -> scanned("ephemeral QR credential") }) }
+            MaterialTheme { if (visible) QrHostPairing(model, scanQr = { scanned -> scanned("ephemeral QR credential") }) }
         }
     }
 
@@ -40,10 +44,17 @@ class HostPairingTest {
         compose.onNodeWithTag("host-pair-port").assertTextContains("2222")
         compose.onNodeWithTag("host-pair-user").assertTextContains("dev")
         compose.onNodeWithText("SHA256:host-pin", substring = true).assertExists()
+        compose.onNodeWithTag("host-pair-name").performTextReplacement("My development Host")
+        // Regression: immediate app lock removes the review's composition; it
+        // must return without another scan or an automatic registration.
+        compose.runOnIdle { visible = false }
+        compose.runOnIdle { visible = true }
+        compose.onNodeWithTag("host-pair-name").assertTextContains("My development Host")
         assertTrue(core.hosts().isEmpty())
         compose.onNodeWithTag("host-pair-confirm").performClick()
         compose.waitForIdle()
         assertEquals("SHA256:host-pin", core.hosts().single().hostKey)
+        assertEquals("My development Host", core.hosts().single().name)
         assertEquals(1, core.pairingRequests.size)
         compose.onNodeWithTag("host-pair-confirm").assertDoesNotExist()
     }

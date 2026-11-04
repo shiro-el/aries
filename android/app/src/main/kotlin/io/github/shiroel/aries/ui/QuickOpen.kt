@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -142,7 +143,7 @@ internal fun QuickOpenButton() {
 
 @Composable
 internal fun QuickOpenDialog(model: HostsModel) {
-    var query by remember { mutableStateOf("") }
+    var query by rememberSaveable { mutableStateOf("") }
     var commandError by remember { mutableStateOf<Int?>(null) }
     val focus = remember { FocusRequester() }
     val now by produceState(System.currentTimeMillis()) {
