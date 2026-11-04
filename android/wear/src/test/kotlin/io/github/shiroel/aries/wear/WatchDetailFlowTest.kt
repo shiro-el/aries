@@ -46,9 +46,9 @@ class WatchDetailFlowTest {
         scope.cancel()
     }
 
-    // Catches a late send reply being lost when a new request/token replaces
-    // the row while the RPC is still pending, allowing an accidental repeat.
-    @Test fun answerOutcomeSurvivesAReplacementRequestAndDetailReentry() {
+    // Catches duplicate sends while an old turn is pending, and a late outcome
+    // hiding the next question after leaving and reopening detail.
+    @Test fun onlyPendingAnswerSurvivesAReplacementRequestAndDetailReentry() {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         val reply = CompletableDeferred<ByteArray>()
         val session = WatchDetailSession(scope, { _, _ -> reply.await() })
@@ -62,12 +62,28 @@ class WatchDetailFlowTest {
         compose.onNodeWithText("Sending…").assertExists()
         screenshot("answer-sending")
         compose.runOnIdle { showing = false; session.merge(summary(question.copy(stateToken = "turn2", requestId = "q2"))) }
-        compose.runOnIdle { reply.complete(WatchResult.SENT.toBytes()) }
         compose.runOnIdle { showing = true }
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("Sending…"))
+        compose.onNodeWithText("Sending…").assertExists()
+        compose.onNodeWithText("Blue").assertDoesNotExist()
+        compose.runOnIdle { reply.complete(WatchResult.SENT.toBytes()) }
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("Blue"))
+        compose.onNodeWithText("Sent").assertDoesNotExist()
+        compose.onNodeWithText("Blue").assertHasClickAction().performClick()
         compose.onNode(hasScrollAction()).performScrollToNode(hasText("Sent"))
         compose.onNodeWithText("Sent").assertExists()
-        screenshot("answer-sent-after-reentry")
+        screenshot("answer-sent-for-current-turn")
+        compose.runOnIdle { showing = false }
+        compose.runOnIdle { session.merge(session.summary); showing = true }
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("Sent"))
+        compose.onNodeWithText("Sent").assertExists()
         compose.onNodeWithText("Blue").assertDoesNotExist()
+        // Even a new token with the same request ID must have fresh actions.
+        compose.runOnIdle { session.merge(summary(question.copy(stateToken = "turn3", requestId = "q2"))) }
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("Blue"))
+        compose.onNodeWithText("Sent").assertDoesNotExist()
+        compose.onNodeWithText("Blue").assertHasClickAction()
+        screenshot("answer-next-question")
         scope.cancel()
     }
 
