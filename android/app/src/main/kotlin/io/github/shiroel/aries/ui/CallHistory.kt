@@ -48,7 +48,7 @@ internal fun CallInboxPanel(
 ) {
     val waiting = model.calls.filter { it.answerable }.let { calls ->
         if (LocalLayoutTokens.current == tokensFor(AppLayout.TASKS))
-            taskNeeds(emptyList(), calls).filterIsInstance<TaskNeed.Call>().map { it.entry }
+            calls.sortedWith(compareByDescending<CallEntry> { it.call.urgency.ordinal }.thenByDescending { it.call.atMs })
         else calls
     }
     val other = model.calls.filter { !it.answerable && it.call.answer == null }
