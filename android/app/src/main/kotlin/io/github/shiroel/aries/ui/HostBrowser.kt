@@ -282,7 +282,7 @@ private fun HostTreeList(
     }
     LazyColumn {
         if (browser.terminals.isEmpty()) item {
-            Text(stringResource(R.string.terminals_empty))
+            Text(stringResource(R.string.terminals_empty), Modifier.padding(LocalLayoutTokens.current.contentPadding))
             startTask?.let { start ->
                 TextButton(onClick = { start(null) }, enabled = browser.link?.state == LinkState.Up && !browser.closed) {
                     Text(stringResource(R.string.new_task_title))

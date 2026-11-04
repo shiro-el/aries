@@ -8,7 +8,6 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -42,7 +41,7 @@ internal fun TerminalDisplaySection(settings: TerminalDisplaySettings) {
         stringResource(if (it == TerminalFont.SYSTEM) R.string.terminal_display_font_system else R.string.terminal_display_font_jetbrains)
     }
     Text(stringResource(R.string.terminal_display_size_label, settings.fontSize))
-    Slider(
+    ConsoleSlider(
         value = settings.fontSize.toFloat(),
         onValueChange = { settings.chooseFontSize(it.roundToInt()) },
         valueRange = 8f..32f,

@@ -31,7 +31,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.ui.res.painterResource
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -272,6 +271,14 @@ private fun AccentControls(settings: ThemeSettings) {
     var custom by rememberSaveable { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()).selectableGroup()) {
+            if (AccentPresets.none { it.hex.equals(settings.accentHex, ignoreCase = true) }) {
+                val label = stringResource(R.string.accent_custom)
+                Box(Modifier.size(48.dp).selectable(true, role = Role.RadioButton, onClick = { custom = true })
+                    .semantics { contentDescription = label }, contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(32.dp).border(2.dp, MaterialTheme.colorScheme.primary).padding(4.dp)
+                        .background(Color(settings.accentArgb)))
+                }
+            }
             AccentPresets.forEach { preset ->
                 val label = stringResource(preset.label)
                 Box(Modifier.size(48.dp).selectable(settings.accentHex == preset.hex, role = Role.RadioButton,
@@ -328,7 +335,12 @@ private fun HsvPicker(settings: ThemeSettings) {
         settings.setAccent(committed)
     }
     val hues = remember { (0..6).map { Color(android.graphics.Color.HSVToColor(floatArrayOf(it * 60f, .8f, .95f))) } }
-    Box(Modifier.fillMaxWidth().height(10.dp).background(Brush.horizontalGradient(hues)))
+    val draft = Color(android.graphics.Color.HSVToColor(floatArrayOf(hue, saturation, brightness)))
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(Modifier.size(40.dp).background(draft).border(1.dp, MaterialTheme.colorScheme.outline)
+            .testTag("accent-draft"))
+        Box(Modifier.weight(1f).height(10.dp).background(Brush.horizontalGradient(hues)))
+    }
     LabeledSlider(R.string.accent_hue, hue, 0f..360f, { hue = it }, ::commit)
     LabeledSlider(R.string.accent_saturation, saturation, 0f..1f, { saturation = it }, ::commit)
     LabeledSlider(R.string.accent_brightness, brightness, 0f..1f, { brightness = it }, ::commit)
@@ -339,7 +351,7 @@ private fun LabeledSlider(labelRes: Int, value: Float, range: ClosedFloatingPoin
     val label = stringResource(labelRes)
     Column {
         Text(label, style = MaterialTheme.typography.bodySmall)
-        Slider(value = value, onValueChange = onChange, onValueChangeFinished = onFinished, valueRange = range,
+        ConsoleSlider(value = value, onValueChange = onChange, onValueChangeFinished = onFinished, valueRange = range,
             modifier = Modifier.fillMaxWidth().semantics { contentDescription = label })
     }
 }

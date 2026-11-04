@@ -17,6 +17,8 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
@@ -389,6 +391,7 @@ class ChatScreenTest {
         compose.waitForIdle()
         assertTrue(core.chatStopped)
         compose.onNodeWithText("claude").assertExists()
+        compose.onNodeWithTag("agent-row:h2:t1").performTouchInput { longClick() }
         compose.onNodeWithContentDescription(str(R.string.agent_pin_button_label, "claude", "server")).assertExists()
     }
 
