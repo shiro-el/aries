@@ -266,7 +266,7 @@ internal fun ThreadCallPanel(entry: CallEntry, calls: CallsModel, chat: ChatMode
 internal fun ThreadChatHeader(chat: ChatModel, onBack: () -> Unit, onTerminal: () -> Unit,
     onSearch: () -> Unit, preview: LocalhostPreview, usage: AgentUsage?) {
     var menu by remember(chat) { mutableStateOf(false) }
-    var showUsage by remember(chat) { mutableStateOf(false) }
+    var showUsage by chat.dialogs::showUsage
     val openFiles = LocalOpenFiles.current
     val github = chat.link?.github(chat.terminal.address)
     if (github?.shown == true) GithubDialog(chat.link, chat.terminal, github::dismiss)

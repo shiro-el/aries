@@ -54,6 +54,8 @@ data class AgentKey(val hostId: String, val address: String)
  * (Terminals that report Agent status) into one list.
  */
 class AgentBoard(val hosts: List<Host>) {
+    /** Captured Needs order and cursor belong to the board, not its recreated UI. */
+    internal var needsQueue by mutableStateOf<TasksNeedsQueue?>(null)
     private val lists = mutableStateMapOf<String, List<TerminalInfo>>()
     private val structures = mutableStateMapOf<String, HostStructure>()
     /** Compatibility with older callers; orderAgents ignores the retired Grouped value. */

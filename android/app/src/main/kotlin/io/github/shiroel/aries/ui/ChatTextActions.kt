@@ -200,12 +200,22 @@ private fun Modifier.childLongPress(onLongPress: () -> Unit): Modifier = pointer
 /** Screen-owned requests survive disposal or replacement of their originating lazy row. */
 @Stable
 internal class ChatDialogState {
+    var showUsage by mutableStateOf(false)
     var textMenu by mutableStateOf<ChatTextMenu?>(null)
     var tasksRequest by mutableStateOf<TasksRequest?>(null)
     var selection by mutableStateOf<String?>(null)
     var image by mutableStateOf<ByteArray?>(null)
     var diagram by mutableStateOf<String?>(null)
     var responseMetadata by mutableStateOf<ChatResponseMetadata?>(null)
+    fun dismiss() {
+        showUsage = false
+        textMenu = null
+        tasksRequest = null
+        selection = null
+        image = null
+        diagram = null
+        responseMetadata = null
+    }
     val isOpen: Boolean get() = textMenu != null || tasksRequest != null || selection != null || image != null || diagram != null || responseMetadata != null
 }
 
