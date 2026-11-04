@@ -9,7 +9,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.isPopup
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertTextContains
@@ -66,8 +66,8 @@ class PresetsScreenTest {
     }
 
     private fun openForm() {
-        compose.onNodeWithContentDescription(str(R.string.hosts_actions_label)).performClick()
-        compose.onNode(hasText(str(R.string.launch_open_button)) and hasAnyAncestor(isPopup())).performClick()
+        compose.onNodeWithContentDescription(str(R.string.host_create_title)).performClick()
+        compose.onNode(hasText(str(R.string.launch_open_button)) and hasAnyAncestor(hasTestTag("host-create-sheet"))).performClick()
     }
 
     private fun click(id: Int) = compose.onNodeWithText(str(id)).performClick()
@@ -98,7 +98,8 @@ class PresetsScreenTest {
         compose.onNodeWithTag("launch_model").assertTextContains("my-model")
         compose.onNodeWithTag("launch_effort").assertTextContains(str(R.string.launch_effort_high))
         click(R.string.cancel_button)
-        compose.onNodeWithTag("saved_run:${saved.id}").performClick()
+        compose.onNodeWithContentDescription(str(R.string.host_create_title)).performClick()
+        compose.onNodeWithTag("saved_run:${saved.id}").performScrollTo().performClick()
         compose.waitForIdle()
         assertEquals(listOf(saved.request), core.connection!!.launched)
     }
@@ -188,8 +189,9 @@ class PresetsScreenTest {
         assertEquals(emptyList<LaunchRequest>(), core.connection!!.launched)
         click(R.string.cancel_button)
 
-        // One tap on the browse screen starts it as saved.
-        compose.onNodeWithTag("saved_run:${saved.id}").performClick()
+        // The creation sheet runs it with the saved options.
+        compose.onNodeWithContentDescription(str(R.string.host_create_title)).performClick()
+        compose.onNodeWithTag("saved_run:${saved.id}").performScrollTo().performClick()
         compose.waitForIdle()
         assertEquals(listOf(request), core.connection!!.launched)
 
@@ -220,7 +222,8 @@ class PresetsScreenTest {
         val core = FakeCore().apply { structure = desktop; savedLaunches += saved }
         open(core)
         core.connection!!.launchFailWith = CoreException.Rpc("spawn_failed", "cannot start in /nope")
-        compose.onNodeWithTag("saved_run:${saved.id}").performClick()
+        compose.onNodeWithContentDescription(str(R.string.host_create_title)).performClick()
+        compose.onNodeWithTag("saved_run:${saved.id}").performScrollTo().performClick()
         compose.waitForIdle()
         compose.onNodeWithText(str(R.string.launch_spawn_failed, "cannot start in /nope")).assertExists()
         compose.onNodeWithTag("launch_command").assertTextContains("make")
