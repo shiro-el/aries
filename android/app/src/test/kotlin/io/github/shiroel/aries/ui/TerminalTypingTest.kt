@@ -23,6 +23,8 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.performTouchInput
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.core.AttachMode
@@ -193,15 +195,17 @@ class TerminalTypingTest {
         compose.onNodeWithText(str(R.string.key_right)).performClick()
         // Ctrl applies to the next key only.
         compose.onNodeWithText(str(R.string.key_ctrl)).performClick()
-        ic.commitText("r", 1)
-        ic.commitText("r", 1)
+        ic.commitText("c", 1)
+        ic.commitText("c", 1)
+        compose.onNodeWithText(str(R.string.key_slash)).performClick()
+        compose.onNodeWithText(str(R.string.key_dash)).performClick()
         compose.waitForIdle()
 
         assertEquals(
             listOf(
                 "text:ls -la", "key:Enter", "text:x", "key:Backspace", "key:Enter",
                 "key:Escape", "key:Tab", "key:Up", "key:Down", "key:Left", "key:Right",
-                "key:ctrl+r", "text:r",
+                "key:ctrl+c", "text:c", "key:/", "key:-",
             ),
             typing.sent,
         )
@@ -267,13 +271,66 @@ class TerminalTypingTest {
     }
 
     @Test
-    fun theInterruptKeySendsCtrlC() {
+    fun heldNavigationKeysRepeatAndStopWhenReleasedOrCancelled() {
         val core = FakeCore()
         open(core)
         focusInput()
-        compose.onNodeWithText(str(R.string.key_interrupt)).performClick()
+        val sent = core.connection!!.views.last().sent
+        compose.mainClock.autoAdvance = false
+        for ((label, key) in listOf(
+            R.string.key_up to "Up", R.string.key_down to "Down",
+            R.string.key_left to "Left", R.string.key_right to "Right",
+            R.string.key_home to "Home", R.string.key_end to "End",
+            R.string.key_page_up to "PageUp", R.string.key_page_down to "PageDown",
+        )) {
+            compose.runOnIdle { sent.clear() }
+            val button = compose.onNodeWithText(str(label))
+            button.performTouchInput { down(center) }
+            compose.mainClock.advanceTimeBy(900)
+            compose.runOnIdle {
+                assertTrue("$key should repeat while held: $sent", sent.size >= 2)
+                assertTrue(sent.all { it == "key:$key" })
+            }
+            button.performTouchInput { up() }
+            compose.waitForIdle()
+            val released = sent.size
+            compose.mainClock.advanceTimeBy(600)
+            compose.runOnIdle { assertEquals("$key stopped on release", released, sent.size) }
+            button.performTouchInput { down(center) }
+            compose.mainClock.advanceTimeBy(900)
+            button.performTouchInput { cancel() }
+            compose.waitForIdle()
+            val cancelled = sent.size
+            compose.mainClock.advanceTimeBy(600)
+            compose.runOnIdle { assertEquals("$key stopped on cancel", cancelled, sent.size) }
+        }
+        compose.mainClock.autoAdvance = true
+    }
+
+    @Test
+    fun longPressedModifiersStayLockedUntilTappedAndHidingKeysClearsThem() {
+        val core = FakeCore()
+        open(core)
+        val ic = focusInput()
+        val ctrl = compose.onNodeWithText(str(R.string.key_ctrl))
+        val alt = compose.onNodeWithText(str(R.string.key_alt))
+        ctrl.performTouchInput { longClick() }
+        alt.performTouchInput { longClick() }
+        ic.commitText("cx", 1)
         compose.waitForIdle()
-        assertEquals(listOf("key:ctrl+c"), core.connection!!.views.last().sent)
+        assertEquals(listOf("key:ctrl+alt+c", "key:ctrl+alt+x"), core.connection!!.views.last().sent)
+        ctrl.performClick()
+        ic.commitText("yz", 1)
+        compose.waitForIdle()
+        assertEquals(listOf("key:ctrl+alt+c", "key:ctrl+alt+x", "key:alt+y", "key:alt+z"),
+            core.connection!!.views.last().sent)
+        compose.onNodeWithContentDescription(str(R.string.terminal_keys_hide_button)).performClick()
+        ic.commitText("q", 1)
+        compose.waitForIdle()
+        assertEquals("text:q", core.connection!!.views.last().sent.last())
+        compose.onNodeWithContentDescription(str(R.string.terminal_keys_show_button)).performClick()
+        ctrl.assertIsNotSelected()
+        alt.assertIsNotSelected()
     }
 
     @Test

@@ -34,6 +34,7 @@ internal fun TerminalComposer(viewer: TerminalViewer) {
     if (!viewer.composerOpen) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             TerminalInput(viewer, Modifier.weight(1f))
+            if (viewer.typing) TerminalKeyBarToggle(viewer)
             ActionIcon(R.drawable.ic_square_pen, R.string.terminal_compose_button, viewer::openComposer)
         }
         return
@@ -66,6 +67,7 @@ internal fun TerminalComposer(viewer: TerminalViewer) {
             },
         )
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            if (viewer.typing) TerminalKeyBarToggle(viewer)
             ActionIcon(R.drawable.ic_keyboard, R.string.terminal_direct_input_button, viewer::closeComposer)
             Spacer(Modifier.weight(1f))
             ActionIcon(R.drawable.ic_corner_down_left, R.string.terminal_enter_button,
