@@ -22,6 +22,11 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 internal data class TaskIssue(val repository: GithubRepository, val item: GithubItem)
+internal data class AgentCreationAccess(
+    val startTask: (HostLink) -> Unit,
+    val runSaved: (AgentBoard, HostLink, SavedLaunch) -> Unit,
+)
+internal val LocalAgentCreation = compositionLocalOf<AgentCreationAccess?> { null }
 internal val LocalStartTask = compositionLocalOf<((TaskIssue?) -> Unit)?> { null }
 
 /** A launch is performed once. Only a positive readiness observation permits the first send.
@@ -38,7 +43,7 @@ internal class NewTask(var link: HostLink, val form: LaunchForm, prompt: String)
     var waiting by mutableStateOf(false)
         private set
 
-    val canStart get() = !form.busy && !deliveryUnknown && !launchUnknown &&
+    val canStart get() = link.state == LinkState.Up && !form.busy && !deliveryUnknown && !launchUnknown &&
         prompt.isNotBlank() && form.cwd.startsWith('/') && form.preset in taskPresets
 
     suspend fun start(onReady: (TerminalInfo, String) -> Unit) {
@@ -97,30 +102,35 @@ internal class NewTask(var link: HostLink, val form: LaunchForm, prompt: String)
 
 private val taskPresets = listOf(AgentPreset.CLAUDE_CODE, AgentPreset.CODEX)
 
-/** Shared entry point for the Host list, connected Host menu and GitHub Issue. */
+/** Shared task flow for Host and Agent lists, the connected Host sheet and GitHub Issues. */
 @Composable
 internal fun NewTaskAccess(model: HostsModel, content: @Composable () -> Unit) {
     val scope = rememberCoroutineScope()
     val resources = androidx.compose.ui.platform.LocalResources.current
+    val history = rememberCreationHostHistory()
+    val currentHostId = when (val screen = model.screen) {
+        is Screen.Browse -> screen.browser.host.id
+        is Screen.Chat -> screen.chat.host.id
+        is Screen.Terminal -> screen.viewer.link?.host?.id
+        else -> null
+    }
+    LaunchedEffect(currentHostId) { currentHostId?.let(history::used) }
     var task by remember(model) { mutableStateOf<NewTask?>(null) }
     var visible by remember(model) { mutableStateOf(false) }
-    val start: (TaskIssue?) -> Unit = start@{ issue ->
+    val startOnLink: (HostLink, TaskIssue?) -> Unit = start@{ link, issue ->
+        if (link.state != LinkState.Up) return@start
         val screen = model.screen
-        val browser = model.quickOpenBrowser
-        val link = when (screen) {
-            is Screen.Browse -> screen.browser.link
-            is Screen.Chat -> screen.chat.link
-            is Screen.Terminal -> screen.viewer.link
-            else -> null
-        } ?: return@start
+        val browser = model.quickOpenBrowser?.takeIf { it.host.id == link.host.id }
         val conn = link.connection ?: return@start
+        history.used(link.host.id)
         if (issue == null && task?.link?.host?.id == link.host.id) {
             task?.link = link
             visible = true
             return@start
         }
         if (issue?.repository?.on != null) return@start
-        val structure = browser?.structure ?: HostStructure(emptyList(), emptyList(), null)
+        val structure = browser?.structure ?: (screen as? Screen.Agents)?.board?.structureOf(link.host.id)
+            ?: HostStructure(emptyList(), emptyList(), null)
         val form = LaunchForm(structure, conn.recentCwds(), null, null, conn.savedLaunches())
         form.preset = AgentPreset.CLAUDE_CODE
         val terminal = when (screen) {
@@ -140,6 +150,15 @@ internal fun NewTaskAccess(model: HostsModel, content: @Composable () -> Unit) {
         task = NewTask(link, form, prompt)
         visible = true
     }
+    val start: (TaskIssue?) -> Unit = start@{ issue ->
+        val link = when (val screen = model.screen) {
+            is Screen.Browse -> screen.browser.link
+            is Screen.Chat -> screen.chat.link
+            is Screen.Terminal -> screen.viewer.link
+            else -> null
+        } ?: return@start
+        startOnLink(link, issue)
+    }
     val browse = model.screen as? Screen.Browse
     LaunchedEffect(model.newTaskHostId, browse?.browser?.structure) {
         if (model.newTaskHostId != null && browse?.browser?.host?.id == model.newTaskHostId && browse?.browser?.structure != null) {
@@ -147,7 +166,9 @@ internal fun NewTaskAccess(model: HostsModel, content: @Composable () -> Unit) {
             start(null)
         }
     }
-    CompositionLocalProvider(LocalStartTask provides start) {
+    CompositionLocalProvider(LocalStartTask provides start,
+        LocalCreationHostHistory provides history,
+        LocalAgentCreation provides AgentCreationAccess({ startOnLink(it, null) }, model::runSavedFromAgents)) {
         content()
         task?.takeIf { visible }?.let { current ->
             fun open(terminal: TerminalInfo, draft: String) {
