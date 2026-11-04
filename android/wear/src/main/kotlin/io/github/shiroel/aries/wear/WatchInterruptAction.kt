@@ -49,7 +49,7 @@ fun WatchInterruptAction(agent: WatchAgent) {
         ScalingLazyColumn(modifier = Modifier.fillMaxSize(), autoCentering = null,
             contentPadding = PaddingValues(horizontal = 18.dp, vertical = 32.dp)) {
             item { Text(stringResource(R.string.wear_interrupt_confirm_body, agent.name), style = MaterialTheme.typography.body2) }
-            item { InterruptChip(stringResource(R.string.wear_interrupt_confirm), !pending) {
+            item { InterruptChip(stringResource(R.string.wear_interrupt_confirm), !pending, primary = true) {
                 confirming = false
                 pending = true
                 result = null
@@ -90,7 +90,8 @@ fun WatchInterruptAction(agent: WatchAgent) {
 }
 
 @Composable
-private fun InterruptChip(label: String, enabled: Boolean, onClick: () -> Unit) {
+private fun InterruptChip(label: String, enabled: Boolean, primary: Boolean = false, onClick: () -> Unit) {
     Chip(label = { Text(label) }, onClick = onClick, enabled = enabled,
-        colors = ChipDefaults.secondaryChipColors(), modifier = Modifier.fillMaxWidth())
+        colors = if (primary) ChipDefaults.primaryChipColors() else ChipDefaults.secondaryChipColors(),
+        shape = WatchConsoleShape, modifier = Modifier.fillMaxWidth())
 }
