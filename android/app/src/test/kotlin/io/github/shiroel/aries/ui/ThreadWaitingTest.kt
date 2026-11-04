@@ -22,6 +22,47 @@ import org.robolectric.annotation.Config
 class ThreadWaitingTest {
     @get:Rule val compose = createComposeRule()
 
+    // D04: a failed list watch must remove cached Agents from live waiting and drawer priority sections.
+    @Test fun failedHostListKeepsLastKnownAgentsOutOfLiveWaiting() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val core = FakeCore().apply {
+            addHost("home", Endpoint.Ssh("home.test", 22u, "me"))
+            addHost("work", Endpoint.Ssh("work.test", 22u, "me"))
+            terminalsOf["h1"] = listOf(TerminalInfo("t1", "Current", "", listOf("claude"), "/repo", "live", AgentStatus.Working))
+            terminalsOf["h2"] = listOf(
+                TerminalInfo("t2", "Old question", "", listOf("claude"), "/repo", "live", AgentStatus.Blocked(BlockedReason.QUESTION, null)),
+                TerminalInfo("t3", "Old work", "", listOf("claude"), "/repo", "live", AgentStatus.Working))
+            storedStates["h2"] = LastKnownState("h2", terminalsOf.getValue("h2"), 1_000uL)
+        }
+        lateinit var model: HostsModel
+        val settings = ThemeSettings(context.getSharedPreferences("thread-freshness", Context.MODE_PRIVATE)).apply {
+            chooseLayout(AppLayout.THREAD)
+        }
+        compose.setContent {
+            val scope = rememberCoroutineScope()
+            model = remember { HostsModel(core, scope).apply { start(layout = AppLayout.THREAD) } }
+            AriesApp(model, settings)
+        }
+        compose.waitUntil { model.drawerAgents.size == 3 && model.quickOpenSources.all { it.live } }
+        compose.runOnIdle { model.openPushedAgent("h1", "t1", openChat = true) }
+        compose.onNodeWithTag("thread-waiting-pill").assertExists()
+        compose.runOnIdle { core.failTerminalWatch("h2", CoreException.Rpc("list_failed", "List failed")) }
+        compose.waitUntil { model.quickOpenSources.any { it.host.id == "h2" && !it.live } }
+        compose.onNodeWithTag("thread-waiting-pill").assertDoesNotExist()
+        compose.runOnIdle {
+            val cached = model.drawerAgents.filter { it.host.id == "h2" }
+            assertEquals(2, cached.size)
+            assertTrue(cached.all { !it.live && it.lastUpdatedMs == 1_000L })
+        }
+        compose.openConsoleDrawer()
+        compose.onNodeWithText(context.getString(R.string.thread_section_needs)).assertDoesNotExist()
+        compose.onNodeWithText(context.getString(R.string.thread_section_working)).onParent()
+            .assert(hasAnyDescendant(hasText("1")))
+        compose.onNodeWithText(context.getString(R.string.thread_section_earlier)).assertExists()
+        compose.onNodeWithTag("thread-agent:h2:t2").assertExists()
+        compose.onNodeWithTag("thread-agent:h2:t3").assertExists()
+    }
+
     // Regression: opening a preview must retire its old stream and keep the newly adopted Chat stream alive.
     @Test fun openingTheWaitingConversationKeepsItsChatStreamAlive() {
         val context = ApplicationProvider.getApplicationContext<Context>()
