@@ -582,15 +582,17 @@ fun TerminalScreen(
                             Banner(stringResource(R.string.terminal_connection_closed))
                         }
                     }
-                    Box(Modifier.align(Alignment.BottomStart)) {
+                    Column(Modifier.align(Alignment.BottomStart).fillMaxWidth()) {
+                        if (viewer.scrolled > 0 && look.selection == null) {
+                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                LatestButton(
+                                    description = stringResource(R.string.terminal_back_to_live),
+                                    onClick = { scope.launch { viewer.animateToLive() } },
+                                    modifier = Modifier.padding(8.dp),
+                                )
+                            }
+                        }
                         TerminalLookBar(viewer, look, onSelectionSend)
-                    }
-                    if (viewer.scrolled > 0 && look.selection == null) {
-                        LatestButton(
-                            description = stringResource(R.string.terminal_back_to_live),
-                            onClick = { scope.launch { viewer.animateToLive() } },
-                            modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp),
-                        )
                     }
                 }
                 TerminalComposer(viewer)
