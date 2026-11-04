@@ -895,6 +895,7 @@
     <string name="tasks_home">Tasks</string>
     <string name="tasks_hosts_count">Hosts %1$d/%2$d</string>
     <string name="tasks_prompt_hint">What should the Agent do?</string>
+    <string name="tasks_preparing">Preparing new task…</string>
     <string name="tasks_expand_label">Open new task full screen</string>
     <string name="tasks_agent">Agent</string>
     <string name="tasks_filter_all">All</string>
