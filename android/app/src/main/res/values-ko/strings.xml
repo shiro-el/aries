@@ -42,6 +42,8 @@
     <string name="agent_details_folder">폴더 · %1$s</string>
 
     <!-- Host creation and context sheets -->
+    <string name="creation_host_label">Host</string>
+    <string name="creation_host_disconnected">Agent를 만들려면 %1$s에 연결하세요.</string>
     <string name="host_create_title">새로 만들기</string>
     <string name="host_create_task_detail">Agent와 첫 프롬프트를 골라 작업 시작</string>
     <string name="host_create_terminal_detail">이 Host에서 명령 실행</string>
