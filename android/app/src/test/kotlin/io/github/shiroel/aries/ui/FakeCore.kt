@@ -1079,9 +1079,11 @@ class FakeConnection(
     /** When set, `sendMessage` is held (someone types at the Host) until it completes. */
     var sendHold: CompletableDeferred<Unit>? = null
     var sendReply: CompletableDeferred<Unit>? = null
+    val sendListeners = mutableListOf<SendListener>()
 
     override suspend fun sendMessage(address: String, text: String, listener: SendListener): SendOutcome {
         calls += "sendMessage"
+        sendListeners += listener
         sendHold?.let {
             listener.onHeld()
             it.await()

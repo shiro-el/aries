@@ -818,6 +818,8 @@
     <string name="chat_queue_agent">Passed to Agent · waiting for its turn</string>
     <string name="chat_queue_uncertain">Delivery unconfirmed · check the conversation before resending</string>
     <string name="chat_queue_cancel_button">Cancel queued message</string>
+    <string name="chat_queue_returned">Queued messages were returned to the input. Review them and send when ready.</string>
+    <string name="chat_delivery_dismiss_button">Dismiss delivery note</string>
 
     <string name="chat_send_held">Someone is typing in this Terminal. The message goes in once they pause.</string>
     <string name="chat_send_refused">Not sent: the Agent is Blocked and waits for you in the Terminal.</string>
