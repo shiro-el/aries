@@ -1207,6 +1207,9 @@
 
     <!-- Call inbox -->
     <string name="call_inbox_label">Calls, %1$d waiting</string>
+    <string name="call_banner_meta">%1$s Call · %2$s</string>
+    <string name="call_banner_open">View Calls</string>
+    <string name="call_banner_dismiss">Dismiss Call banner</string>
     <string name="call_inbox_expanded">Expanded</string>
     <string name="call_inbox_collapsed">Collapsed</string>
     <string name="call_inbox_past">Past Calls</string>

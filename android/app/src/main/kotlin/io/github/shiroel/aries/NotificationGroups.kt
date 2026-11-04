@@ -113,7 +113,9 @@ object NotificationGroups {
         remember(context, hostId, tag, generation, hidden = false, updated = update)
         val visibility = NotificationVisibility.from(context)
         val foreground = visibility?.foreground == true
-        if (foreground && !notification.extras.getBoolean(InlineNotifications.ACTION_UPDATE) &&
+        // Urgent Calls retain their channel's heads-up, sound and vibration even on the caller's screen.
+        val urgentCall = tag.startsWith("call:") && notification.channelId in setOf("calls_urgent", "calls_emergency")
+        if (foreground && !urgentCall && !update &&
             (notification.extras.getBoolean(NotificationVisibility.PASSIVE) ||
                 visibility.isViewing(hostId, notification.extras.getString(NotificationVisibility.TERMINAL)))) {
             remember(context, hostId, tag, generation, hidden = true)
@@ -121,7 +123,7 @@ object NotificationGroups {
             refresh(context, manager, hostId, hostName, excludedTag = tag)
             return
         }
-        val card = if (foreground || update) {
+        val card = if ((foreground && !urgentCall) || update) {
             val localized = AppLanguage.context(context)
             manager.createNotificationChannel(NotificationChannel(
                 if (update) UPDATE_CHANNEL else FOREGROUND_CHANNEL,
