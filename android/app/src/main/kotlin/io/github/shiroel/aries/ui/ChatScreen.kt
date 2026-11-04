@@ -168,6 +168,7 @@ class ChatModel(
     /** Tool entry IDs and response:<entry ID> disclosures the user expanded. */
     var expanded by mutableStateOf<Set<String>>(emptySet())
         private set
+    internal val threadToolGrouping = ThreadToolGrouping()
     /** Disclosure state survives switching between following and history renderers. */
     var rawInputsExpanded by mutableStateOf<Set<String>>(emptySet())
         private set
@@ -1200,7 +1201,10 @@ fun ChatScreen(
     }
     val entries by entriesState
     val transcript = remember(chat, entriesState, markdownState) { ChatTranscript(entriesState, markdownState) }
-    val toolGroups = if (thread != null) threadToolGroups(transcript.contents) else emptyList()
+    val toolGroupsState = remember(chat, transcript) {
+        derivedStateOf(structuralEqualityPolicy()) { chat.threadToolGrouping.update(transcript.contents) }
+    }
+    val toolGroups = if (thread != null) toolGroupsState.value else emptyList()
     val answerQuestion = if (thread != null) threadAnswerQuestion(chat) else null
     val dialogs = chat.dialogs
     val tasks = LocalTasksDetail.current
@@ -1341,6 +1345,10 @@ fun ChatScreen(
                     val historyContent = remember(chat, transcript, readAloud, agentCalls, calls, toggleTool) {
                         chatHistoryContent(transcript, chat, readAloud, agentCalls, calls, toggleTool)
                     }
+                    val threadContent = remember(chat, transcript, toolGroupsState, readAloud, answerQuestion?.id, agentCalls, toggleTool, scroll) {
+                        threadHistoryContent(transcript, toolGroupsState, chat, readAloud,
+                            answerQuestion?.id, agentCalls, toggleTool, scroll)
+                    }
                     // One LazyColumn owns both providers. Changing follow mode must
                     // keep the same list instance and item keys when reading details.
                     val followingContent: LazyListScope.() -> Unit = {
@@ -1378,8 +1386,7 @@ fun ChatScreen(
                     }
                     LazyColumn(
                         transcriptModifier, state = scroll.list, contentPadding = transcriptPadding,
-                        content = if (thread != null) threadHistoryContent(transcript, toolGroups, chat, readAloud,
-                            answerQuestion?.id, agentCalls, toggleTool, scroll) else if (scroll.following) followingContent else historyContent,
+                        content = if (thread != null) threadContent else if (scroll.following) followingContent else historyContent,
                     )
                     if (!searchOpen && !scroll.following && (entries.isNotEmpty() || agentCalls.isNotEmpty() || chat.queuedMessages.isNotEmpty())) {
                         LatestButton(

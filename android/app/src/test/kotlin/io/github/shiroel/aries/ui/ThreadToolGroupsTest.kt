@@ -9,6 +9,17 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class ThreadToolGroupsTest {
+    // D70: interleaved Thinking must stay in the same fold until a User or Agent body arrives.
+    @Test fun thinkingStaysWithToolsUntilTheNextConversationBody() {
+        fun tool(id: String) = ChatEntry(id, null, ChatEntryBody.Tool("Bash", "check", "{}", ChatToolStatus.DONE, null))
+        val entries = listOf(tool("1"), ChatEntry("thinking", null, ChatEntryBody.Thinking("Check the result")), tool("2"),
+            ChatEntry("agent", null, ChatEntryBody.Agent("Done")), tool("3"),
+            ChatEntry("user", null, ChatEntryBody.User("Continue")), tool("4"))
+        val transcript = ChatTranscript(mutableStateOf(entries), mutableStateOf(emptyMap()))
+        assertEquals(listOf(listOf("1", "thinking", "2"), listOf("3"), listOf("4")),
+            threadToolGroups(transcript.contents).map { group -> group.entries.map { it.id } })
+    }
+
     // Regression: collapsing tools must never mix calls across a user message or Agent response.
     @Test fun consecutiveToolsStayInsideTheirConversationSegment() {
         fun tool(id: String) = ChatEntry(id, null, ChatEntryBody.Tool("Read", "a.kt", "{}", ChatToolStatus.DONE, null))

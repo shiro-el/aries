@@ -26,6 +26,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.PERMISSION_TOOL
 import io.github.shiroel.aries.core.*
@@ -67,94 +68,115 @@ internal object ThreadScreens : LayoutScreens() {
 /** Keep the same projected rows, keys and search/reading indexes even while tools are collapsed. */
 internal fun threadHistoryContent(
     transcript: ChatTranscript,
-    groups: List<ThreadToolGroup>,
+    groups: State<List<ThreadToolGroup>>,
     chat: ChatModel,
     readAloud: io.github.shiroel.aries.speech.ReadAloudState,
     activeQuestion: String?,
     calls: List<CallEntry>,
     toggle: (String) -> Unit,
     scroll: ChatScrollState,
-): LazyListScope.() -> Unit = {
-    val byTool = groups.flatMap { group -> group.entries.map { it.id to group } }.toMap()
-    val users = transcript.contents.mapNotNull { (it as? ChatTranscriptContent.Header)?.entry }
-        .filter { it.body is ChatEntryBody.User }.mapTo(mutableSetOf()) { it.id }
-    items(transcript.rows, key = { it.key }, contentType = { it.contentType }) { row ->
-        CompositionLocalProvider(LocalChatSearchEntry provides row.entryId) {
-            val content = row.content
-            val group = byTool[row.entryId]
-            when {
-                group != null -> {
-                    val first = group.entries.first().id == row.entryId
-                    val expanded = group.key in chat.expanded
-                    if (first && group.entries.size > 1) ThreadToolSummary(group, chat, scroll, toggle, transcript)
-                    if (expanded || group.entries.size == 1) {
-                        val header = content as ChatTranscriptContent.Header
-                        Box(Modifier.padding(horizontal = 16.dp)) {
-                            ChatEntryView(header.entry, header.attachments, chat, row.entryId in chat.expanded,
-                                chat::image, readAloud) { toggle(row.entryId) }
+): LazyListScope.() -> Unit {
+    val byTool by derivedStateOf(structuralEqualityPolicy()) {
+        groups.value.flatMap { group -> group.entries.map { it.id to group } }.toMap()
+    }
+    val headers by derivedStateOf(structuralEqualityPolicy()) {
+        transcript.contents.mapNotNull { (it as? ChatTranscriptContent.Header)?.entry }
+    }
+    val users by derivedStateOf(structuralEqualityPolicy()) {
+        headers.filter { it.body is ChatEntryBody.User }.mapTo(mutableSetOf()) { it.id }
+    }
+    val metadata by derivedStateOf(structuralEqualityPolicy()) {
+        headers.mapNotNull { entry -> (entry.body as? ChatEntryBody.Agent)?.metadata?.let { entry.id to it } }.toMap()
+    }
+    return {
+        items(transcript.rows, key = { it.key }, contentType = { it.contentType }) { row ->
+            CompositionLocalProvider(LocalChatSearchEntry provides row.entryId, LocalChatResponseMetadata provides metadata[row.entryId]) {
+                val content = row.content
+                val group = byTool[row.entryId]
+                when {
+                    group != null -> {
+                        val first = group.entries.first().id == row.entryId
+                        val expanded = group.key in chat.expanded
+                        if (first && content is ChatTranscriptContent.Header && group.entries.size > 1) {
+                            ThreadToolSummary(group, chat, scroll, toggle, transcript)
+                        }
+                        if (expanded || group.entries.size == 1) {
+                            ChatTranscriptRowView(row, chat, readAloud, toggle)
                         }
                     }
-                }
-                row.entryId == activeQuestion -> {
-                    if (content is ChatTranscriptContent.Header) Column(Modifier.padding(16.dp)) {
-                        val question = content.entry.body as ChatEntryBody.Question
-                        Text(stringResource(if (question.name == PERMISSION_TOOL) R.string.thread_permission_waiting else R.string.thread_question_waiting), style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        question.questions.forEachIndexed { part, question ->
-                            SearchableChatText(question.text, "question:$part", style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium))
+                    row.entryId == activeQuestion -> {
+                        if (content is ChatTranscriptContent.Header) Column(Modifier.padding(16.dp)) {
+                            val question = content.entry.body as ChatEntryBody.Question
+                            Text(stringResource(if (question.name == PERMISSION_TOOL) R.string.thread_permission_waiting else R.string.thread_question_waiting), style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            question.questions.forEachIndexed { part, question ->
+                                SearchableChatText(question.text, "question:$part", style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium))
+                            }
                         }
                     }
-                }
-                row.entryId in users -> ThreadUserRow(row, chat)
-                content is ChatTranscriptContent.Footer -> {
-                    content.metadata?.let {
-                        val key = "response:${row.entryId}"
-                        Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                            ChatResponseMetadataView(it, key in chat.expanded) { toggle(key) }
+                    row.entryId in users -> ThreadUserRow(row, chat, row.entryId == users.lastOrNull() && chat.queuedMessages.isEmpty())
+                    content is ChatTranscriptContent.Footer -> {
+                        content.metadata?.takeIf { it.completion in setOf(ChatResponseCompletion.INTERRUPTED, ChatResponseCompletion.ERROR) }?.let {
+                            Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                                ChatResponseMetadataView(it, false, showDisclosure = false) {}
+                            }
                         }
                     }
+                    else -> ChatTranscriptRowView(row, chat, readAloud, toggle)
                 }
-                else -> ChatTranscriptRowView(row, chat, readAloud, toggle)
             }
         }
-    }
-    items(calls, key = { "call:${it.key}" }, contentType = { "call" }) { entry ->
-        val model = LocalThreadChat.current
-        Column(Modifier.fillMaxWidth().testTag("thread-call:${entry.call.id}")
-            .clickable(role = Role.Button) { model?.calls?.openThreadCall(entry) }
-            .padding(16.dp)) {
-            Text(stringResource(R.string.console_chat_call_label), style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(entry.call.title, fontWeight = FontWeight.Medium)
+        items(calls, key = { "call:${it.key}" }, contentType = { "call" }) { entry ->
+            val model = LocalThreadChat.current
+            Column(Modifier.fillMaxWidth().testTag("thread-call:${entry.call.id}")
+                .clickable(role = Role.Button) { model?.calls?.openThreadCall(entry) }
+                .padding(16.dp)) {
+                Text(stringResource(R.string.console_chat_call_label), style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(entry.call.title, fontWeight = FontWeight.Medium)
+            }
         }
+        queuedChatMessages(chat)
     }
-    queuedChatMessages(chat)
 }
 
 @Composable
-private fun ThreadUserRow(row: ChatTranscriptRow, chat: ChatModel) {
+private fun ThreadUserRow(row: ChatTranscriptRow, chat: ChatModel, latest: Boolean) {
     val content = row.content
     val top = content is ChatTranscriptContent.Header
     val bottom = content is ChatTranscriptContent.Footer
-    Column(Modifier.fillMaxWidth().padding(start = 40.dp, end = 16.dp,
-        top = if (top) 16.dp else 0.dp, bottom = if (bottom) 12.dp else 0.dp), horizontalAlignment = Alignment.End) {
-        val shape = RoundedCornerShape(topStart = if (top) 16.dp else 0.dp, topEnd = if (top) 16.dp else 0.dp,
-            bottomStart = if (bottom) 16.dp else 0.dp, bottomEnd = if (bottom) 16.dp else 0.dp)
-        Column(Modifier.fillMaxWidth().clip(shape).background(MaterialTheme.colorScheme.surfaceContainerHighest)) {
-            when (content) {
-                is ChatTranscriptContent.Header -> {
-                    Spacer(Modifier.height(8.dp))
-                    ChatAttachmentCards(content.attachments, chat)
-                }
-                is ChatTranscriptContent.Markdown -> ChatMarkdownItem(content.source, content.block, content.index, content.thinking)
-                is ChatTranscriptContent.Footer -> Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
-                    content.images.forEach { ChatImageView(it, chat::image) }
-                    val user = chat.snapshot?.entries?.find { it.id == row.entryId }?.body as? ChatEntryBody.User
-                    Text(stringResource(if (user?.queued == true) R.string.chat_queue_agent else R.string.chat_delivery_received),
-                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+    val user = (content as? ChatTranscriptContent.Footer)?.let {
+        chat.snapshot?.entries?.find { it.id == row.entryId }?.body as? ChatEntryBody.User
+    }
+    ThreadUserBubble(top, bottom, delivery = if (bottom && (latest || user?.queued == true)) ({
+        Text(stringResource(if (user?.queued == true) R.string.chat_queue_agent else R.string.chat_delivery_received),
+            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }) else null) {
+        when (content) {
+            is ChatTranscriptContent.Header -> {
+                Spacer(Modifier.height(12.dp))
+                ChatAttachmentCards(content.attachments, chat)
+            }
+            is ChatTranscriptContent.Markdown -> ChatMarkdownItem(content.source, content.block, content.index, content.thinking)
+            is ChatTranscriptContent.Footer -> Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                content.images.forEach { ChatImageView(it, chat::image) }
             }
         }
+    }
+}
+
+/** Outbox and transcript share the same silhouette; delivery lives below the body. */
+@Composable
+internal fun ThreadUserBubble(top: Boolean = true, bottom: Boolean = true,
+    delivery: (@Composable () -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(start = 40.dp, end = 16.dp,
+        top = if (top) 16.dp else 0.dp, bottom = if (bottom) 12.dp else 0.dp), horizontalAlignment = Alignment.End) {
+        // Header/footer segments must be at least the radius tall so lazy-row
+        // clipping keeps the same corners as the one-piece outbox bubble.
+        val shape = RoundedCornerShape(topStart = if (top) 12.dp else 0.dp, topEnd = if (top) 12.dp else 0.dp,
+            bottomStart = if (bottom) 12.dp else 0.dp, bottomEnd = if (bottom) 12.dp else 0.dp)
+        Column(Modifier.fillMaxWidth().clip(shape).background(MaterialTheme.colorScheme.surfaceContainerHighest), content = content)
+        if (delivery != null) Column(Modifier.padding(top = 4.dp), horizontalAlignment = Alignment.End) { delivery() }
     }
 }
 
@@ -166,8 +188,10 @@ private fun ThreadToolSummary(group: ThreadToolGroup, chat: ChatModel, scroll: C
         val fileCounts = buildList {
             if (group.readFiles > 0) add(pluralStringResource(R.plurals.thread_tools_read, group.readFiles, group.readFiles))
             if (group.modifiedFiles.isNotEmpty()) add(pluralStringResource(R.plurals.thread_tools_modified, group.modifiedFiles.size, group.modifiedFiles.size))
+            if (group.commands > 0) add(pluralStringResource(R.plurals.thread_tools_commands, group.commands, group.commands))
+            if (group.searches > 0) add(pluralStringResource(R.plurals.thread_tools_searches, group.searches, group.searches))
         }.joinToString(stringResource(R.string.thread_tools_separator))
-        val steps = pluralStringResource(R.plurals.thread_tools_steps, group.entries.size, group.entries.size)
+        val steps = pluralStringResource(R.plurals.thread_tools_steps, group.tools.size, group.tools.size)
         val summary = if (fileCounts.isEmpty()) steps else stringResource(R.string.thread_tools_summary, fileCounts, steps)
         val disclosure = stringResource(if (group.key in chat.expanded) R.string.chat_details_expanded else R.string.chat_details_collapsed)
         TextButton(onClick = { toggle(group.key) }, contentPadding = PaddingValues(0.dp),
@@ -183,16 +207,16 @@ private fun ThreadToolSummary(group: ThreadToolGroup, chat: ChatModel, scroll: C
                     if (group.key !in chat.expanded) chat.toggle(group.key)
                     if (entry.id !in chat.expanded) chat.toggle(entry.id)
                     scope.launch { scroll.list.scrollToItem(transcript.rows.indexOfFirst { it.entryId == entry.id }.coerceAtLeast(0)) }
-                }, label = { Text(path.substringAfterLast('/'), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                }, label = { Text(group.modifiedFileLabels.getValue(path), maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     modifier = Modifier.testTag("thread-diff:${entry.id}"))
             }
         }
-        if (group.entries.any { (it.body as ChatEntryBody.Tool).status == ChatToolStatus.FAILED }) {
+        if (group.tools.any { (it.body as ChatEntryBody.Tool).status == ChatToolStatus.FAILED }) {
             AnnouncedText(stringResource(R.string.chat_tool_failed), style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.error)
         }
-        val running = group.entries.lastOrNull { (it.body as ChatEntryBody.Tool).status == ChatToolStatus.RUNNING }?.body as? ChatEntryBody.Tool
-        if (running != null && chat.link?.state == LinkState.Up) {
+        val running = group.tools.lastOrNull { (it.body as ChatEntryBody.Tool).status == ChatToolStatus.RUNNING }?.body as? ChatEntryBody.Tool
+        if (running != null && !chat.showWorking && chat.link?.state == LinkState.Up) {
             Text(stringResource(R.string.thread_tool_running, running.name, running.title), style = MaterialTheme.typography.labelSmall,
                 maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.primary)
         }
@@ -205,9 +229,9 @@ internal fun threadAnswerQuestion(chat: ChatModel): ChatEntry? = chat.snapshot?.
 }
 
 @Composable
-internal fun ThreadAnswerPanel(chat: ChatModel, entry: ChatEntry) {
+internal fun ThreadAnswerPanel(chat: ChatModel, entry: ChatEntry, maxHeight: Dp = 360.dp) {
     // Large text and long questions scroll inside the panel.
-    Box(Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState()).testTag("thread-answer-panel")) {
+    Box(Modifier.fillMaxWidth().heightIn(max = maxHeight).verticalScroll(rememberScrollState()).testTag("thread-answer-panel")) {
         CompositionLocalProvider(LocalChatSearchEntry provides entry.id) {
             QuestionView(chat, entry.id, entry.body as ChatEntryBody.Question)
         }
@@ -215,10 +239,11 @@ internal fun ThreadAnswerPanel(chat: ChatModel, entry: ChatEntry) {
 }
 
 @Composable
-internal fun ThreadCallPanel(entry: CallEntry, calls: CallsModel, chat: ChatModel? = null, compact: Boolean = false, onDismiss: (() -> Unit)? = null) {
+internal fun ThreadCallPanel(entry: CallEntry, calls: CallsModel, chat: ChatModel? = null, compact: Boolean = false,
+    onDismiss: (() -> Unit)? = null, maxHeight: Dp = 360.dp) {
     val urgent = entry.call.urgency in setOf(CallUrgency.URGENT, CallUrgency.EMERGENCY)
     val accent = if (urgent) Color(0xFFF0B23E) else MaterialTheme.colorScheme.outlineVariant
-    Column(Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState()).testTag("thread-call-panel")) {
+    Column(Modifier.fillMaxWidth().heightIn(max = maxHeight).verticalScroll(rememberScrollState()).testTag("thread-call-panel")) {
         HorizontalDivider(thickness = if (urgent) 3.dp else 1.dp, color = accent)
         if (urgent || onDismiss != null) Row(
             Modifier.fillMaxWidth().background(if (urgent) accent.copy(alpha = .14f) else MaterialTheme.colorScheme.surfaceContainer),
@@ -334,13 +359,14 @@ internal fun ThreadComposer(chat: ChatModel, compact: Boolean) {
 @Composable
 internal fun ThreadChatInput(model: HostsModel, chat: ChatModel, activeCall: CallEntry?, calls: CallsModel?,
     question: ChatEntry?, compact: Boolean) {
+    val panelHeight = if (compact) minOf(360.dp, LocalAgentViewportHeight.current * .4f) else 360.dp
     Column(Modifier.fillMaxWidth()) {
-        ThreadWaitingPill(model, chat)
+        if (!compact) ThreadWaitingPill(model, chat)
         ThreadConnectionGuidance(chat)
         if (activeCall != null && calls != null) ThreadCallPanel(activeCall, calls, chat, compact, onDismiss = {
             calls.closeThreadCall(activeCall)
-        })
-        else if (question != null) ThreadAnswerPanel(chat, question)
+        }, maxHeight = panelHeight)
+        else if (question != null) ThreadAnswerPanel(chat, question, panelHeight)
         else if (chat.link != null) ThreadComposer(chat, compact)
     }
 }

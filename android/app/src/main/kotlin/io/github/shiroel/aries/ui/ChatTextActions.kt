@@ -57,6 +57,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import io.github.shiroel.aries.R
+import io.github.shiroel.aries.core.ChatResponseMetadata
 
 /**
  * Adds local text actions without coupling them to the text renderer. [text] is
@@ -78,7 +79,8 @@ internal fun ChatTextActions(
     val sharedDialogs = LocalChatDialogs.current
     val dialogs = sharedDialogs ?: remember { ChatDialogState() }
     var bounds by remember { mutableStateOf(Rect.Zero) }
-    val openMenu = rememberUpdatedState { dialogs.textMenu = ChatTextMenu(text, bounds) }
+    val metadata = LocalChatResponseMetadata.current
+    val openMenu = rememberUpdatedState { dialogs.textMenu = ChatTextMenu(text, bounds, metadata) }
     val actionsLabel = stringResource(R.string.chat_text_actions)
     Box {
         val gestures = if (interceptChildLongPress && text.isNotEmpty()) {
@@ -124,6 +126,10 @@ private fun ChatTextMenuView(menu: ChatTextMenu, dialogs: ChatDialogState) {
             Column(Modifier.width(IntrinsicSize.Max).widthIn(min = 240.dp, max = 320.dp).verticalScroll(rememberScrollState()).padding(vertical = 8.dp)
                 .semantics { paneTitle = actionsLabel }) {
                 // Build the list only when requested; long transcripts stay cheap while streaming.
+                menu.metadata?.let { metadata ->
+                    ActionMenuItem(label = stringResource(R.string.chat_response_details_button), icon = R.drawable.ic_circle_dot,
+                        onClick = { dialogs.responseMetadata = metadata; dialogs.textMenu = null })
+                }
                 chatWebUrls(text).map { it.second }.distinct().forEach { url ->
                     ActionMenuItem(
                         label = stringResource(R.string.chat_link_copy, url), icon = R.drawable.ic_link,
@@ -200,6 +206,7 @@ internal class ChatDialogState {
     var selection by mutableStateOf<String?>(null)
     var image by mutableStateOf<ByteArray?>(null)
     var diagram by mutableStateOf<String?>(null)
+    var responseMetadata by mutableStateOf<ChatResponseMetadata?>(null)
     fun dismiss() {
         showUsage = false
         textMenu = null
@@ -207,17 +214,26 @@ internal class ChatDialogState {
         selection = null
         image = null
         diagram = null
+        responseMetadata = null
     }
-    val isOpen: Boolean get() = textMenu != null || tasksRequest != null || selection != null || image != null || diagram != null
+    val isOpen: Boolean get() = textMenu != null || tasksRequest != null || selection != null || image != null || diagram != null || responseMetadata != null
 }
 
-internal data class ChatTextMenu(val text: String, val bounds: Rect)
+internal data class ChatTextMenu(val text: String, val bounds: Rect, val metadata: ChatResponseMetadata? = null)
 
 internal val LocalChatDialogs = staticCompositionLocalOf<ChatDialogState?> { null }
 internal val LocalChatImageRevision = staticCompositionLocalOf { 0 }
 
 @Composable
 internal fun ChatDialogs(dialogs: ChatDialogState) {
+    dialogs.responseMetadata?.let { metadata ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { dialogs.responseMetadata = null },
+            title = { Text(stringResource(R.string.chat_response_details_button)) },
+            text = { ChatResponseMetadataDetails(metadata, multiline = true) },
+            confirmButton = { TextButton(onClick = { dialogs.responseMetadata = null }) { Text(stringResource(R.string.ok_button)) } },
+        )
+    }
     dialogs.textMenu?.let { ChatTextMenuView(it, dialogs) }
     dialogs.selection?.let { selected ->
         Dialog(onDismissRequest = { dialogs.selection = null }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
