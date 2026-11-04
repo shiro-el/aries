@@ -33,6 +33,18 @@ class LastLocationStore(private val preferences: SharedPreferences) {
             .apply()
     }
 
+    /** Thread keeps its last Agent even when Host management becomes the last route. */
+    fun loadAgent(): LastLocation? = preferences.getString("agent_host", null)?.let { host ->
+        preferences.getString("agent_terminal", null)?.let { terminal ->
+            LastLocation(hostId = host, terminal = terminal, view = AgentView.CHAT)
+        }
+    } ?: load().takeIf { it.terminal != null }
+
+    fun saveAgent(location: LastLocation) {
+        preferences.edit().putString("agent_host", location.hostId)
+            .putString("agent_terminal", location.terminal).apply()
+    }
+
     companion object {
         fun from(context: Context) = LastLocationStore(
             context.applicationContext.getSharedPreferences("last_location", Context.MODE_PRIVATE),

@@ -116,7 +116,7 @@ private fun AriesContent(
                 LocalLayoutScreens.current.Shell(model) {
                     RemoteFilesAccess(model) {
                         AdaptiveHostLayout(
-                            listScreen = model.listScreen,
+                            listScreen = model.listScreen.takeIf { LocalLayoutScreens.current.usesListPane },
                             hasDetail = model.screen != model.listScreen,
                             listHeader = { LocalLayoutScreens.current.Header(model, it) },
                             detailHeader = { LocalLayoutScreens.current.Header(model, model.screen) },

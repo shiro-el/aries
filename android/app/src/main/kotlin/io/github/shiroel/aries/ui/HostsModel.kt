@@ -11,6 +11,7 @@ import io.github.shiroel.aries.PushTarget
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentPreset
 import io.github.shiroel.aries.core.AgentStatus
+import io.github.shiroel.aries.core.ChatEntryBody
 import io.github.shiroel.aries.core.AgentView
 import io.github.shiroel.aries.core.AriesCoreInterface
 import io.github.shiroel.aries.core.AttachMode
@@ -561,7 +562,7 @@ class HostsModel(
     }
 
     /** Called after the activity resumes and installs its biometric authorizer. */
-    fun start(target: PushTarget? = null) {
+    fun start(target: PushTarget? = null, layout: AppLayout = AppLayout.CONSOLE) {
         if (started) {
             target?.let(::openNotificationTarget)
             return
@@ -572,14 +573,19 @@ class HostsModel(
             startupHostId = target.hostId
             openNotificationTarget(target)
         } else if (!explicitSurfaceEntry && screen == Screen.Hosts) {
-            hosts.find { it.id == saved?.hostId }?.let {
+            if (layout == AppLayout.THREAD) openThreadHome()
+            else hosts.find { it.id == saved?.hostId }?.let {
                 startupHostId = it.id
                 connect(it, saved)
             }
         }
         if (locationStore != null) scope.launch {
             snapshotFlow { if (restoring || suppressLocationSave) null else lastLocation() }
-                .filterNotNull().collect { locationStore.save(it) }
+                .filterNotNull().collect { location ->
+                    locationStore.save(location)
+                    val agent = liveChat != null || (ownedScreen as? Screen.Terminal)?.viewer?.terminal?.agentStatus != null
+                    if (agent && location.terminal != null) locationStore.saveAgent(location)
+                }
         }
     }
 
@@ -767,9 +773,11 @@ class HostsModel(
         closeAddingHost()
         val quickOpen = pendingQuickOpen
         val taskHostId = newTaskHostId
+        val taskSelection = threadTaskSelection
         back()
         pendingQuickOpen = quickOpen
         newTaskHostId = taskHostId
+        threadTaskSelection = taskSelection
         suppressLocationSave = false
         restoring = restore != null
         missingKeyHostId = null
@@ -813,6 +821,8 @@ class HostsModel(
     }
 
     // Drafts and mutation jobs belong to the Activity's retained HostsModel owner scope.
+    private data class ThreadTaskSelection(val hostId: String, val input: androidx.compose.ui.text.input.TextFieldValue, val showDialog: Boolean)
+    private var threadTaskSelection: ThreadTaskSelection? = null
     private val tasks = mutableMapOf<String, NewTask>()
     internal var task by mutableStateOf<NewTask?>(null)
         private set
@@ -823,12 +833,20 @@ class HostsModel(
     internal fun prepareTask(link: HostLink, cwd: String? = null, prompt: String? = null, showDialog: Boolean = true) {
         if (link.state != LinkState.Up || pendingLaunch(link.host.id) || pendingWorktree(link.host.id)) return
         val conn = link.connection ?: return
+        val selection = threadTaskSelection?.takeIf { it.hostId == link.host.id }
         val previous = tasks[link.host.id]
         if (previous != null && (prompt == null || previous.form.busy || previous.launchUnknown || previous.deliveryUnknown || previous.terminal != null)) {
             if (previous.link !== link && previous.waiting) taskJobs[previous]?.cancel()
             previous.link = link
             task = previous
-            taskVisible = showDialog
+            taskVisible = selection?.showDialog ?: showDialog
+            if (selection != null) {
+                if (!previous.form.busy && previous.terminal == null && !previous.launchUnknown && !previous.deliveryUnknown) {
+                    previous.form.cwd = ""
+                    previous.input = selection.input
+                }
+                threadTaskSelection = null
+            }
             return
         }
         val browser = quickOpenBrowser?.takeIf { it.host.id == link.host.id }
@@ -837,13 +855,15 @@ class HostsModel(
         val form = LaunchForm(structure, conn.recentCwds(), null, null, conn.savedLaunches())
         form.preset = AgentPreset.CLAUDE_CODE
         val terminal = quickOpenTerminal()?.takeIf { currentAgentKey?.hostId == link.host.id }
-        form.cwd = cwd ?: terminal?.takeIf { it.machine == null }?.currentCwd ?:
+        form.cwd = if (selection != null) "" else cwd ?: terminal?.takeIf { it.machine == null }?.currentCwd ?:
             browser?.openSpace?.folder ?: conn.recentCwds().firstOrNull() ?: ""
         val created = NewTask(link, form, prompt.orEmpty())
+        selection?.let { created.input = it.input }
         tasks[link.host.id] = created
         task = created
-        taskVisible = showDialog
-        if (form.cwd.isBlank()) scope.launch {
+        taskVisible = selection?.showDialog ?: showDialog
+        if (selection != null) threadTaskSelection = null
+        if (form.cwd.isBlank() && selection == null) scope.launch {
             try {
                 val home = conn.machineExec(listOf("sh", "-c", "printf '%s' \"\$HOME\""), null, 5u)
                 val path = home.stdout.toString(Charsets.UTF_8)
@@ -1720,6 +1740,30 @@ class HostsModel(
 
     fun cancelShare() { pendingShare = null }
 
+    /** Validate the saved Agent against a fresh list; stale layout records cannot reopen it. */
+    fun openThreadHome() {
+        val saved = locationStore?.loadAgent()
+        back()
+        openAgents(focus = saved?.let { location ->
+            hosts.find { it.id == location.hostId }?.let { host ->
+                location.terminal?.let { AgentKey(host.id, it) }
+            }
+        }, openChat = true, restoreAgent = true)
+    }
+
+    internal fun threadTitle(entry: AgentEntry): String = conversations[entry.key]?.snapshot?.entries
+        ?.firstNotNullOfOrNull { (it.body as? ChatEntryBody.User)?.text?.trim()?.takeIf(String::isNotEmpty) }
+        ?.lineSequence()?.firstOrNull()?.take(160) ?: displayName(entry.terminal)
+
+    internal fun beginThreadTask(host: Host, showDialog: Boolean = true, resetFolder: Boolean = false) {
+        val link = links.firstOrNull { it.host.id == host.id && it.state == LinkState.Up && it.connection != null }
+        if (resetFolder) task?.let { threadTaskSelection = ThreadTaskSelection(host.id, it.input, showDialog) }
+        if (link == null) {
+            taskVisible = false
+            newTask(host)
+        } else prepareTask(link, showDialog = showDialog)
+    }
+
     /** Connects to every Host and shows all their Agents in one list. */
     fun openAgents() {
         back()
@@ -1787,7 +1831,8 @@ class HostsModel(
     }
 
     /** [focus]: the Agent whose Terminal to open once its Host's list arrives. */
-    private fun openAgents(focus: AgentKey?, openChat: Boolean = false, selectedHosts: List<Host> = hosts) {
+    private fun openAgents(focus: AgentKey?, openChat: Boolean = false, selectedHosts: List<Host> = hosts,
+        restoreAgent: Boolean = false) {
         val board = AgentBoard(selectedHosts)
         val agents = Screen.Agents(board)
         val focusVersion = navigationVersion
@@ -1820,7 +1865,13 @@ class HostsModel(
                                     terminalOn(host.id)?.update(list)
                                     focusing?.let { key ->
                                         focusing = null
-                                        if (screen === agents && navigationVersion == focusVersion) focusOn(agents, host, key, list, openChat)
+                                        if (screen === agents && navigationVersion == focusVersion) {
+                                            if (restoreAgent) {
+                                                list.find { it.address == key.address && it.state == "live" && it.agentStatus != null }?.let {
+                                                    openAgent(board, AgentEntry(host, it), openChat = true)
+                                                }
+                                            } else focusOn(agents, host, key, list, openChat)
+                                        }
                                     }
                                 }
                             } finally {
@@ -2246,6 +2297,7 @@ class HostsModel(
         // Cancelling a cold reconnect does not replace the last successfully viewed location.
         suppressLocationSave = interruptedRestore
         newTaskHostId = null
+        threadTaskSelection = null
         if (prompt is Prompt.ConfirmSavedLaunch) prompt = null
         closeQuickOpen()
         pendingQuickOpen = null

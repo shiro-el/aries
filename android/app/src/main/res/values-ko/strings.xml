@@ -614,6 +614,18 @@
     <string name="chat_select_text">텍스트 선택</string>
     <string name="chat_thinking">생각 과정</string>
     <!-- Thread Chat -->
+    <!-- Thread navigation and task shell -->
+    <string name="thread_home_empty_title">새 대화 시작</string>
+    <string name="thread_home_empty_body">아래에서 새 작업을 입력하거나 메뉴에서 대화를 열어 주세요.</string>
+    <string name="thread_new_body">Host, 폴더, Agent를 고르고 할 일을 입력하세요.</string>
+    <string name="thread_host_online">%1$s · 연결됨</string>
+    <string name="thread_search_hint">대화 검색</string>
+    <string name="thread_section_needs">답 필요</string>
+    <string name="thread_section_working">진행 중</string>
+    <string name="thread_section_today">오늘</string>
+    <string name="thread_section_earlier">이전</string>
+    <string name="thread_urgent_call">긴급 Call</string>
+
     <string name="thread_tools_summary">%1$s · %2$s</string>
     <string name="thread_tools_separator">", "</string>
     <string name="thread_tool_running">%1$s · %2$s</string>
