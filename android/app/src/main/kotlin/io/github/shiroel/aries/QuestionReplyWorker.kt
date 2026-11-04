@@ -96,6 +96,10 @@ class QuestionReplyWorker(context: Context, params: WorkerParameters) : Coroutin
 object QuestionReplies {
     suspend fun answer(context: Context, core: AriesCoreInterface, notice: QuestionNotice, choice: Int, online: Boolean): QuestionView.Done {
         val context = AppLanguage.context(context)
+        // A notification/work request can survive an app upgrade. Older
+        // Always actions must also go through the phone card's confirmation.
+        if (notice.question.id.startsWith(PERMISSION_ID_PREFIX) && notice.question.options.getOrNull(choice) == "Allow always")
+            return QuestionView.Done(context.getString(R.string.question_notify_confirm_in_app))
         if (!online) return QuestionView.Done(context.getString(R.string.call_notify_no_network))
         return try {
             // The core bounds sign-in (15 s) and the Beacon result (30 s).

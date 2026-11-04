@@ -419,7 +419,7 @@ class ChatScreenTest {
         blue.performScrollTo().assertIsDisplayed().performClick()
         compose.waitForIdle()
         assertEquals(listOf(Triple("t1", "toolu_q", listOf(listOf(1u)))), core.answers)
-        compose.onNodeWithText(str(R.string.chat_question_sent)).assertExists()
+        compose.onNodeWithText(str(R.string.chat_question_waiting)).assertExists()
 
         // The Agent took it: no buttons, the answer shows.
         core.pushChat(
