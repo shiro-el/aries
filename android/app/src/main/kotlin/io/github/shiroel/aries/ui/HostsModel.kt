@@ -4,6 +4,7 @@ import io.github.shiroel.aries.core.CallAnswerState
 import io.github.shiroel.aries.core.HerdrCoreState
 import androidx.annotation.StringRes
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github.shiroel.aries.HttpBeaconFetcher
@@ -1550,7 +1551,7 @@ class HostsModel(
     }
 
     /** One owner per full Host/Terminal identity, independent of navigation and SSH lines. */
-    private val conversations = mutableMapOf<AgentKey, ChatModel>()
+    private val conversations = mutableStateMapOf<AgentKey, ChatModel>()
 
     private fun conversation(link: HostLink, terminal: TerminalInfo): ChatModel =
         conversations.getOrPut(AgentKey(link.host.id, terminal.address)) {
@@ -1640,7 +1641,7 @@ class HostsModel(
         }
         switchView(AgentView.CHAT)
         val chat = (screen as? Screen.Chat)?.chat ?: run { cleanup(); return false }
-        return chat.attach(context.applicationContext, content, cleanup)
+        return chat.attach(context.applicationContext, content, cleanup = cleanup)
     }
 
     /** Adds output to an editable draft, never to the Terminal input stream. */
@@ -1675,7 +1676,9 @@ class HostsModel(
         viewing = scope.launch {
             try {
                 link.keepWatching(onFailure = { viewer.watchError = it }, onStart = {
-                    viewer.discardInput()
+                    // Retry invalidates a failed attachment's input. A new line may
+                    // already own keys queued while the old search finishes.
+                    if (viewer.watchError != null) viewer.discardInput()
                     viewer.watchError = null
                 }) { conn, resumed ->
                     if (!viewer.typing) {
@@ -1891,9 +1894,12 @@ class HostsModel(
         }, openChat = true, restoreAgent = true)
     }
 
-    internal fun threadTitle(entry: AgentEntry): String = conversations[entry.key]?.snapshot?.entries
+    internal fun threadTitle(entry: AgentEntry): String =
+        conversations[entry.key]?.let(::threadTitle) ?: displayName(entry.terminal)
+
+    internal fun threadTitle(chat: ChatModel): String = chat.snapshot?.entries
         ?.firstNotNullOfOrNull { (it.body as? ChatEntryBody.User)?.text?.trim()?.takeIf(String::isNotEmpty) }
-        ?.lineSequence()?.firstOrNull()?.take(160) ?: displayName(entry.terminal)
+        ?.lineSequence()?.firstOrNull()?.take(160) ?: displayName(chat.terminal)
 
     internal fun beginThreadTask(host: Host, showDialog: Boolean = true, resetFolder: Boolean = false) {
         val link = links.firstOrNull { it.host.id == host.id && it.state == LinkState.Up && it.connection != null }

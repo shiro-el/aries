@@ -94,6 +94,8 @@ import io.github.shiroel.aries.core.SendListener
 import io.github.shiroel.aries.core.SendOutcome
 import io.github.shiroel.aries.core.TerminalInfo
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
@@ -116,6 +118,7 @@ class ChatModel(
     link: HostLink? = null,
     /** Runs the calls that sign in to the Host (see [HostsModel]). */
     private val keyWork: CoroutineContext = EmptyCoroutineContext,
+    private val journalWork: CoroutineContext = Dispatchers.IO,
 ) {
     internal var readingSession by mutableStateOf(ChatReadingSession())
     internal val files = RemoteFilesPanel()
@@ -127,7 +130,7 @@ class ChatModel(
     /** Reopening reuses drafts and pending operations; only the live SSH line changes. */
     fun bind(link: HostLink, terminal: TerminalInfo) {
         inputHistory.open = false
-        if (this.link !== link) clearNotices()
+        if (this.link !== link) clearSendNotices()
         this.link = link
         update(listOf(terminal))
     }
@@ -197,7 +200,7 @@ class ChatModel(
      * normal message, through terminal.send's Blocked gate.
      */
     fun questionMode(id: String): QuestionMode {
-        if (inputUnavailable) return QuestionMode.ReadOnly
+        if (inputUnavailable || recoveryFailed) return QuestionMode.ReadOnly
         val snap = snapshot ?: return QuestionMode.ReadOnly
         val entries = snap.entries
         val pending = entries.drop(entries.indexOfLast { (it.body as? ChatEntryBody.User)?.queued == false } + 1)
@@ -250,7 +253,7 @@ class ChatModel(
         val selected = picks[id] ?: List(question.questions.size) { emptySet() }
         picks = picks + (id to selected.mapIndexed { i, value -> if (i == part) emptySet() else value })
         clearNotices()
-        saveOutbox()
+        saveOutbox(debounce = true)
     }
 
     /** What the user is typing into the input. */
@@ -262,7 +265,7 @@ class ChatModel(
             editableInput = value
             if (changed) {
                 clearNotices()
-                saveOutbox()
+                saveOutbox(debounce = true)
             }
         }
 
@@ -308,14 +311,15 @@ class ChatModel(
         val address = terminal.address
         interrupting = true
         returnWaitingToDraft()
+        saveOutbox()
         interruptNotice = null
-        val revision = noticeRevision
+        val revision = ++interruptRevision
         scope.launch {
             try {
                 val notice = interruptMessage(connection.interruptAgent(address))
-                if (noticeRevision == revision) interruptNotice = notice
+                if (interruptRevision == revision) interruptNotice = notice
             } catch (e: CoreException) {
-                if (noticeRevision == revision) interruptNotice = Message(R.string.chat_interrupt_failed, listOf(errorMessage(e)))
+                if (interruptRevision == revision) interruptNotice = Message(R.string.chat_interrupt_failed, listOf(errorMessage(e)))
             } finally {
                 interrupting = false
                 drainQueue()
@@ -333,7 +337,7 @@ class ChatModel(
         }
 
     fun removeAttachment(attachment: DraftAttachment) {
-        clearNotices()
+        clearAttachmentNotice()
         attachments = attachments - attachment
     }
     var uploading by mutableStateOf(false)
@@ -341,6 +345,17 @@ class ChatModel(
     var attachmentError by mutableStateOf<Message?>(null)
         private set
     private var uploadJob: Job? = null
+    private var uploadRemaining: List<String> = emptyList()
+    var attachmentNotice by mutableStateOf<Message?>(null)
+        private set
+
+    /** Keeps completed chips; only the files still outside the draft are canceled. */
+    fun cancelUpload() {
+        if (!uploading) return
+        attachmentRevision++
+        attachmentNotice = Message(R.string.attachments_canceled, listOf(uploadRemaining.joinToString(", ")))
+        uploadJob?.cancel()
+    }
 
     fun attachmentFailed(error: Exception) {
         if (error is AttachmentTooLarge || (error is CoreException.Rpc && error.kind == "attachment_too_large")) {
@@ -355,25 +370,28 @@ class ChatModel(
     }
 
     /** Saves bytes and adds attachment chips to the current draft; never calls sendMessage. */
-    fun attach(context: Context, content: SharedContent, cleanup: () -> Unit = {}): Boolean {
+    fun attach(context: Context, content: SharedContent, onUploaded: () -> Unit = {}, cleanup: () -> Unit = {}): Boolean {
         val scope = scope ?: run { cleanup(); return false }
         if (inputUnavailable || uploading) { cleanup(); return false }
         val link = link ?: run { attachmentFailed(CoreException.Closed()); cleanup(); return false }
         val resize = AttachmentSettings.from(context).resizeImages
-        clearNotices()
+        clearAttachmentNotice()
         uploading = true
+        uploadRemaining = content.uris.map { it.lastPathSegment ?: "attachment" }
         fun append(value: String) {
             appendDraft(value, separator = if (draft.isEmpty() || draft.last().isWhitespace()) "" else " ")
         }
         content.text?.let(::append)
-        uploadJob = scope.launch {
+        val revision = attachmentRevision
+        // Retain the current line before even reading camera bytes. Leaving the Host
+        // can then finish this bounded batch before disconnecting, without replaying a put.
+        val initialConnection = link.connection
+        val upload: suspend (HostConnection) -> Unit = { connection ->
             try {
                 for (uri in content.uris) {
                     val attachment = withContext(Dispatchers.IO) { prepareAttachment(context, uri, resize) }
-                    // The picker/camera may stop the Activity and release its Host connection.
-                    // Wait for its replacement after reading the URI; never retry a put itself.
-                    val connection = link.awaitConnection()
-                    if (inputUnavailable) break
+                    uploadRemaining = listOf(attachment.name) + uploadRemaining.drop(1)
+                    if (inputUnavailable) throw CoreException.Closed()
                     val path = try {
                         connection.uploadAttachment(terminal.address, attachment.name, attachment.bytes)
                     } catch (e: CoreException.Closed) {
@@ -382,12 +400,34 @@ class ChatModel(
                     }
                     attachments = attachments + DraftAttachment(path, attachment.name, attachment.bytes.size,
                         attachment.bytes.takeIf { remoteMediaKind(attachment.name) == RemoteMediaKind.IMAGE })
+                    uploadRemaining = uploadRemaining.drop(1)
                 }
+                onUploaded()
+            } catch (e: TimeoutCancellationException) {
+                if (attachmentRevision == revision) attachmentFailed(CoreException.Closed())
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                attachmentFailed(e)
+                if (attachmentRevision == revision) attachmentFailed(e)
             } finally {
+                uploading = false
+                cleanup()
+            }
+        }
+        uploadJob = if (initialConnection != null) {
+            link.finishBeforeDisconnect(initialConnection) { upload(initialConnection) }
+        } else scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            // A picker/camera may release the old line. Acquire and retain its
+            // replacement before preparing bytes; never retry a put itself.
+            try {
+                val connection = link.awaitConnection()
+                uploadJob = link.finishBeforeDisconnect(connection) { upload(connection) }
+            } catch (e: CancellationException) {
+                uploading = false
+                cleanup()
+                throw e
+            } catch (e: Exception) {
+                if (attachmentRevision == revision) attachmentFailed(e)
                 uploading = false
                 cleanup()
             }
@@ -406,15 +446,39 @@ class ChatModel(
     private var recoveryLoaded = false
     private var outboxEdits = 0
     private var recoveryFailed by mutableStateOf(false)
-    val terminalComposer = TerminalComposerState { saveOutbox() }
+    var journalError by mutableStateOf<Message?>(null)
+        private set
+    val needsDraftRecovery: Boolean get() = recoveryFailed
+    var discardingDrafts by mutableStateOf(false)
+        private set
+    val terminalComposer = TerminalComposerState { saveOutbox(debounce = true) }
+    // Flushes survive cancellation of the screen's watch scope. Only the timer
+    // is cancellable: an already queued write must finish before the next one.
+    private var journalScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var journalTimer: Job? = null
+    private var journalWrite: Job? = null
 
-    private var noticeRevision = 0L
-    private fun clearNotices() {
-        noticeRevision++
+    private var interruptRevision = 0L
+    private var attachmentRevision = 0L
+
+    /** Link/Agent/Chat changes only invalidate feedback about sending. */
+    private fun clearSendNotices() {
         sendError = null
         refused = false
+    }
+
+    /** Editing starts a new instruction; unrelated lifecycle changes do not. */
+    private fun clearNotices() {
+        clearSendNotices()
+        interruptRevision++
         interruptNotice = null
+        clearAttachmentNotice()
+    }
+
+    private fun clearAttachmentNotice() {
+        attachmentRevision++
         attachmentError = null
+        attachmentNotice = null
     }
 
     /** Callers commit once after moving text and attachments together between draft and queue. */
@@ -423,27 +487,50 @@ class ChatModel(
         try { change() } finally { outboxEdits-- }
     }
 
-    private fun saveOutbox(): Boolean {
+    /** Accept a snapshot; [afterSave] reports whether its durable write succeeded. */
+    private fun saveOutbox(debounce: Boolean = false, afterSave: ((Boolean) -> Unit)? = null): Boolean {
         if (!recoveryLoaded || outboxEdits > 0) return true
         if (recoveryFailed) return false
-        return try {
-            val state = ChatOutboxState(draft, attachments, queuedMessages,
-                terminalComposer.draft, terminalComposer.open, questionText, picks,
-                answers.mapValues { (_, answer) -> when (answer) {
-                    AnswerState.Sending, AnswerState.Held -> "sending"
-                    AnswerState.Sent, AnswerState.Unconfirmed -> "sent"
-                    is AnswerState.Failed -> "failed"
-                } }, waitingReturned = waitingReturned)
-            core.saveChatOutbox(host.id, terminal.address, state.encode())
-            true
-        } catch (e: CoreException) {
-            sendError = errorMessage(e)
-            false
+        journalTimer?.cancel()
+        // Snapshot on the owner dispatcher, encode/seal/write on IO. Never read
+        // mutable composer state on the worker or cancel a write mid-checkpoint.
+        val state = ChatOutboxState(draft, attachments, queuedMessages,
+            terminalComposer.draft, terminalComposer.open, questionText, picks,
+            answers.mapValues { (_, answer) -> when (answer) {
+                AnswerState.Sending, AnswerState.Held -> "sending"
+                AnswerState.Sent, AnswerState.Unconfirmed -> "sent"
+                is AnswerState.Failed -> "failed"
+            } }, waitingReturned = waitingReturned)
+        fun enqueue() {
+            val previous = journalWrite
+            journalWrite = journalScope.launch {
+                previous?.join()
+                val saved = try {
+                    withContext(journalWork) { core.saveChatOutbox(host.id, terminal.address, state.encode()) }
+                    true
+                } catch (e: CoreException) {
+                    journalError = Message(R.string.chat_drafts_save_failed)
+                    false
+                }
+                if (saved) journalError = null
+                afterSave?.invoke(saved)
+            }
         }
+        if (debounce) journalTimer = journalScope.launch { delay(300); enqueue() }
+        else enqueue()
+        return true
     }
 
     private fun restoreOutbox() {
-        if (recoveryLoaded) return
+        if (recoveryLoaded) {
+            if (recoveryFailed) try {
+                if (core.chatOutbox(host.id, terminal.address) == null) {
+                    recoveryFailed = false
+                    journalError = null
+                }
+            } catch (_: Exception) { /* Preserve the recovery banner and the unreadable file. */ }
+            return
+        }
         try {
             val saved = core.chatOutbox(host.id, terminal.address)?.let(::decodeChatOutbox) ?: return
             waitingReturned = saved.waitingReturned
@@ -464,11 +551,32 @@ class ChatModel(
         } catch (e: Exception) {
             // Leave an unreadable/newer journal intact. Never overwrite or dispatch it.
             recoveryFailed = true
-            sendError = errorMessage(e)
+            journalError = Message(R.string.chat_drafts_read_failed)
         } finally {
             recoveryLoaded = true
         }
-        saveOutbox()
+        if (scope != null) saveOutbox()
+    }
+
+    /** Explicitly discard only the saved Host journal, retaining the user's current input. */
+    fun discardSavedDrafts() {
+        if (!recoveryFailed || discardingDrafts) return
+        discardingDrafts = true
+        journalTimer?.cancel()
+        val previous = journalWrite
+        journalWrite = journalScope.launch {
+            previous?.join()
+            try {
+                withContext(journalWork) { core.discardChatOutbox(host.id) }
+                recoveryFailed = false
+                journalError = null
+                saveOutbox()
+            } catch (e: CoreException) {
+                journalError = Message(R.string.chat_drafts_discard_failed)
+            } finally {
+                discardingDrafts = false
+            }
+        }
     }
 
     private fun returnWaitingToDraft() {
@@ -493,7 +601,7 @@ class ChatModel(
         saveOutbox()
     }
 
-    val canRetryMessage: Boolean get() = canEdit && !interrupting && !uploading &&
+    val canRetryMessage: Boolean get() = !recoveryFailed && canEdit && !interrupting && !uploading &&
         connectionError == null && link?.state == LinkState.Up && snapshot?.status == ChatStatus.LIVE
 
     fun restoreFailedMessage(id: String) {
@@ -521,7 +629,8 @@ class ChatModel(
             // Keep composition and selection attached to the user's newer text.
             val current = input
             val prefix = message.draft + if (current.text.isNotEmpty()) "\n\n" else ""
-            input = current.copy(
+            // Recovery is not an input edit: keep unrelated operation receipts.
+            editableInput = current.copy(
                 text = prefix + current.text,
                 selection = TextRange(current.selection.start + prefix.length, current.selection.end + prefix.length),
                 composition = current.composition?.let { TextRange(it.start + prefix.length, it.end + prefix.length) },
@@ -532,7 +641,7 @@ class ChatModel(
 
     /** No retry is safe once terminal.send has started, even if its reply is lost. */
     private fun drainQueue() {
-        if (scope == null || stopped || paused || !transcriptReady || sending != null || interrupting || inputUnavailable ||
+        if (scope == null || recoveryFailed || stopped || paused || !transcriptReady || sending != null || interrupting || inputUnavailable ||
             connectionError != null || link?.state != LinkState.Up || snapshot?.status != ChatStatus.LIVE ||
             terminal.agentStatus == AgentStatus.Working || terminal.agentStatus is AgentStatus.Blocked) return
         // An unresolved earlier attempt is an ordering barrier, including new Send taps.
@@ -585,7 +694,7 @@ class ChatModel(
     fun update(terminals: List<TerminalInfo>) {
         val now = terminals.find { it.address == terminal.address }
         if (terminalPresent != (now != null) || (now != null &&
-            (terminal.agentStatus != now.agentStatus || terminal.state != now.state))) clearNotices()
+            (terminal.agentStatus != now.agentStatus || terminal.state != now.state))) clearSendNotices()
         terminalPresent = now != null
         if (now == null || now.state != "live" || now.agentStatus == null) returnWaitingToDraft()
         if (now == null) return
@@ -639,20 +748,34 @@ class ChatModel(
         // Capture the current transcript immediately before this row's first attempt.
         val dispatched = message.copy(phase = QueuedMessagePhase.Agent, dispatchTurn = terminal.turn,
             before = snapshot?.entries.orEmpty().map { it.id }.toSet())
-        val beforeDispatch = queuedMessages
         queuedMessages = queuedMessages.map { if (it.id == message.id) dispatched else it }
-        if (!saveOutbox()) {
-            queuedMessages = beforeDispatch
-            return
-        }
         sending = Sending.Sending
         val revisionAtDispatch = terminalRevision
-        link.finishBeforeDisconnect(conn) {
-            try {
-                sendDispatchedMessage(conn, dispatched)
-            } finally {
+        saveOutbox { saved ->
+            // Status/navigation can change while IO is pending. An unattempted
+            // row remains Waiting; it must not type on a stale or stopped line.
+            if (!saved || stopped || paused || inputUnavailable || interrupting || !transcriptReady ||
+                snapshot?.status != ChatStatus.LIVE || queuedMessages.none { it.id == message.id } ||
+                terminal.agentStatus == AgentStatus.Working || terminal.agentStatus is AgentStatus.Blocked ||
+                link.connection !== conn || link.state != LinkState.Up) {
+                queuedMessages = queuedMessages.map {
+                    if (it.id == message.id) message else it
+                }
                 sending = null
-                if (!stopped && terminalRevision != revisionAtDispatch) drainQueue()
+                if (inputUnavailable) returnWaitingToDraft()
+                else if (saved) {
+                    saveOutbox()
+                    drainQueue()
+                }
+            } else {
+                link.finishBeforeDisconnect(conn) {
+                    try {
+                        sendDispatchedMessage(conn, dispatched)
+                    } finally {
+                        sending = null
+                        if (!stopped && terminalRevision != revisionAtDispatch) drainQueue()
+                    }
+                }
             }
         }
     }
@@ -732,14 +855,16 @@ class ChatModel(
         this.paused = paused
         transcriptReady = false
         stopped = false
-        restoreOutbox()
         this.scope = scope
+        journalScope = CoroutineScope(scope.coroutineContext + SupervisorJob())
+        restoreOutbox()
+        saveOutbox()
         connectionJob?.cancel()
         connectionJob = scope.launch {
             // Waiting rows have never been attempted and may use the next Up line.
             // Attempted rows remain attached to their original RPC; never replay them.
             snapshotFlow { link?.state to link?.connection }.collect { (state, connection) ->
-                clearNotices()
+                clearSendNotices()
                 if (state == LinkState.Up && connection != null) drainQueue()
             }
         }
@@ -753,7 +878,7 @@ class ChatModel(
                     w = withContext(keyWork) { core.watchChat(host.id, terminal.address, snapshot?.cursor) }
                     break
                 } catch (e: CoreException) {
-                    clearNotices()
+                    clearSendNotices()
                     connectionError = e
                     transcriptReady = false
                     // A cancelled key unlock is not evidence of a missing Beacon.
@@ -776,7 +901,7 @@ class ChatModel(
                     if (update.reset) entries.clear()
                     update.upserts.forEach { entries[it.id] = it }
                     entries.keys.retainAll(update.order.toSet())
-                    if (snapshot?.status != update.status) clearNotices()
+                    if (snapshot?.status != update.status) clearSendNotices()
                     snapshot = ChatSnapshot(update.order.mapNotNull { entries[it] }, update.status, update.cursor, update.usage)
                     connectionError = null
                     transcriptReady = update.status == ChatStatus.LIVE
@@ -786,7 +911,7 @@ class ChatModel(
                     reconcileQueue()
                     drainQueue()
                 } catch (e: CoreException) {
-                    clearNotices()
+                    clearSendNotices()
                     transcriptReady = false
                     if (e is CoreException.Closed) return@launch
                     // The core pauses permanent failures until an explicit retry.
@@ -858,6 +983,7 @@ class ChatModel(
 
     private fun answer(id: String, question: ChatEntryBody.Question, chosen: List<List<Int>>) {
         val scope = scope ?: return
+        if (recoveryFailed) return
         if (answers[id] == AnswerState.Sending || answers[id] == AnswerState.Held || answers[id] == AnswerState.Sent || answers[id] == AnswerState.Unconfirmed) return
         val mode = questionMode(id)
         if (mode != QuestionMode.Live && mode != QuestionMode.History) return
@@ -867,70 +993,72 @@ class ChatModel(
         picks = picks + (id to chosen.map { it.toSet() })
         answers = answers + (id to AnswerState.Sending)
         clearNotices()
-        if (!saveOutbox()) {
-            answers = answers + (id to AnswerState.Failed(Message(R.string.chat_queue_uncertain)))
-            return
-        }
-        scope.launch {
-            var historyDispatched = false
-            val state = try {
-                withContext(keyWork) {
-                    if (mode == QuestionMode.History) {
-                        val connection = link?.connection ?: throw CoreException.Closed()
-                        val parts = question.questions.mapIndexed { i, part ->
-                            texts[i] ?: chosen[i].joinToString(", ") { part.options[it].label }
-                        }
-                        val text = if (parts.size == 1) parts[0] else parts.mapIndexed { i, part -> "${question.questions[i].text}: $part" }.joinToString("\n")
-                        historyDispatched = true
-                        val outcome = withTimeout(25_000L) {
-                            connection.sendMessage(terminal.address, text, object : SendListener {
-                                override fun onHeld() {
-                                    scope.launch(Dispatchers.Main) {
-                                        if (answers[id] == AnswerState.Sending) {
-                                            answers = answers + (id to AnswerState.Held)
-                                            saveOutbox()
+        saveOutbox { saved ->
+            if (!saved) {
+                answers = answers + (id to AnswerState.Failed(Message(R.string.chat_queue_uncertain)))
+                return@saveOutbox
+            }
+            scope.launch {
+                var historyDispatched = false
+                val state = try {
+                    withContext(keyWork) {
+                        if (mode == QuestionMode.History) {
+                            val connection = link?.connection ?: throw CoreException.Closed()
+                            val parts = question.questions.mapIndexed { i, part ->
+                                texts[i] ?: chosen[i].joinToString(", ") { part.options[it].label }
+                            }
+                            val text = if (parts.size == 1) parts[0] else parts.mapIndexed { i, part -> "${question.questions[i].text}: $part" }.joinToString("\n")
+                            historyDispatched = true
+                            val outcome = withTimeout(25_000L) {
+                                connection.sendMessage(terminal.address, text, object : SendListener {
+                                    override fun onHeld() {
+                                        scope.launch(Dispatchers.Main) {
+                                            if (answers[id] == AnswerState.Sending) {
+                                                answers = answers + (id to AnswerState.Held)
+                                                saveOutbox()
+                                            }
                                         }
                                     }
-                                }
-                            })
-                        }
-                        when (outcome) {
-                            SendOutcome.Sent -> {}
-                            is SendOutcome.Blocked -> {
-                                terminal = terminal.copy(agentStatus = AgentStatus.Blocked(outcome.reason, outcome.message))
-                                throw CoreException.AnswerRefused(AnswerProblem.GONE, "")
+                                })
                             }
+                            when (outcome) {
+                                SendOutcome.Sent -> {}
+                                is SendOutcome.Blocked -> {
+                                    terminal = terminal.copy(agentStatus = AgentStatus.Blocked(outcome.reason, outcome.message))
+                                    throw CoreException.AnswerRefused(AnswerProblem.GONE, "")
+                                }
+                            }
+                        } else if (texts.any { it != null }) {
+                            core.answerQuestionWithText(host.id, terminal.address, id, chosen.map { p -> p.map { it.toUInt() } }, texts)
+                        } else {
+                            core.answerQuestion(host.id, terminal.address, id, chosen.map { p -> p.map { it.toUInt() } })
                         }
-                    } else if (texts.any { it != null }) {
-                        core.answerQuestionWithText(host.id, terminal.address, id, chosen.map { p -> p.map { it.toUInt() } }, texts)
-                    } else {
-                        core.answerQuestion(host.id, terminal.address, id, chosen.map { p -> p.map { it.toUInt() } })
                     }
-                }
-                AnswerState.Sent
-            } catch (e: TimeoutCancellationException) {
-                AnswerState.Unconfirmed
-            } catch (e: CancellationException) {
-                answers = answers + (id to AnswerState.Unconfirmed)
-                saveOutbox()
-                throw e
-            } catch (e: CoreException) {
-                if (historyDispatched && e !is CoreException.AnswerRefused &&
-                    !(e is CoreException.Rpc && e.kind in setOf("no_agent", "status_mismatch"))) AnswerState.Unconfirmed
-                else AnswerState.Failed(if (mode == QuestionMode.History && e is CoreException.AnswerRefused &&
-                    e.reason == AnswerProblem.GONE &&
-                    (terminal.agentStatus as? AgentStatus.Blocked)?.reason == BlockedReason.QUESTION)
-                    Message(R.string.chat_question_asking_now) else answerProblem(e))
-            }
-            answers = answers + (id to state)
-            saveOutbox()
-            if (state == AnswerState.Sent) {
-                // Key delivery is only a receipt. Keep duplicate-send protection,
-                // but expose the Terminal if the same live question does not advance.
-                delay(3_000L)
-                if (answers[id] == AnswerState.Sent) {
+                    AnswerState.Sent
+                } catch (e: TimeoutCancellationException) {
+                    AnswerState.Unconfirmed
+                } catch (e: CancellationException) {
                     answers = answers + (id to AnswerState.Unconfirmed)
                     saveOutbox()
+                    throw e
+                } catch (e: CoreException) {
+                    if (historyDispatched && e !is CoreException.AnswerRefused &&
+                        !(e is CoreException.Rpc && e.kind in setOf("no_agent", "status_mismatch"))) AnswerState.Unconfirmed
+                    else AnswerState.Failed(if (mode == QuestionMode.History && e is CoreException.AnswerRefused &&
+                        e.reason == AnswerProblem.GONE &&
+                        (terminal.agentStatus as? AgentStatus.Blocked)?.reason == BlockedReason.QUESTION)
+                        Message(R.string.chat_question_asking_now) else answerProblem(e))
+                }
+                answers = answers + (id to state)
+                saveOutbox()
+                if (state == AnswerState.Sent) {
+                    // Key delivery is only a receipt. Keep duplicate-send protection,
+                    // but expose the Terminal if the same live question does not advance.
+                    delay(3_000L)
+                    if (answers[id] == AnswerState.Sent) {
+                        answers = answers + (id to AnswerState.Unconfirmed)
+                        saveOutbox()
+                    }
                 }
             }
         }
@@ -938,20 +1066,20 @@ class ChatModel(
 
     /** Network/foreground signals may wake transient failures, never permanent ones. */
     fun reconnect() {
-        clearNotices()
+        clearSendNotices()
         if (connectionError?.retryableConnection() == false) return
         if (watch == null) scope?.let(::start) else watch?.reconnect()
     }
 
     fun retryNow() {
-        clearNotices()
+        clearSendNotices()
         if (connectionError?.retryableConnection() == false) return
         if (watch == null) scope?.let(::start) else watch?.retryNow()
     }
 
     /** User action: keep the Agent/draft/cache and resume or recreate the watch. */
     fun retryConnection() {
-        clearNotices()
+        clearSendNotices()
         connectionError = null
         if (watch == null || job?.isActive != true) {
             watch?.stop()
@@ -961,6 +1089,7 @@ class ChatModel(
     }
 
     fun pause() {
+        saveOutbox()
         transcriptReady = false
         paused = true
         if (watch == null) job?.cancel() else watch?.pause()
@@ -978,9 +1107,8 @@ class ChatModel(
         saveOutbox()
         stopped = true
         connectionJob?.cancel()
-        // Only an already attempted RPC may finish on its original HostLink.
-        // Waiting stays in the journal until this Chat is opened again.
-        uploadJob?.cancel()
+        // Submitted uploads and attempted input finish on their original HostLink.
+        // Waiting messages stay in the journal until this Chat is opened again.
         job?.cancel()
         watch?.stop()
         watch = null
@@ -1065,9 +1193,9 @@ fun ChatScreen(
                     thread != null && it.call.pushesByDefault && it.call.answer == null))
         }.sortedBy { it.call.atMs }
     }.orEmpty()
-    var closedThreadCalls by remember(chat) { mutableStateOf(emptySet<String>()) }
-    val activeThreadCall = if (thread != null) agentCalls.sortedByDescending { it.call.urgency.ordinal }
-        .firstOrNull { it.key !in closedThreadCalls } else null
+    val activeThreadCall = if (thread != null) agentCalls.firstOrNull { it.key == calls?.openedThreadCall }
+        ?: agentCalls.sortedByDescending { it.call.urgency.ordinal }.firstOrNull { calls?.isThreadPanelVisible(it) == true }
+        else null
     val scroll = rememberChatScrollState(chat, entries, agentCalls.map { "call:${it.key}" } + chat.queuedMessages.map { "queued:${it.id}" } +
         if (chat.showWorking) listOf("working") else emptyList(), markdown, followEnabled = !searchOpen && !dialogs.isOpen)
     val toggleTool = remember(chat, scroll) {
@@ -1104,10 +1232,7 @@ fun ChatScreen(
             },
             input = { compact ->
                 if (preview.selected == null) {
-                    if (thread != null) ThreadChatInput(thread, chat, activeThreadCall, calls, answerQuestion, compact, onDismissCall = { call ->
-                        closedThreadCalls = closedThreadCalls + call.key
-                        if (calls?.banner?.key == call.key) calls.dismissBanner()
-                    })
+                    if (thread != null) ThreadChatInput(thread, chat, activeThreadCall, calls, answerQuestion, compact)
                     else if (chat.link != null) {
                         if (!compact) ChatCatalogControls(chat)
                         MessageInput(chat, compact)
@@ -1121,7 +1246,7 @@ fun ChatScreen(
                     change = chat.terminal.turn to rawEntries.mapNotNull { (it.body as? ChatEntryBody.Tool)?.diff },
                     captureEnabled = chat.canEdit && !chat.uploading,
                     onAttachCapture = { content, cleanup ->
-                        chat.attach(context.applicationContext, content, cleanup).also { accepted ->
+                        chat.attach(context.applicationContext, content, cleanup = cleanup).also { accepted ->
                             if (accepted) preview.selected = null
                         }
                     })
@@ -1152,6 +1277,15 @@ fun ChatScreen(
                 }
                 if (thread == null && !loading && (chatLink == null || (chatLink.state == LinkState.Up && !reconnecting && chatProblem == null))) {
                     statusText(snapshot?.status ?: ChatStatus.CONNECTING)?.let { ChatNotice(it) }
+                }
+                chat.journalError?.let { error ->
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        AnnouncedText(messageText(error), color = MaterialTheme.colorScheme.error)
+                        if (chat.needsDraftRecovery) TextButton(
+                            onClick = chat::discardSavedDrafts,
+                            enabled = !chat.discardingDrafts,
+                        ) { Text(stringResource(R.string.chat_drafts_discard_button)) }
+                    }
                 }
                 if (chat.waitingReturned) ChatNotice(stringResource(R.string.chat_queue_returned))
                 if (snapshot != null && entries.isEmpty() && chat.queuedMessages.isEmpty() && snapshot.status in setOf(ChatStatus.LIVE, ChatStatus.WAITING)) {
@@ -1231,8 +1365,12 @@ fun ChatScreen(
                 }
                 if (chat.uploading) {
                     ConsoleProgress(Modifier.fillMaxWidth())
-                    ChatNotice(stringResource(R.string.attachments_uploading))
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.weight(1f)) { ChatNotice(stringResource(R.string.attachments_uploading)) }
+                        TextButton(onClick = chat::cancelUpload) { Text(stringResource(R.string.attachments_cancel_button)) }
+                    }
                 }
+                chat.attachmentNotice?.let { AnnouncedText(messageText(it)) }
                 chat.attachmentError?.let { AnnouncedText(stringResource(it.res, *it.args.toTypedArray()), color = MaterialTheme.colorScheme.error) }
                 if (chat.inputUnavailable) {
                     ConsoleChatCallSurface {

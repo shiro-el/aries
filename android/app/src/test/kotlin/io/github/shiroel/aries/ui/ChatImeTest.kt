@@ -74,11 +74,14 @@ class ChatImeTest {
 
     @Test fun explicitSendCommitsVoiceTextAndClearsTheDraft() {
         open()
+        core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, null))
+        compose.waitUntil { chat.snapshot?.status == ChatStatus.LIVE }
         compose.runOnIdle {
             chat.update(listOf(terminal.copy(agentStatus = AgentStatus.Idle)))
             chat.input = TextFieldValue("고쳐 주세요", TextRange(6), TextRange(0, 6))
         }
         compose.onNodeWithText(context.getString(R.string.chat_send_button)).performClick()
+        compose.waitUntil(5_000) { connection.typed == listOf("t1" to "고쳐 주세요") }
         compose.runOnIdle {
             assertEquals(listOf("t1" to "고쳐 주세요"), connection.typed)
             assertEquals(TextFieldValue(""), chat.input)

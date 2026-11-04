@@ -130,6 +130,8 @@ class ChatQueuedMessageTest {
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("first\n\nsecond")
         compose.onNodeWithText(str(R.string.chat_queue_returned)).assertExists()
         compose.runOnIdle { (hosts.screen as Screen.Chat).chat.draft += " edited" }
+        // Process death inside the debounce window cannot run a lifecycle flush.
+        compose.waitUntil(5_000) { core.chatOutbox("h1", "t1")?.let(::decodeChatOutbox)?.draft == "first\n\nsecond edited" }
         compose.runOnIdle { generation++ }
         compose.waitForIdle()
         compose.onNodeWithText("home").performClick()
@@ -525,7 +527,8 @@ class ChatQueuedMessageTest {
                 viewer.openComposer()
                 viewer.draft = "unsent Terminal command"
             }
-            // Dispose the UI scope without calling back()/stop(): process death has no cleanup callback.
+            // Let the typing debounce commit before simulating process death without lifecycle callbacks.
+            compose.waitUntil(5_000) { core.chatOutbox("h1", "t1")?.let(::decodeChatOutbox)?.terminalDraft == "unsent Terminal command" }
             compose.runOnIdle { generation++ }
             compose.waitForIdle()
             compose.onNodeWithText("home").performClick()
@@ -642,6 +645,30 @@ class ChatQueuedMessageTest {
                 assertEquals(listOf("/host/it's file.jpg"), (restored.attachments + restored.queuedMessages.flatMap { it.attachments }).map { it.path })
             }
         } finally { file.delete() }
+    }
+
+    // D18: editing must not erase the only explanation for a blocked recovery journal.
+    @Test fun unreadableJournalKeepsItsBannerUntilDiscardAndThenAllowsSending() {
+        val core = FakeCore()
+        core.saveChatOutbox("h1", "t1", """{"version":99}""")
+        open(core)
+        val chat = compose.runOnIdle { (hosts.screen as Screen.Chat).chat }
+        compose.runOnIdle { org.junit.Assert.assertNotNull(chat.journalError) }
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).performTextInput("new draft")
+        compose.runOnIdle { org.junit.Assert.assertNotNull(chat.journalError) }
+        compose.onNodeWithText(str(R.string.chat_drafts_read_failed)).assertExists()
+        compose.onNodeWithText(str(R.string.chat_send_button)).assertIsNotEnabled()
+        compose.runOnIdle { chat.reconnect() }
+        compose.onNodeWithText(str(R.string.chat_drafts_read_failed)).assertExists()
+        compose.onNodeWithText(str(R.string.chat_drafts_discard_button)).performClick()
+        compose.waitUntil(5_000) { !chat.needsDraftRecovery }
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("new draft")
+        compose.onNodeWithText(str(R.string.chat_send_button)).assertIsEnabled().performClick()
+        compose.waitUntil(5_000) { chat.queuedMessages.size == 1 }
+        core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
+        compose.waitUntil(5_000) { core.connection!!.typed == listOf("t1" to "new draft") }
+        // The first write seeded the broken fixture; every app checkpoint uses IO.
+        org.junit.Assert.assertFalse(core.outboxWritesOnMain.drop(1).any { it })
     }
 
     private fun screenshot(name: String) {

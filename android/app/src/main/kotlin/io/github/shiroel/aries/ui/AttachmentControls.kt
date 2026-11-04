@@ -31,7 +31,7 @@ fun AttachmentControls(chat: ChatModel) {
         if (file != null) {
             if (success) {
                 val uri = FileProvider.getUriForFile(context, "${context.packageName}.attachments", file)
-                chat.attach(context.applicationContext, SharedContent(listOf(uri))) { file.delete() }
+                chat.attach(context.applicationContext, SharedContent(listOf(uri)), onUploaded = { file.delete() })
             } else file.delete()
         }
     }

@@ -21,7 +21,7 @@ impl<'a> ChatOutbox<'a> {
         }
     }
 
-    fn read(&self) -> Result<BTreeMap<String, String>, CoreError> {
+    fn read(&self) -> Result<BTreeMap<String, serde_json::Value>, CoreError> {
         match private_content::read(&self.path, self.vault)? {
             Some(bytes) => serde_json::from_slice(&bytes).map_err(storage),
             None => Ok(BTreeMap::new()),
@@ -29,13 +29,25 @@ impl<'a> ChatOutbox<'a> {
     }
 
     pub fn get(&self, terminal: &str) -> Result<Option<String>, CoreError> {
-        Ok(self.read()?.remove(terminal))
+        self.read()?
+            .remove(terminal)
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(storage)
+    }
+
+    pub fn discard(&self) -> Result<(), CoreError> {
+        match std::fs::remove_file(&self.path) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(storage(e)),
+        }
     }
 
     pub fn save(&self, terminal: String, content: Option<String>) -> Result<(), CoreError> {
         let mut all = self.read()?;
         if let Some(content) = content {
-            all.insert(terminal, content);
+            all.insert(terminal, serde_json::Value::String(content));
         } else if all.remove(&terminal).is_none() {
             return Ok(());
         }
