@@ -75,9 +75,12 @@ class FakeCore : AriesCoreInterface {
             (hostId == null || it.hostId == hostId) && (!failuresOnly || it.error != null) }
 
     private val outboxes = mutableMapOf<Pair<String, String>, String>()
+    /** Durable checkpoints at which a process could disappear. */
+    val outboxWrites = mutableListOf<Triple<String, String, String?>>()
     override fun chatOutbox(hostId: String, terminal: String): String? = outboxes[hostId to terminal]
     override fun saveChatOutbox(hostId: String, terminal: String, content: String?) {
         if (content == null) outboxes.remove(hostId to terminal) else outboxes[hostId to terminal] = content
+        outboxWrites += Triple(hostId, terminal, content)
     }
 
     private val inputs = mutableMapOf<Pair<String, String>, List<String>>()

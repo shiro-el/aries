@@ -397,6 +397,33 @@ class ChatQueuedMessageTest {
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("saved before lock")
     }
 
+    @Test fun everyDurableCheckpointOfQueueCancellationRecoversTheTextAndAttachmentTogether() {
+        val core = FakeCore()
+        val connection = open(core)
+        val file = File(context.cacheDir, "atomic-draft.txt").apply { writeText("notes") }
+        try {
+            compose.runOnIdle { (hosts.screen as Screen.Chat).chat.attach(context, SharedContent(listOf(Uri.fromFile(file)))) }
+            compose.waitUntil(5_000) { connection.uploads.isNotEmpty() }
+            compose.waitUntil(5_000) { !(hosts.screen as Screen.Chat).chat.uploading }
+            compose.onNodeWithContentDescription(str(R.string.chat_input_label)).performTextInput("review notes")
+            core.outboxWrites.clear()
+            compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
+            compose.onNodeWithContentDescription(str(R.string.chat_queue_cancel_button)).performClick()
+            compose.waitForIdle()
+            // Each acknowledged storage write is a possible process-death boundary.
+            // Recovery must never combine only half of the draft/queue transition.
+            org.junit.Assert.assertTrue(core.outboxWrites.isNotEmpty())
+            for ((hostId, terminal, content) in core.outboxWrites.toList()) {
+                val restarted = FakeCore()
+                val host = restarted.addHost("home", Endpoint.Ssh("host", 22u, "me"))
+                restarted.saveChatOutbox(hostId, terminal, content)
+                val restored = ChatModel(restarted, host, agent)
+                assertEquals("review notes", restored.draft)
+                assertEquals(listOf("/host/it's file.jpg"), restored.attachments.map { it.path })
+            }
+        } finally { file.delete() }
+    }
+
     private fun screenshot(name: String) {
         System.getenv("ARIES_QUEUE_RENDER_DIR")?.let { directory ->
             File(directory).mkdirs()

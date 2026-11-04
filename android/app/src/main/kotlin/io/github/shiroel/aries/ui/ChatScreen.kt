@@ -340,6 +340,7 @@ class ChatModel(
     private var stopped = false
     private var terminalRevision = 0L
     private var recoveryLoaded = false
+    private var outboxEdits = 0
     private var recoveryFailed by mutableStateOf(false)
     val terminalComposer = TerminalComposerState { saveOutbox() }
 
@@ -352,8 +353,14 @@ class ChatModel(
         attachmentError = null
     }
 
+    /** Callers commit once after moving text and attachments together between draft and queue. */
+    private inline fun changeOutbox(change: () -> Unit) {
+        outboxEdits++
+        try { change() } finally { outboxEdits-- }
+    }
+
     private fun saveOutbox(): Boolean {
-        if (!recoveryLoaded) return true
+        if (!recoveryLoaded || outboxEdits > 0) return true
         if (recoveryFailed) return false
         return try {
             val state = ChatOutboxState(draft, attachments, queuedMessages,
@@ -438,7 +445,7 @@ class ChatModel(
         restoreMessage(message)
     }
 
-    private fun restoreMessage(message: QueuedChatMessage) {
+    private fun restoreMessage(message: QueuedChatMessage) = changeOutbox {
         if (message.draft.isNotEmpty()) {
             // Cancellation/recovery inserts text outside the active IME range.
             // Keep composition and selection attached to the user's newer text.
@@ -538,12 +545,14 @@ class ChatModel(
         }
         val message = QueuedChatMessage(draft = draft, attachments = attachments, text = text,
             before = snapshot?.entries.orEmpty().map { it.id }.toSet())
-        queuedMessages = queuedMessages + message
-        draft = ""
-        attachments = emptyList()
-        sent = false
-        refused = false
-        sendError = null
+        changeOutbox {
+            queuedMessages = queuedMessages + message
+            draft = ""
+            attachments = emptyList()
+            sent = false
+            refused = false
+            sendError = null
+        }
         if (!saveOutbox()) {
             queuedMessages = queuedMessages.filterNot { it.id == message.id }
             restoreMessage(message)
