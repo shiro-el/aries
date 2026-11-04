@@ -40,6 +40,8 @@ class TasksHomeTest {
         "h1", id, callTime, terminal, true, id, "Decide $id", urgency, listOf("Continue", "Wait"), null, true)
 
     private fun show(core: AriesCoreInterface) {
+        // These fixtures simulate already provisioned SSH Hosts.
+        core.ensureKey()
         val prefs = context.getSharedPreferences("tasks-home-test", Context.MODE_PRIVATE)
         prefs.edit().clear().commit()
         val settings = ThemeSettings(prefs).apply {
@@ -141,11 +143,64 @@ class TasksHomeTest {
         compose.onNodeWithTag("tasks-new-prompt").assertTextContains("Keep my draft")
     }
 
+    // D120: recreation of the open Needs sheet must keep its authenticated preview stream.
+    @Test fun recreatedNeedsSheetReusesItsPreviewUntilDismissed() {
+        val core = FakeCore().apply {
+            ensureKey()
+            addHost("home", Endpoint.Ssh("home.test", 22u, "me"))
+            terminals = listOf(TerminalInfo("t1", "Question task", "", listOf("codex"), "/repo", "live",
+                AgentStatus.Blocked(BlockedReason.QUESTION, "Color?")))
+        }
+        show(core)
+        compose.waitUntil(5_000) { (model.screen as? Screen.Agents)?.board?.agents?.singleOrNull()?.live == true }
+        compose.onNodeWithTag("tasks-filter-needs").performClick()
+        compose.waitUntil(5_000) { core.chatsOpened.isNotEmpty() }
+        compose.runOnIdle { assertEquals(listOf("h1" to "t1"), core.chatsOpened) }
+        compose.runOnIdle { generation.intValue++ }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals(1, core.chatsOpened.size)
+            assertFalse(core.chatStopped)
+            model.closeTaskNeeds((model.screen as Screen.Agents).board)
+        }
+        compose.waitForIdle()
+        compose.runOnIdle { org.junit.Assert.assertTrue(core.chatStopped) }
+    }
+
+    // D28/D29: automatic home watches, foreground pulls and recreated composition must not open biometric keys.
+    @Test fun biometricHomeDoesNotAuthenticateOnEntryReturnOrRecreation() {
+        val fake = FakeCore().apply {
+            addHost("locked", Endpoint.Ssh("locked.test", 22u, "me"))
+            ensureKey(); setKeyProtection(KeyProtection.BIOMETRIC)
+        }
+        val attempted = mutableListOf<String>()
+        val core = object : AriesCoreInterface by fake {
+            override suspend fun connect(hostId: String): HostConnection {
+                attempted += "connect"
+                return fake.connect(hostId)
+            }
+            override suspend fun watchCalls(hostId: String, listener: CallListener): CallWatch {
+                attempted += "calls"
+                return fake.watchCalls(hostId, listener)
+            }
+            override suspend fun snapshot(hostId: String): LastKnownState {
+                attempted += "snapshot"
+                return fake.snapshot(hostId)
+            }
+        }
+        show(core)
+        compose.runOnIdle { model.foregrounded(); generation.intValue++ }
+        compose.waitForIdle()
+        compose.runOnIdle { model.openSettings(); model.settingsBack(); model.foregrounded() }
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals(emptyList<String>(), attempted) }
+    }
+
     // D25: Needs must ignore helpers, unknown callers and stale feeds, including on biometric Hosts.
     @Test fun needsOnlyCountsLiveConfirmedTopLevelCallsOnTheForegroundHost() {
         val core = FakeCore().apply {
             addHost("home", Endpoint.Ssh("home.test", 22u, "me"))
-            ensureKey(); setKeyProtection(KeyProtection.BIOMETRIC)
+            ensureKey()
             callsOf["h1"] = listOf(call("review", "t1", CallUrgency.CHECK),
                 call("helper", "t2", CallUrgency.CHECK).copy(topLevel = false, pushesByDefault = false),
                 call("unknown", "t3", CallUrgency.CHECK).copy(terminal = null, pushesByDefault = false),

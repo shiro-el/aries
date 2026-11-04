@@ -133,7 +133,7 @@ sealed interface Prompt {
     data class ConfirmSavedLaunch(val browser: HostBrowser, val saved: SavedLaunch) : Prompt
 
     /** Something the user must read; [title] and [body] are resources. */
-    data class Problem(val title: Message, val body: Message, val recoverKey: Boolean = false) : Prompt
+    data class Problem(val title: Message, val body: Message, val recoverKey: Boolean = false, val unlock: (() -> Unit)? = null) : Prompt
 }
 
 enum class AfterTrust { Connect, InstallKey }
@@ -468,9 +468,11 @@ class HostsModel(
         if (active) emit(withContext(keyWork) { core.connect(hostId) })
     }.first()
 
-    private fun link(host: Host, conn: HostConnection?, onDown: (CoreException) -> Unit = {}) = HostLink(
+    private fun link(host: Host, conn: HostConnection?, initiallyExplicit: Boolean = true, onDown: (CoreException) -> Unit = {}) = HostLink(
         host, conn, scope,
         connect = { connectScreen(host.id) },
+        initiallyExplicit = initiallyExplicit,
+        canConnectAutomatically = { core.canAnswerInBackground(host.id) || core.keyProtection() == null },
         onDown = onDown,
         onSettings = { error ->
             when (error) {
@@ -523,6 +525,7 @@ class HostsModel(
     private fun releaseScreenConnections() {
         // Give submitted Chat messages to the core before retiring their SSH line.
         liveChat?.pause()
+        taskQuestionOwner?.takeUnless(::isViewedChat)?.pause()
         links.forEach { it.pause() }
     }
 
@@ -532,7 +535,8 @@ class HostsModel(
         screensPaused = false
         screensActive.value = true
         links.forEach { it.resume() }
-        liveChat?.resume()
+        if (screen != Screen.Settings) liveChat?.resume()
+        taskQuestionOwner?.takeUnless(::isViewedChat)?.resume()
         if (pendingNetworkChange) {
             pendingNetworkChange = false
             networkChanged()
@@ -541,14 +545,21 @@ class HostsModel(
 
     fun foregrounded() {
         resumeScreens()
-        links.forEach { it.check() }
-        liveChat?.retryNow()
         val startupHost = startupHostId
+        links.forEach { link ->
+            val visible = screen != Screen.Settings && (link === browseLink || link.host.id == currentAgentKey?.hostId)
+            if (visible && link.host.id != startupHost && ((link.state as? LinkState.Down)?.error is CoreException.KeyLocked ||
+                    link.state == LinkState.Reconnecting && !core.canAnswerInBackground(link.host.id))) link.retryNow()
+            else link.check()
+        }
+        if (screen != Screen.Settings) liveChat?.let { chat ->
+            if (chat.connectionError is CoreException.KeyLocked) chat.retryConnection() else chat.retryNow()
+        }
         startupHostId = null
         // Live connections publish their lists in the core. Other Hosts
-        // get a short pull while the foreground biometric prompt is available.
+        // get a short pull only if they can unlock without a prompt.
         // Startup already opens its target, including a biometric prompt if needed.
-        hosts.filter { host -> host.id != startupHost && links.none { it.host.id == host.id } }
+        hosts.filter { host -> host.id != startupHost && core.canAnswerInBackground(host.id) && links.none { it.host.id == host.id } }
             .forEach { refreshLastKnownState(it.id) }
     }
 
@@ -592,7 +603,7 @@ class HostsModel(
             chat.waitingSheetOpen = false
             chat.waitingSheetTarget = null
         }
-        agentHome?.board?.needsQueue = null
+        agentHome?.board?.let(::closeTaskNeeds)
         overlayNavigationVersion++
         navigationIntent()
     }
@@ -1586,13 +1597,38 @@ class HostsModel(
 
     /** Needs sheets reuse the same answer/outbox owner as Chat, without changing navigation. */
     internal fun taskQuestion(board: AgentBoard, key: AgentKey): ChatModel? {
+        taskQuestionOwner?.takeIf { it.host.id == key.hostId && it.terminal.address == key.address }?.let { return it }
         val entry = board.find(key)?.takeIf { it.live } ?: return null
         val link = board.links[key.hostId]?.takeIf { it.state == LinkState.Up && it.connection != null } ?: return null
         return conversation(link, entry.terminal)
     }
 
     /** A submitted sheet answer outlives the sheet, just like a submitted Chat message. */
-    internal fun startTaskQuestion(chat: ChatModel) { chat.start(scope, paused = screensPaused) }
+    private var taskQuestionOwner: ChatModel? = null
+
+    internal fun startTaskQuestion(chat: ChatModel) {
+        if (taskQuestionOwner === chat && chat.isRunning) return
+        stopTaskQuestion()
+        taskQuestionOwner = chat
+        if (!isViewedChat(chat)) chat.start(scope, paused = screensPaused)
+    }
+
+    internal fun stopTaskQuestion() {
+        taskQuestionOwner?.takeUnless(::isViewedChat)?.stop()
+        taskQuestionOwner = null
+    }
+
+    internal fun openTaskQuestion(board: AgentBoard, entry: AgentEntry) {
+        // Transfer the preview's live stream to detail before dismissing its queue.
+        taskQuestionOwner = null
+        board.needsQueue = null
+        openAgent(board, entry, openChat = true)
+    }
+
+    internal fun closeTaskNeeds(board: AgentBoard) {
+        board.needsQueue = null
+        stopTaskQuestion()
+    }
 
     internal fun isViewedChat(chat: ChatModel) = liveChat === chat
 
@@ -1614,13 +1650,13 @@ class HostsModel(
         restoreSettingsBase()
         viewing?.cancel()
         viewing = null
-        liveChat?.stop()
         val chat = conversation(line, terminal)
+        liveChat?.takeUnless { it === chat }?.stop()
         // Drafts/answers belong to the cached conversation; the viewport belongs to this visit.
         if (!preserveReadingPosition) chat.readingSession = ChatReadingSession()
         if (draft.isNotEmpty()) chat.appendDraft(draft)
         screen = Screen.Chat(chat, if (returnTo == Screen.Settings) screen else returnTo)
-        chat.start(scope, paused = screensPaused)
+        if (!chat.isRunning) chat.start(scope, paused = screensPaused)
     }
 
     /**
@@ -1963,6 +1999,7 @@ class HostsModel(
             explicitSurfaceEntry = true
             back()
             openAgents(focus = null, selectedHosts = hosts.filter { it.id == target.hostId })
+            agentLinks[target.hostId]?.retryNow()
         } else openPushedAgent(target.hostId, target.terminal, openChat = target.chat)
     }
 
@@ -2036,7 +2073,7 @@ class HostsModel(
         screen = agents
         selectedHosts.forEach { host ->
             var focusing = focus?.takeIf { it.hostId == host.id }
-            val link = link(host, null)
+            val link = link(host, null, initiallyExplicit = focus?.hostId == host.id || selectedHosts.size == 1 && selectedHosts != hosts)
             agentLinks[host.id] = link
             board.links[host.id] = link
             agentJobs += scope.launch {
@@ -2170,6 +2207,7 @@ class HostsModel(
     }
 
     private fun closeAgents() {
+        stopTaskQuestion()
         agentHome = null
         agentJobs.forEach { it.cancel() }
         agentJobs.clear()
@@ -2179,6 +2217,7 @@ class HostsModel(
 
     /** The app is in front: follow eligible Calls until [pauseCalls]. */
     private var callsActive = false
+    private var callRouteWatch: Job? = null
 
     var callInboxOpen by mutableStateOf(false)
         private set
@@ -2202,20 +2241,11 @@ class HostsModel(
         }
     }
 
-    private var taskNeedsActive = false
-
     private fun reconcileCallWatches() {
         if (callsActive) calls.watch(hosts,
-            everyHost = callInboxOpen || taskNeedsActive,
-            retainedHostIds = setOfNotNull(currentAgentKey?.hostId))
+            everyHost = callInboxOpen,
+            retainedHostIds = setOfNotNull(currentAgentKey?.hostId.takeIf { screen != Screen.Settings }))
         else calls.stopAll()
-    }
-
-    internal fun beginTaskNeeds() { taskNeedsActive = true; reconcileCallWatches() }
-
-    internal fun endTaskNeeds() {
-        taskNeedsActive = false
-        reconcileCallWatches()
     }
 
     fun closeCallInbox() {
@@ -2227,6 +2257,9 @@ class HostsModel(
     }
 
     fun resumeCalls() {
+        if (callRouteWatch == null) callRouteWatch = scope.launch {
+            snapshotFlow { screen to currentAgentKey?.hostId }.collect { reconcileCallWatches() }
+        }
         callsActive = true
         observeLastKnownStates()
         reconcileCallWatches()
@@ -2433,7 +2466,10 @@ class HostsModel(
             settingsReturnTo = null
             val cold = settingsColdReturn
             settingsColdReturn = null
-            if (origin != null) screen = origin
+            if (origin != null) {
+                screen = origin
+                if (!screensPaused) liveChat?.resume()
+            }
             else if (cold != null) restoreSettingsReturn(cold)
             else back()
         }
@@ -2536,6 +2572,8 @@ class HostsModel(
         agentOpeningHostId = host.id
         agentOpeningFromInbox = fromInbox
         if (existing == null) agentOpeningLink = target
+        // Explicit selection is the permission to reopen a locked line.
+        target.retryNow()
         agentOpeningJob = scope.launch {
             var adopted = false
             try {
@@ -2547,7 +2585,10 @@ class HostsModel(
                                 is CoreException.HostKeyUnknown -> prompt = Prompt.TrustHostKey(host, error.fingerprint)
                                 is CoreException.JumpHostKeyUnknown -> prompt = Prompt.TrustJumpHostKey(host, error.hop, error.address, error.fingerprint)
                                 null -> {
-                                    delay(20_000L)
+                                    // The native connection has its own network deadline, excluding
+                                    // biometric authorization (the prompt itself allows 120 seconds).
+                                    val openingBudget = if (core.keyProtection() == KeyProtection.BIOMETRIC) 140_000L else 20_000L
+                                    delay(openingBudget)
                                     throw CoreException.Unreachable(host.name)
                                 }
                                 else -> throw error
@@ -2555,7 +2596,6 @@ class HostsModel(
                         }
                     }
                     try {
-                        if (target.state !is LinkState.Down) target.retryNow()
                         target.keep { conn, _ ->
                             if (board == null) conn.terminals() else {
                                 // Reuse the board's first fresh snapshot, including an empty list.
@@ -2597,7 +2637,12 @@ class HostsModel(
                 } else if (openChat) chat(target, terminal, screen) else show(target, terminal, screen)
                 closeCallInbox()
             } catch (e: CoreException) {
-                if (current()) prompt = problemFor(e)
+                if (current()) prompt = problemFor(e).let { problem ->
+                    if (e is CoreException.KeyLocked) problem.copy(unlock = {
+                        prompt = null
+                        openAgentTarget(host, address, openChat, callKey)
+                    }) else problem
+                }
             } finally {
                 if (existing == null && !adopted) target.close()
                 if (agentOpeningLink === target) agentOpeningLink = null

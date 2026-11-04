@@ -430,12 +430,12 @@ private fun PromptDialog(prompt: Prompt, model: HostsModel) {
             title = { Text(text(prompt.title)) },
             text = { AnnouncedText(text(prompt.body)) },
             confirmButton = {
-                TextButton(onClick = { if (prompt.recoverKey) model.openKeyRecovery() else model.dismiss() }) {
-                    Text(stringResource(if (prompt.recoverKey) R.string.key_recover_button else R.string.ok_button))
+                TextButton(onClick = { if (prompt.unlock != null) prompt.unlock.invoke() else if (prompt.recoverKey) model.openKeyRecovery() else model.dismiss() }) {
+                    Text(stringResource(if (prompt.unlock != null) R.string.key_unlock_button else if (prompt.recoverKey) R.string.key_recover_button else R.string.ok_button))
                 }
             },
             dismissButton = {
-                if (prompt.recoverKey) TextButton(onClick = model::dismiss) { Text(stringResource(R.string.cancel_button)) }
+                if (prompt.recoverKey || prompt.unlock != null) TextButton(onClick = model::dismiss) { Text(stringResource(R.string.cancel_button)) }
             },
         )
     }
