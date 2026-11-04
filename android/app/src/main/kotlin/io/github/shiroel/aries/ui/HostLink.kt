@@ -29,6 +29,9 @@ sealed interface LinkState {
     }
 }
 
+/** Configuration failures wait for explicit action; never infer this from message text. */
+fun CoreException.retryableConnection(): Boolean = this is CoreException.Unreachable || this is CoreException.Closed
+
 /** Waits between reconnect attempts; the last one repeats. A network change or the app coming back retries at once. */
 val RETRY_DELAYS_MS = listOf(500L, 1_000L, 2_000L, 5_000L, 10_000L, 30_000L)
 
@@ -108,7 +111,7 @@ class HostLink(
         } else poke.trySend(Unit)
     }
 
-    fun settings() = onSettings((state as? LinkState.Down)?.error)
+    fun settings(error: CoreException? = (state as? LinkState.Down)?.error) = onSettings(error)
 
     /** The phone's network changed: the old line is likely dead, so replace it now (or retry now). */
     fun networkChanged() {
@@ -156,7 +159,7 @@ class HostLink(
             } catch (e: CoreException) {
                 // Keep the typed error. Protocol, auth, trust, permission and key
                 // unlock failures need an explicit user action, never a timer.
-                if (e !is CoreException.Unreachable && e !is CoreException.Closed) {
+                if (!e.retryableConnection()) {
                     state = LinkState.Down(e)
                     onDown(e)
                     return

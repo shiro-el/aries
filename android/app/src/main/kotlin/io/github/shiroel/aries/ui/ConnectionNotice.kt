@@ -38,7 +38,7 @@ fun ConnectionNotice(link: HostLink, state: LinkState = link.state, onRetry: () 
         }
         Row {
             TextButton(onClick = onRetry) { Text(stringResource(R.string.connect_retry_button), color = colors.onErrorContainer) }
-            TextButton(onClick = link::settings) { Text(stringResource(R.string.connect_settings_button), color = colors.onErrorContainer) }
+            TextButton(onClick = { link.settings((state as? LinkState.Down)?.error) }) { Text(stringResource(R.string.connect_settings_button), color = colors.onErrorContainer) }
         }
     }
 }

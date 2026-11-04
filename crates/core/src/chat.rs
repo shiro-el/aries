@@ -744,10 +744,13 @@ async fn answer_result(stream: Stream) -> Result<(), CoreError> {
 /// heartbeat every 15 s).
 const SILENCE: Duration = Duration::from_secs(45);
 
+/// Snapshots and typed connection problems share one ordered update stream.
+type ChatUpdate = Result<Option<ChatSnapshot>, CoreError>;
+
 /// A running Chat for one Terminal.
 #[derive(uniffi::Object)]
 pub struct ChatWatch {
-    rx: Arc<Mutex<watch::Receiver<Option<ChatSnapshot>>>>,
+    rx: Arc<Mutex<watch::Receiver<ChatUpdate>>>,
     task: JoinHandle<()>,
     wake: Arc<Wake>,
     images: Images,
@@ -771,7 +774,7 @@ impl ChatWatch {
         retry: Duration,
     ) -> Self {
         let model = ChatModel::new(cursor);
-        let (tx, rx) = watch::channel(Some(model.snapshot()));
+        let (tx, rx) = watch::channel(Ok(Some(model.snapshot())));
         let images = model.images.clone();
         let wake = Arc::new(Wake::default());
         let signals = wake.clone();
@@ -783,7 +786,7 @@ impl ChatWatch {
                 && (model.cursor.is_none() || model.cursor == cached.cursor)
             {
                 model.seed(cached);
-                if tx.send(Some(model.snapshot())).is_err() {
+                if tx.send(Ok(Some(model.snapshot()))).is_err() {
                     return;
                 }
             }
@@ -856,7 +859,7 @@ async fn follow(
     terminal: String,
     mut model: ChatModel,
     cache: Option<CacheSlot>,
-    tx: watch::Sender<Option<ChatSnapshot>>,
+    tx: watch::Sender<ChatUpdate>,
     retry: Duration,
     wake: &Wake,
 ) {
@@ -868,7 +871,23 @@ async fn follow(
     let mut backoff = retry;
     loop {
         let command = command(&terminal, model.cursor.as_deref());
-        if let Ok(stream) = host.open(&command).await {
+        let opened = host.open(&command).await;
+        if let Err(error) = opened.as_ref()
+            && !error.retryable_connection()
+        {
+            saver.flush(&terminal, &model).await;
+            if tx.send(Err(error.clone())).is_err() {
+                return;
+            }
+            // Auth, trust, permission and configuration failures require a
+            // user action. Preserve the typed cause through next(), then wait.
+            tokio::select! {
+                _ = wake.replace.notified() => {},
+                _ = wake.retry.notified() => {},
+            }
+            continue;
+        }
+        if let Ok(stream) = opened {
             // The writer and guard stay alive while reading; dropping them
             // ends the Host command.
             let Stream {
@@ -901,7 +920,7 @@ async fn follow(
                 let burst_read = lines.get_ref().buffer().is_empty();
                 if burst_read || model.status.is_final() {
                     saver.changed(&terminal, &model).await;
-                    if tx.send(Some(model.snapshot())).is_err() {
+                    if tx.send(Ok(Some(model.snapshot()))).is_err() {
                         saver.flush(&terminal, &model).await;
                         return;
                     }
@@ -918,7 +937,7 @@ async fn follow(
             return;
         }
         model.status = ChatStatus::Reconnecting;
-        if tx.send(Some(model.snapshot())).is_err() {
+        if tx.send(Ok(Some(model.snapshot()))).is_err() {
             return;
         }
         tokio::select! {
@@ -934,13 +953,14 @@ impl ChatWatch {
     /// The Chat: right away on the first call, then each time it changes
     /// (intermediate states may be skipped). After a final status
     /// (`NoTerminal`, `NoBeacon`, `Incompatible`) or `stop`, fails with
-    /// [`CoreError::Closed`].
+    /// [`CoreError::Closed`]. A permanent connection failure returns its typed
+    /// error once; following pauses until an explicit reconnect/retry signal.
     pub async fn next(&self) -> Result<ChatSnapshot, CoreError> {
         let rx = self.rx.clone();
         crate::on_runtime(async move {
             let mut rx = rx.lock().await;
             rx.changed().await.map_err(|_| CoreError::Closed)?;
-            rx.borrow_and_update().clone().ok_or(CoreError::Closed)
+            rx.borrow_and_update().clone()?.ok_or(CoreError::Closed)
         })
         .await
     }
@@ -956,13 +976,13 @@ impl ChatWatch {
     /// The phone's network changed: the line is likely dead, so drop it
     /// and connect again now, after the last cursor.
     pub fn reconnect(&self) {
-        self.wake.replace.notify_waiters();
+        self.wake.replace.notify_one();
     }
 
     /// The app is back in front: if the Chat waits to reconnect, try now.
     /// A live line is kept (a dead one is noticed by its silence).
     pub fn retry_now(&self) {
-        self.wake.retry.notify_waiters();
+        self.wake.retry.notify_one();
     }
 
     pub fn stop(&self) {

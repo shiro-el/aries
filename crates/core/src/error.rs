@@ -32,7 +32,7 @@ pub enum AnswerProblem {
     Failed,
 }
 
-#[derive(Debug, thiserror::Error, uniffi::Error)]
+#[derive(Debug, Clone, thiserror::Error, uniffi::Error)]
 pub enum CoreError {
     /// `answer_question` did not answer; nothing was retried.
     #[error("the answer was not sent ({reason:?}): {detail}")]
@@ -157,6 +157,13 @@ pub enum CoreError {
     /// Jump host `hop` did not accept the key chosen for it.
     #[error("jump host {hop} ({address}) did not accept its SSH key")]
     JumpAuthRejected { hop: u32, address: String },
+}
+
+impl CoreError {
+    /// Connection retries never replay commands or hide configuration failures.
+    pub(crate) fn retryable_connection(&self) -> bool {
+        matches!(self, Self::Unreachable { .. } | Self::Closed)
+    }
 }
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]

@@ -710,7 +710,11 @@ class HostsModel(
         when (prompt.then) {
             AfterTrust.Connect -> {
                 val waiting = links.firstOrNull { it.host.id == host.id && it.state is LinkState.Down }
-                if (waiting != null) waiting.retryNow() else connect(host)
+                val chat = liveChat?.takeIf { it.host.id == host.id && it.connectionError != null }
+                if (waiting != null || chat != null) {
+                    waiting?.retryNow()
+                    chat?.retryConnection()
+                } else connect(host)
             }
             // The password was not kept, so ask for it again.
             AfterTrust.InstallKey -> askPassword(host)
@@ -759,7 +763,11 @@ class HostsModel(
         when (prompt.then) {
             AfterTrust.Connect -> {
                 val waiting = links.firstOrNull { it.host.id == host.id && it.state is LinkState.Down }
-                if (waiting != null) waiting.retryNow() else connect(host)
+                val chat = liveChat?.takeIf { it.host.id == host.id && it.connectionError != null }
+                if (waiting != null || chat != null) {
+                    waiting?.retryNow()
+                    chat?.retryConnection()
+                } else connect(host)
             }
             AfterTrust.InstallKey -> askPassword(host)
         }
@@ -1562,6 +1570,7 @@ fun problemFor(e: CoreException): Prompt.Problem {
             Message(R.string.key_biometric_unavailable_title),
             Message(R.string.key_biometric_unavailable_body),
         )
+        is CoreException.BeaconNotInstalled -> Prompt.Problem(failed, Message(R.string.chat_status_no_beacon))
         is CoreException.Unreachable -> Prompt.Problem(failed, Message(R.string.connect_unreachable, listOf(e.detail)))
         is CoreException.Rpc -> Prompt.Problem(failed,
             Message(if (e.kind == "permission_denied") R.string.connect_permission_denied else R.string.connect_other, listOf(e.detail)))

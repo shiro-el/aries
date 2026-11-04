@@ -147,6 +147,27 @@ class ReconnectTest {
     }
 
     @Test
+    fun aLockedChatStartKeepsItsCauseAndCanBeRetriedWithoutLeavingTheAgent() {
+        val core = FakeCore().apply { terminals = listOf(agent); failChatWith = CoreException.KeyLocked() }
+        val home = core.addHost("home", Endpoint.Ssh("home", 22u, "me"))
+        start(core)
+        compose.runOnIdle { model.openPushedAgent(home.id, agent.address, openChat = true) }
+        compose.waitForIdle()
+        assertTrue(model.screen is Screen.Chat)
+        compose.runOnIdle { model.networkChanged(); model.foregrounded() }
+        compose.waitForIdle()
+        assertEquals("unlock cancellation must not prompt repeatedly", 1, core.chatsOpened.size)
+        core.failChatWith = null
+        compose.onNodeWithText(str(R.string.connect_retry_button)).performClick()
+        compose.waitForIdle()
+        assertEquals(2, core.chatsOpened.size)
+        core.pushChat(io.github.shiroel.aries.core.ChatSnapshot(emptyList(), io.github.shiroel.aries.core.ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        assertEquals(io.github.shiroel.aries.core.ChatStatus.LIVE, (model.screen as Screen.Chat).chat.snapshot!!.status)
+        compose.onNodeWithText(str(R.string.chat_status_no_beacon)).assertDoesNotExist()
+    }
+
+    @Test
     fun aDroppedLineShowsReconnectingThenReattachesTheOpenTerminalResumed() {
         val core = FakeCore().apply { terminals = listOf(build) }
         val first = openBuild(core)
