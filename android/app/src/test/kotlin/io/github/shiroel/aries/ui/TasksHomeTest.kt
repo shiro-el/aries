@@ -33,8 +33,6 @@ class TasksHomeTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private lateinit var model: HostsModel
 
-    private lateinit var model: HostsModel
-
     private val callTime = System.currentTimeMillis().toULong() - 60_000uL
 
     private fun call(id: String, terminal: String, urgency: CallUrgency) = CallInfo(
