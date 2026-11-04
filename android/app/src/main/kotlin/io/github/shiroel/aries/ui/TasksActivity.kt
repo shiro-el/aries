@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.*
 import java.time.OffsetDateTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 /** Keeps Chat's lazy row keys, search indices, markdown, outbox and scroll ownership intact. */
@@ -29,7 +30,8 @@ internal fun TasksActivityEntry(entry: ChatEntry, chat: ChatModel, content: @Com
         return
     }
     val timestamp = remember(entry.timestamp) {
-        runCatching { OffsetDateTime.parse(entry.timestamp).toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm")) }.getOrNull()
+        runCatching { OffsetDateTime.parse(entry.timestamp).atZoneSameInstant(ZoneId.systemDefault())
+            .format(DateTimeFormatter.ofPattern("HH:mm")) }.getOrNull()
     }
     if (body is ChatEntryBody.Tool) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.Top,

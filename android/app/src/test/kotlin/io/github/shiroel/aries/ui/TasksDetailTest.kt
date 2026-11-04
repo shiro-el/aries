@@ -73,14 +73,28 @@ class TasksDetailTest {
             core.connection!!.gitPatch = GitDiff(listOf(GitDiffLine("-old", 1u, null), GitDiffLine("+hello", null, 1u), GitDiffLine("+world", null, 2u)), false, false)
             assertEquals(0, core.connection!!.gitChangesRequests)
         }
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithText("The changes are ready to review.").fetchSemanticsNodes().isNotEmpty()
+        }
         screenshot("activity")
         compose.onNodeWithTag("chat-transcript").performScrollToIndex(0)
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithText("Make task details easier to review").fetchSemanticsNodes().isNotEmpty()
+        }
         screenshot("request-plan")
-        compose.onNodeWithTag("tasks-tab-terminal").performClick()
+        compose.onNodeWithTag("tasks-tab-terminal").performScrollTo().performClick()
+        compose.runOnIdle {
+            val lines = listOf("$ codex", "", "Review the task details", "", "Updated ui/Task.kt", "+2 -1", "", "Ready for follow-up")
+            core.connection!!.views.last().push(TerminalUpdate.Screen(ScreenFrame(40u, 24u, true,
+                lines.mapIndexed { row, text -> ScreenLine(row.toUShort(), listOf(
+                    CellRun(0u, text.length.toUShort(), text, false, null, null, false, false, false, false, false, false))) },
+                CursorPos(8u, 0u), null)))
+        }
+        compose.waitForIdle()
         screenshot("terminal")
-        compose.onNodeWithTag("tasks-tab-activity").performClick()
+        compose.onNodeWithTag("tasks-tab-activity").performScrollTo().performClick()
         compose.runOnIdle { assertSame(chat, (model.screen as Screen.Chat).chat); assertEquals("Review this", chat.draft) }
-        compose.onNodeWithTag("tasks-tab-changes").performClick()
+        compose.onNodeWithTag("tasks-tab-changes").performScrollTo().performClick()
         compose.onNodeWithText("ui/Task.kt").performClick()
         screenshot("changes-diff")
         compose.onNodeWithText("+hello").performClick()
@@ -91,9 +105,9 @@ class TasksDetailTest {
             assertTrue(core.connection!!.typed.isEmpty())
             assertEquals(1, core.connection!!.gitChangesRequests)
         }
-        compose.onNodeWithTag("tasks-tab-changes").performClick()
+        compose.onNodeWithTag("tasks-tab-changes").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(1, core.connection!!.gitChangesRequests) }
-        compose.onNodeWithTag("tasks-tab-activity").performClick()
+        compose.onNodeWithTag("tasks-tab-activity").performScrollTo().performClick()
         compose.runOnIdle { model.closeChat() }
         compose.onNodeWithText("+2 −1").assertExists()
         screenshot("home-stats")

@@ -48,7 +48,8 @@ internal fun AgentScreenHeader(
     val openFiles = LocalOpenFiles.current
     val quickOpen = LocalQuickOpen.current
     val openDrawer = LocalConsoleMenu.current
-    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("console-top-bar"), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().then(if (tasks == null) Modifier.height(56.dp) else Modifier.heightIn(min = 56.dp))
+        .testTag("console-top-bar"), verticalAlignment = Alignment.CenterVertically) {
         val backLabel = stringResource(R.string.back_button)
         IconButton(onClick = onBack, modifier = Modifier.size(48.dp).testTag("console-back")) {
             Icon(painterResource(R.drawable.ic_arrow_left), contentDescription = backLabel, modifier = Modifier.size(20.dp))

@@ -1557,7 +1557,7 @@ private fun ToolContent(
                     maxLines = 1, fontFamily = FontFamily.Monospace,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                val patch = tool.diff?.takeUnless { it.truncated }
+                val patch = if (LocalTasksDetail.current != null) tool.diff?.takeUnless { it.truncated } else null
                 val patchStats = remember(patch) {
                     patch?.hunks?.flatMap { it.lines }?.let { lines ->
                         TaskChangeStats(lines.count { it.startsWith("+") }, lines.count { it.startsWith("-") })
