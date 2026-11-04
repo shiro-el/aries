@@ -111,16 +111,18 @@ private fun AriesContent(
     Scaffold { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
             FirstConnectionGuide(model, guidance, allowNotifications) {
-                LocalLayoutScreens.current.Shell(model) {
-                    RemoteFilesAccess(model) {
-                        AdaptiveHostLayout(
-                            listScreen = model.listScreen.takeIf { LocalLayoutScreens.current.usesListPane },
-                            hasDetail = model.screen != model.listScreen,
-                            listHeader = { LocalLayoutScreens.current.Header(model, it) },
-                            detailHeader = { LocalLayoutScreens.current.Header(model, model.screen) },
-                            listContent = { LocalLayoutScreens.current.Screen(model, settings, terminalDisplay, it) },
-                            detailContent = { LocalLayoutScreens.current.Screen(model, settings, terminalDisplay, model.screen) },
-                        )
+                CallAttentionHost(model) {
+                    LocalLayoutScreens.current.Shell(model) {
+                        RemoteFilesAccess(model) {
+                            AdaptiveHostLayout(
+                                listScreen = model.listScreen.takeIf { LocalLayoutScreens.current.usesListPane },
+                                hasDetail = model.screen != model.listScreen,
+                                listHeader = { LocalLayoutScreens.current.Header(model, it) },
+                                detailHeader = { LocalLayoutScreens.current.Header(model, model.screen) },
+                                listContent = { LocalLayoutScreens.current.Screen(model, settings, terminalDisplay, it) },
+                                detailContent = { LocalLayoutScreens.current.Screen(model, settings, terminalDisplay, model.screen) },
+                            )
+                        }
                     }
                 }
             }
@@ -177,7 +179,7 @@ private fun ConsoleHostRow(model: HostsModel, host: Host, tasks: Boolean = false
             model.drawerAgents.filter { it.host.id == host.id }, Modifier.testTag("host-waiting:${host.id}"),
             onClick = { model.openHostWaiting(host) })
         val taskLabel = stringResource(R.string.new_task_on_host, host.name)
-        ActionIcon(R.drawable.ic_plus, R.string.new_task_title, { model.back(); model.newTask(host) },
+        ActionIcon(R.drawable.ic_plus, R.string.new_task_title, { model.newTask(host) },
             modifier = Modifier.testTag("host-new-task").semantics {
                 contentDescription = taskLabel
             })
@@ -234,18 +236,18 @@ internal fun KeySection(model: HostsModel) {
 }
 
 @Composable
-private fun PublicKeyDetails(model: HostsModel) {
-    val key = model.key ?: return
+private fun PublicKeyDetails(model: HostsModel, selected: io.github.shiroel.aries.core.PublicKeyInfo? = model.key, label: String = "") {
+    val key = selected ?: return
     val context = LocalContext.current
     val clipLabel = stringResource(R.string.key_clip_label)
-    Text(stringResource(R.string.key_title), style = MaterialTheme.typography.titleMedium)
+    Text(label.ifBlank { stringResource(R.string.key_title) }, style = MaterialTheme.typography.titleMedium)
     Text(key.openssh, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
     Text(stringResource(R.string.key_fingerprint, key.fingerprint), style = MaterialTheme.typography.bodySmall)
     ConsoleButton(onClick = {
         context.getSystemService(ClipboardManager::class.java)
             ?.setPrimaryClip(ClipData.newPlainText(clipLabel, key.openssh))
     }) { Text(stringResource(R.string.key_copy_button)) }
-    ConsoleButton(onClick = model::showKeyQr) { Text(stringResource(R.string.key_qr_button)) }
+    ConsoleButton(onClick = { model.showKeyQr(key) }) { Text(stringResource(R.string.key_qr_button)) }
 }
 
 @Composable
@@ -306,7 +308,10 @@ private fun HostConnectionForm(model: HostsModel) {
 @Composable
 internal fun HostKeyAuthorization(model: HostsModel, host: Host) {
     Text(stringResource(R.string.onboarding_manual_key_body))
-    KeySection(model)
+    val key = model.authorizationKey(host)
+    if (key == null) Text(stringResource(R.string.key_missing))
+    else PublicKeyDetails(model, io.github.shiroel.aries.core.PublicKeyInfo(key.openssh, key.fingerprint), key.label)
+    TextButton(onClick = model::openKeyRecovery) { Text(stringResource(R.string.key_recover_button)) }
     TextButton(onClick = { model.askPassword(host) }) { Text(stringResource(R.string.host_install_key_button)) }
 }
 

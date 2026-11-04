@@ -96,7 +96,8 @@ private fun TasksQuestionTrace(entry: ChatEntry, chat: ChatModel, body: ChatEntr
 @Composable
 internal fun TasksCallTrace(entry: CallEntry, calls: CallsModel) {
     var open by remember(entry.key) { mutableStateOf(false) }
-    TextButton(onClick = { open = true }, modifier = Modifier.fillMaxWidth().testTag("tasks-call:${entry.key}")) {
+    TextButton(onClick = { open = true }, modifier = Modifier.fillMaxWidth().testTag("tasks-call:${entry.key}")
+        .presentsCalls(setOf(entry.key))) {
         Column(Modifier.fillMaxWidth().padding(8.dp)) {
             Text(entry.call.title, color = tasksAttentionColor())
             Text(stringResource(R.string.console_chat_call_label), style = MaterialTheme.typography.labelSmall)

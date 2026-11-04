@@ -318,21 +318,33 @@ internal fun quotedFileReference(path: String): String = "'" + path.replace("'",
 /** Files reuse the current Host line; dismissing the panel retains the Agent view. */
 @Composable
 internal fun RemoteFilesAccess(model: HostsModel, content: @Composable () -> Unit) {
-    val body: @Composable () -> Unit = { Column(Modifier.fillMaxSize()) { content() } }
     val screen = model.screen
     val terminal = when (screen) {
         is Screen.Chat -> screen.chat.terminal
         is Screen.Terminal -> screen.viewer.terminal
-        else -> { body(); return }
+        else -> null
     }
     val link = when (screen) {
         is Screen.Chat -> screen.chat.link
         is Screen.Terminal -> screen.viewer.link
-    } ?: run { body(); return }
+        else -> null
+    }
     val panel = when (screen) {
         is Screen.Chat -> screen.chat.files
         is Screen.Terminal -> screen.viewer.files
+        else -> null
     }
+    // Keep navigation content at one composition location with or without an open Agent.
+    val openFiles: (() -> Unit)? = if (panel != null && link != null) ({ panel.show() }) else null
+    val openRemoteFile: ((FileLocation) -> Unit)? = if (panel != null && terminal != null && link != null) ({ target ->
+        panel.show(target.copy(path = if (target.path.startsWith('/')) target.path
+            else terminal.currentCwd.orEmpty().trimEnd('/') + "/" + target.path),
+            missingFolder = !target.path.startsWith('/') && terminal.currentCwd.isNullOrBlank())
+    }) else null
+    CompositionLocalProvider(LocalOpenFiles provides openFiles, LocalOpenRemoteFile provides openRemoteFile) {
+        Column(Modifier.fillMaxSize()) { content() }
+    }
+    if (panel == null || terminal == null || link == null) return
     var open by panel::open
     val noFolder = panel.noFolder
     val location = panel.navigation.initialLocation
@@ -345,13 +357,6 @@ internal fun RemoteFilesAccess(model: HostsModel, content: @Composable () -> Uni
         }
         open = false
     }
-    CompositionLocalProvider(LocalOpenFiles provides {
-        panel.show()
-    }, LocalOpenRemoteFile provides { target ->
-        panel.show(target.copy(path = if (target.path.startsWith('/')) target.path
-            else terminal.currentCwd.orEmpty().trimEnd('/') + "/" + target.path),
-            missingFolder = !target.path.startsWith('/') && terminal.currentCwd.isNullOrBlank())
-    }) { body() }
     if (open) androidx.compose.ui.window.Dialog(
         onDismissRequest = { open = false },
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),

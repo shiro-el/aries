@@ -38,7 +38,7 @@ class ChatQueuedMessageTest {
     private val agent = TerminalInfo("t1", "claude", "", listOf("claude"), "/repo", "live", AgentStatus.Working)
     private fun str(id: Int) = context.getString(id)
 
-    private fun open(core: FakeCore): FakeConnection {
+    private fun open(core: FakeCore, initialSnapshot: ChatSnapshot? = ChatSnapshot(emptyList(), ChatStatus.LIVE, null)): FakeConnection {
         core.terminals = listOf(agent)
         core.savedView = AgentView.CHAT
         core.addHost("home", Endpoint.Ssh("host", 22u, "me"))
@@ -51,7 +51,7 @@ class ChatQueuedMessageTest {
         }
         compose.onNodeWithText("home").performClick()
         compose.onNodeWithText("claude").performClick()
-        core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, null))
+        initialSnapshot?.let(core::pushChat)
         compose.waitForIdle()
         return core.connection!!
     }
@@ -60,6 +60,231 @@ class ChatQueuedMessageTest {
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).performTextInput(text)
         compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
         compose.waitForIdle()
+    }
+
+    // D12: transcript rendering of bash and uploaded paths must resolve a lost send reply.
+    @Test fun bashAndAttachmentRenderingCanResolveAnUnconfirmedMessage() {
+        val core = FakeCore()
+        val connection = open(core)
+        val chat = compose.runOnIdle { (hosts.screen as Screen.Chat).chat }
+        val uri = Uri.parse("content://documents/note.txt")
+        shadowOf(context.contentResolver).registerInputStream(uri, ByteArrayInputStream("notes".toByteArray()))
+        compose.runOnIdle { chat.attach(context, SharedContent(listOf(uri))) }
+        compose.waitUntil(5_000) { !chat.uploading }
+        connection.sendFailWith = CoreException.Closed()
+        send("!echo hello")
+        core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
+        compose.waitForIdle()
+        assertEquals(QueuedMessagePhase.Uncertain, chat.queuedMessages.single().phase)
+        core.pushChat(ChatSnapshot(listOf(ChatEntry("bash", null,
+            ChatEntryBody.User("<bash-input>echo hello /host/it's file.jpg</bash-input>"))), ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        assertEquals(emptyList<QueuedChatMessage>(), chat.queuedMessages)
+    }
+
+    // D12: changed transcript text and completed turns must not leave permanent receipt bubbles.
+    @Test fun enteredNotesRetireOnUserProgressOrTurnCompletionAndCanBeDismissed() {
+        val core = FakeCore()
+        val connection = open(core)
+        val chat = compose.runOnIdle { (hosts.screen as Screen.Chat).chat }
+        send("first")
+        core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
+        compose.waitForIdle()
+        core.pushChat(ChatSnapshot(listOf(ChatEntry("different", null, ChatEntryBody.User("[Image #1]"))), ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        assertEquals(emptyList<QueuedChatMessage>(), chat.queuedMessages)
+        send("second")
+        core.push(listOf(agent.copy(agentStatus = AgentStatus.Done, turn = 1uL)))
+        compose.waitForIdle()
+        assertEquals(emptyList<QueuedChatMessage>(), chat.queuedMessages)
+        send("third")
+        compose.onNodeWithContentDescription(str(R.string.chat_delivery_dismiss_button)).performClick()
+        compose.waitForIdle()
+        assertEquals(emptyList<QueuedChatMessage>(), chat.queuedMessages)
+        assertEquals(emptyList<QueuedChatMessage>(), ChatModel(core, chat.host, chat.terminal).queuedMessages)
+        assertEquals(listOf("t1" to "first", "t1" to "second", "t1" to "third"), connection.typed)
+    }
+
+    // D12: a new User that matches a newer send still retires older Terminal receipts.
+    @Test fun receiptCleanupAlsoCoversOlderNotesWhenTheNewUserMatchesAnotherSend() {
+        val core = FakeCore()
+        val connection = open(core)
+        send("older image instruction")
+        core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
+        compose.waitForIdle()
+        send("newer instruction")
+        core.pushChat(ChatSnapshot(listOf(ChatEntry("newer", null, ChatEntryBody.User("newer instruction"))), ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        assertEquals(emptyList<QueuedChatMessage>(), (hosts.screen as Screen.Chat).chat.queuedMessages)
+        assertEquals(listOf("t1" to "older image instruction", "t1" to "newer instruction"), connection.typed)
+    }
+
+    // D10 fallback: returning rows to the composer must leave a durable explanation across edits/restart.
+    @Test fun endedAgentsReturnWaitingInOrderWithANoticeThatSurvivesEditingAndRecreation() {
+        val core = FakeCore()
+        val connection = open(core)
+        send("first")
+        send("second")
+        core.pushChat(ChatSnapshot(emptyList(), ChatStatus.ENDED, null))
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("first\n\nsecond")
+        compose.onNodeWithText(str(R.string.chat_queue_returned)).assertExists()
+        compose.runOnIdle { (hosts.screen as Screen.Chat).chat.draft += " edited" }
+        compose.runOnIdle { generation++ }
+        compose.waitForIdle()
+        compose.onNodeWithText("home").performClick()
+        compose.onNodeWithText("claude").performClick()
+        core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("first\n\nsecond edited")
+        compose.onNodeWithText(str(R.string.chat_queue_returned)).assertExists()
+        assertEquals(emptyList<Pair<String, String>>(), connection.typed)
+        assertEquals(emptyList<Pair<String, String>>(), core.connection!!.typed)
+    }
+
+    // D10: process death preserves the two unsent rows and their FIFO on the replacement line.
+    @Test fun processRecreationSendsWaitingRowsInOrderOnlyAfterANewLiveSnapshot() {
+        val core = FakeCore()
+        val original = open(core)
+        send("first")
+        send("second")
+        compose.runOnIdle { generation++ }
+        compose.waitForIdle()
+        compose.onNodeWithText("home").performClick()
+        compose.onNodeWithText("claude").performClick()
+        val replacement = core.connection!!
+        core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
+        compose.waitForIdle()
+        assertEquals(emptyList<Pair<String, String>>(), replacement.typed)
+        core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        assertEquals(listOf("t1" to "first"), replacement.typed)
+        core.push(listOf(agent))
+        compose.waitForIdle()
+        core.push(listOf(agent.copy(agentStatus = AgentStatus.Done, turn = 1uL)))
+        compose.waitForIdle()
+        assertEquals(listOf("t1" to "first", "t1" to "second"), replacement.typed)
+        assertEquals(emptyList<Pair<String, String>>(), original.typed)
+    }
+
+    // D09: a foreign-thread callback must not read/write the queue during an owner edit.
+    @org.robolectric.annotation.LooperMode(org.robolectric.annotation.LooperMode.Mode.PAUSED)
+    @Test fun heldCallbacksAreOwnedAndLateCallbacksCannotReviveCompletedOrCancelledRows() {
+        val core = FakeCore()
+        val connection = open(core)
+        val chat = compose.runOnIdle { (hosts.screen as Screen.Chat).chat }
+        connection.sendReply = CompletableDeferred()
+        core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
+        compose.waitForIdle()
+        send("first")
+        val callback = connection.sendListeners.single()
+        compose.runOnIdle {
+            kotlin.concurrent.thread { callback.onHeld() }.join()
+            // Main is still performing this edit: the native callback must be queued behind it.
+            assertEquals(ChatModel.Sending.Sending, chat.sending)
+            chat.draft = "cancelled second"
+            chat.send()
+            chat.cancelQueuedMessage(chat.queuedMessages.last().id)
+            chat.draft = "third"
+            chat.send()
+        }
+        compose.waitForIdle()
+        assertEquals(listOf("first", "third"), chat.queuedMessages.map { it.text })
+        assertEquals(ChatModel.Sending.Held, chat.sending)
+        connection.sendReply!!.complete(Unit)
+        compose.waitForIdle()
+        kotlin.concurrent.thread { callback.onHeld() }.join()
+        compose.waitForIdle()
+        assertEquals(false, chat.queuedMessages.first().heldForTyping)
+        assertEquals(listOf("first", "third"), chat.queuedMessages.map { it.text })
+        assertEquals(listOf("t1" to "first"), connection.typed)
+        assertEquals("", chat.draft)
+    }
+
+    // D13: an old identical transcript row cannot acknowledge a send before the first snapshot.
+    @Test fun sendingBeforeTheFirstSnapshotWaitsAndNeverClaimsAnOldIdenticalEntry() {
+        val core = FakeCore()
+        val connection = open(core, initialSnapshot = null)
+        core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
+        compose.waitForIdle()
+        connection.sendReply = CompletableDeferred()
+        send("repeat")
+        assertEquals(0, connection.calls.count { it == "sendMessage" })
+        val baseline = ChatSnapshot(listOf(ChatEntry("old", null, ChatEntryBody.User("repeat"))), ChatStatus.LIVE, null)
+        core.pushChat(baseline)
+        compose.waitForIdle()
+        assertEquals(1, connection.calls.count { it == "sendMessage" })
+        core.pushChat(baseline)
+        compose.waitForIdle()
+        connection.sendFailWith = CoreException.Closed()
+        connection.sendReply!!.complete(Unit)
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.chat_queue_uncertain)).assertExists()
+    }
+
+    // D13: history arriving while Waiting must be included in the dispatch baseline.
+    @Test fun aWaitingMessageDoesNotClaimHistoryThatArrivedBeforeItsDispatch() {
+        val core = FakeCore()
+        val connection = open(core)
+        send("repeat")
+        val baseline = ChatSnapshot(listOf(ChatEntry("old", null, ChatEntryBody.User("repeat"))), ChatStatus.LIVE, null)
+        core.pushChat(baseline)
+        compose.waitForIdle()
+        connection.sendReply = CompletableDeferred()
+        core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
+        compose.waitForIdle()
+        core.pushChat(baseline)
+        compose.waitForIdle()
+        connection.sendFailWith = CoreException.Closed()
+        connection.sendReply!!.complete(Unit)
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.chat_queue_uncertain)).assertExists()
+    }
+
+    // D20: a lost reply must stop both existing and newly enqueued follow-ups.
+    @Test fun uncertainDeliveryBlocksTheRestOfTheFifoUntilExplicitlyResolved() {
+        val core = FakeCore()
+        val connection = open(core)
+        send("first")
+        send("second")
+        connection.sendReply = CompletableDeferred()
+        core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
+        compose.waitForIdle()
+        core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
+        compose.waitForIdle()
+        connection.sendFailWith = CoreException.Closed()
+        connection.sendReply!!.complete(Unit)
+        compose.waitForIdle()
+        send("third")
+        assertEquals(1, connection.calls.count { it == "sendMessage" })
+        val chat = compose.runOnIdle { (hosts.screen as Screen.Chat).chat }
+        assertEquals(listOf(QueuedMessagePhase.Uncertain, QueuedMessagePhase.Waiting, QueuedMessagePhase.Waiting), chat.queuedMessages.map { it.phase })
+        connection.sendFailWith = null
+        compose.runOnIdle { chat.retryMessage(chat.queuedMessages.first().id) }
+        compose.waitForIdle()
+        assertEquals(listOf("t1" to "first"), connection.typed)
+        assertEquals(listOf("second", "third"), chat.queuedMessages.filter { it.phase == QueuedMessagePhase.Waiting }.map { it.text })
+    }
+
+    // D11: a status update during Stop must never drain queued follow-up instructions.
+    @Test fun confirmedStopReturnsWaitingMessagesInOrderWithoutTypingIntoTheStoppedAgent() {
+        val core = FakeCore()
+        val connection = open(core)
+        send("first instruction")
+        send("second instruction")
+        val chat = compose.runOnIdle { (hosts.screen as Screen.Chat).chat }
+        connection.interruptHold = CompletableDeferred()
+        compose.runOnIdle {
+            chat.draft = "newer draft"
+            chat.interrupt()
+        }
+        core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
+        compose.waitForIdle()
+        connection.interruptHold!!.complete(Unit)
+        compose.waitForIdle()
+        assertEquals("first instruction\n\nsecond instruction\n\nnewer draft", chat.draft)
+        assertEquals(emptyList<QueuedChatMessage>(), chat.queuedMessages)
+        assertEquals(emptyList<Pair<String, String>>(), connection.typed)
     }
 
     @Test fun cancellingAHeldMessageRestoresItsTextAndNeverTypesItWhenTheAgentFinishes() {
@@ -135,12 +360,12 @@ class ChatQueuedMessageTest {
         screenshot("delivered-once")
     }
 
-    @Test fun reopeningChatRecoversUnsentMessagesAsADraftWithoutAutomaticallySending() {
+    @Test fun reopeningChatKeepsUnsentMessagesQueuedAndSendsOnTheNewLine() {
         val core = FakeCore()
         val connection = open(core)
         send("recover this draft")
         compose.runOnIdle {
-            // A lost connection cannot accept a final handoff; preserve its draft.
+            // A lost connection preserves proof that Waiting has never been attempted.
             (hosts.screen as Screen.Chat).chat.link!!.close()
             hosts.back()
         }
@@ -148,30 +373,26 @@ class ChatQueuedMessageTest {
         compose.onNodeWithText("claude").performClick()
         core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, null))
         compose.waitForIdle()
-        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("recover this draft")
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assert(SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.EditableText, androidx.compose.ui.text.AnnotatedString("")))
         core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
         compose.waitForIdle()
         assertEquals(emptyList<Pair<String, String>>(), connection.typed)
-        assertEquals(emptyList<Pair<String, String>>(), core.connection!!.typed)
+        assertEquals(listOf("t1" to "recover this draft"), core.connection!!.typed)
     }
 
-    @Test fun reconnectDoesNotRetryEitherUnsentOrUnconfirmedMessages() {
+    @Test fun reconnectSendsOnlyUnsentMessagesAndNeverRetriesUnconfirmedMessages() {
         val core = FakeCore()
         val originalConnection = open(core)
         send("check delivery")
         // The sending line and the Chat watch have separate SSH connections.
-        // Losing only HostLink must not replay a local queue on its replacement.
+        // The replacement line can send rows proven never to have been attempted.
         compose.runOnIdle { (hosts.screen as Screen.Chat).chat.link!!.lost(originalConnection) }
         compose.waitUntil(5_000) { core.connection !== originalConnection }
         compose.waitForIdle()
-        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("check delivery")
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assert(SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.EditableText, androidx.compose.ui.text.AnnotatedString("")))
         val connection = core.connection!!
-        core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
-        compose.waitForIdle()
-        assertEquals(0, connection.calls.count { it == "sendMessage" })
-
         connection.sendHold = CompletableDeferred()
-        compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
+        core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
         compose.waitForIdle()
         compose.onNodeWithContentDescription("Cancel queued message").assertDoesNotExist()
         screenshot("held-for-host-typing")
@@ -209,27 +430,26 @@ class ChatQueuedMessageTest {
         assertEquals(0, connection.calls.count { it == "sendMessage" })
     }
 
-    @Test fun stoppingChatHandsOffWaitingMessagesInOrderBeforeDisconnecting() {
+    // D16/D19: navigation cannot type Waiting rows or journal them as attempted.
+    @Test fun leavingChatPreservesWaitingMessagesWithoutHandoff() {
         val core = FakeCore()
         val connection = open(core)
         send("first queued instruction")
         send("second queued instruction")
         val chat = compose.runOnIdle { (hosts.screen as Screen.Chat).chat }
-        val hold = CompletableDeferred<Unit>()
-        connection.sendHold = hold
+        compose.onNodeWithContentDescription(str(R.string.agent_switch_terminal_label)).performClick()
+        compose.waitForIdle()
+        assertEquals(emptyList<Pair<String, String>>(), connection.typed)
+        compose.onNodeWithContentDescription(str(R.string.agent_switch_chat_label)).performClick()
+        core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, null))
+        compose.waitForIdle()
         compose.runOnIdle { hosts.back() }
         compose.waitForIdle()
-        assertEquals(1, connection.calls.count { it == "sendMessage" })
-        compose.runOnIdle {
-            assertEquals("", chat.draft)
-            assertEquals(listOf(QueuedMessagePhase.Agent, QueuedMessagePhase.Agent), chat.queuedMessages.map { it.phase })
-            assertEquals(false, connection.disconnected)
-        }
-        hold.complete(Unit)
-        compose.waitUntil(5_000) { connection.typed.size == 2 && connection.disconnected }
-        assertEquals(listOf("t1" to "first queued instruction", "t1" to "second queued instruction"), connection.typed)
-        assertEquals(2, connection.calls.count { it == "sendMessage" })
-        compose.runOnIdle { assertEquals("", chat.draft) }
+        assertEquals(emptyList<Pair<String, String>>(), connection.typed)
+        assertEquals(listOf(QueuedMessagePhase.Waiting, QueuedMessagePhase.Waiting), chat.queuedMessages.map { it.phase })
+        val recovered = ChatModel(core, chat.host, agent)
+        assertEquals(listOf("first queued instruction", "second queued instruction"), recovered.queuedMessages.map { it.draft })
+        assertEquals("", recovered.draft)
     }
 
     @Test fun editingAndSwitchingViewsDuringAHeldSendKeepsOnlyTheNewDraft() {
@@ -418,8 +638,8 @@ class ChatQueuedMessageTest {
                 val host = restarted.addHost("home", Endpoint.Ssh("host", 22u, "me"))
                 restarted.saveChatOutbox(hostId, terminal, content)
                 val restored = ChatModel(restarted, host, agent)
-                assertEquals("review notes", restored.draft)
-                assertEquals(listOf("/host/it's file.jpg"), restored.attachments.map { it.path })
+                assertEquals(listOf("review notes"), listOf(restored.draft).filter { it.isNotEmpty() } + restored.queuedMessages.map { it.draft })
+                assertEquals(listOf("/host/it's file.jpg"), (restored.attachments + restored.queuedMessages.flatMap { it.attachments }).map { it.path })
             }
         } finally { file.delete() }
     }

@@ -285,6 +285,9 @@ class InlineNotificationTest {
     // Regression: a late failed send must preserve the typed text without overwriting a newer push.
     @Test
     fun aFailedReplyKeepsItsDraftEvenWhenANewerCardArrivesDuringTheSend() = runBlocking {
+        // D31: a recovery card created after replacement must retain the snapshot's Agent name.
+        core.storedStates["h1"] = io.github.shiroel.aries.core.LastKnownState("h1", listOf(
+            io.github.shiroel.aries.core.TerminalInfo("t1", "Builder", "", emptyList(), null, "live")), 1uL)
         online()
         PushService.show(context, status())
         val accepted = target()
@@ -300,6 +303,7 @@ class InlineNotificationTest {
         result.await()
         assertTrue(text().contains("newer error"))
         val recovery = manager.activeNotifications.single { it.tag.startsWith("inline-recovery:") }.notification
+        assertEquals("Builder on box", recovery.extras.getCharSequence(Notification.EXTRA_TITLE).toString())
         assertEquals("run tests", recovery.actions.single { !it.remoteInputs.isNullOrEmpty() }.remoteInputs.single().choices.single())
         assertFalse(recovery.publicVersion.extras.toString().contains("run tests"))
         assertEquals(PushTarget("h1", "t1"), PushTarget.from(shadowOf(recovery.contentIntent).savedIntent))

@@ -82,6 +82,29 @@ class NewTaskScreenTest {
         assertEquals(1, conn.launched.size)
     }
 
+    // Regression D87: acknowledging a lost launch reply must free both creation flows without replaying it.
+    @Test fun acknowledgingLostLaunchFreesNewTerminalAndNewTaskWithoutReplaying() {
+        val core = FakeCore()
+        open(core)
+        compose.onNodeWithTag("host-new-task").performClick()
+        compose.onNodeWithTag("new-task-prompt").performScrollTo().performTextInput("Old task")
+        val conn = core.connection!!
+        conn.launchReplyFailure = CoreException.Closed()
+        compose.onNodeWithText(str(R.string.new_task_start)).performClick()
+        compose.onNodeWithText("Stop tracking this launch").performScrollTo().performClick()
+        compose.runOnIdle { model.newTerminal((model.screen as Screen.Browse).browser) }
+        compose.onNodeWithTag("launch-dialog").assertExists()
+        compose.onNodeWithText(str(R.string.cancel_button)).performClick()
+        compose.runOnIdle { model.prepareTask((model.screen as Screen.Browse).browser.link!!) }
+        compose.onNodeWithTag("new-task-prompt").performScrollTo().assertIsEnabled()
+        compose.runOnIdle {
+            assertEquals("", model.task!!.prompt)
+            assertEquals(false, model.task!!.launchUnknown)
+            assertEquals(1, conn.launched.size)
+            assertEquals(emptyList<Pair<String, String>>(), conn.typed)
+        }
+    }
+
     // Regression: dismissing a slow readiness wait and reopening through a different
     // entry must keep the launched Terminal and prompt, rather than spawn another Agent.
     @Test fun dismissingReadinessResumesTheSameTaskFromTheHostMenu() {

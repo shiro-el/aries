@@ -37,12 +37,15 @@ private enum class TasksFilter(val label: Int, val tag: String) {
 
 @Composable
 internal fun TasksHome(model: HostsModel, board: AgentBoard) {
+    androidx.lifecycle.compose.LifecycleStartEffect(model) {
+        model.beginTaskNeeds()
+        onStopOrDispose { model.endTaskNeeds() }
+    }
     var filter by rememberSaveable { mutableStateOf(TasksFilter.ALL) }
     var grouped by rememberSaveable { mutableStateOf(false) }
     var queue by remember { mutableStateOf<TasksNeedsQueue?>(null) }
-    var resolved by remember { mutableStateOf<Set<String>>(emptySet()) }
     val agents = board.agents
-    val needs = taskNeeds(agents, model.calls.calls).filterNot { it.key in resolved }
+    val needs = taskNeeds(agents, model.calls.calls, model::taskTranscript)
     val calls = needs.filterIsInstance<TaskNeed.Call>().map { it.entry }
     val visible = agents.filter {
         when (filter) {
@@ -53,16 +56,16 @@ internal fun TasksHome(model: HostsModel, board: AgentBoard) {
         }
     }
     val openNeed: (TaskNeed) -> Unit = { need ->
-        queue = TasksNeedsQueue(needs, needs.indexOfFirst { it.key == need.key }.coerceAtLeast(0)) { resolved = resolved + it }
+        queue = TasksNeedsQueue(needs, needs.indexOfFirst { it.key == need.key }.coerceAtLeast(0))
     }
     val folds = rememberTreeFolds("tasks-hosts")
     Column(Modifier.fillMaxSize().testTag("tasks-home")) {
-        if (queue == null) model.calls.banner?.let { entry ->
-            CallAttentionBanner(entry, model.callCallerName(entry), onOpen = {
-                needs.firstOrNull { it is TaskNeed.Call && it.entry.key == entry.key }?.let(openNeed)
-                model.calls.dismissBanner()
-            }, onDismiss = model.calls::dismissBanner)
-        }
+        AgentHomeScope(model, board)
+        if (queue == null && model.screen is Screen.Agents) CallAttentionSlot(onOpen = { entry ->
+            val need = needs.firstOrNull { it is TaskNeed.Call && it.entry.key == entry.key }
+            if (need == null) model.openCallInbox()
+            else { openNeed(need); model.calls.dismissBanner() }
+        })
         if (model.pendingShare != null) {
             Text(stringResource(R.string.attachments_choose_agent), Modifier.padding(12.dp))
             TextButton(onClick = model::cancelShare) { Text(stringResource(R.string.cancel_button)) }
@@ -119,7 +122,11 @@ internal fun TasksHome(model: HostsModel, board: AgentBoard) {
                     item(key = "host:${host.id}") {
                         TextButton(onClick = { model.openHost(host) }, modifier = Modifier.fillMaxWidth()) {
                             Text(host.name, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-                            Text(stringResource(if (board.links[host.id]?.state == LinkState.Up) R.string.tasks_host_connected else R.string.tasks_offline),
+                            Text(stringResource(when (board.links[host.id]?.state) {
+                                LinkState.Up -> R.string.tasks_host_connected
+                                null -> R.string.tasks_host_not_connected
+                                else -> R.string.tasks_offline
+                            }),
                                 style = MaterialTheme.typography.labelSmall)
                         }
                     }
@@ -192,7 +199,7 @@ internal fun TasksTaskRow(entry: AgentEntry, transcript: ChatSnapshot? = null, s
 private fun TasksCallRow(entry: CallEntry, onOpen: () -> Unit) {
     val urgent = entry.call.urgency == CallUrgency.URGENT || entry.call.urgency == CallUrgency.EMERGENCY
     TasksRow(entry.call.title, stringResource(if (urgent) R.string.tasks_urgent_call else R.string.console_chat_call_label),
-        tasksAttentionColor(), urgent, Modifier.testTag("task-call:${entry.key}"), onOpen,
+        tasksAttentionColor(), urgent, Modifier.testTag("task-call:${entry.key}").presentsCalls(setOf(entry.key)), onOpen,
         metadata = {
             val host = if (entry.live) entry.host.name else listOf(entry.host.name, stringResource(R.string.tasks_offline)).joinToString(" · ")
             Text(host, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
