@@ -153,6 +153,7 @@ private fun diagnosticText(resources: Resources, entry: DiagnosticEntry, names: 
 }
 
 private fun DiagnosticSource.label(): Int = when (this) {
+    DiagnosticSource.STORAGE -> R.string.diagnostics_storage
     DiagnosticSource.SSH -> R.string.diagnostics_ssh
     DiagnosticSource.BEACON -> R.string.diagnostics_beacon
     DiagnosticSource.RELAY -> R.string.diagnostics_relay
@@ -160,6 +161,7 @@ private fun DiagnosticSource.label(): Int = when (this) {
 }
 
 private fun DiagnosticEvent.label(): Int = when (this) {
+    DiagnosticEvent.LAST_KNOWN_STATE -> R.string.diagnostics_last_known_state
     DiagnosticEvent.HERDR_INSTALL -> R.string.herdr_diagnostics_install
     DiagnosticEvent.HERDR_STATUS -> R.string.herdr_diagnostics_status
     DiagnosticEvent.CONNECT -> R.string.diagnostics_connect

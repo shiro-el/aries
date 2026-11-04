@@ -238,10 +238,12 @@ impl TerminalWatch {
         client: Arc<HcClient>,
         states: crate::last_known_state::States,
         host_id: String,
+        revision: u64,
     ) -> Result<Self, CoreError> {
         let (snapshot, mut events) = client.subscribe_events(json!({})).await?;
         let mut model = Terminals::from_snapshot(&snapshot);
-        states.save(&host_id, model.infos())?;
+        let writer = states.writer(host_id, revision);
+        writer.send_replace(Some(crate::last_known_state::Update::agents(model.infos())));
         let (tx, mut rx) = watch::channel(Latest::List(model.infos()));
         rx.mark_changed();
         let task = tokio::spawn(async move {
@@ -263,11 +265,13 @@ impl TerminalWatch {
                         true
                     }
                 };
-                if changed
-                    && (states.save(&host_id, model.infos()).is_err()
-                        || tx.send(Latest::List(model.infos())).is_err())
-                {
-                    break;
+                if changed {
+                    let infos = model.infos();
+                    writer
+                        .send_replace(Some(crate::last_known_state::Update::agents(infos.clone())));
+                    if tx.send(Latest::List(infos)).is_err() {
+                        break;
+                    }
                 }
             }
             let _ = tx.send(Latest::Ended);

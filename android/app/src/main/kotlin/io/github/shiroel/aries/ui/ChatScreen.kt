@@ -364,9 +364,14 @@ class ChatModel(
             }
             watch = w
             if (paused) w.pause()
+            val entries = LinkedHashMap<String, ChatEntry>()
             while (true) {
                 try {
-                    snapshot = w.next()
+                    val update = w.nextUpdate()
+                    if (update.reset) entries.clear()
+                    update.upserts.forEach { entries[it.id] = it }
+                    entries.keys.retainAll(update.order.toSet())
+                    snapshot = ChatSnapshot(update.order.mapNotNull { entries[it] }, update.status, update.cursor, update.usage)
                     connectionError = null
                 } catch (e: CoreException) {
                     if (e is CoreException.Closed) return@launch
@@ -374,7 +379,6 @@ class ChatModel(
                     connectionError = e
                     snapshot = snapshot?.copy(status = ChatStatus.RECONNECTING)
                 }
-
             }
         }
     }
