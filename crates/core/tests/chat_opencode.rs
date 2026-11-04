@@ -25,22 +25,23 @@ fn path(p: &Path) -> String {
     p.to_string_lossy().into_owned()
 }
 
-async fn wait_for(watch: &ChatWatch, what: &str, ok: impl Fn(&ChatSnapshot) -> bool) {
+async fn wait_for(
+    watch: &ChatWatch,
+    what: &str,
+    ok: impl Fn(&ChatSnapshot) -> bool,
+) -> ChatSnapshot {
     let mut last = None;
     let found = tokio::time::timeout(Duration::from_secs(20), async {
         loop {
             match watch.next().await {
-                Ok(s) if ok(&s) => return,
+                Ok(s) if ok(&s) => return s,
                 Ok(s) => last = Some(s),
                 Err(e) => panic!("{what}: {e:?}"),
             }
         }
     })
     .await;
-    assert!(
-        found.is_ok(),
-        "timed out waiting for {what}; last {last:#?}"
-    );
+    found.unwrap_or_else(|_| panic!("timed out waiting for {what}; last {last:#?}"))
 }
 
 fn question(s: &ChatSnapshot) -> Option<(&str, ChatToolStatus, Vec<String>)> {
@@ -150,13 +151,14 @@ async fn opencode_answer(free_text: bool) {
         )
         .unwrap();
 
-    wait_for(&watch, "the open question", |s| {
+    let snap = wait_for(&watch, "the open question", |s| {
         question(s).is_some_and(|(id, status, labels)| {
             id == qid && status == ChatToolStatus::Running && labels == ["Red", "Green", "Blue"]
         })
     })
     .await;
-    let snap = watch.next().await.unwrap();
+    // next() may skip intermediate states and emits only changed snapshots.
+    // Inspect the question we just received; another update needs new Agent activity.
     let kinds: Vec<&str> = snap
         .entries
         .iter()
