@@ -37,6 +37,19 @@
     <string name="preview_capture_attach_failed">캡처를 추가하지 못했습니다. Agent 연결을 확인한 후 다시 시도하세요.</string>
     <string name="preview_capture_context">미리보기: %1$s\n보기 모드: %2$s</string>
 
+    <!-- Host creation and context sheets -->
+    <string name="host_create_title">새로 만들기</string>
+    <string name="host_create_task_detail">Agent와 첫 프롬프트를 골라 작업 시작</string>
+    <string name="host_create_terminal_detail">이 Host에서 명령 실행</string>
+    <string name="host_create_space_detail">새 Space에 작업 모으기</string>
+    <string name="host_create_tab_detail">%1$s에 Tab 추가</string>
+    <string name="host_create_tab_no_space">먼저 상단 제목에서 Space를 선택하세요</string>
+    <string name="host_create_worktree_detail">Git worktree를 새 Tab으로 열기</string>
+    <string name="host_create_worktree_no_folder">먼저 폴더가 있는 Space를 선택하세요</string>
+    <string name="host_create_saved_detail">저장된 Agent 옵션으로 실행</string>
+    <string name="host_context_edit_hint">Space 또는 Tab을 길게 눌러 이름을 바꾸거나 닫으세요.</string>
+    <string name="host_context_empty">아직 Space가 없습니다. +를 눌러 만드세요.</string>
+
     <!-- Action menus -->
     <string name="menu_switch">위치 선택</string>
     <string name="menu_current">현재</string>
@@ -471,7 +484,6 @@
     <string name="terminal_accessibility_summary">터미널, %1$d열, %2$d행</string>
     <string name="terminal_accessibility_cursor">커서 줄 %1$d: %2$s</string>
     <string name="terminal_connection_closed">Terminal 연결이 끊겼어요. 화면이 최신이 아닐 수 있어요.</string>
-    <string name="reconnecting">연결 중이에요. 자동으로 재시도하고 있어요.</string>
     <string name="terminal_scrolled_back">%1$d줄 위</string>
     <string name="terminal_back_to_live">최신 화면으로</string>
     <string name="terminal_zoom_reset">%1$d%% · 원래 크기로</string>
@@ -809,7 +821,8 @@
     <string name="incompatible_core_too_old">이 Host의 herdr-core 버전은 %1$s이고, Aries에는 %2$s 이상이 필요해요. Host에서 `hc update`를 실행해 주세요.</string>
     <string name="incompatible_missing_methods">이 Host의 herdr-core에 필요한 기능이 없어요: %1$s. Host에서 `hc update`를 실행해 주세요.</string>
 
-    <!-- Host connection recovery -->
+    <!-- Host connection status and recovery -->
+    <string name="reconnecting">연결 중…</string>
     <string name="connect_host_status">%1$s · 연결</string>
     <string name="connect_retry_button">다시 시도</string>
     <string name="connect_settings_button">연결 설정</string>

@@ -34,6 +34,19 @@
     <string name="preview_capture_attach_failed">Could not add the capture. Check the Agent connection and try again.</string>
     <string name="preview_capture_context">Preview: %1$s\nView mode: %2$s</string>
 
+    <!-- Host creation and context sheets -->
+    <string name="host_create_title">Create new</string>
+    <string name="host_create_task_detail">Choose an Agent and write its first prompt</string>
+    <string name="host_create_terminal_detail">Run a command on this Host</string>
+    <string name="host_create_space_detail">Group work in a new Space</string>
+    <string name="host_create_tab_detail">Add a Tab to %1$s</string>
+    <string name="host_create_tab_no_space">Choose a Space from the header first</string>
+    <string name="host_create_worktree_detail">Open a Git worktree in a new Tab</string>
+    <string name="host_create_worktree_no_folder">Choose a Space with a folder first</string>
+    <string name="host_create_saved_detail">Run with saved Agent options</string>
+    <string name="host_context_edit_hint">Touch and hold a Space or Tab to rename or close it.</string>
+    <string name="host_context_empty">No Spaces yet. Use + to create one.</string>
+
     <!-- Action menus -->
     <string name="menu_switch">Switch</string>
     <string name="menu_current">Current</string>
@@ -471,7 +484,6 @@
     <string name="terminal_accessibility_summary">Terminal, %1$d columns, %2$d rows</string>
     <string name="terminal_accessibility_cursor">Cursor line %1$d: %2$s</string>
     <string name="terminal_connection_closed">The connection to the Terminal closed. What you see may be out of date.</string>
-    <string name="reconnecting">Connecting… Retrying automatically.</string>
     <string name="terminal_scrolled_back">%1$d lines back</string>
     <string name="terminal_back_to_live">Back to live</string>
     <string name="terminal_zoom_reset">Zoom %1$d%% · Reset</string>
@@ -812,7 +824,8 @@
     <string name="incompatible_core_too_old">This Host runs herdr-core %1$s. Aries needs %2$s or newer: run `hc update` on the Host.</string>
     <string name="incompatible_missing_methods">This Host\'s herdr-core lacks %1$s. Run `hc update` on the Host.</string>
 
-    <!-- Host connection recovery -->
+    <!-- Host connection status and recovery -->
+    <string name="reconnecting">Connecting…</string>
     <string name="connect_host_status">%1$s · connection</string>
     <string name="connect_retry_button">Try again</string>
     <string name="connect_settings_button">Connection settings</string>
