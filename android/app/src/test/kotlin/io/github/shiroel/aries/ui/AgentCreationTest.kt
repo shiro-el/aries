@@ -77,6 +77,8 @@ class AgentCreationTest {
         assertEquals(emptyList<LaunchRequest>(), core.connectionsOf.getValue("h1").launched)
         assertEquals(listOf(serverRequest), core.connectionsOf.getValue("h2").launched)
         // Last-used creation Host survives rebuilding the board, even if it now needs user action.
+        // Release the warm board explicitly: openAgents() otherwise retains its live links.
+        compose.runOnIdle { model.back() }
         compose.runOnIdle {
             core.failFor["h2"] = CoreException.HostKeyUnknown("changed-key")
             model.openAgents()
