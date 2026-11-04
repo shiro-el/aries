@@ -126,18 +126,26 @@ impl HostConnection {
         }).await
     }
 
-    /// Optional discovery source. Missing tools, denied exec and malformed
-    /// output yield no ports; they must not interrupt the Agent screen.
-    pub async fn preview_listening_ports(&self) -> Vec<u16> {
-        // Both successful and rejected probes are cached per live connection.
+    /// Discover HTTP listeners. Only successful scans are cached; a failed scan
+    /// remains distinguishable from a Host with no development servers.
+    pub async fn preview_listening_ports(&self) -> Result<Vec<u16>, CoreError> {
+        let mut closed = self.client.preview_closed();
+        tokio::select! {
+            biased;
+            _ = closed.wait_for(|ended| *ended) => Err(CoreError::Closed),
+            result = self.discover_preview_ports() => result,
+        }
+    }
+
+    async fn discover_preview_ports(&self) -> Result<Vec<u16>, CoreError> {
         // Coalesce concurrent Agent screens; never scan on every output update.
         let mut cache = self.preview_cache.lock().await;
         if let Some(found) = cache.as_ref()
             && found.checked.elapsed() < Duration::from_secs(30)
         {
-            return found.ports.clone();
+            return Ok(found.ports.clone());
         }
-        let candidates = self.listening_ports().await;
+        let candidates = self.listening_ports().await?;
         let session = self.client.ssh.as_ref().and_then(std::sync::Weak::upgrade);
         let ports = on_runtime(async move {
             let Some(session) = session else {
@@ -165,31 +173,40 @@ impl HostConnection {
                 .filter(|port| accepted.contains(port))
                 .collect::<Vec<_>>())
         })
-        .await
-        .unwrap_or_default();
+        .await?;
         *cache = Some(Discovery {
             checked: Instant::now(),
             ports: ports.clone(),
         });
-        ports
+        Ok(ports)
     }
 
-    async fn listening_ports(&self) -> Vec<u16> {
+    async fn listening_ports(&self) -> Result<Vec<u16>, CoreError> {
         let mut ports = Vec::new();
-        if let Ok(out) = self
+        let out = self
             .machine_exec(vec!["ss".into(), "-H".into(), "-ltn".into()], None, 3)
-            .await
+            .await;
+        let out = match out {
+            Ok(out) => Some(out),
+            // macOS does not ship ss; lsof is the supported fallback.
+            Err(CoreError::Rpc { kind, .. }) if kind == "spawn_failed" => None,
+            Err(error) => return Err(error),
+        };
+        if let Some(out) = out
             && out.code == Some(0)
             && !out.timed_out
+            && !out.truncated
         {
             for line in String::from_utf8_lossy(&out.stdout).lines() {
-                if let Some(endpoint) = line.split_whitespace().nth(3) {
-                    add_listening_port(endpoint, &mut ports);
-                }
+                let endpoint = line
+                    .split_whitespace()
+                    .nth(3)
+                    .ok_or_else(|| protocol("invalid ss listener output"))?;
+                add_listening_port(endpoint, &mut ports);
             }
-            return ports;
+            return Ok(ports);
         }
-        if let Ok(out) = self
+        let out = self
             .machine_exec(
                 vec![
                     "lsof".into(),
@@ -201,17 +218,20 @@ impl HostConnection {
                 None,
                 3,
             )
-            .await
-            && out.code == Some(0)
-            && !out.timed_out
-        {
-            for line in String::from_utf8_lossy(&out.stdout).lines() {
-                if let Some(endpoint) = line.strip_prefix('n') {
-                    add_listening_port(endpoint, &mut ports);
-                }
+            .await?;
+        // lsof exits 1 with no output when there are no matching listeners.
+        let empty = out.code == Some(1) && out.stdout.is_empty() && out.stderr.is_empty();
+        if (out.code != Some(0) && !empty) || out.timed_out || out.truncated {
+            return Err(protocol("preview listener discovery failed"));
+        }
+        for line in String::from_utf8_lossy(&out.stdout).lines() {
+            if let Some(endpoint) = line.strip_prefix('n') {
+                add_listening_port(endpoint, &mut ports);
+            } else if !line.starts_with('p') && !line.starts_with('f') {
+                return Err(protocol("invalid lsof listener output"));
             }
         }
-        ports
+        Ok(ports)
     }
 }
 
