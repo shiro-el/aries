@@ -17,6 +17,8 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.R
@@ -98,10 +100,11 @@ class DrawerShellTest {
         compose.onNode(hasText(context.getString(R.string.agents_button)) and
             hasText(context.getString(R.string.console_agents_waiting, 2)) and
             hasAnyAncestor(hasTestTag("console-drawer"))).assertExists()
-        compose.onNode(hasTestTag("agent-pin:h2:t1") and hasAnyAncestor(hasTestTag("console-drawer"))).performClick()
+        compose.onNodeWithTag("drawer-agent:h2:t1").performTouchInput { longClick() }
+        compose.onNodeWithTag("agent-pin:h2:t1").performClick()
         compose.waitForIdle()
         org.junit.Assert.assertEquals(listOf("h2 t1 pinned=true"), core.labelWrites)
-        compose.onNode(hasTestTag("agent-pin:h2:t1") and hasAnyAncestor(hasTestTag("console-drawer"))).assertIsSelected()
+        assertTrue(core.terminalsOf.getValue("h2").single().pinned)
         compose.onNodeWithTag("drawer-agent:h2:t1").performClick()
         compose.onNode(hasTestTag("console-top-bar") and hasAnyDescendant(hasText("work-agent"))).assertExists()
         compose.onNodeWithContentDescription(context.getString(R.string.back_button)).performClick()
@@ -112,7 +115,7 @@ class DrawerShellTest {
         compose.openConsoleDrawer()
         compose.onNodeWithTag("drawer-host:h1").assertIsSelected()
         compose.onNodeWithTag("drawer-agent:h1:t1").assertExists()
-        compose.onNodeWithTag("drawer-agent:h2:t1").assertDoesNotExist()
+        compose.onNodeWithTag("drawer-agent:h2:t1").assertExists()
     }
 
     @Test fun leavingConnectingDoesNotLetALateConnectionReplaceTheDrawerDestination() {

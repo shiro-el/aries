@@ -1310,7 +1310,8 @@
     <string name="console_field_invalid">Invalid value</string>
     <string name="console_open_drawer">Open Hosts and Agents</string>
     <string name="console_agents_waiting">Needs you · %1$d</string>
-    <string name="console_all_hosts">Hosts</string>
+    <string name="console_urgent_calls">Urgent Calls</string>
+    <string name="console_all_hosts">All Hosts</string>
     <!-- i18n-ok: decorative tree guides, shared across languages. -->
     <string name="console_add_host">+ Add Host</string>
     <string name="console_add_close">− Close add form</string>

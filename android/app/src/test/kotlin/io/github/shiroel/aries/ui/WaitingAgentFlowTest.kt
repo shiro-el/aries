@@ -155,7 +155,7 @@ class WaitingAgentFlowTest {
         }
         val model = show(core)
         compose.onNodeWithTag("host-waiting:h1").assert(hasText(context.getString(R.string.console_agents_waiting, 1)))
-        compose.onNodeWithTag("host-waiting:h2").assert(hasText(context.getString(R.string.agents_waiting_unknown)))
+        compose.onNodeWithTag("host-waiting:h2").assertDoesNotExist()
         screenshot("home-counts")
         compose.openConsoleDrawer()
         compose.onNodeWithText(context.getString(R.string.agents_waiting_partial, 1)).assertExists()

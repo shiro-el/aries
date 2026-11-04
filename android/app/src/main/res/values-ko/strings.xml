@@ -1305,7 +1305,8 @@
     <string name="console_field_invalid">올바른 값을 입력해 주세요.</string>
     <string name="console_open_drawer">Host와 Agent 목록 열기</string>
     <string name="console_agents_waiting">확인 필요 · %1$d</string>
-    <string name="console_all_hosts">Host</string>
+    <string name="console_urgent_calls">긴급 Call</string>
+    <string name="console_all_hosts">모든 Host</string>
     <!-- i18n-ok: decorative tree guides, shared across languages. -->
     <string name="console_add_host">+ Host 추가</string>
     <string name="console_add_close">− 닫기</string>

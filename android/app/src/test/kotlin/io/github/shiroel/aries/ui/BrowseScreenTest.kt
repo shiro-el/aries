@@ -3,7 +3,6 @@ package io.github.shiroel.aries.ui
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -11,6 +10,8 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
@@ -98,10 +99,11 @@ class BrowseScreenTest {
             terminals = structure!!.unplaced
         }
         open(core)
+        compose.onNodeWithTag("host-agent:h1:t1").performTouchInput { longClick() }
         compose.onNodeWithContentDescription(str(R.string.agent_pin_button_label, "claude-main", "home")).performClick()
         compose.waitForIdle()
         assertEquals(listOf("h1 t1 pinned=true"), core.labelWrites)
-        compose.onNodeWithTag("agent-pin:h1:t1").assertIsSelected()
+        assertTrue(core.terminals.single().pinned)
         assertTrue(core.connection!!.views.isEmpty())
     }
 

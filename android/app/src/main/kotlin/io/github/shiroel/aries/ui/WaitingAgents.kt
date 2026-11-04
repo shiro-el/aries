@@ -19,7 +19,7 @@ import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentStatus
 import kotlinx.coroutines.delay
 
-/** Unknown Hosts never turn into a reassuring zero; stored counts always retain their age. */
+/** Only actionable counts use row width; stored counts retain their known age. */
 @Composable
 internal fun WaitingSummary(
     sources: List<QuickOpenSource>,
@@ -28,13 +28,13 @@ internal fun WaitingSummary(
     onClick: (() -> Unit)? = null,
 ) {
     val count = agents.count { isWaiting(it.terminal.agentStatus) }
+    if (count == 0) return
     val unknown = sources.any { !it.live && it.fetchedAtMs == null }
     val oldest = sources.filterNot { it.live }.mapNotNull { it.fetchedAtMs }.minOrNull()
     val now by produceState(System.currentTimeMillis()) {
         while (true) { delay(30_000); value = System.currentTimeMillis() }
     }
     val label = when {
-        unknown && count == 0 -> stringResource(R.string.agents_waiting_unknown)
         unknown -> stringResource(R.string.agents_waiting_partial, count)
         else -> stringResource(R.string.console_agents_waiting, count)
     }
@@ -42,8 +42,8 @@ internal fun WaitingSummary(
         .heightIn(min = 48.dp).padding(horizontal = 6.dp, vertical = 4.dp),
         verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.End) {
         Text(label, style = MaterialTheme.typography.labelMedium, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis,
-            color = if (count > 0) statusColor(AgentStatus.Blocked(null, null)) else MaterialTheme.colorScheme.onSurfaceVariant)
-        if (oldest != null) Text(
+            color = statusColor(AgentStatus.Blocked(null, null)))
+        if (oldest != null && oldest > 0uL && oldest <= now.coerceAtLeast(0).toULong()) Text(
             relativeAge(androidx.compose.ui.platform.LocalContext.current, oldest, now),
             style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis,
