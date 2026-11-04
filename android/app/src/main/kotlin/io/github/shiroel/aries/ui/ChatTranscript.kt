@@ -17,36 +17,45 @@ import io.github.shiroel.aries.core.ChatResponseMetadata
 internal class ChatTranscript {
     var rows by mutableStateOf<List<ChatTranscriptRow>>(emptyList())
         private set
-    private var byKey = emptyMap<String, ChatTranscriptRow>()
+    private class MessageRows(val entry: ChatEntry, val document: ChatMarkdownDocument?, val rows: List<ChatTranscriptRow>)
+    private var messages = emptyMap<String, MessageRows>()
 
     fun update(entries: List<ChatEntry>, markdown: Map<String, ChatMarkdownDocument>) {
-        val next = buildList {
-            fun row(entryId: String, key: String, type: Any, content: ChatTranscriptContent) {
-                val row = byKey[key]?.takeIf { it.contentType == type }
-                    ?: ChatTranscriptRow(entryId, key, type, content)
-                row.content = content
-                add(row)
+        val nextMessages = entries.associate { entry ->
+            val document = markdown[entry.id]
+            val previous = messages[entry.id]
+            if (previous != null && previous.entry == entry && previous.document === document) {
+                // Most snapshots change one message. Avoid allocating payloads and touching
+                // snapshot state for every historical Markdown block on the main thread.
+                return@associate entry.id to previous
             }
-            entries.forEach { entry ->
+            val byKey = previous?.rows?.associateBy { it.key }.orEmpty()
+            val next = buildList {
+                fun row(key: String, type: Any, content: ChatTranscriptContent) {
+                    val row = byKey[key]?.takeIf { it.contentType == type }
+                        ?: ChatTranscriptRow(entry.id, key, type, content)
+                    row.content = content
+                    add(row)
+                }
                 val body = entry.body
                 val key = "transcript:${entry.id}"
-                row(entry.id, key, body::class, ChatTranscriptContent.Header(entry))
+                row(key, body::class, ChatTranscriptContent.Header(entry))
                 if (body.markdownSource() != null) {
-                    val document = markdown[entry.id]
                     document?.blocks?.forEachIndexed { index, block ->
-                        row(entry.id, "$key:markdown:$index", block::class,
+                        row("$key:markdown:$index", block::class,
                             ChatTranscriptContent.Markdown(document.source, block, index, body is ChatEntryBody.Thinking))
                     }
-                    row(entry.id, "$key:footer", ChatTranscriptContent.Footer::class,
+                    row("$key:footer", ChatTranscriptContent.Footer::class,
                         ChatTranscriptContent.Footer(
                             (body as? ChatEntryBody.User)?.images.orEmpty(),
                             (body as? ChatEntryBody.Agent)?.metadata,
                         ))
                 }
             }
+            entry.id to MessageRows(entry, document, next)
         }
-        byKey = next.associateBy { it.key }
-        rows = next
+        messages = nextMessages
+        rows = nextMessages.values.flatMap { it.rows }
     }
 }
 
