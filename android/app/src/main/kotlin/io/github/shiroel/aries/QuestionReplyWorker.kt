@@ -98,7 +98,7 @@ object QuestionReplies {
             QuestionView.Done(context.getString(R.string.question_notify_unknown))
         } catch (e: CoreException) {
             val line = when (e) {
-                is CoreException.KeyLocked, is CoreException.BiometricUnavailable -> context.getString(R.string.call_notify_key_locked)
+                is CoreException.KeyLocked, is CoreException.KeyInvalidated, is CoreException.BiometricUnavailable -> context.getString(R.string.call_notify_key_locked)
                 is CoreException.Unreachable -> context.getString(R.string.call_notify_unreachable)
                 is CoreException.AuthRejected, is CoreException.JumpAuthRejected -> context.getString(R.string.call_notify_key_rejected)
                 is CoreException.HostKeyUnknown, is CoreException.HostKeyChanged,

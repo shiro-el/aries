@@ -3,6 +3,7 @@ package io.github.shiroel.aries
 import android.os.Build
 import android.os.Looper
 import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
 import android.security.keystore.UserNotAuthenticatedException
 import io.github.shiroel.aries.core.KeyProtection
@@ -10,6 +11,8 @@ import io.github.shiroel.aries.core.KeyVault
 import io.github.shiroel.aries.core.VaultException
 import java.security.InvalidAlgorithmParameterException
 import java.security.KeyStore
+import java.security.UnrecoverableKeyException
+import javax.crypto.AEADBadTagException
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -37,13 +40,25 @@ fun interface BiometricAuthorizer {
  *   BroadcastReceiver) it fails at once with [VaultException.Locked] instead
  *   of being used quietly.
  */
-class KeystoreVault(private val alias: String = "aries-vault") : KeyVault {
+class KeystoreVault(
+    private val alias: String = "aries-vault",
+    private val loadKey: ((KeyProtection) -> SecretKey)? = null,
+) : KeyVault {
     @Volatile
     var authorizer: BiometricAuthorizer? = null
 
     override fun seal(plaintext: ByteArray, protection: KeyProtection): ByteArray = guarded {
-        val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.ENCRYPT_MODE, key(protection))
+        val cipher = synchronized(this) {
+            try {
+                encryptionCipher(protection)
+            } catch (e: Exception) {
+                if (!e.isInvalidated()) throw e
+                // Only encryption can rotate an irrecoverable wrapping key.
+                // Never retry decryption with a new key or discard SSH records.
+                KeyStore.getInstance(KEYSTORE).apply { load(null); deleteEntry(aliasFor(protection)) }
+                encryptionCipher(protection)
+            }
+        }
         val ready = authorized(cipher, protection)
         ready.iv + ready.doFinal(plaintext)
     }
@@ -51,7 +66,7 @@ class KeystoreVault(private val alias: String = "aries-vault") : KeyVault {
     override fun open(sealed: ByteArray, protection: KeyProtection): ByteArray = guarded {
         require(sealed.size > IV_BYTES) { "sealed data too short" }
         val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.DECRYPT_MODE, key(protection), GCMParameterSpec(128, sealed, 0, IV_BYTES))
+        cipher.init(Cipher.DECRYPT_MODE, key(protection, create = false), GCMParameterSpec(128, sealed, 0, IV_BYTES))
         authorized(cipher, protection).doFinal(sealed, IV_BYTES, sealed.size - IV_BYTES)
     }
 
@@ -67,10 +82,15 @@ class KeystoreVault(private val alias: String = "aries-vault") : KeyVault {
         KeyProtection.BIOMETRIC -> "$alias-biometric"
     }
 
-    private fun key(protection: KeyProtection): SecretKey {
+    private fun encryptionCipher(protection: KeyProtection): Cipher =
+        Cipher.getInstance(TRANSFORMATION).apply { init(Cipher.ENCRYPT_MODE, key(protection)) }
+
+    private fun key(protection: KeyProtection, create: Boolean = true): SecretKey {
+        loadKey?.let { return it(protection) }
         val name = aliasFor(protection)
         val store = KeyStore.getInstance(KEYSTORE).apply { load(null) }
         (store.getKey(name, null) as SecretKey?)?.let { return it }
+        if (!create) throw VaultException.Invalidated()
         val spec = KeyGenParameterSpec.Builder(name, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
             .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
             .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
@@ -106,8 +126,14 @@ class KeystoreVault(private val alias: String = "aries-vault") : KeyVault {
         } catch (e: UserNotAuthenticatedException) {
             throw VaultException.Locked()
         } catch (e: Exception) {
+            if (e.isInvalidated() || e is AEADBadTagException) {
+                throw VaultException.Invalidated()
+            }
             throw VaultException.Failed(e.toString())
         }
+
+    private fun Throwable.isInvalidated(): Boolean =
+        generateSequence(this) { it.cause }.take(16).any { it is KeyPermanentlyInvalidatedException || it is UnrecoverableKeyException }
 
     private companion object {
         const val KEYSTORE = "AndroidKeyStore"

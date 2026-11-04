@@ -291,6 +291,15 @@ class FakeCore : AriesCoreInterface {
         return createKey(label)
     }
 
+    override fun recoverKey(keyId: String, privateKey: String?, passphrase: String): KeyInfo {
+        signsIn("recoverKey")
+        importFailure?.let { throw it }
+        val replacement = KeyInfo(keyId, keys().first { it.id == keyId }.label, "$PUBLIC_KEY recovered", "SHA256:recovered")
+        if (keyId == "default") key = PublicKeyInfo(replacement.openssh, replacement.fingerprint)
+        else extraKeys[extraKeys.indexOfFirst { it.id == keyId }] = replacement
+        return replacement
+    }
+
     override fun keys(): List<KeyInfo> =
         listOfNotNull(key?.let { KeyInfo("default", "", it.openssh, it.fingerprint) }) + extraKeys
 
