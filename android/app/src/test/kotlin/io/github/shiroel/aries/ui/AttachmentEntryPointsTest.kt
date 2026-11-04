@@ -134,7 +134,7 @@ class AttachmentEntryPointsTest {
         compose.waitForIdle()
         assertFalse("A picker upload must retain its replacement line when leaving the Host", replacement.disconnected)
         uploadGate!!.complete(Unit)
-        compose.waitUntil(5_000) { chat.attachments.size == 1 }
+        compose.waitUntil(5_000) { compose.runOnIdle { chat.attachments.size == 1 && !chat.uploading } }
         compose.waitForIdle()
         assertFalse(chat.uploading)
         assertNull(chat.attachmentError)
@@ -215,6 +215,7 @@ class AttachmentEntryPointsTest {
         captureAttachmentScreenshot(compose, "compact-camera-draft")
         compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
         compose.waitForIdle()
+        compose.waitForTypedMessages(connection, 1)
         assertEquals(listOf("t1" to "'/host/it'\"'\"'s file.jpg'"), connection.typed)
         assertTrue("temporary capture removed", File(compose.activity.cacheDir, "attachments").listFiles().orEmpty().isEmpty())
     }

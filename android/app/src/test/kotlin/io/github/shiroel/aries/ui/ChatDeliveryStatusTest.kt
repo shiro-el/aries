@@ -56,15 +56,18 @@ class ChatDeliveryStatusTest {
         connection.sendReply = CompletableDeferred()
         send("review this change")
         compose.onNodeWithText("review this change").assertIsDisplayed()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Sending…").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Sending…").assertIsDisplayed()
         screenshot("sending")
         connection.sendReply!!.complete(Unit)
         compose.waitForIdle()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Entered in Terminal").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Entered in Terminal").assertIsDisplayed()
         screenshot("entered")
         core.pushChat(ChatSnapshot(listOf(ChatEntry("u1", null, ChatEntryBody.User("review this change"))), ChatStatus.LIVE, null))
         compose.waitUntil(5_000) { compose.onAllNodesWithText("Received by Agent").fetchSemanticsNodes().isNotEmpty() }
         compose.waitUntil(5_000) { compose.onAllNodesWithText("review this change").fetchSemanticsNodes().size == 1 }
+        compose.waitForTypedMessages(connection, 1)
         assertEquals(listOf("t1" to "review this change"), connection.typed)
         screenshot("received")
     }
@@ -74,6 +77,7 @@ class ChatDeliveryStatusTest {
         val connection = open(core)
         connection.sendFailWith = CoreException.Closed()
         send("try this instruction")
+        compose.waitUntil(5_000) { compose.onAllNodesWithText(str(R.string.chat_queue_uncertain)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(str(R.string.chat_queue_uncertain)).assertExists()
         compose.onNodeWithText("Retry").assertExists()
         screenshot("failed")
@@ -86,6 +90,7 @@ class ChatDeliveryStatusTest {
         connection.sendFailWith = null
         compose.onNodeWithText("Send").performClick()
         compose.waitForIdle()
+        compose.waitForTypedMessages(connection, 1)
         assertEquals(listOf("t1" to "try this instruction"), connection.typed)
     }
 

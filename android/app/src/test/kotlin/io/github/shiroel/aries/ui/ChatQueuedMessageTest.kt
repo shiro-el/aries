@@ -74,6 +74,7 @@ class ChatQueuedMessageTest {
         send("!echo hello")
         core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
         compose.waitForIdle()
+        compose.waitUntil(5_000) { compose.runOnIdle { chat.queuedMessages.single().phase == QueuedMessagePhase.Uncertain } }
         assertEquals(QueuedMessagePhase.Uncertain, chat.queuedMessages.single().phase)
         core.pushChat(ChatSnapshot(listOf(ChatEntry("bash", null,
             ChatEntryBody.User("<bash-input>echo hello /host/it's file.jpg</bash-input>"))), ChatStatus.LIVE, null))
@@ -89,6 +90,7 @@ class ChatQueuedMessageTest {
         send("first")
         core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
         compose.waitForIdle()
+        compose.waitForTypedMessages(connection, 1)
         core.pushChat(ChatSnapshot(listOf(ChatEntry("different", null, ChatEntryBody.User("[Image #1]"))), ChatStatus.LIVE, null))
         compose.waitForIdle()
         assertEquals(emptyList<QueuedChatMessage>(), chat.queuedMessages)
@@ -97,6 +99,7 @@ class ChatQueuedMessageTest {
         core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle, turn = 1uL)))
         compose.waitForIdle()
         send("second")
+        compose.waitForTypedMessages(connection, 2)
         core.push(listOf(agent.copy(agentStatus = AgentStatus.Done, turn = 2uL)))
         compose.waitForIdle()
         assertEquals(emptyList<QueuedChatMessage>(), chat.queuedMessages)
@@ -117,12 +120,13 @@ class ChatQueuedMessageTest {
         val connection = open(core)
         send("older image instruction")
         core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
-        compose.waitForIdle()
+        compose.waitForTypedMessages(connection, 1)
         core.push(listOf(agent))
         compose.waitForIdle()
         core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle, turn = 1uL)))
         compose.waitForIdle()
         send("newer instruction")
+        compose.waitForTypedMessages(connection, 2)
         core.pushChat(ChatSnapshot(listOf(ChatEntry("newer", null, ChatEntryBody.User("newer instruction"))), ChatStatus.LIVE, null))
         compose.waitForIdle()
         assertEquals(emptyList<QueuedChatMessage>(), (hosts.screen as Screen.Chat).chat.queuedMessages)
@@ -163,6 +167,8 @@ class ChatQueuedMessageTest {
         val original = open(core)
         send("first")
         send("second")
+        compose.waitUntil(5_000) { core.chatOutbox("h1", "t1")?.let(::decodeChatOutbox)
+            ?.messages?.map { it.draft } == listOf("first", "second") }
         compose.runOnIdle { generation++ }
         compose.waitForIdle()
         compose.onNodeWithText("home").performClick()
@@ -173,11 +179,13 @@ class ChatQueuedMessageTest {
         assertEquals(emptyList<Pair<String, String>>(), replacement.typed)
         core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, null))
         compose.waitForIdle()
+        compose.waitForTypedMessages(replacement, 1)
         assertEquals(listOf("t1" to "first"), replacement.typed)
         core.push(listOf(agent))
         compose.waitForIdle()
         core.push(listOf(agent.copy(agentStatus = AgentStatus.Done, turn = 1uL)))
         compose.waitForIdle()
+        compose.waitForTypedMessages(replacement, 2)
         assertEquals(listOf("t1" to "first", "t1" to "second"), replacement.typed)
         assertEquals(emptyList<Pair<String, String>>(), original.typed)
     }
@@ -192,6 +200,7 @@ class ChatQueuedMessageTest {
         core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
         compose.waitForIdle()
         send("first")
+        compose.waitForSendAttempts(connection, 1)
         val callback = connection.sendListeners.single()
         compose.runOnIdle {
             kotlin.concurrent.thread { callback.onHeld() }.join()
@@ -208,6 +217,7 @@ class ChatQueuedMessageTest {
         assertEquals(ChatModel.Sending.Held, chat.sending)
         connection.sendReply!!.complete(Unit)
         compose.waitForIdle()
+        compose.waitForTypedMessages(connection, 1)
         kotlin.concurrent.thread { callback.onHeld() }.join()
         compose.waitForIdle()
         assertEquals(false, chat.queuedMessages.first().heldForTyping)
@@ -228,12 +238,14 @@ class ChatQueuedMessageTest {
         val baseline = ChatSnapshot(listOf(ChatEntry("old", null, ChatEntryBody.User("repeat"))), ChatStatus.LIVE, null)
         core.pushChat(baseline)
         compose.waitForIdle()
+        compose.waitForSendAttempts(connection, 1)
         assertEquals(1, connection.calls.count { it == "sendMessage" })
         core.pushChat(baseline)
         compose.waitForIdle()
         connection.sendFailWith = CoreException.Closed()
         connection.sendReply!!.complete(Unit)
         compose.waitForIdle()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText(str(R.string.chat_queue_uncertain)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(str(R.string.chat_queue_uncertain)).assertExists()
     }
 
@@ -250,9 +262,11 @@ class ChatQueuedMessageTest {
         compose.waitForIdle()
         core.pushChat(baseline)
         compose.waitForIdle()
+        compose.waitForSendAttempts(connection, 1)
         connection.sendFailWith = CoreException.Closed()
         connection.sendReply!!.complete(Unit)
         compose.waitForIdle()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText(str(R.string.chat_queue_uncertain)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(str(R.string.chat_queue_uncertain)).assertExists()
     }
 
@@ -267,16 +281,19 @@ class ChatQueuedMessageTest {
         compose.waitForIdle()
         core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
         compose.waitForIdle()
+        compose.waitForSendAttempts(connection, 1)
         connection.sendFailWith = CoreException.Closed()
         connection.sendReply!!.complete(Unit)
-        compose.waitForIdle()
+        compose.waitUntil(5_000) { compose.runOnIdle {
+            (hosts.screen as Screen.Chat).chat.queuedMessages.first().phase == QueuedMessagePhase.Uncertain
+        } }
         send("third")
         assertEquals(1, connection.calls.count { it == "sendMessage" })
         val chat = compose.runOnIdle { (hosts.screen as Screen.Chat).chat }
         assertEquals(listOf(QueuedMessagePhase.Uncertain, QueuedMessagePhase.Waiting, QueuedMessagePhase.Waiting), chat.queuedMessages.map { it.phase })
         connection.sendFailWith = null
         compose.runOnIdle { chat.retryMessage(chat.queuedMessages.first().id) }
-        compose.waitUntil(5_000) { compose.runOnIdle { connection.typed.isNotEmpty() } }
+        compose.waitForTypedMessages(connection, 1)
         assertEquals(listOf("t1" to "first"), connection.typed)
         assertEquals(listOf("second", "third"), chat.queuedMessages.filter { it.phase == QueuedMessagePhase.Waiting }.map { it.text })
     }
@@ -308,8 +325,7 @@ class ChatQueuedMessageTest {
         val uri = Uri.parse("content://documents/note.txt")
         registerAttachmentInput(context, uri, "notes".toByteArray())
         compose.runOnIdle { (hosts.screen as Screen.Chat).chat.attach(context, SharedContent(listOf(uri))) }
-        compose.waitUntil(5_000) { connection.uploads.isNotEmpty() }
-        compose.waitForIdle()
+        compose.waitUntil(5_000) { compose.runOnIdle { !(hosts.screen as Screen.Chat).chat.uploading } }
         send("review the patch")
         compose.onNodeWithText("review the patch").assertIsDisplayed()
         screenshot("waiting")
@@ -333,6 +349,7 @@ class ChatQueuedMessageTest {
         // Editing and explicitly sending the recovered draft includes its file once.
         compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
         compose.waitForIdle()
+        compose.waitForTypedMessages(connection, 1)
         assertEquals(listOf("t1" to "review the patch\n\nkeep the newer draft '/host/it'\"'\"'s file.jpg'"), connection.typed)
     }
 
@@ -345,7 +362,7 @@ class ChatQueuedMessageTest {
         assertEquals(emptyList<Pair<String, String>>(), connection.typed)
 
         core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
-        compose.waitForIdle()
+        compose.waitForTypedMessages(connection, 1)
         core.push(listOf(agent))
         compose.waitForIdle()
         screenshot("agent-handoff")
@@ -357,7 +374,7 @@ class ChatQueuedMessageTest {
         assertEquals(listOf("t1" to "next step"), connection.typed)
 
         core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
-        compose.waitForIdle()
+        compose.waitForTypedMessages(connection, 2)
         core.push(listOf(agent))
         // Repeating the first update must not also consume the second identical send.
         core.pushChat(ChatSnapshot(listOf(ChatEntry("u1", null, ChatEntryBody.User("next step", emptyList(), false))), ChatStatus.LIVE, null))
@@ -371,6 +388,7 @@ class ChatQueuedMessageTest {
             compose.onAllNodesWithText("Entered in Terminal").fetchSemanticsNodes().isEmpty() &&
                 compose.onAllNodesWithText("next step").fetchSemanticsNodes().size == 2
         }
+        compose.waitForTypedMessages(connection, 2)
         assertEquals(listOf("t1" to "next step", "t1" to "next step"), connection.typed)
         screenshot("delivered-once")
     }
@@ -392,6 +410,7 @@ class ChatQueuedMessageTest {
         core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
         compose.waitForIdle()
         assertEquals(emptyList<Pair<String, String>>(), connection.typed)
+        compose.waitForTypedMessages(core.connection!!, 1)
         assertEquals(listOf("t1" to "recover this draft"), core.connection!!.typed)
     }
 
@@ -410,11 +429,15 @@ class ChatQueuedMessageTest {
         core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, null))
         core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
         compose.waitForIdle()
+        compose.waitUntil(5_000) { compose.runOnIdle {
+            (hosts.screen as Screen.Chat).chat.sending == ChatModel.Sending.Held
+        } }
         compose.onNodeWithContentDescription("Cancel queued message").assertDoesNotExist()
         screenshot("held-for-host-typing")
         connection.sendFailWith = CoreException.Closed()
         connection.sendHold!!.complete(Unit)
         compose.waitForIdle()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText(str(R.string.chat_queue_uncertain)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(str(R.string.chat_queue_uncertain)).assertExists()
         screenshot("delivery-unconfirmed")
         core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, null))
@@ -463,6 +486,8 @@ class ChatQueuedMessageTest {
         compose.waitForIdle()
         assertEquals(emptyList<Pair<String, String>>(), connection.typed)
         assertEquals(listOf(QueuedMessagePhase.Waiting, QueuedMessagePhase.Waiting), chat.queuedMessages.map { it.phase })
+        compose.waitUntil(5_000) { core.chatOutbox(chat.host.id, agent.address)?.let(::decodeChatOutbox)
+            ?.messages?.map { it.draft } == listOf("first queued instruction", "second queued instruction") }
         val recovered = ChatModel(core, chat.host, agent)
         assertEquals(listOf("first queued instruction", "second queued instruction"), recovered.queuedMessages.map { it.draft })
         assertEquals("", recovered.draft)
@@ -475,6 +500,7 @@ class ChatQueuedMessageTest {
         compose.waitForIdle()
         connection.sendHold = CompletableDeferred()
         send("submitted prefix")
+        compose.waitForSendAttempts(connection, 1)
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertIsEnabled()
             .performTextInput("new draft")
         compose.onNodeWithContentDescription(str(R.string.agent_switch_terminal_label)).performClick()
@@ -487,6 +513,7 @@ class ChatQueuedMessageTest {
         compose.waitForIdle()
         compose.onNodeWithContentDescription(str(R.string.chat_input_label))
             .assertTextEquals("new draft\n\n```\nselected output\n```")
+        compose.waitForTypedMessages(connection, 1)
         assertEquals(listOf("t1" to "submitted prefix"), connection.typed)
         compose.onNodeWithText("Entered in Terminal").assertExists()
         screenshot("editable-held-draft")
@@ -499,6 +526,7 @@ class ChatQueuedMessageTest {
         compose.waitForIdle()
         connection.sendReply = CompletableDeferred()
         send("possibly delivered")
+        compose.waitForSendAttempts(connection, 1)
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).performTextInput("keep editing")
         compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         compose.onNodeWithText("claude").performClick()
@@ -508,6 +536,7 @@ class ChatQueuedMessageTest {
         connection.sendReply!!.complete(Unit)
         compose.waitForIdle()
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("keep editing")
+        compose.waitUntil(5_000) { compose.onAllNodesWithText(str(R.string.chat_queue_uncertain)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(str(R.string.chat_queue_uncertain)).assertExists()
         compose.onNodeWithText(context.getString(R.string.chat_send_failed, connection.sendFailWith!!.message))
             .assertDoesNotExist()
@@ -643,12 +672,16 @@ class ChatQueuedMessageTest {
             compose.waitUntil(5_000) { connection.uploads.isNotEmpty() }
             compose.waitUntil(5_000) { !(hosts.screen as Screen.Chat).chat.uploading }
             compose.onNodeWithContentDescription(str(R.string.chat_input_label)).performTextInput("review notes")
+            compose.waitUntil(5_000) { core.chatOutbox("h1", "t1")?.let(::decodeChatOutbox)?.draft == "review notes" }
             core.outboxWrites.clear()
             compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
             compose.onNodeWithContentDescription(str(R.string.chat_queue_cancel_button)).performClick()
             compose.waitForIdle()
             // Each acknowledged storage write is a possible process-death boundary.
             // Recovery must never combine only half of the draft/queue transition.
+            compose.waitUntil(5_000) { core.outboxWrites.lastOrNull()?.third?.let(::decodeChatOutbox)?.let {
+                it.draft == "review notes" && it.messages.isEmpty()
+            } == true }
             org.junit.Assert.assertTrue(core.outboxWrites.isNotEmpty())
             for ((hostId, terminal, content) in core.outboxWrites.toList()) {
                 val restarted = FakeCore()

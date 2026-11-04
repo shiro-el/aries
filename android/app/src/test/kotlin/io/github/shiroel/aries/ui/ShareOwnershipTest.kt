@@ -84,7 +84,7 @@ class ShareOwnershipTest {
         val send = context.getString(R.string.chat_send_button)
         if (panel == null) compose.onNodeWithText(send).assertIsEnabled().performClick()
         else compose.onNodeWithContentDescription(send).assertIsEnabled().performClick()
-        compose.waitForIdle()
+        compose.waitForTypedMessages(core.connection!!, 1)
         assertEquals(1, core.connection!!.typed.size)
     }
 }
