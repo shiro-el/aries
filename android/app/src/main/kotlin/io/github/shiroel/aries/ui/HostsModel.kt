@@ -647,6 +647,14 @@ class HostsModel(
         } else if (!explicitSurfaceEntry && screen == Screen.Hosts) {
             if (settings != null) applySettingsState(settings)
             else if (layout == AppLayout.THREAD) restoreThreadHome()
+            else if (layout == AppLayout.TASKS) {
+                // Restore detail over the all-Host home, so Back keeps the Tasks board.
+                val focus = hosts.find { it.id == saved?.hostId }?.let { host ->
+                    saved?.terminal?.let { AgentKey(host.id, it) }
+                }
+                startupHostId = focus?.hostId
+                openAgents(focus = focus, focusView = saved?.view)
+            }
             else hosts.find { it.id == saved?.hostId }?.let {
                 startupHostId = it.id
                 connect(it, saved)

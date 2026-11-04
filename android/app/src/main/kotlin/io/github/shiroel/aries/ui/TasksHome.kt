@@ -127,9 +127,6 @@ internal fun TasksHome(model: HostsModel, board: AgentBoard) {
                     item(key = "host:${host.id}") {
                         TextButton(onClick = { model.openHost(host) }, modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) { heading() }) {
                             Text(host.name, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-                            if (board.links[host.id]?.state != LinkState.Up) Text(
-                                stringResource(if (host in board.loadingHosts) R.string.reconnecting else R.string.tasks_offline),
-                                style = MaterialTheme.typography.labelSmall)
                         }
                     }
                     agentTreeItems(visible.filter { it.host.id == host.id }, folds,

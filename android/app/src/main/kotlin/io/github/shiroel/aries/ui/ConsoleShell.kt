@@ -113,6 +113,8 @@ internal fun ConsoleShell(
     drawerContent: (@Composable ((() -> Unit) -> Unit) -> Unit)? = null,
     onHome: (() -> Unit)? = null,
     isHome: (Screen) -> Boolean = { it == Screen.Hosts },
+    onHostBack: (() -> Unit)? = null,
+    drawerEnabled: Boolean = true,
 ) {
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -147,7 +149,7 @@ internal fun ConsoleShell(
     }
     ModalNavigationDrawer(
         drawerState = drawer,
-        gesturesEnabled = drawer.isOpen,
+        gesturesEnabled = drawerEnabled && drawer.isOpen,
         drawerContent = {
             ModalDrawerSheet(
                 modifier = Modifier.width(drawerWidth).testTag("console-drawer"),
@@ -167,12 +169,13 @@ internal fun ConsoleShell(
             scope.launch { drawer.open() }
         }
         CompositionLocalProvider(LocalCallAttentionEnabled provides (drawer.isClosed && drawer.targetValue == DrawerValue.Closed),
-            LocalConsoleHeaderMeasured provides { measuredHeaderHeight = it }, LocalConsoleMenu provides openDrawer, LocalQuickOpen provides {
+            LocalConsoleHeaderMeasured provides { measuredHeaderHeight = it },
+            LocalConsoleMenu provides openDrawer.takeIf { drawerEnabled }, LocalQuickOpen provides {
             navigate(model::openQuickOpen)
         }, LocalCallInbox provides CallInboxAction(model.calls, model.callInboxOpen) {
             navigate { if (model.callInboxOpen) model.closeCallInbox() else model.openCallInbox() }
         }, LocalNextWaitingAgent provides model.nextWaitingAgent?.let { NextWaitingAction(it, model::openNextWaitingAgent) }) {
-            Box(Modifier.fillMaxSize().systemGestureExclusion { coordinates ->
+            val drawerGestures = if (drawerEnabled) Modifier.systemGestureExclusion { coordinates ->
                 Rect(0f, 0f, edgeWidth, minOf(coordinates.size.height.toFloat(), terminalHeaderHeight))
             }.pointerInput(screen, drawer.isClosed, model.callInboxOpen, model.quickOpenVisible, terminalHeaderHeight) {
                 awaitEachGesture {
@@ -193,7 +196,8 @@ internal fun ConsoleShell(
                         openDrawer()
                     }
                 }
-            }) {
+            } else Modifier
+            Box(Modifier.fillMaxSize().then(drawerGestures)) {
                 val inboxVisible = model.callInboxOpen && drawer.isClosed && drawer.targetValue == DrawerValue.Closed
                 Box(Modifier.fillMaxSize().semantics { if (inboxVisible) hideFromAccessibility() }) { content() }
                 if (inboxVisible) CallInboxOverlay(model)
@@ -205,6 +209,7 @@ internal fun ConsoleShell(
     BackHandler(drawer.isOpen || model.callInboxOpen || !isHome(screen)) {
         if (drawer.isOpen) scope.launch { drawer.close() }
         else if (model.callInboxOpen) model.closeCallInbox()
+        else if (onHostBack != null && (screen is Screen.Browse || screen is Screen.Connecting)) onHostBack()
         else if (onHome != null && screen !is Screen.Chat && screen !is Screen.Terminal && screen != Screen.Settings && screen !is Screen.JumpHosts) onHome()
         else consoleBack(model)?.invoke() ?: model.back()
     }
