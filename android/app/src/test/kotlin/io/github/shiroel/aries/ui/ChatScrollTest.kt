@@ -8,6 +8,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -80,6 +82,11 @@ class ChatScrollTest {
         compose.waitForIdle()
     }
 
+    private fun awaitLatest(description: String) {
+        compose.waitUntil(5_000) { compose.onAllNodesWithContentDescription(description).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitForIdle()
+    }
+
     private fun assertReply(number: Int) {
         val text = "Reply $number\nSecond line\nThird line"
         awaitText(text)
@@ -101,10 +108,10 @@ class ChatScrollTest {
         push(entries(32))
 
         assertReply(6)
-        awaitText("Latest (2)")
-        compose.onNodeWithText("Latest (2)").assertIsDisplayed().performClick()
+        awaitLatest("Latest (2)")
+        compose.onNodeWithContentDescription("Latest (2)").assertIsDisplayed().performClick()
         assertReply(32)
-        compose.onNodeWithText("Latest (2)").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Latest (2)").assertDoesNotExist()
         push(entries(33))
         assertReply(33)
     }
@@ -124,8 +131,8 @@ class ChatScrollTest {
         assertReply(6)
         val after = compose.onNodeWithText("Reply 6\nSecond line\nThird line").fetchSemanticsNode().boundsInRoot.top
         assertEquals(before, after, 0.5f)
-        awaitText("Latest (3)")
-        compose.onNodeWithText("Latest (3)").assertIsDisplayed()
+        awaitLatest("Latest (3)")
+        compose.onNodeWithContentDescription("Latest (3)").assertIsDisplayed()
     }
 
     @Test fun reopeningAtThePreviousEndDoesNotSkipRowsThatArrivedWhileAway() {
@@ -137,8 +144,8 @@ class ChatScrollTest {
         assertReply(30)
         val after = compose.onNodeWithText("Reply 30\nSecond line\nThird line").fetchSemanticsNode().positionInRoot.y
         assertEquals(before, after, 0.5f)
-        awaitText("Latest (3)")
-        compose.onNodeWithText("Latest (3)").assertIsDisplayed()
+        awaitLatest("Latest (3)")
+        compose.onNodeWithContentDescription("Latest (3)").assertIsDisplayed()
     }
 
     @Test fun streamingFollowsTheBottomOfAnOversizedRowButDoesNotInterruptHistoryReading() {
@@ -162,9 +169,9 @@ class ChatScrollTest {
         readReply(6)
         push(streaming(120))
         assertReply(6)
-        awaitText("Latest")
-        compose.onNodeWithText("Latest").assertIsDisplayed()
-        compose.onNodeWithText("Latest (1)").assertDoesNotExist()
+        awaitLatest("Latest")
+        compose.onNodeWithContentDescription("Latest").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Latest (1)").assertDoesNotExist()
     }
 
     @Test fun prependedHistoryPreservesTheAnchorAndManualReturnToTheBottomClearsTheCount() {
@@ -175,11 +182,11 @@ class ChatScrollTest {
         push(listOf(older) + entries(32))
         val after = compose.onNodeWithText("Reply 6\nSecond line\nThird line").fetchSemanticsNode().positionInRoot.y
         assertEquals(before, after, 0.5f)
-        awaitText("Latest (2)")
-        compose.onNodeWithText("Latest (2)").assertIsDisplayed()
+        awaitLatest("Latest (2)")
+        compose.onNodeWithContentDescription("Latest (2)").assertIsDisplayed()
         readReply(32)
         compose.onNodeWithTag("chat-transcript").performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 10_000f) }
-        compose.onNodeWithText("Latest (2)").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Latest (2)").assertDoesNotExist()
         push(listOf(older) + entries(33))
         assertReply(33)
     }
@@ -227,8 +234,8 @@ class ChatScrollTest {
         }
         push(entries(31))
         assertReply(6)
-        awaitText("Latest (2)")
-        compose.onNodeWithText("Latest (2)").assertIsDisplayed().performClick()
+        awaitLatest("Latest (2)")
+        compose.onNodeWithContentDescription("Latest (2)").assertIsDisplayed().performClick()
         compose.onNodeWithText("Review?").assertIsDisplayed()
     }
 
@@ -240,9 +247,9 @@ class ChatScrollTest {
                 (1..80).joinToString("\n") { "val line$it = $it" } + "\n```\n\nEnd of reply",
         ))
         push(entries(30) + message)
-        awaitText("Latest (1)")
-        awaitText("Latest (1)")
-        compose.onNodeWithText("Latest (1)").assertIsDisplayed()
+        awaitLatest("Latest (1)")
+        awaitLatest("Latest (1)")
+        compose.onNodeWithContentDescription("Latest (1)").assertIsDisplayed()
         compose.onNodeWithTag("chat-transcript").performScrollToNode(hasText("Paragraph to keep reading"))
         val before = compose.onNodeWithText("Paragraph to keep reading").fetchSemanticsNode().positionInRoot.y
         compose.runOnIdle { generation.value++ }
@@ -251,7 +258,7 @@ class ChatScrollTest {
         awaitText("Paragraph to keep reading")
         compose.onNodeWithText("Paragraph to keep reading").assertIsDisplayed()
         assertEquals(before, compose.onNodeWithText("Paragraph to keep reading").fetchSemanticsNode().positionInRoot.y, 0.5f)
-        awaitText("Latest (2)")
-        compose.onNodeWithText("Latest (2)").assertIsDisplayed()
+        awaitLatest("Latest (2)")
+        compose.onNodeWithContentDescription("Latest (2)").assertIsDisplayed()
     }
 }
