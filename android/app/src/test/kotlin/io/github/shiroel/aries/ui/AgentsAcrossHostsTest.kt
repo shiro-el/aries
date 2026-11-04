@@ -18,7 +18,8 @@ import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.TerminalInfo
 import org.junit.Assert.assertEquals
-import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasTestTag
 import io.github.shiroel.aries.core.CellRun
 import io.github.shiroel.aries.core.ScreenFrame
 import io.github.shiroel.aries.core.ScreenLine
@@ -197,7 +198,7 @@ class AgentsAcrossHostsTest {
             ),
         )
         compose.waitForIdle()
-        compose.onNode(hasContentDescription("pi> ready", substring = true)).assertExists()
+        compose.onNode(hasTestTag("terminal-screen") and hasText("pi> ready", substring = true)).assertExists()
 
         compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         compose.waitForIdle()
