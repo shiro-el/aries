@@ -873,6 +873,11 @@
     <string name="herdr_diagnostics_status">Herdr Core status</string>
     <string name="herdr_diagnostics_failed">Herdr Core installation failed</string>
     <string name="herdr_diagnostics_checksum">Herdr Core checksum mismatch</string>
+    <string name="settings_advanced_button">Advanced</string>
+    <string name="settings_less_button">Show less</string>
+    <string name="herdr_install_ready">Ready</string>
+    <string name="herdr_install_connect_reason">This Host needs Herdr Core installed or updated before Aries can connect.</string>
+    <string name="herdr_install_consent_body">Aries downloads the pinned Herdr Core release from releases.herdr.dev and verifies its SHA-256 checksum before running it. A new installation writes ~/.local/bin/herdr-core and may add an hc link there. An existing installation is updated using its updater; Terminals stay running.</string>
     <string name="herdr_install_title">Herdr Core</string>
     <string name="herdr_install_missing">herdr-core is missing on this Host.</string>
     <string name="herdr_install_version">herdr-core %1$s</string>
@@ -891,6 +896,8 @@
     <string name="herdr_install_checksum">Checksum verification failed. Nothing was installed. Expected: %1$s; got: %2$s</string>
     <string name="herdr_install_failed">Herdr Core failed at %1$s: %2$s</string>
 
+    <string name="beacon_check_again">Check Beacon again</string>
+    <string name="beacon_ready">Running and connected</string>
     <string name="beacon_title">Beacon</string>
     <string name="beacon_needs_ssh">The Beacon can only be installed on an SSH Host.</string>
     <string name="beacon_status_unknown">Could not read the Beacon on this Host.</string>
@@ -906,7 +913,7 @@
     <string name="beacon_linger_title">Beacon stops when you log out</string>
     <string name="beacon_linger_body">The Beacon is installed, but the Host refused to keep your services running after logout (%1$s). Without that the Beacon, and its notifications, stop until you log in again.\n\nOn the Host, run: sudo loginctl enable-linger %2$s</string>
     <string name="beacon_remove_title">Remove Beacon from %1$s?</string>
-    <string name="beacon_failed_title">Beacon not installed</string>
+    <string name="beacon_failed_title">Could not complete Beacon action</string>
     <string name="beacon_checksum_body">The downloaded Beacon does not match the checksum built into this app, so nothing was installed.\n\nExpected: %1$s\nGot: %2$s</string>
     <string name="beacon_unsupported_host_body">The Beacon does not support %1$s/%2$s Hosts.</string>
     <string name="beacon_unavailable_body">This version of Aries has no Beacon for %1$s/%2$s yet.</string>
@@ -971,6 +978,14 @@
     <string name="call_reply_no_call">This Call is no longer in the Host\'s history.</string>
     <string name="call_reply_no_choice">That Choice is no longer offered.</string>
     <string name="call_reply_no_beacon">The Beacon is not installed on this Host.</string>
+    <string name="push_on_summary">Push is on</string>
+    <string name="push_off_summary">Push is off</string>
+    <string name="push_testing">Sending test notification…</string>
+    <string name="push_test_timeout">The test took too long. Check the Host connection and try again.</string>
+    <string name="push_disable_title">Turn off push for %1$s?</string>
+    <string name="push_disable_body">Agent alerts and Calls from this Host will no longer notify this phone. You can turn push on again here.</string>
+    <string name="push_cancelled">Push setup was cancelled. Try again when you are ready.</string>
+    <string name="push_checking_beacon">Checking Beacon…</string>
     <string name="push_title">Push notifications</string>
     <string name="push_needs_beacon">Install the Beacon to turn on push notifications for this Host.</string>
     <string name="push_enable_button">Turn on push</string>
@@ -1155,6 +1170,8 @@
     <string name="settings_beacon_missing">Beacon not installed · Host settings</string>
 
     <!-- Beacon aries-call-human skill diagnostics. -->
+    <string name="beacon_skill_summary_ready">Call skill: ready</string>
+    <string name="beacon_skill_summary_problems">Call skill: %1$d paths need attention</string>
     <string name="beacon_skill_title">aries-call-human skill</string>
     <string name="beacon_skill_unknown">This Beacon did not report aries-call-human skill status. The Aries Call connection cannot be verified.</string>
     <string name="beacon_skill_foreign">Another tool’s skill was kept. Agents using this path cannot send Calls to Aries.</string>
