@@ -3,6 +3,13 @@
     <application android:label="@string/app_name" android:allowBackup="false"
         android:icon="@drawable/ic_aries" android:theme="@android:style/Theme.DeviceDefault">
         <meta-data android:name="com.google.android.wearable.standalone" android:value="false" />
+        <activity android:name=".WatchInboxActivity" android:exported="true" android:launchMode="singleTop"
+            android:taskAffinity="${applicationId}.inbox">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
         <activity android:name=".OpenOnPhoneActivity" android:exported="true"
             android:taskAffinity="${applicationId}.openonphone" />
         <service android:name=".WatchDataService" android:exported="true">

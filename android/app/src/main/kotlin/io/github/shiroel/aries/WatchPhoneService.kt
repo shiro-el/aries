@@ -9,6 +9,11 @@ import io.github.shiroel.aries.weardata.WatchSummary
 /** Data Layer verifies package/signature. Acknowledge only an existing cached Agent. */
 class WatchPhoneService : WearableListenerService() {
     override fun onRequest(nodeId: String, path: String, request: ByteArray): Task<ByteArray>? {
+        if (path == WatchSummary.REFRESH_PATH) {
+            if (request.isNotEmpty()) return Tasks.forResult(byteArrayOf())
+            LastKnownStates.requestRefresh(this)
+            return Tasks.forResult(byteArrayOf(1))
+        }
         if (path != WatchSummary.OPEN_PATH) return null
         val command = OpenWatchAgent.fromBytes(request)
         val valid = command != null && runCatching {

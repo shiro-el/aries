@@ -52,6 +52,8 @@ CREATE TABLE IF NOT EXISTS removed_hosts (digest BLOB PRIMARY KEY) WITHOUT ROWID
 /// A cached Chat: the Beacon's items in order and the cursor after them.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct CachedChat {
+    #[serde(default)]
+    pub usage: Option<aries_protocol::chat::AgentUsage>,
     pub items: Vec<ChatItem>,
     pub cursor: Option<String>,
 }

@@ -533,6 +533,28 @@
     <string name="chat_thinking">Thinking</string>
     <string name="chat_tool_running">running</string>
     <string name="chat_tool_failed">failed</string>
+    <!-- Agent usage and context (193) -->
+    <string name="usage_title">Usage &amp; limits</string>
+    <string name="usage_source">Last readings recorded by this Agent. Account limits may be shared with other Agents. Readings can be stale; times are shown in your local time zone.</string>
+    <string name="usage_context_title">Last recorded context</string>
+    <string name="usage_context_unavailable">Context: Data unavailable</string>
+    <string name="usage_context_remaining">Context: %1$s%% left</string>
+    <string name="usage_context_tokens">%1$s / %2$s context tokens used</string>
+    <string name="usage_account_title">Account limits</string>
+    <string name="usage_limits_unavailable">Account limits: Data unavailable</string>
+    <string name="usage_unavailable">Data unavailable</string>
+    <string name="usage_used">%1$s%% used</string>
+    <string name="usage_used_unknown">Used: Data unavailable</string>
+    <string name="usage_resets">Resets: %1$s</string>
+    <string name="usage_updated">Recorded: %1$s</string>
+    <string name="usage_five_hours">5-hour limit</string>
+    <string name="usage_seven_days">7-day limit</string>
+    <string name="usage_week_opus">Opus · 7-day limit</string>
+    <string name="usage_week_sonnet">Sonnet · 7-day limit</string>
+    <string name="usage_window">%1$s-minute limit</string>
+    <string name="usage_window_unknown">Window: Data unavailable</string>
+    <string name="usage_close">Close</string>
+
     <!-- Chat tool details and response metadata -->
     <string name="chat_details_expanded">Expanded</string>
     <string name="chat_details_collapsed">Collapsed</string>
