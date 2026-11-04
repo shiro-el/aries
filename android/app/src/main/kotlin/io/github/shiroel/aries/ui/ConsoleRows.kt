@@ -102,7 +102,7 @@ internal fun ConsoleTerminalRow(
         hovered -> MaterialTheme.colorScheme.surfaceContainerHigh
         else -> androidx.compose.ui.graphics.Color.Transparent
     }
-    val rowModifier = modifier.alpha(if (live) 1f else 0.55f).fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(background)
+    val rowModifier = modifier.alpha(if (live) 1f else 0.55f).fillMaxWidth().clip(RoundedCornerShape(LocalLayoutTokens.current.cornerRadius)).background(background)
         .hoverable(interactions).combinedClickable(role = Role.Button, onClick = onOpen, onLongClick = onLongClick, onLongClickLabel = actionsLabel)
         .semantics {
             contentDescription = spokenName
@@ -110,10 +110,10 @@ internal fun ConsoleTerminalRow(
             this.selected = selected
         }
     if (compact) {
-        Row(rowModifier.heightIn(min = 48.dp).padding(horizontal = 8.dp, vertical = 2.dp),
+        Row(rowModifier.heightIn(min = 48.dp).padding(horizontal = LocalLayoutTokens.current.contentPadding, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ProgramMark(terminal, Modifier.size(14.dp))
-            Text(displayName(terminal), Modifier.weight(1f), fontSize = 12.5.sp, lineHeight = 18.sp,
+            Text(displayName(terminal), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
             if (lastSeen != null) Text(lastSeen, style = MaterialTheme.typography.labelSmall)
             trailing()
@@ -122,7 +122,7 @@ internal fun ConsoleTerminalRow(
     } else {
         Row(rowModifier, verticalAlignment = Alignment.Top) {
             Row(
-                Modifier.weight(1f).heightIn(min = 48.dp).padding(start = 8.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+                Modifier.weight(1f).heightIn(min = 48.dp).padding(start = LocalLayoutTokens.current.contentPadding, end = 4.dp, top = 8.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.Top,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {

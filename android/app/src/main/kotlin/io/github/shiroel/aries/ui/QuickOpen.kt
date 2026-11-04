@@ -156,7 +156,7 @@ internal fun QuickOpenDialog(model: HostsModel) {
                     Text(stringResource(R.string.quick_open_title), Modifier.weight(1f).padding(12.dp), style = MaterialTheme.typography.titleMedium)
                     TextButton(onClick = model::closeQuickOpen) { Text(stringResource(R.string.cancel_button)) }
                 }
-                OutlinedTextField(query, { query = it; commandError = null }, singleLine = true,
+                ConsoleField(query, { query = it; commandError = null }, singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).testTag("quick-open-query").focusRequester(focus),
                     label = { Text(stringResource(R.string.quick_open_hint)) })
                 commandError?.let { Text(stringResource(it), Modifier.padding(12.dp), color = MaterialTheme.colorScheme.error) }

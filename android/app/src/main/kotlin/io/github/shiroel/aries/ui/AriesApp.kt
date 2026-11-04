@@ -30,9 +30,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.semantics.Role
 import io.github.shiroel.aries.core.KeyProtection
@@ -257,7 +255,7 @@ private fun BiometricToggle(required: Boolean, onChange: (Boolean) -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(stringResource(R.string.key_biometric_label), Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-        Switch(checked = required, onCheckedChange = null)
+        ConsoleToggle(checked = required, onCheckedChange = null)
     }
 }
 
@@ -272,7 +270,7 @@ internal fun OptionToggle(label: String, on: Boolean, onChange: (Boolean) -> Uni
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(label, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-        Switch(checked = on, onCheckedChange = null)
+        ConsoleToggle(checked = on, onCheckedChange = null)
     }
 }
 
@@ -324,16 +322,16 @@ private fun AddHostForm(model: HostsModel) {
     Text(stringResource(R.string.onboarding_manual_key_body), style = MaterialTheme.typography.bodySmall)
     PublicKeyDetails(model)
     Text(stringResource(R.string.host_add_title), style = MaterialTheme.typography.titleMedium)
-    OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.host_add_name)) }, singleLine = true, isError = errors.name != null, supportingText = hostInputSupport(errors.name))
-    OutlinedTextField(address, { address = it }, label = { Text(stringResource(R.string.host_add_address)) }, singleLine = true, isError = errors.address != null && address.isNotEmpty(), supportingText = hostInputSupport(errors.address))
-    OutlinedTextField(
+    ConsoleField(name, { name = it }, label = { Text(stringResource(R.string.host_add_name)) }, singleLine = true, isError = errors.name != null, supportingText = hostInputSupport(errors.name))
+    ConsoleField(address, { address = it }, label = { Text(stringResource(R.string.host_add_address)) }, singleLine = true, isError = errors.address != null && address.isNotEmpty(), supportingText = hostInputSupport(errors.address))
+    ConsoleField(
         port, { port = it },
         label = { Text(stringResource(R.string.host_add_port)) },
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         isError = errors.port != null, supportingText = hostInputSupport(errors.port),
     )
-    OutlinedTextField(user, { user = it }, label = { Text(stringResource(R.string.host_add_user)) }, singleLine = true, isError = errors.user != null && user.isNotEmpty(), supportingText = hostInputSupport(errors.user))
+    ConsoleField(user, { user = it }, label = { Text(stringResource(R.string.host_add_user)) }, singleLine = true, isError = errors.user != null && user.isNotEmpty(), supportingText = hostInputSupport(errors.user))
     ConsoleButton(
         enabled = validHostInput(model.hosts, null, name, address, portNumber, user),
         onClick = {
@@ -434,7 +432,7 @@ private fun PasswordDialog(prompt: Prompt.Password, model: HostsModel) {
         title = { Text(stringResource(R.string.key_install_title, prompt.host.name)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
+                ConsoleField(
                     password, { password = it },
                     label = { Text(stringResource(R.string.key_install_password)) },
                     singleLine = true,

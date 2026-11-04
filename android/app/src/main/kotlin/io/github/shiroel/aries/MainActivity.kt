@@ -29,6 +29,7 @@ class MainActivity : AppCompatActivity() {
 
     @Suppress("DEPRECATION") // Bundle.getParcelable is the API 28-compatible saved Intent reader.
     override fun onCreate(savedInstanceState: Bundle?) {
+        ThemeSettings.from(this).applyNightMode()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         app.appLock.foregrounded()

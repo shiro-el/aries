@@ -2,6 +2,7 @@ package io.github.shiroel.aries.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -68,41 +69,38 @@ internal fun GithubDialog(link: HostLink?, terminal: TerminalInfo, onDismiss: ()
         BackHandler(onBack = ::back)
         Surface(Modifier.fillMaxSize().testTag("github-dialog")) {
             Column(Modifier.fillMaxSize().safeDrawingPadding().imePadding()) {
-                Row(Modifier.fillMaxWidth().heightIn(min = 56.dp), verticalAlignment = Alignment.CenterVertically) {
-                    ActionIcon(R.drawable.ic_arrow_left, R.string.back_button, ::back, enabled = !writing, modifier = Modifier.testTag("github-back"))
-                    Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Icon(painterResource(R.drawable.ic_github), null, Modifier.size(20.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(stringResource(R.string.github_button), style = MaterialTheme.typography.titleMedium)
-                            repository?.let { Text(it.nameWithOwner, style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                ConsoleTopBar(stringResource(R.string.github_button), onMenu = {}, onBack = ::back,
+                    showMark = false, showNavigationActions = false, backEnabled = !writing, backTag = "github-back",
+                    titleContent = {
+                        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(painterResource(R.drawable.ic_github), null, Modifier.size(20.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(stringResource(R.string.github_button), style = MaterialTheme.typography.titleMedium)
+                                repository?.let { Text(it.nameWithOwner, style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                            }
                         }
-                    }
-                    repository?.let { repo ->
-                        ActionIcon(R.drawable.ic_external_link, R.string.github_open_browser, {
-                            val item = selected
-                            val path = if (item == null) "" else "/${if (item.kind == GithubKind.PULL_REQUEST) "pull" else "issues"}/${item.number}"
-                            uriHandler.openUri("https://${repo.hostname}/${repo.nameWithOwner}$path")
-                        })
-                    }
-                    ActionIcon(R.drawable.ic_refresh_cw, R.string.github_refresh, { revision++ }, enabled = !loading && !writing)
-                }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }, actions = {
+                        repository?.let { repo ->
+                            ActionIcon(R.drawable.ic_external_link, R.string.github_open_browser, {
+                                val item = selected
+                                val path = if (item == null) "" else "/${if (item.kind == GithubKind.PULL_REQUEST) "pull" else "issues"}/${item.number}"
+                                uriHandler.openUri("https://${repo.hostname}/${repo.nameWithOwner}$path")
+                            })
+                        }
+                        ActionIcon(R.drawable.ic_refresh_cw, R.string.github_refresh, { revision++ }, enabled = !loading && !writing)
+                })
                 val opened = selected
                 if (opened != null) {
                     GithubConversation(model.conversation(repository!!, opened.number), connection, repository!!, opened, revision, prFile, { prFile = it }, Modifier.weight(1f))
                 } else {
-                    SecondaryTabRow(selectedTabIndex = kind.ordinal) {
-                        GithubKind.entries.forEach { value ->
-                            Tab(selected = kind == value, onClick = { kind = value; page = 1 },
-                                text = { Text(stringResource(if (value == GithubKind.ISSUE) R.string.github_issues else R.string.github_prs)) })
-                        }
-                    }
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    ConsoleSegments(GithubKind.entries, kind, { kind = it; page = 1 },
+                        label = { stringResource(if (it == GithubKind.ISSUE) R.string.github_issues else R.string.github_prs) })
+                    Row(Modifier.fillMaxWidth().padding(horizontal = LocalLayoutTokens.current.contentPadding, vertical = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         fun submitSearch() { search = input; page = 1; revision++ }
-                        OutlinedTextField(value = input, onValueChange = { input = it.take(256) },
+                        ConsoleField(value = input, onValueChange = { input = it.take(256) },
                             singleLine = true, placeholder = { Text(stringResource(R.string.github_search_hint)) },
                             trailingIcon = { ActionIcon(R.drawable.ic_search, R.string.github_search_button, ::submitSearch) },
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
@@ -113,7 +111,7 @@ internal fun GithubDialog(link: HostLink?, terminal: TerminalInfo, onDismiss: ()
                         var filterMenu by rememberSaveable { mutableStateOf(false) }
                         TextButton(onClick = { filterMenu = true }, modifier = Modifier.testTag("github-state-filter")) {
                             Text(stringResource(githubFilterLabel(state)))
-                            Icon(painterResource(R.drawable.ic_chevron_down), null, Modifier.padding(start = 6.dp).size(16.dp))
+                            Icon(painterResource(R.drawable.ic_chevron_down), null, Modifier.padding(start = 6.dp).size(LocalLayoutTokens.current.contentPadding))
                         }
                         DropdownMenu(expanded = filterMenu, onDismissRequest = { filterMenu = false }) {
                             GithubState.entries.forEach { value ->
@@ -124,13 +122,13 @@ internal fun GithubDialog(link: HostLink?, terminal: TerminalInfo, onDismiss: ()
                             }
                         }
                     }
-                    error?.let { Text(stringResource(it), Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error) }
-                    if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+                    error?.let { Text(stringResource(it), Modifier.padding(LocalLayoutTokens.current.contentPadding), color = MaterialTheme.colorScheme.error) }
+                    if (loading) ConsoleProgress(Modifier.fillMaxWidth())
                     if (result?.limited == true) Text(stringResource(R.string.github_limited), Modifier.padding(12.dp))
                     LazyColumn(Modifier.weight(1f).testTag("github-items"), state = listScroll) {
-                        if (result?.items?.isEmpty() == true) item { Text(stringResource(R.string.github_empty), Modifier.padding(16.dp)) }
+                        if (result?.items?.isEmpty() == true) item { Text(stringResource(R.string.github_empty), Modifier.padding(LocalLayoutTokens.current.contentPadding)) }
                         items(result?.items.orEmpty(), key = { it.number.toString() }) { item ->
-                            GithubItemHeading(item, Modifier.fillMaxWidth().clickable { selected = item }.padding(16.dp))
+                            GithubItemHeading(item, Modifier.fillMaxWidth().clickable { selected = item }.padding(LocalLayoutTokens.current.contentPadding))
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                         }
                     }
@@ -191,7 +189,7 @@ private fun GithubConversation(
     val markdown by rememberChatMarkdown(entries)
     val overview = if (selected.kind == GithubKind.PULL_REQUEST) rememberGithubOverview(connection, repo, selected.number, refresh) else null
     Column(modifier.fillMaxWidth()) {
-        Row(Modifier.fillMaxWidth().padding(start = 16.dp, top = 16.dp, end = 8.dp, bottom = 12.dp), verticalAlignment = Alignment.Top) {
+        Row(Modifier.fillMaxWidth().padding(start = LocalLayoutTokens.current.contentPadding, top = LocalLayoutTokens.current.contentPadding, end = 8.dp, bottom = 12.dp), verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 GithubItemHeading(detail?.item ?: selected, detail = true)
                 detail?.let { thread ->
@@ -219,58 +217,56 @@ private fun GithubConversation(
                 enabled = detail != null && connection != null && !busy && repo.on == null) {
                 Text(stringResource(R.string.new_task_from_issue))
             }
-            if (repo.on != null) Text(stringResource(R.string.new_task_nested_host), Modifier.padding(horizontal = 16.dp))
+            if (repo.on != null) Text(stringResource(R.string.new_task_nested_host), Modifier.padding(horizontal = LocalLayoutTokens.current.contentPadding))
         }
         if (selected.kind == GithubKind.PULL_REQUEST) {
-            SecondaryScrollableTabRow(selectedTabIndex = tab.ordinal, edgePadding = 0.dp) {
-                GithubPrTab.entries.forEach { value ->
-                    Tab(selected = tab == value, enabled = !busy,
-                        onClick = { tab = value; onPrFile(null) },
-                        text = { Text(stringResource(value.title)) },
-                        modifier = Modifier.testTag("github-pr-tab-${value.name.lowercase()}"))
-                }
+            Row(Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState())) {
+                ConsoleSegments(GithubPrTab.entries, tab, { if (!busy) { tab = it; onPrFile(null) } },
+                    modifier = Modifier, segmentWidth = 140.dp, enabled = !busy,
+                    label = { stringResource(it.title) },
+                    segmentModifier = { Modifier.testTag("github-pr-tab-${it.name.lowercase()}") })
             }
         }
         if (tab != GithubPrTab.Conversation) {
             GithubPrResources(connection, repo, selected.number, tab, refresh, prFile, onPrFile, Modifier.weight(1f))
         } else {
-            error?.let { Text(stringResource(it), Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.error) }
-            success?.let { Text(stringResource(it), Modifier.padding(horizontal = 16.dp)) }
-            if (model.refreshing || busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+            error?.let { Text(stringResource(it), Modifier.padding(horizontal = LocalLayoutTokens.current.contentPadding), color = MaterialTheme.colorScheme.error) }
+            success?.let { Text(stringResource(it), Modifier.padding(horizontal = LocalLayoutTokens.current.contentPadding)) }
+            if (model.refreshing || busy) ConsoleProgress(Modifier.fillMaxWidth())
             val thread = detail
             LazyColumn(Modifier.weight(1f).testTag("github-conversation")) {
                 if (preview) {
-                    item { Text(stringResource(R.string.github_preview), Modifier.padding(16.dp)) }
+                    item { Text(stringResource(R.string.github_preview), Modifier.padding(LocalLayoutTokens.current.contentPadding)) }
                     chatMarkdownItems("preview", markdown["preview"])
                 } else if (thread != null) {
                     if (overview != null) githubOverviewItems(overview,
                         onTab = { tab = it; onPrFile(null) },
                         onFile = { tab = GithubPrTab.Files; onPrFile(it) })
-                    if (thread.item.body.isBlank()) item { Text(stringResource(R.string.github_no_body), Modifier.padding(16.dp)) }
+                    if (thread.item.body.isBlank()) item { Text(stringResource(R.string.github_no_body), Modifier.padding(LocalLayoutTokens.current.contentPadding)) }
                     chatMarkdownItems("body", markdown["body"])
                     item { HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant); GithubSection(stringResource(R.string.github_comments), thread.comments.size) }
-                    if (thread.comments.isEmpty()) item { Text(stringResource(R.string.github_no_comments), Modifier.padding(16.dp)) }
+                    if (thread.comments.isEmpty()) item { Text(stringResource(R.string.github_no_comments), Modifier.padding(LocalLayoutTokens.current.contentPadding)) }
                     thread.comments.forEach { comment ->
                         item(key = "author:${comment.id}") {
                             Text(stringResource(R.string.github_author_date,
-                                comment.author.ifBlank { stringResource(R.string.github_deleted_author) }, comment.createdAt.substringBefore("T")), Modifier.padding(horizontal = 16.dp, vertical = 12.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                comment.author.ifBlank { stringResource(R.string.github_deleted_author) }, comment.createdAt.substringBefore("T")), Modifier.padding(horizontal = LocalLayoutTokens.current.contentPadding, vertical = 12.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         chatMarkdownItems("comment:${comment.id}", markdown["comment:${comment.id}"])
                     }
                 }
             }
             draftError?.let {
-                Text(if (it == R.string.github_draft_limit) stringResource(it, GITHUB_DRAFT_BYTES / 1024) else stringResource(it), Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.error)
+                Text(if (it == R.string.github_draft_limit) stringResource(it, GITHUB_DRAFT_BYTES / 1024) else stringResource(it), Modifier.padding(horizontal = LocalLayoutTokens.current.contentPadding), color = MaterialTheme.colorScheme.error)
                 if (it != R.string.github_draft_limit) TextButton(onClick = model::retryDraft, enabled = !busy,
                     modifier = Modifier.testTag("github-draft-retry")) { Text(stringResource(R.string.github_draft_retry)) }
             }
-            if (!preview) OutlinedTextField(value = draft, onValueChange = model::changeDraft,
+            if (!preview) ConsoleField(value = draft, onValueChange = model::changeDraft,
                 enabled = draftReady && !busy && connection != null, minLines = 2, maxLines = 5,
                 label = { Text(stringResource(R.string.github_comment_hint)) },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag("github-comment"))
+                modifier = Modifier.fillMaxWidth().padding(horizontal = LocalLayoutTokens.current.contentPadding).testTag("github-comment"))
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                 TextButton(onClick = { preview = !preview }, enabled = draftReady && !busy) { Text(stringResource(if (preview) R.string.github_edit else R.string.github_preview)) }
-                Button(onClick = { model.write(connection, true) }, enabled = draftReady && draft.isNotBlank() && detail != null && connection != null && !busy, modifier = Modifier.padding(8.dp)) {
+                ConsoleButton(onClick = { model.write(connection, true) }, enabled = draftReady && draft.isNotBlank() && detail != null && connection != null && !busy, modifier = Modifier.padding(8.dp)) {
                     Text(stringResource(R.string.github_send))
                 }
             }

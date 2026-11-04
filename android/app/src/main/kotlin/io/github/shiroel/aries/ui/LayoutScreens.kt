@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -58,7 +59,12 @@ internal open class LayoutScreens {
         }
     }
 
-    @Composable open fun Hosts(model: HostsModel) = HostListScreen(model)
+    @Composable open fun Hosts(model: HostsModel) {
+        Column(Modifier.fillMaxSize()) {
+            ConsoleHomeAttention(model)
+            Box(Modifier.weight(1f)) { HostListScreen(model) }
+        }
+    }
 
     @Composable open fun Settings(model: HostsModel, settings: ThemeSettings, display: TerminalDisplaySettings) {
         SettingsScreen(model, settings, onBack = model::settingsBack, showHeader = false,
@@ -88,17 +94,22 @@ internal open class LayoutScreens {
     }
 
     @Composable open fun Home(model: HostsModel, browser: HostBrowser) {
-        BrowseScreen(browser, showHeader = false, onBack = model::back,
-            onOpen = { model.selectListedTerminal(browser, it) }, current = model.currentAgentKey,
-            onPin = model::pin, onNewTerminal = { model.newTerminal(browser) },
-            onRunSaved = { model.runSaved(browser, it) }, hostSections = {
-                if (model.beacon.ui == BeaconUi.Known(BeaconState.NotInstalled)) {
-                    TextButton(onClick = { model.openHostSettings(browser.host) },
-                        modifier = Modifier.testTag("browse-host-settings:${browser.host.id}")) {
-                        Text(stringResource(R.string.settings_beacon_missing), maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
-                    }
-                }
-            })
+        Column(Modifier.fillMaxSize()) {
+            ConsoleHomeAttention(model, browser.host.id)
+            Box(Modifier.weight(1f)) {
+                BrowseScreen(browser, showHeader = false, onBack = model::back,
+                    onOpen = { model.selectListedTerminal(browser, it) }, current = model.currentAgentKey,
+                    onPin = model::pin, onNewTerminal = { model.newTerminal(browser) },
+                    onRunSaved = { model.runSaved(browser, it) }, hostSections = {
+                        if (model.beacon.ui == BeaconUi.Known(BeaconState.NotInstalled)) {
+                            TextButton(onClick = { model.openHostSettings(browser.host) },
+                                modifier = Modifier.testTag("browse-host-settings:${browser.host.id}")) {
+                                Text(stringResource(R.string.settings_beacon_missing), maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                    })
+            }
+        }
     }
 
     @Composable open fun Agents(model: HostsModel, board: AgentBoard) {

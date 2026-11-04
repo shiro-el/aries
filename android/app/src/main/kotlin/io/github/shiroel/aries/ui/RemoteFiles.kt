@@ -357,7 +357,7 @@ internal fun RemoteFilesAccess(model: HostsModel, content: @Composable () -> Uni
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Surface(Modifier.fillMaxSize()) {
-            if (noFolder) Column(Modifier.padding(16.dp)) {
+            if (noFolder) Column(Modifier.padding(LocalLayoutTokens.current.contentPadding)) {
                 Text(stringResource(R.string.files_no_folder))
                 ActionIcon(R.drawable.ic_x, R.string.files_close_button, onClick = { open = false })
             } else Column(Modifier.fillMaxSize()) {

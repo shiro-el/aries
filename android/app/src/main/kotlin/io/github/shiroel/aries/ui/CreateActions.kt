@@ -54,7 +54,7 @@ internal fun CreateActions(
         if (!buttonEnabled || (dismissWhenDisabled && !creationEnabled)) visible = false
     }
     ActionIcon(R.drawable.ic_plus, R.string.host_create_title, { onOpen(); visible = true }, enabled = buttonEnabled)
-    if (visible) ModalBottomSheet(onDismissRequest = { visible = false },
+    if (visible) ConsoleSheet(onDismissRequest = { visible = false },
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         LazyColumn(Modifier.fillMaxWidth().testTag(sheetTag), contentPadding = PaddingValues(bottom = 24.dp)) {
             item {

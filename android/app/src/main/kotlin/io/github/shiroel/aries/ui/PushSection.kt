@@ -7,11 +7,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -28,7 +26,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.Alignment
-import androidx.compose.material3.Switch
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -53,7 +50,7 @@ fun PushSection(model: PushModel, beaconState: BeaconUi) {
     Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(stringResource(R.string.push_title), style = MaterialTheme.typography.titleMedium)
         when (val ui = model.ui) {
-            PushUi.Loading, PushUi.Working -> CircularProgressIndicator()
+            PushUi.Loading, PushUi.Working -> ConsoleBusyIndicator()
             PushUi.Off -> {
                 val missing = (beaconState as? BeaconUi.Known)?.state == BeaconState.NotInstalled
                 val checking = beaconState == BeaconUi.Loading || beaconState == BeaconUi.Working
@@ -97,7 +94,7 @@ fun PushSection(model: PushModel, beaconState: BeaconUi) {
             }
         }
         if (model.testing) {
-            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+            ConsoleBusyIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
             AnnouncedText(stringResource(R.string.push_testing))
         }
         if (model.failedSteps.isNotEmpty() && model.ui !is PushUi.Enabling) PushSteps(model.failedSteps)
@@ -127,7 +124,7 @@ fun PushSection(model: PushModel, beaconState: BeaconUi) {
 
 @Composable
 private fun PushSteps(steps: List<Pair<PushStep, StepState>>) {
-    if (steps.isEmpty()) CircularProgressIndicator()
+    if (steps.isEmpty()) ConsoleBusyIndicator()
     steps.forEach { (step, state) ->
         Row(
             Modifier.semantics(mergeDescendants = true) {},
@@ -137,7 +134,7 @@ private fun PushSteps(steps: List<Pair<PushStep, StepState>>) {
             when (state) {
                 StepState.Running -> {
                     val description = stringResource(R.string.push_step_running_description)
-                    CircularProgressIndicator(
+                    ConsoleBusyIndicator(
                         modifier = Modifier.size(18.dp).semantics { contentDescription = description },
                         strokeWidth = 2.dp,
                     )
@@ -162,7 +159,7 @@ private fun PolicyOptions(model: PushModel) {
     Text(stringResource(R.string.push_policy_title), style = MaterialTheme.typography.titleSmall)
     val policy = model.policy
     if (policy == null) {
-        if (model.policyBusy) CircularProgressIndicator()
+        if (model.policyBusy) ConsoleBusyIndicator()
         model.policyProblem?.let {
             AnnouncedText(resolve(it), color = MaterialTheme.colorScheme.error)
             TextButton(onClick = model::loadPolicy) { Text(stringResource(R.string.push_policy_retry)) }
@@ -192,14 +189,14 @@ private fun PolicyOption(label: Int, on: Boolean, enabled: Boolean, onChange: (B
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(stringResource(label), Modifier.weight(1f))
-        Switch(checked = on, onCheckedChange = null, enabled = enabled)
+        ConsoleToggle(checked = on, onCheckedChange = null, enabled = enabled)
     }
 }
 
 /** The Relay this Host's push goes through: this build's default or a self-hosted one. */
 @Composable
 private fun RelayField(model: PushModel) {
-    OutlinedTextField(
+    ConsoleField(
         model.relayDraft, { model.relayDraft = it },
         modifier = Modifier.fillMaxWidth().testTag("push_relay_url"),
         label = { Text(stringResource(R.string.push_relay_label)) },

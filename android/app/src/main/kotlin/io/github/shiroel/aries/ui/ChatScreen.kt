@@ -3,7 +3,6 @@ package io.github.shiroel.aries.ui
 import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.material3.LinearProgressIndicator
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -1201,7 +1200,7 @@ fun ChatScreen(
                     AnnouncedText(stringResource(R.string.chat_send_failed, messageText(it)), color = MaterialTheme.colorScheme.error)
                 }
                 if (chat.uploading) {
-                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                    ConsoleProgress(Modifier.fillMaxWidth())
                     ChatNotice(stringResource(R.string.attachments_uploading))
                 }
                 chat.attachmentError?.let { AnnouncedText(stringResource(it.res, *it.args.toTypedArray()), color = MaterialTheme.colorScheme.error) }

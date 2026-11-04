@@ -33,7 +33,7 @@ internal val LocalCallInbox = staticCompositionLocalOf<CallInboxAction?> { null 
 @Composable
 internal fun ConsoleInboxAction() {
     val action = LocalCallInbox.current ?: return
-    val count = action.calls.calls.count { it.answerable }
+    val count = action.calls.calls.count { it.answerable || it.needsUrgentAttention }
     if (count == 0) return
     val label = stringResource(R.string.call_inbox_label, count)
     val state = stringResource(if (action.open) R.string.call_inbox_expanded else R.string.call_inbox_collapsed)
@@ -46,16 +46,7 @@ internal fun ConsoleInboxAction() {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Canvas(Modifier.size(20.dp)) {
-            val path = Path().apply {
-                moveTo(3f, 11.5f); lineTo(3f, 16f); lineTo(17f, 16f); lineTo(17f, 11.5f)
-                moveTo(3f, 11.5f); lineTo(5f, 4f); lineTo(15f, 4f); lineTo(17f, 11.5f)
-                moveTo(3f, 11.5f); lineTo(7f, 11.5f); lineTo(8f, 13.5f); lineTo(12f, 13.5f); lineTo(13f, 11.5f); lineTo(17f, 11.5f)
-            }
-            scale(size.width / 20f, size.height / 20f, pivot = Offset.Zero) {
-                drawPath(path, ink, style = Stroke(width = 1.5f))
-            }
-        }
+        androidx.compose.material3.Icon(androidx.compose.ui.res.painterResource(R.drawable.ic_bell), null, Modifier.size(20.dp), tint = ink)
         if (count > 0) Text(
             count.toString(), Modifier.testTag("console-inbox-count"), fontSize = 12.sp, // i18n-ok: bare Console count digits
             fontWeight = FontWeight.Bold, color = statusColor(AgentStatus.Blocked(null, null)),
@@ -78,7 +69,7 @@ internal fun CallInboxOverlay(model: HostsModel, modifier: Modifier = Modifier) 
             .background(if (sheet) MaterialTheme.colorScheme.surfaceContainer else MaterialTheme.colorScheme.surface).testTag("call-inbox-panel")
             .semantics { paneTitle = title }) {
             Row(Modifier.fillMaxWidth().padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                AnnouncedText(stringResource(R.string.call_inbox_label, model.calls.calls.count { it.answerable }),
+                AnnouncedText(stringResource(R.string.call_inbox_label, model.calls.calls.count { it.answerable || it.needsUrgentAttention }),
                     Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
                 TextButton(onClick = model::closeCallInbox, modifier = Modifier.testTag("call-inbox-close")) { Text(close) }
             }

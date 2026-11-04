@@ -1,6 +1,6 @@
 package io.github.shiroel.aries.ui
 
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -20,8 +20,8 @@ const val AGENT_VIEW_TOGGLE = "agent_view_toggle"
 fun AgentViewToggle(current: AgentView, onView: (AgentView) -> Unit) {
     ConsoleSegments(
         options = listOf(AgentView.TERMINAL, AgentView.CHAT), selected = current, onSelect = onView,
-        modifier = Modifier.padding(end = 8.dp).testTag(AGENT_VIEW_TOGGLE),
-        height = 48.dp, segmentWidth = 104.dp,
+        modifier = Modifier.fillMaxWidth().testTag(AGENT_VIEW_TOGGLE),
+        height = 48.dp,
         textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp),
         inactiveColor = MaterialTheme.colorScheme.onSurfaceVariant,
     ) { view ->

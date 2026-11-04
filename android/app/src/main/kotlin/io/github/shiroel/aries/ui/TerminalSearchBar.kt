@@ -9,7 +9,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -64,7 +63,7 @@ internal fun TerminalSearchBar(viewer: TerminalViewer, open: Boolean, onClose: (
     if (!open) return
     Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
+            ConsoleField(
                 value = query, onValueChange = { query = it },
                 modifier = Modifier.weight(1f).testTag("terminal-search-query"),
                 label = { Text(stringResource(R.string.terminal_search_hint)) },

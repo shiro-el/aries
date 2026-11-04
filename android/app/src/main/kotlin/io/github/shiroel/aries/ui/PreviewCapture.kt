@@ -98,102 +98,105 @@ internal fun PreviewCaptureEditor(
     Dialog(onDismissRequest = { if (!exporting) onDismiss() },
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Surface(Modifier.fillMaxSize()) {
-            Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).imePadding().padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(stringResource(R.string.preview_capture_title), style = MaterialTheme.typography.titleLarge)
-                Text(capture.url, style = MaterialTheme.typography.bodySmall, maxLines = 2)
-                Text(mode, style = MaterialTheme.typography.bodySmall)
-                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = tool == PreviewMarkTool.Pen, onClick = { tool = PreviewMarkTool.Pen },
-                        enabled = !exporting, label = { Text(stringResource(R.string.preview_capture_pen)) })
-                    FilterChip(selected = tool == PreviewMarkTool.Rectangle, onClick = { tool = PreviewMarkTool.Rectangle },
-                        enabled = !exporting, label = { Text(stringResource(R.string.preview_capture_rectangle)) })
-                    TextButton(onClick = { marks = marks.dropLast(1) }, enabled = marks.isNotEmpty() && !exporting) {
-                        Text(stringResource(R.string.preview_capture_undo))
-                    }
-                }
-                Canvas(Modifier.fillMaxWidth().weight(1f).background(MaterialTheme.colorScheme.surfaceVariant)
-                    .testTag("preview-capture-canvas")
-                    .semantics { contentDescription = canvasDescription }
-                    .pointerInput(capture, tool, exporting) {
-                        if (!exporting) detectDragGestures(
-                            onDragStart = { point ->
-                                val rect = previewImageRect(Size(size.width.toFloat(), size.height.toFloat()), capture.bitmap)
-                                if (rect.contains(point)) {
-                                    val scale = rect.width / capture.bitmap.width
-                                    current = PreviewMark(tool, listOf((point - rect.topLeft) / scale))
-                                }
-                            },
-                            onDrag = { change, _ ->
-                                current?.let { mark ->
-                                    val rect = previewImageRect(Size(size.width.toFloat(), size.height.toFloat()), capture.bitmap)
-                                    val point = (change.position - rect.topLeft) / (rect.width / capture.bitmap.width)
-                                    val bounded = Offset(point.x.coerceIn(0f, capture.bitmap.width.toFloat()),
-                                        point.y.coerceIn(0f, capture.bitmap.height.toFloat()))
-                                    current = mark.copy(points = if (mark.tool == PreviewMarkTool.Rectangle)
-                                        listOf(mark.points.first(), bounded) else mark.points + bounded)
-                                    change.consume()
-                                }
-                            },
-                            onDragEnd = { current?.let { marks = marks + it }; current = null },
-                            onDragCancel = { current = null },
-                        )
-                    }) {
-                    val rect = previewImageRect(size, capture.bitmap)
-                    drawIntoCanvas { canvas ->
-                        val native = canvas.nativeCanvas
-                        native.save()
-                        try {
-                            native.translate(rect.left, rect.top)
-                            val scale = rect.width / capture.bitmap.width
-                            native.scale(scale, scale)
-                            native.drawBitmap(capture.bitmap, 0f, 0f, Paint(Paint.FILTER_BITMAP_FLAG))
-                            drawPreviewMarks(native, marks + listOfNotNull(current), capture.bitmap.width)
-                        } finally { native.restore() }
-                    }
-                }
-                OutlinedTextField(value = note, onValueChange = { note = it }, enabled = !exporting,
-                    label = { Text(stringResource(R.string.preview_capture_note)) }, maxLines = 3,
-                    modifier = Modifier.fillMaxWidth())
-                if (failed) Text(stringResource(R.string.preview_capture_attach_failed), color = MaterialTheme.colorScheme.error)
-                val captureContext = stringResource(R.string.preview_capture_context, capture.url, mode)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = onDismiss, enabled = !exporting) { Text(stringResource(R.string.cancel_button)) }
-                    Button(enabled = !exporting, onClick = {
-                        val annotations = marks.toList()
-                        val text = captureContext +
-                            note.trim().takeIf { it.isNotEmpty() }?.let { "\n\n$it" }.orEmpty()
-                        exporting = true
-                        failed = false
-                        scope.launch {
-                            var temporary: File? = null
-                            try {
-                                val file = withContext(Dispatchers.IO) {
-                                    val directory = File(context.cacheDir, "attachments").apply { mkdirs() }
-                                    val output = File.createTempFile("preview-", ".png", directory)
-                                    temporary = output
-                                    val bitmap = checkNotNull(capture.bitmap.copy(Bitmap.Config.ARGB_8888, true))
-                                    try {
-                                        drawPreviewMarks(AndroidCanvas(bitmap), annotations, bitmap.width)
-                                        output.outputStream().use { check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
-                                    } finally { bitmap.recycle() }
-                                    output
-                                }
-                                if (onAttach(SharedContent(listOf(Uri.fromFile(file)), text)) { file.delete() }) {
-                                    temporary = null // The attachment job now owns cleanup.
-                                    onDismiss()
-                                } else failed = true
-                            } catch (e: CancellationException) {
-                                throw e
-                            } catch (_: Exception) {
-                                failed = true
-                            } finally {
-                                temporary?.delete()
-                                exporting = false
-                            }
+            Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).imePadding()) {
+                ConsoleTopBar(stringResource(R.string.preview_capture_title), onMenu = {},
+                    onBack = { if (!exporting) onDismiss() }, showMark = false, showNavigationActions = false, backEnabled = !exporting)
+                Column(Modifier.weight(1f).padding(LocalLayoutTokens.current.contentPadding),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(capture.url, style = MaterialTheme.typography.bodySmall, maxLines = 2)
+                    Text(mode, style = MaterialTheme.typography.bodySmall)
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SingleChoiceChip(selected = tool == PreviewMarkTool.Pen, onClick = { tool = PreviewMarkTool.Pen },
+                            enabled = !exporting, label = { Text(stringResource(R.string.preview_capture_pen)) })
+                        SingleChoiceChip(selected = tool == PreviewMarkTool.Rectangle, onClick = { tool = PreviewMarkTool.Rectangle },
+                            enabled = !exporting, label = { Text(stringResource(R.string.preview_capture_rectangle)) })
+                        TextButton(onClick = { marks = marks.dropLast(1) }, enabled = marks.isNotEmpty() && !exporting) {
+                            Text(stringResource(R.string.preview_capture_undo))
                         }
-                    }) { Text(stringResource(if (exporting) R.string.preview_capture_preparing else R.string.preview_capture_attach)) }
+                    }
+                    Canvas(Modifier.fillMaxWidth().weight(1f).background(MaterialTheme.colorScheme.surfaceVariant)
+                        .testTag("preview-capture-canvas")
+                        .semantics { contentDescription = canvasDescription }
+                        .pointerInput(capture, tool, exporting) {
+                            if (!exporting) detectDragGestures(
+                                onDragStart = { point ->
+                                    val rect = previewImageRect(Size(size.width.toFloat(), size.height.toFloat()), capture.bitmap)
+                                    if (rect.contains(point)) {
+                                        val scale = rect.width / capture.bitmap.width
+                                        current = PreviewMark(tool, listOf((point - rect.topLeft) / scale))
+                                    }
+                                },
+                                onDrag = { change, _ ->
+                                    current?.let { mark ->
+                                        val rect = previewImageRect(Size(size.width.toFloat(), size.height.toFloat()), capture.bitmap)
+                                        val point = (change.position - rect.topLeft) / (rect.width / capture.bitmap.width)
+                                        val bounded = Offset(point.x.coerceIn(0f, capture.bitmap.width.toFloat()),
+                                            point.y.coerceIn(0f, capture.bitmap.height.toFloat()))
+                                        current = mark.copy(points = if (mark.tool == PreviewMarkTool.Rectangle)
+                                            listOf(mark.points.first(), bounded) else mark.points + bounded)
+                                        change.consume()
+                                    }
+                                },
+                                onDragEnd = { current?.let { marks = marks + it }; current = null },
+                                onDragCancel = { current = null },
+                            )
+                        }) {
+                        val rect = previewImageRect(size, capture.bitmap)
+                        drawIntoCanvas { canvas ->
+                            val native = canvas.nativeCanvas
+                            native.save()
+                            try {
+                                native.translate(rect.left, rect.top)
+                                val scale = rect.width / capture.bitmap.width
+                                native.scale(scale, scale)
+                                native.drawBitmap(capture.bitmap, 0f, 0f, Paint(Paint.FILTER_BITMAP_FLAG))
+                                drawPreviewMarks(native, marks + listOfNotNull(current), capture.bitmap.width)
+                            } finally { native.restore() }
+                        }
+                    }
+                    ConsoleField(value = note, onValueChange = { note = it }, enabled = !exporting,
+                        label = { Text(stringResource(R.string.preview_capture_note)) }, maxLines = 3,
+                        modifier = Modifier.fillMaxWidth())
+                    if (failed) Text(stringResource(R.string.preview_capture_attach_failed), color = MaterialTheme.colorScheme.error)
+                    val captureContext = stringResource(R.string.preview_capture_context, capture.url, mode)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = onDismiss, enabled = !exporting) { Text(stringResource(R.string.cancel_button)) }
+                        ConsoleButton(enabled = !exporting, onClick = {
+                            val annotations = marks.toList()
+                            val text = captureContext +
+                                note.trim().takeIf { it.isNotEmpty() }?.let { "\n\n$it" }.orEmpty()
+                            exporting = true
+                            failed = false
+                            scope.launch {
+                                var temporary: File? = null
+                                try {
+                                    val file = withContext(Dispatchers.IO) {
+                                        val directory = File(context.cacheDir, "attachments").apply { mkdirs() }
+                                        val output = File.createTempFile("preview-", ".png", directory)
+                                        temporary = output
+                                        val bitmap = checkNotNull(capture.bitmap.copy(Bitmap.Config.ARGB_8888, true))
+                                        try {
+                                            drawPreviewMarks(AndroidCanvas(bitmap), annotations, bitmap.width)
+                                            output.outputStream().use { check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+                                        } finally { bitmap.recycle() }
+                                        output
+                                    }
+                                    if (onAttach(SharedContent(listOf(Uri.fromFile(file)), text)) { file.delete() }) {
+                                        temporary = null // The attachment job now owns cleanup.
+                                        onDismiss()
+                                    } else failed = true
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (_: Exception) {
+                                    failed = true
+                                } finally {
+                                    temporary?.delete()
+                                    exporting = false
+                                }
+                            }
+                        }) { Text(stringResource(if (exporting) R.string.preview_capture_preparing else R.string.preview_capture_attach)) }
+                    }
                 }
             }
         }

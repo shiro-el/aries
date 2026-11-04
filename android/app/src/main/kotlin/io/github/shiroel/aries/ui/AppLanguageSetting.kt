@@ -6,7 +6,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -33,7 +32,7 @@ internal fun AppLanguageSetting() {
     )
     val selected = AppCompatDelegate.getApplicationLocales()[0]?.language.orEmpty()
     ExposedDropdownMenuBox(expanded, onExpandedChange = { expanded = it; search = "" }) {
-        OutlinedTextField(
+        ConsoleField(
             value = choices.firstOrNull { it.first == selected }?.second ?: choices.first().second,
             onValueChange = {}, readOnly = true, singleLine = true,
             label = { Text(stringResource(R.string.app_language_title)) },
@@ -42,7 +41,7 @@ internal fun AppLanguageSetting() {
                 .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
         )
         ExposedDropdownMenu(expanded, onDismissRequest = { expanded = false }) {
-            OutlinedTextField(
+            ConsoleField(
                 search, onValueChange = { search = it }, singleLine = true,
                 label = { Text(stringResource(R.string.app_language_search)) },
                 modifier = Modifier.fillMaxWidth().testTag("app-language-search"),

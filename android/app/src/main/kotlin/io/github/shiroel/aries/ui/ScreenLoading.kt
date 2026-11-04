@@ -30,8 +30,8 @@ internal fun ScreenLoading(label: String, compact: Boolean = false, labelDelayMi
         verticalArrangement = if (compact) Arrangement.Top else Arrangement.Center,
     ) {
         if (!expired) {
-            if (compact) LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
-            else CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 2.dp)
+            if (compact) ConsoleProgress(Modifier.fillMaxWidth().height(2.dp))
+            else ConsoleBusyIndicator(Modifier.size(28.dp), strokeWidth = 2.dp)
             if (showLabel) Text(label, Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
         } else {
             AnnouncedText(stringResource(R.string.loading_slow), Modifier.padding(12.dp),

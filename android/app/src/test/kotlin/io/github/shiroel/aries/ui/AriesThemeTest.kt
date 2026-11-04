@@ -8,6 +8,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import org.junit.Assert.assertTrue
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.text.font.FontFamily
@@ -75,11 +77,26 @@ class AriesThemeTest {
         }
         compose.runOnIdle {
             assertEquals(Color(0xFF121315), colors.background)
-            assertEquals(Color(0xFF8C7CF0), colors.primary)
+            assertNotEquals(Brand.Saffron, colors.primary)
+            assertTrue(contrast(colors.primary, colors.surfaceContainerHighest) >= 4.5f)
             assertEquals(colors.primary, working)
             assertNotEquals(colors.primary, blocked)
             settings.chooseMode(ThemeMode.SYSTEM)
         }
         compose.runOnIdle { assertEquals(Color(0xFFFAF9F7), colors.background) }
     }
+    // Regression: a near-black custom accent in dark mode made primary text disappear; lint cannot check dynamic colours.
+    @Test fun customAccentTextAndButtonsStayReadableInEveryLayout() {
+        for (layout in AppLayout.entries) for (dark in listOf(false, true)) {
+            for (accent in listOf(Color.Black, Color.White, Color(0xFF123456), Brand.Saffron)) {
+                val colors = schemeFor(accent, dark, layout)
+                assertTrue("$layout dark=$dark accent=$accent text", contrast(colors.primary, colors.surfaceContainerHighest) >= 4.5f)
+                assertTrue("$layout dark=$dark accent=$accent button", contrast(colors.primary, colors.onPrimary) >= 4.5f)
+            }
+        }
+    }
+
+    private fun contrast(a: Color, b: Color): Float =
+        (maxOf(a.luminance(), b.luminance()) + .05f) / (minOf(a.luminance(), b.luminance()) + .05f)
+
 }

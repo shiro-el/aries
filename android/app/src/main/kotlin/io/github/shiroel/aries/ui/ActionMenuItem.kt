@@ -76,6 +76,6 @@ internal fun MenuInfo(label: String, value: String, @DrawableRes icon: Int) {
 internal fun MenuToggleState(checked: Boolean, enabled: Boolean) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         MenuDetail(stringResource(if (checked) R.string.menu_state_on else R.string.menu_state_off))
-        Switch(checked, onCheckedChange = null, enabled = enabled)
+        ConsoleToggle(checked, onCheckedChange = null, enabled = enabled)
     }
 }

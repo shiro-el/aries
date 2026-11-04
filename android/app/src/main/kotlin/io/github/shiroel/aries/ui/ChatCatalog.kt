@@ -94,9 +94,9 @@ internal fun ChatCatalogControls(chat: ChatModel,
         .filter { it.token.startsWith(prefix, ignoreCase = true) || ("/" + it.name).startsWith(prefix, ignoreCase = true) }
         else emptyList()
     if (completing) {
-        Text(stringResource(R.string.chat_commands_title), Modifier.padding(horizontal = 16.dp))
+        Text(stringResource(R.string.chat_commands_title), Modifier.padding(horizontal = LocalLayoutTokens.current.contentPadding))
         CatalogStatus(loading, failed) { revision++ }
-        if (!loading && !failed && matches.isEmpty()) Text(stringResource(R.string.chat_catalog_empty), Modifier.padding(horizontal = 16.dp))
+        if (!loading && !failed && matches.isEmpty()) Text(stringResource(R.string.chat_catalog_empty), Modifier.padding(horizontal = LocalLayoutTokens.current.contentPadding))
         LazyColumn(Modifier.fillMaxWidth().heightIn(max = 180.dp)) {
             items(matches, key = { it.token }) { entry ->
                 CatalogRow(entry, enabled) {
@@ -126,15 +126,15 @@ internal fun ChatCatalogControls(chat: ChatModel,
         }
     }
     if (showSkills) {
-        ModalBottomSheet(onDismissRequest = { showSkills = false }) {
-            Column(Modifier.fillMaxWidth().imePadding().padding(horizontal = 16.dp)) {
+        ConsoleSheet(onDismissRequest = { showSkills = false }) {
+            Column(Modifier.fillMaxWidth().imePadding().padding(horizontal = LocalLayoutTokens.current.contentPadding)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.chat_skills_title), Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
                     ActionIcon(R.drawable.ic_x, R.string.cancel_button, { showSkills = false })
                 }
                 Column(Modifier.fillMaxWidth().weight(1f, fill = false)) {
                     val searchLabel = stringResource(R.string.chat_skills_search)
-                    OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().semantics { contentDescription = searchLabel },
+                    ConsoleField(query, { query = it }, Modifier.fillMaxWidth().semantics { contentDescription = searchLabel },
                         label = { Text(searchLabel) }, singleLine = true)
                     CatalogStatus(loading, failed) { revision++ }
                     val skills = catalog?.skills.orEmpty().filter { entry ->
@@ -159,7 +159,7 @@ internal fun ChatCatalogControls(chat: ChatModel,
 
 @Composable
 private fun CatalogStatus(loading: Boolean, failed: Boolean, onRetry: () -> Unit) {
-    if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+    if (loading) ConsoleProgress(Modifier.fillMaxWidth())
     if (failed) Row(verticalAlignment = Alignment.CenterVertically) {
         Text(stringResource(R.string.chat_catalog_failed), Modifier.weight(1f), color = MaterialTheme.colorScheme.error)
         TextButton(onClick = onRetry, enabled = !loading) { Text(stringResource(R.string.connect_retry_button)) }
@@ -169,7 +169,7 @@ private fun CatalogStatus(loading: Boolean, failed: Boolean, onRetry: () -> Unit
 @Composable
 private fun CatalogRow(entry: AgentCatalogEntry, enabled: Boolean, onClick: () -> Unit) {
     Column(
-        Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = onClick).padding(horizontal = 16.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = onClick).padding(horizontal = LocalLayoutTokens.current.contentPadding, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Text(entry.token, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,

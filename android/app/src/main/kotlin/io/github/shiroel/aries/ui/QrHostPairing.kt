@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -67,10 +66,10 @@ internal fun QrHostPairing(
         details?.let { offer ->
             val errors = hostInputErrors(model.hosts, null, name, offer.address, offer.port.toInt(), offer.user)
             Text(stringResource(R.string.host_pair_review_title), style = MaterialTheme.typography.titleMedium)
-            OutlinedTextField(name, { name = it }, Modifier.testTag("host-pair-name"), enabled = !busy, label = { Text(stringResource(R.string.host_add_name)) }, singleLine = true, isError = errors.name != null, supportingText = hostInputSupport(errors.name))
-            OutlinedTextField(offer.address, {}, Modifier.testTag("host-pair-address"), readOnly = true, label = { Text(stringResource(R.string.host_add_address)) })
-            OutlinedTextField(offer.port.toString(), {}, Modifier.testTag("host-pair-port"), readOnly = true, label = { Text(stringResource(R.string.host_add_port)) })
-            OutlinedTextField(offer.user, {}, Modifier.testTag("host-pair-user"), readOnly = true, label = { Text(stringResource(R.string.host_add_user)) })
+            ConsoleField(name, { name = it }, Modifier.testTag("host-pair-name"), enabled = !busy, label = { Text(stringResource(R.string.host_add_name)) }, singleLine = true, isError = errors.name != null, supportingText = hostInputSupport(errors.name))
+            ConsoleField(offer.address, {}, Modifier.testTag("host-pair-address"), readOnly = true, label = { Text(stringResource(R.string.host_add_address)) })
+            ConsoleField(offer.port.toString(), {}, Modifier.testTag("host-pair-port"), readOnly = true, label = { Text(stringResource(R.string.host_add_port)) })
+            ConsoleField(offer.user, {}, Modifier.testTag("host-pair-user"), readOnly = true, label = { Text(stringResource(R.string.host_add_user)) })
             Text(stringResource(R.string.host_pair_fingerprint, offer.hostKey), style = MaterialTheme.typography.bodySmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ConsoleButton(

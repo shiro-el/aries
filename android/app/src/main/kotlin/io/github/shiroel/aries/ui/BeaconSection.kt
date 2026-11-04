@@ -6,10 +6,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -101,13 +99,13 @@ fun BeaconSection(model: BeaconModel) {
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(stringResource(R.string.beacon_auto_update))
-                            Switch(checked = model.autoUpdate, onCheckedChange = null, enabled = !model.busy)
+                            ConsoleToggle(checked = model.autoUpdate, onCheckedChange = null, enabled = !model.busy)
                         }
                     }
                 }
             }
         }
-        if (model.busy) CircularProgressIndicator()
+        if (model.busy) ConsoleBusyIndicator()
         model.problem?.let {
             AnnouncedText(text(it), color = MaterialTheme.colorScheme.error)
             if (model.ui is BeaconUi.Known) {

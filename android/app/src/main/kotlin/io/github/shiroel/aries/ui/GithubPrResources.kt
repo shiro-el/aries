@@ -58,7 +58,7 @@ internal fun GithubPrResources(
     val markdown by rememberChatMarkdown(entries)
     Column(modifier.fillMaxWidth()) {
         error?.let { Text(stringResource(it), Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error) }
-        if (resource == null && error == null) LinearProgressIndicator(Modifier.fillMaxWidth())
+        if (resource == null && error == null) ConsoleProgress(Modifier.fillMaxWidth())
         val opened = file
         if (opened != null) {
             Text(opened.path, Modifier.padding(16.dp), fontFamily = FontFamily.Monospace)

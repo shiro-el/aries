@@ -3,6 +3,8 @@ package io.github.shiroel.aries.ui
 import androidx.compose.ui.test.junit4.ComposeContentTestRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.performScrollTo
 
 /** Shared user navigation for tests whose assertions concern a destination's behavior. */
@@ -13,7 +15,8 @@ fun ComposeContentTestRule.openConsoleDrawer() {
 fun ComposeContentTestRule.openKeyDetails() {
     openConsoleDrawer()
     onNodeWithTag("settings-open").performClick()
-    onNodeWithTag("settings-keys").performScrollTo().performClick()
+    onNodeWithTag("settings-list").performScrollToNode(hasTestTag("settings-keys"))
+    onNodeWithTag("settings-keys").performClick()
 }
 
 fun ComposeContentTestRule.openHostAddForm() {

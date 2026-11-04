@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -42,7 +41,7 @@ fun HerdrInstallSection(model: HerdrInstallModel, connect: () -> Unit) {
             null -> Unit
         }
         if (model.busy) {
-            CircularProgressIndicator()
+            ConsoleBusyIndicator()
             model.step?.let {
                 Text(stringResource(when (it) {
                     HerdrInstallStep.DETECT -> R.string.herdr_install_detect

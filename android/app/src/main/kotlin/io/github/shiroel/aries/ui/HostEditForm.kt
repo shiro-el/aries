@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -56,15 +55,15 @@ fun HostEditForm(model: HostsModel, host: Host, onClose: () -> Unit) {
     val errors = hostInputErrors(model.hosts, host.id, name, address, portNumber, user)
     Column(Modifier.padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.host_edit_title), style = MaterialTheme.typography.titleMedium)
-        OutlinedTextField(name, { name = it }, Modifier.testTag("host-edit-name"), enabled = !saving, label = { Text(stringResource(R.string.host_add_name)) }, singleLine = true, isError = errors.name != null, supportingText = hostInputSupport(errors.name))
-        OutlinedTextField(address, { address = it }, Modifier.testTag("host-edit-address"), enabled = !saving, label = { Text(stringResource(R.string.host_add_address)) }, singleLine = true, isError = errors.address != null && address.isNotEmpty(), supportingText = hostInputSupport(errors.address))
-        OutlinedTextField(
+        ConsoleField(name, { name = it }, Modifier.testTag("host-edit-name"), enabled = !saving, label = { Text(stringResource(R.string.host_add_name)) }, singleLine = true, isError = errors.name != null, supportingText = hostInputSupport(errors.name))
+        ConsoleField(address, { address = it }, Modifier.testTag("host-edit-address"), enabled = !saving, label = { Text(stringResource(R.string.host_add_address)) }, singleLine = true, isError = errors.address != null && address.isNotEmpty(), supportingText = hostInputSupport(errors.address))
+        ConsoleField(
             port, { port = it }, Modifier.testTag("host-edit-port"), enabled = !saving,
             label = { Text(stringResource(R.string.host_add_port)) }, singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             isError = errors.port != null, supportingText = hostInputSupport(errors.port),
         )
-        OutlinedTextField(user, { user = it }, Modifier.testTag("host-edit-user"), enabled = !saving, label = { Text(stringResource(R.string.host_add_user)) }, singleLine = true, isError = errors.user != null && user.isNotEmpty(), supportingText = hostInputSupport(errors.user))
+        ConsoleField(user, { user = it }, Modifier.testTag("host-edit-user"), enabled = !saving, label = { Text(stringResource(R.string.host_add_user)) }, singleLine = true, isError = errors.user != null && user.isNotEmpty(), supportingText = hostInputSupport(errors.user))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ConsoleButton(
                 modifier = Modifier.testTag("host-edit-save"),

@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -24,7 +23,7 @@ import io.github.shiroel.aries.core.AgentPreset
 fun LaunchOptions(form: LaunchForm, preset: AgentPreset, enabled: Boolean = true) {
     var modelsOpen by remember(preset) { mutableStateOf(false) }
     var effortsOpen by remember(preset) { mutableStateOf(false) }
-    OutlinedTextField(
+    ConsoleField(
         value = form.model, enabled = enabled,
         onValueChange = { form.model = it },
         modifier = Modifier.fillMaxWidth().testTag("launch_model"),

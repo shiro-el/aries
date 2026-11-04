@@ -10,7 +10,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -96,7 +95,7 @@ fun KeyImportDialog(model: HostsModel, replacementKeyId: String? = null, onDismi
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (replacementKeyId != null) Text(stringResource(R.string.key_recover_replace_body))
-                if (needsLabel) OutlinedTextField(
+                if (needsLabel) ConsoleField(
                     label, { label = it }, enabled = !busy, singleLine = true,
                     label = { Text(stringResource(R.string.key_new_label)) },
                     modifier = Modifier.fillMaxWidth().testTag("key-import-label"),
@@ -104,7 +103,7 @@ fun KeyImportDialog(model: HostsModel, replacementKeyId: String? = null, onDismi
                 TextButton(enabled = !busy, onClick = { picker.launch(arrayOf("*/*")) }) {
                     Text(stringResource(R.string.key_import_file_button))
                 }
-                OutlinedTextField(
+                ConsoleField(
                     privateKey, {
                         if (it.toByteArray(Charsets.UTF_8).size <= MAX_PRIVATE_KEY_BYTES) {
                             privateKey = it
@@ -119,7 +118,7 @@ fun KeyImportDialog(model: HostsModel, replacementKeyId: String? = null, onDismi
                     keyboardOptions = passwordKeyboard, visualTransformation = PasswordVisualTransformation(),
                     modifier = Modifier.fillMaxWidth().testTag("key-import-private"),
                 )
-                OutlinedTextField(
+                ConsoleField(
                     passphrase, { passphrase = it }, enabled = !busy, singleLine = true,
                     label = { Text(stringResource(R.string.key_import_passphrase_label)) },
                     keyboardOptions = passwordKeyboard, visualTransformation = PasswordVisualTransformation(),

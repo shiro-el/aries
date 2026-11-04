@@ -1,6 +1,7 @@
 package io.github.shiroel.aries.ui
 
 import android.content.Context
+import androidx.appcompat.app.AppCompatDelegate
 import android.content.SharedPreferences
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -32,6 +33,15 @@ class ThemeSettings(private val preferences: SharedPreferences) {
     fun chooseMode(value: ThemeMode) {
         preferences.edit().putString("mode", value.name).apply()
         mode = value
+        applyNightMode()
+    }
+
+    fun applyNightMode() {
+        AppCompatDelegate.setDefaultNightMode(when (mode) {
+            ThemeMode.SYSTEM -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+            ThemeMode.LIGHT -> AppCompatDelegate.MODE_NIGHT_NO
+            ThemeMode.DARK -> AppCompatDelegate.MODE_NIGHT_YES
+        })
     }
 
     fun setAccent(value: String): Boolean {
