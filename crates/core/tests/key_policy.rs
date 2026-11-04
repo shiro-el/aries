@@ -14,6 +14,7 @@ use common::{TestVault, script_endpoint};
 /// keys work only while the user is there to authenticate (the app is in
 /// the foreground) and only if a biometric is enrolled.
 struct PhoneVault {
+    invalidated: AtomicBool,
     enrolled: AtomicBool,
     user_present: AtomicBool,
     inner: TestVault,
@@ -25,6 +26,7 @@ struct PhoneVault {
 impl PhoneVault {
     fn new() -> Arc<Self> {
         Arc::new(Self {
+            invalidated: AtomicBool::new(false),
             enrolled: AtomicBool::new(true),
             user_present: AtomicBool::new(true),
             inner: TestVault,
@@ -65,6 +67,9 @@ impl KeyVault for PhoneVault {
 
     fn open(&self, sealed: Vec<u8>, protection: KeyProtection) -> Result<Vec<u8>, VaultError> {
         self.check(protection)?;
+        if protection == KeyProtection::Biometric && self.invalidated.load(Ordering::SeqCst) {
+            return Err(VaultError::Invalidated);
+        }
         self.inner.open(sealed, protection)
     }
 }
@@ -453,4 +458,64 @@ async fn a_background_question_answer_never_asks_to_unlock_a_biometric_key() {
         .unwrap_err();
     assert!(matches!(err, CoreError::KeyLocked), "{err:?}");
     assert!(vault.asked.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn permanent_invalidation_is_distinct_from_a_cancelled_unlock() {
+    let dir = tempfile::tempdir().unwrap();
+    let vault = PhoneVault::new();
+    let core = core_with(dir.path(), &vault);
+    core.ensure_key().unwrap();
+    let host = core.add_host("desk".into(), closed_ssh()).unwrap();
+    core.set_key_protection(KeyProtection::Biometric).unwrap();
+    vault.invalidated.store(true, Ordering::SeqCst);
+    let err = core.connect(host.id).await.err().unwrap();
+    assert!(matches!(err, CoreError::KeyInvalidated), "{err:?}");
+}
+
+#[test]
+fn recovery_replaces_only_the_chosen_key_and_preserves_routes_after_restart() {
+    let dir = tempfile::tempdir().unwrap();
+    let vault = PhoneVault::new();
+    let core = core_with(dir.path(), &vault);
+    let before = core.ensure_key().unwrap();
+    let extra = core.create_key("bastion".into()).unwrap();
+    let host = routed_host(&core, None, Some(extra.id.clone()));
+    core.trust_host_key(host.clone(), "SHA256:trusted".into())
+        .unwrap();
+    core.set_key_protection(KeyProtection::Biometric).unwrap();
+    vault.invalidated.store(true, Ordering::SeqCst);
+    let replacement = core
+        .recover_key("default".into(), None, String::new())
+        .unwrap();
+    assert_ne!(replacement.openssh, before.openssh);
+    assert_eq!(core.keys().unwrap()[1], extra);
+    // A broken import must leave the replacement intact.
+    assert!(matches!(
+        core.recover_key(
+            "default".into(),
+            Some("bad private key".into()),
+            "bad".into()
+        ),
+        Err(CoreError::InvalidPrivateKey)
+    ));
+    assert_eq!(
+        core.public_key().unwrap().unwrap().openssh,
+        replacement.openssh
+    );
+    let again = core_with(dir.path(), &vault);
+    assert_eq!(
+        again.public_key().unwrap().unwrap().openssh,
+        replacement.openssh
+    );
+    assert_eq!(again.host_ssh_key(host.clone()).unwrap(), None);
+    assert_eq!(
+        again.jump_hosts(host.clone()).unwrap()[0].key_id,
+        Some(extra.id)
+    );
+    assert_eq!(again.hosts()[0].host_key.as_deref(), Some("SHA256:trusted"));
+    assert_eq!(
+        again.key_protection().unwrap(),
+        Some(KeyProtection::Biometric)
+    );
 }

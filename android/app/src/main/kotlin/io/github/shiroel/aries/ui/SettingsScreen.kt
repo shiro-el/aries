@@ -75,6 +75,10 @@ fun SettingsScreen(
     }
     if (model.settingsKeys) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (model.recoveringKeys) {
+                KeyRecoverySection(model)
+                return@Column
+            }
             KeySection(model)
             KeyImportButton(model)
             if (model.key != null) {

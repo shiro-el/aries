@@ -2,24 +2,29 @@
 //! are JSON keys, never paths. The enclosing Host directory owns cleanup.
 use std::{collections::BTreeMap, path::PathBuf};
 
-use crate::error::{CoreError, storage};
+use crate::{
+    KeyVault,
+    error::{CoreError, storage},
+    private_content,
+};
 
-pub(crate) struct InputHistory {
+pub(crate) struct InputHistory<'a> {
+    vault: &'a dyn KeyVault,
     path: PathBuf,
 }
 
-impl InputHistory {
-    pub fn new(host_dir: PathBuf) -> Self {
+impl<'a> InputHistory<'a> {
+    pub fn new(host_dir: PathBuf, vault: &'a dyn KeyVault) -> Self {
         Self {
+            vault,
             path: host_dir.join("input-history.json"),
         }
     }
 
     fn read(&self) -> Result<BTreeMap<String, Vec<String>>, CoreError> {
-        match std::fs::read(&self.path) {
-            Ok(bytes) => serde_json::from_slice(&bytes).map_err(storage),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(BTreeMap::new()),
-            Err(e) => Err(storage(e)),
+        match private_content::read(&self.path, self.vault)? {
+            Some(bytes) => serde_json::from_slice(&bytes).map_err(storage),
+            None => Ok(BTreeMap::new()),
         }
     }
 
@@ -44,10 +49,10 @@ impl InputHistory {
     }
 
     fn write(&self, all: &BTreeMap<String, Vec<String>>) -> Result<(), CoreError> {
-        let dir = self.path.parent().expect("host directory");
-        std::fs::create_dir_all(dir).map_err(storage)?;
-        let tmp = self.path.with_extension("json.tmp");
-        std::fs::write(&tmp, serde_json::to_vec(all).map_err(storage)?).map_err(storage)?;
-        std::fs::rename(tmp, &self.path).map_err(storage)
+        private_content::write(
+            &self.path,
+            serde_json::to_vec(all).map_err(storage)?,
+            self.vault,
+        )
     }
 }

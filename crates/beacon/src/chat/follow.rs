@@ -35,6 +35,9 @@ impl Options {
 pub trait TerminalLookup {
     /// `Ok(None)`: no such Terminal. `Err`: herdr-core cannot be asked.
     fn get(&mut self, terminal: &str) -> Result<Option<TerminalFacts>, String>;
+    fn screen(&mut self, _terminal: &str) -> Result<String, String> {
+        Err("live screen is unavailable".into())
+    }
 }
 
 /// `<agent>:<session>:<position>`; the position is the Agent's
@@ -85,6 +88,7 @@ pub fn run(
     let mut current: Option<Current> = None;
     let mut last_state: Option<ChatState> = None;
     let mut last_write = Instant::now();
+    let mut permission: Option<aries_protocol::chat::ChatItem> = None;
     let emit = |out: &mut dyn Write, line: ChatLine| -> std::io::Result<()> {
         writeln!(out, "{}", line.to_json())
     };
@@ -124,6 +128,7 @@ pub fn run(
                         }),
                     )?;
                     last_state = None;
+                    permission = None;
                 }
                 current = Some(Current {
                     agent: agent.name(),
@@ -151,6 +156,7 @@ pub fn run(
                     )?;
                     wrote = true;
                     last_state = None;
+                    permission = None;
                     let agent = agents.iter().find(|a| a.name() == cur.agent);
                     if let Some(agent) = agent {
                         cur.source = agent.open(&cur.located, None).source;
@@ -176,6 +182,41 @@ pub fn run(
             }
         }
 
+        if caught_up {
+            let next =
+                found.as_ref().and_then(|(agent, located)| {
+                    if facts.status.as_ref().is_none_or(|s| {
+                        s.state != "blocked" || s.kind.as_deref() != Some("permission")
+                    }) {
+                        return None;
+                    }
+                    super::permission::detect(
+                        agent.name(),
+                        &located.session,
+                        &facts,
+                        &lookup.screen(&opts.terminal).ok()?,
+                    )
+                    .map(|p| p.item)
+                });
+            // Remove transient approvals when answered, replaced, or no longer
+            // recognized; never leave them actionable in cached history.
+            if permission.as_ref().map(|p| &p.id) != next.as_ref().map(|p| &p.id)
+                && let Some(old) = permission.take()
+            {
+                emit(out, ChatLine::new(ChatEvent::Remove { id: old.id }))?;
+                wrote = true;
+            }
+            if permission != next {
+                if let Some(item) = &next {
+                    emit(out, ChatLine::new(ChatEvent::Item { item: item.clone() }))?;
+                    wrote = true;
+                }
+                permission = next;
+            }
+            if permission.is_some() {
+                now_state = ChatState::Live;
+            }
+        }
         if caught_up && last_state != Some(now_state) {
             let mut line = state(now_state);
             if let Some(cur) = &current {
