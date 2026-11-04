@@ -58,6 +58,8 @@ class AttachmentEntryPointsTest {
         compose.onNodeWithText("home").performClick()
         compose.onNodeWithText("claude").performClick()
         compose.waitForIdle()
+        core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, null))
+        compose.waitForIdle()
         return core.connection!!
     }
 
