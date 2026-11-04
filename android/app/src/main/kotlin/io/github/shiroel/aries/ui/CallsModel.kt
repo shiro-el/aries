@@ -32,6 +32,9 @@ data class CallEntry(val host: Host, val call: CallInfo, val live: Boolean = tru
 
     /** It can still be answered with a Choice from here. */
     val answerable get() = live && call.topLevel && call.terminal != null && call.answer == null && call.choices.isNotEmpty()
+
+    /** Attention does not require Choices: CHECK results can need a look or a free-text reply. */
+    val needsAttention get() = live && call.answer == null && call.pushesByDefault
 }
 
 /** Feedback from a local reply, kept even when the Call is no longer answerable. */

@@ -69,7 +69,7 @@ internal fun AgentScreenHeader(
         }
         if (tasks == null) onView?.let { AgentViewSwitch(current, it) }
         val inbox = LocalCallInbox.current
-        if (inbox?.calls?.calls?.any { it.answerable || it.needsUrgentAttention } == true) ConsoleInboxAction()
+        ConsoleInboxAction()
         if (preview != null && preview.ports.isNotEmpty()) {
             IconButton(onClick = { preview.selected = if (preview.selected != null) null else preview.ports.first() }, modifier = Modifier.size(48.dp)) {
                 Icon(painterResource(R.drawable.ic_browser_preview), stringResource(R.string.preview_title), Modifier.size(20.dp),
@@ -100,7 +100,7 @@ internal fun AgentScreenHeader(
                 }
                 // Keep Call history reachable even when there is no answerable Call.
                 inbox?.let { action ->
-                    val label = stringResource(R.string.call_inbox_label, action.calls.calls.count { it.answerable })
+                    val label = stringResource(R.string.call_inbox_label, action.calls.calls.count { it.answerable || it.needsAttention })
                     ActionMenuItem(stringResource(R.string.calls_title), R.drawable.ic_chat_view,
                         onClick = { menu = false; action.toggle() },
                         modifier = Modifier.testTag("agent-inbox-menu").semantics { contentDescription = label })

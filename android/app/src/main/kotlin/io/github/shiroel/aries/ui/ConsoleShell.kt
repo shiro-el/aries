@@ -110,7 +110,6 @@ internal fun ConsoleShell(
     model: HostsModel,
     content: @Composable () -> Unit,
     drawerContent: (@Composable ((() -> Unit) -> Unit) -> Unit)? = null,
-    showAttentionBanner: Boolean = true,
     onHome: (() -> Unit)? = null,
     isHome: (Screen) -> Boolean = { it == Screen.Hosts },
 ) {
@@ -158,10 +157,12 @@ internal fun ConsoleShell(
         },
     ) {
         val openDrawer: () -> Unit = {
+            model.interactWithHome()
             model.closeCallInbox()
             scope.launch { drawer.open() }
         }
-        CompositionLocalProvider(LocalConsoleHeaderMeasured provides { measuredHeaderHeight = it }, LocalConsoleMenu provides openDrawer, LocalQuickOpen provides {
+        CompositionLocalProvider(LocalCallAttentionEnabled provides (drawer.isClosed && drawer.targetValue == DrawerValue.Closed),
+            LocalConsoleHeaderMeasured provides { measuredHeaderHeight = it }, LocalConsoleMenu provides openDrawer, LocalQuickOpen provides {
             scope.launch { drawer.close(); model.openQuickOpen() }
         }, LocalCallInbox provides CallInboxAction(model.calls, model.callInboxOpen) {
             scope.launch {
@@ -169,7 +170,7 @@ internal fun ConsoleShell(
                 if (model.callInboxOpen) model.closeCallInbox() else model.openCallInbox()
             }
         }, LocalNextWaitingAgent provides model.nextWaitingAgent?.let { NextWaitingAction(it, model::openNextWaitingAgent) }) {
-            BoxWithConstraints(Modifier.fillMaxSize().systemGestureExclusion { coordinates ->
+            Box(Modifier.fillMaxSize().systemGestureExclusion { coordinates ->
                 Rect(0f, 0f, edgeWidth, minOf(coordinates.size.height.toFloat(), terminalHeaderHeight))
             }.pointerInput(screen, drawer.isClosed, model.callInboxOpen, model.quickOpenVisible, terminalHeaderHeight) {
                 awaitEachGesture {
@@ -186,18 +187,13 @@ internal fun ConsoleShell(
                             distance += change.position.x - change.previousPosition.x
                             change.consume()
                         } && distance > swipeThreshold) {
+                        model.interactWithHome()
                         scope.launch { drawer.open() }
                     }
                 }
             }) {
                 val inboxVisible = model.callInboxOpen && drawer.isClosed && drawer.targetValue == DrawerValue.Closed
-                val compactHeight = maxHeight < 480.dp || WindowInsets.ime.getBottom(density) > 0
-                Column(Modifier.fillMaxSize().semantics { if (inboxVisible) hideFromAccessibility() }) {
-                    if (showAttentionBanner && !inboxVisible && !compactHeight) model.calls.banner?.let { entry ->
-                        CallAttentionBanner(entry, model.callCallerName(entry), model::openCallInbox, model.calls::dismissBanner)
-                    }
-                    Box(Modifier.weight(1f)) { content() }
-                }
+                Box(Modifier.fillMaxSize().semantics { if (inboxVisible) hideFromAccessibility() }) { content() }
                 if (inboxVisible) CallInboxOverlay(model)
             }
         }
