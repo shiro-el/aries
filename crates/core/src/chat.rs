@@ -782,12 +782,22 @@ pub struct ChatWatch {
 }
 
 /// The app's reconnect signals (see [`ChatWatch::reconnect`]).
-#[derive(Default)]
 struct Wake {
+    active: watch::Sender<bool>,
     /// Drop the current line and connect again now.
     replace: Notify,
     /// Skip the wait before the next attempt.
     retry: Notify,
+}
+
+impl Default for Wake {
+    fn default() -> Self {
+        Self {
+            active: watch::channel(true).0,
+            replace: Notify::new(),
+            retry: Notify::new(),
+        }
+    }
 }
 
 impl ChatWatch {
@@ -894,10 +904,19 @@ async fn follow(
         next: Instant::now(),
     };
     let mut backoff = retry;
+    let mut active = wake.active.subscribe();
     loop {
+        if active.wait_for(|active| *active).await.is_err() {
+            return;
+        }
         model.clear_permissions();
         let command = command(&terminal, model.cursor.as_deref());
-        if let Ok(stream) = host.open(&command).await {
+        let opened = tokio::select! {
+            biased;
+            _ = active.changed() => continue,
+            stream = host.open(&command) => stream,
+        };
+        if let Ok(stream) = opened {
             // The writer and guard stay alive while reading; dropping them
             // ends the Host command.
             let Stream {
@@ -914,6 +933,7 @@ async fn follow(
                 let next = tokio::select! {
                     next = tokio::time::timeout_at(wake_at, lines.next_line()) => next,
                     _ = wake.replace.notified() => break,
+                    _ = active.changed() => break,
                 };
                 let text = match next {
                     Ok(Ok(Some(text))) => text,
@@ -947,6 +967,9 @@ async fn follow(
         if model.status.is_final() {
             return;
         }
+        if !*active.borrow() {
+            continue;
+        }
         model.status = ChatStatus::Reconnecting;
         if tx.send(Some(model.snapshot())).is_err() {
             return;
@@ -955,6 +978,7 @@ async fn follow(
             _ = tokio::time::sleep(backoff) => backoff = (backoff * 2).min(Duration::from_secs(30)),
             _ = wake.replace.notified() => backoff = retry,
             _ = wake.retry.notified() => backoff = retry,
+            _ = active.changed() => backoff = retry,
         }
     }
 }
@@ -993,6 +1017,16 @@ impl ChatWatch {
     /// A live line is kept (a dead one is noticed by its silence).
     pub fn retry_now(&self) {
         self.wake.retry.notify_waiters();
+    }
+
+    /// Releases the screen's SSH stream and suspends retries, retaining the
+    /// in-memory transcript, images and cursor for a later foreground resume.
+    pub fn pause(&self) {
+        self.wake.active.send_replace(false);
+    }
+
+    pub fn resume(&self) {
+        self.wake.active.send_replace(true);
     }
 
     pub fn stop(&self) {

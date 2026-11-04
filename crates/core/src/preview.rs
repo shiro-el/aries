@@ -82,9 +82,10 @@ impl HostConnection {
         let session = self
             .client
             .ssh
-            .clone()
+            .as_ref()
+            .and_then(std::sync::Weak::upgrade)
             .ok_or_else(|| protocol("preview requires SSH"))?;
-        let mut closed = self.client.closed.subscribe();
+        let mut closed = self.client.preview_closed();
         on_runtime(async move {
             if *closed.borrow() { return Err(CoreError::Closed); }
             let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
