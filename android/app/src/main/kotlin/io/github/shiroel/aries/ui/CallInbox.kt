@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,7 +39,7 @@ internal fun ConsoleInboxAction() {
     Row(
         Modifier.heightIn(min = 48.dp).widthIn(min = 48.dp).testTag("console-inbox")
             .clickable(role = Role.Button, onClick = action.toggle)
-            .semantics { contentDescription = label; stateDescription = state }
+            .semantics { contentDescription = label; stateDescription = state; liveRegion = LiveRegionMode.Polite }
             .padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -68,11 +69,20 @@ internal fun CallInboxOverlay(model: HostsModel, modifier: Modifier = Modifier) 
         Box(Modifier.fillMaxSize().testTag("call-inbox-scrim")
             .background(MaterialTheme.colorScheme.scrim.copy(alpha = .45f))
             .semantics { contentDescription = close }
-            .clickable(onClick = model::closeCallInbox))
-        Box(Modifier.fillMaxWidth().heightIn(max = maxHeight * .7f)
+            .clickable(role = Role.Button, onClick = model::closeCallInbox))
+        Column(Modifier.fillMaxWidth().heightIn(max = maxHeight * .7f)
             .background(MaterialTheme.colorScheme.surface).testTag("call-inbox-panel")
             .semantics { paneTitle = title }) {
-            CallInboxPanel(model.calls, model::openCallChat, callerName = model::callCallerName,
+            Row(Modifier.fillMaxWidth().padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                AnnouncedText(stringResource(R.string.call_inbox_label, model.calls.calls.count { it.answerable }),
+                    Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                TextButton(onClick = model::closeCallInbox, modifier = Modifier.testTag("call-inbox-close")) { Text(close) }
+            }
+            model.calls.banner?.let { entry ->
+                CallAttentionBanner(entry, model.callCallerName(entry), onOpen = model::openCallInbox,
+                    onDismiss = model.calls::dismissBanner)
+            }
+            CallInboxPanel(model.calls, model::openCallChat, modifier = Modifier.weight(1f, fill = false), callerName = model::callCallerName,
                 onInstallBeacon = model::openHostSettings, onFeedSettings = model::callFeedSettings, openingCall = model.openingCall,
                 blockedAgents = model.drawerAgents.count { it.terminal.agentStatus is AgentStatus.Blocked },
                 onWaitingAgents = { model.closeCallInbox(); model.openAgents() })
