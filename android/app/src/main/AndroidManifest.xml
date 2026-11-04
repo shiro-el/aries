@@ -118,6 +118,7 @@
                 <data android:scheme="wear" android:host="*" android:path="/aries/answer" />
                 <data android:scheme="wear" android:host="*" android:path="/aries/reply" />
                 <data android:scheme="wear" android:host="*" android:path="/aries/answer-context" />
+                <data android:scheme="wear" android:host="*" android:path="/aries/interrupt-agent" />
             </intent-filter>
         </service>
         <service

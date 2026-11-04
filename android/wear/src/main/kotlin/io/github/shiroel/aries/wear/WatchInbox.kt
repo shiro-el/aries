@@ -161,12 +161,12 @@ private fun InboxChip(label: String, enabled: Boolean, onClick: () -> Unit) {
         colors = ChipDefaults.secondaryChipColors(), shape = WatchConsoleShape, modifier = Modifier.fillMaxWidth())
 }
 
-/** 190 = Answer, 192 = Stop, 191 = ongoing progress. No command is dispatched here. */
+/** Separate composables keep watch actions reusable as the other action slots are filled. */
 @Composable
 fun WatchDetailActionPlaceholders(agent: WatchAgent) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         // Answer actions are provided by WatchAnswerActions.
-        InboxChip(stringResource(R.string.wear_inbox_stop), false, {})
+        WatchInterruptAction(agent)
         InboxChip(stringResource(R.string.wear_inbox_watch), false, {})
     }
 }

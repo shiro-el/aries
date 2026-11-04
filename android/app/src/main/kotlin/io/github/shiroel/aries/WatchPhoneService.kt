@@ -8,11 +8,14 @@ import com.google.android.gms.tasks.Task
 import com.google.android.gms.tasks.Tasks
 import com.google.android.gms.wearable.WearableListenerService
 import io.github.shiroel.aries.weardata.OpenWatchAgent
+import io.github.shiroel.aries.weardata.WatchInterrupt
+import io.github.shiroel.aries.weardata.WatchInterruptResult
 import io.github.shiroel.aries.weardata.WatchSummary
 
 /** Data Layer verifies package/signature. Mutations use fresh Host state and background-safe keys. */
 class WatchPhoneService : WearableListenerService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val interrupts by lazy { WatchInterruptHandler((application as HasCore).core) }
 
     private fun rpc(block: suspend () -> ByteArray): Task<ByteArray> {
         val completion = TaskCompletionSource<ByteArray>()
@@ -32,6 +35,15 @@ class WatchPhoneService : WearableListenerService() {
     }
 
     override fun onRequest(nodeId: String, path: String, request: ByteArray): Task<ByteArray>? {
+        if (path == WatchInterrupt.PATH) {
+            val command = OpenWatchAgent.fromBytes(request) ?: return Tasks.forResult(byteArrayOf())
+            val reply = TaskCompletionSource<ByteArray>()
+            scope.launch {
+                try { reply.trySetResult(interrupts.interrupt(command).toBytes()) }
+                finally { reply.trySetResult(WatchInterruptResult.UNKNOWN.toBytes()) }
+            }
+            return reply.task
+        }
         if (path == WatchCommand.DETAILS_PATH) {
             val target = OpenWatchAgent.fromBytes(request) ?: return Tasks.forResult(byteArrayOf())
             return rpc {
