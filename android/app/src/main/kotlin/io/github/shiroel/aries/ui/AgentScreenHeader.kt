@@ -77,6 +77,7 @@ internal fun AgentScreenHeader(
             }
         }
         onView?.let { AgentViewSwitch(current, it) }
+        ConsoleInboxAction()
         if (preview != null && preview.ports.isNotEmpty()) {
             IconButton(onClick = { preview.selected = if (preview.selected != null) null else preview.ports.first() }, modifier = Modifier.size(48.dp)) {
                 Icon(painterResource(R.drawable.ic_browser_preview), stringResource(R.string.preview_title), Modifier.size(20.dp),
@@ -114,4 +115,5 @@ internal fun AgentScreenHeader(
         }
     }
     HorizontalDivider()
+    NextWaitingAgentButton()
 }
