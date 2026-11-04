@@ -1641,7 +1641,7 @@ class HostsModel(
         }
         switchView(AgentView.CHAT)
         val chat = (screen as? Screen.Chat)?.chat ?: run { cleanup(); return false }
-        return chat.attach(context.applicationContext, content, cleanup)
+        return chat.attach(context.applicationContext, content, cleanup = cleanup)
     }
 
     /** Adds output to an editable draft, never to the Terminal input stream. */
