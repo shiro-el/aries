@@ -206,8 +206,8 @@ class HostsModel(
 
     var quickOpenVisible by mutableStateOf(false)
         private set
-    private var quickOpenStates by mutableStateOf<List<io.github.shiroel.aries.core.LastKnownState>>(emptyList())
-    private var quickOpenWatch: Job? = null
+    private var lastKnownStates by mutableStateOf<List<io.github.shiroel.aries.core.LastKnownState>>(emptyList())
+    private var lastKnownWatch: Job? = null
     private var pendingQuickOpen: QuickOpenResult? = null
 
     private fun quickOpenBase(route: Screen = screen): Screen = when (route) {
@@ -222,13 +222,13 @@ class HostsModel(
     val quickOpenSources: List<QuickOpenSource>
         get() {
             val live = when (val base = quickOpenBase()) {
-                is Screen.Browse -> listOfNotNull(base.browser.takeIf { it.link?.state == LinkState.Up }?.let {
+                is Screen.Browse -> listOfNotNull(base.browser.takeIf { it.link?.state == LinkState.Up && it.hasTerminalList }?.let {
                     QuickOpenSource(it.host, it.structure, it.agents.map { entry -> entry.terminal })
                 })
                 is Screen.Agents -> base.board.quickOpenSources
                 else -> emptyList()
             }.associateBy { it.host.id }
-            val stored = quickOpenStates.associateBy { it.hostId }
+            val stored = lastKnownStates.associateBy { it.hostId }
             return hosts.map { host ->
                 live[host.id] ?: stored[host.id].let { state ->
                     QuickOpenSource(host, state?.structure, state?.agents.orEmpty(), state?.fetchedAtMs,
@@ -239,12 +239,17 @@ class HostsModel(
 
     fun openQuickOpen() {
         closeCallInbox()
-        guard { quickOpenStates = core.lastKnownStates() }
+        guard { lastKnownStates = core.lastKnownStates() }
         quickOpenVisible = true
-        quickOpenWatch?.cancel()
-        quickOpenWatch = scope.launch {
+        observeLastKnownStates()
+    }
+
+    /** One foreground subscription feeds search, home and drawer; it never starts SSH. */
+    private fun observeLastKnownStates() {
+        if (lastKnownWatch?.isActive == true) return
+        lastKnownWatch = scope.launch {
             try {
-                io.github.shiroel.aries.LastKnownStates.observe(core).collect { quickOpenStates = it }
+                io.github.shiroel.aries.LastKnownStates.observe(core).collect { lastKnownStates = it }
             } catch (_: CoreException) {
                 // Keep the readable stored values if the subscription fails.
             }
@@ -253,8 +258,6 @@ class HostsModel(
 
     fun closeQuickOpen() {
         quickOpenVisible = false
-        quickOpenWatch?.cancel()
-        quickOpenWatch = null
     }
 
     private fun returnToQuickOpenBase() {
@@ -509,6 +512,7 @@ class HostsModel(
             key = core.publicKey()
             keyProtection = core.keyProtection()
             hosts = core.hosts()
+            lastKnownStates = core.lastKnownStates()
             refreshRoutes()
             attachMode = core.attachMode()
             agentView = core.agentView()
@@ -1417,11 +1421,14 @@ class HostsModel(
 
     fun resumeCalls() {
         callsActive = true
+        observeLastKnownStates()
         calls.watch(hosts, everyHost = callInboxOpen)
     }
 
     fun pauseCalls() {
         callsActive = false
+        lastKnownWatch?.cancel()
+        lastKnownWatch = null
         calls.stopAll()
     }
 
@@ -1430,18 +1437,73 @@ class HostsModel(
         if (callsActive || callInboxOpen) calls.watch(hosts, everyHost = callInboxOpen)
     }
 
-    /** Available live Agent data, including the screen beneath an open Terminal/Chat. */
+    /** Live lists replace stored lists per Host, including an empty live list. */
     val drawerAgents: List<AgentEntry>
-        get() {
-            fun entries(screen: Screen): List<AgentEntry> = when (screen) {
-                is Screen.Agents -> screen.board.agents
-                is Screen.Browse -> screen.browser.agents
-                is Screen.Terminal -> entries(screen.returnTo)
-                is Screen.Chat -> entries(screen.returnTo)
-                else -> emptyList()
-            }
-            return entries(screen)
+        get() = orderAgents(quickOpenSources.flatMapIndexed { index, source ->
+            withAgentSpaces(agentFamily(source.host, source.terminals.filter { it.state == "live" }), source.structure)
+                .map { it.copy(hostOrder = index) }
+        })
+
+    val currentAgentKey: AgentKey?
+        get() = when (val route = screen) {
+            is Screen.Chat -> AgentKey(route.chat.host.id, route.chat.terminal.address)
+            is Screen.Terminal -> route.viewer.link?.host?.id?.let { AgentKey(it, route.viewer.terminal.address) }
+            else -> null
         }
+
+    val nextWaitingAgent: AgentEntry?
+        get() = currentAgentKey?.let { current -> drawerAgents.firstOrNull {
+            it.key != current && isWaiting(it.terminal.agentStatus)
+        } }
+
+    private var nextAgentRequest = 0
+
+    /** Switch in place over the original list; reuse its line and release the previous view. */
+    fun openNextWaitingAgent() {
+        val next = nextWaitingAgent ?: return
+        val origin = screen
+        val request = ++nextAgentRequest
+        val base = quickOpenBase()
+        val existingLink = (agentLinks[next.host.id] ?: browseLink?.takeIf { it.host.id == next.host.id })
+            ?.takeIf { it.state == LinkState.Up }
+        if (existingLink != null) {
+            returnToQuickOpenBase()
+            show(existingLink, next.terminal, base)
+        } else {
+            // A stored Agent on another Host needs a fresh list before it can open.
+            // Like inbox entry, this line belongs to the detail view, not its original list.
+            scope.launch {
+                var pending: HostLink? = null
+                fun current() = screen === origin && request == nextAgentRequest
+                try {
+                    val connected = link(next.host, connectScreen(next.host.id))
+                    pending = connected
+                    if (!current()) return@launch
+                    val terminal = connected.keep { conn, _ -> conn.terminals() }
+                        .find { it.address == next.terminal.address && it.state == "live" }
+                    if (!current()) return@launch
+                    if (terminal == null) {
+                        prompt = Prompt.Problem(Message(R.string.push_terminal_gone_title),
+                            Message(R.string.push_terminal_gone_body, listOf(next.terminal.address, next.host.name)))
+                        return@launch
+                    }
+                    returnToQuickOpenBase()
+                    callLink?.close()
+                    callLink = connected
+                    pending = null
+                    show(connected, terminal, base)
+                } catch (e: CoreException) {
+                    if (current()) prompt = problemFor(e)
+                } finally { pending?.close() }
+            }
+        }
+    }
+
+    /** A home badge opens the first waiting Agent, or the list if the Host has none. */
+    fun openHostWaiting(host: Host) {
+        val next = drawerAgents.firstOrNull { it.host.id == host.id && isWaiting(it.terminal.agentStatus) }
+        if (next == null) openAgents() else openPushedAgent(next.host.id, next.terminal.address)
+    }
 
     /** Resolve a Call against snapshots already available; opening the inbox starts no Agent watch. */
     fun callCallerName(entry: CallEntry): String? {
