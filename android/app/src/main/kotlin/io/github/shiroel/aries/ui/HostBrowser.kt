@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -20,6 +19,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import io.github.shiroel.aries.core.CoreException
+import io.github.shiroel.aries.core.HostConnection
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.Host
 import io.github.shiroel.aries.core.HostStructure
@@ -45,6 +46,9 @@ class HostBrowser(val host: Host) {
     var closed by mutableStateOf(false)
         private set
 
+    /** A stopped subscription may leave the SSH connection healthy. */
+    var watchError by mutableStateOf<CoreException?>(null)
+
     /** The Host line; its state shows while it reconnects. */
     var link: HostLink? = null
 
@@ -67,7 +71,19 @@ class HostBrowser(val host: Host) {
 
     fun replaceTerminal(terminal: TerminalInfo) { live[terminal.address] = terminal }
 
+    var lastUpdatedMs by mutableStateOf<Long?>(null)
+        private set
+    private var observing: HostConnection? = null
+    private var refreshing by mutableStateOf(false)
+    val hasLiveTerminals: Boolean get() = watchError == null && !refreshing &&
+        (link == null || link?.state == LinkState.Up && observing === link?.connection)
+
+    fun startingWatch() { watchError = null; refreshing = true }
+
     fun updateTerminals(list: List<TerminalInfo>) {
+        lastUpdatedMs = System.currentTimeMillis()
+        observing = link?.connection
+        refreshing = false
         liveOrder = list.map { it.address }
         val addresses = list.map { it.address }.toSet()
         live.keys.retainAll(addresses)
@@ -85,7 +101,9 @@ class HostBrowser(val host: Host) {
 
     /** Latest Agent snapshot for Browse and its drawer; no additional watch is opened. */
     val agents: List<AgentEntry>
-        get() = orderAgents(withAgentSpaces(agentFamily(host, terminals), structure))
+        get() = orderAgents(withAgentSpaces(agentFamily(host, terminals), structure).map {
+            it.copy(live = hasLiveTerminals, lastUpdatedMs = lastUpdatedMs)
+        })
 
     /** The Host's saved launch configs, each started with one tap. */
     var savedLaunches by mutableStateOf<List<SavedLaunch>>(emptyList())
@@ -190,15 +208,18 @@ fun BrowseScreen(
             titleContent = { HostContextTitle(browser, Modifier.weight(1f)) })
         LayoutEditControls(browser, editor)
         val line = browser.link?.state
-        browser.link?.let { ConnectionNotice(it, firstLoad = browser.structure == null) }
-        if (browser.structure != null && !browser.hasTerminalList && line == LinkState.Up) {
+        browser.link?.let {
+            ConnectionNotice(it, firstLoad = browser.structure == null)
+            if (line == LinkState.Up) browser.watchError?.let { error -> WatchFailureNotice(it, error) }
+        }
+        if (browser.structure != null && !browser.hasTerminalList && line == LinkState.Up && browser.watchError == null) {
             ScreenLoading(stringResource(R.string.hosts_loading), compact = true,
                 onRetry = { browser.link?.networkChanged() })
         }
         if (browser.closed && line == LinkState.Up) Notice(stringResource(R.string.structure_connection_closed))
         browser.structure?.problem?.let { Notice(problemText(it)) }
         when {
-            browser.structure == null -> if (line == null || line == LinkState.Up) {
+            browser.structure == null -> if (browser.watchError == null && (line == null || line == LinkState.Up)) {
                 ScreenLoading(stringResource(R.string.hosts_loading), onRetry = { browser.link?.networkChanged() })
             }
             else -> HostTreeList(browser, browser.structure!!, hostSections, onOpen, onPin, onNewTerminal, current)
@@ -238,7 +259,7 @@ private fun HostTreeList(
     val agents = browser.agents
     val family = agents.map { it.key.address }.toSet()
     val plain = withAgentSpaces(browser.terminals.filterNot { it.address in family }
-        .mapIndexed { index, terminal -> AgentEntry(browser.host, terminal, sequence = index) }, structure)
+        .mapIndexed { index, terminal -> AgentEntry(browser.host, terminal, sequence = index, live = browser.hasLiveTerminals, lastUpdatedMs = browser.lastUpdatedMs) }, structure)
     val startTask = LocalStartTask.current
     val plainKey = "plain-terminals"
     val actions: @Composable ColumnScope.(AgentEntry, () -> Unit) -> Unit = { entry, close ->
@@ -265,19 +286,16 @@ private fun HostTreeList(
             }
         }
         agentTreeItems(agents, agentFolds, { onOpen(it.terminal) }, onPin, tag = "host-agent",
-            sectionNamespace = "all", actions = actions, current = current)
+            sectionNamespace = "all", actions = actions, current = current, showHost = false,
+            canPin = { browser.link?.state == LinkState.Up && browser.link?.connection != null && !browser.closed })
         if (plain.isNotEmpty()) {
             item {
                 TreeSectionRow(stringResource(R.string.terminals_plain_group, plain.size), 0, folds.contains(plainKey),
                     { folds.toggle(plainKey) }, Modifier.testTag("host-plain-terminals"))
             }
             if (!folds.contains(plainKey)) agentTreeItems(orderAgents(plain), agentFolds,
-                { onOpen(it.terminal) }, onPin, tag = "host-terminal", sections = false, actions = actions, current = current)
-        }
-        val missing = structure.spaces.flatMap { it.tabs }.flatMap { it.panes }.filter { it.terminal == null }
-        items(missing, key = { "gone:${it.id}" }) { pane ->
-            Text(stringResource(R.string.pane_terminal_gone, pane.terminalAddress), Modifier.padding(12.dp),
-                style = MaterialTheme.typography.bodySmall)
+                { onOpen(it.terminal) }, onPin, tag = "host-terminal", sections = false, actions = actions, current = current,
+                showHost = false, canPin = { browser.link?.state == LinkState.Up && browser.link?.connection != null && !browser.closed })
         }
         item { Column(Modifier.padding(horizontal = 12.dp)) { hostSections() } }
     }

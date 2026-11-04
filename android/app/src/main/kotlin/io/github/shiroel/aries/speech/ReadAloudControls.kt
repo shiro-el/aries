@@ -13,17 +13,22 @@ import androidx.compose.ui.platform.LocalConfiguration
 import android.content.res.Configuration
 import java.util.Locale
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
 
 @Composable
 fun ReadAloudButton(state: ReadAloudState, id: String, source: String) {
-    TextButton(
+    IconButton(
         onClick = { if (state.activeId == id) state.stop() else state.read(id, source) },
         enabled = state.ready,
         modifier = Modifier.testTag("read-aloud:$id"),
-    ) { Text(stringResource(if (state.activeId == id) R.string.read_aloud_stop else if (!state.ready && state.notice == null) R.string.read_aloud_loading else R.string.read_aloud_button)) }
+    ) {
+        Icon(painterResource(if (state.activeId == id) R.drawable.ic_square else R.drawable.ic_volume),
+            stringResource(if (state.activeId == id) R.string.read_aloud_stop else if (!state.ready && state.notice == null) R.string.read_aloud_loading else R.string.read_aloud_button),
+            Modifier.size(18.dp))
+    }
 }
 
 /** Stays outside the lazy transcript so Stop remains reachable while scrolling. */

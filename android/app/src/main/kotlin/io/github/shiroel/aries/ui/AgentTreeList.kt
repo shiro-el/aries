@@ -1,5 +1,8 @@
 package io.github.shiroel.aries.ui
 
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -9,6 +12,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.testTag
@@ -29,9 +34,12 @@ internal fun LazyListScope.agentTreeItems(
     current: AgentKey? = null,
     sectionNamespace: String = "all",
     sections: Boolean = true,
+    presentation: List<AgentGroup>? = null,
+    showHost: Boolean = true,
+    canPin: (AgentEntry) -> Boolean = { true },
     actions: (@Composable ColumnScope.(AgentEntry, () -> Unit) -> Unit)? = null,
 ) {
-    val groups = if (sections) agentGroups(entries, AgentListView.Priority)
+    val groups = presentation ?: if (sections) agentGroups(entries, AgentListView.Priority)
         else listOf(AgentGroup("terminals", entries, entries.size, 0))
     groups.forEach { group ->
         val groupKey = "section:$sectionNamespace:${group.id}"
@@ -52,23 +60,26 @@ internal fun LazyListScope.agentTreeItems(
                         Modifier.testTag("$tag:${entry.host.id}:${entry.terminal.address}"),
                         spaceName = entry.space?.name,
                         tabName = entry.tabName,
+                        showHost = showHost,
                         compact = compact,
                         selected = current == entry.key,
+                        live = entry.live, lastUpdatedMs = entry.lastUpdatedMs,
                         onLongClick = if (actions != null || compact && entry.terminal.agentStatus != null) ({ menu = true }) else null,
                         trailing = {
                             if (!compact) {
                                 AgentFoldButton(entry, descendants, folds.contains(entry.key.foldKey)) { folds.toggle(entry.key.foldKey) }
-                                if (entry.terminal.agentStatus != null) AgentPinButton(entry) { onPin(entry, it) }
+                                if (entry.terminal.agentStatus != null) AgentPinButton(entry, enabled = canPin(entry)) { onPin(entry, it) }
                             }
                             Box {
                                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                                    if (compact && entry.terminal.agentStatus != null) {
+                                    if (compact && entry.live && entry.terminal.agentStatus != null) {
                                         val pinDescription = pinLabel(entry)
                                         ActionMenuItem(
                                             label = stringResource(if (entry.terminal.pinned) R.string.menu_unpin else R.string.menu_pin),
                                             icon = if (entry.terminal.pinned) R.drawable.agent_pin_off else R.drawable.agent_pin,
                                             modifier = Modifier.semantics { contentDescription = pinDescription },
                                             onClick = { menu = false; onPin(entry, !entry.terminal.pinned) },
+                                            enabled = canPin(entry),
                                         )
                                     }
                                     actions?.invoke(this, entry) { menu = false }
@@ -89,7 +100,8 @@ private fun pinLabel(entry: AgentEntry): String = stringResource(
 
 @Composable
 private fun agentGroupLabel(group: AgentGroup): String =
-    if (group.id == "pinned") stringResource(R.string.agents_pinned_group, group.count)
+    if (group.id == "last-known") stringResource(R.string.agents_last_known_group, group.count)
+    else if (group.id == "pinned") stringResource(R.string.agents_pinned_group, group.count)
     else stringResource(R.string.agents_priority_group, stringResource(when (group.priority) {
         4 -> R.string.agents_needs_you
         3 -> R.string.agent_status_done
@@ -126,20 +138,21 @@ internal fun AgentFoldButton(entry: AgentEntry, descendants: List<AgentEntry>, f
             val statusLabel = stringResource(agentStatusLabel(status))
             Text(descendants.size.toString(), Modifier.testTag("agent-summary:${entry.host.id}:${entry.terminal.address}")
                 .semantics { contentDescription = statusLabel },
-                style = MaterialTheme.typography.labelSmall, color = statusColor(status))
+                style = MaterialTheme.typography.labelSmall, color = if (entry.live) statusColor(status) else MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
 @Composable
-internal fun AgentPinButton(entry: AgentEntry, onPin: (Boolean) -> Unit) {
+internal fun AgentPinButton(entry: AgentEntry, enabled: Boolean = true, onPin: (Boolean) -> Unit) {
     val pinned = entry.terminal.pinned
     val label = stringResource(if (pinned) R.string.agent_unpin_button_label else R.string.agent_pin_button_label,
         displayName(entry.terminal), entry.host.name)
-    IconButton(onClick = { onPin(!pinned) }, modifier = Modifier.size(48.dp)
+    IconButton(onClick = { onPin(!pinned) }, enabled = enabled && entry.live, modifier = Modifier.size(48.dp)
         .testTag("agent-pin:${entry.host.id}:${entry.terminal.address}").semantics { selected = pinned }) {
         Icon(painterResource(if (pinned) R.drawable.agent_pin_off else R.drawable.agent_pin), label,
-            Modifier.size(18.dp), tint = if (pinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+            Modifier.size(18.dp), tint = (if (pinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                .copy(alpha = if (enabled && entry.live) 1f else .38f))
     }
 }
 
@@ -154,4 +167,54 @@ internal fun TreeSectionRow(label: String, depth: Int, folded: Boolean, onToggle
         Text(label, Modifier.weight(1f), style = MaterialTheme.typography.labelLarge,
             maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
     }
+}
+
+internal data class AgentTreePresentation(val groups: List<AgentGroup>, val modifier: Modifier)
+
+/** Keep family/section positions steady through touch, scrolling and a short release grace.
+ * Facts still update immediately; a dead Host always leaves Needs you immediately. */
+@Composable
+internal fun rememberAgentTreePresentation(entries: List<AgentEntry>, scrolling: Boolean): AgentTreePresentation {
+    val desired = agentGroups(entries, AgentListView.Priority)
+    var previous by remember { mutableStateOf(desired) }
+    var pressed by remember { mutableStateOf(false) }
+    var cooling by remember { mutableStateOf(false) }
+    LaunchedEffect(pressed, scrolling) {
+        if (pressed || scrolling) cooling = true
+        else {
+            kotlinx.coroutines.delay(1_000)
+            cooling = false
+        }
+    }
+    val holding = pressed || scrolling || cooling
+    SideEffect { if (!holding) previous = desired }
+    val groups = if (!holding) desired else {
+        val current = entries.associateBy { it.key }
+        val retained = previous.mapNotNull { group ->
+            val rows = group.entries.mapNotNull { current[it.key] }
+                .filter { (group.id == "last-known") == !it.live }
+            if (rows.isEmpty()) null else group.copy(entries = rows,
+                count = agentTreeRows(rows).count { it.depth == 0 })
+        }
+        val retainedKeys = retained.flatMap { it.entries }.map { it.key }.toSet()
+        val additions = desired.mapNotNull { group ->
+            val rows = group.entries.filterNot { it.key in retainedKeys }
+            if (rows.isEmpty()) null else group.copy(entries = rows,
+                count = agentTreeRows(rows).count { it.depth == 0 })
+        }
+        (retained + additions).groupBy { it.id }.values.map { parts ->
+            val rows = parts.flatMap { it.entries }
+            parts.first().copy(entries = rows, count = agentTreeRows(rows).count { it.depth == 0 })
+        }
+    }
+    val modifier = Modifier.pointerInput(Unit) {
+        awaitEachGesture {
+            awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            pressed = true
+            cooling = true
+            try { waitForUpOrCancellation(pass = PointerEventPass.Initial) }
+            finally { pressed = false }
+        }
+    }
+    return AgentTreePresentation(groups, modifier)
 }

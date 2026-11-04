@@ -59,6 +59,7 @@ sealed interface LayoutEndTarget {
     data class Space(val id: String) : LayoutEndTarget
     data class Tab(val id: String) : LayoutEndTarget
     data class Terminal(val info: TerminalInfo) : LayoutEndTarget
+    data class Pane(val spaceId: String, val tabId: String, val paneId: String, val address: String) : LayoutEndTarget
 }
 
 data class LayoutImpact(val name: String, val terminals: List<TerminalInfo>) {
@@ -99,7 +100,19 @@ class LayoutEditor(private val browser: HostBrowser, private val scope: Coroutin
             is LayoutEndTarget.Terminal -> browser.findTerminal(target.info.address)?.let {
                 LayoutImpact(displayName(it), listOf(it))
             }
+            is LayoutEndTarget.Pane -> endedPane(target)?.let {
+                LayoutImpact(it.terminalAddress, it.subAgents.map(browser::current))
+            }
         }
+    }
+
+    /** herdr-app addresses Panes by ID alone. Never close an empty or ambiguous ID,
+     * or a Pane that acquired a Terminal while the confirmation was open. */
+    fun endedPane(target: LayoutEndTarget.Pane): PaneInfo? {
+        val spaces = browser.structure?.spaces ?: return null
+        if (target.paneId.isBlank() || spaces.flatMap { it.tabs }.flatMap { it.panes }.count { it.id == target.paneId } != 1) return null
+        return spaces.find { it.id == target.spaceId }?.tabs?.find { it.id == target.tabId }?.panes
+            ?.singleOrNull { it.id == target.paneId && it.terminalAddress == target.address && it.terminal == null && browser.findTerminal(it.terminalAddress) == null }
     }
 
     fun requireAvailable(): Boolean {
@@ -152,6 +165,7 @@ class LayoutEditor(private val browser: HostBrowser, private val scope: Coroutin
                     is LayoutEndTarget.Terminal -> conn.killTerminal(target.info.address)
                     is LayoutEndTarget.Space -> conn.editLayout(LayoutEdit.CloseSpace(target.id))
                     is LayoutEndTarget.Tab -> conn.editLayout(LayoutEdit.CloseTab(target.id))
+                    is LayoutEndTarget.Pane -> conn.editLayout(LayoutEdit.ClosePane(target.paneId))
                 }
                 ending = null
             } catch (e: CoreException) {

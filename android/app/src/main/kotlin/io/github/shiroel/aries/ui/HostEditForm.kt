@@ -53,16 +53,18 @@ fun HostEditForm(model: HostsModel, host: Host, onClose: () -> Unit) {
     var saving by remember(host.id) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val portNumber = port.toIntOrNull()?.takeIf { it in 1..65535 }
+    val errors = hostInputErrors(model.hosts, host.id, name, address, portNumber, user)
     Column(Modifier.padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.host_edit_title), style = MaterialTheme.typography.titleMedium)
-        OutlinedTextField(name, { name = it }, Modifier.testTag("host-edit-name"), enabled = !saving, label = { Text(stringResource(R.string.host_add_name)) }, singleLine = true)
-        OutlinedTextField(address, { address = it }, Modifier.testTag("host-edit-address"), enabled = !saving, label = { Text(stringResource(R.string.host_add_address)) }, singleLine = true)
+        OutlinedTextField(name, { name = it }, Modifier.testTag("host-edit-name"), enabled = !saving, label = { Text(stringResource(R.string.host_add_name)) }, singleLine = true, isError = errors.name != null, supportingText = hostInputSupport(errors.name))
+        OutlinedTextField(address, { address = it }, Modifier.testTag("host-edit-address"), enabled = !saving, label = { Text(stringResource(R.string.host_add_address)) }, singleLine = true, isError = errors.address != null && address.isNotEmpty(), supportingText = hostInputSupport(errors.address))
         OutlinedTextField(
             port, { port = it }, Modifier.testTag("host-edit-port"), enabled = !saving,
             label = { Text(stringResource(R.string.host_add_port)) }, singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            isError = errors.port != null, supportingText = hostInputSupport(errors.port),
         )
-        OutlinedTextField(user, { user = it }, Modifier.testTag("host-edit-user"), enabled = !saving, label = { Text(stringResource(R.string.host_add_user)) }, singleLine = true)
+        OutlinedTextField(user, { user = it }, Modifier.testTag("host-edit-user"), enabled = !saving, label = { Text(stringResource(R.string.host_add_user)) }, singleLine = true, isError = errors.user != null && user.isNotEmpty(), supportingText = hostInputSupport(errors.user))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ConsoleButton(
                 modifier = Modifier.testTag("host-edit-save"),
@@ -83,10 +85,24 @@ fun HostEditForm(model: HostsModel, host: Host, onClose: () -> Unit) {
     }
 }
 
-internal fun validHostInput(hosts: List<Host>, except: String?, name: String, address: String, port: Int?, user: String): Boolean {
-    val label = name.trim().ifBlank { address.trim() }
-    fun token(value: String) = value.isNotBlank() && value.none { it.isWhitespace() || it.isISOControl() }
-    return label.isNotEmpty() && label.none { it.isISOControl() } &&
-        hosts.none { it.id != except && it.name == label } &&
-        token(address.trim()) && token(user.trim()) && port != null
+internal data class HostInputErrors(val name: Int?, val address: Int?, val port: Int?, val user: Int?) {
+    val valid get() = name == null && address == null && port == null && user == null
 }
+
+internal fun validHostToken(value: String) = value.isNotBlank() && value.none { it.isWhitespace() || it.isISOControl() }
+
+internal fun hostInputErrors(hosts: List<Host>, except: String?, name: String, address: String, port: Int?, user: String): HostInputErrors {
+    val label = name.trim().ifBlank { address.trim() }
+    return HostInputErrors(
+        R.string.host_input_name_error.takeIf { label.any { it.isISOControl() } || hosts.any { it.id != except && it.name == label } },
+        R.string.host_input_address_error.takeUnless { validHostToken(address.trim()) },
+        R.string.host_input_port_error.takeIf { port == null },
+        R.string.host_input_user_error.takeUnless { validHostToken(user.trim()) },
+    )
+}
+
+internal fun validHostInput(hosts: List<Host>, except: String?, name: String, address: String, port: Int?, user: String) =
+    hostInputErrors(hosts, except, name, address, port, user).valid
+
+internal fun hostInputSupport(error: Int?): (@Composable () -> Unit)? =
+    error?.let { resource -> { Text(stringResource(resource)) } }

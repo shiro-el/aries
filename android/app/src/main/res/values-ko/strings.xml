@@ -246,11 +246,14 @@
     <string name="app_update_failed">업데이트를 확인하지 못했어요. URL과 네트워크 연결을 확인하고 다시 시도해 주세요.</string>
 
     <string name="app_update_available">Aries %1$s 버전이 나왔어요</string>
+    <string name="app_update_url_hint">비워 두면 업데이트를 확인하지 않아요.</string>
+    <string name="whats_new_0_1_0_body">Host 설정에서 필드 오류를 안내하고, SSH 키를 설치하면 연결을 다시 시도해요. 폼을 떠나도 저장한 설정이 반영돼요. 시작 안내는 추가한 Host에만 이어지고, 업데이트 알림은 닫을 수 있어요.</string>
+    <string name="app_update_dismiss_button">닫기</string>
     <string name="app_update_download_button">APK 다운로드</string>
     <string name="app_update_browser_failed">브라우저를 열 수 없어요. 브라우저 앱을 설치한 다음 다시 시도해 주세요.</string>
 
     <string name="whats_new_title">새로운 기능 · %1$s</string>
-    <string name="whats_new_body">3단계 시작 안내, 앱에서 바로 보는 릴리스 노트, 업데이트 배너가 추가됐어요. 시작 안내와 릴리스 노트, 업데이트 주소는 설정에 있어요.</string>
+    <string name="whats_new_body">이 빌드에는 릴리스 노트가 포함되지 않았어요.</string>
 
     <!-- First connection guide (195) -->
     <string name="onboarding_welcome_title">첫 Host에 연결하기</string>
@@ -415,6 +418,7 @@
 
     <string name="host_install_key_button">비밀번호로 키 등록</string>
     <string name="key_install_title">%1$s에 키 등록</string>
+    <string name="key_install_busy">SSH 키를 설치하고 있어요…</string>
     <string name="key_install_password">비밀번호</string>
     <string name="key_install_button">키 등록</string>
     <string name="key_install_done_title">키 등록 완료</string>
@@ -425,6 +429,7 @@
     <string name="key_install_write_failed">로그인은 됐지만 Host의 ~/.ssh/authorized_keys에 쓰지 못했어요: %1$s\n\n~/.ssh 소유자와 쓰기 권한을 확인해 주세요.</string>
 
     <string name="host_ssh_address">%1$s@%2$s:%3$d</string>
+    <string name="host_ssh_default_address">%1$s@%2$s</string>
     <string name="host_local_address">로컬 프로세스</string>
     <!-- QR Host pairing -->
     <string name="host_pair_scan_button">Host QR 스캔</string>
@@ -526,6 +531,12 @@
     <string name="agents_waiting_partial">확인 필요 %1$d+</string>
     <string name="agents_next_waiting">다음 대기 Agent: %1$s · %2$s</string>
 
+    <!-- Agent list liveness -->
+    <string name="agents_watch_stopped">%1$s · 멈춤: %2$s</string>
+    <string name="agents_host_offline">%1$s · 오프라인</string>
+    <string name="agents_last_known_group">마지막 확인 상태 · %1$d</string>
+    <string name="agents_last_seen">%1$d분 전 마지막 확인</string>
+    <string name="agents_last_seen_unknown">마지막 확인 시각 없음</string>
     <string name="agents_title">Agent</string>
     <string name="agents_empty">Host에서 실행 중인 Agent가 없어요.</string>
     <string name="agents_no_hosts">먼저 Host를 추가해 주세요.</string>
@@ -572,7 +583,7 @@
     <string name="chat_input_agent_ended">Agent가 종료됐거나 이 Terminal에서 실행 중이 아니에요. Chat 입력은 사용할 수 없어요. 작성 중인 내용은 보관돼요. 계속하려면 Terminal을 여세요.</string>
     <string name="chat_status_reconnecting">연결이 끊겨 다시 연결하는 중…</string>
     <string name="chat_status_no_terminal">이 Terminal은 이제 없어요.</string>
-    <string name="chat_status_no_beacon">Chat을 보려면 이 Host에 Beacon이 필요해요. Host 화면에서 설치할 수 있어요.</string>
+    <string name="chat_status_no_beacon">Chat을 보려면 이 Host에 Beacon이 필요해요. Host 설정에서 설치해 주세요.</string>
     <string name="chat_status_no_core">Beacon이 이 Host의 herdr-core에 연결하지 못하고 있어요. 다시 시도하는 중…</string>
     <string name="chat_status_incompatible">이 Host의 Beacon이 앱보다 새 버전이에요. Chat을 보려면 Aries를 업데이트해 주세요.</string>
     <string name="chat_you">나</string>
@@ -642,6 +653,8 @@
     <string name="chat_response_cache_read_tokens">캐시 읽기 %1$s</string>
     <string name="chat_response_cache_write_tokens">캐시 쓰기 %1$s</string>
     <string name="chat_response_duration">%1$s ms</string>
+    <string name="chat_response_duration_seconds">%1$s s</string>
+    <string name="chat_response_details_button">응답 상세</string>
     <string name="chat_response_complete">완료</string>
     <string name="chat_response_interrupted">중단됨</string>
     <string name="chat_response_error">오류</string>
@@ -967,7 +980,7 @@
     <string name="jump_key_changed_body">점프 호스트 %1$d(%2$s)가 이전과 다른 키를 보내서 연결하지 않았어요. 누군가 연결을 가로채고 있거나 점프 호스트를 다시 설치했을 수 있어요.\n\n신뢰한 키: %3$s\n현재 키: %4$s</string>
     <string name="connect_jump_auth_rejected">점프 호스트 %1$d(%2$s)가 지정한 키를 거부했어요. 점프 호스트의 ~/.ssh/authorized_keys에 그 키의 공개 키를 추가해 주세요.</string>
     <string name="calls_title">Call 기록</string>
-    <string name="calls_feed_down">%1$s: Call 목록을 갱신하지 못했어요(%2$s). 다시 시도하는 중이에요.</string>
+    <string name="calls_feed_down">%1$s: Call을 최신 상태로 확인하지 못했어요. %2$s</string>
     <string name="call_meta">%1$s · %2$s · %3$s</string>
     <string name="call_choices">Choice: %1$s</string>
     <string name="call_urgency_record">기록</string>
@@ -1157,7 +1170,20 @@
     <string name="call_inbox_expanded">펼침</string>
     <string name="call_inbox_collapsed">접힘</string>
     <string name="call_inbox_past">지난 Call</string>
-    <string name="call_inbox_empty">대기 중인 Call이 없어요.</string>
+    <string name="call_feed_retrying">다시 연결 중…</string>
+    <string name="call_feed_unlock">잠금 해제</string>
+    <string name="call_feed_retry">다시 시도</string>
+    <string name="call_feed_settings">설정</string>
+    <string name="call_inbox_other">그 밖의 미응답 Call</string>
+    <string name="call_inbox_helper">하위 Agent의 Call이에요. Chat을 열어 확인해 주세요. 여기서는 Choice를 보낼 수 없어요.</string>
+    <string name="call_inbox_read_only">읽기 전용 · 마지막 확인 %1$s</string>
+    <string name="call_inbox_blocked">Blocked Agent %1$d개가 기다려요 · Agent 보기</string>
+    <string name="call_reply_dismiss">답장 안내 닫기</string>
+    <plurals name="call_inbox_syncing">
+        <item quantity="one">Host %1$d개 확인 중…</item>
+        <item quantity="other">Host %1$d개 확인 중…</item>
+    </plurals>
+    <string name="call_inbox_empty">여기서 답할 Call이 없어요.</string>
     <string name="call_inbox_caller">%2$s의 %1$s</string>
     <string name="call_open_chat">Chat에서 열기</string>
     <string name="call_open_chat_label">%1$s Chat 열기 (Call: %2$s)</string>
@@ -1192,6 +1218,10 @@
     <string name="host_edit_title">Host 편집</string>
     <string name="host_edit_save_button">저장</string>
     <string name="host_edit_invalid_body">다른 Host와 겹치지 않는 이름, 올바른 주소와 사용자 이름, 1~65535 사이의 포트를 입력해 주세요.</string>
+    <string name="host_input_port_error">1~65535 사이의 포트를 입력해 주세요.</string>
+    <string name="host_input_user_error">공백과 제어 문자가 없는 SSH 사용자 이름을 입력해 주세요.</string>
+    <string name="host_input_address_error">공백과 제어 문자가 없는 주소를 입력해 주세요.</string>
+    <string name="host_input_name_error">다른 Host와 겹치지 않고 제어 문자가 없는 이름을 입력해 주세요.</string>
 
     <string name="attachments_choose_agent">공유할 Agent 선택</string>
     <string name="attachments_uploading">첨부 파일 올리는 중…</string>
@@ -1228,6 +1258,7 @@
     <string name="layout_folder_label">폴더 (선택)</string>
     <string name="layout_close_space_button">Space 닫기</string>
     <string name="layout_close_tab_button">Tab 닫기</string>
+    <string name="layout_close_pane_button">Pane 닫기</string>
     <string name="layout_target_gone">이미 닫힌 항목이에요.</string>
     <!-- Shared searchable language picker -->
     <string name="language_picker_auto">자동 감지</string>
