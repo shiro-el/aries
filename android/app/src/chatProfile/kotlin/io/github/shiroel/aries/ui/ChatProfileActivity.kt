@@ -45,7 +45,7 @@ class ChatProfileActivity : ComponentActivity() {
         ChatEntry("entry-$index", null, body)
     } }
     private val tail = ChatEntry("stream", null, ChatEntryBody.Agent("Streaming response"))
-    // UniFFI decodes a complete snapshot each time, including new wrappers for old entries.
+    // The native watch shares unchanged bodies and sends only changed wrappers.
     private fun freshHistory() = history.map { entry ->
         entry.copy(body = when (val body = entry.body) {
             is ChatEntryBody.User -> body.copy()
@@ -65,7 +65,15 @@ class ChatProfileActivity : ComponentActivity() {
         }
     }
     private val watch = object : ChatWatch(NoHandle) {
+        private var previous = emptyMap<String, ChatEntry>()
         override suspend fun next() = updates.receive()
+        override suspend fun nextUpdate(): ChatUpdate {
+            val snapshot = updates.receive()
+            val upserts = snapshot.entries.filter { previous[it.id] != it }
+            val update = ChatUpdate(usage = snapshot.usage, reset = previous.isEmpty(), order = snapshot.entries.map { it.id }, upserts = upserts, status = snapshot.status, cursor = snapshot.cursor)
+            previous = snapshot.entries.associateBy { it.id }
+            return update
+        }
         override fun image(id: String) = picture
         override fun stop() {}
         override fun close() {}

@@ -635,3 +635,394 @@ async fn connection_setting_edits_stop_chat_watches_without_erasing_cached_chat(
         assert!(core.cached_chat(host, "t1".into()).await.unwrap().is_some());
     }
 }
+
+/// Storage companion to ChatProfileActivity's 300-history / 200-tail workload.
+/// Run explicitly with --ignored --nocapture; numbers are observations, never gates.
+#[tokio::test]
+#[ignore = "observational Chat storage workload"]
+async fn measure_chat_storage() {
+    use std::time::Instant;
+    let env = Env::new();
+    let core = env.core();
+    let host = env.host(&core, "profile");
+    let mut script = String::from(
+        "cat <<'CHAT'\n{\"v\":1,\"type\":\"reset\",\"agent\":\"claude-code\",\"session\":\"profile\"}\n",
+    );
+    let prompt = "Check `src/change.kt`, preserve the existing behavior, and explain the tests before editing.\n\n".repeat(1000);
+    for i in 0..300 {
+        let text = if i % 10 == 0 {
+            prompt.clone()
+        } else {
+            "A paragraph with **emphasis**, `code`, and a [link](https://example.org). ".repeat(20)
+        };
+        script.push_str(&serde_json::json!({"v":1,"type":"item","item":{"id":format!("entry-{i}"),"kind":"agent","text":text}}).to_string());
+        script.push('\n');
+    }
+    script.push_str("{\"v\":1,\"type\":\"state\",\"state\":\"live\"}\nCHAT\n");
+    for step in 0..200 {
+        let text = format!(
+            "Streaming response\n\n{}",
+            (0..=step)
+                .map(|i| format!("token{i}"))
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
+        let line = serde_json::json!({"v":1,"type":"item","item":{"id":"stream","kind":"agent","text":text},"cursor":format!("profile:{step}")});
+        script.push_str(&format!("sleep 0.1\ncat <<'CHAT'\n{line}\nCHAT\n"));
+    }
+    script.push_str("sleep 30\n");
+    env.beacon("profile", &script);
+    let io_before = std::fs::read_to_string("/proc/self/io").unwrap();
+    let began = Instant::now();
+    let watch = watch(&core, &host);
+    let mut received = 0;
+    let mut receive_us = 0u128;
+    let deltas = std::env::var_os("ARIES_CHAT_PROFILE_DELTAS").is_some();
+    let mut body_bytes = 0usize;
+    loop {
+        let start = Instant::now();
+        let (cursor, entries) = if deltas {
+            let update = tokio::time::timeout(Duration::from_secs(30), watch.next_update())
+                .await
+                .unwrap()
+                .unwrap();
+            (update.cursor, update.upserts)
+        } else {
+            let snapshot = tokio::time::timeout(Duration::from_secs(30), watch.next())
+                .await
+                .unwrap()
+                .unwrap();
+            (snapshot.cursor, snapshot.entries)
+        };
+        body_bytes += entries
+            .iter()
+            .map(|e| match &e.body {
+                ChatEntryBody::Agent { text, .. } | ChatEntryBody::User { text, .. } => text.len(),
+                _ => 0,
+            })
+            .sum::<usize>();
+        // Includes waiting for the source, intentionally reported separately from wall time.
+        receive_us += start.elapsed().as_micros();
+        received += 1;
+        if cursor.as_deref() == Some("profile:199") {
+            break;
+        }
+    }
+    cached(&core, &host, "profile persisted", |s| {
+        s.cursor.as_deref() == Some("profile:199")
+    })
+    .await;
+    watch.stop();
+    println!(
+        "CHAT_STORAGE elapsed_ms={} snapshots={} next_wait_us={} delivered_text_bytes={} deltas={} db_bytes={}\nIO_BEFORE\n{}IO_AFTER\n{}RSS\n{}",
+        began.elapsed().as_millis(),
+        received,
+        receive_us,
+        body_bytes,
+        deltas,
+        std::fs::metadata(env.data().join("chat-cache.sqlite"))
+            .unwrap()
+            .len(),
+        io_before,
+        std::fs::read_to_string("/proc/self/io").unwrap(),
+        std::fs::read_to_string("/proc/self/status")
+            .unwrap()
+            .lines()
+            .filter(|l| l.starts_with("VmHWM:") || l.starts_with("VmRSS:"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+}
+
+#[tokio::test]
+async fn idle_heartbeat_neither_publishes_nor_rewrites_the_chat() {
+    let env = Env::new();
+    let core = env.core();
+    let host = env.host(&core, "idle");
+    let lines = env.dir.path().join("initial");
+    std::fs::write(&lines, FIRST).unwrap();
+    env.beacon(
+        "idle",
+        &format!(
+            "cat {}; sleep 2; echo '{{\"v\":1,\"type\":\"heartbeat\"}}'; sleep 30",
+            lines.display()
+        ),
+    );
+    let watch = watch(&core, &host);
+    wait_for(&watch, "live", |s| s.status == ChatStatus::Live).await;
+    cached(&core, &host, "initial stored", |s| s.entries.len() == 2).await;
+    let db = rusqlite::Connection::open(env.data().join("chat-cache.sqlite")).unwrap();
+    let before: i64 = db
+        .query_row("PRAGMA data_version", [], |r| r.get(0))
+        .unwrap();
+    assert!(
+        tokio::time::timeout(Duration::from_millis(2400), watch.next())
+            .await
+            .is_err(),
+        "heartbeat must only advance liveness"
+    );
+    let after: i64 = db
+        .query_row("PRAGMA data_version", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(before, after, "idle Chat must not be saved again");
+    watch.stop();
+}
+
+#[tokio::test]
+async fn incremental_history_edits_and_reset_restore_in_order_after_restart() {
+    let env = Env::new();
+    let core = env.core();
+    let host = env.host(&core, "pages");
+    let mut initial =
+        String::from("{\"v\":1,\"type\":\"reset\",\"agent\":\"claude-code\",\"session\":\"s\"}\n");
+    for i in 0..300 {
+        initial.push_str(&serde_json::json!({"v":1,"type":"item","item":{"id":format!("a{i}"),"kind":"agent","text":format!("history {i}")},"cursor":format!("s:{i}")}).to_string());
+        initial.push('\n');
+    }
+    initial.push_str("{\"v\":1,\"type\":\"state\",\"state\":\"live\"}\n");
+    env.beacon_printing("pages", &initial);
+    let live = watch(&core, &host);
+    wait_for(&live, "history", |s| {
+        s.status == ChatStatus::Live && s.entries.len() == 300
+    })
+    .await;
+    cached(&core, &host, "history stored", |s| s.entries.len() == 300).await;
+    live.stop();
+    drop(core);
+
+    let core = env.core();
+    // Edit early history, remove another entry, then reinsert it at the tail.
+    let edits = concat!(
+        "{\"v\":1,\"type\":\"item\",\"item\":{\"id\":\"a2\",\"kind\":\"agent\",\"text\":\"corrected\"}}\n",
+        "{\"v\":1,\"type\":\"remove\",\"id\":\"a5\"}\n",
+        "{\"v\":1,\"type\":\"remove\",\"id\":\"a10\"}\n",
+        "{\"v\":1,\"type\":\"item\",\"item\":{\"id\":\"a5\",\"kind\":\"agent\",\"text\":\"returned\"},\"cursor\":\"s:done\"}\n",
+        "{\"v\":1,\"type\":\"state\",\"state\":\"live\"}\n"
+    );
+    env.beacon_printing("pages", edits);
+    let live = watch(&core, &host);
+    wait_for(&live, "edits", |s| s.cursor.as_deref() == Some("s:done")).await;
+    let expected = cached(&core, &host, "edits stored", |s| {
+        s.cursor.as_deref() == Some("s:done")
+    })
+    .await;
+    assert_eq!(expected.entries.len(), 299);
+    assert_eq!(texts(&expected)[2], "agent: corrected");
+    assert_eq!(expected.entries.last().unwrap().id, "a5");
+    assert!(!expected.entries.iter().any(|e| e.id == "a10"));
+    live.stop();
+    drop(core);
+
+    let core = env.core();
+    let restored = core
+        .cached_chat(host.clone(), "t1".into())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(restored.entries, expected.entries);
+    assert_eq!(restored.cursor.as_deref(), Some("s:done"));
+    env.beacon_printing("pages", FIRST);
+    let live = watch(&core, &host);
+    wait_for(&live, "new session", |s| {
+        s.cursor.as_deref() == Some("cc:s:20")
+    })
+    .await;
+    cached(&core, &host, "reset stored", |s| {
+        s.cursor.as_deref() == Some("cc:s:20")
+    })
+    .await;
+    live.stop();
+    drop(core);
+    let restored = env
+        .core()
+        .cached_chat(host, "t1".into())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        texts(&restored),
+        ["user: the secret word is aubergine", "tool Bash Running"]
+    );
+}
+
+#[tokio::test]
+async fn slow_update_consumer_keeps_all_edits_removals_and_session_resets() {
+    let env = Env::new();
+    let core = env.core();
+    let host = env.host(&core, "delta");
+    let first = env.dir.path().join("first");
+    std::fs::write(&first, FIRST.replace("{\"v\":1,\"type\":\"state\"", "{\"v\":1,\"type\":\"item\",\"item\":{\"id\":\"stable\",\"kind\":\"agent\",\"text\":\"unchanged history\"}}\n{\"v\":1,\"type\":\"state\"")).unwrap();
+    let edits = env.dir.path().join("edits");
+    std::fs::write(&edits, concat!(
+        "{\"v\":1,\"type\":\"item\",\"item\":{\"id\":\"u1\",\"kind\":\"user\",\"text\":\"changed user\"}}\n",
+        "{\"v\":1,\"type\":\"item\",\"item\":{\"id\":\"a1\",\"kind\":\"agent\",\"text\":\"first reply\"}}\n",
+        "{\"v\":1,\"type\":\"remove\",\"id\":\"t1\",\"cursor\":\"delta:done\"}\n"
+    )).unwrap();
+    let go = env.dir.path().join("go");
+    let reset = env.dir.path().join("reset");
+    env.beacon("delta", &format!("cat {}; while [ ! -f {} ]; do sleep 0.02; done; cat {}; while [ ! -f {} ]; do sleep 0.02; done; cat {}; sleep 30", first.display(), go.display(), edits.display(), reset.display(), first.display()));
+    let live = watch(&core, &host);
+    loop {
+        let update = live.next_update().await.unwrap();
+        if update.status == ChatStatus::Live {
+            assert_eq!(update.order, ["u1", "t1", "stable"]);
+            break;
+        }
+    }
+    std::fs::write(go, "go").unwrap();
+    // Intentionally do not consume while different IDs change and one is removed.
+    cached(&core, &host, "all edits applied", |s| {
+        s.cursor.as_deref() == Some("delta:done")
+    })
+    .await;
+    let update = live.next_update().await.unwrap();
+    assert!(!update.reset);
+    assert_eq!(update.order, ["u1", "stable", "a1"]);
+    assert_eq!(update.upserts.len(), 2);
+    assert!(
+        update
+            .upserts
+            .iter()
+            .any(|e| matches!(&e.body, ChatEntryBody::User { text, .. } if text == "changed user"))
+    );
+    assert!(
+        update
+            .upserts
+            .iter()
+            .any(|e| matches!(&e.body, ChatEntryBody::Agent { text, .. } if text == "first reply"))
+    );
+    std::fs::write(reset, "go").unwrap();
+    cached(&core, &host, "session replaced", |s| {
+        s.cursor.as_deref() == Some("cc:s:20")
+    })
+    .await;
+    let update = live.next_update().await.unwrap();
+    assert!(update.reset);
+    assert_eq!(update.order, ["u1", "t1", "stable"]);
+    assert_eq!(update.upserts.len(), 3);
+    live.stop();
+}
+
+#[tokio::test]
+async fn an_active_watch_recovers_its_history_when_the_cached_base_is_cleared() {
+    let env = Env::new();
+    let core = env.core();
+    let host = env.host(&core, "clearbase");
+    let initial = env.dir.path().join("initial");
+    let after = env.dir.path().join("after");
+    let go = env.dir.path().join("go");
+    std::fs::write(&initial, FIRST).unwrap();
+    std::fs::write(&after, AFTER).unwrap();
+    env.beacon(
+        "clearbase",
+        &format!(
+            "cat {}; while [ ! -f {} ]; do sleep 0.02; done; cat {}; sleep 30",
+            initial.display(),
+            go.display(),
+            after.display()
+        ),
+    );
+    let live = watch(&core, &host);
+    wait_for(&live, "initial live Chat", |s| s.status == ChatStatus::Live).await;
+    cached(&core, &host, "base saved", |s| s.entries.len() == 2).await;
+    core.clear_chat_cache(host.clone()).await.unwrap();
+    assert!(
+        core.cached_chat(host.clone(), "t1".into())
+            .await
+            .unwrap()
+            .is_none()
+    );
+    std::fs::write(go, "go").unwrap();
+    wait_for(&live, "continued", |s| {
+        s.cursor.as_deref() == Some("cc:s:40")
+    })
+    .await;
+    cached(&core, &host, "full history recovered", |s| {
+        s.cursor.as_deref() == Some("cc:s:40")
+    })
+    .await;
+    live.stop();
+    drop(core);
+    let restored = env
+        .core()
+        .cached_chat(host, "t1".into())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        texts(&restored),
+        [
+            "user: the secret word is aubergine",
+            "tool Bash Failed",
+            "agent: it failed"
+        ]
+    );
+}
+
+/// Import fixture: the previous release's single encrypted JSON row. Encryption
+/// here creates the old on-disk input; assertions use only the public cache API.
+#[tokio::test]
+async fn a_legacy_blob_migrates_without_losing_history_cursor_or_retention() {
+    use ring::{aead, hkdf};
+    let env = Env::new();
+    let core = env.core();
+    let host = env.host(&core, "legacy");
+    env.cache_first(&core, "legacy", &host).await;
+    drop(core);
+    let db = rusqlite::Connection::open(env.data().join("chat-cache.sqlite")).unwrap();
+    let id: Vec<u8> = db
+        .query_row("SELECT chat FROM chats", [], |r| r.get(0))
+        .unwrap();
+    let master = common::TestVault
+        .open(
+            std::fs::read(env.data().join("chat-cache.key")).unwrap(),
+            KeyProtection::Plain,
+        )
+        .unwrap();
+    let prk = hkdf::Salt::new(hkdf::HKDF_SHA256, b"aries chat cache v1").extract(&master);
+    let key: aead::UnboundKey = prk
+        .expand(&[b"seal"], &aead::CHACHA20_POLY1305)
+        .unwrap()
+        .into();
+    let nonce = [7; aead::NONCE_LEN];
+    let aad = [host.as_bytes(), &[0], id.as_slice()].concat();
+    let mut plain = br#"{"items":[{"id":"u1","kind":"user","text":"the secret word is aubergine"},{"id":"t1","kind":"tool","name":"Bash","status":"running"}],"cursor":"cc:s:20"}"#.to_vec();
+    aead::LessSafeKey::new(key)
+        .seal_in_place_append_tag(
+            aead::Nonce::assume_unique_for_key(nonce),
+            aead::Aad::from(aad),
+            &mut plain,
+        )
+        .unwrap();
+    let data = [nonce.as_slice(), plain.as_slice()].concat();
+    db.execute("DELETE FROM chat_items", []).unwrap();
+    db.execute(
+        "UPDATE chats SET data=?1, updated=updated - 29 * 86400",
+        [data],
+    )
+    .unwrap();
+    drop(db);
+
+    let core = env.core();
+    let migrated = core
+        .cached_chat(host.clone(), "t1".into())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        texts(&migrated),
+        ["user: the secret word is aubergine", "tool Bash Running"]
+    );
+    assert_eq!(migrated.cursor.as_deref(), Some("cc:s:20"));
+    // The same migrated records survive a second process launch too.
+    drop(core);
+    let core = env.core();
+    let restored = core
+        .cached_chat(host.clone(), "t1".into())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(restored.entries, migrated.entries);
+    core.shift_clock(2 * DAY);
+    assert!(core.cached_chat(host, "t1".into()).await.unwrap().is_none());
+}

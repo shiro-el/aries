@@ -1,6 +1,9 @@
 //! Last-known state comes from herdr-core, never from push payloads.
-//! The shared Host lock serializes writes with Host removal so a late
-//! network response cannot recreate deleted state.
+//! Disk work runs on blocking writers. A session generation check serializes
+//! the final rename with Host edits/removal; file reads and serialization never
+//! hold the global Host registry lock.
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -34,6 +37,22 @@ pub(crate) struct States {
     pub store: Store,
     pub hosts: Arc<Mutex<Vec<SavedHost>>>,
     pub changes: tokio::sync::watch::Sender<u64>,
+    pub sessions: crate::host_edit::HostSessions,
+    pub io: Arc<Mutex<HashMap<String, Arc<Mutex<WriteOrder>>>>>,
+    pub diagnostics: crate::diagnostics::Log,
+}
+
+/// Completion order can differ from observation order across one-shot reads
+/// and watches. Track each field independently, including same-millisecond reads.
+#[derive(Default)]
+pub(crate) struct WriteOrder {
+    agents: u64,
+    structure: u64,
+}
+
+static OBSERVATION: AtomicU64 = AtomicU64::new(1);
+fn observation() -> u64 {
+    OBSERVATION.fetch_add(1, Ordering::Relaxed)
 }
 
 fn storage(e: impl std::fmt::Display) -> CoreError {
@@ -49,10 +68,15 @@ impl States {
     }
 
     fn all(&self) -> Result<Vec<LastKnownState>, CoreError> {
-        let hosts = self.hosts.lock().expect("hosts lock");
-        hosts
+        let ids: Vec<_> = self
+            .hosts
+            .lock()
+            .expect("hosts lock")
             .iter()
-            .filter_map(|h| self.read(&h.id).transpose())
+            .map(|h| h.id.clone())
+            .collect();
+        ids.iter()
+            .filter_map(|id| self.read(id).transpose())
             .collect()
     }
 
@@ -64,65 +88,176 @@ impl States {
         }
     }
 
-    pub fn save(
+    /// Explicit refreshes may wait for durability; live reads use the queue.
+    pub async fn save_checked(
         &self,
-        host_id: &str,
-        terminals: Vec<TerminalInfo>,
-    ) -> Result<LastKnownState, CoreError> {
-        let hosts = self.hosts.lock().expect("hosts lock");
-        if !hosts.iter().any(|h| h.id == host_id) {
-            return Err(CoreError::UnknownHost { id: host_id.into() });
-        }
-        let previous = self.read(host_id)?;
-        let state = LastKnownState {
-            structure: previous.as_ref().and_then(|s| s.structure.clone()),
-            structure_fetched_at_ms: previous.and_then(|s| s.structure_fetched_at_ms),
-            host_id: host_id.into(),
-            agents: terminals
-                .into_iter()
-                .filter(|t| t.agent_status.is_some())
-                .collect(),
-            fetched_at_ms: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64,
-        };
-        let dir = self.store.host_dir(host_id);
-        std::fs::create_dir_all(&dir).map_err(storage)?;
-        let tmp = dir.join(".last-known-state.tmp");
-        std::fs::write(&tmp, serde_json::to_vec(&state).map_err(storage)?).map_err(storage)?;
-        std::fs::rename(tmp, dir.join("last-known-state.json")).map_err(storage)?;
-        self.changed();
-        Ok(state)
+        host: String,
+        revision: u64,
+        update: Update,
+    ) -> Result<(), CoreError> {
+        let states = self.clone();
+        tokio::task::spawn_blocking(move || states.persist(&host, revision, update))
+            .await
+            .map_err(storage)?
     }
 
-    /// Serialized with Agent updates and Host removal by the same Host lock.
-    pub fn save_structure(&self, host_id: &str, structure: HostStructure) -> Result<(), CoreError> {
-        let hosts = self.hosts.lock().expect("hosts lock");
-        if !hosts.iter().any(|h| h.id == host_id) {
-            return Err(CoreError::UnknownHost { id: host_id.into() });
+    fn persist(&self, host: &str, revision: u64, update: Update) -> Result<(), CoreError> {
+        let result = self.write(host, revision, update);
+        if matches!(result, Err(CoreError::Storage { .. })) {
+            self.diagnostics.record(
+                Some(host),
+                crate::DiagnosticSource::Storage,
+                crate::DiagnosticEvent::LastKnownState,
+                Some(crate::DiagnosticError::Storage),
+                None,
+            );
         }
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
-        let mut state = self.read(host_id)?.unwrap_or(LastKnownState {
-            host_id: host_id.into(),
+        result
+    }
+
+    fn write(&self, host: &str, revision: u64, update: Update) -> Result<(), CoreError> {
+        let gate = self
+            .io
+            .lock()
+            .expect("state writers")
+            .entry(host.into())
+            .or_default()
+            .clone();
+        let mut order = gate.lock().expect("Host state writer");
+        let mut next_agents = order.agents;
+        let mut next_structure = order.structure;
+        let now = update.time();
+        let mut state = self.read(host)?.unwrap_or(LastKnownState {
+            host_id: host.into(),
             agents: vec![],
             fetched_at_ms: now,
             structure: None,
             structure_fetched_at_ms: None,
         });
-        state.structure = Some(structure);
-        state.structure_fetched_at_ms = Some(now);
-        let dir = self.store.host_dir(host_id);
-        std::fs::create_dir_all(&dir).map_err(storage)?;
-        let tmp = dir.join(".last-known-state.tmp");
-        std::fs::write(&tmp, serde_json::to_vec(&state).map_err(storage)?).map_err(storage)?;
-        std::fs::rename(tmp, dir.join("last-known-state.json")).map_err(storage)?;
-        self.changed();
-        Ok(())
+        match update {
+            Update::Snapshot(agents, structure, time, observed) => {
+                if observed >= order.agents && time >= state.fetched_at_ms {
+                    next_agents = observed;
+                    state.agents = agents
+                        .into_iter()
+                        .filter(|t| t.agent_status.is_some())
+                        .collect();
+                    state.fetched_at_ms = time;
+                }
+                if let Some(structure) = structure
+                    && observed >= order.structure
+                    && state.structure_fetched_at_ms.is_none_or(|t| time >= t)
+                {
+                    next_structure = observed;
+                    state.structure = Some(structure);
+                    state.structure_fetched_at_ms = Some(time);
+                }
+            }
+            Update::Agents(agents, time, observed) => {
+                if observed < order.agents || time < state.fetched_at_ms {
+                    return Ok(());
+                }
+                next_agents = observed;
+                state.agents = agents
+                    .into_iter()
+                    .filter(|t| t.agent_status.is_some())
+                    .collect();
+                state.fetched_at_ms = time;
+            }
+            Update::Structure(structure, time, observed) => {
+                if observed < order.structure
+                    || state.structure_fetched_at_ms.is_some_and(|t| time < t)
+                {
+                    return Ok(());
+                }
+                next_structure = observed;
+                state.structure = Some(structure);
+                state.structure_fetched_at_ms = Some(time);
+            }
+        }
+        let bytes = serde_json::to_vec(&state).map_err(storage)?;
+        // The staging path is outside the Host tree. A concurrent removal can
+        // delete that tree without a late writer recreating it during staging.
+        let tmp = self.store.root().join(format!(".last-known-{host}.tmp"));
+        let commit = || -> Result<(), CoreError> {
+            std::fs::write(&tmp, bytes).map_err(storage)?;
+            let sessions = self.sessions.lock().expect("sessions lock");
+            sessions
+                .get(host)
+                .ok_or(CoreError::Closed)?
+                .check(revision)?;
+            // Only directory creation + atomic rename share the invalidation
+            // lock; JSON reading/encoding/writing happen outside registry locks.
+            let dir = self.store.host_dir(host);
+            std::fs::create_dir_all(&dir).map_err(storage)?;
+            std::fs::rename(&tmp, dir.join("last-known-state.json")).map_err(storage)?;
+            self.changed();
+            Ok(())
+        };
+        let result = commit();
+        if result.is_ok() {
+            order.agents = next_agents;
+            order.structure = next_structure;
+        }
+        if result.is_err() {
+            let _ = std::fs::remove_file(tmp);
+        }
+        result
     }
+
+    pub fn queue(&self, host: String, revision: u64, update: Update) {
+        let writer = self.writer(host, revision);
+        writer.send_replace(Some(update));
+    }
+
+    /// Latest complete values coalesce while one blocking write is in flight.
+    /// Each watch owns its sender; closing it flushes the last observed value.
+    pub fn writer(
+        &self,
+        host: String,
+        revision: u64,
+    ) -> tokio::sync::watch::Sender<Option<Update>> {
+        let (tx, mut rx) = tokio::sync::watch::channel(None::<Update>);
+        let states = self.clone();
+        crate::runtime().spawn(async move {
+            while rx.changed().await.is_ok() {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+                let update = rx.borrow_and_update().clone();
+                if let Some(update) = update {
+                    let _ = states.save_checked(host.clone(), revision, update).await;
+                }
+            }
+        });
+        tx
+    }
+}
+
+#[derive(Clone)]
+pub(crate) enum Update {
+    Snapshot(Vec<TerminalInfo>, Option<HostStructure>, u64, u64),
+    Agents(Vec<TerminalInfo>, u64, u64),
+    Structure(HostStructure, u64, u64),
+}
+
+impl Update {
+    pub fn agents(agents: Vec<TerminalInfo>) -> Self {
+        Self::Agents(agents, now(), observation())
+    }
+    pub fn structure(structure: HostStructure) -> Self {
+        Self::Structure(structure, now(), observation())
+    }
+    fn time(&self) -> u64 {
+        match self {
+            Self::Agents(_, t, _) | Self::Structure(_, t, _) | Self::Snapshot(_, _, t, _) => *t,
+        }
+    }
+}
+
+fn now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
 }
 
 #[uniffi::export]
@@ -133,6 +268,7 @@ impl AriesCore {
         if !hosts.iter().any(|h| h.id == host_id) {
             return Err(CoreError::UnknownHost { id: host_id });
         }
+        drop(hosts);
         self.last_known.read(&host_id)
     }
 
@@ -160,14 +296,28 @@ impl AriesCore {
         crate::on_runtime(async move {
             tokio::time::timeout(Duration::from_secs(30), async {
                 let connection = self.connect(host_id.clone()).await?;
-                let list = connection.terminals().await;
+                let list = connection.fetch_terminals().await;
                 // Layout failure must not discard a successful Agent pull.
-                if list.is_ok() {
-                    let _ = connection.structure().await;
-                }
+                let structure = if list.is_ok() {
+                    crate::read_structure(&connection.client, &connection.names)
+                        .await
+                        .ok()
+                } else {
+                    None
+                };
                 connection.disconnect().await;
-                list?;
-                self.last_known_state(host_id)?.ok_or(CoreError::Closed)
+                self.last_known
+                    .save_checked(
+                        host_id.clone(),
+                        connection.revision,
+                        Update::Snapshot(list?, structure, now(), observation()),
+                    )
+                    .await?;
+                let states = self.last_known.clone();
+                tokio::task::spawn_blocking(move || states.read(&host_id))
+                    .await
+                    .map_err(storage)??
+                    .ok_or(CoreError::Closed)
             })
             .await
             .map_err(|_| CoreError::Unreachable {
@@ -201,7 +351,7 @@ impl LastKnownStateWatch {
                 _ = stopped.changed() => Err(CoreError::Closed),
                 changed = rx.changed() => {
                     changed.map_err(|_| CoreError::Closed)?;
-                    states.all()
+                    tokio::task::spawn_blocking(move || states.all()).await.map_err(storage)?
                 }
             }
         })
