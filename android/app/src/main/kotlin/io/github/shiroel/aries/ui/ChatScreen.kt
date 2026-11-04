@@ -611,7 +611,11 @@ class ChatModel(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    journalFailureReason = e.message
+                    journalFailureReason = when (e) {
+                        is CoreException.Storage -> e.detail
+                        is CoreException.Vault -> e.detail
+                        else -> e.message
+                    }
                     journalError = Message(R.string.chat_drafts_save_failed)
                     false
                 }
