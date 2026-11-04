@@ -78,12 +78,10 @@ class InlineNotificationTest {
         WorkManagerTestInitHelper.initializeTestWorkManager(context)
         online()
         val app = context as InlineCoreApp
-        val activity = android.app.Activity()
+        val activity = org.robolectric.Robolectric.buildActivity(android.app.Activity::class.java).create().get()
         for (reply in listOf(true, false)) {
             app.notificationVisibility.onActivityPaused(activity)
             PushService.show(context, status())
-            app.notificationVisibility.viewing(activity, PushTarget("h1", "t1"))
-            app.notificationVisibility.onActivityResumed(activity)
             val action = shown().actions.single {
                 if (reply) !it.remoteInputs.isNullOrEmpty()
                 else it.title == context.getString(R.string.notification_seen_button)
@@ -95,6 +93,11 @@ class InlineNotificationTest {
                 putCharSequence(InlineNotifications.REPLY_TEXT, "from the shade")
             })
             action.actionIntent.send(context, 0, fill)
+            shadowOf(Looper.getMainLooper()).idle()
+            // A passive Done card retires on resume. Its already consumed
+            // action must survive that foreground transition and its own update.
+            app.notificationVisibility.viewing(activity, PushTarget("h1", "t1"))
+            app.notificationVisibility.onActivityResumed(activity)
             withTimeout(5_000) {
                 while (if (reply) app.core.backgroundMessages.isEmpty() else app.core.labelWrites.isEmpty()) {
                     shadowOf(Looper.getMainLooper()).idle()
