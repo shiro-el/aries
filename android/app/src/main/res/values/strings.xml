@@ -267,6 +267,7 @@
     <string name="onboarding_beacon_title">Install Beacon</string>
     <string name="onboarding_notifications_title">Allow notifications</string>
     <string name="onboarding_next_button">Next</string>
+    <string name="onboarding_start_task_hint">After setup, choose New task to start an Agent with your first prompt.</string>
     <string name="onboarding_finish_button">Finish</string>
     <string name="onboarding_skip_button">Skip guide</string>
 
@@ -787,6 +788,7 @@
     <string name="worktrees_prunable">Unavailable · %1$s</string>
 
     <!-- New task from the phone -->
+    <string name="new_task_folder_hint">Choose an absolute folder on this Host, or browse to select one.</string>
     <string name="new_task_title">New task</string>
     <string name="new_task_on_host">New task on %1$s</string>
     <string name="new_task_prompt">First prompt</string>
@@ -804,6 +806,13 @@
     <string name="new_task_wait_again">Wait for Agent</string>
     <string name="new_task_nested_host">Add this machine as a Host to start an Agent there.</string>
 
+    <string name="launch_starting">Starting Terminal…</string>
+    <string name="launch_unknown_title">Check before launching again</string>
+    <string name="launch_unknown_body">The Host may already have started this Terminal. Check its Terminal list before launching again; another launch could duplicate the task.</string>
+    <string name="launch_review_button">Review another launch…</string>
+    <string name="launch_again_button">Launch again anyway</string>
+    <string name="launch_removed">Removed %1$s</string>
+    <string name="launch_undo_button">Undo</string>
     <string name="launch_open_button">New Terminal</string>
     <string name="launch_title">Start a Terminal</string>
     <string name="launch_command">Command</string>

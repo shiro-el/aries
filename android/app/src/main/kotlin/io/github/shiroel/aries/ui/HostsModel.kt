@@ -9,6 +9,7 @@ import io.github.shiroel.aries.HttpBeaconFetcher
 import io.github.shiroel.aries.HttpRelayClient
 import io.github.shiroel.aries.PushTarget
 import io.github.shiroel.aries.R
+import io.github.shiroel.aries.core.AgentPreset
 import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.core.AgentView
 import io.github.shiroel.aries.core.AriesCoreInterface
@@ -347,9 +348,7 @@ class HostsModel(
     private fun quickOpenTerminal(): TerminalInfo? = when (val route = screen) {
         is Screen.Terminal -> route.viewer.terminal
         is Screen.Chat -> route.chat.terminal
-        else -> quickOpenBrowser?.let { browser -> browser.tab?.let { tab ->
-            tab.panes.find { it.id == browser.focusedPane(tab) }?.terminal?.let(browser::current)
-        } }
+        else -> null
     }
 
     @StringRes
@@ -732,6 +731,79 @@ class HostsModel(
         connect(host)
     }
 
+    // Drafts and mutation jobs belong to the Activity's retained HostsModel owner scope.
+    private val tasks = mutableMapOf<String, NewTask>()
+    internal var task by mutableStateOf<NewTask?>(null)
+        private set
+    internal var taskVisible by mutableStateOf(false)
+        private set
+    private val taskJobs = mutableMapOf<NewTask, Job>()
+
+    internal fun prepareTask(link: HostLink, cwd: String? = null, prompt: String? = null) {
+        if (link.state != LinkState.Up || pendingLaunch(link.host.id) || pendingWorktree(link.host.id)) return
+        val conn = link.connection ?: return
+        val previous = tasks[link.host.id]
+        if (previous != null && (prompt == null || previous.form.busy || previous.launchUnknown || previous.deliveryUnknown || previous.terminal != null)) {
+            if (previous.link !== link && previous.waiting) taskJobs[previous]?.cancel()
+            previous.link = link
+            task = previous
+            taskVisible = true
+            return
+        }
+        val browser = quickOpenBrowser?.takeIf { it.host.id == link.host.id }
+        val structure = browser?.structure ?: (screen as? Screen.Agents)?.board?.structureOf(link.host.id)
+            ?: HostStructure(emptyList(), emptyList(), null)
+        val form = LaunchForm(structure, conn.recentCwds(), null, null, conn.savedLaunches())
+        form.preset = AgentPreset.CLAUDE_CODE
+        val terminal = quickOpenTerminal()?.takeIf { currentAgentKey?.hostId == link.host.id }
+        form.cwd = cwd ?: terminal?.takeIf { it.machine == null }?.currentCwd ?:
+            browser?.openSpace?.folder ?: conn.recentCwds().firstOrNull() ?: ""
+        val created = NewTask(link, form, prompt.orEmpty())
+        tasks[link.host.id] = created
+        task = created
+        taskVisible = true
+        if (form.cwd.isBlank()) scope.launch {
+            try {
+                val home = conn.machineExec(listOf("sh", "-c", "printf '%s' \"\$HOME\""), null, 5u)
+                val path = home.stdout.toString(Charsets.UTF_8)
+                if (home.code == 0 && !home.truncated && !home.timedOut && path.startsWith('/') && form.cwd.isBlank()) form.cwd = path
+            } catch (_: CoreException) { /* The folder helper and picker remain available. */ }
+        }
+    }
+
+    internal fun startTask() {
+        val current = task ?: return
+        if (!current.canStart) return
+        val job = scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+            current.start { terminal, draft ->
+                if (task === current && taskVisible && current.link in links) {
+                    taskVisible = false
+                    tasks.remove(current.link.host.id)
+                    task = null
+                    openTaskChat(current.link, terminal, draft)
+                }
+            }
+        }
+        taskJobs[current] = job
+        job.invokeOnCompletion { taskJobs.remove(current) }
+    }
+
+    internal fun dismissTask() {
+        taskVisible = false
+        // Dismissal cancels only the readiness read. Launch and send outcomes must finish once.
+        task?.takeIf { it.waiting }?.let { taskJobs[it]?.cancel() }
+    }
+
+    internal fun openCreatedTask() {
+        val current = task ?: return
+        val terminal = current.terminal ?: return
+        if (current.form.busy) return
+        taskVisible = false
+        tasks.remove(current.link.host.id)
+        task = null
+        openTaskChat(current.link, terminal, if (current.sent) "" else current.prompt)
+    }
+
     /** New tasks always open Chat, independently of the user's last view preference. */
     internal fun openTaskChat(link: HostLink, terminal: TerminalInfo, draft: String) {
         val origin = when (val current = screen) {
@@ -780,88 +852,235 @@ class HostsModel(
         }
     }
 
-    /** Opens the "new Terminal" form on [browser], starting at the Space/Tab shown. */
-    fun newTerminal(browser: HostBrowser) {
-        val conn = open?.first ?: return
-        val structure = browser.structure ?: return
-        browser.launchForm =
-            LaunchForm(structure, conn.recentCwds(), browser.openSpaceId, browser.tab?.id, browser.savedLaunches)
+    internal class WorktreeFlow(var browser: HostBrowser, val form: WorktreeForm)
+    private val worktrees = mutableMapOf<String, WorktreeFlow>()
+    internal var activeWorktree by mutableStateOf<WorktreeFlow?>(null)
+        private set
+
+    private fun pendingWorktree(hostId: String): Boolean {
+        val flow = worktrees[hostId] ?: return false
+        if (!flow.form.busy && !flow.form.openUnknown && flow.form.openedAddress == null) return false
+        if (!flow.form.busy) quickOpenBrowser?.takeIf { it.host.id == hostId }?.let { flow.browser = it }
+        activeWorktree = flow
+        return true
     }
 
-    /** Saves [form] under its name (new, or replacing the config it edits); the form stays open. */
-    fun saveLaunch(browser: HostBrowser, form: LaunchForm) {
-        val conn = open?.first ?: return
-        form.error = null
-        try {
-            form.stored(conn.saveLaunch(form.toSaved()))
-            browser.savedLaunches = form.saved.toList()
-            onSavedLaunchesChanged()
-        } catch (e: CoreException) {
-            form.error = launchProblem(e)
-        }
+    internal fun showWorktrees(browser: HostBrowser, cwd: String, spaceId: String?) {
+        if (pendingTask(browser.host.id) || pendingLaunch(browser.host.id) || pendingWorktree(browser.host.id)) return
+        val flow = WorktreeFlow(browser, WorktreeForm(cwd, spaceId))
+        activeWorktree = flow
+        worktrees[browser.host.id] = flow
+        loadWorktrees()
     }
 
-    fun deleteSavedLaunch(browser: HostBrowser, form: LaunchForm, saved: SavedLaunch) {
-        val conn = open?.first ?: return
-        form.error = null
-        try {
-            conn.deleteSavedLaunch(saved.id)
-            form.removed(saved.id)
-            browser.savedLaunches = form.saved.toList()
-            onSavedLaunchesChanged()
-        } catch (e: CoreException) {
-            form.error = launchProblem(e)
-        }
-    }
+    internal fun dismissWorktrees() { activeWorktree = null }
 
-    /** One tap: starts [saved] as stored. If that fails, its form opens with the reason. */
-    fun runSaved(browser: HostBrowser, saved: SavedLaunch) {
-        val conn = open?.first ?: return
-        val structure = browser.structure ?: return
-        scope.launch {
-            try {
-                val terminal = conn.launch(saved.request)
-                browser.reveal(saved.request.spaceId, saved.request.tabId, terminal.address)
-            } catch (e: CoreException) {
-                val form = LaunchForm(structure, conn.recentCwds(), null, null, browser.savedLaunches)
-                form.edit(saved)
-                form.error = launchProblem(e)
-                browser.launchForm = form
-            }
-        }
-    }
-
-    /** Agent-list launches retain its watches and return to that list from the new Chat. */
-    internal fun runSavedFromAgents(board: AgentBoard, link: HostLink, saved: SavedLaunch) {
-        val origin = screen as? Screen.Agents ?: return
-        if (origin.board !== board || board.links[link.host.id] !== link || link.state != LinkState.Up) return
-        val conn = link.connection ?: return
-        scope.launch {
-            try {
-                val terminal = conn.launch(saved.request)
-                if (screen === origin) openTaskChat(link, terminal, "")
-            } catch (e: CoreException) {
-                if (screen === origin) prompt = problemFor(e)
-            }
-        }
-    }
-
-    /** Starts [form]'s command on the open Host, then shows the new Terminal; failures stay on the form. */
-    fun launch(browser: HostBrowser, form: LaunchForm) {
-        val conn = open?.first ?: return
-        val request = form.request()
+    internal fun loadWorktrees() {
+        val flow = activeWorktree ?: return
+        val conn = flow.browser.link?.connection ?: return
+        val form = flow.form
+        if (form.busy) return
         form.busy = true
         form.error = null
         scope.launch {
             try {
-                val terminal = conn.launch(request)
-                if (browser.launchForm === form) browser.launchForm = null
-                browser.reveal(request.spaceId, request.tabId, terminal.address)
+                form.entries = conn.listWorktrees(form.cwd)
+                form.selected = form.entries.find { it.path == form.selected?.path }
+            } catch (e: CoreException) { form.error = problemFor(e).body
+            } finally { form.busy = false }
+        }
+    }
+
+    internal fun openWorktree(again: Boolean = false) {
+        val flow = activeWorktree ?: return
+        val browser = flow.browser
+        val form = flow.form
+        val link = browser.link ?: return
+        val conn = link.connection ?: return
+        val selected = form.selected ?: return
+        if (form.busy || (form.openUnknown && !again)) return
+        form.busy = true
+        form.error = null
+        scope.launch {
+            try {
+                if (form.openedAddress == null) {
+                    form.openUnknown = true
+                    form.openedAddress = when (val opened = conn.openWorktree(selected.path, form.spaceId, form.preset)) {
+                        is io.github.shiroel.aries.core.WorktreeOpen.Tab -> {
+                            browser.reveal(opened.spaceId, opened.tabId, opened.address)
+                            opened.address
+                        }
+                        is io.github.shiroel.aries.core.WorktreeOpen.Terminal -> opened.address
+                    }
+                    form.openUnknown = false
+                }
+                // The creation RPC has completed; only this read may reconnect.
+                val terminal = withTimeoutOrNull(30_000) {
+                    link.keep { current, _ -> current.terminals().find { it.address == form.openedAddress } }
+                }
+                if (terminal == null) {
+                    form.error = Message(R.string.launch_connection_closed)
+                    return@launch
+                }
+                worktrees.remove(browser.host.id)
+                if (activeWorktree === flow) activeWorktree = null
+                if ((quickOpenBase() as? Screen.Browse)?.browser === browser) {
+                    returnToQuickOpenBase()
+                    observe(link, terminal, Screen.Browse(browser))
+                }
             } catch (e: CoreException) {
-                form.error = launchProblem(e)
-            } finally {
-                form.busy = false
-            }
+                if (e is CoreException.Rpc && e.kind == "spawn_failed") form.openUnknown = false
+                form.error = if (form.openUnknown) null else problemFor(e).body
+            } finally { form.busy = false }
+        }
+    }
+
+    internal class LaunchFlow(var link: HostLink, val form: LaunchForm, var browser: HostBrowser?, var origin: Screen,
+        var storedRequest: io.github.shiroel.aries.core.LaunchRequest? = null)
+    private val launches = mutableMapOf<String, LaunchFlow>()
+    internal var activeLaunch by mutableStateOf<LaunchFlow?>(null)
+        private set
+
+    private fun pendingTask(hostId: String): Boolean {
+        val pending = tasks[hostId] ?: return false
+        if (!pending.form.busy && !pending.launchUnknown && !pending.deliveryUnknown && pending.terminal == null) return false
+        links.firstOrNull { it.host.id == hostId && it.state == LinkState.Up }?.let { link ->
+            if (pending.link !== link && pending.waiting) taskJobs[pending]?.cancel()
+            pending.link = link
+        }
+        task = pending
+        taskVisible = true
+        return true
+    }
+
+    private fun pendingLaunch(hostId: String): Boolean {
+        val flow = launches[hostId] ?: return false
+        if (!flow.form.busy && !flow.form.launchUnknown) return false
+        if (!flow.form.busy) links.firstOrNull { it.host.id == hostId && it.state == LinkState.Up }?.let { link ->
+            flow.link = link
+            flow.browser = quickOpenBrowser?.takeIf { it.host.id == hostId }
+            flow.origin = screen
+        }
+        activeLaunch = flow
+        return true
+    }
+
+    /** Opens the retained launch operation when this Host already has an unresolved request. */
+    fun newTerminal(browser: HostBrowser) {
+        if (pendingTask(browser.host.id) || pendingLaunch(browser.host.id) || pendingWorktree(browser.host.id)) return
+        val conn = browser.link?.connection ?: return
+        val structure = browser.structure ?: return
+        val form = LaunchForm(structure, conn.recentCwds(), browser.openSpaceId, browser.tab?.id, browser.savedLaunches)
+        activeLaunch = LaunchFlow(browser.link ?: return, form, browser, screen).also { launches[browser.host.id] = it }
+    }
+
+    private fun storeLaunch(link: HostLink, browser: HostBrowser?, form: LaunchForm, saved: SavedLaunch) {
+        val conn = link.connection ?: return
+        if (form.busy) return
+        form.error = null
+        try {
+            form.stored(conn.saveLaunch(saved))
+            browser?.savedLaunches = form.saved.toList()
+            onSavedLaunchesChanged()
+        } catch (e: CoreException) { form.error = launchProblem(e) }
+    }
+
+    internal fun saveActiveLaunch() {
+        val flow = activeLaunch ?: return
+        storeLaunch(flow.link, flow.browser, flow.form, flow.form.toSaved())
+    }
+
+    internal fun undoLaunchDelete() {
+        val flow = activeLaunch ?: return
+        val saved = flow.form.removedLaunch ?: return
+        storeLaunch(flow.link, flow.browser, flow.form, saved)
+        if (flow.form.error == null) flow.form.removedLaunch = null
+    }
+
+    private fun deleteLaunch(link: HostLink, browser: HostBrowser?, form: LaunchForm, saved: SavedLaunch) {
+        val conn = link.connection ?: return
+        if (form.busy) return
+        form.error = null
+        try {
+            conn.deleteSavedLaunch(saved.id)
+            form.removed(saved.id)
+            form.removedLaunch = saved
+            browser?.savedLaunches = form.saved.toList()
+            onSavedLaunchesChanged()
+        } catch (e: CoreException) { form.error = launchProblem(e) }
+    }
+
+    internal fun deleteActiveLaunch(saved: SavedLaunch) {
+        val flow = activeLaunch ?: return
+        deleteLaunch(flow.link, flow.browser, flow.form, saved)
+    }
+
+    fun runSaved(browser: HostBrowser, saved: SavedLaunch) {
+        val link = browser.link ?: return
+        if (pendingTask(link.host.id) || pendingLaunch(link.host.id) || pendingWorktree(link.host.id)) return
+        val conn = link.connection ?: return
+        val form = LaunchForm(browser.structure ?: return, conn.recentCwds(), null, null, browser.savedLaunches)
+        form.edit(saved)
+        val flow = LaunchFlow(link, form, browser, screen, saved.request)
+        launches[link.host.id] = flow
+        activeLaunch = flow
+        submitLaunch(flow)
+    }
+
+    internal fun runSavedFromAgents(board: AgentBoard, link: HostLink, saved: SavedLaunch) {
+        val origin = screen as? Screen.Agents ?: return
+        if (origin.board !== board || board.links[link.host.id] !== link || link.state != LinkState.Up) return
+        if (pendingTask(link.host.id) || pendingLaunch(link.host.id) || pendingWorktree(link.host.id)) return
+        val conn = link.connection ?: return
+        val form = LaunchForm(board.structureOf(link.host.id) ?: HostStructure(emptyList(), emptyList(), null),
+            conn.recentCwds(), null, null, conn.savedLaunches())
+        form.edit(saved)
+        val flow = LaunchFlow(link, form, null, origin, saved.request)
+        launches[link.host.id] = flow
+        activeLaunch = flow
+        submitLaunch(flow)
+    }
+
+    internal fun dismissLaunch() { activeLaunch = null }
+
+    internal fun launchActive(again: Boolean = false) {
+        val flow = activeLaunch ?: return
+        if (again && !flow.form.busy && flow.link.state == LinkState.Up && flow.link.connection != null) {
+            flow.form.launchUnknown = false
+        }
+        submitLaunch(flow)
+    }
+
+    private fun submitLaunch(flow: LaunchFlow) {
+        val form = flow.form
+        if (!form.canLaunch || flow.link.state != LinkState.Up) return
+        val conn = flow.link.connection ?: return
+        val request = flow.storedRequest ?: form.request()
+        form.busy = true // Set before scheduling so a second tap cannot race the job.
+        form.error = null
+        scope.launch {
+            form.launchUnknown = true
+            try {
+                val terminal = conn.launch(request)
+                form.launchUnknown = false
+                launches.remove(flow.link.host.id)
+                if (activeLaunch === flow) activeLaunch = null
+                flow.browser?.reveal(request.spaceId, request.tabId, terminal.address)
+                if (flow.link in links) {
+                    val base = quickOpenBase()
+                    val browser = flow.browser
+                    if (browser != null && (base as? Screen.Browse)?.browser === browser) {
+                        returnToQuickOpenBase()
+                        observe(flow.link, terminal, Screen.Browse(browser))
+                    } else if (screen === flow.origin) openTaskChat(flow.link, terminal, "")
+                }
+            } catch (e: CoreException) {
+                if (e is CoreException.Rpc && e.kind == "spawn_failed") {
+                    form.launchUnknown = false
+                    flow.storedRequest = null
+                }
+                form.error = if (form.launchUnknown) null else launchProblem(e)
+            } finally { form.busy = false }
         }
     }
 
