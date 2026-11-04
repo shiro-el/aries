@@ -452,8 +452,9 @@ class HostsModel(
     }
 
     private fun releaseScreenConnections() {
-        links.forEach { it.pause() }
+        // Give submitted Chat messages to the core before retiring their SSH line.
         liveChat?.pause()
+        links.forEach { it.pause() }
     }
 
     fun resumeScreens() {

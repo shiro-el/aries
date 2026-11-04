@@ -11,6 +11,7 @@ mod beacon;
 mod calls;
 mod chat;
 mod chat_cache;
+mod chat_outbox;
 mod diagnostics;
 mod error;
 mod files;
@@ -502,6 +503,36 @@ impl AriesCore {
     pub fn saved_launches(&self, host_id: String) -> Result<Vec<SavedLaunch>, CoreError> {
         let host = self.saved_host(&host_id)?;
         launch::SavedLaunches::in_host_dir(self.store.host_dir(&host.id)).list()
+    }
+
+    /// Versioned, phone-owned Chat recovery state. Never contacts the Host.
+    pub fn chat_outbox(
+        &self,
+        host_id: String,
+        terminal: String,
+    ) -> Result<Option<String>, CoreError> {
+        let hosts = self.hosts.lock().expect("hosts lock");
+        if !hosts.iter().any(|host| host.id == host_id) {
+            return Err(CoreError::UnknownHost { id: host_id });
+        }
+        chat_outbox::ChatOutbox::new(self.store.host_dir(&host_id), self.vault.as_ref())
+            .get(&terminal)
+    }
+
+    /// Atomically seals recovery state before dispatch. None clears this Terminal only.
+    /// Stored below the Host directory so Host removal deletes it as well.
+    pub fn save_chat_outbox(
+        &self,
+        host_id: String,
+        terminal: String,
+        content: Option<String>,
+    ) -> Result<(), CoreError> {
+        let hosts = self.hosts.lock().expect("hosts lock");
+        if !hosts.iter().any(|host| host.id == host_id) {
+            return Err(CoreError::UnknownHost { id: host_id });
+        }
+        chat_outbox::ChatOutbox::new(self.store.host_dir(&host_id), self.vault.as_ref())
+            .save(terminal, content)
     }
 
     /// Composer inputs on this phone, newest first. Never contacts the Host.

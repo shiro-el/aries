@@ -709,6 +709,12 @@
     <string name="chat_send_button">Send</string>
     <string name="chat_sent">Message sent</string>
     <string name="chat_sending">Sending…</string>
+    <!-- Phone-local Chat queue -->
+    <string name="chat_queue_waiting">Waiting</string>
+    <string name="chat_queue_agent">Passed to Agent · waiting for its turn</string>
+    <string name="chat_queue_uncertain">Delivery unconfirmed · check the conversation before resending</string>
+    <string name="chat_queue_cancel_button">Cancel queued message</string>
+
     <string name="chat_send_held">Someone is typing in this Terminal. The message goes in once they pause.</string>
     <string name="chat_send_refused">Not sent: the Agent is Blocked and waits for you in the Terminal.</string>
     <string name="chat_send_failed">Could not send the message: %1$s</string>

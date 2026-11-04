@@ -13,6 +13,8 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
@@ -92,7 +94,7 @@ class ChatSendTest {
         input.performTextInput("first\n한국어")
         compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
         compose.onNodeWithContentDescription("Input history").performClick()
-        compose.onNodeWithText("first\n한국어").performClick()
+        compose.onNode(hasText("first\n한국어") and hasClickAction()).performClick()
         input.assertTextEquals("first\n한국어")
         assertEquals(listOf("t1" to "first\n한국어"), conn.typed)
         input.performTextReplacement("edited message")
@@ -227,7 +229,8 @@ class ChatSendTest {
         type("now add a test")
 
         assertEquals(listOf("t1" to "now add a test"), conn.typed)
-        compose.onNodeWithText("now add a test").assertDoesNotExist()
+        compose.onNodeWithText("now add a test").assertExists()
+        compose.onNodeWithText(str(R.string.chat_queue_agent)).assertExists()
     }
 
     @Test
@@ -239,6 +242,8 @@ class ChatSendTest {
 
         type("after you")
         compose.onNodeWithText(str(R.string.chat_send_held)).assertExists()
+        compose.onNodeWithText("after you").assertExists()
+        compose.onNodeWithContentDescription(str(R.string.chat_queue_cancel_button)).assertDoesNotExist()
         compose.onNodeWithText(str(R.string.chat_send_button)).assertIsNotEnabled()
         assertEquals(emptyList<Pair<String, String>>(), conn.typed)
 
