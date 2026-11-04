@@ -60,6 +60,30 @@ class WatchAnswerTest {
                 ChatQuestionOption("Allow", null), ChatQuestionOption("Allow always", null), ChatQuestionOption("Deny", null)
             ) else listOf(ChatQuestionOption("Red", null), ChatQuestionOption("Blue", null)))), ChatToolStatus.RUNNING, null))
 
+    // Catches cached/live watch projections selecting a later queued request or
+    // reviving a question from an earlier user turn; lint cannot exercise dispatch.
+    @Test fun codexWatchAnswersTheFirstPendingRequestInTheCurrentTurn() = runBlocking {
+        val core = FakeCore().apply { ensureKey() }
+        val host = core.addHost("Host", Endpoint.Ssh("host", 22u, "me"))
+        core.terminalsOf[host.id] = listOf(terminal(AgentStatus.Blocked(BlockedReason.QUESTION, "Choose")))
+        fun codex(id: String) = question(id).let { it.copy(body = (it.body as ChatEntryBody.Question).copy(name = "request_user_input")) }
+        val entries = listOf(
+            codex("old"), ChatEntry("user", null, ChatEntryBody.User("Next turn")),
+            codex("first"), ChatEntry("queued", null, ChatEntryBody.User("Later", queued = true)), codex("second"),
+        )
+        core.cachedChats[host.id to "remote/t7"] = ChatSnapshot(entries, ChatStatus.LIVE, null)
+        val summary = WatchPhone.summary(core.hosts(), listOf(core.snapshot(host.id)))
+        val projected = WatchPhone.withCachedDetails(core, summary, false).inbox.single()
+        assertEquals("first", projected.requestId)
+        assertTrue(projected.canAnswerOnWatch)
+        core.pushChat(ChatSnapshot(entries, ChatStatus.LIVE, null))
+        assertEquals(WatchResult.SENT, WatchActions.execute(context, core, WatchCommand(projected, choice = 1)))
+        assertEquals(listOf(Triple("remote/t7", "first", listOf(listOf(1u)))), core.backgroundAnswers)
+        val retired = WatchPhone.withEntries(projected, entries + ChatEntry("next", null, ChatEntryBody.User("New turn")))
+        assertFalse(retired.canAnswerOnWatch)
+        assertEquals("", retired.requestId)
+    }
+
     @Test fun replacementQuestionWithTheSameStatusMessageIsStillRejectedByItsLiveIdentity() = runBlocking {
         val core = FakeCore().apply { ensureKey() }
         val host = core.addHost("Host", Endpoint.Ssh("host", 22u, "me"))

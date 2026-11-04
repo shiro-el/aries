@@ -600,15 +600,15 @@ fn answers_the_open_question_with_its_number() {
         picks: vec![vec![n]],
     };
 
-    let reply = answer::answer("t1", &pick(5), &mut link, &agents).unwrap();
+    let reply = answer::answer(dir.path(), "t1", &pick(5), &mut link, &agents).unwrap();
     assert_eq!(reply.outcome, AnswerOutcome::Invalid);
-    let reply = answer::answer("t1", &pick(1), &mut link, &agents).unwrap();
+    let reply = answer::answer(dir.path(), "t1", &pick(1), &mut link, &agents).unwrap();
     assert_eq!(reply.outcome, AnswerOutcome::Sent, "{reply:?}");
     assert_eq!(link.pressed, [vec!["2".to_string()]]);
 
     // Answered: the part completes; a second answer presses nothing.
     db.part(&q);
-    let reply = answer::answer("t1", &pick(1), &mut link, &agents).unwrap();
+    let reply = answer::answer(dir.path(), "t1", &pick(1), &mut link, &agents).unwrap();
     assert_eq!(reply.outcome, AnswerOutcome::Answered);
     assert_eq!(link.pressed.len(), 1);
 }

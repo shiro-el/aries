@@ -5,8 +5,10 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.text.AnnotatedString
 import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.*
@@ -54,6 +56,8 @@ class ShareAttachmentTest {
         assertTrue(core.chatsOpened.isEmpty())
         compose.onNodeWithText(str(R.string.attachments_choose_agent)).assertExists()
         val connection = core.connectionsOf.getValue("h2")
+        // terminal.put gives each upload its own path; recovery deduplicates by path.
+        connection.uploadPaths = listOf("/host/first file.jpg", "/host/it's file.jpg")
         val hold = CompletableDeferred<Unit>()
         connection.uploadHold = hold
         compose.onNodeWithTag("agent-row:h2:box/t1").performClick()
@@ -75,6 +79,13 @@ class ShareAttachmentTest {
         compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
         compose.waitForIdle()
         assertTrue(connection.typed.isEmpty())
+        // A lost send reply stays in the outbox until the user explicitly restores it.
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label))
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
+        compose.onNodeWithText("please inspect").assertExists()
+        compose.onNodeWithText(str(R.string.chat_queue_uncertain)).assertExists()
+        assertEquals(1, connection.calls.count { it == "sendMessage" })
+        compose.onNodeWithText(str(R.string.chat_delivery_restore_button)).performClick()
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("please inspect")
         val remove = context.getString(R.string.attachments_remove_button, "attachment")
         compose.onAllNodesWithContentDescription(remove).assertCountEquals(2)
