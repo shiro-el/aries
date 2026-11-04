@@ -753,12 +753,15 @@ impl AriesCore {
             .ok_or_else(|| CoreError::UnknownHost {
                 id: host_id.clone(),
             })?;
+        // Local handle writes and late handshake registration use this same lock.
+        let mut sessions = self.sessions.lock().expect("sessions lock");
         removal::run(&host, &self.store, &self.diagnostics)?;
         let next: Vec<_> = hosts.iter().filter(|h| h.id != host_id).cloned().collect();
         self.store.save(&store::Saved {
             hosts: next.clone(),
         })?;
         *hosts = next;
+        sessions.entry(host_id).or_default().invalidate(true);
         self.last_known.changed();
         Ok(())
     }
@@ -797,6 +800,8 @@ impl AriesCore {
             }
             Ok(Arc::new(HostConnection {
                 last_known: self.last_known.clone(),
+                sessions: self.sessions.clone(),
+                revision,
                 host_id: host_id.clone(),
                 client,
                 names: Default::default(),
@@ -902,11 +907,7 @@ impl AriesCore {
         let mut hosts = self.hosts.lock().expect("hosts lock");
         let mut next = hosts.clone();
         f(&mut next);
-        self.store.save(&store::Saved {
-            hosts: next.clone(),
-        })?;
-        *hosts = next;
-        Ok(())
+        self.publish_hosts(&mut hosts, next)
     }
 }
 
@@ -1643,6 +1644,8 @@ fn ssh_for_saved_host(
 /// A live connection to one Host's herdr-core.
 #[derive(uniffi::Object)]
 pub struct HostConnection {
+    sessions: host_edit::HostSessions,
+    revision: u64,
     last_known: last_known_state::States,
     host_id: String,
     client: Arc<HcClient>,
@@ -1803,7 +1806,7 @@ impl HostConnection {
         let result = on_runtime(async move { client.call("terminal.run", params).await }).await?;
         if let Some(cwd) = launch::cwd_to_remember(&request) {
             // The Terminal runs either way; a full disk only loses the hint.
-            let _ = self.recent.remember(cwd);
+            let _ = self.with_active_session(|| self.recent.remember(cwd));
         }
         Ok(terminal_info(&result))
     }
@@ -1824,12 +1827,12 @@ impl HostConnection {
     /// Saves `launch` under its (trimmed) name: a new one when its `id` is
     /// empty, else replaces the one with that id. Returns it as stored.
     pub fn save_launch(&self, launch: SavedLaunch) -> Result<SavedLaunch, CoreError> {
-        self.saved.save(launch)
+        self.with_active_session(|| self.saved.save(launch))
     }
 
     /// Deletes the saved launch `id`; succeeds if it is already gone.
     pub fn delete_saved_launch(&self, id: String) -> Result<(), CoreError> {
-        self.saved.delete(&id)
+        self.with_active_session(|| self.saved.delete(&id))
     }
 
     /// Types `text` into the Agent's Terminal at `address` and submits it, as
@@ -2040,4 +2043,19 @@ fn new_id() -> String {
     use rand::RngExt;
     let bytes: [u8; 8] = rand::rng().random();
     bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+impl HostConnection {
+    /// Hold through local writes so invalidation/removal cannot race a check.
+    fn with_active_session<T>(
+        &self,
+        f: impl FnOnce() -> Result<T, CoreError>,
+    ) -> Result<T, CoreError> {
+        let sessions = self.sessions.lock().expect("sessions lock");
+        sessions
+            .get(&self.host_id)
+            .ok_or(CoreError::Closed)?
+            .check(self.revision)?;
+        f()
+    }
 }

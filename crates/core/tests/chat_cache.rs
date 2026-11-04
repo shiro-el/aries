@@ -11,8 +11,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use aries_core::{
-    AriesCore, ChatEntryBody, ChatSnapshot, ChatStatus, ChatWatch, Endpoint, KeyProtection,
-    KeyVault, VaultError,
+    AriesCore, ChatEntryBody, ChatSnapshot, ChatStatus, ChatWatch, CoreError, Endpoint, JumpHost,
+    KeyProtection, KeyVault, VaultError,
 };
 
 const DAY: Duration = Duration::from_secs(24 * 60 * 60);
@@ -398,8 +398,18 @@ async fn removing_a_host_prevents_an_open_watch_from_recreating_its_cache() {
 
     env.beacon_printing("h", AFTER);
     watch.reconnect();
-    wait_for(&watch, "updated retained watch", |s| s.entries.len() == 3).await;
-    // Let the debounced writer run, including any already-started blocking save.
+    let closed = tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            match watch.next().await {
+                Err(CoreError::Closed) => break,
+                Ok(_) => continue, // Drain a snapshot queued before removal.
+                Err(error) => panic!("unexpected watch error: {error:?}"),
+            }
+        }
+    })
+    .await;
+    assert!(closed.is_ok(), "a removed Host's Chat kept following");
+    // Let any already-started blocking cache save finish.
     tokio::time::sleep(Duration::from_secs(2)).await;
     watch.stop();
     assert!(
@@ -548,4 +558,48 @@ async fn a_chat_image_cache_keeps_newest_images_within_its_size_cap() {
     // inside the 16 MiB persisted image budget. Text/metadata all survive.
     assert_eq!(available, [false, false, true, true, true, true, true]);
     reopened.stop();
+}
+
+#[tokio::test]
+async fn connection_setting_edits_stop_chat_watches_without_erasing_cached_chat() {
+    for change in ["endpoint", "jump", "key"] {
+        let env = Env::new();
+        let core = env.core();
+        let host = env.host(&core, "h");
+        env.cache_first(&core, "h", &host).await;
+        env.beacon_printing("h", FIRST);
+        let watch = watch(&core, &host);
+        wait_for(&watch, "live", |s| s.status == ChatStatus::Live).await;
+        match change {
+            "endpoint" => {
+                core.edit_host(host.clone(), "h".into(), common::script_endpoint("exit 1"))
+                    .await
+                    .unwrap();
+            }
+            "jump" => core
+                .set_jump_hosts(
+                    host.clone(),
+                    vec![JumpHost {
+                        address: "jump".into(),
+                        port: 22,
+                        user: "me".into(),
+                        key_id: None,
+                        host_key: None,
+                    }],
+                )
+                .unwrap(),
+            "key" => {
+                let key = core.create_key("new key".into()).unwrap();
+                core.set_host_ssh_key(host.clone(), Some(key.id)).unwrap();
+            }
+            _ => unreachable!(),
+        }
+        watch.reconnect();
+        let closed = tokio::time::timeout(Duration::from_secs(1), async {
+            while watch.next().await.is_ok() {}
+        })
+        .await;
+        assert!(closed.is_ok(), "{change}: the old Chat kept following");
+        assert!(core.cached_chat(host, "t1".into()).await.unwrap().is_some());
+    }
 }
