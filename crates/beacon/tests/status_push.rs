@@ -556,7 +556,7 @@ fn permission_multi_part_multi_select_and_large_questions_have_no_buttons() {
 }
 
 #[test]
-fn done_has_the_last_assistant_text_clipped_on_a_unicode_boundary() {
+fn done_strips_markdown_before_clipping_the_last_assistant_text_on_a_unicode_boundary() {
     let mut host = Host::new();
     host.set_policy(r#"{"done":true}"#);
     host.serve();
@@ -571,7 +571,7 @@ fn done_has_the_last_assistant_text_clipped_on_a_unicode_boundary() {
         ),
         record(
             "m2",
-            serde_json::json!([{"type":"text","text":"한🦀".repeat(150)}])
+            serde_json::json!([{"type":"text","text":format!("# **{}**\n\n[Review](https://example.com)", "한🦀".repeat(150))}])
         ),
         record(
             "m3",
@@ -583,6 +583,22 @@ fn done_has_the_last_assistant_text_clipped_on_a_unicode_boundary() {
     assert_eq!(push["turn"], 1);
     assert_eq!(push["excerpt"], format!("{}…", "한🦀".repeat(100)));
     assert!(push.get("question").is_none());
+}
+
+#[test]
+fn done_excerpt_projects_blocks_links_and_code_into_readable_text() {
+    let mut host = Host::new();
+    host.set_policy(r#"{"done":true}"#);
+    host.serve();
+    let record = serde_json::json!({"type":"assistant","uuid":"m1","message":{"content":[{
+        "type":"text", "text":"# Result\n\n**Ready** with *care* and `x_y * 2`\n\n- [Review](https://example.com)\n\n> 2 * 3\n\n```rust\nlet x = 1;\nsecond\n```\n\n| Name | Result |\n| --- | --- |\n| Test | Passed |\n\n<div>Now</div>\n\n**unfinished"
+    }]}}).to_string();
+    transcript_agent(&host, &record, "status done\nwait\n");
+    let push = serde_json::to_value(&host.pushes(1)[0]).unwrap();
+    assert_eq!(
+        push["excerpt"],
+        "Result\nReady with care and x_y * 2\n• Review\n2 * 3\nlet x = 1;\nName · Result\nTest · Passed\nNow\nunfinished"
+    );
 }
 
 #[test]

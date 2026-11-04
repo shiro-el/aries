@@ -12,6 +12,7 @@ russh.workspace = true
 tokio.workspace = true
 rand = { version = "0.10", features = ["thread_rng"] }
 base64 = "0.22"
+pulldown-cmark = { version = "0.10.3", default-features = false }
 qrcode = { version = "0.14.1", default-features = false }
 subtle = "2.6"
 libc = "0.2"
