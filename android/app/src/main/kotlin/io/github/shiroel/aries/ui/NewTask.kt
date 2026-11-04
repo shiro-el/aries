@@ -247,8 +247,7 @@ internal fun NewTaskDialog(task: NewTask, onStart: () -> Unit, onOpenChat: () ->
             Text(stringResource(if (task.terminal == null) LocalLayoutScreens.current.startTaskLabel else R.string.new_task_wait_again))
         }
     }
-    if (fullScreen) androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss,
-        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+    if (fullScreen) CallAttentionDialog(onDismissRequest = onDismiss) {
         Surface(Modifier.fillMaxSize().testTag("new-task-dialog"), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize().imePadding()) {
                 ConsoleTopBar(stringResource(LocalLayoutScreens.current.newTaskTitle), onMenu = {}, onBack = onDismiss,

@@ -70,7 +70,7 @@ class ShareOwnershipTest {
         core.pushChat(ChatSnapshot(if (panel == "question") listOf(question) else emptyList(), ChatStatus.LIVE, null))
         compose.waitForIdle()
         if (panel != null) compose.onNodeWithTag("thread-${if (panel == "question") "answer" else "call"}-panel").assertExists()
-        compose.waitUntil(5_000) { chat.attachments.isNotEmpty() && !chat.uploading }
+        compose.waitUntil(5_000) { compose.runOnIdle { chat.attachments.isNotEmpty() && !chat.uploading } }
         assertEquals(1, core.connection!!.uploads.size)
         assertArrayEquals(byteArrayOf(2, 6, 1), core.connection!!.uploads.single().third)
         assertNull(chat.pendingShare)

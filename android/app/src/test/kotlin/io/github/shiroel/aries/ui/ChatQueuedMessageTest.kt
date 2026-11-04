@@ -276,7 +276,7 @@ class ChatQueuedMessageTest {
         assertEquals(listOf(QueuedMessagePhase.Uncertain, QueuedMessagePhase.Waiting, QueuedMessagePhase.Waiting), chat.queuedMessages.map { it.phase })
         connection.sendFailWith = null
         compose.runOnIdle { chat.retryMessage(chat.queuedMessages.first().id) }
-        compose.waitForIdle()
+        compose.waitUntil(5_000) { compose.runOnIdle { connection.typed.isNotEmpty() } }
         assertEquals(listOf("t1" to "first"), connection.typed)
         assertEquals(listOf("second", "third"), chat.queuedMessages.filter { it.phase == QueuedMessagePhase.Waiting }.map { it.text })
     }

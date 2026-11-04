@@ -14,7 +14,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import io.github.shiroel.aries.R
 import kotlinx.coroutines.Dispatchers
@@ -31,7 +30,7 @@ private data class ViewerPicture(val bitmap: Bitmap, val mime: String)
 @Composable
 fun ImageViewer(bytes: ByteArray, onDismiss: () -> Unit, name: String = "image", mediaType: String? = null) {
     key(bytes) {
-        Dialog(onDismissRequest = onDismiss, properties = DialogProperties(
+        CallAttentionDialog(onDismissRequest = onDismiss, properties = DialogProperties(
             usePlatformDefaultWidth = false, decorFitsSystemWindows = false,
         )) {
             var loading by remember { mutableStateOf(true) }

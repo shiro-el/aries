@@ -565,7 +565,9 @@ class ChatModel(
     var waitingReturned by mutableStateOf(false)
         private set
     private var transcriptReady by mutableStateOf(false)
-    private var transcriptConnection: HostConnection? = null
+    // A receipt certifies only the send line current at arrival. Connection
+    // identity fences delivery without retiring the independent transcript watch.
+    private var transcriptConnection by mutableStateOf<HostConnection?>(null)
     private var transcriptTerminal by mutableStateOf<TerminalInfo?>(null)
 
     /** Completion facts survive closing a sheet, but never a newer turn/status. */
@@ -578,7 +580,7 @@ class ChatModel(
 
     /** Home previews must come from an active, caught-up watch of this exact turn/status. */
     internal fun currentTranscript(current: TerminalInfo): ChatSnapshot? = taskTranscript(current)?.takeIf {
-        transcriptReady && transcriptConnection === link?.connection && (link == null || link?.state == LinkState.Up)
+        transcriptReady && (link == null || link?.state == LinkState.Up)
     }
     private var stopped = false
     private var recoveryLoaded = false
@@ -830,6 +832,7 @@ class ChatModel(
 
     private var watch: ChatWatch? = null
     private var paused = false
+    private var resumeWatchWhenConnected = false
     private var job: Job? = null
     private var scope: CoroutineScope? = null
     private var terminalPresent by mutableStateOf(true)
@@ -1036,10 +1039,14 @@ class ChatModel(
         connectionJob = scope.launch {
             snapshotFlow { link?.state to link?.connection }.collect { (state, connection) ->
                 clearSendNotices()
-                transcriptReady = false
-                transcriptConnection = null
                 if (state == LinkState.Closed) stop()
-                else if (state == LinkState.Up && connection != null && connectionError?.retryableConnection() != false) startWatch()
+                else if (state == LinkState.Up && connection != null && !paused && connectionError?.retryableConnection() != false) {
+                    if (watch == null || job?.isActive != true) startWatch()
+                    else if (resumeWatchWhenConnected) {
+                        resumeWatchWhenConnected = false
+                        watch?.resume()
+                    }
+                }
             }
         }
         // Standalone Chat tests may have no HostLink.
@@ -1048,8 +1055,7 @@ class ChatModel(
 
     private fun startWatch() {
         val scope = scope ?: return
-        // Late packets from a retired watch cannot certify a replacement send line.
-        val sendConnection = link?.connection
+        resumeWatchWhenConnected = false
         job?.cancel()
         watch?.stop()
         watch = null
@@ -1091,7 +1097,8 @@ class ChatModel(
                     snapshot = ChatSnapshot(update.order.mapNotNull { entries[it] }, update.status, update.cursor, update.usage)
                     connectionError = null
                     transcriptTerminal = terminal
-                    transcriptConnection = sendConnection
+                    // Only updates received after the send line changes certify it.
+                    transcriptConnection = link?.connection
                     transcriptReady = update.status == ChatStatus.LIVE
                     if (update.status in setOf(ChatStatus.ENDED, ChatStatus.NO_TERMINAL, ChatStatus.NO_AGENT)) {
                         returnWaitingToDraft()
@@ -1268,6 +1275,7 @@ class ChatModel(
         saveOutbox()
         transcriptReady = false
         paused = true
+        resumeWatchWhenConnected = false
         if (watch == null) job?.cancel() else watch?.pause()
     }
 
@@ -1275,8 +1283,12 @@ class ChatModel(
         if (!paused) return
         paused = false
         // A biometric Host resumes only after its explicit unlock. The Up
-        // observer starts a fresh watch; an offscreen FIFO must not prompt first.
-        if (link != null && link?.state != LinkState.Up) return
+        // observer resumes its watch; an offscreen FIFO must not prompt first.
+        if (link != null && link?.state != LinkState.Up) {
+            resumeWatchWhenConnected = watch != null
+            return
+        }
+        resumeWatchWhenConnected = false
         if (watch == null && connectionError?.retryableConnection() != false) restartWatchOrStart()
         else watch?.resume()
     }

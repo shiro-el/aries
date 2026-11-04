@@ -386,6 +386,7 @@ class TasksHomeTest {
         compose.onNodeWithContentDescription(context.getString(R.string.chat_question_option_label, "Blue")).performClick()
         compose.runOnIdle {
             assertEquals(listOf("h1" to "t1"), core.chatsOpened)
+            assertEquals("Replacing the send line must not reopen an active transcript stream", 0, core.chatResumes)
             assertEquals(listOf(Triple("t1", "q1", listOf(listOf(0u)))), core.answers)
         }
     }

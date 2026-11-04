@@ -603,6 +603,8 @@ class FakeCore : AriesCoreInterface {
     var chatStopped = false
     var chatPaused = false
         private set
+    var chatResumes = 0
+        private set
 
     /** Bytes `ChatWatch.image` returns, by image id. */
     val chatImages = mutableMapOf<String, ByteArray>()
@@ -654,7 +656,7 @@ class FakeCore : AriesCoreInterface {
                 chatRetries++
             }
             override fun pause() { chatPaused = true }
-            override fun resume() { chatPaused = false }
+            override fun resume() { chatResumes++; chatPaused = false }
             override fun image(id: String): ByteArray? = chatImages[id]
 
             override fun stop() {

@@ -16,8 +16,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.*
 
@@ -45,7 +43,7 @@ internal fun ThreadNewTaskEntry(model: HostsModel, board: AgentBoard) {
 
 @Composable
 internal fun ThreadNewTaskScreen(task: NewTask, onStart: () -> Unit, onOpenChat: () -> Unit, onDismiss: () -> Unit) {
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    CallAttentionDialog(onDismissRequest = onDismiss) {
         Surface(Modifier.fillMaxSize().testTag("new-task-dialog"), color = MaterialTheme.colorScheme.background) {
             BoxWithConstraints(Modifier.fillMaxSize().imePadding()) {
                 val formHeight = maxHeight * .7f
