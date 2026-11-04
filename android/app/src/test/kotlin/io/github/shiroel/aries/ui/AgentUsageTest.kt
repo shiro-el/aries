@@ -39,17 +39,30 @@ class AgentUsageTest {
     private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
     private fun str(id: Int, vararg args: Any) = context.getString(id, *args)
 
+    /** Regression: removing the fixed usage row must retain a working route to its sheet. */
+    @Test fun moreMenuOpensTheUsageSheet() {
+        compose.setContent { MaterialTheme {
+            AgentScreenHeader(TerminalInfo("t1", "codex", "", listOf("codex"), "/repo", "live", AgentStatus.Working),
+                "home", {}, AgentView.CHAT, {})
+        } }
+        compose.onNodeWithTag("agent-usage-sheet").assertDoesNotExist()
+        compose.onNodeWithTag("agent-actions").performClick()
+        compose.onNodeWithText(str(R.string.usage_title), substring = true).performClick()
+        compose.onNodeWithTag("agent-usage-sheet").assertExists()
+        compose.onNodeWithText(str(R.string.usage_limits_unavailable)).assertIsDisplayed()
+    }
+
     @Test fun unknown_and_measured_zero_remain_distinct_as_readings_change() {
         val reading = mutableStateOf<AgentUsage?>(null)
         compose.setContent { MaterialTheme {
             Column(Modifier.testTag("usage-preview")) {
                 AgentScreenHeader(TerminalInfo("t1", "codex", "", listOf("codex"), "/repo", "live", AgentStatus.Working),
-                    "home", {}, AgentView.CHAT, {})
-                AgentUsageHeader(reading.value)
+                    "home", {}, AgentView.CHAT, {}, usage = reading.value)
             }
         } }
-        compose.onNodeWithText(str(R.string.usage_context_unavailable)).assertIsDisplayed()
-        compose.onNodeWithText(str(R.string.usage_title)).performClick()
+        compose.onNodeWithTag("agent-actions").performClick()
+        compose.onNodeWithText(str(R.string.usage_context_unavailable), substring = true).assertIsDisplayed()
+        compose.onNodeWithText(str(R.string.usage_title), substring = true).performClick()
         compose.onNodeWithText(str(R.string.usage_limits_unavailable)).assertIsDisplayed()
         screenshot("unavailable", "agent-usage-sheet")
         compose.runOnIdle {
@@ -61,11 +74,12 @@ class AgentUsageTest {
         compose.onNodeWithText(str(R.string.usage_context_tokens, "50,000", "200,000")).assertIsDisplayed()
         screenshot("limits", "agent-usage-sheet")
         compose.onNodeWithText(str(R.string.usage_close)).performClick()
-        compose.onNodeWithText(str(R.string.usage_context_remaining, "75")).assertIsDisplayed()
+        compose.onNodeWithTag("agent-actions").performClick()
+        compose.onNodeWithText(str(R.string.usage_context_remaining, "75"), substring = true).assertIsDisplayed()
         screenshot("header", "usage-preview")
         compose.runOnIdle { reading.value = null }
-        compose.onNodeWithText(str(R.string.usage_context_unavailable)).assertIsDisplayed()
-        compose.onNodeWithText(str(R.string.usage_title)).performClick()
+        compose.onNodeWithText(str(R.string.usage_context_unavailable), substring = true).assertIsDisplayed()
+        compose.onNodeWithText(str(R.string.usage_title), substring = true).performClick()
         compose.onNodeWithText(str(R.string.usage_limits_unavailable)).assertIsDisplayed()
     }
     private fun screenshot(name: String, tag: String) {
