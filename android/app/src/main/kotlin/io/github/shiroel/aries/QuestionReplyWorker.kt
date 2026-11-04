@@ -24,11 +24,12 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 
 class QuestionChoiceReceiver : BroadcastReceiver() {
-    override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != ACTION) return
-        val notice = NotificationPayloads.open(context, intent.getStringExtra(EXTRA_NOTICE))?.let { QuestionNotice.fromJson(it) } ?: return
+    override fun onReceive(context: Context, intent: Intent) = synchronized(NotificationGroups) {
+        if (intent.action != ACTION) return@synchronized
+        val notice = NotificationPayloads.open(context, intent.getStringExtra(EXTRA_NOTICE))?.let { QuestionNotice.fromJson(it) } ?: return@synchronized
         val choice = intent.getIntExtra(EXTRA_CHOICE, -1)
-        if (notice.question.options.size !in 1..3 || choice !in notice.question.options.indices) return
+        if (notice.question.options.size !in 1..3 || choice !in notice.question.options.indices) return@synchronized
+        if (!QuestionNotifications.accepts(context, notice)) return@synchronized
         QuestionNotifications.post(context, notice, QuestionView.Sending(choice))
         try {
             QuestionReplyWorker.enqueue(context, notice, choice)

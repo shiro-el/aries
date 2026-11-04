@@ -1044,6 +1044,7 @@
     <string name="agent_watch_label">Watch progress</string>
     <string name="agent_watch_error">Could not update watching: %1$s</string>
     <string name="push_progress_channel">Watched Agent progress</string>
+    <string name="push_progress_elapsed">%1$d min elapsed</string>
     <string name="push_progress_body">%1$d min elapsed · %2$d subagents</string>
 
     <string name="push_test_title">Push works for %1$s</string>
@@ -1058,6 +1059,7 @@
     <string name="push_call_channel_emergency">Emergency Calls</string>
     <string name="push_no_firebase">this build has no Firebase configuration</string>
     <!-- Inline notification actions -->
+    <string name="notification_updates_channel">Reply results</string>
     <string name="notification_reply_button">Reply</string>
     <string name="notification_reply_hint">Message the Agent</string>
     <string name="notification_seen_button">Seen</string>

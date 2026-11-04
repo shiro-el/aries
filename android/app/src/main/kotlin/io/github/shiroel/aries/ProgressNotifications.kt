@@ -45,9 +45,13 @@ internal object ProgressNotifications {
         if (p.cancelled) {
             completed(context, notice.hostId, p.terminal, p.at)
             // A delayed cleanup must not erase a newer attention or Done card.
+            if (existing == null || existing.notification.channelId == CHANNEL) {
+                NotificationGroups.advanced(context, notice.hostId, notice.hostName, p.terminal, "progress:${p.at}")
+            }
             if (existing?.notification?.channelId == CHANNEL) manager.cancel(p.terminal, notice.hostId.hashCode())
             return
         }
+        NotificationGroups.advanced(context, notice.hostId, notice.hostName, p.terminal, "progress:${p.at}")
         WatchProgressPhone.progress(context, notice.hostId, p)
         if (NotificationVisibility.from(context)?.foreground == true) {
             if (existing?.notification?.channelId == CHANNEL) manager.cancel(p.terminal, notice.hostId.hashCode())
@@ -56,8 +60,9 @@ internal object ProgressNotifications {
         manager.createNotificationChannel(NotificationChannel(CHANNEL, context.getString(R.string.push_progress_channel), NotificationManager.IMPORTANCE_LOW))
         val builder = Notification.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_aries)
-            .setContentTitle(context.getString(R.string.push_status_title, NotificationMarkdown.render(p.name ?: p.terminal).plain, notice.hostName))
-            .setContentText(context.getString(R.string.push_progress_body, (p.elapsedSecs / 60uL).toLong(), p.childAgents.toLong()))
+            .setContentTitle(context.getString(R.string.push_status_title, NotificationAgentName.resolve(context, notice.hostId, p.terminal, p.name), notice.hostName))
+            .setContentText(if (p.childAgents == 0u) context.getString(R.string.push_progress_elapsed, (p.elapsedSecs / 60uL).toLong())
+                else context.getString(R.string.push_progress_body, (p.elapsedSecs / 60uL).toLong(), p.childAgents.toLong()))
             .setWhen(p.at.toLong() * 1000)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
