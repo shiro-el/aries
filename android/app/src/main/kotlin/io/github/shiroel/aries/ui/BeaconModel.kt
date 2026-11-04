@@ -16,6 +16,9 @@ import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -39,6 +42,22 @@ class BeaconModel(
     private val onRemoved: () -> Unit = {},
     private val keyWork: CoroutineContext = EmptyCoroutineContext,
 ) {
+    private var operation: Job? = null
+    private var revision = 0
+
+    /** Retire observations and pending reads for an earlier connection configuration. */
+    fun invalidate() {
+        revision++
+        operation?.cancel()
+        operation = null
+        host = null
+        ui = BeaconUi.Loading
+        update = BeaconUpdate.NotNeeded
+        prompt = null
+        problem = null
+        confirmRemove = false
+        busy = false
+    }
     var host by mutableStateOf<Host?>(null)
         private set
     var ui by mutableStateOf<BeaconUi>(BeaconUi.Loading)
@@ -70,6 +89,7 @@ class BeaconModel(
      * out-of-date one unless automatic updates are off.
      */
     fun load(host: Host) {
+        if (this.host?.let { it.id != host.id || it.endpoint != host.endpoint } == true) invalidate()
         if (busy) return
         if (this.host?.id != host.id) ui = BeaconUi.Loading
         this.host = host
@@ -81,6 +101,7 @@ class BeaconModel(
         }
         run {
             val check = onKey { core.checkBeacon(host.id, fetcher) }
+            currentCoroutineContext().ensureActive()
             update = check.update
             (check.update as? BeaconUpdate.Updated)?.let { explainLinger(host, it.install.linger) }
             check.state
@@ -92,6 +113,7 @@ class BeaconModel(
         if (busy || host.endpoint !is Endpoint.Ssh) return
         run {
             val result = onKey { core.installBeacon(host.id, fetcher) }
+            currentCoroutineContext().ensureActive()
             update = BeaconUpdate.NotNeeded
             explainLinger(host, result.linger)
             onKey { core.beaconStatus(host.id) }
@@ -131,8 +153,10 @@ class BeaconModel(
         run {
             val state = onKey {
                 core.uninstallBeacon(host.id)
+                currentCoroutineContext().ensureActive()
                 core.beaconStatus(host.id)
             }
+            currentCoroutineContext().ensureActive()
             onRemoved()
             state
         }
@@ -149,17 +173,22 @@ class BeaconModel(
         if (busy) return
         busy = true
         problem = null
-        scope.launch {
+        val request = revision
+        operation = scope.launch {
             try {
-                ui = BeaconUi.Known(block())
+                val result = block()
+                currentCoroutineContext().ensureActive()
+                if (request == revision) ui = BeaconUi.Known(result)
             } catch (e: CancellationException) {
-                if (ui !is BeaconUi.Known) ui = BeaconUi.Unavailable(Message(R.string.beacon_status_unknown))
+                if (request == revision && ui !is BeaconUi.Known) ui = BeaconUi.Unavailable(Message(R.string.beacon_status_unknown))
                 throw e
             } catch (e: CoreException) {
-                problem = beaconProblem(e).body
-                if (ui !is BeaconUi.Known) ui = BeaconUi.Unavailable(Message(R.string.beacon_status_unknown))
+                if (request == revision) {
+                    problem = beaconProblem(e).body
+                    if (ui !is BeaconUi.Known) ui = BeaconUi.Unavailable(Message(R.string.beacon_status_unknown))
+                }
             } finally {
-                busy = false
+                if (request == revision) busy = false
             }
         }
     }

@@ -324,7 +324,9 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
                     "custom Codex question binding",
                 ));
             };
-            if let Err(e) = link.keys(terminal, &[key.into()]) {
+            // Opening the editor is navigation, not an answer. Keep the
+            // terminal lock, but claim only at the first real answer key.
+            if let Err(e) = link.inner.keys(terminal, &[key.into()]) {
                 return Ok(reply(AnswerOutcome::Failed, e));
             }
             let mut opened = false;
