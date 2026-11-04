@@ -17,6 +17,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -239,10 +240,11 @@ private fun RestrictedPreviewWebView(origin: String, desktop: Boolean, modifier:
             currentView?.stopLoading()
         }
     }
-    Box(modifier.background(MaterialTheme.colorScheme.surfaceVariant)) {
-        AndroidView(modifier = Modifier.fillMaxSize(), factory = {
+    Box(modifier.clipToBounds().background(MaterialTheme.colorScheme.surfaceVariant)) {
+        AndroidView(modifier = Modifier.fillMaxSize().clipToBounds(), factory = {
             WebView(it).apply {
                 setBackgroundColor(android.graphics.Color.WHITE)
+                clipToOutline = true
                 currentView = this
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
