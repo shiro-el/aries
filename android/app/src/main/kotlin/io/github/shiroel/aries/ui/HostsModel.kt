@@ -1993,10 +1993,6 @@ class HostsModel(
         return conversation(line, entry.terminal)
     }
 
-    internal fun startWaitingChat(chat: ChatModel) { chat.start(scope, paused = screensPaused) }
-
-    internal fun openWaitingChat(entry: AgentEntry) = openAgentTarget(entry.host, entry.terminal.address, openChat = true)
-
     /** Switch in place over the original list, using the same entry path as drawer and inbox. */
     fun openNextWaitingAgent() {
         val next = nextWaitingAgent ?: return

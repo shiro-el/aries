@@ -162,6 +162,10 @@ private fun ThreadToolSummary(group: ThreadToolGroup, chat: ChatModel, scroll: C
                     modifier = Modifier.testTag("thread-diff:${entry.id}"))
             }
         }
+        if (group.entries.any { (it.body as ChatEntryBody.Tool).status == ChatToolStatus.FAILED }) {
+            AnnouncedText(stringResource(R.string.chat_tool_failed), style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error)
+        }
         val running = group.entries.lastOrNull { (it.body as ChatEntryBody.Tool).status == ChatToolStatus.RUNNING }?.body as? ChatEntryBody.Tool
         if (running != null && chat.link?.state == LinkState.Up) {
             Text(stringResource(R.string.thread_tool_running, running.name, running.title), style = MaterialTheme.typography.labelSmall,
@@ -263,7 +267,7 @@ internal fun ThreadConnectionGuidance(chat: ChatModel) {
         val error = chat.connectionError ?: state?.error ?: if (chat.snapshot?.status == ChatStatus.NO_BEACON) CoreException.BeaconNotInstalled() else null
         if (error != null) {
             val problem = problemFor(error)
-            Text(stringResource(problem.body.res, *problem.body.args.toTypedArray()), style = MaterialTheme.typography.bodySmall)
+            Text(messageText(problem.body), style = MaterialTheme.typography.bodySmall)
         }
         Row {
             TextButton(onClick = { chat.link?.retryNow(); chat.retryConnection() }) { Text(stringResource(R.string.connect_retry_button)) }

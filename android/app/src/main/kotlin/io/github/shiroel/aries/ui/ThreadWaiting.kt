@@ -16,9 +16,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LifecycleStartEffect
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.*
 
@@ -78,13 +76,10 @@ internal fun ThreadWaitingPill(model: HostsModel, chat: ChatModel) {
                 }
                 TextButton(onClick = {
                     sheet = false
-                    target.agent?.let(model::openWaitingChat) ?: target.call?.let {
-                        // The shared Call route requires the inbox to own the opening request.
-                        model.openCallInbox(); model.openCallChat(it)
-                    }
+                    model.openPushedAgent(target.key.hostId, target.key.address, openChat = true)
                 }) { Text(stringResource(R.string.thread_open_conversation)) }
                 if (target.call != null) {
-                    val live = model.calls.calls.firstOrNull { it.key == target.call.key } ?: target.call
+                    val live = model.calls.calls.firstOrNull { it.key == target.call.key } ?: target.call.copy(live = false)
                     ThreadCallPanel(live, model.calls)
                 } else if (target.agent != null) ThreadWaitingQuestion(model, target.agent)
                 if (index < 0 && waiting.isNotEmpty()) TextButton(onClick = {
@@ -99,15 +94,13 @@ internal fun ThreadWaitingPill(model: HostsModel, chat: ChatModel) {
 @Composable
 private fun ThreadWaitingQuestion(model: HostsModel, agent: AgentEntry) {
     val preview = remember(agent.key) { model.previewWaitingChat(agent) }
-    val lifecycle = LocalLifecycleOwner.current.lifecycle
-    DisposableEffect(preview, lifecycle) {
-        if (preview != null) model.startWaitingChat(preview)
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) preview?.pause()
-            if (event == Lifecycle.Event.ON_START) preview?.resume()
-        }
-        lifecycle.addObserver(observer)
-        onDispose { lifecycle.removeObserver(observer); preview?.stop() }
+    DisposableEffect(preview) {
+        if (preview != null) model.startTaskQuestion(preview)
+        onDispose { if (preview != null && !model.isViewedChat(preview)) preview.stop() }
+    }
+    LifecycleStartEffect(preview) {
+        preview?.resume()
+        onStopOrDispose { if (preview != null && !model.isViewedChat(preview)) preview.pause() }
     }
     if (preview == null) {
         Text(stringResource(R.string.thread_waiting_open_required), Modifier.padding(16.dp))
