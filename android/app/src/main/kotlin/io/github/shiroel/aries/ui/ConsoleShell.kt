@@ -164,7 +164,7 @@ internal fun ConsoleShell(
         }, LocalNextWaitingAgent provides model.nextWaitingAgent?.let { NextWaitingAction(it, model::openNextWaitingAgent) }) {
             BoxWithConstraints(Modifier.fillMaxSize().systemGestureExclusion { coordinates ->
                 Rect(0f, 0f, edgeWidth, minOf(coordinates.size.height.toFloat(), terminalHeaderHeight))
-            }.pointerInput(screen, drawer.isClosed, model.callInboxOpen, model.quickOpenVisible) {
+            }.pointerInput(screen, drawer.isClosed, model.callInboxOpen, model.quickOpenVisible, terminalHeaderHeight) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     // Observe at the parent so normal edge taps still reach header buttons.

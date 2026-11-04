@@ -37,6 +37,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -49,6 +50,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.core.graphics.toColorInt
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AttachMode
 
@@ -273,7 +275,7 @@ private fun AccentControls(settings: ThemeSettings) {
                     contentAlignment = Alignment.Center) {
                     Box(Modifier.size(32.dp).border(if (settings.accentHex == preset.hex) 2.dp else 1.dp,
                         if (settings.accentHex == preset.hex) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline)
-                        .padding(4.dp).background(Color(android.graphics.Color.parseColor(preset.hex))))
+                        .padding(4.dp).background(Color(preset.hex.toColorInt())))
                 }
             }
         }
@@ -305,9 +307,9 @@ private fun AccentControls(settings: ThemeSettings) {
 @Composable
 private fun HsvPicker(settings: ThemeSettings) {
     val initial = remember { FloatArray(3).also { android.graphics.Color.colorToHSV(settings.accentArgb, it) } }
-    var hue by rememberSaveable { mutableStateOf(initial[0]) }
-    var saturation by rememberSaveable { mutableStateOf(initial[1]) }
-    var brightness by rememberSaveable { mutableStateOf(initial[2]) }
+    var hue by rememberSaveable { mutableFloatStateOf(initial[0]) }
+    var saturation by rememberSaveable { mutableFloatStateOf(initial[1]) }
+    var brightness by rememberSaveable { mutableFloatStateOf(initial[2]) }
     var committed by rememberSaveable { mutableStateOf(settings.accentHex) }
     LaunchedEffect(settings.accentHex) {
         if (settings.accentHex != committed) {

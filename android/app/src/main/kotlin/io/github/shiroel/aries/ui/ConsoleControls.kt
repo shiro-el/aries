@@ -145,12 +145,12 @@ internal fun ConsoleProgress(
 }
 
 @Composable
-internal fun ConsoleBusyIndicator(modifier: Modifier = Modifier.size(24.dp), strokeWidth: Dp = 2.dp) {
+internal fun ConsoleBusyIndicator(modifier: Modifier = Modifier, strokeWidth: Dp = 2.dp) {
     val position by rememberInfiniteTransition(label = "console-busy").animateFloat( // i18n-ok: animation tooling label
         0f, 3f, infiniteRepeatable(tween(900, easing = LinearEasing)), label = "cell", // i18n-ok: animation tooling label
     )
     val color = MaterialTheme.colorScheme.primary
-    Canvas(modifier.progressSemantics()) {
+    Canvas(modifier.size(24.dp).progressSemantics()) {
         val cell = size.width / 5
         repeat(3) { index ->
             drawRect(color.copy(alpha = if (position.toInt() == index) 1f else .25f),

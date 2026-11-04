@@ -72,24 +72,24 @@ internal fun GithubDialog(link: HostLink?, terminal: TerminalInfo, onDismiss: ()
                 ConsoleTopBar(stringResource(R.string.github_button), onMenu = {}, onBack = ::back,
                     showMark = false, showNavigationActions = false, backEnabled = !writing, backTag = "github-back",
                     titleContent = {
-                    Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Icon(painterResource(R.drawable.ic_github), null, Modifier.size(20.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(stringResource(R.string.github_button), style = MaterialTheme.typography.titleMedium)
-                            repository?.let { Text(it.nameWithOwner, style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(painterResource(R.drawable.ic_github), null, Modifier.size(20.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(stringResource(R.string.github_button), style = MaterialTheme.typography.titleMedium)
+                                repository?.let { Text(it.nameWithOwner, style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                            }
                         }
-                    }
                     }, actions = {
-                    repository?.let { repo ->
-                        ActionIcon(R.drawable.ic_external_link, R.string.github_open_browser, {
-                            val item = selected
-                            val path = if (item == null) "" else "/${if (item.kind == GithubKind.PULL_REQUEST) "pull" else "issues"}/${item.number}"
-                            uriHandler.openUri("https://${repo.hostname}/${repo.nameWithOwner}$path")
-                        })
-                    }
-                    ActionIcon(R.drawable.ic_refresh_cw, R.string.github_refresh, { revision++ }, enabled = !loading && !writing)
+                        repository?.let { repo ->
+                            ActionIcon(R.drawable.ic_external_link, R.string.github_open_browser, {
+                                val item = selected
+                                val path = if (item == null) "" else "/${if (item.kind == GithubKind.PULL_REQUEST) "pull" else "issues"}/${item.number}"
+                                uriHandler.openUri("https://${repo.hostname}/${repo.nameWithOwner}$path")
+                            })
+                        }
+                        ActionIcon(R.drawable.ic_refresh_cw, R.string.github_refresh, { revision++ }, enabled = !loading && !writing)
                 })
                 val opened = selected
                 if (opened != null) {
