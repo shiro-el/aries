@@ -155,6 +155,7 @@ fun RemoteFilesScreen(
                             if (folder == null && directory == null) folder = path.substringBeforeLast('/').ifEmpty { "/" }
                             file = path
                         }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            FileTypeIcon(entry.path, Modifier.padding(end = 8.dp))
                             Surface(color = MaterialTheme.colorScheme.secondaryContainer) {
                                 Text(gitFileBadge(entry), Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontFamily = FontFamily.Monospace)
                             }
@@ -189,9 +190,8 @@ fun RemoteFilesScreen(
                         FileTreeRow(
                             name = if (entry.directory) "${entry.name}/" else entry.name,
                             depth = entry.depth,
-                            folderIcon = if (entry.directory) {
-                                if (isExpanded) R.drawable.ic_folder_open else R.drawable.ic_folder
-                            } else null,
+                            filePath = entry.name,
+                            directory = entry.directory,
                             expanded = if (entry.directory) isExpanded else null,
                             modifier = Modifier.clickable {
                                 if (entry.directory) toggleFolder(entry.path)
@@ -229,15 +229,18 @@ private fun FileTreeRow(
     depth: Int = 0,
     folderIcon: Int? = null,
     expanded: Boolean? = null,
+    filePath: String? = null,
+    directory: Boolean = false,
 ) {
     Row(modifier.fillMaxWidth().heightIn(min = 48.dp)
         .padding(start = (depth * 16).dp, top = 12.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically) {
-        if (folderIcon != null) {
+        if (folderIcon != null || filePath != null) {
             if (expanded == null) Spacer(Modifier.size(16.dp))
             else Icon(painterResource(if (expanded) R.drawable.ic_chevron_down else R.drawable.ic_chevron_right),
                 contentDescription = null, modifier = Modifier.size(16.dp))
-            Icon(painterResource(folderIcon), contentDescription = null,
+            if (filePath != null) FileTypeIcon(filePath, Modifier.padding(end = 8.dp), directory, expanded == true)
+            else Icon(painterResource(checkNotNull(folderIcon)), contentDescription = null,
                 modifier = Modifier.padding(end = 8.dp).size(20.dp))
         }
         Text(name, fontFamily = FontFamily.Monospace)
