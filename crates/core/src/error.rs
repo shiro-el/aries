@@ -28,7 +28,7 @@ pub enum AnswerProblem {
     NoBeacon,
     /// The Beacon cannot reach the Host's herdr-core.
     NoCore,
-    /// The key presses certainly failed before delivery.
+    /// The Beacon reported a key-press failure.
     Failed,
     /// Execution started but delivery was not confirmed. Do not press again.
     Unconfirmed,
