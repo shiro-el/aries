@@ -86,6 +86,13 @@ class CallsModel(
         if (banner?.key == entry.key) dismissBanner()
     }
 
+    /** Last confirmed Calls stay in Tasks during a feed outage; only live rows accept input. */
+    internal fun isTaskWaiting(entry: CallEntry, caller: AgentEntry? = null): Boolean =
+        (entry.live || entry.checkedAtMs != null) && entry.key !in closedThreadCalls &&
+            entry.copy(live = true).needsAttention &&
+            // A later Host status proves progress even if that list subsequently goes stale.
+            !(entry.call.answer == null && caller != null && (caller.terminal.statusMs ?: 0uL) > entry.call.atMs)
+
     /** Fresh arrivals, without replay: a burst may replace the banner but still needs each haptic. */
     private val attentionEvents = MutableSharedFlow<CallEntry>(extraBufferCapacity = 64)
     internal val attention = attentionEvents.asSharedFlow()

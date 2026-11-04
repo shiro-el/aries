@@ -946,6 +946,7 @@
     <string name="tasks_host_view">Group by Host</string>
     <string name="tasks_offline">Offline</string>
     <string name="tasks_reconnecting">Reconnecting…</string>
+    <string name="tasks_call_checking">Checking Call…</string>
     <string name="tasks_host_connected">Connected</string>
     <string name="tasks_host_not_connected">Not connected</string>
     <string name="tasks_needs_position">Needs you · %2$d of %1$d</string>

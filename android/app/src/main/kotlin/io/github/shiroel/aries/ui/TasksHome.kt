@@ -49,7 +49,11 @@ internal fun TasksHome(model: HostsModel, board: AgentBoard) {
     var grouped by rememberSaveable { mutableStateOf(false) }
     var queue by board::needsQueue
     val agents = board.agents
-    val needs = taskNeeds(agents, model.calls.calls, model::taskTranscript)
+    val hostIds = board.hosts.mapTo(mutableSetOf()) { it.id }
+    val needs = taskNeeds(agents, model.calls.calls.filter { it.host.id in hostIds }, model::taskTranscript) { call ->
+        model.calls.isTaskWaiting(call, call.call.terminal?.let { board.find(AgentKey(call.host.id, it)) })
+    }
+    SideEffect { queue?.append(needs) }
     val calls = needs.filterIsInstance<TaskNeed.Call>().map { it.entry }
     val visible = agents.filter {
         when (filter) {
@@ -65,7 +69,7 @@ internal fun TasksHome(model: HostsModel, board: AgentBoard) {
     val folds = rememberTreeFolds("tasks-hosts")
     Column(Modifier.fillMaxSize().testTag("tasks-home")) {
         AgentHomeScope(model, board)
-        if (queue == null && model.screen is Screen.Agents) CallAttentionSlot(onOpen = { entry ->
+        if (queue == null && model.screen is Screen.Agents && model.calls.banner?.host?.id in hostIds) CallAttentionSlot(onOpen = { entry ->
             val need = needs.firstOrNull { it is TaskNeed.Call && it.entry.key == entry.key }
             if (need == null) model.openCallInbox()
             else { openNeed(need); model.calls.dismissBanner() }
@@ -118,7 +122,7 @@ internal fun TasksHome(model: HostsModel, board: AgentBoard) {
             }
             // Calls precede all Agents, so an urgent Call can never disappear below a pinned family.
             if (filter == TasksFilter.ALL || filter == TasksFilter.NEEDS) items(calls, key = { "call:${it.key}" }) { entry ->
-                TasksCallRow(entry, onOpen = { openNeed(TaskNeed.Call(entry)) })
+                TasksCallRow(entry, model.callCallerName(entry), onOpen = { openNeed(TaskNeed.Call(entry)) })
             }
             if (grouped) {
                 board.hosts.forEach { host ->
@@ -197,13 +201,14 @@ internal fun TasksTaskRow(entry: AgentEntry, transcript: ChatSnapshot? = null, s
 }
 
 @Composable
-private fun TasksCallRow(entry: CallEntry, onOpen: () -> Unit) {
+private fun TasksCallRow(entry: CallEntry, callerName: String?, onOpen: () -> Unit) {
     val urgent = entry.call.urgency == CallUrgency.URGENT || entry.call.urgency == CallUrgency.EMERGENCY
     TasksRow(entry.call.title, stringResource(if (urgent) R.string.tasks_urgent_call else R.string.console_chat_call_label),
         tasksAttentionColor(), urgent, Modifier.testTag("task-call:${entry.key}").presentsCalls(setOf(entry.key)), onOpen,
         metadata = {
-            val host = if (entry.live) entry.host.name else listOf(entry.host.name, stringResource(R.string.tasks_offline)).joinToString(" · ")
-            Text(host, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            val context = listOfNotNull(entry.host.name, callerName ?: entry.call.terminal,
+                if (entry.live) null else stringResource(R.string.tasks_call_checking)).joinToString(" · ")
+            Text(context, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
             if (entry.live) AgentElapsedTime(entry.call.atMs) else entry.checkedAtMs?.let {
                 Text(agentLastSeen(it), style = MaterialTheme.typography.bodySmall)
