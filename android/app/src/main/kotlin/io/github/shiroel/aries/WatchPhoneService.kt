@@ -59,8 +59,10 @@ class WatchPhoneService : WearableListenerService() {
         }
         if (path == WatchSummary.REFRESH_PATH) {
             if (request.isNotEmpty()) return Tasks.forResult(byteArrayOf())
-            LastKnownStates.requestRefresh(this)
-            return Tasks.forResult(byteArrayOf(1))
+            return rpc {
+                LastKnownStates.requestRefresh(applicationContext)
+                byteArrayOf(1)
+            }
         }
         if (path != WatchSummary.OPEN_PATH) return null
         val command = OpenWatchAgent.fromBytes(request)

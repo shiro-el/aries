@@ -120,6 +120,17 @@ object HomeWidgets {
 /** The button delegates SSH/key eligibility and work deduplication to ticket 76. */
 class HomeWidgetRefreshReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == HomeWidgets.ACTION_REFRESH) LastKnownStates.requestRefresh(context)
+        if (intent.action != HomeWidgets.ACTION_REFRESH) return
+        val pending = goAsync()
+        val app = context.applicationContext
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                LastKnownStates.requestRefresh(app)
+            } catch (_: Exception) {
+                android.util.Log.w("AriesWidgets", "Widget refresh scheduling failed")
+            } finally {
+                pending.finish()
+            }
+        }
     }
 }
