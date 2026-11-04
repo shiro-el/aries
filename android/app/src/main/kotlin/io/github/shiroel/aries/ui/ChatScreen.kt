@@ -94,6 +94,7 @@ import io.github.shiroel.aries.core.SendListener
 import io.github.shiroel.aries.core.SendOutcome
 import io.github.shiroel.aries.core.TerminalInfo
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -129,7 +130,7 @@ class ChatModel(
     /** Reopening reuses drafts and pending operations; only the live SSH line changes. */
     fun bind(link: HostLink, terminal: TerminalInfo) {
         inputHistory.open = false
-        if (this.link !== link) clearNotices()
+        if (this.link !== link) clearSendNotices()
         this.link = link
         update(listOf(terminal))
     }
@@ -312,13 +313,13 @@ class ChatModel(
         returnWaitingToDraft()
         saveOutbox()
         interruptNotice = null
-        val revision = noticeRevision
+        val revision = ++interruptRevision
         scope.launch {
             try {
                 val notice = interruptMessage(connection.interruptAgent(address))
-                if (noticeRevision == revision) interruptNotice = notice
+                if (interruptRevision == revision) interruptNotice = notice
             } catch (e: CoreException) {
-                if (noticeRevision == revision) interruptNotice = Message(R.string.chat_interrupt_failed, listOf(errorMessage(e)))
+                if (interruptRevision == revision) interruptNotice = Message(R.string.chat_interrupt_failed, listOf(errorMessage(e)))
             } finally {
                 interrupting = false
                 drainQueue()
@@ -336,7 +337,7 @@ class ChatModel(
         }
 
     fun removeAttachment(attachment: DraftAttachment) {
-        clearNotices()
+        clearAttachmentNotice()
         attachments = attachments - attachment
     }
     var uploading by mutableStateOf(false)
@@ -344,6 +345,17 @@ class ChatModel(
     var attachmentError by mutableStateOf<Message?>(null)
         private set
     private var uploadJob: Job? = null
+    private var uploadRemaining: List<String> = emptyList()
+    var attachmentNotice by mutableStateOf<Message?>(null)
+        private set
+
+    /** Keeps completed chips; only the files still outside the draft are canceled. */
+    fun cancelUpload() {
+        if (!uploading) return
+        attachmentRevision++
+        attachmentNotice = Message(R.string.attachments_canceled, listOf(uploadRemaining.joinToString(", ")))
+        uploadJob?.cancel()
+    }
 
     fun attachmentFailed(error: Exception) {
         if (error is AttachmentTooLarge || (error is CoreException.Rpc && error.kind == "attachment_too_large")) {
@@ -358,25 +370,28 @@ class ChatModel(
     }
 
     /** Saves bytes and adds attachment chips to the current draft; never calls sendMessage. */
-    fun attach(context: Context, content: SharedContent, cleanup: () -> Unit = {}): Boolean {
+    fun attach(context: Context, content: SharedContent, onUploaded: () -> Unit = {}, cleanup: () -> Unit = {}): Boolean {
         val scope = scope ?: run { cleanup(); return false }
         if (inputUnavailable || uploading) { cleanup(); return false }
         val link = link ?: run { attachmentFailed(CoreException.Closed()); cleanup(); return false }
         val resize = AttachmentSettings.from(context).resizeImages
-        clearNotices()
+        clearAttachmentNotice()
         uploading = true
+        uploadRemaining = content.uris.map { it.lastPathSegment ?: "attachment" }
         fun append(value: String) {
             appendDraft(value, separator = if (draft.isEmpty() || draft.last().isWhitespace()) "" else " ")
         }
         content.text?.let(::append)
-        uploadJob = scope.launch {
+        val revision = attachmentRevision
+        // Retain the current line before even reading camera bytes. Leaving the Host
+        // can then finish this bounded batch before disconnecting, without replaying a put.
+        val initialConnection = link.connection
+        val upload: suspend (HostConnection) -> Unit = { connection ->
             try {
                 for (uri in content.uris) {
                     val attachment = withContext(Dispatchers.IO) { prepareAttachment(context, uri, resize) }
-                    // The picker/camera may stop the Activity and release its Host connection.
-                    // Wait for its replacement after reading the URI; never retry a put itself.
-                    val connection = link.awaitConnection()
-                    if (inputUnavailable) break
+                    uploadRemaining = listOf(attachment.name) + uploadRemaining.drop(1)
+                    if (inputUnavailable) throw CoreException.Closed()
                     val path = try {
                         connection.uploadAttachment(terminal.address, attachment.name, attachment.bytes)
                     } catch (e: CoreException.Closed) {
@@ -385,12 +400,34 @@ class ChatModel(
                     }
                     attachments = attachments + DraftAttachment(path, attachment.name, attachment.bytes.size,
                         attachment.bytes.takeIf { remoteMediaKind(attachment.name) == RemoteMediaKind.IMAGE })
+                    uploadRemaining = uploadRemaining.drop(1)
                 }
+                onUploaded()
+            } catch (e: TimeoutCancellationException) {
+                if (attachmentRevision == revision) attachmentFailed(CoreException.Closed())
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                attachmentFailed(e)
+                if (attachmentRevision == revision) attachmentFailed(e)
             } finally {
+                uploading = false
+                cleanup()
+            }
+        }
+        uploadJob = if (initialConnection != null) {
+            link.finishBeforeDisconnect(initialConnection) { upload(initialConnection) }
+        } else scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            // A picker/camera may release the old line. Acquire and retain its
+            // replacement before preparing bytes; never retry a put itself.
+            try {
+                val connection = link.awaitConnection()
+                uploadJob = link.finishBeforeDisconnect(connection) { upload(connection) }
+            } catch (e: CancellationException) {
+                uploading = false
+                cleanup()
+                throw e
+            } catch (e: Exception) {
+                if (attachmentRevision == revision) attachmentFailed(e)
                 uploading = false
                 cleanup()
             }
@@ -421,13 +458,27 @@ class ChatModel(
     private var journalTimer: Job? = null
     private var journalWrite: Job? = null
 
-    private var noticeRevision = 0L
-    private fun clearNotices() {
-        noticeRevision++
+    private var interruptRevision = 0L
+    private var attachmentRevision = 0L
+
+    /** Link/Agent/Chat changes only invalidate feedback about sending. */
+    private fun clearSendNotices() {
         sendError = null
         refused = false
+    }
+
+    /** Editing starts a new instruction; unrelated lifecycle changes do not. */
+    private fun clearNotices() {
+        clearSendNotices()
+        interruptRevision++
         interruptNotice = null
+        clearAttachmentNotice()
+    }
+
+    private fun clearAttachmentNotice() {
+        attachmentRevision++
         attachmentError = null
+        attachmentNotice = null
     }
 
     /** Callers commit once after moving text and attachments together between draft and queue. */
@@ -578,7 +629,8 @@ class ChatModel(
             // Keep composition and selection attached to the user's newer text.
             val current = input
             val prefix = message.draft + if (current.text.isNotEmpty()) "\n\n" else ""
-            input = current.copy(
+            // Recovery is not an input edit: keep unrelated operation receipts.
+            editableInput = current.copy(
                 text = prefix + current.text,
                 selection = TextRange(current.selection.start + prefix.length, current.selection.end + prefix.length),
                 composition = current.composition?.let { TextRange(it.start + prefix.length, it.end + prefix.length) },
@@ -642,7 +694,7 @@ class ChatModel(
     fun update(terminals: List<TerminalInfo>) {
         val now = terminals.find { it.address == terminal.address }
         if (terminalPresent != (now != null) || (now != null &&
-            (terminal.agentStatus != now.agentStatus || terminal.state != now.state))) clearNotices()
+            (terminal.agentStatus != now.agentStatus || terminal.state != now.state))) clearSendNotices()
         terminalPresent = now != null
         if (now == null || now.state != "live" || now.agentStatus == null) returnWaitingToDraft()
         if (now == null) return
@@ -812,7 +864,7 @@ class ChatModel(
             // Waiting rows have never been attempted and may use the next Up line.
             // Attempted rows remain attached to their original RPC; never replay them.
             snapshotFlow { link?.state to link?.connection }.collect { (state, connection) ->
-                clearNotices()
+                clearSendNotices()
                 if (state == LinkState.Up && connection != null) drainQueue()
             }
         }
@@ -826,7 +878,7 @@ class ChatModel(
                     w = withContext(keyWork) { core.watchChat(host.id, terminal.address, snapshot?.cursor) }
                     break
                 } catch (e: CoreException) {
-                    clearNotices()
+                    clearSendNotices()
                     connectionError = e
                     transcriptReady = false
                     // A cancelled key unlock is not evidence of a missing Beacon.
@@ -849,7 +901,7 @@ class ChatModel(
                     if (update.reset) entries.clear()
                     update.upserts.forEach { entries[it.id] = it }
                     entries.keys.retainAll(update.order.toSet())
-                    if (snapshot?.status != update.status) clearNotices()
+                    if (snapshot?.status != update.status) clearSendNotices()
                     snapshot = ChatSnapshot(update.order.mapNotNull { entries[it] }, update.status, update.cursor, update.usage)
                     connectionError = null
                     transcriptReady = update.status == ChatStatus.LIVE
@@ -859,7 +911,7 @@ class ChatModel(
                     reconcileQueue()
                     drainQueue()
                 } catch (e: CoreException) {
-                    clearNotices()
+                    clearSendNotices()
                     transcriptReady = false
                     if (e is CoreException.Closed) return@launch
                     // The core pauses permanent failures until an explicit retry.
@@ -1014,20 +1066,20 @@ class ChatModel(
 
     /** Network/foreground signals may wake transient failures, never permanent ones. */
     fun reconnect() {
-        clearNotices()
+        clearSendNotices()
         if (connectionError?.retryableConnection() == false) return
         if (watch == null) scope?.let(::start) else watch?.reconnect()
     }
 
     fun retryNow() {
-        clearNotices()
+        clearSendNotices()
         if (connectionError?.retryableConnection() == false) return
         if (watch == null) scope?.let(::start) else watch?.retryNow()
     }
 
     /** User action: keep the Agent/draft/cache and resume or recreate the watch. */
     fun retryConnection() {
-        clearNotices()
+        clearSendNotices()
         connectionError = null
         if (watch == null || job?.isActive != true) {
             watch?.stop()
@@ -1055,9 +1107,8 @@ class ChatModel(
         saveOutbox()
         stopped = true
         connectionJob?.cancel()
-        // Only an already attempted RPC may finish on its original HostLink.
-        // Waiting stays in the journal until this Chat is opened again.
-        uploadJob?.cancel()
+        // Submitted uploads and attempted input finish on their original HostLink.
+        // Waiting messages stay in the journal until this Chat is opened again.
         job?.cancel()
         watch?.stop()
         watch = null
@@ -1196,7 +1247,7 @@ fun ChatScreen(
                     change = chat.terminal.turn to rawEntries.mapNotNull { (it.body as? ChatEntryBody.Tool)?.diff },
                     captureEnabled = chat.canEdit && !chat.uploading,
                     onAttachCapture = { content, cleanup ->
-                        chat.attach(context.applicationContext, content, cleanup).also { accepted ->
+                        chat.attach(context.applicationContext, content, cleanup = cleanup).also { accepted ->
                             if (accepted) preview.selected = null
                         }
                     })
@@ -1315,8 +1366,12 @@ fun ChatScreen(
                 }
                 if (chat.uploading) {
                     ConsoleProgress(Modifier.fillMaxWidth())
-                    ChatNotice(stringResource(R.string.attachments_uploading))
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.weight(1f)) { ChatNotice(stringResource(R.string.attachments_uploading)) }
+                        TextButton(onClick = chat::cancelUpload) { Text(stringResource(R.string.attachments_cancel_button)) }
+                    }
                 }
+                chat.attachmentNotice?.let { AnnouncedText(messageText(it)) }
                 chat.attachmentError?.let { AnnouncedText(stringResource(it.res, *it.args.toTypedArray()), color = MaterialTheme.colorScheme.error) }
                 if (chat.inputUnavailable) {
                     ConsoleChatCallSurface {
