@@ -648,6 +648,7 @@
     <string name="thread_waiting_position">%1$d/%2$d</string>
     <string name="thread_previous">‹</string>
     <string name="thread_next">›</string>
+    <string name="thread_call_dismiss">Close Call</string>
     <string name="thread_open_conversation">Open conversation</string>
     <string name="thread_next_waiting">Next · %1$s</string>
     <string name="thread_waiting_empty">All caught up</string>

@@ -11,6 +11,7 @@ import io.github.shiroel.aries.core.*
 import kotlinx.coroutines.awaitCancellation
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -73,4 +74,40 @@ class ThreadWaitingTest {
             assertTrue("The preview releases every superseded stream", targetStreams.dropLast(1).all { it.stopped })
         }
     }
+    // Regression: a Call without Choices must not permanently hide the Agent's checked question-answer route.
+    @Test fun closingACallWithoutChoicesRestoresTheQuestionAnswerRoute() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val core = FakeCore().apply {
+            savedView = AgentView.CHAT
+            addHost("home", Endpoint.Ssh("home.test", 22u, "me"))
+            ensureKey()
+            terminals = listOf(TerminalInfo("t1", "Current", "", listOf("claude"), "/repo", "live",
+                AgentStatus.Blocked(BlockedReason.QUESTION, null)))
+        }
+        val settings = ThemeSettings(context.getSharedPreferences("thread-call-test", Context.MODE_PRIVATE)).apply {
+            chooseLayout(AppLayout.THREAD)
+        }
+        compose.setContent {
+            val scope = rememberCoroutineScope()
+            val model = remember { HostsModel(core, scope) }
+            AriesApp(model, settings)
+        }
+        compose.onNodeWithText("home").performClick()
+        compose.onNodeWithText("Current").performClick()
+        compose.runOnIdle {
+            core.pushChat(ChatSnapshot(listOf(ChatEntry("q1", null, ChatEntryBody.Question("AskUserQuestion", "Scope?",
+                listOf(ChatQuestionPart("Which scope?", null, false, listOf(ChatQuestionOption("Chat", null)))),
+                ChatToolStatus.RUNNING, null))), ChatStatus.LIVE, null))
+            core.sendCall(CallInfo("h1", "notice", 1000uL, "t1", true, "Review the result", "No Choice is required.",
+                CallUrgency.URGENT, emptyList(), null, true))
+        }
+        compose.onNode(hasText(context.getString(R.string.thread_call_dismiss)) and
+            hasAnyAncestor(hasTestTag("thread-call-panel"))).performClick()
+        compose.onNodeWithContentDescription(context.getString(R.string.chat_question_option_label, "Chat")).performClick()
+        compose.runOnIdle {
+            assertEquals(listOf(Triple("t1", "q1", listOf(listOf(0u)))), core.answers)
+            assertTrue(core.replies.isEmpty())
+        }
+    }
+
 }

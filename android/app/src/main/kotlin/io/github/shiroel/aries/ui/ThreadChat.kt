@@ -191,14 +191,20 @@ internal fun ThreadAnswerPanel(chat: ChatModel, entry: ChatEntry) {
 }
 
 @Composable
-internal fun ThreadCallPanel(entry: CallEntry, calls: CallsModel, chat: ChatModel? = null, compact: Boolean = false) {
+internal fun ThreadCallPanel(entry: CallEntry, calls: CallsModel, chat: ChatModel? = null, compact: Boolean = false, onDismiss: (() -> Unit)? = null) {
     val urgent = entry.call.urgency in setOf(CallUrgency.URGENT, CallUrgency.EMERGENCY)
     val accent = if (urgent) Color(0xFFF0B23E) else MaterialTheme.colorScheme.outlineVariant
     Column(Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState()).testTag("thread-call-panel")) {
         HorizontalDivider(thickness = if (urgent) 3.dp else 1.dp, color = accent)
-        if (urgent) Text(stringResource(if (entry.call.urgency == CallUrgency.EMERGENCY) R.string.call_urgency_emergency else R.string.call_urgency_urgent),
-            Modifier.fillMaxWidth().background(accent.copy(alpha = .14f)).padding(horizontal = 16.dp, vertical = 8.dp),
-            fontWeight = FontWeight.Bold)
+        if (urgent || onDismiss != null) Row(
+            Modifier.fillMaxWidth().background(if (urgent) accent.copy(alpha = .14f) else MaterialTheme.colorScheme.surfaceContainer),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (urgent) Text(stringResource(if (entry.call.urgency == CallUrgency.EMERGENCY) R.string.call_urgency_emergency else R.string.call_urgency_urgent),
+                Modifier.weight(1f).padding(horizontal = 16.dp, vertical = 8.dp), fontWeight = FontWeight.Bold)
+            else Spacer(Modifier.weight(1f))
+            if (onDismiss != null) TextButton(onClick = onDismiss) { Text(stringResource(R.string.thread_call_dismiss)) }
+        }
         val colors = MaterialTheme.colorScheme
         MaterialTheme(colorScheme = if (urgent) colors.copy(surfaceContainer = accent.copy(alpha = .1f).compositeOver(colors.surface)) else colors) {
             ConsoleChatCall(entry, calls)
@@ -288,11 +294,15 @@ internal fun ThreadComposer(chat: ChatModel, compact: Boolean) {
 @Composable
 internal fun ThreadChatInput(model: HostsModel, chat: ChatModel, agentCalls: List<CallEntry>, calls: CallsModel?,
     question: ChatEntry?, compact: Boolean) {
+    var closedCalls by remember(chat) { mutableStateOf(emptySet<String>()) }
     Column(Modifier.fillMaxWidth()) {
         ThreadWaitingPill(model, chat)
         ThreadConnectionGuidance(chat)
-        val activeCall = agentCalls.sortedByDescending { it.call.urgency.ordinal }.firstOrNull()
-        if (activeCall != null && calls != null) ThreadCallPanel(activeCall, calls, chat, compact)
+        val activeCall = agentCalls.sortedByDescending { it.call.urgency.ordinal }.firstOrNull { it.key !in closedCalls }
+        if (activeCall != null && calls != null) ThreadCallPanel(activeCall, calls, chat, compact, onDismiss = {
+            closedCalls = closedCalls + activeCall.key
+            if (calls.banner?.key == activeCall.key) calls.dismissBanner()
+        })
         else if (question != null) ThreadAnswerPanel(chat, question)
         else if (chat.link != null) ThreadComposer(chat, compact)
     }

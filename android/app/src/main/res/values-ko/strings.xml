@@ -648,6 +648,7 @@
     <string name="thread_waiting_position">%1$d/%2$d</string>
     <string name="thread_previous">‹</string>
     <string name="thread_next">›</string>
+    <string name="thread_call_dismiss">Call 닫기</string>
     <string name="thread_open_conversation">대화 열기</string>
     <string name="thread_next_waiting">다음 · %1$s</string>
     <string name="thread_waiting_empty">답변을 모두 마쳤어요</string>
