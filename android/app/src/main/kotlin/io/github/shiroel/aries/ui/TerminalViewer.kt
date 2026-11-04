@@ -72,11 +72,23 @@ import io.github.shiroel.aries.core.TerminalExit
 import io.github.shiroel.aries.core.TerminalInfo
 import io.github.shiroel.aries.core.TerminalSearch
 
+/** Stored separately from an attach stream, which is recreated on every view switch. */
+class TerminalComposerState(private val changed: () -> Unit = {}) {
+    private var text by mutableStateOf("")
+    var draft: String
+        get() = text
+        set(value) { text = value; changed() }
+    private var visible by mutableStateOf(false)
+    var open: Boolean
+        get() = visible
+        set(value) { visible = value; changed() }
+}
+
 /**
  * One open Terminal's screen as the core's frames built it. The grid is
  * the Terminal's own size (observe mode): the desktop decides it.
  */
-class TerminalViewer(terminal: TerminalInfo) {
+class TerminalViewer(terminal: TerminalInfo, private val composer: TerminalComposerState = TerminalComposerState()) {
     var inputHistory: InputHistoryModel? = null
     var terminal by mutableStateOf(terminal)
         private set
@@ -224,9 +236,12 @@ class TerminalViewer(terminal: TerminalInfo) {
     var onCompositionInterrupted: (() -> Unit)? = null
 
     /** The editable draft stays local until Send, including across input-mode switches. */
-    var draft by mutableStateOf("")
-    var composerOpen by mutableStateOf(false)
-        private set
+    var draft: String
+        get() = composer.draft
+        set(value) { composer.draft = value }
+    var composerOpen: Boolean
+        get() = composer.open
+        private set(value) { composer.open = value }
 
     private var pendingPaste: TerminalInput.Paste? = null
     private var pasteConnection: HostConnection? = null

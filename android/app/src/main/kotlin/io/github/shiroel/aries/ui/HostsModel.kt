@@ -84,8 +84,8 @@ sealed interface Screen {
     /** An open Host: its Spaces, Tabs and Panes. */
     data class Browse(val browser: HostBrowser) : Screen
 
-    /** One Terminal; [chatDraft] carries unsent text across view switches. Back returns to [returnTo]. */
-    data class Terminal(val viewer: TerminalViewer, val returnTo: Screen, val chatDraft: String = "") : Screen
+    /** One Terminal. Drafts belong to HostsModel; Back returns to [returnTo]. */
+    data class Terminal(val viewer: TerminalViewer, val returnTo: Screen) : Screen
 
     /** Every Host's Agents in one list. */
     data class Agents(val board: AgentBoard) : Screen
@@ -1173,7 +1173,9 @@ class HostsModel(
     fun remove(prompt: Prompt.ConfirmRemove) {
         this.prompt = null
         guard {
+            conversations.filterKeys { it.hostId == prompt.host.id }.values.forEach { it.stop() }
             core.removeHost(prompt.host.id)
+            conversations.keys.removeAll { it.hostId == prompt.host.id }
             hosts = core.hosts()
             hostsChanged()
             settingsHost = null
@@ -1264,7 +1266,7 @@ class HostsModel(
                             browser.updateTerminals(list)
                             terminals = list
                             restoreIfReady()
-                            chatOn(browser.host.id)?.update(list)
+                            updateConversations(browser.host.id, list)
                             terminalOn(browser.host.id)?.update(list)
                         }
                     } finally {
@@ -1314,12 +1316,20 @@ class HostsModel(
         }
     }
 
+    /** One owner per full Host/Terminal identity, independent of navigation and SSH lines. */
+    private val conversations = mutableMapOf<AgentKey, ChatModel>()
+
+    private fun conversation(link: HostLink, terminal: TerminalInfo): ChatModel =
+        conversations.getOrPut(AgentKey(link.host.id, terminal.address)) {
+            ChatModel(core, link.host, terminal, link, keyWork)
+        }.also { it.bind(link, terminal) }
+
     private fun chat(link: HostLink?, terminal: TerminalInfo, returnTo: Screen, draft: String = "") {
-        val host = link?.host ?: return
-        val chat = ChatModel(core, host, terminal, link, keyWork).also { it.draft = draft }
+        val line = link ?: return
+        val chat = conversation(line, terminal)
+        if (draft.isNotEmpty()) chat.appendDraft(draft)
         screen = Screen.Chat(chat, returnTo)
-        if (screensPaused) chat.pause()
-        chat.start(scope)
+        chat.start(scope, paused = screensPaused)
     }
 
     /**
@@ -1338,14 +1348,14 @@ class HostsModel(
                     val link = s.viewer.link ?: return
                     viewing?.cancel()
                     viewing = null
-                    chat(link, s.viewer.terminal, s.returnTo, s.chatDraft)
+                    chat(link, s.viewer.terminal, s.returnTo)
                 }
             }
             is Screen.Chat -> {
                 if (view != AgentView.TERMINAL) return
                 val link = s.chat.link ?: return
                 s.chat.stop()
-                observe(link, s.chat.terminal, s.returnTo, s.chat.draft)
+                observe(link, s.chat.terminal, s.returnTo)
             }
             else -> return
         }
@@ -1383,7 +1393,7 @@ class HostsModel(
         if (s.viewer.terminal.agentStatus != null) {
             switchView(AgentView.CHAT)
             (screen as? Screen.Chat)?.chat?.let { chat ->
-                chat.draft = if (chat.draft.isEmpty()) block else chat.draft + "\n\n" + block
+                chat.appendDraft(block)
                 return
             }
         }
@@ -1392,12 +1402,13 @@ class HostsModel(
     }
 
     /** Re-attaches with `resumed` on each new line, so the screen comes back after a network change. */
-    private fun observe(link: HostLink, terminal: TerminalInfo, returnTo: Screen, chatDraft: String = "") {
-        val viewer = TerminalViewer(terminal)
-        viewer.inputHistory = InputHistoryModel(core, link.host.id, terminal.address)
+    private fun observe(link: HostLink, terminal: TerminalInfo, returnTo: Screen) {
+        val owner = conversation(link, terminal)
+        val viewer = TerminalViewer(terminal, owner.terminalComposer)
+        viewer.inputHistory = owner.inputHistory
         viewer.link = link
         if (attachMode == AttachMode.INPUT) viewer.startTyping()
-        screen = Screen.Terminal(viewer, returnTo, chatDraft)
+        screen = Screen.Terminal(viewer, returnTo)
         viewing = scope.launch {
             try {
                 link.keep { conn, resumed ->
@@ -1671,7 +1682,7 @@ class HostsModel(
                                 while (true) {
                                     val list = watch.next()
                                     board.update(host.id, list)
-                                    chatOn(host.id)?.update(list)
+                                    updateConversations(host.id, list)
                                     terminalOn(host.id)?.update(list)
                                     focusing?.let { key ->
                                         focusing = null
@@ -2007,8 +2018,10 @@ class HostsModel(
         screen = s.returnTo
     }
 
-    /** The Chat that is open (or under the Terminal opened from it) on [hostId]. */
-    private fun chatOn(hostId: String): ChatModel? = liveChat?.takeIf { it.host.id == hostId }
+    /** Hidden composers share the Host's status feed without opening another watch. */
+    private fun updateConversations(hostId: String, terminals: List<TerminalInfo>) {
+        conversations.filterKeys { it.hostId == hostId }.values.forEach { it.update(terminals) }
+    }
 
     private fun terminalOn(hostId: String): TerminalViewer? =
         (screen as? Screen.Terminal)?.viewer?.takeIf { it.link?.host?.id == hostId }

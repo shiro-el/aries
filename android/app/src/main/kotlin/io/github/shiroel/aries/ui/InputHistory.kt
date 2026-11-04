@@ -109,3 +109,7 @@ internal fun InputHistoryButton(history: InputHistoryModel, enabled: Boolean = t
         },
     )
 }
+
+/** History inserts a previous input without discarding work already in the composer. */
+internal fun appendInputHistory(draft: String, entry: String): String =
+    if (draft.isEmpty()) entry else "$draft\n\n$entry"
