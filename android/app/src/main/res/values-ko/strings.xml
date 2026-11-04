@@ -1013,7 +1013,7 @@
     <string name="push_step_done_description">완료</string>
     <string name="push_step_failed_description">실패</string>
     <string name="push_failed">“%1$s” 단계 실패: %2$s</string>
-    <string name="push_on_body">푸시 켜짐 · Relay: %1$s</string>
+    <string name="push_on_body">Relay: %1$s</string>
     <string name="push_test_sent">테스트 알림을 보냈어요.</string>
     <string name="push_relay_label">Relay URL</string>
     <string name="push_change_relay_button">Relay 변경</string>

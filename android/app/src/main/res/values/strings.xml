@@ -1016,7 +1016,7 @@
     <string name="push_step_done_description">Completed</string>
     <string name="push_step_failed_description">Failed</string>
     <string name="push_failed">Step \"%1$s\" failed: %2$s</string>
-    <string name="push_on_body">Push is on. Relay: %1$s</string>
+    <string name="push_on_body">Relay: %1$s</string>
     <string name="push_test_sent">Test notification sent.</string>
     <string name="push_relay_label">Relay URL</string>
     <string name="push_relay_placeholder" translatable="false">https://relay.example.com</string>
