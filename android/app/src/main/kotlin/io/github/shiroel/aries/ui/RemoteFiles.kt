@@ -40,7 +40,7 @@ fun RemoteFilesScreen(
     initialLocation: FileLocation? = null,
     onDiffSend: ((String) -> Unit)? = onSend,
 ) {
-    val initialFolder = initialLocation?.path?.let { java.nio.file.Paths.get(it).normalize().parent?.toString() ?: "/" }
+    val initialFolder = initialLocation?.path?.substringBeforeLast('/')?.ifEmpty { "/" }
     var folder by remember(address, initialLocation) { mutableStateOf(initialFolder) }
     var startingFolder by remember(address, initialLocation) { mutableStateOf(initialFolder) }
     var directory by remember(address, initialLocation) { mutableStateOf<RemoteDirectory?>(null) }
