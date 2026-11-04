@@ -50,7 +50,7 @@ internal fun ChatCatalogControls(chat: ChatModel) {
     var revision by remember(chat) { mutableIntStateOf(0) }
     var showSkills by remember(chat) { mutableStateOf(false) }
     var query by remember(chat) { mutableStateOf("") }
-    val enabled = chat.sending == null
+    val enabled = chat.canEdit
     val input = chat.input
     val prefix = input.text.take(input.selection.start)
     val completing = input.selection.collapsed && prefix.startsWith('/') && prefix.drop(1).all { it.isLetterOrDigit() || it in "-_:" }
