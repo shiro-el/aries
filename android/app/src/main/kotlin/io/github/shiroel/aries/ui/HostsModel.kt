@@ -578,8 +578,17 @@ class HostsModel(
     private var navigationVersion = 0L
     private var suppressLocationSave by mutableStateOf(false)
 
-    /** Explicit navigation supersedes automatic focus, restoration and any pending detail connection. */
+    /** Only explicit destination changes dismiss navigation overlays. */
+    internal var overlayNavigationVersion by mutableStateOf(0L)
+        private set
+
     private fun userNavigation() {
+        overlayNavigationVersion++
+        navigationIntent()
+    }
+
+    /** Overlay entry and pending opens supersede restoration without dismissing themselves. */
+    private fun navigationIntent() {
         navigationVersion++
         suppressLocationSave = false
         restoring = false
@@ -2132,8 +2141,12 @@ class HostsModel(
     var callInboxOpen by mutableStateOf(false)
         private set
 
+    internal var callInboxOpenedAtNavigation = 0L
+        private set
+
     fun openCallInbox() {
-        userNavigation()
+        navigationIntent()
+        callInboxOpenedAtNavigation = overlayNavigationVersion
         callInboxOpen = true
         calls.dismissBanner()
         calls.watch(hosts, everyHost = true)
@@ -2147,10 +2160,20 @@ class HostsModel(
         }
     }
 
-    internal fun beginTaskNeeds() { calls.watch(hosts, everyHost = true) }
+    private var taskNeedsActive = false
+
+    private fun reconcileCallWatches() {
+        if (callsActive) calls.watch(hosts,
+            everyHost = callInboxOpen || taskNeedsActive,
+            retainedHostIds = setOfNotNull(currentAgentKey?.hostId))
+        else calls.stopAll()
+    }
+
+    internal fun beginTaskNeeds() { taskNeedsActive = true; reconcileCallWatches() }
 
     internal fun endTaskNeeds() {
-        if (callsActive) calls.watch(hosts, everyHost = callInboxOpen) else calls.stopAll()
+        taskNeedsActive = false
+        reconcileCallWatches()
     }
 
     fun closeCallInbox() {
@@ -2158,14 +2181,13 @@ class HostsModel(
         callInboxOpen = false
         if (agentOpeningFromInbox) cancelAgentOpen()
         openingCall = null
-        calls.stopAll()
-        if (callsActive) calls.watch(hosts, everyHost = false)
+        reconcileCallWatches()
     }
 
     fun resumeCalls() {
         callsActive = true
         observeLastKnownStates()
-        calls.watch(hosts, everyHost = callInboxOpen)
+        reconcileCallWatches()
     }
 
     fun pauseCalls() {
@@ -2180,7 +2202,7 @@ class HostsModel(
         if (agentHome?.board?.hosts?.any { retained -> hosts.none { it.id == retained.id } } == true) closeAgents()
         onSavedLaunchesChanged()
         calls.retainHosts(hosts)
-        if (callsActive || callInboxOpen) calls.watch(hosts, everyHost = callInboxOpen)
+        reconcileCallWatches()
     }
 
     /** Live lists replace stored lists per Host, including an empty live list. */
@@ -2391,13 +2413,13 @@ class HostsModel(
 
     /** Resolve against exactly one Host. Pending trust retries this same action on this same link. */
     private fun openAgentTarget(host: Host, address: String, openChat: Boolean = false, callKey: String? = null) {
-        userNavigation()
-        restoreSettingsBase()
         val fromInbox = callKey != null
+        if (fromInbox) navigationIntent() else userNavigation()
+        restoreSettingsBase()
         openingCall = callKey
-        val origin = screen
+        val version = navigationVersion
         val request = agentOpenRequest
-        fun current() = screen === origin && request == agentOpenRequest && (!fromInbox || callInboxOpen)
+        fun current() = navigationVersion == version && request == agentOpenRequest && (!fromInbox || callInboxOpen)
         val existing = links.firstOrNull { it.host.id == host.id && it.state != LinkState.Closed }
         val target = existing ?: link(host, null)
         val board = agentHome?.board?.takeIf { it.links[host.id] === target }
@@ -2460,13 +2482,13 @@ class HostsModel(
                 if (retained != null) callLink = retained
                 if (existing == null) ownCallLink(target)
                 adopted = true
-                closeCallInbox()
                 val shared = pendingShare
                 if (shared != null && terminal.agentStatus != null) {
                     chat(target, terminal, screen)
                     (screen as Screen.Chat).chat.pendingShare = shared
                     pendingShare = null
                 } else if (openChat) chat(target, terminal, screen) else show(target, terminal, screen)
+                closeCallInbox()
             } catch (e: CoreException) {
                 if (current()) prompt = problemFor(e)
             } finally {
