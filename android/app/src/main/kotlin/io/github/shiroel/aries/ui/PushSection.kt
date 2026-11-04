@@ -37,7 +37,7 @@ import io.github.shiroel.aries.R
 
 /** Push pairing is local state; only a new pairing depends on Beacon availability. */
 @Composable
-fun PushSection(model: PushModel, beaconState: BeaconUi) {
+fun PushSection(model: PushModel, beaconState: BeaconUi, showDialogs: Boolean = true) {
     val host = model.host ?: return
     var advanced by rememberSaveable(host.id) { mutableStateOf(false) }
     LaunchedEffect(host.id, model.ui) {
@@ -59,7 +59,7 @@ fun PushSection(model: PushModel, beaconState: BeaconUi) {
                     checking -> Text(stringResource(R.string.push_checking_beacon))
                     else -> Text(stringResource(R.string.push_off_summary))
                 }
-                if (advanced || model.relayDraft.isBlank()) RelayField(model)
+                RelayField(model)
                 TextButton(onClick = model::enable, enabled = !missing && !checking && !model.busy && model.relayDraft.isNotBlank()) {
                     Text(stringResource(if (model.problem == null) R.string.push_enable_button else R.string.push_retry_button))
                 }
@@ -111,6 +111,12 @@ fun PushSection(model: PushModel, beaconState: BeaconUi) {
         model.problem?.let { AnnouncedText(resolve(it), color = MaterialTheme.colorScheme.error) }
         model.notice?.let { AnnouncedText(resolve(it), style = MaterialTheme.typography.bodySmall) }
     }
+    if (showDialogs) PushDialogs(model)
+}
+
+@Composable
+internal fun PushDialogs(model: PushModel) {
+    val host = model.host ?: return
     if (model.confirmDisable) {
         AlertDialog(
             onDismissRequest = model::cancelDisable,
@@ -202,7 +208,12 @@ private fun RelayField(model: PushModel) {
         label = { Text(stringResource(R.string.push_relay_label)) },
         placeholder = { Text(stringResource(R.string.push_relay_placeholder)) },
         singleLine = true,
-        supportingText = if (model.relayDraft.isBlank()) ({ Text(stringResource(R.string.push_relay_required)) }) else null,
+        isError = model.relayProblem != null,
+        supportingText = when {
+            model.relayProblem != null -> ({ AnnouncedText(resolve(model.relayProblem!!)) })
+            model.relayDraft.isBlank() -> ({ Text(stringResource(R.string.push_relay_required)) })
+            else -> null
+        },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false),
     )
 }

@@ -17,6 +17,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -66,6 +67,9 @@ fun ExtraKeysSection(model: HostsModel) {
     val context = LocalContext.current
     val clipLabel = stringResource(R.string.key_clip_label)
     var label by rememberSaveable { mutableStateOf("") }
+    LaunchedEffect(model.createdExtraKeyLabel) {
+        model.consumeCreatedExtraKey()?.let { created -> if (label.trim() == created) label = "" }
+    }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.keys_title), style = MaterialTheme.typography.titleMedium)
         model.keys.filter { it.label.isNotEmpty() }.forEach { key ->
@@ -76,10 +80,10 @@ fun ExtraKeysSection(model: HostsModel) {
                     ?.setPrimaryClip(ClipData.newPlainText(clipLabel, key.openssh))
             }) { Text(stringResource(R.string.key_copy_button)) }
         }
-        ConsoleField(label, { label = it }, label = { Text(stringResource(R.string.key_new_label)) }, singleLine = true)
-        ConsoleButton(enabled = label.isNotBlank(), onClick = {
+        ConsoleField(label, { label = it }, enabled = !model.extraKeyBusy,
+            label = { Text(stringResource(R.string.key_new_label)) }, singleLine = true)
+        ConsoleButton(enabled = label.isNotBlank() && !model.extraKeyBusy, onClick = {
             model.createExtraKey(label)
-            label = ""
         }) { Text(stringResource(R.string.key_new_button)) }
     }
 }
