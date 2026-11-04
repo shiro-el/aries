@@ -3,13 +3,14 @@ package io.github.shiroel.aries.ui
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performFirstLinkClick
 import androidx.compose.ui.test.performTouchInput
@@ -35,7 +36,7 @@ class RemoteFilesTest {
     private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
     private fun str(id: Int) = context.getString(id)
 
-    @Test fun browsesFoldersPagesAndReturnsALineForTheDraft() {
+    @Test fun browsesBeyondTwoHundredLinesAndReturnsTheLastLineForTheDraft() {
         val requests = mutableListOf<Triple<String, ULong, UInt>>()
         val conn = object : HostConnection(NoHandle) {
             override suspend fun listFiles(address: String, path: String?): RemoteDirectory {
@@ -45,20 +46,22 @@ class RemoteFilesTest {
             }
             override suspend fun readFilePage(address: String, path: String, offset: ULong, limit: UInt): RemoteFilePage {
                 requests += Triple(path, offset, limit)
-                return if (offset == 1uL) RemoteFilePage("first\nsecond\n", 1u, 2u, 3u)
-                else RemoteFilePage("last", 3u, 3u, 3u)
+                val last = minOf(605uL, offset + limit - 1u)
+                val text = (offset..last).joinToString("\n") { if (it == 605uL) "val last = 605" else "line $it" }
+                return RemoteFilePage(text, offset, last, 605u)
             }
         }
         var draft = ""
         compose.setContent { MaterialTheme { RemoteFilesScreen(conn, "box/t7", {}, { draft = it }) } }
         compose.onNodeWithText("src/").performClick()
         compose.onNodeWithText("a.kt").performClick()
-        compose.onNodeWithText("first").assertExists()
-        compose.onNodeWithContentDescription(str(R.string.files_next_button)).performClick()
-        compose.onNodeWithText("last").assertExists()
-        compose.onNodeWithTag("files-line:3").performClick()
-        assertEquals("'/repo/src/a.kt':3\nlast", draft)
-        assertEquals(listOf(Triple("/repo/src/a.kt", 1uL, 200u), Triple("/repo/src/a.kt", 3uL, 200u)), requests)
+        compose.onNodeWithText("line 1").assertExists()
+        compose.onNodeWithTag("files-lines").performScrollToIndex(604)
+        compose.onNodeWithText("val last = 605").assertExists()
+        compose.onNodeWithTag("files-line:605").performClick()
+        assertEquals("'/repo/src/a.kt':605\nval last = 605", draft)
+        org.junit.Assert.assertTrue(requests.any { it.second > 200uL })
+
     }
     @Test fun changedFileLinkStartsWithDiffAndFullFileKeepsTheLinkedLine() {
         val reads = mutableListOf<ULong>()
@@ -75,7 +78,8 @@ class RemoteFilesTest {
                 assertEquals("box/t7", address)
                 assertEquals("/repo/src/Main.kt", path)
                 reads += offset
-                return RemoteFilePage("full source", offset, offset, 800u)
+                val last = minOf(800uL, offset + limit - 1u)
+                return RemoteFilePage((offset..last).joinToString("\n") { if (it == 415uL) "full source" else "line $it" }, offset, last, 800u)
             }
         }
         compose.setContent { MaterialTheme {
@@ -168,7 +172,8 @@ class RemoteFilesTest {
         val reads = mutableListOf<Triple<String, String, ULong>>()
         core.connection!!.fileReader = { address, path, offset, _ ->
             reads += Triple(address, path, offset)
-            RemoteFilePage("val answer = 42\n", offset, offset, 800u)
+            val last = minOf(800uL, offset + 199u)
+            RemoteFilePage((offset..last).joinToString("\n") { if (it == 415uL) "val answer = 42" else "line $it" }, offset, last, 800u)
         }
         core.pushChat(ChatSnapshot(listOf(ChatEntry("a1", null, ChatEntryBody.Agent("See src/Main.kt:415."))), ChatStatus.LIVE, null))
         compose.waitUntil(5000) { compose.onAllNodesWithText("See src/Main.kt:415.").fetchSemanticsNodes().isNotEmpty() }
@@ -250,6 +255,51 @@ class RemoteFilesTest {
         compose.onNodeWithText("Wrap lines").performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.waitForIdle()
         compose.waitUntil(5000) { layout().lineCount == 1 }
+    }
+
+    @Test fun findReachesUnloadedLinesAndWrapsAcrossTheWholeFile() {
+        val conn = object : HostConnection(NoHandle) {
+            override suspend fun readFilePage(address: String, path: String, offset: ULong, limit: UInt): RemoteFilePage {
+                // The Host may return fewer lines than requested because of its byte budget.
+                val last = minOf(1001uL, offset + 36u)
+                val text = (offset..last).joinToString("\n") {
+                    when (it) { 415uL -> "val needle = 415"; 1001uL -> "val needle = 1001"; else -> "line $it" }
+                }
+                return RemoteFilePage(text, offset, last, 1001u)
+            }
+        }
+        compose.setContent { MaterialTheme { RemoteFilesScreen(conn, "t1", {}, initialLocation = FileLocation("/repo/a.kt")) } }
+        compose.onNodeWithText("val needle = 415").assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.files_find_hint)).performTextInput("NEEDLE")
+        fun found(text: String) {
+            compose.waitUntil(10000) { compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() }
+        }
+        found("val needle = 415")
+        compose.onNodeWithTag("files-line:415").assertExists()
+        compose.onNodeWithContentDescription(str(R.string.files_find_next)).performClick()
+        found("val needle = 1001")
+        compose.onNodeWithContentDescription(str(R.string.files_find_next)).performClick()
+        found("val needle = 415")
+        compose.onNodeWithContentDescription(str(R.string.files_find_previous)).performClick()
+        found("val needle = 1001")
+    }
+
+    @Test fun largeTextNeedsAnExplicitOpenBeforeReadingItsLines() {
+        var reads = 0
+        val conn = object : HostConnection(NoHandle) {
+            override suspend fun readFileBytes(address: String, path: String, offset: ULong, length: UInt) =
+                RemoteFileBytes(byteArrayOf(97), 0u, 3uL * 1024u * 1024u, false)
+            override suspend fun readFilePage(address: String, path: String, offset: ULong, limit: UInt): RemoteFilePage {
+                reads++
+                return RemoteFilePage("large source", 1u, 1u, 1u)
+            }
+        }
+        compose.setContent { MaterialTheme { RemoteFilesScreen(conn, "t1", {}, initialLocation = FileLocation("/repo/large.txt")) } }
+        compose.onNodeWithText(str(R.string.files_large_warning)).assertExists()
+        assertEquals(0, reads)
+        compose.onNodeWithText(str(R.string.files_large_open)).performClick()
+        compose.onNodeWithText("large source").assertExists()
+        assertEquals(1, reads)
     }
 
 }
