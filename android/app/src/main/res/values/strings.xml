@@ -909,6 +909,9 @@
     <string name="tasks_changes">Changes</string>
     <string name="tasks_changes_count">Changes %1$d</string>
     <string name="tasks_change_stats">+%1$d −%2$d</string>
+    <string name="tasks_tracked_change_stats">Tracked: +%1$d −%2$d</string>
+    <string name="tasks_changes_previous_folder">Previous folder — refresh to review changes in the current folder.</string>
+    <string name="tasks_changes_working_age">Snapshot: %1$s · The task is still working.</string>
     <string name="tasks_request">Request</string>
     <string name="tasks_plan">Plan</string>
     <string name="tasks_plan_completed">Done</string>
