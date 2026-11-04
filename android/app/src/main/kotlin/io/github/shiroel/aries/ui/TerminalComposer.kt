@@ -48,7 +48,7 @@ internal fun TerminalComposer(viewer: TerminalViewer) {
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         viewer.inputHistory?.let { history ->
-            InputHistoryButton(history) { viewer.draft = it }
+            InputHistoryButton(history) { viewer.draft = appendInputHistory(viewer.draft, it) }
         }
         BasicTextField(
             value = viewer.draft,
