@@ -189,7 +189,9 @@ private fun TasksCallRow(entry: CallEntry, onOpen: () -> Unit) {
     TasksRow(entry.call.title, stringResource(if (urgent) R.string.tasks_urgent_call else R.string.console_chat_call_label),
         tasksAttentionColor(), urgent, Modifier.testTag("task-call:${entry.key}"), onOpen,
         metadata = {
-            Text(entry.host.name, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            val host = if (entry.live) entry.host.name else listOf(entry.host.name, stringResource(R.string.tasks_offline)).joinToString(" · ")
+            Text(host, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
             if (entry.live) AgentElapsedTime(entry.call.atMs) else entry.checkedAtMs?.let {
                 Text(agentLastSeen(it), style = MaterialTheme.typography.bodySmall)
             }
