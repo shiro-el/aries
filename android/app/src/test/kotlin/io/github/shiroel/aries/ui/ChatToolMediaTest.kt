@@ -58,7 +58,7 @@ class ChatToolMediaTest {
             "Read", "/repo/shot.png", "{}", ChatToolStatus.DONE, "[image image/png]",
             images = listOf(ChatImage("read#0", "image/png", png.size.toULong(), 160u, 120u, true)),
         ))
-        val header = compose.onNodeWithContentDescription(compose.activity.getString(R.string.chat_tool_expand_label, "Read"))
+        val header = compose.onNode(hasToolAction(compose.activity.getString(R.string.chat_tool_expand_label, "Read")))
         compose.onNodeWithContentDescription("Image").assertDoesNotExist()
         header.performTouchInput { click(topLeft + androidx.compose.ui.geometry.Offset(4f, 4f)) }
         assertEquals(setOf("read"), chat.expanded)
@@ -121,7 +121,7 @@ class ChatToolMediaTest {
         compose.onNodeWithText("Back").performClick()
         compose.onNodeWithContentDescription(compose.activity.getString(R.string.files_actions_label)).performClick()
         compose.onNodeWithText("Close files").performClick()
-        compose.onNodeWithContentDescription(compose.activity.getString(R.string.chat_tool_expand_label, "Read"))
+        compose.onNode(hasToolAction(compose.activity.getString(R.string.chat_tool_expand_label, "Read")))
             .performTouchInput { click(topLeft + androidx.compose.ui.geometry.Offset(4f, 4f)) }
         compose.onNodeWithText(compose.activity.getString(R.string.chat_tool_path, "/tmp/deleted.svg")).performFirstLinkClick()
         compose.waitUntil(5_000) { compose.onAllNodesWithContentDescription("Image viewer").fetchSemanticsNodes().isNotEmpty() }

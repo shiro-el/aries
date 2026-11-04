@@ -132,7 +132,7 @@ class ChatCopySelectionTest {
         val input = "{\n  \"command\": \"printf hello\"\n}"
         val result = "hello\n  오류: 자세한 내용\n"
         show(ChatEntryBody.Tool("Bash", "printf hello", input, ChatToolStatus.FAILED, result))
-        val tool = compose.onNodeWithContentDescription(str(R.string.chat_tool_expand_label, "Bash"))
+        val tool = compose.onNode(hasToolAction(str(R.string.chat_tool_expand_label, "Bash")))
         tool.performTouchInput { longClick() }
         compose.onNodeWithText(str(R.string.chat_copy_all)).performClick()
         assertEquals(result, clipboard())
@@ -158,7 +158,7 @@ class ChatCopySelectionTest {
         for (output in listOf(null, result)) {
             show(ChatEntryBody.Tool("Bash", "cat log.txt", input,
                 if (output == null) ChatToolStatus.RUNNING else ChatToolStatus.DONE, output))
-            compose.onNodeWithContentDescription(str(R.string.chat_tool_expand_label, "Bash"))
+            compose.onNode(hasToolAction(str(R.string.chat_tool_expand_label, "Bash")))
                 .performTouchInput { longClick() }
             compose.onNodeWithText(str(R.string.chat_copy_all)).performClick()
             assertEquals(output ?: input, clipboard())
