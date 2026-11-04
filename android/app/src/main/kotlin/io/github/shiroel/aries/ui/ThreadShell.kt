@@ -68,6 +68,7 @@ internal fun ThreadSecondaryHeader(model: HostsModel, screen: Screen) {
 internal fun ThreadNewTaskButton(model: HostsModel) {
     val history = LocalCreationHostHistory.current
     ActionIcon(R.drawable.ic_square_pen, R.string.new_task_title, {
+        model.interactWithHome()
         val host = model.hosts.find { it.id == model.currentAgentKey?.hostId }
             ?: model.task?.link?.host?.takeIf { it in model.hosts }
             ?: model.hosts.find { it.id == history?.hostId }
@@ -81,6 +82,7 @@ internal fun ThreadNewTaskButton(model: HostsModel) {
 @Composable
 internal fun ThreadEmptyHome(model: HostsModel, board: AgentBoard) {
     Column(Modifier.fillMaxSize().testTag("thread-empty-home")) {
+        AgentHomeScope(model, board)
         if (model.pendingShare != null) {
             Text(stringResource(R.string.attachments_choose_agent), Modifier.padding(16.dp))
             LazyColumn(Modifier.weight(1f)) {
@@ -123,6 +125,7 @@ private fun ThreadDrawer(model: HostsModel, navigate: (() -> Unit) -> Unit) {
         }
     }
     Column(Modifier.fillMaxSize().testTag("thread-drawer")) {
+        (model.listScreen as? Screen.Agents)?.board?.let { AgentHomeScope(model, it) }
         Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.app_name), Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall)
             ThreadNewTaskButton(model)
@@ -162,17 +165,22 @@ private fun ThreadDrawer(model: HostsModel, navigate: (() -> Unit) -> Unit) {
         HorizontalDivider()
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             FlowRow(Modifier.weight(1f).heightIn(min = 48.dp).testTag("thread-hosts")
-                .clickable(role = Role.Button) { navigate(model::back) }.padding(8.dp),
+                .clickable(role = Role.Button) { navigate(model::showHosts) }.padding(8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (model.hosts.isEmpty()) Text(stringResource(R.string.hosts_title))
                 model.hosts.forEach { host ->
                     val live = model.quickOpenSources.any { it.host.id == host.id && it.live }
-                    val hostLabel = stringResource(if (live) R.string.thread_host_online else R.string.agents_host_offline, host.name)
+                    val hostLabel = stringResource(when {
+                        live -> R.string.thread_host_online
+                        !model.hasHostLink(host.id) -> R.string.agents_host_not_connected
+                        else -> R.string.agents_host_offline
+                    }, host.name)
                     Row(Modifier.semantics { contentDescription = hostLabel }, verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Box(Modifier.size(7.dp).border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
                             .then(if (live) Modifier.background(statusColor(AgentStatus.Done), CircleShape) else Modifier))
-                        Text(host.name, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(if (!live && !model.hasHostLink(host.id)) hostLabel else host.name,
+                            style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }

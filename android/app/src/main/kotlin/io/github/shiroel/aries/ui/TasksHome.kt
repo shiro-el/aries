@@ -57,6 +57,7 @@ internal fun TasksHome(model: HostsModel, board: AgentBoard) {
     }
     val folds = rememberTreeFolds("tasks-hosts")
     Column(Modifier.fillMaxSize().testTag("tasks-home")) {
+        AgentHomeScope(model, board)
         if (queue == null) model.calls.banner?.let { entry ->
             CallAttentionBanner(entry, model.callCallerName(entry), onOpen = {
                 needs.firstOrNull { it is TaskNeed.Call && it.entry.key == entry.key }?.let(openNeed)
@@ -119,7 +120,11 @@ internal fun TasksHome(model: HostsModel, board: AgentBoard) {
                     item(key = "host:${host.id}") {
                         TextButton(onClick = { model.openHost(host) }, modifier = Modifier.fillMaxWidth()) {
                             Text(host.name, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-                            Text(stringResource(if (board.links[host.id]?.state == LinkState.Up) R.string.tasks_host_connected else R.string.tasks_offline),
+                            Text(stringResource(when (board.links[host.id]?.state) {
+                                LinkState.Up -> R.string.tasks_host_connected
+                                null -> R.string.tasks_host_not_connected
+                                else -> R.string.tasks_offline
+                            }),
                                 style = MaterialTheme.typography.labelSmall)
                         }
                     }
