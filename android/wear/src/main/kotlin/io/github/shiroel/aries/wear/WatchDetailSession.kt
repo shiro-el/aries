@@ -82,6 +82,8 @@ internal class WatchDetailSession(
             if (current?.detailKey() != key || current.contentHidden) return@launch
             if (detail == null) return@launch
             if (detail.key() != agent.key() || detail.contentHidden) { checks[key] = DetailCheck.FAILED; return@launch }
+            // A body-free permission publication must find only the latest live menu.
+            live.keys.removeAll { it.host == detail.hostId && it.terminal == detail.terminal }
             live[detail.detailKey()] = detail
             checks.remove(key)
             checks[detail.detailKey()] = DetailCheck.READY

@@ -29,7 +29,7 @@ class WatchDetailFlowTest {
     // plus stale permission menus surviving a privacy or turn change.
     @Test fun livePermissionSurvivesRepublishingButNotPrivacyOrANewTurn() {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-        val live = row.copy(requestId = "permission:edit", choices = listOf("Allow", "Deny"), canAnswerOnWatch = true)
+        var live = row.copy(requestId = "permission:edit", choices = listOf("Allow", "Deny"), canAnswerOnWatch = true)
         val session = WatchDetailSession(scope, { _, _ -> WatchCommand(live).toBytes() })
         compose.setContent { WatchInbox(session.summary, 1, row.hostId to row.terminal, {}, false, null, {}, {}, detailActions = { WatchAnswerActions(it, session) }) }
         compose.runOnIdle { session.merge(summary(row)); session.load(row) }
@@ -39,6 +39,14 @@ class WatchDetailFlowTest {
         screenshot("permission-actions")
         compose.runOnIdle { session.merge(summary(row)) }
         compose.onNodeWithText("Deny").assertExists()
+        // A refreshed live permission must also replace the old live override.
+        compose.runOnIdle {
+            live = live.copy(requestId = "permission:second-edit")
+            session.recover(session.summary.inbox.single())
+        }
+        compose.waitForIdle()
+        compose.runOnIdle { session.merge(summary(row)) }
+        assertEquals("permission:second-edit", session.summary.inbox.single().requestId)
         compose.runOnIdle { session.merge(summary(row.copy(contentHidden = true))) }
         compose.onNodeWithText("Deny").assertDoesNotExist()
         compose.runOnIdle { session.merge(summary(row.copy(stateToken = "turn2"))) }
