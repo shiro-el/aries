@@ -43,7 +43,7 @@ fun ConsoleTopBar(
     inbox: @Composable RowScope.() -> Unit = { ConsoleInboxAction() },
     showMark: Boolean = true,
     titleContent: @Composable RowScope.() -> Unit = {
-        Text(title, Modifier.weight(1f), fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
+        ConsoleTitle(title, Modifier.weight(1f))
     },
 ) {
     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("console-top-bar"), verticalAlignment = Alignment.CenterVertically) {
@@ -66,6 +66,12 @@ fun ConsoleTopBar(
         inbox()
     }
     HorizontalDivider()
+}
+
+@Composable
+internal fun ConsoleTitle(title: String, modifier: Modifier = Modifier) {
+    Text(title, modifier, fontSize = 14.sp, fontWeight = FontWeight.Medium,
+        maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
 }
 
 @Composable
@@ -147,7 +153,10 @@ internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit) {
                             model.closeCallInbox()
                             scope.launch { drawer.open() }
                         }, onBack = consoleBack(model), actions = {
-                            if (screen is Screen.Browse) HostActions(screen.browser) { model.newTerminal(screen.browser) }
+                            if (screen is Screen.Browse) HostActions(screen.browser, onRunSaved = { model.runSaved(screen.browser, it) }) { model.newTerminal(screen.browser) }
+                        }, titleContent = {
+                            if (screen is Screen.Browse) HostContextTitle(screen.browser, Modifier.weight(1f))
+                            else ConsoleTitle(consoleTitle(screen), Modifier.weight(1f))
                         })
                     }
                     Box(Modifier.weight(1f)) {

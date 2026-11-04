@@ -38,6 +38,19 @@
     <string name="agent_details_host">Host · %1$s</string>
     <string name="agent_details_folder">Folder · %1$s</string>
 
+    <!-- Host creation and context sheets -->
+    <string name="host_create_title">Create new</string>
+    <string name="host_create_task_detail">Choose an Agent and write its first prompt</string>
+    <string name="host_create_terminal_detail">Run a command on this Host</string>
+    <string name="host_create_space_detail">Group work in a new Space</string>
+    <string name="host_create_tab_detail">Add a Tab to %1$s</string>
+    <string name="host_create_tab_no_space">Choose a Space from the header first</string>
+    <string name="host_create_worktree_detail">Open a Git worktree in a new Tab</string>
+    <string name="host_create_worktree_no_folder">Choose a Space with a folder first</string>
+    <string name="host_create_saved_detail">Run with saved Agent options</string>
+    <string name="host_context_edit_hint">Touch and hold a Space or Tab to rename or close it.</string>
+    <string name="host_context_empty">No Spaces yet. Use + to create one.</string>
+
     <!-- Action menus -->
     <string name="menu_switch">Switch</string>
     <string name="menu_current">Current</string>
