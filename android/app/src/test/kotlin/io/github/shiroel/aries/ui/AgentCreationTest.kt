@@ -122,4 +122,56 @@ class AgentCreationTest {
         assertEquals(listOf("h1", "h2"), core.connectAttempts)
     }
 
+    // D89: editing a saved launch must refresh the warm board, and an open menu must resolve its ID again.
+    @Test fun editingSavedLaunchRefreshesTheBoardAndAnOpenMenuRunsTheCurrentRequest() {
+        val saved = SavedLaunch("L1", "Old task", LaunchRequest("old-command", "/repo", null, null))
+        val core = FakeCore().apply {
+            addHost("home", Endpoint.Ssh("home.invalid", 22u, "me"))
+            savedLaunches += saved
+        }
+        open(core)
+        val conn = core.connection!!
+        conn.launchFailWith = CoreException.Rpc("spawn_failed", "missing program")
+        compose.onNodeWithTag("saved_run:L1").performClick()
+        compose.onNodeWithTag("saved_edit:L1").performScrollTo().performClick()
+        compose.onNodeWithTag("launch_command").performScrollTo().performTextReplacement("edited-command")
+        compose.onNodeWithTag("launch_name").performScrollTo().performTextReplacement("Edited task")
+        compose.onNodeWithText(str(R.string.launch_save_button)).performScrollTo().performClick()
+        compose.onNodeWithText(str(R.string.cancel_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.host_create_title)).performClick()
+        compose.onNodeWithTag("saved_run:L1").assertTextContains("Edited task")
+        // A second editor changes storage after the sheet is already open.
+        val current = saved.request.copy(command = "latest-command")
+        compose.runOnIdle {
+            conn.saveLaunch(saved.copy(name = "Latest task", request = current))
+            conn.launchFailWith = null
+        }
+        compose.onNodeWithTag("saved_run:L1").performClick()
+        compose.runOnIdle { assertEquals(listOf(current), conn.launched) }
+    }
+
+    // D89: deletion must remove the board entry, and a callback captured before deletion must never launch it.
+    @Test fun deletingSavedLaunchRefreshesTheBoardAndAStaleMenuCannotRunIt() {
+        val saved = SavedLaunch("L1", "Old task", LaunchRequest("old-command", "/repo", null, null))
+        val core = FakeCore().apply {
+            addHost("home", Endpoint.Ssh("home.invalid", 22u, "me"))
+            savedLaunches += saved
+        }
+        open(core)
+        val conn = core.connection!!
+        conn.launchFailWith = CoreException.Rpc("spawn_failed", "missing program")
+        compose.onNodeWithTag("saved_run:L1").performClick()
+        compose.onNodeWithTag("saved_delete:L1").performScrollTo().performClick()
+        compose.onNodeWithText(str(R.string.cancel_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.host_create_title)).performClick()
+        compose.onNodeWithTag("saved_run:L1").assertDoesNotExist()
+        // Exercise a stale callback from a sheet/shortcut that was captured before deletion.
+        compose.runOnIdle {
+            conn.launchFailWith = null
+            val board = (model.screen as Screen.Agents).board
+            model.runSavedFromAgents(board, board.links.getValue("h1"), saved)
+        }
+        compose.runOnIdle { assertEquals(emptyList<LaunchRequest>(), conn.launched) }
+    }
+
 }

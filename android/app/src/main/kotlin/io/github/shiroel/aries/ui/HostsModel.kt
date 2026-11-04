@@ -1217,13 +1217,22 @@ class HostsModel(
         activeLaunch = LaunchFlow(browser.link ?: return, form, browser, screen).also { launches[browser.host.id] = it }
     }
 
+    /** Keep warm creation menus in sync even when a different surface edits the saved launch. */
+    private fun updateSavedLaunches(hostId: String, saved: List<SavedLaunch>, browser: HostBrowser? = null) {
+        browser?.savedLaunches = saved
+        quickOpenBrowser?.takeIf { it.host.id == hostId }?.savedLaunches = saved
+        agentHome?.board?.let { board ->
+            if (board.hosts.any { it.id == hostId }) board.savedLaunches[hostId] = saved
+        }
+    }
+
     private fun storeLaunch(link: HostLink, browser: HostBrowser?, form: LaunchForm, saved: SavedLaunch) {
         val conn = link.connection ?: return
         if (form.busy) return
         form.error = null
         try {
             form.stored(conn.saveLaunch(saved))
-            browser?.savedLaunches = form.saved.toList()
+            updateSavedLaunches(link.host.id, conn.savedLaunches(), browser)
             onSavedLaunchesChanged()
         } catch (e: CoreException) { form.error = launchProblem(e) }
     }
@@ -1248,7 +1257,7 @@ class HostsModel(
             conn.deleteSavedLaunch(saved.id)
             form.removed(saved.id)
             form.removedLaunch = saved
-            browser?.savedLaunches = form.saved.toList()
+            updateSavedLaunches(link.host.id, conn.savedLaunches(), browser)
             onSavedLaunchesChanged()
         } catch (e: CoreException) { form.error = launchProblem(e) }
     }
@@ -1262,9 +1271,12 @@ class HostsModel(
         val link = browser.link ?: return
         if (pendingTask(link.host.id) || pendingLaunch(link.host.id) || pendingWorktree(link.host.id)) return
         val conn = link.connection ?: return
-        val form = LaunchForm(browser.structure ?: return, conn.recentCwds(), null, null, browser.savedLaunches)
-        form.edit(saved)
-        val flow = LaunchFlow(link, form, browser, screen, saved.request)
+        val savedLaunches = conn.savedLaunches()
+        updateSavedLaunches(link.host.id, savedLaunches, browser)
+        val current = savedLaunches.find { it.id == saved.id } ?: run { savedLaunchMissing(); return }
+        val form = LaunchForm(browser.structure ?: return, conn.recentCwds(), null, null, savedLaunches)
+        form.edit(current)
+        val flow = LaunchFlow(link, form, browser, screen, current.request)
         launches[link.host.id] = flow
         activeLaunch = flow
         submitLaunch(flow)
@@ -1275,10 +1287,13 @@ class HostsModel(
         if (origin.board !== board || board.links[link.host.id] !== link || link.state != LinkState.Up) return
         if (pendingTask(link.host.id) || pendingLaunch(link.host.id) || pendingWorktree(link.host.id)) return
         val conn = link.connection ?: return
+        val savedLaunches = conn.savedLaunches()
+        updateSavedLaunches(link.host.id, savedLaunches)
+        val current = savedLaunches.find { it.id == saved.id } ?: run { savedLaunchMissing(); return }
         val form = LaunchForm(board.structureOf(link.host.id) ?: HostStructure(emptyList(), emptyList(), null),
-            conn.recentCwds(), null, null, conn.savedLaunches())
-        form.edit(saved)
-        val flow = LaunchFlow(link, form, null, origin, saved.request)
+            conn.recentCwds(), null, null, savedLaunches)
+        form.edit(current)
+        val flow = LaunchFlow(link, form, null, origin, current.request)
         launches[link.host.id] = flow
         activeLaunch = flow
         submitLaunch(flow)
