@@ -22,6 +22,17 @@
 
     <!-- GitHub Issues and PR conversations (113) -->
     <string name="github_button">GitHub</string>
+    <string name="github_draft">초안</string>
+    <string name="github_number">#%1$d</string>
+    <string name="github_branches">%1$s → %2$s</string>
+    <string name="github_open_browser">브라우저로 열기</string>
+    <string name="github_item_actions">Issue 작업</string>
+    <string name="github_checks_passed">검사 통과</string>
+    <string name="github_checks_failed">검사 실패</string>
+    <string name="github_checks_pending">검사 대기 중</string>
+    <string name="github_checks_other">검사 결과</string>
+    <string name="github_checks_count">%2$d개 중 %1$d개 통과</string>
+    <string name="github_view_files">모든 파일 보기</string>
     <string name="github_issues">이슈</string>
     <string name="github_prs">풀 리퀘스트</string>
     <string name="github_open">열림</string>

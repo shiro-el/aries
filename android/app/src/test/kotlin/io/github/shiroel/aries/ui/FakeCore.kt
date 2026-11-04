@@ -770,20 +770,20 @@ class FakeConnection(
     var githubThread: io.github.shiroel.aries.core.GithubDetail? = null
     override suspend fun githubDetail(repo: io.github.shiroel.aries.core.GithubRepository, number: UInt): io.github.shiroel.aries.core.GithubDetail {
         githubFailure?.let { throw it }
-        return githubThread ?: io.github.shiroel.aries.core.GithubDetail(githubPage.items.first(), emptyList())
+        return githubThread ?: io.github.shiroel.aries.core.GithubDetail(githubPage.items.first(), emptyList(), null, null)
     }
     val githubComments = mutableListOf<Triple<io.github.shiroel.aries.core.GithubKind, UInt, String>>()
     override suspend fun githubComment(repo: io.github.shiroel.aries.core.GithubRepository, kind: io.github.shiroel.aries.core.GithubKind, number: UInt, body: String) {
         githubComments += Triple(kind, number, body)
         githubFailure?.let { throw it }
-        val current = githubThread ?: io.github.shiroel.aries.core.GithubDetail(githubPage.items.first(), emptyList())
+        val current = githubThread ?: io.github.shiroel.aries.core.GithubDetail(githubPage.items.first(), emptyList(), null, null)
         githubThread = current.copy(comments = current.comments + io.github.shiroel.aries.core.GithubComment((current.comments.size + 1).toULong(), body, "me", "2026-11-04"))
     }
     val githubStateChanges = mutableListOf<Pair<UInt, Boolean>>()
     override suspend fun githubSetIssueClosed(repo: io.github.shiroel.aries.core.GithubRepository, number: UInt, closed: Boolean) {
         githubFailure?.let { throw it }
         githubStateChanges += number to closed
-        val current = githubThread ?: io.github.shiroel.aries.core.GithubDetail(githubPage.items.first(), emptyList())
+        val current = githubThread ?: io.github.shiroel.aries.core.GithubDetail(githubPage.items.first(), emptyList(), null, null)
         githubThread = current.copy(item = current.item.copy(state = if (closed) "closed" else "open"))
     }
     val githubDrafts = mutableMapOf<Pair<String, UInt>, String>()
