@@ -150,6 +150,7 @@ internal fun ConsoleShell(
         },
     ) {
         val openDrawer: () -> Unit = {
+            model.interactWithHome()
             model.closeCallInbox()
             scope.launch { drawer.open() }
         }
@@ -179,6 +180,7 @@ internal fun ConsoleShell(
                             distance += change.position.x - change.previousPosition.x
                             change.consume()
                         } && distance > swipeThreshold) {
+                        model.interactWithHome()
                         scope.launch { drawer.open() }
                     }
                 }
