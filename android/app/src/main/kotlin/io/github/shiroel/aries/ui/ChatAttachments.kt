@@ -158,5 +158,5 @@ private fun AttachmentThumbnail(name: String, bytes: ByteArray?) {
     }
     val picture = bitmap
     if (picture != null) Image(picture.asImageBitmap(), name, Modifier.size(56.dp), contentScale = ContentScale.Crop)
-    else Icon(painterResource(R.drawable.ic_file), contentDescription = null, modifier = Modifier.size(40.dp).padding(8.dp))
+    else FileTypeIcon(name, Modifier.size(40.dp).padding(8.dp))
 }
