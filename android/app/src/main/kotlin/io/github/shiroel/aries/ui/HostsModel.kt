@@ -1809,10 +1809,19 @@ class HostsModel(
         calls.watch(hosts, everyHost = true)
     }
 
+    fun callFeedSettings(host: Host) {
+        when (calls.startFailures[host.id]) {
+            is CoreException.KeyInvalidated -> openKeyRecovery()
+            is CoreException.NoKey, is CoreException.KeyLocked, is CoreException.BiometricUnavailable -> openKeySettings()
+            else -> openHostSettings(host)
+        }
+    }
+
     fun closeCallInbox() {
         if (!callInboxOpen) return
         callInboxOpen = false
         callOpenRequest++
+        openingCall = null
         calls.stopAll()
         if (callsActive) calls.watch(hosts, everyHost = false)
     }
@@ -1832,6 +1841,7 @@ class HostsModel(
 
     private fun hostsChanged() {
         onSavedLaunchesChanged()
+        calls.retainHosts(hosts)
         if (callsActive || callInboxOpen) calls.watch(hosts, everyHost = callInboxOpen)
     }
 
@@ -1985,17 +1995,20 @@ class HostsModel(
     /** The connection owned by a Chat opened from the inbox. */
     private var callLink: HostLink? = null
     private var callOpenRequest = 0
+    var openingCall by mutableStateOf<String?>(null)
+        private set
 
     /** Opens the caller in Chat without changing the saved Agent view. */
     fun openCallChat(entry: CallEntry) {
         val address = entry.call.terminal ?: return
-        if (!callInboxOpen) return
+        if (!callInboxOpen || openingCall == entry.key) return
         val origin = screen
         if (origin is Screen.Chat && origin.chat.host.id == entry.host.id && origin.chat.terminal.address == address) {
             closeCallInbox()
             return
         }
         val request = ++callOpenRequest
+        openingCall = entry.key
         fun current() = callInboxOpen && screen === origin && request == callOpenRequest
         scope.launch {
             var pending: HostLink? = null
@@ -2030,6 +2043,7 @@ class HostsModel(
                 }
             } finally {
                 pending?.close()
+                if (request == callOpenRequest) openingCall = null
             }
         }
     }

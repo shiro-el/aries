@@ -122,6 +122,22 @@ class ChatCallsTest {
         compose.onNodeWithText(str(R.string.call_answer_delivered, "Wait")).assertExists()
     }
 
+    // Regression: a reply warning must leave Chat when the feed confirms its durable final answer.
+    @Test
+    fun confirmedFeedAnswerClearsAnEarlierUnknownReplyNoteFromChat() {
+        val core = core().apply { replyResult = CallReply(CallReplyOutcome.UNKNOWN, null, null) }
+        openChat(core)
+        chooseWait()
+        compose.onNodeWithText(str(R.string.call_reply_unknown)).assertExists()
+        compose.runOnIdle {
+            core.callListeners.getValue("h1").onCalls(listOf(call.copy(answer = answer(CallAnswerState.DELIVERED))))
+        }
+        compose.onNodeWithText(call.title).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.call_reply_unknown)).assertDoesNotExist()
+        openInboxFromChat()
+        compose.onNodeWithText(str(R.string.call_answer_delivered, "Wait")).assertExists()
+    }
+
     @Test
     fun aCallThatBecomesUnanswerableDisappearsOnTheLiveFeedUpdate() {
         val core = core()
@@ -170,6 +186,9 @@ class ChatCallsTest {
         compose.onNodeWithText(str(R.string.call_answer_failed, "Wait")).assertExists()
         compose.onNodeWithText("reply detail").assertExists()
         compose.onNodeWithText(str(R.string.call_reply_unknown)).assertDoesNotExist()
+        // A final error must be dismissible even when its note has no separate text.
+        compose.onNodeWithText(str(R.string.call_reply_dismiss)).performClick()
+        compose.onNodeWithText(call.title).assertDoesNotExist()
     }
 
     @Test

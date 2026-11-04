@@ -971,7 +971,7 @@ fun ChatScreen(
     val agentCalls = calls?.let { model ->
         model.calls.filter {
             it.host.id == chat.host.id && it.call.terminal == chat.terminal.address &&
-                (it.answerable || it.key in model.replying || it.key in model.replyNotes)
+                (it.key in model.replying || it.live && (it.answerable || it.key in model.replyNotes))
         }.sortedBy { it.call.atMs }
     }.orEmpty()
     val scroll = rememberChatScrollState(chat, entries, agentCalls.map { "call:${it.key}" } + chat.queuedMessages.map { "queued:${it.id}" } +
