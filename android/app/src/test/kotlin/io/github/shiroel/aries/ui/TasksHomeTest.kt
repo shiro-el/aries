@@ -154,6 +154,7 @@ class TasksHomeTest {
         show(core)
         compose.waitUntil(5_000) { (model.screen as? Screen.Agents)?.board?.agents?.singleOrNull()?.live == true }
         compose.onNodeWithTag("tasks-filter-needs").performClick()
+        compose.waitForIdle()
         compose.waitUntil(5_000) { core.chatsOpened.isNotEmpty() }
         compose.runOnIdle { assertEquals(listOf("h1" to "t1"), core.chatsOpened) }
         compose.runOnIdle { generation.intValue++ }
@@ -161,7 +162,14 @@ class TasksHomeTest {
         compose.runOnIdle {
             assertEquals(1, core.chatsOpened.size)
             assertFalse(core.chatStopped)
-            model.closeTaskNeeds((model.screen as Screen.Agents).board)
+        }
+        compose.onNodeWithText(context.getString(R.string.tasks_open_task)).performClick()
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals(1, core.chatsOpened.size)
+            org.junit.Assert.assertTrue(model.screen is Screen.Chat)
+            assertFalse(core.chatStopped)
+            model.closeChat()
         }
         compose.waitForIdle()
         compose.runOnIdle { org.junit.Assert.assertTrue(core.chatStopped) }
