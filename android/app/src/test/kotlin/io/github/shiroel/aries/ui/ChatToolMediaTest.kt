@@ -25,6 +25,8 @@ import org.robolectric.annotation.GraphicsMode
 class ChatToolMediaTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
+    private val generation = androidx.compose.runtime.mutableIntStateOf(0)
+
     private val png = ByteArrayOutputStream().use { out ->
         Bitmap.createBitmap(160, 120, Bitmap.Config.ARGB_8888).apply {
             eraseColor(android.graphics.Color.RED)
@@ -54,7 +56,7 @@ class ChatToolMediaTest {
         compose.setContent {
             val scope = rememberCoroutineScope()
             model = remember { HostsModel(core, scope) }
-            MaterialTheme { AriesApp(model) }
+            androidx.compose.runtime.key(generation.intValue) { MaterialTheme { AriesApp(model) } }
         }
         compose.onNodeWithText("home").performClick()
         compose.onNodeWithText("agent").performClick()
@@ -76,6 +78,9 @@ class ChatToolMediaTest {
         compose.waitUntil(5_000) { compose.onAllNodesWithContentDescription("Image").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithContentDescription("Image").performTouchInput { click() }
         compose.waitUntil(5_000) { compose.onAllNodesWithContentDescription("Image viewer").fetchSemanticsNodes().isNotEmpty() }
+        // D101: a recreated Chat UI must keep the same open image without saving its bytes in a Bundle.
+        compose.runOnIdle { generation.intValue++ }
+        compose.onNodeWithContentDescription("Image viewer").assertExists()
         assertEquals(setOf("read"), chat.expanded)
         compose.onNodeWithText(compose.activity.getString(R.string.back_button)).performClick()
         header.performTouchInput { click(topLeft + androidx.compose.ui.geometry.Offset(4f, 4f)) }

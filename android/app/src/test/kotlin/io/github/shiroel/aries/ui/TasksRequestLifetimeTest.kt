@@ -20,6 +20,7 @@ import org.robolectric.annotation.Config
 class TasksRequestLifetimeTest {
     @get:Rule val compose = createComposeRule()
     private val core = FakeCore()
+    private val generation = androidx.compose.runtime.mutableIntStateOf(0)
     private val base = listOf(ChatEntry("prompt", null, ChatEntryBody.User("Review this task")))
     private fun open() {
         val host = core.addHost("home", Endpoint.Ssh("home.test", 22u, "me"))
@@ -33,7 +34,7 @@ class TasksRequestLifetimeTest {
             DisposableEffect(chat) { onDispose { chat.stop(); calls.stopAll() } }
             val presentation = remember { TasksDetailPresentation(TasksChangesState(), TasksDetailTab.ACTIVITY, null, {}) }
             CompositionLocalProvider(LocalTasksDetail provides presentation) {
-                MaterialTheme { ChatScreen(chat, {}, calls = calls) }
+                androidx.compose.runtime.key(generation.intValue) { MaterialTheme { ChatScreen(chat, {}, calls = calls) } }
             }
         }
         compose.waitForIdle()
@@ -69,6 +70,9 @@ class TasksRequestLifetimeTest {
         compose.runOnIdle { core.sendCall(call(1)) }
         compose.waitUntil(5_000) { compose.onAllNodesWithTag("tasks-call:h1/call1").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("tasks-call:h1/call1").performClick()
+        compose.onNodeWithText("Details for review 1").assertIsDisplayed()
+        // D101: a Call trace retains its original target when the Activity UI is recreated.
+        compose.runOnIdle { generation.intValue++ }
         compose.onNodeWithText("Details for review 1").assertIsDisplayed()
 
         compose.runOnIdle { (2..40).forEach { core.sendCall(call(it)) } }

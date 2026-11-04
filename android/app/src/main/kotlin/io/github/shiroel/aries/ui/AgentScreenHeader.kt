@@ -37,10 +37,15 @@ internal fun AgentScreenHeader(
     onSearch: (() -> Unit)? = null,
     preview: LocalhostPreview? = null,
     usage: AgentUsage? = null,
+    dialogs: ChatDialogState? = null,
 ) {
     val tasks = LocalTasksDetail.current
     var menu by remember(terminal.address) { mutableStateOf(false) }
-    var showUsage by remember(terminal.address) { mutableStateOf(false) }
+    val usageDialogs = dialogs ?: androidx.compose.runtime.saveable.rememberSaveable(hostName, terminal.address,
+        saver = androidx.compose.runtime.saveable.Saver<ChatDialogState, Boolean>(
+            save = { it.showUsage }, restore = { shown -> ChatDialogState().apply { showUsage = shown } },
+        )) { ChatDialogState() }
+    var showUsage by usageDialogs::showUsage
     if (showUsage) AgentUsageSheet(usage) { showUsage = false }
     val github = link?.github(terminal.address)
     if (github?.shown == true) GithubDialog(link, terminal, github::dismiss)

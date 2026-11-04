@@ -51,6 +51,7 @@ internal fun taskNeeds(agents: List<AgentEntry>, calls: List<CallEntry>,
 internal class TasksNeedsQueue(val items: List<TaskNeed>, start: Int = 0) {
     var position by mutableIntStateOf(start)
         private set
+    val questionIds = mutableStateMapOf<String, String>()
     val current get() = items.getOrNull(position)
     fun next() { position++ }
     fun resolve(key: String) {
@@ -84,7 +85,7 @@ internal fun TasksNeedsSheet(model: HostsModel, board: AgentBoard, queue: TasksN
                             model.openPushedAgent(entry.host.id, entry.call.terminal!!, openChat = true)
                         }) { Text(stringResource(R.string.call_open_chat)) }
                     }
-                    is TaskNeed.Agent -> TasksQuestion(model, board, current, onAnswered = { queue.resolve(current.key) }, onDismiss = onDismiss)
+                    is TaskNeed.Agent -> TasksQuestion(model, board, current, queue, onAnswered = { queue.resolve(current.key) }, onDismiss = onDismiss)
                 }
                 TextButton(onClick = queue::next, modifier = Modifier.testTag("tasks-needs-next")) {
                     Text(stringResource(R.string.tasks_needs_next))
@@ -95,7 +96,7 @@ internal fun TasksNeedsSheet(model: HostsModel, board: AgentBoard, queue: TasksN
 }
 
 @Composable
-private fun TasksQuestion(model: HostsModel, board: AgentBoard, need: TaskNeed.Agent,
+private fun TasksQuestion(model: HostsModel, board: AgentBoard, need: TaskNeed.Agent, queue: TasksNeedsQueue,
     onAnswered: () -> Unit, onDismiss: () -> Unit) {
     val original = need.entry
     val entry = board.find(original.key) ?: original.copy(live = false)
@@ -119,11 +120,11 @@ private fun TasksQuestion(model: HostsModel, board: AgentBoard, need: TaskNeed.A
     }
     // A key receipt is not confirmation. Keep the displayed question (and its
     // Unconfirmed recovery UI) until transcript completion or a live status change.
-    var questionId by remember(need.key) { mutableStateOf(need.questionId) }
+    val questionId = queue.questionIds[need.key] ?: need.questionId
     val snapshot = chat?.snapshot
     val question = snapshot?.entries?.find { it.id == questionId && it.body is ChatEntryBody.Question }
         ?: taskNeedQuestion(entry, snapshot)
-    LaunchedEffect(question?.id) { if (question != null) questionId = question.id }
+    LaunchedEffect(question?.id) { if (question != null) queue.questionIds[need.key] = question.id }
     val confirmed = entry.live && (!isWaiting(entry.terminal.agentStatus) ||
         snapshot?.status == ChatStatus.LIVE && (question?.body as? ChatEntryBody.Question)?.status == ChatToolStatus.DONE)
     LaunchedEffect(confirmed) { if (confirmed) onAnswered() }

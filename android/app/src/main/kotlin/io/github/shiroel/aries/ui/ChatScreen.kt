@@ -120,6 +120,11 @@ class ChatModel(
     private val keyWork: CoroutineContext = EmptyCoroutineContext,
     private val journalWork: CoroutineContext = Dispatchers.IO,
 ) {
+    // The ViewModel retains this Chat owner across Activity recreation. Large payloads
+    // stay in memory; they must never be serialized into the Activity's state Bundle.
+    internal val dialogs = ChatDialogState()
+    internal var waitingSheetOpen by mutableStateOf(false)
+    internal var waitingSheetTarget by mutableStateOf<AgentKey?>(null)
     internal var readingSession by mutableStateOf(ChatReadingSession())
     internal val files = RemoteFilesPanel()
     internal val preview = LocalhostPreview()
@@ -1197,7 +1202,7 @@ fun ChatScreen(
     val transcript = remember(chat, entriesState, markdownState) { ChatTranscript(entriesState, markdownState) }
     val toolGroups = if (thread != null) threadToolGroups(transcript.contents) else emptyList()
     val answerQuestion = if (thread != null) threadAnswerQuestion(chat) else null
-    val dialogs = remember(chat) { ChatDialogState() }
+    val dialogs = chat.dialogs
     val tasks = LocalTasksDetail.current
     val liveTaskQuestion = if (tasks != null) entries.firstOrNull {
         it.body is ChatEntryBody.Question && it.id !in chat.dismissedTaskQuestions &&
@@ -1205,7 +1210,7 @@ fun ChatScreen(
             chat.answers[it.id] !in setOf(AnswerState.Sending, AnswerState.Held, AnswerState.Sent, AnswerState.Unconfirmed)
     } else null
     LaunchedEffect(chat, liveTaskQuestion?.id) {
-        liveTaskQuestion?.let { dialogs.tasksRequest = TasksRequest.Question(it.id, it.body as ChatEntryBody.Question) }
+        if (dialogs.tasksRequest == null) liveTaskQuestion?.let { dialogs.tasksRequest = TasksRequest.Question(it.id, it.body as ChatEntryBody.Question) }
     }
     val horizontalScrolls = remember(chat) { ChatMarkdownScrolls() }
     SideEffect { horizontalScrolls.retain(rawEntries.mapTo(mutableSetOf()) { it.id }) }
@@ -1265,7 +1270,7 @@ fun ChatScreen(
             header = {
                 if (thread != null) ThreadChatHeader(chat, onBack, onOpenTerminal, { searchOpen = true }, preview, snapshot?.usage)
                 else AgentScreenHeader(chat.terminal, chat.host.name, onBack, AgentView.CHAT, onView,
-                    preview = preview, usage = snapshot?.usage, link = chat.link, onTerminalUpdate = { chat.update(listOf(it)) }, onSearch = { searchOpen = true })
+                    preview = preview, usage = snapshot?.usage, dialogs = dialogs, link = chat.link, onTerminalUpdate = { chat.update(listOf(it)) }, onSearch = { searchOpen = true })
             },
             input = { compact ->
                 if (preview.selected == null) {
