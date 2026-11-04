@@ -38,6 +38,7 @@ internal data class InlineTarget(
 object InlineNotifications {
     internal const val TARGET = "inline_target"
     internal const val GENERATION = "inline_generation"
+    internal const val ACTION_UPDATE = "inline_action_update"
     const val REPLY_TEXT = "inline_reply_text"
     internal const val REPLY = "io.github.shiroel.aries.INLINE_REPLY"
     internal const val SEEN = "io.github.shiroel.aries.INLINE_SEEN"
@@ -47,19 +48,28 @@ object InlineNotifications {
 
     fun add(context: Context, builder: Notification.Builder, hostId: String, hostName: String,
         terminal: String, tag: String, reply: Boolean, turn: ULong? = null) {
-        val target = InlineTarget(hostId, hostName, terminal, tag, turn)
+        add(context, builder, InlineTarget(hostId, hostName, terminal, tag, turn), reply)
+    }
+
+    private fun add(context: Context, builder: Notification.Builder, target: InlineTarget,
+        reply: Boolean, draft: String? = null, snooze: Boolean = true) {
         builder.addExtras(Bundle().apply { putString(GENERATION, target.generation) })
         if (reply) {
+            val input = RemoteInput.Builder(REPLY_TEXT).setLabel(context.getString(R.string.notification_reply_hint))
+            if (draft != null) {
+                input.setChoices(arrayOf(draft))
+                if (Build.VERSION.SDK_INT >= 29) input.setEditChoicesBeforeSending(RemoteInput.EDIT_CHOICES_BEFORE_SENDING_ENABLED)
+            }
             val action = Notification.Action.Builder(null, context.getString(R.string.notification_reply_button), pending(context, target, REPLY, mutable = true))
-                .addRemoteInput(RemoteInput.Builder(REPLY_TEXT).setLabel(context.getString(R.string.notification_reply_hint)).build())
+                .addRemoteInput(input.build())
                 .setAllowGeneratedReplies(false)
                 .setSemanticAction(Notification.Action.SEMANTIC_ACTION_REPLY)
             if (Build.VERSION.SDK_INT >= 31) action.setAuthenticationRequired(true)
             builder.addAction(action.build())
         }
-        if (turn != null) builder.addAction(Notification.Action.Builder(null,
+        if (target.turn != null) builder.addAction(Notification.Action.Builder(null,
             context.getString(R.string.notification_seen_button), pending(context, target, SEEN)).build())
-        builder.addAction(Notification.Action.Builder(null,
+        if (snooze) builder.addAction(Notification.Action.Builder(null,
             context.getString(R.string.notification_snooze_button), pending(context, target, SNOOZE))
             .addExtras(Bundle().apply { putBoolean(WearNotificationBridge.PHONE_ONLY, true) }).build())
     }
@@ -70,12 +80,58 @@ object InlineNotifications {
                 it.notification.extras.getString(GENERATION) == target.generation }?.notification
 
     internal fun update(context: Context, target: InlineTarget, line: String) = synchronized(NotificationGroups) {
-        val original = current(context, target)?.clone()?.apply { actions = null } ?: return@synchronized
+        val original = current(context, target)?.clone()?.apply {
+            actions = null
+            extras = Bundle(extras).apply { putBoolean("inline_consumed", true); putBoolean(ACTION_UPDATE, true) }
+        } ?: return@synchronized
         val notification = Notification.Builder.recoverBuilder(context, original)
             .setContentText(line)
             .setStyle(Notification.BigTextStyle().bigText(line)).setOnlyAlertOnce(true)
-            .addExtras(Bundle().apply { putBoolean("inline_consumed", true) }).build()
+            .build()
         NotificationGroups.post(context, target.hostId, target.hostName, target.tag, notification)
+    }
+
+    /** Keep failed text on the private card, also offered as an editable Reply choice.
+     * A fresh generation makes an explicit retry independent of the previous unique work.
+     * Never replace a newer push: if the original vanished, give the recovery its own tag.
+     */
+    internal fun failed(context: Context, target: InlineTarget, line: String, text: String? = null,
+        reply: Boolean = false) = synchronized(NotificationGroups) {
+        val original = current(context, target)?.clone()?.apply { actions = null }
+        if (original == null && text == null) return@synchronized
+        val retry = target.copy(tag = if (original == null) "inline-recovery:${target.generation}" else target.tag,
+            generation = UUID.randomUUID().toString())
+        // recoverBuilder merges inherited extras over addExtras on build. Change the
+        // cloned notification too, so its old generation/consumed bit cannot win.
+        original?.let {
+            it.extras = Bundle(it.extras).apply {
+                putString(GENERATION, retry.generation)
+                putBoolean("inline_consumed", false)
+                putBoolean(ACTION_UPDATE, true)
+            }
+        }
+        val builder = if (original != null) Notification.Builder.recoverBuilder(context, original) else {
+            val channel = "inline_actions"
+            context.getSystemService(android.app.NotificationManager::class.java).createNotificationChannel(
+                android.app.NotificationChannel(channel, context.getString(R.string.call_notify_channel_sending),
+                    android.app.NotificationManager.IMPORTANCE_LOW))
+            val title = context.getString(R.string.push_status_title, target.terminal, target.hostName)
+            NotificationGroups.decorate(context, Notification.Builder(context, channel)
+                .setSmallIcon(R.drawable.ic_stat_aries).setContentTitle(title)
+                .setVisibility(Notification.VISIBILITY_PRIVATE)
+                .setPublicVersion(Notification.Builder(context, channel).setSmallIcon(R.drawable.ic_stat_aries)
+                    .setContentTitle(title).setContentText(line).build()),
+                target.hostId, target.hostName, retry.tag, target.terminal)
+        }
+        builder.setContentText(line).setStyle(Notification.BigTextStyle().bigText(
+            if (text == null) line else "$line\n\n$text"))
+            .setOnlyAlertOnce(true).addExtras(Bundle().apply {
+                putBoolean("inline_consumed", false)
+                putBoolean(ACTION_UPDATE, true)
+            })
+        // Snooze serializes action metadata in AlarmManager. Do not copy a draft there.
+        add(context, builder, retry, reply, text, snooze = false)
+        NotificationGroups.post(context, retry.hostId, retry.hostName, retry.tag, builder.build())
     }
 
     internal fun dismiss(context: Context, target: InlineTarget) = synchronized(NotificationGroups) {
@@ -110,7 +166,11 @@ object InlineNotifications {
 }
 
 class InlineActionReceiver : BroadcastReceiver() {
-    override fun onReceive(context: Context, intent: Intent) {
+    override fun onReceive(context: Context, intent: Intent) = synchronized(NotificationGroups) {
+        receive(context, intent)
+    }
+
+    private fun receive(context: Context, intent: Intent) {
         val context = AppLanguage.context(context)
         val target = intent.getStringExtra(InlineNotifications.TARGET)?.let(InlineTarget::fromJson) ?: return
         if (intent.action == InlineNotifications.RESTORE) {
@@ -133,7 +193,8 @@ class InlineActionReceiver : BroadcastReceiver() {
             try {
                 InlineNotifications.snooze(context, target, original)
             } catch (_: Exception) {
-                InlineNotifications.update(context, target, context.getString(R.string.notification_action_failed))
+                InlineNotifications.failed(context, target, context.getString(R.string.notification_action_failed),
+                    reply = original.actions.orEmpty().any { !it.remoteInputs.isNullOrEmpty() })
             }
             return
         }
@@ -143,7 +204,8 @@ class InlineActionReceiver : BroadcastReceiver() {
         } else null
         if (action != InlineNotifications.REPLY && action != InlineNotifications.SEEN) return
         if (!CallReplyWorker.online(context)) {
-            InlineNotifications.update(context, target, context.getString(R.string.notification_action_offline))
+            InlineNotifications.failed(context, target, context.getString(R.string.notification_action_offline), text,
+                reply = action == InlineNotifications.REPLY)
             return
         }
         InlineNotifications.update(context, target, context.getString(
@@ -153,7 +215,8 @@ class InlineActionReceiver : BroadcastReceiver() {
         } catch (_: Exception) {
             // Encryption failure or WorkManager's 10 KiB limit must fail
             // visibly instead of crashing the receiver at Sending.
-            InlineNotifications.update(context, target, context.getString(R.string.notification_action_failed))
+            InlineNotifications.failed(context, target, context.getString(R.string.notification_action_failed), text,
+                reply = action == InlineNotifications.REPLY)
         }
     }
 }
