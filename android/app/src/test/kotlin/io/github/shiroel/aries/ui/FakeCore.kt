@@ -97,6 +97,7 @@ class FakeCore : AriesCoreInterface {
 
     /** When set, `connect` fails with it. */
     var failWith: CoreException? = null
+    val connectAttempts = mutableListOf<String>()
 
     private var terminalList: List<TerminalInfo>? = null
     /** Structure-only fixtures describe the same Terminal inventory to both watches.
@@ -370,6 +371,7 @@ class FakeCore : AriesCoreInterface {
     }
 
     override suspend fun connect(hostId: String): HostConnection {
+        connectAttempts += hostId
         signsIn("connect")
         failWith?.let { throw it }
         val host = hosts.find { it.id == hostId } ?: throw CoreException.UnknownHost(hostId)
@@ -565,6 +567,7 @@ class FakeCore : AriesCoreInterface {
     /** (host id, terminal) of each `watchChat` call. */
     val chatsOpened = mutableListOf<Pair<String, String>>()
     var chatStopped = false
+    var chatPaused = false
         private set
 
     /** Bytes `ChatWatch.image` returns, by image id. */
@@ -612,6 +615,8 @@ class FakeCore : AriesCoreInterface {
             override fun retryNow() {
                 chatRetries++
             }
+            override fun pause() { chatPaused = true }
+            override fun resume() { chatPaused = false }
             override fun image(id: String): ByteArray? = chatImages[id]
 
             override fun stop() {
