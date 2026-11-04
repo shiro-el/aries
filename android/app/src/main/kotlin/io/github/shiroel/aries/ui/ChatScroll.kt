@@ -2,6 +2,7 @@ package io.github.shiroel.aries.ui
 
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.lazy.LazyListState
@@ -29,11 +30,14 @@ internal class ChatScrollState(following: Boolean) {
     var unreadCount by mutableIntStateOf(0)
     var latestRequest by mutableIntStateOf(0)
         private set
+    var jumping by mutableStateOf(false)
+    var dragging by mutableStateOf(false)
 
-    fun latest() { latestRequest++ }
+    fun latest() { jumping = true; latestRequest++ }
 
     /** Apply before changing a tool's height so LazyColumn keeps the same reading anchor. */
     fun readTool() {
+        jumping = false
         following = false
         list.requestScrollToItem(list.firstVisibleItemIndex, list.firstVisibleItemScrollOffset)
     }
@@ -74,22 +78,36 @@ internal fun Modifier.chatImeAnchor(list: LazyListState): Modifier {
 internal fun rememberChatScrollState(
     chat: ChatModel,
     entries: List<ChatEntry>,
-    callKeys: List<String>,
+    auxiliaryKeys: List<String>,
     markdown: Map<String, ChatMarkdownDocument>,
     followEnabled: Boolean = true,
+    callKeys: List<String> = emptyList(),
+    messageKeys: List<String> = entries.map { "transcript:${it.id}" },
 ): ChatScrollState {
     val session = chat.readingSession
     val saved = remember(session) { session.position }
     val state = remember(session) { ChatScrollState(saved?.following ?: true) }
-    val content = rememberUpdatedState(ChatScrollContent(entries, callKeys, markdown, followEnabled))
+    val content = rememberUpdatedState(ChatScrollContent(entries, auxiliaryKeys, markdown, followEnabled, callKeys, messageKeys))
+    LaunchedEffect(state) {
+        state.list.interactionSource.interactions.collect { interaction ->
+            when (interaction) {
+                is DragInteraction.Start -> {
+                    state.dragging = true
+                    state.jumping = false
+                    state.following = false
+                }
+                is DragInteraction.Stop, is DragInteraction.Cancel -> state.dragging = false
+            }
+        }
+    }
     LaunchedEffect(state) {
         var previousEntries: List<ChatEntry>? = null
         var previousCalls = emptyList<String>()
+        var previousTranscript = emptyList<String>()
         var previousItemKeys = emptyList<String>()
         var lastViewport: Pair<Any?, Int>? = null
         var readingAnchor: Pair<String, Int>? = null
         var pending = emptySet<String>()
-        var request = state.latestRequest
         var disclosures = chat.expanded to chat.rawInputsExpanded
         snapshotFlow {
             // Read layout as well as data: scrolling changes the follow mode;
@@ -97,14 +115,14 @@ internal fun rememberChatScrollState(
             Triple(
                 content.value,
                 state.list.layoutInfo,
-                Triple(state.latestRequest, chat.expanded, chat.rawInputsExpanded),
+                Triple(state.latestRequest, chat.expanded, chat.rawInputsExpanded) to state.dragging,
             )
         }.collect { (data, _, controls) ->
-            val (latestRequest, expanded, rawInputsExpanded) = controls
+            val (_, expanded, rawInputsExpanded) = controls.first
             val disclosureChanged = disclosures != (expanded to rawInputsExpanded)
             disclosures = expanded to rawInputsExpanded
-            val (rows, calls, documents, followEnabled) = data
-            val transcript = rows.map { "transcript:${it.id}" }
+            val (rows, auxiliary, documents, followEnabled, calls, transcript) = data
+            val countable = (transcript + calls).toSet()
             val keys = buildList {
                 rows.forEach { entry ->
                     add("transcript:${entry.id}")
@@ -114,7 +132,7 @@ internal fun rememberChatScrollState(
                         add("transcript:${entry.id}:footer")
                     }
                 }
-                addAll(calls)
+                addAll(auxiliary)
             }
             if (chat.snapshot == null || keys.isEmpty()) return@collect
             fun viewport(): Pair<Any?, Int> = state.list.layoutInfo.visibleItemsInfo
@@ -122,12 +140,15 @@ internal fun rememberChatScrollState(
             val currentViewport = viewport()
             // Stable keys distinguish a deliberate scroll from a history
             // prepend or an asynchronous Markdown remeasure.
-            if (previousEntries != null && lastViewport != currentViewport) {
+            if (previousEntries != null && lastViewport != currentViewport && !state.jumping && !state.dragging) {
                 state.following = !state.list.canScrollForward
             }
             // A disclosure is a reading action, not new Agent output. Its next
             // measure must not trigger scrollToLatest and move the tapped header.
-            if (!followEnabled || disclosureChanged) state.following = false
+            if (!followEnabled || disclosureChanged) {
+                state.jumping = false
+                state.following = false
+            }
             lastViewport = currentViewport
             val ready = rows.all { entry ->
                 val text = entry.body.markdownSource()
@@ -135,62 +156,62 @@ internal fun rememberChatScrollState(
             }
             // Never replace a saved block anchor with an incomplete parse.
             if (!ready) return@collect
-            val changed = previousEntries != rows || previousCalls != calls || previousItemKeys != keys
-            val latest = request != latestRequest
+            val changed = previousEntries != rows || previousCalls != calls || previousItemKeys != keys || previousTranscript != transcript
+            val latest = state.jumping
             // Keep a tool's expand/collapse control reachable on arrival.
-            val alignBottom = calls.isNotEmpty() || rows.lastOrNull()?.body !is io.github.shiroel.aries.core.ChatEntryBody.Tool
+            val alignBottom = auxiliary.isNotEmpty() || rows.lastOrNull()?.body !is io.github.shiroel.aries.core.ChatEntryBody.Tool
             if (changed || latest) {
                 val previous = previousEntries
                 if (previous != null) {
-                    pending = (pending + addedTail(previous.map { "transcript:${it.id}" }, transcript) +
-                        addedTail(previousCalls, calls)).intersect(keys.toSet())
+                    pending = (pending + addedTail(previousTranscript, transcript) +
+                        calls.filterNot { it in previousCalls }).intersect(countable)
                     if (!state.following && !latest && rows.indexOfFirst { it.id == previous.firstOrNull()?.id } > 0) {
                         // A prepend can move the turn's read-aloud control to an
                         // older entry and collapse the old first header. Keep
                         // the measured body block in place, rather than that header.
                         readingAnchor?.let { (key, offset) ->
                             val index = keys.indexOf(key)
-                            if (index >= 0) state.list.scrollToItem(index, -offset)
+                            if (index >= 0) state.observeScroll { state.list.scrollToItem(index, -offset) }
                         }
                     }
                 } else if (saved != null) {
-                    pending = (saved.pending + after(saved.transcriptTail, transcript) + after(saved.callTail, calls))
-                        .intersect(keys.toSet())
+                    pending = (saved.pending + after(saved.transcriptTail, transcript) + calls.filterNot { it in saved.calls })
+                        .intersect(countable)
                     // Restore even when the user left at the end: rows may
                     // have arrived while this screen was covered. Follow again only
                     // if that saved viewport still reaches the current end.
                     val anchorIndex = keys.indexOf(saved.anchor)
                     if (followEnabled) {
-                        state.list.scrollToItem(
-                            if (anchorIndex >= 0) anchorIndex else saved.index.coerceIn(keys.indices),
-                            if (anchorIndex >= 0) saved.offset else 0,
-                        )
-                        state.following = !state.list.canScrollForward
+                        if (state.observeScroll {
+                            state.list.scrollToItem(
+                                if (anchorIndex >= 0) anchorIndex else saved.index.coerceIn(keys.indices),
+                                if (anchorIndex >= 0) saved.offset else 0,
+                            )
+                        }) state.following = !state.dragging && !state.list.canScrollForward
                     }
                 }
-                if (followEnabled && (latest || (state.following && (previous != null || saved == null)))) {
+                if (followEnabled && !state.dragging && (latest || (state.following && (previous != null || saved == null)))) {
                     // A streamed edit keeps the same tail key. Let its natural
                     // measure run before checking whether its height moved the
                     // bottom; forcing a jump here also measures the old height.
                     val tailMoved = previousItemKeys.lastOrNull() != keys.lastOrNull()
                     if (latest || previous == null || tailMoved || state.list.canScrollForward) {
-                        try {
+                        val completed = state.observeScroll {
                             state.list.scrollToLatest(keys.lastIndex, alignBottom || latest, animate = latest)
-                        } catch (e: CancellationException) {
-                            // A user drag may interrupt the animation. Keep observing
-                            // the viewport so a later Latest tap still works.
-                            currentCoroutineContext().ensureActive()
                         }
-                        state.following = !state.list.canScrollForward
+                        // Data can advance while the animation is suspended. Keep
+                        // the intent until a measured, current tail is reached.
+                        state.following = completed && !state.dragging && !state.list.canScrollForward && data == content.value
+                        if (state.following) state.jumping = false
                     }
                 }
                 previousEntries = rows
                 previousCalls = calls
+                previousTranscript = transcript
                 previousItemKeys = keys
-                request = latestRequest
-            } else if (followEnabled && state.following && state.list.canScrollForward) {
-                state.list.scrollToLatest(keys.lastIndex, alignBottom)
-                state.following = !state.list.canScrollForward
+            } else if (followEnabled && !state.dragging && state.following && state.list.canScrollForward) {
+                val completed = state.observeScroll { state.list.scrollToLatest(keys.lastIndex, alignBottom) }
+                state.following = completed && !state.dragging && !state.list.canScrollForward
             }
             lastViewport = viewport()
             if (state.following) pending = emptySet()
@@ -213,7 +234,7 @@ internal fun rememberChatScrollState(
                 readingAnchor = (body?.key as? String)?.let { it to body.offset }
                 val position = ChatReadingPosition(
                     anchor!!, keys.indexOf(anchor), state.list.firstVisibleItemScrollOffset,
-                    state.following, pending, transcript.lastOrNull(), calls.lastOrNull(),
+                    state.following, pending, transcript.lastOrNull(), calls.toSet(),
                 )
                 session.position = position
             }
@@ -222,11 +243,24 @@ internal fun rememberChatScrollState(
     return state
 }
 
+/** A user-input mutation cancels this scroll, not the visit's long-lived observer. */
+private suspend fun ChatScrollState.observeScroll(scroll: suspend () -> Unit): Boolean = try {
+    scroll()
+    true
+} catch (_: CancellationException) {
+    currentCoroutineContext().ensureActive()
+    jumping = false
+    following = false
+    false
+}
+
 private data class ChatScrollContent(
     val entries: List<ChatEntry>,
-    val calls: List<String>,
+    val auxiliary: List<String>,
     val markdown: Map<String, ChatMarkdownDocument>,
     val followEnabled: Boolean,
+    val calls: List<String>,
+    val messages: List<String>,
 )
 
 private fun after(tail: String?, keys: List<String>): List<String> {
@@ -247,7 +281,7 @@ internal data class ChatReadingPosition(
     val following: Boolean,
     val pending: Set<String>,
     val transcriptTail: String?,
-    val callTail: String?,
+    val calls: Set<String>,
 )
 
 /** Prepending older history and replacing a conversation are not new tail rows. */

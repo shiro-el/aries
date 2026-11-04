@@ -125,12 +125,15 @@ private fun TasksQuestion(model: HostsModel, board: AgentBoard, need: TaskNeed.A
     Text(entry.host.name, Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall)
     when {
         !entry.live -> Text(stringResource(R.string.tasks_offline), Modifier.padding(16.dp))
+        entry.terminal.agentStatus is AgentStatus.Error -> {
+            Text(stringResource(R.string.agents_waiting_error), Modifier.padding(16.dp))
+            statusMessage(entry.terminal.agentStatus)?.takeIf { it.isNotBlank() }?.let {
+                Text(it, Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.error)
+            }
+        }
         question != null && chat != null -> QuestionView(chat, question.id, question.body as ChatEntryBody.Question)
         chat?.snapshot == null -> ScreenLoading(stringResource(R.string.chat_loading), compact = true, onRetry = { chat?.retryConnection() })
         else -> {
-            (entry.terminal.agentStatus as? AgentStatus.Error)?.message?.takeIf { it.isNotBlank() }?.let {
-                Text(it, Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error)
-            }
             Text(stringResource(R.string.tasks_needs_open), Modifier.padding(16.dp))
         }
     }

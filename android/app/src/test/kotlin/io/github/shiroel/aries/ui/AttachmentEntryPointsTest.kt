@@ -37,6 +37,7 @@ class AttachmentEntryPointsTest {
 
     private lateinit var model: HostsModel
     private var reconnectGate: CompletableDeferred<Unit>? = null
+    private var uploadGate: CompletableDeferred<Unit>? = null
 
     private fun openChat(): FakeConnection {
         val core = FakeCore().apply {
@@ -49,13 +50,15 @@ class AttachmentEntryPointsTest {
             model = remember { HostsModel(object : AriesCoreInterface by core {
                 override suspend fun connect(hostId: String): HostConnection {
                     reconnectGate?.await()
-                    return core.connect(hostId)
+                    return core.connect(hostId).also { (it as FakeConnection).uploadHold = uploadGate }
                 }
             }, scope) }
             AriesApp(model)
         }
         compose.onNodeWithText("home").performClick()
         compose.onNodeWithText("claude").performClick()
+        compose.waitForIdle()
+        core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, null))
         compose.waitForIdle()
         return core.connection!!
     }
@@ -97,6 +100,7 @@ class AttachmentEntryPointsTest {
         val request = shadowOf(compose.activity).nextStartedActivityForResult
         val ready = CompletableDeferred<Unit>()
         reconnectGate = ready
+        uploadGate = CompletableDeferred()
         compose.runOnIdle { model.backgrounded() }
         // A long picker visit outlasts the warm connection grace period.
         compose.mainClock.advanceTimeBy(120_100)
@@ -110,13 +114,19 @@ class AttachmentEntryPointsTest {
         assertNull(chat.attachmentError)
         assertTrue(old.uploads.isEmpty())
         ready.complete(Unit)
+        compose.waitUntil(5_000) { chat.link!!.connection != null }
+        val replacement = chat.link!!.connection!! as FakeConnection
+        compose.runOnIdle { model.back() }
+        compose.waitForIdle()
+        assertFalse("A picker upload must retain its replacement line when leaving the Host", replacement.disconnected)
+        uploadGate!!.complete(Unit)
         compose.waitUntil(5_000) { chat.attachments.size == 1 }
         compose.waitForIdle()
         assertFalse(chat.uploading)
         assertNull(chat.attachmentError)
-        assertArrayEquals(byteArrayOf(4, 2), (chat.link!!.connection!! as FakeConnection).uploads.single().third)
+        assertArrayEquals(byteArrayOf(4, 2), replacement.uploads.single().third)
         assertTrue(old.uploads.isEmpty())
-        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("keep this")
+        assertEquals("keep this", chat.draft)
     }
 
     // Keep the existing camera flow on the folded toolbar; the picker covers portrait controls.
@@ -124,6 +134,10 @@ class AttachmentEntryPointsTest {
     fun cameraGetsAFullSizeOutputUriThenKeepsTheUploadedPhotoOutsideTheTextField() {
         shadowOf(compose.activity.application).denyPermissions(Manifest.permission.CAMERA)
         val connection = openChat()
+        // Robolectric gives each test a new cache root; recreate Android's provider lifecycle.
+        val info = compose.activity.packageManager.resolveContentProvider(
+            "${compose.activity.packageName}.attachments", PackageManager.GET_META_DATA)!!
+        androidx.core.content.FileProvider().attachInfo(compose.activity, info)
         compose.onNodeWithContentDescription(str(R.string.chat_input_tools_button)).performClick()
         compose.onNodeWithContentDescription(str(R.string.attachments_camera_button)).performClick()
         compose.waitForIdle()

@@ -543,6 +543,7 @@
     <string name="agents_last_known_group">마지막 확인 상태 · %1$d</string>
     <string name="agents_last_seen">마지막 확인 %1$s</string>
     <string name="agents_last_seen_unknown">마지막 확인 시각 없음</string>
+    <string name="agent_opening">%1$s 여는 중…</string>
     <string name="agents_title">Agent</string>
     <string name="agents_empty">Host에서 실행 중인 Agent가 없어요.</string>
     <string name="agents_no_hosts">먼저 Host를 추가해 주세요.</string>
@@ -558,6 +559,7 @@
     <string name="agent_status_blocked_question">Blocked: 질문</string>
     <string name="agent_status_blocked_auth">Blocked: 로그인</string>
     <string name="agent_status_error">Error</string>
+    <string name="agents_waiting_error">오류가 났어요. 열어서 확인하세요</string>
     <string name="agent_status_done">Done</string>
     <string name="agent_status_idle">Idle</string>
     <string name="agent_attention_label">확인 필요</string>
@@ -623,7 +625,7 @@
     <string name="thread_new_body">Host, 폴더, Agent를 고르고 할 일을 입력하세요.</string>
     <string name="thread_host_online">%1$s · 연결됨</string>
     <string name="thread_search_hint">대화 검색</string>
-    <string name="thread_section_needs">답 필요</string>
+    <string name="thread_section_needs">확인 필요</string>
     <string name="thread_section_working">진행 중</string>
     <string name="thread_section_today">오늘</string>
     <string name="thread_section_earlier">이전</string>
@@ -632,8 +634,8 @@
     <string name="thread_tools_summary">%1$s · %2$s</string>
     <string name="thread_tools_separator">", "</string>
     <string name="thread_tool_running">%1$s · %2$s</string>
-    <string name="thread_waiting_single">%1$s가 답을 기다려요 ›</string>
-    <string name="thread_waiting_urgent_single">긴급 · %1$s가 답을 기다려요 ›</string>
+    <string name="thread_waiting_single">%1$s 확인이 필요해요 ›</string>
+    <string name="thread_waiting_urgent_single">긴급 · %1$s 확인이 필요해요 ›</string>
     <plurals name="thread_tools_read">
         <item quantity="one">파일 %1$d개 읽음</item>
         <item quantity="other">파일 %1$d개 읽음</item>
@@ -653,12 +655,12 @@
     <string name="thread_chat_subtitle">%1$s · %2$s</string>
     <string name="thread_chat_menu">⋯</string>
     <plurals name="thread_waiting">
-        <item quantity="one">%1$s 외 %2$d개가 답을 기다려요 ›</item>
-        <item quantity="other">%1$s 외 %2$d개가 답을 기다려요 ›</item>
+        <item quantity="one">%1$s 외 %2$d개 확인이 필요해요 ›</item>
+        <item quantity="other">%1$s 외 %2$d개 확인이 필요해요 ›</item>
     </plurals>
     <plurals name="thread_waiting_urgent">
-        <item quantity="one">긴급 · %1$s 외 %2$d개가 답을 기다려요 ›</item>
-        <item quantity="other">긴급 · %1$s 외 %2$d개가 답을 기다려요 ›</item>
+        <item quantity="one">긴급 · %1$s 외 %2$d개 확인이 필요해요 ›</item>
+        <item quantity="other">긴급 · %1$s 외 %2$d개 확인이 필요해요 ›</item>
     </plurals>
     <string name="thread_waiting_position">%1$d/%2$d</string>
     <string name="thread_previous">‹</string>
@@ -1329,7 +1331,7 @@
     <string name="call_inbox_other">그 밖의 미응답 Call</string>
     <string name="call_inbox_helper">하위 Agent의 Call이에요. Chat을 열어 확인해 주세요. 여기서는 Choice를 보낼 수 없어요.</string>
     <string name="call_inbox_read_only">읽기 전용 · 마지막 확인 %1$s</string>
-    <string name="call_inbox_blocked">Blocked Agent %1$d개가 기다려요 · Agent 보기</string>
+    <string name="call_inbox_blocked">확인할 Agent %1$d개 · Agent 열기</string>
     <string name="call_reply_dismiss">답장 안내 닫기</string>
     <plurals name="call_inbox_syncing">
         <item quantity="one">Host %1$d개 확인 중…</item>
@@ -1378,6 +1380,8 @@
 
     <string name="attachments_choose_agent">공유할 Agent 선택</string>
     <string name="attachments_uploading">첨부 파일 올리는 중…</string>
+    <string name="attachments_cancel_button">업로드 취소</string>
+    <string name="attachments_canceled">업로드를 취소했어요. 초안에 첨부하지 않은 파일: %1$s. 이미 첨부한 파일은 유지하고 촬영 원본은 이 폰에 남겨요.</string>
     <string name="attachments_too_large">첨부 파일이 %1$d MiB를 넘어요. 더 작은 파일을 고르거나 이미지 크기 줄이기를 켜 주세요.</string>
     <string name="attachments_failed">파일을 첨부하지 못했어요. 다시 선택해 주세요. 계속 실패하면 Host에 다시 연결한 뒤 시도해 주세요.</string>
     <string name="attachments_connection_failed">Host에 연결되어 있지 않아 첨부하지 못했어요. Host에 다시 연결한 뒤 파일을 다시 선택해 주세요.</string>
