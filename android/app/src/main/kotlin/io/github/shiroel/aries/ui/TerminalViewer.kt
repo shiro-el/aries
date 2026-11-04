@@ -541,17 +541,26 @@ fun TerminalScreen(
     androidx.compose.runtime.CompositionLocalProvider(
         androidx.compose.ui.platform.LocalUriHandler provides rememberAgentUriHandler(preview, viewer.link, viewer.terminal.address),
     ) {
-        Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))) {
-            AgentScreenHeader(viewer.terminal, viewer.link?.host?.name, onBack, AgentView.TERMINAL, onView,
-                title = viewer.terminal.name?.takeIf { it.isNotBlank() } ?: viewer.title?.takeIf { it.isNotBlank() } ?: displayName(viewer.terminal),
-                preview = preview, link = viewer.link, onTerminalUpdate = { viewer.update(listOf(it)) }, onSearch = { searching = true })
-            PreviewChips(preview)
+        AgentViewport(
+            header = {
+                AgentScreenHeader(viewer.terminal, viewer.link?.host?.name, onBack, AgentView.TERMINAL, onView,
+                    title = viewer.terminal.name?.takeIf { it.isNotBlank() } ?: viewer.title?.takeIf { it.isNotBlank() } ?: displayName(viewer.terminal),
+                    preview = preview, link = viewer.link, onTerminalUpdate = { viewer.update(listOf(it)) }, onSearch = { searching = true })
+            },
+            input = { compact ->
+                if (preview.selected == null) {
+                    TerminalComposer(viewer, compact)
+                    if (!compact && viewer.typing && viewer.keyBarVisible) TerminalKeyBar(viewer)
+                }
+            },
+        ) { compact ->
+            if (!compact) PreviewChips(preview)
             if (preview.selected != null) {
                 LocalhostPreviewBrowser(preview, viewer.link, Modifier.weight(1f).fillMaxWidth(), change = viewer.terminal.turn,
                     captureEnabled = viewer.terminal.state == "live",
                     onAttachCapture = onPreviewCapture.takeIf { viewer.terminal.agentStatus != null })
             } else {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                if (!compact) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         stringResource(if (viewer.typing) R.string.terminal_typing else R.string.terminal_observing,
                             viewer.terminal.address, viewer.cols, viewer.rows),
@@ -582,8 +591,6 @@ fun TerminalScreen(
                         )
                     }
                 }
-                TerminalComposer(viewer)
-                if (viewer.typing && viewer.keyBarVisible) TerminalKeyBar(viewer)
             }
         }
     }
@@ -666,8 +673,11 @@ private fun TerminalCanvas(viewer: TerminalViewer, look: TerminalLook, settings:
         val baseCellW = per100 * baseFontPx / probePx
         val baseCellH = (probe.size.height * baseFontPx / probePx).coerceAtLeast(1f)
         val heightPx = with(density) { maxHeight.toPx() }
-        if (viewer.typing) {
-            val grid = (widthPx / baseCellW).toInt().coerceAtLeast(1) to (heightPx / baseCellH).toInt().coerceAtLeast(1)
+        // Do not resize the Host to a one-row grid during an IME animation or
+        // in a tiny split. Keep the last usable grid until two rows fit again.
+        if (viewer.typing && widthPx >= baseCellW &&
+            (heightPx >= baseCellH * 2 || viewer.phoneGrid == null)) {
+            val grid = (widthPx / baseCellW).toInt().coerceAtLeast(1) to (heightPx / baseCellH).toInt().coerceAtLeast(2)
             SideEffect { if (viewer.phoneGrid != grid) viewer.phoneGrid = grid }
         }
         look.layout(baseCellW, baseCellH, widthPx, heightPx)

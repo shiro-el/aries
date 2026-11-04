@@ -272,8 +272,12 @@ class HostsModel(
     val quickOpenBrowser: HostBrowser? get() = (quickOpenBase() as? Screen.Browse)?.browser
 
     /** The live list under detail; layout changes never create another list or connection. */
-    val listScreen: Screen? get() = quickOpenBase().takeIf {
-        it == Screen.Hosts || it is Screen.Browse || it is Screen.Agents
+    val listScreen: Screen? get() = when (val route = quickOpenBase()) {
+        Screen.Hosts, is Screen.Browse, is Screen.Agents -> route
+        // These destinations do not own a live list connection. Keep Hosts in
+        // the tablet pane rather than unmounting the entire list during setup.
+        is Screen.Connecting, Screen.Settings, is Screen.JumpHosts -> Screen.Hosts
+        else -> null
     }
 
     /** Replace detail from the visible list, retaining its original navigation/connection owner. */

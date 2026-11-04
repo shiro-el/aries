@@ -29,12 +29,12 @@ import io.github.shiroel.aries.core.TerminalKey
 
 /** Standard Android editing and OS paste, followed by one core paste operation. */
 @Composable
-internal fun TerminalComposer(viewer: TerminalViewer) {
+internal fun TerminalComposer(viewer: TerminalViewer, compact: Boolean = false) {
     val style = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace, fontSize = 14.sp)
     if (!viewer.composerOpen) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             TerminalInput(viewer, Modifier.weight(1f))
-            if (viewer.typing) TerminalKeyBarToggle(viewer)
+            if (!compact && viewer.typing) TerminalKeyBarToggle(viewer)
             ActionIcon(R.drawable.ic_square_pen, R.string.terminal_compose_button, viewer::openComposer)
         }
         return
@@ -47,29 +47,35 @@ internal fun TerminalComposer(viewer: TerminalViewer) {
             Text(stringResource(reason), Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        viewer.inputHistory?.let { history ->
+        if (!compact) viewer.inputHistory?.let { history ->
             InputHistoryButton(history) { viewer.draft = appendInputHistory(viewer.draft, it) }
         }
-        BasicTextField(
-            value = viewer.draft,
-            onValueChange = { viewer.draft = it },
-            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
-                .testTag("terminal-composer")
-                .semantics { contentDescription = hint },
-            textStyle = style.copy(color = MaterialTheme.colorScheme.onSurface),
-            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
-            minLines = 2,
-            maxLines = 6,
-            decorationBox = { field ->
-                Box(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
-                    if (viewer.draft.isEmpty()) {
-                        Text(hint, style = style, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            BasicTextField(
+                value = viewer.draft,
+                onValueChange = { viewer.draft = it },
+                modifier = (if (compact) Modifier.weight(1f) else Modifier.fillMaxWidth()).heightIn(min = if (compact) 48.dp else 56.dp)
+                    .testTag("terminal-composer")
+                    .semantics { contentDescription = hint },
+                textStyle = style.copy(color = MaterialTheme.colorScheme.onSurface),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
+                minLines = if (compact) 1 else 2,
+                maxLines = if (compact) 1 else 6,
+                decorationBox = { field ->
+                    Box(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                        if (viewer.draft.isEmpty()) {
+                            Text(hint, style = style, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        field()
                     }
-                    field()
-                }
-            },
-        )
+                },
+            )
+            if (compact) {
+                ActionIcon(R.drawable.ic_keyboard, R.string.terminal_direct_input_button, viewer::closeComposer)
+                ActionIcon(R.drawable.ic_send, R.string.terminal_composer_send_button, viewer::pasteDraft, enabled = viewer.canPasteDraft)
+            }
+        }
         if (viewer.pasteSending || viewer.pasteUncertain) {
             AnnouncedText(
                 stringResource(if (viewer.pasteSending) R.string.terminal_paste_sending else R.string.terminal_paste_uncertain),
@@ -78,7 +84,7 @@ internal fun TerminalComposer(viewer: TerminalViewer) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        if (!compact) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             if (viewer.typing) TerminalKeyBarToggle(viewer)
             ActionIcon(R.drawable.ic_keyboard, R.string.terminal_direct_input_button, viewer::closeComposer)
             Spacer(Modifier.weight(1f))

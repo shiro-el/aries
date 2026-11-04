@@ -730,6 +730,7 @@
     <string name="chat_catalog_builtin">Built-in command</string>
 
     <string name="chat_input_label">Message to the Agent</string>
+    <string name="chat_input_tools_button">Input tools</string>
     <string name="chat_send_button">Send</string>
     <string name="chat_sent">Message sent</string>
     <string name="chat_sending">Sending…</string>
