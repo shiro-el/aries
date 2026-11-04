@@ -29,6 +29,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.foundation.selection.toggleable
@@ -128,6 +129,18 @@ private fun AriesContent(
             }
         }
         model.prompt?.let { PromptDialog(it, model) }
+        if (model.prompt == null) model.agentOpening?.let { message ->
+            AlertDialog(onDismissRequest = model::cancelAgentOpen,
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Text(stringResource(message.res, *message.args.toTypedArray()))
+                        LinearProgressIndicator(Modifier.fillMaxWidth())
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = model::cancelAgentOpen) { Text(stringResource(R.string.cancel_button)) }
+                })
+        }
         if (model.installingKeyOn != null) {
             AlertDialog(onDismissRequest = {},
                 text = { Text(stringResource(R.string.key_install_busy)) }, confirmButton = {})

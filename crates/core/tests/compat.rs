@@ -155,5 +155,17 @@ async fn fails_clearly_when_herdr_core_is_missing() {
         "echo 'sh: herdr-core: not found' >&2; exit 127",
     ))
     .await;
-    assert!(matches!(err, CoreError::Protocol { .. }), "{err:?}");
+    assert!(matches!(err, CoreError::Unreachable { .. }), "{err:?}");
+}
+
+// Regression: a dropped hello (including a truncated reply) must remain retryable on Android.
+#[tokio::test]
+async fn a_peer_that_drops_before_hello_is_unreachable() {
+    for script in [
+        "read -r _; exit 0",
+        "read -r _; printf '{\"jsonrpc\":\"2.0\",\"id\":0,'",
+    ] {
+        let err = connect_err(script_endpoint(script)).await;
+        assert!(matches!(err, CoreError::Unreachable { .. }), "{err:?}");
+    }
 }

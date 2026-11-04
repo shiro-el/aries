@@ -386,6 +386,22 @@ class ReconnectTest {
         screenShows("before")
     }
 
+    // D85: a Wi-Fi/LTE switch during the grace period must replace even an apparently healthy warm line on resume.
+    @Test fun aNetworkChangeWhilePausedReplacesTheWarmLineOnResume() {
+        val core = FakeCore().apply { terminals = listOf(build) }
+        openBuild(core)
+        val old = core.connection!!
+        compose.runOnIdle {
+            model.backgrounded()
+            model.networkChanged()
+        }
+        compose.runOnIdle { assertFalse(old.disconnected) }
+        compose.runOnIdle { model.resumeScreens() }
+        compose.waitForIdle()
+        assertTrue(old.disconnected)
+        assertNotSame(old, core.connection)
+    }
+
     @Test
     fun aLongBackgroundVisitReleasesTheLineAndResumesTheTerminal() {
         val core = FakeCore().apply { terminals = listOf(build) }
@@ -429,7 +445,6 @@ class ReconnectTest {
             chat.send()
             chat.draft = "unfinished question"
             screenLifecycle.currentState = Lifecycle.State.CREATED
-            model.networkChanged()
         }
         compose.mainClock.advanceTimeBy(30_000)
         compose.waitForIdle()
