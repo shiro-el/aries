@@ -99,7 +99,7 @@ class UploadNoticeLifetimeTest {
             compose.onNodeWithText("Cancel upload").performClick()
             compose.waitUntil(5_000) { !chat.uploading }
             assertTrue("Canceled captures must remain on the phone", photo.exists())
-            compose.onNodeWithText(photo.name, substring = true).assertExists()
+            compose.onNodeWithText(compose.activity.getString(R.string.attachments_canceled, photo.name)).assertExists()
             connection.uploadHold!!.complete(Unit)
             compose.waitForIdle()
             assertTrue(chat.attachments.isEmpty())
@@ -115,7 +115,7 @@ class UploadNoticeLifetimeTest {
         assertTrue("The unuploaded camera source must remain", photo.exists())
         if (leaveHost) assertFalse("Navigation must not disconnect an in-flight upload", connection.disconnected)
         connection.uploadHold!!.complete(Unit)
-        compose.waitUntil(5_000) { chat.attachments.size == 1 }
+        compose.waitUntil(5_000) { chat.attachments.size == 1 && !chat.uploading }
         compose.waitForIdle()
         assertFalse(chat.uploading)
         assertEquals(listOf("t1"), connection.uploads.map { it.first })

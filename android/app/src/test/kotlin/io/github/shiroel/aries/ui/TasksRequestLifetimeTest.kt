@@ -71,6 +71,7 @@ class TasksRequestLifetimeTest {
             listOf(ChatQuestionPart("Which route should we use?", "Route", false,
                 listOf(ChatQuestionOption("North", "Take the northern route")))), ChatToolStatus.DONE, null))
         push(base + request)
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("tasks-question:request").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("tasks-question:request").performClick()
         compose.onNodeWithText("Which route should we use?").assertIsDisplayed()
         val output = (1..40).map { ChatEntry("reply$it", null, ChatEntryBody.Agent("Progress $it\nMore output\nMore output")) }

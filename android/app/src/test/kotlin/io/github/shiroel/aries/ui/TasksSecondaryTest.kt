@@ -99,6 +99,7 @@ class TasksSecondaryTest {
         // A new Host snapshot changes the default target while this panel is pinned.
         compose.runOnIdle { browser.updateTerminals(listOf(other, terminal)) }
         restoration.emulateSavedInstanceStateRestore()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("line 451").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("line 451").assertExists()
         compose.runOnIdle { assertTrue(reads.all { it == "t1" to "/repo/src/notes.txt" }) }
         compose.onNodeWithTag("files-back").performClick()
