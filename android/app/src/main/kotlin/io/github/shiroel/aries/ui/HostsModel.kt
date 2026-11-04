@@ -1675,7 +1675,9 @@ class HostsModel(
         viewing = scope.launch {
             try {
                 link.keepWatching(onFailure = { viewer.watchError = it }, onStart = {
-                    viewer.discardInput()
+                    // Retry invalidates a failed attachment's input. A new line may
+                    // already own keys queued while the old search finishes.
+                    if (viewer.watchError != null) viewer.discardInput()
                     viewer.watchError = null
                 }) { conn, resumed ->
                     if (!viewer.typing) {
