@@ -9,6 +9,10 @@
 //! menu and its status/turn before sending that menu's advertised shortcut.
 
 use std::collections::HashMap;
+use std::fs::{File, OpenOptions};
+use std::path::{Path, PathBuf};
+
+use sha2::{Digest, Sha256};
 
 use aries_protocol::answer::{Answer, AnswerOutcome, AnswerReply};
 use aries_protocol::chat::{ChatBody, ChatEvent, ChatItem, ChatQuestion, ToolStatus};
@@ -89,13 +93,103 @@ fn reply(outcome: AnswerOutcome, detail: impl Into<String>) -> AnswerReply {
     AnswerReply::new(outcome, Some(detail.into()))
 }
 
+/// Input is serialized across Beacon processes, including validation reads.
+/// A claim is synced before the first possibly delivered input and survives a
+/// process death or an RPC error. Claims contain only request identity hashes.
+struct ClaimedInput<'a, L> {
+    inner: &'a mut L,
+    path: PathBuf,
+    claimed: bool,
+}
+
+impl<L> ClaimedInput<'_, L> {
+    fn claim(&mut self) -> Result<(), String> {
+        if !self.claimed {
+            let mut options = OpenOptions::new();
+            options.write(true).create_new(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.mode(0o600);
+            }
+            let file = options.open(&self.path).map_err(|e| {
+                if e.kind() == std::io::ErrorKind::AlreadyExists {
+                    "answer already attempted; delivery is uncertain".to_owned()
+                } else {
+                    format!("could not claim answer: {e}")
+                }
+            })?;
+            file.sync_all().map_err(|e| e.to_string())?;
+            File::open(self.path.parent().expect("claim directory"))
+                .and_then(|dir| dir.sync_all())
+                .map_err(|e| e.to_string())?;
+            self.claimed = true;
+        }
+        Ok(())
+    }
+}
+
+impl<L: TerminalLookup> TerminalLookup for ClaimedInput<'_, L> {
+    fn get(&mut self, terminal: &str) -> Result<Option<super::TerminalFacts>, String> {
+        self.inner.get(terminal)
+    }
+    fn screen(&mut self, terminal: &str) -> Result<String, String> {
+        self.inner.screen(terminal)
+    }
+}
+
+impl<L: TerminalInput> TerminalInput for ClaimedInput<'_, L> {
+    fn keys(&mut self, terminal: &str, keys: &[String]) -> Result<(), String> {
+        self.claim()?;
+        self.inner.keys(terminal, keys)
+    }
+    fn text(&mut self, terminal: &str, text: &str) -> Result<(), String> {
+        self.claim()?;
+        self.inner.text(terminal, text)
+    }
+}
+
+fn hash(value: impl serde::Serialize) -> String {
+    Sha256::digest(serde_json::to_vec(&value).expect("answer identity"))
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+fn terminal_lock(dir: &Path) -> std::io::Result<File> {
+    let mut builder = std::fs::DirBuilder::new();
+    builder.recursive(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        builder.mode(0o700);
+    }
+    builder.create(dir)?;
+    let mut options = OpenOptions::new();
+    options.create(true).truncate(false).write(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let lock = options.open(dir.join("input.lock"))?;
+    lock.lock()?;
+    Ok(lock)
+}
+
 /// Runs one answer, without retries. Input failures can follow partial input.
 pub fn answer<L: TerminalLookup + TerminalInput>(
+    state_dir: &Path,
     terminal: &str,
     answer: &Answer,
     link: &mut L,
     agents: &[Box<dyn Agent>],
 ) -> std::io::Result<AnswerReply> {
+    let dir = state_dir.join("answers").join(hash(terminal));
+    let _lock = match terminal_lock(&dir) {
+        Ok(lock) => lock,
+        Err(e) => return Ok(reply(AnswerOutcome::Failed, format!("answer lock: {e}"))),
+    };
     let facts = match link.get(terminal) {
         Ok(Some(f)) => f,
         Ok(None) => return Ok(reply(AnswerOutcome::NoTerminal, terminal)),
@@ -105,6 +199,20 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
     else {
         return Ok(reply(AnswerOutcome::NoAgent, terminal));
     };
+
+    // Picks never enter the identity: another surface choosing a different
+    // option must not dispatch a second answer to this same request.
+    let mut claimed = ClaimedInput {
+        inner: link,
+        path: dir.join(hash((
+            agent.name(),
+            &located.session,
+            located.path.as_os_str().as_encoded_bytes(),
+            &answer.question,
+        ))),
+        claimed: false,
+    };
+    let link = &mut claimed;
 
     if answer.question.starts_with(super::permission::PREFIX) {
         let screen = link.screen(terminal).unwrap_or_default();
