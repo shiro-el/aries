@@ -822,6 +822,11 @@
     <string name="chat_queue_agent">Passed to Agent · waiting for its turn</string>
     <string name="chat_queue_uncertain">Delivery unconfirmed · check the conversation before resending</string>
     <string name="chat_queue_cancel_button">Cancel queued message</string>
+    <!-- Chat draft recovery -->
+    <string name="chat_drafts_read_failed">Saved drafts could not be read. Discard this Host’s saved drafts to continue. Your current input will be kept.</string>
+    <string name="chat_drafts_save_failed">Draft changes could not be saved.</string>
+    <string name="chat_drafts_discard_failed">Saved drafts could not be discarded. Try again.</string>
+    <string name="chat_drafts_discard_button">Discard saved drafts for this Host</string>
     <string name="chat_queue_returned">Queued messages were returned to the input. Review them and send when ready.</string>
     <string name="chat_delivery_dismiss_button">Dismiss delivery note</string>
 
