@@ -357,7 +357,7 @@ class ChatModel(
                     connectionError = e
                     // A cancelled key unlock is not evidence of a missing Beacon.
                     val cached = snapshot ?: try { core.cachedChat(host.id, terminal.address) } catch (_: CoreException) { null }
-                    snapshot = ChatSnapshot(cached?.entries.orEmpty(), ChatStatus.RECONNECTING, cached?.cursor)
+                    snapshot = ChatSnapshot(cached?.entries.orEmpty(), ChatStatus.RECONNECTING, cached?.cursor, cached?.usage)
                     if (!e.retryableConnection()) return@launch
                     delay(RETRY_DELAYS_MS[minOf(attempt++, RETRY_DELAYS_MS.lastIndex)])
                 }
@@ -579,6 +579,7 @@ fun ChatScreen(
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))) {
             AgentScreenHeader(chat.terminal, chat.host.name, onBack, AgentView.CHAT, onView,
                 preview = preview, link = chat.link, onTerminalUpdate = { chat.update(listOf(it)) }, onSearch = { searchOpen = true })
+            AgentUsageHeader(snapshot?.usage)
             PreviewChips(preview)
             if (preview.selected != null) {
                 LocalhostPreviewBrowser(preview, chat.link, Modifier.weight(1f).fillMaxWidth(),

@@ -1,7 +1,22 @@
 # Aries companion for Wear OS 4+
 
-The phone owns SSH and Last-known state. This companion receives only the waiting
-count, the three highest-ranked Agents and the oldest included Host fetch time.
+The phone owns SSH and Last-known state. The launcher opens a Wear Compose Inbox:
+requests needing attention first, then Agents grouped by Host and Space (current
+folder when no Space is known). Each row opens request text and a short excerpt
+of the last cached Agent response. Missing Chat content directs the user to the
+phone. Refresh asks the phone's existing WorkManager pull to run; acknowledgment
+means scheduled, and only a new DataItem advances the displayed fetch time.
+Biometric-key Hosts still require the foreground phone app to refresh.
+
+The v2 contract retains the v1 envelope and its three-Agent projection, adding
+`inbox_version=2` and an `inbox` list. Old watches ignore the extension; new
+watches also accept v1-only phones and explicit v2 envelopes. The Inbox carries
+up to 32 Agents, request text up to 1,200 UTF-16 units, and last-response excerpts
+up to 600. The entire DataMap stays within 100 KB; a large list is shortened and
+the screen directs users to the phone for the rest. Names, folders, Choices and
+request IDs are bounded too. Preview protection on the phone removes request
+and conversation content before publication. No SSH credentials or full
+transcripts are transferred.
 It works with an Android phone paired through the normal Wear OS pairing flow.
 Tile and complication taps open the installed watch launcher when available, otherwise
 they open the phone through a best-effort MessageClient command; there is no
@@ -29,7 +44,8 @@ On the watch, enable Developer options (About watch → Software → tap Softwar
 version five times), ADB debugging and Wireless debugging. Put the workstation
 and watch on the same Wi-Fi. Select **Pair new device** and read the pairing IP,
 port and code. The pairing port differs from the ordinary debugging port.
-These steps are for the user to perform; no watch was attached during development.
+These pairing steps are for the user to perform. Development screenshots use a
+round Wear OS emulator with fictional seeded state, not a paired physical watch.
 
 ```sh
 # Replace every placeholder. Enter the pairing code at the prompt.
@@ -57,7 +73,13 @@ changes alone do not request another complication update. A never-synced complic
 certificate; use matching builds. Do not uninstall another user's install as a
 workaround. No Firebase/Cloudflare deployment is needed for this companion.
 
-References: [Data Layer](https://developer.android.com/training/wearables/data/overview),
+`WatchInboxActivity` accepts `host` and `terminal` extras for local detail links.
+`WatchInbox` exposes a composable `detailActions(WatchAgent)` slot; Answer, Stop,
+and progress are disabled placeholders until their dedicated action tickets land.
+The existing Tile/complication implementations remain separate.
+
+References: [Wear Compose](https://developer.android.com/jetpack/androidx/releases/wear-compose),
+[Data Layer](https://developer.android.com/training/wearables/data/overview),
 [Tiles](https://developer.android.com/training/wearables/tiles),
 [complications](https://developer.android.com/training/wearables/complications/exposing-data),
 [Samsung Wi-Fi debugging](https://developer.samsung.com/health/sensor/guide/connect-watch.html).

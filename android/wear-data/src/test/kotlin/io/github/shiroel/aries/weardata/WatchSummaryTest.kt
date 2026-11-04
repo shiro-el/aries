@@ -22,11 +22,52 @@ class WatchSummaryTest {
         assertEquals(summary, WatchSummary.fromBytes(request.data))
     }
 
+    @Test fun mixedPhoneAndWatchVersionsKeepTheLegacyProjectionAndReadOptionalDetails() {
+        val v1 = DataMap().apply {
+            putInt("version", 1)
+            putInt("waiting", 1)
+            putLong("fetched_at_ms", 123)
+            putDataMapArrayList("agents", arrayListOf(DataMap().apply {
+                putString("host", "h1"); putString("terminal", "t1")
+                putString("name", "Build"); putString("status", "blocked")
+            }))
+        }
+        val old = WatchSummary.fromBytes(v1.toByteArray())!!
+        assertEquals("", old.inbox.single().conversationSummary)
+        val rich = old.agents.single().copy(requestBody = "Run cargo test?", conversationSummary = "Build passed.")
+        val wire = DataMap.fromByteArray(old.copy(inbox = listOf(rich)).toRequest().data!!)
+        // These are the constraints of the already-shipped v1 decoder.
+        assertEquals(1, wire.getInt("version"))
+        assertTrue(wire.getDataMapArrayList("agents")!!.size <= 3)
+        assertEquals("blocked", wire.getDataMapArrayList("agents")!!.single().getString("status"))
+        assertEquals("Run cargo test?", WatchSummary.fromBytes(wire.toByteArray())!!.inbox.single().requestBody)
+        wire.putInt("version", 2)
+        assertEquals("Build passed.", WatchSummary.fromBytes(wire.toByteArray())!!.inbox.single().conversationSummary)
+    }
+
+    @Test fun unicodeRequestsAndResponseExcerptsCannotExceedTheDataLayerBudget() {
+        val long = "가😀".repeat(1000)
+        val row = WatchAgent("h1", "t1", long, "blocked", long, long, long, long, choices = List(20) { long })
+        val request = WatchSummary(100, listOf(row), 123, inbox = List(100) { row.copy(terminal = "t$it") }).toRequest()
+        assertTrue(request.data!!.size <= 100_000)
+        val decoded = WatchSummary.fromBytes(request.data)!!
+        assertTrue(decoded.inbox.size <= 32)
+        val excerpt = decoded.inbox.first()
+        assertTrue(excerpt.requestBody.length <= 1200)
+        assertTrue(excerpt.conversationSummary.length <= 600)
+        assertFalse(Character.isHighSurrogate(excerpt.conversationSummary.last()))
+        val hidden = WatchSummary.fromBytes(WatchSummary(1, listOf(row), 123,
+            inbox = listOf(row.copy(contentHidden = true))).toRequest().data)!!.inbox.single()
+        assertEquals("", hidden.requestBody)
+        assertEquals("", hidden.conversationSummary)
+        assertTrue(hidden.choices.isEmpty())
+    }
+
     @Test fun unsupportedAndMalformedSummariesAreIgnored() {
         assertNull(WatchSummary.fromBytes(null))
         assertNull(WatchSummary.fromBytes(byteArrayOf(1, 2)))
         val map = DataMap.fromByteArray(WatchSummary.EMPTY.toRequest().data!!)
-        map.putInt("version", 2)
+        map.putInt("version", 99)
         assertNull(WatchSummary.fromBytes(map.toByteArray()))
         map.putInt("version", 1)
         map.putInt("waiting", -1)
