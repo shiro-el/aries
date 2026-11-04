@@ -273,44 +273,44 @@ impl SavedLaunches {
         }
     }
 
-    pub fn list(&self) -> Vec<SavedLaunch> {
-        std::fs::read(&self.path)
-            .ok()
-            .and_then(|b| serde_json::from_slice(&b).ok())
-            .unwrap_or_default()
+    pub fn list(&self) -> Result<Vec<SavedLaunch>, CoreError> {
+        crate::store::read_json(&self.path)
     }
 
     /// Adds `launch` (empty id) or replaces the one with its id.
     pub fn save(&self, mut launch: SavedLaunch) -> Result<SavedLaunch, CoreError> {
         launch.name = launch.name.trim().to_owned();
-        let mut list = self.list();
         if launch.id.is_empty() {
             launch.id = crate::new_id();
         }
-        match list.iter_mut().find(|l| l.id == launch.id) {
-            Some(slot) => *slot = launch.clone(),
-            None => list.push(launch.clone()),
-        }
-        self.write(&list)?;
+        self.update(|list| {
+            match list.iter_mut().find(|l| l.id == launch.id) {
+                Some(slot) => *slot = launch.clone(),
+                None => list.push(launch.clone()),
+            }
+            true
+        })?;
         Ok(launch)
     }
 
     pub fn delete(&self, id: &str) -> Result<(), CoreError> {
-        let mut list = self.list();
-        let before = list.len();
-        list.retain(|l| l.id != id);
-        if list.len() == before {
-            return Ok(());
-        }
-        self.write(&list)
+        self.update(|list| {
+            let before = list.len();
+            list.retain(|l| l.id != id);
+            list.len() != before
+        })
     }
 
-    fn write(&self, list: &[SavedLaunch]) -> Result<(), CoreError> {
+    /// Serializes add, replace and delete across connections and core handles.
+    fn update(&self, update: impl FnOnce(&mut Vec<SavedLaunch>) -> bool) -> Result<(), CoreError> {
         let dir = self.path.parent().expect("host dir");
         std::fs::create_dir_all(dir).map_err(storage)?;
-        let tmp = dir.join(".saved-launches.json.tmp");
-        std::fs::write(&tmp, serde_json::to_vec(list).map_err(storage)?).map_err(storage)?;
-        std::fs::rename(&tmp, &self.path).map_err(storage)
+        let _guard = crate::store::lock_file(&dir.join("saved-launches.lock"))?;
+        let mut list = self.list()?;
+        if update(&mut list) {
+            crate::store::write_atomic(&self.path, &serde_json::to_vec(&list).map_err(storage)?)?;
+        }
+        Ok(())
     }
 }
 
