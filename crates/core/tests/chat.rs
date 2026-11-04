@@ -607,3 +607,40 @@ async fn waiting_input_becomes_one_delivered_message_with_its_image() {
     );
     watch.stop();
 }
+
+// Regression: a usage-only line must reach the phone, survive cache resume,
+// and disappear when a different transcript replaces it.
+#[tokio::test]
+async fn usage_survives_cache_resume_and_reset_clears_the_previous_account() {
+    let env = Env::new();
+    let lines = env.file("usage-lines", concat!(
+        "{\"v\":1,\"type\":\"reset\",\"agent\":\"codex\",\"session\":\"s\"}\n",
+        "{\"v\":1,\"type\":\"usage\",\"usage\":{\"context\":{\"used_tokens\":50000,\"window_tokens\":200000,\"updated_at\":\"2026-11-04T10:00:00Z\"},\"limits\":[{\"name\":\"primary\",\"window_minutes\":300,\"used_basis_points\":0,\"resets_at\":1793790000,\"updated_at\":\"2026-11-04T10:00:00Z\"}]},\"cursor\":\"usage:1\"}\n",
+        "{\"v\":1,\"type\":\"state\",\"state\":\"live\"}\n",
+    ));
+    let host = env.fake_beacon(&format!("cat {lines}; sleep 30"));
+    let watch = env.watch(&host);
+    let first = wait_for(&watch, "usage", |s| s.status == ChatStatus::Live).await;
+    assert_eq!(
+        first.usage.as_ref().unwrap().limits[0].used_basis_points,
+        Some(0)
+    );
+    // The cache coalesces writes for one second; wait for that save before stop().
+    tokio::time::sleep(Duration::from_millis(1200)).await;
+    watch.stop();
+    let cached = env
+        .core
+        .cached_chat(host.clone(), "t1".into())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        cached.usage.unwrap().context.unwrap().used_tokens,
+        Some(50000)
+    );
+    std::fs::write(&lines, "{\"v\":1,\"type\":\"reset\",\"agent\":\"claude-code\",\"session\":\"new\"}\n{\"v\":1,\"type\":\"state\",\"state\":\"live\"}\n").unwrap();
+    let watch = env.watch(&host);
+    let reset = wait_for(&watch, "reset", |s| s.status == ChatStatus::Live).await;
+    assert!(reset.usage.is_none());
+    watch.stop();
+}
