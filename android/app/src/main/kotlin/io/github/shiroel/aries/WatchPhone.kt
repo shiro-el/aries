@@ -72,11 +72,16 @@ object WatchPhone {
 
     /** Both cached questions and the one-shot live permission projection use the same shape. */
     fun withEntries(agent: WatchAgent, entries: List<io.github.shiroel.aries.core.ChatEntry>): WatchAgent {
-        val question = entries.lastOrNull {
-            val body = it.body
-            body is ChatEntryBody.Question && body.status == ChatToolStatus.RUNNING &&
-                (body.name == PERMISSION_TOOL) == (agent.requestKind == "permission")
-        }
+        // Match Chat and the Beacon: only the current user turn can own a
+        // live request. Queued user drafts do not retire that turn's tools.
+        val pending = entries.drop(entries.indexOfLast { (it.body as? ChatEntryBody.User)?.queued == false } + 1)
+            .filter {
+                val body = it.body
+                body is ChatEntryBody.Question && body.status == ChatToolStatus.RUNNING &&
+                    (body.name == PERMISSION_TOOL) == (agent.requestKind == "permission")
+            }
+        val codex = (pending.firstOrNull()?.body as? ChatEntryBody.Question)?.name == "request_user_input"
+        val question = if (codex) pending.firstOrNull() else pending.lastOrNull()
         val body = question?.body as? ChatEntryBody.Question
         val part = body?.questions?.singleOrNull()
         val permission = agent.requestKind == "permission"
