@@ -272,8 +272,7 @@ internal fun RemoteFilesAccess(model: HostsModel, content: @Composable () -> Uni
         if (model.screen === screen) {
             model.switchView(io.github.shiroel.aries.core.AgentView.CHAT)
             (model.screen as? Screen.Chat)?.chat?.let { chat ->
-                chat.draft = if (diff && chat.draft.isNotBlank()) chat.draft + "\n\n" + reference
-                    else appendFileReference(chat.draft, reference)
+                chat.appendDraft(reference, separator = if (diff && chat.draft.isNotBlank()) "\n\n" else "\n")
             }
         }
         open = false
@@ -302,9 +301,6 @@ internal fun RemoteFilesAccess(model: HostsModel, content: @Composable () -> Uni
         }
     }
 }
-
-internal fun appendFileReference(draft: String, reference: String): String =
-    if (draft.isEmpty()) reference else "$draft\n$reference"
 
 internal val LocalOpenFiles = staticCompositionLocalOf<(() -> Unit)?> { null }
 

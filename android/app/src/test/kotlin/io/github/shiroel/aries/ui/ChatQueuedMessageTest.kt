@@ -2,6 +2,10 @@ package io.github.shiroel.aries.ui
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.text.TextRange
@@ -29,6 +33,7 @@ import kotlinx.coroutines.CompletableDeferred
 class ChatQueuedMessageTest {
     @get:Rule val compose = createComposeRule()
     private lateinit var hosts: HostsModel
+    private var generation by mutableStateOf(0)
     private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
     private val agent = TerminalInfo("t1", "claude", "", listOf("claude"), "/repo", "live", AgentStatus.Working)
     private fun str(id: Int) = context.getString(id)
@@ -38,9 +43,11 @@ class ChatQueuedMessageTest {
         core.savedView = AgentView.CHAT
         core.addHost("home", Endpoint.Ssh("host", 22u, "me"))
         compose.setContent {
-            val scope = rememberCoroutineScope()
-            val model = remember { HostsModel(core, scope).also { hosts = it } }
-            MaterialTheme { AriesApp(model) }
+            key(generation) {
+                val scope = rememberCoroutineScope()
+                val model = remember { HostsModel(core, scope).also { hosts = it } }
+                MaterialTheme { AriesApp(model) }
+            }
         }
         compose.onNodeWithText("home").performClick()
         compose.onNodeWithText("claude").performClick()
@@ -223,6 +230,155 @@ class ChatQueuedMessageTest {
         assertEquals(listOf("t1" to "first queued instruction", "t1" to "second queued instruction"), connection.typed)
         assertEquals(2, connection.calls.count { it == "sendMessage" })
         compose.runOnIdle { assertEquals("", chat.draft) }
+    }
+
+    @Test fun editingAndSwitchingViewsDuringAHeldSendKeepsOnlyTheNewDraft() {
+        val core = FakeCore()
+        val connection = open(core)
+        core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
+        compose.waitForIdle()
+        connection.sendHold = CompletableDeferred()
+        send("submitted prefix")
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertIsEnabled()
+            .performTextInput("new draft")
+        compose.onNodeWithContentDescription(str(R.string.agent_switch_terminal_label)).performClick()
+        compose.runOnIdle { hosts.sendTerminalSelectionToDraft("selected output") }
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label))
+            .assertTextEquals("new draft\n\n```\nselected output\n```")
+        screenshot("held-with-edited-draft")
+        connection.sendHold!!.complete(Unit)
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label))
+            .assertTextEquals("new draft\n\n```\nselected output\n```")
+        assertEquals(listOf("t1" to "submitted prefix"), connection.typed)
+        compose.onNodeWithText("Entered in Terminal").assertExists()
+        screenshot("editable-held-draft")
+    }
+
+    @Test fun reopeningWhileAReplyIsPendingKeepsItsResultAndTheNewerDraft() {
+        val core = FakeCore()
+        val connection = open(core)
+        core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
+        compose.waitForIdle()
+        connection.sendReply = CompletableDeferred()
+        send("possibly delivered")
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).performTextInput("keep editing")
+        compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
+        compose.onNodeWithText("claude").performClick()
+        core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        connection.sendFailWith = CoreException.Closed()
+        connection.sendReply!!.complete(Unit)
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("keep editing")
+        compose.onNodeWithText(str(R.string.chat_queue_uncertain)).assertExists()
+        compose.onNodeWithText(context.getString(R.string.chat_send_failed, connection.sendFailWith!!.message))
+            .assertDoesNotExist()
+        assertEquals(1, connection.calls.count { it == "sendMessage" })
+        screenshot("reopened-delivery-unconfirmed")
+    }
+
+    @Test fun processRecreationRecoversChatAttachmentsQuestionsAndTerminalComposer() {
+        val core = FakeCore()
+        val connection = open(core)
+        val question = ChatEntryBody.Question("AskUserQuestion", "Choose a direction",
+            listOf(ChatQuestionPart("First?", "First", true, listOf(ChatQuestionOption("Red", ""), ChatQuestionOption("Blue", ""))),
+                ChatQuestionPart("Second?", "Second", false, emptyList())), ChatToolStatus.RUNNING, null)
+        core.pushChat(ChatSnapshot(listOf(ChatEntry("q", null, question)), ChatStatus.LIVE, null))
+        core.push(listOf(agent.copy(agentStatus = AgentStatus.Blocked(BlockedReason.QUESTION, "Choose a direction"))))
+        compose.waitForIdle()
+        val file = File(context.cacheDir, "draft-owner.txt").apply { writeText("notes") }
+        try {
+            compose.runOnIdle {
+                val chat = (hosts.screen as Screen.Chat).chat
+                chat.draft = "unsent text"
+                chat.pick("q", question, 0, 1)
+                chat.writeAnswer("q", question, 1, "my own answer")
+                chat.attach(context, SharedContent(listOf(Uri.fromFile(file))))
+            }
+            compose.waitUntil(5_000) { connection.uploads.isNotEmpty() }
+            compose.waitUntil(5_000) { !(hosts.screen as Screen.Chat).chat.uploading }
+            compose.onNodeWithContentDescription(str(R.string.agent_switch_terminal_label)).performClick()
+            compose.runOnIdle {
+                val viewer = (hosts.screen as Screen.Terminal).viewer
+                viewer.openComposer()
+                viewer.draft = "unsent Terminal command"
+            }
+            // Dispose the UI scope without calling back()/stop(): process death has no cleanup callback.
+            compose.runOnIdle { generation++ }
+            compose.waitForIdle()
+            compose.onNodeWithText("home").performClick()
+            compose.onNodeWithText("claude").performClick()
+            compose.onNodeWithTag("terminal-composer").assertTextEquals("unsent Terminal command")
+            screenshot("restored-terminal-composer")
+            compose.onNodeWithContentDescription(str(R.string.agent_switch_chat_label)).performClick()
+            core.pushChat(ChatSnapshot(listOf(ChatEntry("q", null, question)), ChatStatus.LIVE, null))
+            compose.waitForIdle()
+            compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("unsent text")
+            compose.runOnIdle {
+                val chat = (hosts.screen as Screen.Chat).chat
+                assertEquals("/host/it's file.jpg", chat.attachments.single().path)
+                assertEquals(listOf(setOf(1), emptySet<Int>()), chat.picks["q"])
+                assertEquals(listOf("", "my own answer"), chat.questionText["q"])
+            }
+            assertEquals(emptyList<Pair<String, String>>(), connection.typed)
+            assertEquals(emptyList<Pair<String, String>>(), core.connection!!.typed)
+            screenshot("restored-composers")
+        } finally { file.delete() }
+    }
+
+    @Test fun selectingChatHistoryAppendsWithoutReplacingTheCurrentDraftOrSending() {
+        val core = FakeCore()
+        val connection = open(core)
+        core.rememberInput("h1", "t1", "previous input")
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).performTextInput("current draft")
+        compose.onNodeWithContentDescription(str(R.string.input_history_title)).performClick()
+        compose.onNodeWithText("previous input").performClick()
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label))
+            .assertTextEquals("current draft\n\nprevious input")
+        assertEquals(emptyList<Pair<String, String>>(), connection.typed)
+    }
+
+    @Test fun notificationSwitchKeepsSeparateDraftsForTheSameTerminalAddressOnDifferentHosts() {
+        val core = FakeCore().apply {
+            addHost("other", Endpoint.Ssh("other", 22u, "me"))
+            terminalsOf["h1"] = listOf(agent)
+        }
+        open(core) // home is h2; both Hosts expose address t1.
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).performTextInput("home draft")
+        compose.runOnIdle { hosts.openPushedAgent("h1", "t1", openChat = true) }
+        compose.waitForIdle()
+        core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, null))
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label))
+            .assert(SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.EditableText,
+                androidx.compose.ui.text.AnnotatedString("")))
+            .performTextInput("other draft")
+        compose.runOnIdle { hosts.openPushedAgent("h2", "t1", openChat = true) }
+        compose.waitForIdle()
+        core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, null))
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("home draft")
+        compose.runOnIdle { hosts.openPushedAgent("h1", "t1", openChat = true) }
+        compose.waitForIdle()
+        core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, null))
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("other draft")
+    }
+
+    @Test fun upgradingAnExistingOutboxRestoresDraftAndUnconfirmedSendWithoutResending() {
+        val core = FakeCore()
+        core.saveChatOutbox("h1", "t1", """{
+            "version":1,"draft":"older draft","attachments":[],"messages":[{
+                "id":"old-send","draft":"older send","text":"older send","attachments":[],
+                "before":[],"phase":"Agent","confirmed":false
+            }]
+        }""")
+        val connection = open(core)
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("older draft")
+        compose.onNodeWithText("older send").assertExists()
+        compose.onNodeWithText(str(R.string.chat_queue_uncertain)).assertExists()
+        core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
+        compose.waitForIdle()
+        assertEquals(emptyList<Pair<String, String>>(), connection.typed)
     }
 
     private fun screenshot(name: String) {

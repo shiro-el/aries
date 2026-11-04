@@ -44,7 +44,7 @@ internal fun TerminalComposer(viewer: TerminalViewer) {
     Column(Modifier.fillMaxWidth()) {
         HorizontalDivider()
         viewer.inputHistory?.let { history ->
-            InputHistoryButton(history) { viewer.draft = it }
+            InputHistoryButton(history) { viewer.draft = appendInputHistory(viewer.draft, it) }
         }
         BasicTextField(
             value = viewer.draft,
