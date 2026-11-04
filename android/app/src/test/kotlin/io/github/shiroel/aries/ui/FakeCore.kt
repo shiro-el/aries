@@ -163,6 +163,8 @@ class FakeCore : AriesCoreInterface {
 
     /** Each subscriber receives every update, like independent core event subscriptions. */
     val firstTerminalListHolds = mutableMapOf<String, kotlinx.coroutines.Deferred<Unit>>()
+    /** Delays a Terminal-list RPC independently of the existing live watch. */
+    val terminalListHolds = mutableMapOf<String, kotlinx.coroutines.Deferred<Unit>>()
 
     internal fun watchTerminals(hostId: String, gone: kotlinx.coroutines.Deferred<Unit>): TerminalWatch {
         watchFailures[hostId]?.let { throw it }
@@ -981,6 +983,7 @@ class FakeConnection(
     override suspend fun terminals(): List<TerminalInfo> {
         calls += "terminals"
         if (dead) throw CoreException.Closed()
+        core?.terminalListHolds?.get(hostId)?.await()
         return core?.let { it.terminalsOf[hostId] ?: it.terminals } ?: list
     }
 
