@@ -20,7 +20,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** Regression: successful answers advance once; the last success closes the queue. */
+/** Needs confirmation and foreground feed ownership at the Android UI/core seam. */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "h1200dp")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -61,9 +61,35 @@ class TasksHomeTest {
         }
     }
 
-    // Regression: a shared question owner must not stop at the first answer or replay it
-    // when the Terminal list remains Blocked while the Host catches up.
-    @Test fun questionThenPermissionUseCheckedAnswersAndDoNotReappearFromAStaleList() {
+    // D25: Needs must ignore helpers, unknown callers and stale feeds, including on biometric Hosts.
+    @Test fun needsOnlyCountsLiveConfirmedTopLevelCallsOnTheForegroundHost() {
+        val core = FakeCore().apply {
+            addHost("home", Endpoint.Ssh("home.test", 22u, "me"))
+            ensureKey(); setKeyProtection(KeyProtection.BIOMETRIC)
+            callsOf["h1"] = listOf(call("review", "t1", CallUrgency.CHECK),
+                call("helper", "t2", CallUrgency.CHECK).copy(topLevel = false, pushesByDefault = false),
+                call("unknown", "t3", CallUrgency.CHECK).copy(terminal = null, pushesByDefault = false),
+                call("record", "t4", CallUrgency.RECORD).copy(pushesByDefault = false))
+        }
+        show(core)
+        compose.onNodeWithTag("task-call:h1/review").assertExists()
+        compose.onNodeWithTag("task-call:h1/helper").assertDoesNotExist()
+        compose.onNodeWithTag("task-call:h1/unknown").assertDoesNotExist()
+        compose.onNodeWithTag("task-call:h1/record").assertDoesNotExist()
+        compose.onNodeWithTag("tasks-filter-needs").assertTextEquals(context.getString(R.string.tasks_filter_count,
+            context.getString(R.string.tasks_filter_needs), 1))
+        compose.onNodeWithTag("tasks-filter-needs").performClick()
+        compose.onNodeWithTag("tasks-needs-next").performClick()
+        compose.onNodeWithTag("task-call:h1/review").assertExists()
+        compose.runOnIdle { core.callListeners.getValue("h1").onState(CallFeedState.Reconnecting("offline")) }
+        compose.onNodeWithTag("task-call:h1/review").assertDoesNotExist()
+        compose.onNodeWithTag("tasks-filter-needs").assertTextEquals(context.getString(R.string.tasks_filter_count,
+            context.getString(R.string.tasks_filter_needs), 0))
+    }
+
+    // D22: a key receipt is not resolution; the same Blocked question must expose Unconfirmed,
+    // then advance only when the transcript confirms completion.
+    @Test fun questionThenPermissionWaitForTranscriptConfirmation() {
         val core = FakeCore().apply {
             addHost("home", Endpoint.Ssh("home.test", 22u, "me"))
             terminals = listOf(
@@ -84,18 +110,49 @@ class TasksHomeTest {
         compose.runOnIdle { core.pushChat(ChatSnapshot(listOf(question), ChatStatus.LIVE, null)) }
         screenshot("question", "tasks-needs-sheet")
         compose.onNodeWithContentDescription(context.getString(R.string.chat_question_option_label, "Blue")).performClick()
+        compose.onNode(hasText("Question task") and hasAnyAncestor(hasTestTag("tasks-needs-sheet"))).assertExists()
+        compose.mainClock.advanceTimeBy(4_000)
+        compose.onNodeWithText(context.getString(R.string.chat_question_unconfirmed)).assertExists()
+        compose.runOnIdle { core.pushChat(ChatSnapshot(listOf(question.copy(body =
+            (question.body as ChatEntryBody.Question).copy(status = ChatToolStatus.DONE))), ChatStatus.LIVE, null)) }
         compose.onNode(hasText("Permission task") and hasAnyAncestor(hasTestTag("tasks-needs-sheet"))).assertExists()
         val permission = ChatEntry("permission:current", null, ChatEntryBody.Question("permission", "Run build?",
             listOf(ChatQuestionPart("Run build?", null, false, listOf(ChatQuestionOption("Allow", null)))), ChatToolStatus.RUNNING, null))
         compose.runOnIdle { core.pushChat(ChatSnapshot(listOf(permission), ChatStatus.LIVE, null)) }
         screenshot("permission", "tasks-needs-sheet")
         compose.onNodeWithContentDescription(context.getString(R.string.chat_question_option_label, context.getString(R.string.chat_permission_allow))).performClick()
+        compose.onNodeWithTag("tasks-needs-sheet").assertExists()
+        compose.runOnIdle { core.pushChat(ChatSnapshot(listOf(permission.copy(body =
+            (permission.body as ChatEntryBody.Question).copy(status = ChatToolStatus.DONE))), ChatStatus.LIVE, null)) }
         compose.onNodeWithTag("tasks-needs-sheet").assertDoesNotExist()
         compose.onNodeWithTag("tasks-filter-needs").performClick()
         compose.onNodeWithTag("tasks-needs-sheet").assertDoesNotExist()
         compose.runOnIdle {
             assertEquals(listOf("t1" to "q1", "t2" to "permission:current"), core.answers.map { it.first to it.second })
         }
+    }
+
+    // D22: completing one question must not hide a new question with the same Terminal status/turn.
+    @Test fun aNewQuestionOnTheSameBlockedTaskRemainsInNeeds() {
+        val core = FakeCore().apply {
+            addHost("home", Endpoint.Ssh("home.test", 22u, "me"))
+            terminals = listOf(TerminalInfo("t1", "Question task", "", listOf("codex"), "/repo", "live",
+                AgentStatus.Blocked(BlockedReason.QUESTION, "Color?")))
+        }
+        show(core)
+        compose.onNodeWithTag("tasks-filter-needs").performClick()
+        val first = ChatEntry("q1", null, ChatEntryBody.Question("request_user_input", "Color?",
+            listOf(ChatQuestionPart("Color?", null, false, listOf(ChatQuestionOption("Blue", null)))), ChatToolStatus.RUNNING, null))
+        compose.runOnIdle { core.pushChat(ChatSnapshot(listOf(first), ChatStatus.LIVE, null)) }
+        compose.onNodeWithContentDescription(context.getString(R.string.chat_question_option_label, "Blue")).performClick()
+        val second = first.copy(id = "q2")
+        compose.runOnIdle { core.pushChat(ChatSnapshot(listOf(first.copy(body =
+            (first.body as ChatEntryBody.Question).copy(status = ChatToolStatus.DONE)), second), ChatStatus.LIVE, null)) }
+        compose.onNodeWithTag("tasks-needs-sheet").assertDoesNotExist()
+        compose.onNodeWithTag("tasks-filter-needs").performClick()
+        compose.onNodeWithTag("tasks-needs-sheet").assertExists()
+        compose.onNodeWithContentDescription(context.getString(R.string.chat_question_option_label, "Blue")).performClick()
+        compose.runOnIdle { assertEquals(listOf("q1", "q2"), core.answers.map { it.second }) }
     }
 
     // Regression: uncertain/failed delivery must not consume a need and silently move to another one.
@@ -163,6 +220,9 @@ class TasksHomeTest {
         compose.onNodeWithTag("tasks-filter-needs").performClick()
         compose.onNodeWithTag("tasks-needs-sheet").assertExists()
         compose.runOnIdle { hold.complete(Unit) }
+        compose.onNodeWithTag("tasks-needs-sheet").assertExists()
+        compose.runOnIdle { core.pushChat(ChatSnapshot(listOf(question.copy(body =
+            (question.body as ChatEntryBody.Question).copy(status = ChatToolStatus.DONE))), ChatStatus.LIVE, null)) }
         compose.onNodeWithTag("tasks-needs-sheet").assertDoesNotExist()
         compose.runOnIdle { assertEquals(1, core.answers.size) }
     }
