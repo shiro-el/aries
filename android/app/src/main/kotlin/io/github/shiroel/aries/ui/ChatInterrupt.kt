@@ -35,7 +35,7 @@ internal fun ChatInterruptControls(chat: ChatModel) {
     LaunchedEffect(chat.canInterrupt) {
         if (!chat.canInterrupt) confirming = false
     }
-    if (chat.terminal.agentStatus == AgentStatus.Working || chat.interrupting) {
+    if ((chat.terminalAvailable && chat.terminal.agentStatus == AgentStatus.Working) || chat.interrupting) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             TextButton(onClick = { confirming = true }, enabled = chat.canInterrupt) {
                 Text(stringResource(if (chat.interrupting) R.string.chat_interrupt_pending else R.string.chat_interrupt_button))

@@ -167,6 +167,34 @@ class ChatSendTest {
     }
 
     @Test
+    fun endedChatPreservesTheDraftAndNeverSendsItToTheShell() {
+        val core = FakeCore()
+        val conn = openChat(core)
+        val input = compose.onNodeWithContentDescription(str(R.string.chat_input_label))
+        input.performTextInput("please run the tests")
+
+        core.pushChat(ChatSnapshot(emptyList(), ChatStatus.ENDED, null))
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
+        assertTrue(conn.typed.isEmpty())
+        input.assertTextEquals("please run the tests")
+        input.assertIsNotEnabled()
+        compose.onNodeWithText(str(R.string.chat_send_button)).assertIsNotEnabled()
+
+        // A stale LIVE transcript must also be read-only once the pane is a shell.
+        core.push(listOf(claude.copy(agentStatus = null)))
+        core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
+        assertTrue(conn.typed.isEmpty())
+        input.assertTextEquals("please run the tests")
+        input.assertIsNotEnabled()
+        compose.onNodeWithText(str(R.string.terminal_open_button)).performClick()
+        compose.waitForIdle()
+        assertEquals("t1", conn.views.single().address)
+    }
+
+    @Test
     fun aMessageGoesIntoTheAgentsTerminal() {
         val core = FakeCore()
         val conn = openChat(core)

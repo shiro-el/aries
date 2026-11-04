@@ -79,10 +79,14 @@ pub(crate) async fn send(
     text: &str,
     on_held: impl FnOnce(),
 ) -> Result<SendOutcome, CoreError> {
-    let call = client.call(
-        "terminal.send",
-        json!({ "terminal": address, "text": text }),
-    );
+    let state = require_agent(client, address).await?;
+    let mut params = json!({ "terminal": address, "text": text });
+    // These are the statuses herdr-core accepts for its atomic precondition.
+    // Recheck after a held send too, so an Agent exit cannot type into its shell.
+    if matches!(state.as_str(), "idle" | "working") {
+        params["if"] = json!(state);
+    }
+    let call = client.call("terminal.send", params);
     tokio::pin!(call);
     let result = tokio::select! {
         r = &mut call => r,
@@ -96,6 +100,24 @@ pub(crate) async fn send(
         Err(CoreError::Rpc { kind, .. }) if kind == "blocked" => Ok(blocked(client, address).await),
         Err(e) => Err(e),
     }
+}
+
+/// A live Terminal may now be a shell. Never use Chat's cached transcript
+/// or the Terminal's launch argv as proof that an Agent is still there.
+pub(crate) async fn require_agent(client: &HcClient, address: &str) -> Result<String, CoreError> {
+    let terminal = client
+        .call("terminal.get", json!({ "terminal": address }))
+        .await?;
+    if terminal["state"] != "live" || crate::host_model::status_of(&terminal).0.is_none() {
+        return Err(CoreError::Rpc {
+            kind: "no_agent".into(),
+            detail: "the Agent has ended; open Terminal to continue".into(),
+        });
+    }
+    Ok(terminal["status"]["state"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned())
 }
 
 /// Why the Agent is Blocked, as it reports it now.

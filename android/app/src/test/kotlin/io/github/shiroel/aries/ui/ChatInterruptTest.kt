@@ -102,5 +102,12 @@ class ChatInterruptTest {
         compose.waitForIdle()
         compose.onNodeWithText(str(R.string.chat_interrupt_still_working)).assertExists()
         assertEquals(listOf("t1", "t1"), conn.interrupted)
+
+        compose.onNodeWithText(str(R.string.chat_interrupt_button)).performClick()
+        core.push(emptyList())
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.chat_interrupt_confirm_button)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.chat_interrupt_button)).assertDoesNotExist()
+        assertEquals(listOf("t1", "t1"), conn.interrupted)
     }
 }
