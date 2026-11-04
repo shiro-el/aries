@@ -165,12 +165,15 @@ async fn imported_keys_follow_the_same_biometric_policy_as_generated_keys() {
     use aries_core::{CoreError, Endpoint, KeyProtection, KeyVault, VaultError};
     use std::sync::{
         Arc,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     };
-    struct Vault(AtomicBool);
+    struct Vault {
+        locked: AtomicBool,
+        opens: AtomicUsize,
+    }
     impl KeyVault for Vault {
         fn seal(&self, bytes: Vec<u8>, protection: KeyProtection) -> Result<Vec<u8>, VaultError> {
-            if protection == KeyProtection::Biometric && self.0.load(Ordering::SeqCst) {
+            if protection == KeyProtection::Biometric && self.locked.load(Ordering::SeqCst) {
                 return Err(VaultError::Locked);
             }
             // The vault must receive a decrypted key, never the import passphrase.
@@ -183,14 +186,18 @@ async fn imported_keys_follow_the_same_biometric_policy_as_generated_keys() {
             common::TestVault.seal(bytes, protection)
         }
         fn open(&self, bytes: Vec<u8>, protection: KeyProtection) -> Result<Vec<u8>, VaultError> {
-            if protection == KeyProtection::Biometric && self.0.load(Ordering::SeqCst) {
+            self.opens.fetch_add(1, Ordering::SeqCst);
+            if protection == KeyProtection::Biometric && self.locked.load(Ordering::SeqCst) {
                 return Err(VaultError::Locked);
             }
             common::TestVault.open(bytes, protection)
         }
     }
     let data = tempfile::tempdir().unwrap();
-    let vault = Arc::new(Vault(AtomicBool::new(false)));
+    let vault = Arc::new(Vault {
+        locked: AtomicBool::new(false),
+        opens: AtomicUsize::new(0),
+    });
     let core =
         aries_core::AriesCore::new(data.path().to_string_lossy().into(), vault.clone()).unwrap();
     core.ensure_key().unwrap();
@@ -209,22 +216,31 @@ async fn imported_keys_follow_the_same_biometric_policy_as_generated_keys() {
             },
         )
         .unwrap();
-    core.set_host_ssh_key(host.id.clone(), Some(key.id))
+    core.set_host_ssh_key(host.id.clone(), Some(key.id.clone()))
         .unwrap();
     assert!(!core.can_answer_in_background(host.id.clone()).unwrap());
-    vault.0.store(true, Ordering::SeqCst);
+    vault.locked.store(true, Ordering::SeqCst);
     let before = core.keys().unwrap();
     assert!(matches!(
         core.import_key("cancelled".into(), private, "forget me".into()),
         Err(CoreError::KeyLocked)
     ));
     assert_eq!(core.keys().unwrap(), before);
-    assert!(matches!(
-        core.connect(host.id.clone()).await,
-        Err(CoreError::KeyLocked)
-    ));
-    vault.0.store(false, Ordering::SeqCst);
+    // D31: imported and generated keys both wait for transport before opening.
+    let opens = vault.opens.load(Ordering::SeqCst);
+    for key_id in [Some(key.id.clone()), None] {
+        core.set_host_ssh_key(host.id.clone(), key_id).unwrap();
+        assert!(!core.can_answer_in_background(host.id.clone()).unwrap());
+        assert!(matches!(
+            core.connect(host.id.clone()).await,
+            Err(CoreError::Unreachable { .. })
+        ));
+        assert_eq!(vault.opens.load(Ordering::SeqCst), opens);
+    }
+    vault.locked.store(false, Ordering::SeqCst);
     core.set_key_protection(KeyProtection::Plain).unwrap();
+    core.set_host_ssh_key(host.id.clone(), Some(key.id))
+        .unwrap();
     assert!(core.can_answer_in_background(host.id.clone()).unwrap());
     assert!(matches!(
         core.connect(host.id).await,
