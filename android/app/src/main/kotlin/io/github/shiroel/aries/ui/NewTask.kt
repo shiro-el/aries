@@ -17,7 +17,6 @@ import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -40,10 +39,12 @@ internal class NewTask(var link: HostLink, val form: LaunchForm, prompt: String)
         private set
     var launchUnknown by mutableStateOf(false)
         private set
+    var sent by mutableStateOf(false)
+        private set
     var waiting by mutableStateOf(false)
         private set
 
-    val canStart get() = link.state == LinkState.Up && !form.busy && !deliveryUnknown && !launchUnknown &&
+    val canStart get() = link.state == LinkState.Up && !form.busy && !deliveryUnknown && !launchUnknown && !sent &&
         prompt.isNotBlank() && form.cwd.startsWith('/') && form.preset in taskPresets
 
     suspend fun start(onReady: (TerminalInfo, String) -> Unit) {
@@ -51,38 +52,45 @@ internal class NewTask(var link: HostLink, val form: LaunchForm, prompt: String)
         form.busy = true
         form.error = null
         try {
-            val conn = link.connection ?: throw CoreException.Closed()
+            val launchConnection = link.connection ?: throw CoreException.Closed()
             if (terminal == null) {
                 // Without an idempotency token a disconnected launch cannot safely be repeated.
                 launchUnknown = true
-                terminal = conn.launch(form.request())
+                terminal = launchConnection.launch(form.request())
                 launchUnknown = false
             }
             waiting = true
             val ready = withTimeoutOrNull(60_000) {
-                val watch = conn.watchTerminals()
-                try {
-                    var ready: TerminalInfo? = null
-                    while (ready == null) {
-                        val current = watch.next().find { it.address == terminal!!.address }
-                        if (current != null) {
-                            terminal = current
-                            if (current.state != "live" || current.agentStatus is AgentStatus.Blocked || current.agentStatus is AgentStatus.Error) break
-                            if (current.agentStatus == AgentStatus.Idle || current.agentStatus == AgentStatus.Done) ready = current
+                link.keep { conn, _ ->
+                    val watch = conn.watchTerminals()
+                    try {
+                        var ready: TerminalInfo? = null
+                        while (ready == null) {
+                            val current = watch.next().find { it.address == terminal!!.address }
+                            if (current != null) {
+                                terminal = current
+                                if (current.state != "live" || current.agentStatus is AgentStatus.Blocked || current.agentStatus is AgentStatus.Error) break
+                                if (current.agentStatus == AgentStatus.Idle || current.agentStatus == AgentStatus.Done) ready = current
+                            }
                         }
-                    }
-                    ready
-                } finally { withContext(NonCancellable) { watch.stop(); watch.close() } }
+                        ready?.let { it to conn }
+                    } finally { withContext(NonCancellable) { watch.stop(); watch.close() } }
+                }
             }
             waiting = false
             if (ready == null) {
                 form.error = Message(R.string.new_task_not_ready)
                 return
             }
+            val (terminal, conn) = ready
             val text = prompt
             deliveryUnknown = true
-            when (conn.sendMessage(ready.address, text, object : SendListener { override fun onHeld() {} })) {
-                SendOutcome.Sent -> onReady(ready, "")
+            when (conn.sendMessage(terminal.address, text, object : SendListener { override fun onHeld() {} })) {
+                SendOutcome.Sent -> {
+                    sent = true
+                    deliveryUnknown = false
+                    onReady(terminal, "")
+                }
                 is SendOutcome.Blocked -> {
                     deliveryUnknown = false
                     form.error = Message(R.string.new_task_not_ready)
@@ -105,7 +113,6 @@ private val taskPresets = listOf(AgentPreset.CLAUDE_CODE, AgentPreset.CODEX)
 /** Shared task flow for Host and Agent lists, the connected Host sheet and GitHub Issues. */
 @Composable
 internal fun NewTaskAccess(model: HostsModel, content: @Composable () -> Unit) {
-    val scope = rememberCoroutineScope()
     val resources = androidx.compose.ui.platform.LocalResources.current
     val history = rememberCreationHostHistory()
     val currentHostId = when (val screen = model.screen) {
@@ -115,40 +122,17 @@ internal fun NewTaskAccess(model: HostsModel, content: @Composable () -> Unit) {
         else -> null
     }
     LaunchedEffect(currentHostId) { currentHostId?.let(history::used) }
-    var task by remember(model) { mutableStateOf<NewTask?>(null) }
-    var visible by remember(model) { mutableStateOf(false) }
     val startOnLink: (HostLink, TaskIssue?) -> Unit = start@{ link, issue ->
-        if (link.state != LinkState.Up) return@start
-        val screen = model.screen
-        val browser = model.quickOpenBrowser?.takeIf { it.host.id == link.host.id }
-        val conn = link.connection ?: return@start
-        history.used(link.host.id)
-        if (issue == null && task?.link?.host?.id == link.host.id) {
-            task?.link = link
-            visible = true
-            return@start
-        }
         if (issue?.repository?.on != null) return@start
-        val structure = browser?.structure ?: (screen as? Screen.Agents)?.board?.structureOf(link.host.id)
-            ?: HostStructure(emptyList(), emptyList(), null)
-        val form = LaunchForm(structure, conn.recentCwds(), null, null, conn.savedLaunches())
-        form.preset = AgentPreset.CLAUDE_CODE
-        val terminal = when (screen) {
-            is Screen.Chat -> screen.chat.terminal
-            is Screen.Terminal -> screen.viewer.terminal
-            else -> null
-        }
-        form.cwd = issue?.repository?.cwd ?: terminal?.takeIf { it.machine == null }?.currentCwd ?:
-            browser?.openSpace?.folder ?: conn.recentCwds().firstOrNull() ?: ""
+        history.used(link.host.id)
         val prompt = issue?.let {
             val repo = it.repository
             val body = it.item.body.replace(Regex("\\s+"), " ").trim()
             val summary = body.take(2000) + if (body.length > 2000) "…" else ""
             resources.getString(R.string.new_task_issue_prompt, repo.nameWithOwner, it.item.number.toInt(),
                 it.item.title, "https://${repo.hostname}/${repo.nameWithOwner}/issues/${it.item.number}", summary)
-        }.orEmpty()
-        task = NewTask(link, form, prompt)
-        visible = true
+        }
+        model.prepareTask(link, issue?.repository?.cwd, prompt)
     }
     val start: (TaskIssue?) -> Unit = start@{ issue ->
         val link = when (val screen = model.screen) {
@@ -166,20 +150,32 @@ internal fun NewTaskAccess(model: HostsModel, content: @Composable () -> Unit) {
             start(null)
         }
     }
-    CompositionLocalProvider(LocalStartTask provides start,
+    CompositionLocalProvider(LocalShowWorktrees provides model::showWorktrees,
+        LocalStartTask provides start,
         LocalCreationHostHistory provides history,
         LocalAgentCreation provides AgentCreationAccess({ startOnLink(it, null) }, model::runSavedFromAgents)) {
         content()
-        task?.takeIf { visible }?.let { current ->
-            fun open(terminal: TerminalInfo, draft: String) {
-                visible = false
-                task = null
-                model.openTaskChat(current.link, terminal, draft)
-            }
+        model.activeWorktree?.let { flow ->
+            WorktreeDialog(flow.form, enabled = flow.browser.link?.state == LinkState.Up && !flow.browser.closed,
+                onReload = model::loadWorktrees, onOpen = { model.openWorktree() },
+                onDismiss = model::dismissWorktrees, onOpenAgain = { model.openWorktree(again = true) })
+        }
+        model.activeLaunch?.let { flow ->
+            val context = androidx.compose.ui.platform.LocalContext.current
+            LaunchDialog(flow.form,
+                onLaunch = { model.launchActive() }, onDismiss = model::dismissLaunch,
+                onSave = model::saveActiveLaunch, onDelete = model::deleteActiveLaunch,
+                connected = flow.link.state == LinkState.Up,
+                onUndoDelete = model::undoLaunchDelete, onLaunchAgain = { model.launchActive(again = true) },
+                onPin = if (io.github.shiroel.aries.LaunchShortcuts.canPin(context)) { saved ->
+                    io.github.shiroel.aries.LaunchShortcuts.pin(context, flow.link.host.id, saved)
+                } else null)
+        }
+        model.task?.takeIf { model.taskVisible }?.let { current ->
             NewTaskDialog(current,
-                onStart = { scope.launch { current.start(::open) } },
-                onOpenChat = { current.terminal?.let { open(it, current.prompt) } },
-                onDismiss = { if (!current.form.busy) visible = false })
+                onStart = model::startTask,
+                onOpenChat = model::openCreatedTask,
+                onDismiss = model::dismissTask)
         }
     }
 }
@@ -215,11 +211,14 @@ private fun NewTaskDialog(task: NewTask, onStart: () -> Unit, onOpenChat: () -> 
                     }
                 }
                 OutlinedTextField(form.cwd, { form.cwd = it }, enabled = editable, singleLine = true,
-                    label = { Text(stringResource(R.string.launch_cwd)) }, modifier = Modifier.testTag("launch_cwd"))
+                    label = { Text(stringResource(R.string.launch_cwd)) },
+                    supportingText = { Text(stringResource(R.string.new_task_folder_hint)) },
+                    isError = form.cwd.isNotBlank() && !form.cwd.startsWith('/'),
+                    modifier = Modifier.testTag("launch_cwd"))
                 TextButton(onClick = { browsing = true }, enabled = editable && task.link.connection != null) {
                     Text(stringResource(R.string.new_task_browse))
                 }
-                OutlinedTextField(task.input, { task.input = it }, enabled = !form.busy,
+                OutlinedTextField(task.input, { task.input = it }, enabled = !form.busy && !task.sent,
                     minLines = 4, maxLines = 8, label = { Text(stringResource(R.string.new_task_prompt)) },
                     modifier = Modifier.fillMaxWidth().testTag("new-task-prompt"))
                 TextButton(onClick = { options = !options }, enabled = editable) { Text(stringResource(R.string.new_task_options)) }
@@ -237,7 +236,7 @@ private fun NewTaskDialog(task: NewTask, onStart: () -> Unit, onOpenChat: () -> 
         confirmButton = { TextButton(onClick = onStart, enabled = task.canStart) {
             Text(stringResource(if (task.terminal == null) R.string.new_task_start else R.string.new_task_wait_again))
         } },
-        dismissButton = { TextButton(onClick = onDismiss, enabled = !form.busy) { Text(stringResource(R.string.cancel_button)) } })
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel_button)) } })
     if (browsing) TaskFolderDialog(task.link.connection, form.cwd.ifBlank { "/" },
         onSelect = { form.cwd = it; browsing = false }, onDismiss = { browsing = false })
 }

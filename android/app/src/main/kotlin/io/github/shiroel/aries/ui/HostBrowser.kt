@@ -6,13 +6,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
-import io.github.shiroel.aries.LaunchShortcuts
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -108,16 +105,11 @@ class HostBrowser(val host: Host) {
             it.copy(live = hasLiveTerminals, lastUpdatedMs = lastUpdatedMs)
         })
 
-    /** The "new Terminal" form, while it is open. */
-    var launchForm by mutableStateOf<LaunchForm?>(null)
-
     /** The Host's saved launch configs, each started with one tap. */
     var savedLaunches by mutableStateOf<List<SavedLaunch>>(emptyList())
 
-    /** A just-launched Terminal to open once the structure lists it: (space, tab, address). */
+    /** Select the launched Terminal's Pane context when the structure lists it. */
     private var pendingReveal: Triple<String, String, String>? = null
-    internal var revealRequest by mutableStateOf<Triple<String, String, String>?>(null)
-        private set
 
     val openSpace: SpaceInfo? get() = structure?.spaces?.find { it.id == openSpaceId }
 
@@ -140,9 +132,8 @@ class HostBrowser(val host: Host) {
     }
 
     /**
-     * Shows a Terminal just launched into [spaceId]/[tabId]: opens that Space
-     * and Tab and focuses its Pane as soon as the structure lists it. Without
-     * a Space it is unplaced, so the Space list (where those show) opens.
+     * Selects the phone's context for a Terminal launched into [spaceId]/[tabId].
+     * The caller opens the Terminal itself; context selection never unfolds the tree.
      */
     fun reveal(spaceId: String?, tabId: String?, address: String) {
         if (spaceId == null || tabId == null) {
@@ -151,7 +142,6 @@ class HostBrowser(val host: Host) {
             return
         }
         pendingReveal = Triple(spaceId, tabId, address)
-        revealRequest = pendingReveal
         openSpaceId = spaceId
         tabOfSpace[spaceId] = tabId
         tryReveal()
@@ -206,31 +196,17 @@ fun BrowseScreen(
     onOpen: (TerminalInfo) -> Unit = {},
     onNewTerminal: (() -> Unit)? = null,
     onPin: (AgentEntry, Boolean) -> Unit = { _, _ -> },
-    onLaunch: (LaunchForm) -> Unit = {},
-    onSaveLaunch: (LaunchForm) -> Unit = {},
-    onDeleteLaunch: (LaunchForm, SavedLaunch) -> Unit = { _, _ -> },
     onRunSaved: (SavedLaunch) -> Unit = {},
     hostSections: @Composable () -> Unit = {},
     showHeader: Boolean = true,
     current: AgentKey? = null,
 ) {
-    val context = LocalContext.current
     val editor = rememberLayoutEditor(browser)
     Column(Modifier.fillMaxSize()) {
         if (showHeader) ConsoleTopBar(browser.host.name, onMenu = {}, onBack = onBack,
             showMark = false, inbox = {}, actions = { HostActions(browser, onRunSaved, onNewTerminal) },
             titleContent = { HostContextTitle(browser, Modifier.weight(1f)) })
         LayoutEditControls(browser, editor)
-        browser.launchForm?.let { form ->
-            LaunchDialog(
-                form,
-                onLaunch = { onLaunch(form) },
-                onDismiss = { browser.launchForm = null },
-                onSave = { onSaveLaunch(form) },
-                onDelete = { onDeleteLaunch(form, it) },
-                onPin = if (LaunchShortcuts.canPin(context)) { saved -> LaunchShortcuts.pin(context, browser.host.id, saved) } else null,
-            )
-        }
         val line = browser.link?.state
         browser.link?.let {
             ConnectionNotice(it, firstLoad = browser.structure == null)
@@ -284,22 +260,25 @@ private fun HostTreeList(
     val family = agents.map { it.key.address }.toSet()
     val plain = withAgentSpaces(browser.terminals.filterNot { it.address in family }
         .mapIndexed { index, terminal -> AgentEntry(browser.host, terminal, sequence = index, live = browser.hasLiveTerminals, lastUpdatedMs = browser.lastUpdatedMs) }, structure)
+    val startTask = LocalStartTask.current
     val plainKey = "plain-terminals"
-    androidx.compose.runtime.LaunchedEffect(browser.revealRequest) {
-        if (browser.revealRequest != null) folds.expand(plainKey)
-    }
     val actions: @Composable ColumnScope.(AgentEntry, () -> Unit) -> Unit = { entry, close ->
         // Keep navigation local to the phone; layout edits are in the title's context sheet.
         if (entry.space != null) ActionMenuItem(stringResource(R.string.menu_switch_context), R.drawable.ic_panels, onClick = {
             selectTerminalContext(browser, entry.terminal.address)
             close()
         })
-        if (entry.space == null) WorktreeControls(browser, entry.terminal, asMenuItem = true)
+        WorktreeControls(browser, entry.terminal, asMenuItem = true)
         browser.layoutEditor?.let { EndTerminalButton(it, entry.terminal, close) }
     }
     LazyColumn {
         if (browser.terminals.isEmpty()) item {
             Text(stringResource(R.string.terminals_empty))
+            startTask?.let { start ->
+                TextButton(onClick = { start(null) }, enabled = browser.link?.state == LinkState.Up && !browser.closed) {
+                    Text(stringResource(R.string.new_task_title))
+                }
+            }
             onNewTerminal?.let { launch ->
                 TextButton(onClick = launch, enabled = browser.link?.state == LinkState.Up && !browser.closed) {
                     Text(stringResource(R.string.launch_open_button))
@@ -307,19 +286,16 @@ private fun HostTreeList(
             }
         }
         agentTreeItems(agents, agentFolds, { onOpen(it.terminal) }, onPin, tag = "host-agent",
-            sectionNamespace = "all", actions = actions, current = current)
+            sectionNamespace = "all", actions = actions, current = current, showHost = false,
+            canPin = { browser.link?.state == LinkState.Up && browser.link?.connection != null && !browser.closed })
         if (plain.isNotEmpty()) {
             item {
                 TreeSectionRow(stringResource(R.string.terminals_plain_group, plain.size), 0, folds.contains(plainKey),
                     { folds.toggle(plainKey) }, Modifier.testTag("host-plain-terminals"))
             }
             if (!folds.contains(plainKey)) agentTreeItems(orderAgents(plain), agentFolds,
-                { onOpen(it.terminal) }, onPin, tag = "host-terminal", sections = false, actions = actions, current = current)
-        }
-        val missing = structure.spaces.flatMap { it.tabs }.flatMap { it.panes }.filter { it.terminal == null }
-        items(missing, key = { "gone:${it.id}" }) { pane ->
-            Text(stringResource(R.string.pane_terminal_gone, pane.terminalAddress), Modifier.padding(12.dp),
-                style = MaterialTheme.typography.bodySmall)
+                { onOpen(it.terminal) }, onPin, tag = "host-terminal", sections = false, actions = actions, current = current,
+                showHost = false, canPin = { browser.link?.state == LinkState.Up && browser.link?.connection != null && !browser.closed })
         }
         item { Column(Modifier.padding(horizontal = 12.dp)) { hostSections() } }
     }

@@ -55,22 +55,22 @@ internal fun TerminalKeyBar(viewer: TerminalViewer) {
         val rowWidth = maxWidth.coerceAtLeast(336.dp)
         Column(Modifier.horizontalScroll(rememberScrollState())) {
             Row(Modifier.width(rowWidth).height(IntrinsicSize.Min)) {
-                BarKey(R.string.key_esc) { viewer.press(TerminalKey.Escape) }
-                BarKey(R.string.key_slash) { viewer.press(TerminalKey.Char("/")) }
-                BarKey(R.string.key_dash) { viewer.press(TerminalKey.Char("-")) }
-                BarKey(R.string.key_home, repeating = true) { viewer.press(TerminalKey.Home) }
-                BarKey(R.string.key_up, repeating = true, fontSize = 20.sp) { viewer.press(TerminalKey.Up) }
-                BarKey(R.string.key_end, repeating = true) { viewer.press(TerminalKey.End) }
-                BarKey(R.string.key_page_up, repeating = true) { viewer.press(TerminalKey.PageUp) }
+                BarKey(enabled = viewer.canInput, label = R.string.key_esc) { viewer.press(TerminalKey.Escape) }
+                BarKey(enabled = viewer.canInput, label = R.string.key_slash) { viewer.press(TerminalKey.Char("/")) }
+                BarKey(enabled = viewer.canInput, label = R.string.key_dash) { viewer.press(TerminalKey.Char("-")) }
+                BarKey(enabled = viewer.canInput, label = R.string.key_home, repeating = true) { viewer.press(TerminalKey.Home) }
+                BarKey(enabled = viewer.canInput, label = R.string.key_up, repeating = true, fontSize = 20.sp) { viewer.press(TerminalKey.Up) }
+                BarKey(enabled = viewer.canInput, label = R.string.key_end, repeating = true) { viewer.press(TerminalKey.End) }
+                BarKey(enabled = viewer.canInput, label = R.string.key_page_up, repeating = true) { viewer.press(TerminalKey.PageUp) }
             }
             Row(Modifier.width(rowWidth).height(IntrinsicSize.Min)) {
-                BarKey(R.string.key_tab) { viewer.press(TerminalKey.Tab) }
-                BarKey(R.string.key_ctrl, held = viewer.ctrl, onClick = viewer::toggleCtrl)
-                BarKey(R.string.key_alt, held = viewer.alt, onClick = viewer::toggleAlt)
-                BarKey(R.string.key_left, repeating = true, fontSize = 20.sp) { viewer.press(TerminalKey.Left) }
-                BarKey(R.string.key_down, repeating = true, fontSize = 20.sp) { viewer.press(TerminalKey.Down) }
-                BarKey(R.string.key_right, repeating = true, fontSize = 20.sp) { viewer.press(TerminalKey.Right) }
-                BarKey(R.string.key_page_down, repeating = true) { viewer.press(TerminalKey.PageDown) }
+                BarKey(enabled = viewer.canInput, label = R.string.key_tab) { viewer.press(TerminalKey.Tab) }
+                BarKey(enabled = viewer.canInput, label = R.string.key_ctrl, held = viewer.ctrl, onClick = viewer::toggleCtrl)
+                BarKey(enabled = viewer.canInput, label = R.string.key_alt, held = viewer.alt, onClick = viewer::toggleAlt)
+                BarKey(enabled = viewer.canInput, label = R.string.key_left, repeating = true, fontSize = 20.sp) { viewer.press(TerminalKey.Left) }
+                BarKey(enabled = viewer.canInput, label = R.string.key_down, repeating = true, fontSize = 20.sp) { viewer.press(TerminalKey.Down) }
+                BarKey(enabled = viewer.canInput, label = R.string.key_right, repeating = true, fontSize = 20.sp) { viewer.press(TerminalKey.Right) }
+                BarKey(enabled = viewer.canInput, label = R.string.key_page_down, repeating = true) { viewer.press(TerminalKey.PageDown) }
             }
         }
     }
@@ -88,6 +88,7 @@ internal fun TerminalKeyBarToggle(viewer: TerminalViewer) {
 @Composable
 private fun RowScope.BarKey(
     label: Int,
+    enabled: Boolean = true,
     held: Boolean? = null,
     repeating: Boolean = false,
     fontSize: TextUnit = 12.sp,
@@ -113,8 +114,8 @@ private fun RowScope.BarKey(
                     stateDescription = modifierState
                 }
             }
-            .pointerInput(repeating, repeatDelay) {
-                if (repeating) coroutineScope {
+            .pointerInput(enabled, repeating, repeatDelay) {
+                if (enabled && repeating) coroutineScope {
                     val scope = this
                     awaitEachGesture {
                         awaitFirstDown(requireUnconsumed = false)
@@ -138,6 +139,7 @@ private fun RowScope.BarKey(
                 interactionSource = interactions,
                 indication = null,
                 role = Role.Button,
+                enabled = enabled,
                 // Consume a hold so releasing it does not add a final tap.
                 onLongClick = if (repeating) ({}) else null,
                 onClick = onClick,
@@ -146,7 +148,11 @@ private fun RowScope.BarKey(
     ) {
         Text(
             stringResource(label),
-            color = if (held == true) onAccent(LocalAccentColor.current) else colors.onSurface,
+            color = when {
+                !enabled -> colors.onSurface.copy(alpha = 0.38f)
+                held == true -> onAccent(LocalAccentColor.current)
+                else -> colors.onSurface
+            },
             style = MaterialTheme.typography.labelLarge.copy(fontFamily = FontFamily.Monospace, fontSize = fontSize),
             maxLines = accessibleNameLines(),
         )

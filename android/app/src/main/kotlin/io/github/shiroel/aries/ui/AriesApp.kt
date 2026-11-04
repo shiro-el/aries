@@ -3,8 +3,6 @@ package io.github.shiroel.aries.ui
 import android.content.ClipData
 import android.content.ClipboardManager
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.border
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Box
@@ -110,24 +108,22 @@ private fun AriesContent(
             }
         }
     }
-    NewTaskAccess(model) {
-        Scaffold { padding ->
-            Box(Modifier.padding(padding).fillMaxSize()) {
-                FirstConnectionGuide(model, guidance, allowNotifications) {
-                    ConsoleShell(model) {
-                        RemoteFilesAccess(model) {
-                            AdaptiveHostLayout(
-                                listScreen = model.listScreen,
-                                hasDetail = model.screen is Screen.Chat || model.screen is Screen.Terminal,
-                                listContent = { ScreenContent(model, settings, terminalDisplay, it) },
-                                detailContent = { ScreenContent(model, settings, terminalDisplay, model.screen) },
-                            )
-                        }
+    Scaffold { padding ->
+        Box(Modifier.padding(padding).fillMaxSize()) {
+            FirstConnectionGuide(model, guidance, allowNotifications) {
+                ConsoleShell(model) {
+                    RemoteFilesAccess(model) {
+                        AdaptiveHostLayout(
+                            listScreen = model.listScreen,
+                            hasDetail = model.screen is Screen.Chat || model.screen is Screen.Terminal,
+                            listContent = { ScreenContent(model, settings, terminalDisplay, it) },
+                            detailContent = { ScreenContent(model, settings, terminalDisplay, model.screen) },
+                        )
                     }
                 }
             }
-            model.prompt?.let { PromptDialog(it, model) }
         }
+        model.prompt?.let { PromptDialog(it, model) }
     }
 }
 
@@ -170,9 +166,6 @@ private fun ScreenContent(model: HostsModel, settings: ThemeSettings, terminalDi
                 current = model.currentAgentKey,
                 onPin = model::pin,
                 onNewTerminal = { model.newTerminal(s.browser) },
-                onLaunch = { model.launch(s.browser, it) },
-                onSaveLaunch = { model.saveLaunch(s.browser, it) },
-                onDeleteLaunch = { form, saved -> model.deleteSavedLaunch(s.browser, form, saved) },
                 onRunSaved = { model.runSaved(s.browser, it) },
                 hostSections = {
                     if (model.beacon.ui == BeaconUi.Known(io.github.shiroel.aries.core.BeaconState.NotInstalled)) {
@@ -259,7 +252,9 @@ private fun ConsoleHostRow(model: HostsModel, host: Host) {
         Column(Modifier.weight(1f).heightIn(min = 48.dp).clickable(onClickLabel = connectLabel, role = Role.Button) { model.openHost(host) }.padding(horizontal = 12.dp, vertical = 6.dp)) {
             Text(host.name, fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
             val where = when (val endpoint = host.endpoint) {
-                is Endpoint.Ssh -> stringResource(R.string.host_ssh_address, endpoint.user, endpoint.address, endpoint.port.toInt())
+                is Endpoint.Ssh -> if (endpoint.port.toInt() == 22) {
+                    stringResource(R.string.host_ssh_default_address, endpoint.user, endpoint.address)
+                } else stringResource(R.string.host_ssh_address, endpoint.user, endpoint.address, endpoint.port.toInt())
                 is Endpoint.Local -> stringResource(R.string.host_local_address)
             }
             Text(where, fontSize = 12.sp, lineHeight = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
@@ -267,11 +262,6 @@ private fun ConsoleHostRow(model: HostsModel, host: Host) {
         WaitingSummary(model.quickOpenSources.filter { it.host.id == host.id },
             model.drawerAgents.filter { it.host.id == host.id }, Modifier.testTag("host-waiting:${host.id}"),
             onClick = { model.openHostWaiting(host) })
-        Text(
-            stringResource(if (host.endpoint is Endpoint.Ssh) R.string.console_ssh else R.string.console_local),
-            Modifier.border(1.dp, color.copy(alpha = .7f), RoundedCornerShape(3.dp)).padding(horizontal = 5.dp, vertical = 1.dp),
-            fontSize = 11.sp, lineHeight = 15.sp, color = color,
-        )
         val taskLabel = stringResource(R.string.new_task_on_host, host.name)
         ActionIcon(R.drawable.ic_plus, R.string.new_task_title, { model.back(); model.newTask(host) },
             modifier = Modifier.testTag("host-new-task").semantics {

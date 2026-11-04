@@ -76,6 +76,14 @@ class ChatQuestionTest {
         assertTrue(core.connection!!.typed.isEmpty())
         compose.onNodeWithText(str(R.string.chat_question_send)).assertDoesNotExist()
         compose.onNodeWithText("보라색").assertExists()
+        // A still-running transcript question must not offer to send the same answer after a view switch.
+        compose.onNodeWithContentDescription(str(R.string.agent_switch_terminal_label)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.agent_switch_chat_label)).performClick()
+        core.pushChat(ChatSnapshot(listOf(question("q1")), ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.chat_question_send)).assertDoesNotExist()
+        compose.onNodeWithText("보라색").assertExists()
+        assertEquals(1, core.textAnswers.size)
     }
 
     @Test fun queuedCodexRequestsAdvanceAfterTheFirstGetsAResult() {

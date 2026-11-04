@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -112,6 +113,11 @@ internal fun ConsoleChatCall(entry: CallEntry, calls: CallsModel) {
         }
         calls.replyNotes[entry.key]?.let { replyNoteText(it) }?.let { text ->
             AnnouncedText(text, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        }
+        if (entry.key in calls.replyNotes) {
+            TextButton(onClick = { calls.dismissReplyNote(entry.key) }) {
+                Text(stringResource(R.string.call_reply_dismiss))
+            }
         }
     }
 }

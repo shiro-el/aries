@@ -6,9 +6,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
@@ -17,9 +17,11 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
+import io.github.shiroel.aries.core.BeaconState
+import io.github.shiroel.aries.core.PushStep
 import io.github.shiroel.aries.core.PushVerificationState
 import kotlinx.coroutines.delay
 import androidx.compose.ui.semantics.Role
@@ -36,11 +38,11 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
 
-/** Push for the open Host: turn on (with each step's progress), test, turn off. */
+/** Push pairing is local state; only a new pairing depends on Beacon availability. */
 @Composable
-fun PushSection(model: PushModel, beaconInstalled: Boolean) {
+fun PushSection(model: PushModel, beaconState: BeaconUi) {
     val host = model.host ?: return
-    var beaconRequired by remember(host.id, beaconInstalled) { mutableStateOf(false) }
+    var advanced by rememberSaveable(host.id) { mutableStateOf(false) }
     LaunchedEffect(host.id, model.ui) {
         do {
             model.refreshVerification()
@@ -48,86 +50,109 @@ fun PushSection(model: PushModel, beaconInstalled: Boolean) {
             delay(1_000)
         } while (true)
     }
-    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(stringResource(R.string.push_title), style = MaterialTheme.typography.titleMedium)
-        if (!beaconInstalled) {
-            TextButton(onClick = { beaconRequired = true }) { Text(stringResource(R.string.push_enable_button)) }
-            if (beaconRequired) Text(stringResource(R.string.push_needs_beacon), color = MaterialTheme.colorScheme.error)
-            return@Column
-        }
         when (val ui = model.ui) {
             PushUi.Loading, PushUi.Working -> CircularProgressIndicator()
             PushUi.Off -> {
-                RelayField(model)
-                TextButton(onClick = model::enable, enabled = model.relayDraft.isNotBlank()) {
+                val missing = (beaconState as? BeaconUi.Known)?.state == BeaconState.NotInstalled
+                val checking = beaconState == BeaconUi.Loading || beaconState == BeaconUi.Working
+                when {
+                    missing -> Text(stringResource(R.string.push_needs_beacon))
+                    checking -> Text(stringResource(R.string.push_checking_beacon))
+                    else -> Text(stringResource(R.string.push_off_summary))
+                }
+                if (advanced || model.relayDraft.isBlank()) RelayField(model)
+                TextButton(onClick = model::enable, enabled = !missing && !checking && !model.busy && model.relayDraft.isNotBlank()) {
                     Text(stringResource(if (model.problem == null) R.string.push_enable_button else R.string.push_retry_button))
                 }
             }
-            is PushUi.Enabling -> {
-                if (ui.steps.isEmpty()) CircularProgressIndicator()
-                ui.steps.forEach { (step, state) ->
-                    Row(
-                        Modifier.semantics(mergeDescendants = true) {},
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        when (state) {
-                            StepState.Running -> {
-                                val description = stringResource(R.string.push_step_running_description)
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp).semantics { contentDescription = description },
-                                    strokeWidth = 2.dp,
-                                )
-                            }
-                            StepState.Done, StepState.Failed -> Icon(
-                                painterResource(if (state == StepState.Done) R.drawable.ic_check else R.drawable.ic_x),
-                                contentDescription = stringResource(
-                                    if (state == StepState.Done) R.string.push_step_done_description else R.string.push_step_failed_description,
-                                ),
-                                modifier = Modifier.size(18.dp),
-                                tint = if (state == StepState.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                            )
-                        }
-                        Text(stringResource(stepLabel(step)))
-                    }
-                }
-                if (ui.steps.any { it.second == StepState.Failed }) {
-                    TextButton(onClick = model::enable) { Text(stringResource(R.string.push_retry_button)) }
-                }
-            }
+            is PushUi.Enabling -> PushSteps(ui.steps)
             is PushUi.On -> {
-                Text(stringResource(R.string.push_on_body, ui.relayUrl))
-                if (model.changingRelay) {
-                    RelayField(model)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = model::enable, enabled = model.relayDraft.isNotBlank()) {
-                            Text(stringResource(R.string.push_use_relay_button))
+                Text(stringResource(R.string.push_on_summary))
+                if (advanced || model.changingRelay) {
+                    Text(stringResource(R.string.push_on_body, ui.relayUrl), style = MaterialTheme.typography.bodySmall)
+                    if (model.changingRelay) {
+                        RelayField(model)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = model::enable, enabled = !model.busy && model.relayDraft.isNotBlank()) {
+                                Text(stringResource(R.string.push_use_relay_button))
+                            }
+                            TextButton(onClick = model::cancelRelayChange, enabled = !model.busy) { Text(stringResource(R.string.cancel_button)) }
                         }
-                        TextButton(onClick = model::cancelRelayChange) { Text(stringResource(R.string.cancel_button)) }
+                    } else {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = model::sendTest, enabled = !model.busy) { Text(stringResource(R.string.push_test_button)) }
+                            TextButton(onClick = model::askDisable, enabled = !model.busy) { Text(stringResource(R.string.push_disable_button)) }
+                        }
+                        TextButton(onClick = model::changeRelay, enabled = !model.busy) { Text(stringResource(R.string.push_change_relay_button)) }
                     }
-                } else {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = model::sendTest) { Text(stringResource(R.string.push_test_button)) }
-                        TextButton(onClick = model::disable) { Text(stringResource(R.string.push_disable_button)) }
-                    }
-                    TextButton(onClick = model::changeRelay) { Text(stringResource(R.string.push_change_relay_button)) }
+                    PolicyOptions(model)
                 }
-                PolicyOptions(model)
             }
         }
+        if (model.ui is PushUi.Off || model.ui is PushUi.On) {
+            TextButton(onClick = { advanced = !advanced }, modifier = Modifier.testTag("push-advanced")) {
+                Text(stringResource(if (advanced) R.string.settings_less_button else R.string.settings_advanced_button))
+            }
+        }
+        if (model.testing) {
+            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+            AnnouncedText(stringResource(R.string.push_testing))
+        }
+        if (model.failedSteps.isNotEmpty() && model.ui !is PushUi.Enabling) PushSteps(model.failedSteps)
         when (model.verificationState) {
             PushVerificationState.PENDING -> AnnouncedText(stringResource(R.string.push_verification_pending))
             PushVerificationState.FAILED -> {
                 AnnouncedText(stringResource(R.string.push_verification_failed), color = MaterialTheme.colorScheme.error)
                 if (model.ui is PushUi.On) {
-                    TextButton(onClick = model::enable) { Text(stringResource(R.string.push_retry_button)) }
+                    TextButton(onClick = model::enable, enabled = !model.busy) { Text(stringResource(R.string.push_retry_button)) }
                 }
             }
             else -> Unit
         }
         model.problem?.let { AnnouncedText(resolve(it), color = MaterialTheme.colorScheme.error) }
         model.notice?.let { AnnouncedText(resolve(it), style = MaterialTheme.typography.bodySmall) }
+    }
+    if (model.confirmDisable) {
+        AlertDialog(
+            onDismissRequest = model::cancelDisable,
+            title = { Text(stringResource(R.string.push_disable_title, host.name)) },
+            text = { Text(stringResource(R.string.push_disable_body)) },
+            confirmButton = { TextButton(onClick = model::disable) { Text(stringResource(R.string.push_disable_button)) } },
+            dismissButton = { TextButton(onClick = model::cancelDisable) { Text(stringResource(R.string.cancel_button)) } },
+        )
+    }
+}
+
+@Composable
+private fun PushSteps(steps: List<Pair<PushStep, StepState>>) {
+    if (steps.isEmpty()) CircularProgressIndicator()
+    steps.forEach { (step, state) ->
+        Row(
+            Modifier.semantics(mergeDescendants = true) {},
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            when (state) {
+                StepState.Running -> {
+                    val description = stringResource(R.string.push_step_running_description)
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp).semantics { contentDescription = description },
+                        strokeWidth = 2.dp,
+                    )
+                }
+                StepState.Done, StepState.Failed -> Icon(
+                    painterResource(if (state == StepState.Done) R.drawable.ic_check else R.drawable.ic_x),
+                    contentDescription = stringResource(
+                        if (state == StepState.Done) R.string.push_step_done_description else R.string.push_step_failed_description,
+                    ),
+                    modifier = Modifier.size(18.dp),
+                    tint = if (state == StepState.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                )
+            }
+            Text(stringResource(stepLabel(step)))
+        }
     }
 }
 
@@ -144,7 +169,7 @@ private fun PolicyOptions(model: PushModel) {
         }
         return
     }
-    val enabled = !model.policyBusy
+    val enabled = !model.policyBusy && !model.busy
     PolicyOption(R.string.push_policy_blocked, policy.blocked, enabled) { on ->
         model.changePolicy { it.copy(blocked = on) }
     }

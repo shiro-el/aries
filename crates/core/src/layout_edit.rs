@@ -50,6 +50,9 @@ pub enum LayoutEdit {
     CloseTab {
         id: String,
     },
+    ClosePane {
+        id: String,
+    },
 }
 
 #[uniffi::export]
@@ -162,6 +165,7 @@ impl HostConnection {
             ),
             LayoutEdit::RenameTab { id, name } => ("tab.rename", json!({"id":id, "name":name})),
             LayoutEdit::CloseTab { id } => ("tab.close", json!({"id":id, "confirmed":true})),
+            LayoutEdit::ClosePane { id } => ("pane.close", json!({"pane":id, "confirmed":true})),
         };
         let out = self
             .machine_exec(

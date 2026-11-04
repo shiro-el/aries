@@ -132,7 +132,8 @@ class ChatInterruptTest {
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("keep my draft")
         conn.interruptHold!!.complete(Unit)
         compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.chat_interrupt_stopped)).assertExists()
+        // Editing starts the next instruction; the preceding interrupt notice stays dismissed.
+        compose.onNodeWithText(str(R.string.chat_interrupt_stopped)).assertDoesNotExist()
         assertEquals(emptyList<Pair<String, String>>(), conn.typed)
     }
 
@@ -169,4 +170,28 @@ class ChatInterruptTest {
         compose.onNodeWithContentDescription(str(R.string.chat_interrupt_confirm_button)).assertDoesNotExist()
         assertEquals(listOf("t1", "t1"), conn.interrupted)
     }
+    @Test
+    fun editingReconnectingAndStatusChangesDismissInterruptNoticesIncludingLateReplies() {
+        val core = FakeCore()
+        val conn = open(core)
+        val chat = compose.runOnIdle { (model.screen as Screen.Chat).chat }
+        compose.runOnIdle { chat.interrupt() }
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.chat_interrupt_stopped)).assertExists()
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).performTextInput("next instruction")
+        compose.onNodeWithText(str(R.string.chat_interrupt_stopped)).assertDoesNotExist()
+        compose.runOnIdle { chat.interrupt() }
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.chat_interrupt_stopped)).assertExists()
+        compose.runOnIdle { chat.reconnect() }
+        compose.onNodeWithText(str(R.string.chat_interrupt_stopped)).assertDoesNotExist()
+        conn.interruptHold = CompletableDeferred()
+        compose.runOnIdle { chat.interrupt() }
+        core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
+        compose.waitForIdle()
+        conn.interruptHold!!.complete(Unit)
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.chat_interrupt_stopped)).assertDoesNotExist()
+    }
+
 }

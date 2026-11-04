@@ -182,7 +182,8 @@ fun AgentsScreen(
                     TextButton(onClick = open) { Text(stringResource(R.string.agents_empty_hosts_button)) }
                 }
             }
-            agentTreeItems(agents, folds, onOpen, onPin, current = current, presentation = presentation.groups)
+            agentTreeItems(agents, folds, onOpen, onPin, current = current, presentation = presentation.groups,
+                canPin = { board.links[it.host.id]?.let { link -> link.state == LinkState.Up && link.connection != null } == true })
             items(board.hosts.filter { board.links[it.id]?.state is LinkState.Down || it.id in board.watchErrors },
                 key = { "failure:" + it.id }) { host ->
                 board.links[host.id]?.let { link ->

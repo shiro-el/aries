@@ -124,7 +124,7 @@ class KoreanImeDeviceTest {
         val new = mutableListOf<String>()
         compose.runOnUiThread {
             while (true) {
-                val input = viewer.inputs.tryReceive().getOrNull() ?: break
+                val input = viewer.inputs.tryReceive().getOrNull()?.input ?: break
                 new += when (input) {
                     is TerminalInput.Text -> "text:${input.text}"
                     is TerminalInput.Paste -> "paste:${input.text}"

@@ -79,7 +79,8 @@ internal fun FirstConnectionGuide(
                 allowed?.let {
                     AnnouncedText(stringResource(if (it) R.string.onboarding_permission_granted else R.string.onboarding_permission_denied))
                 }
-                PushSection(model.push, beaconInstalled = model.beacon.installed)
+                PushSection(model.push, beaconState = model.beacon.ui)
+                Text(stringResource(R.string.onboarding_start_task_hint), style = MaterialTheme.typography.bodySmall)
                 TextButton(state::finishOnboarding, Modifier.testTag("onboarding-finish")) {
                     Text(stringResource(R.string.onboarding_finish_button))
                 }

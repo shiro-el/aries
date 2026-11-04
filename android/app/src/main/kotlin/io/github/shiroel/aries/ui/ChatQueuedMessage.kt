@@ -86,7 +86,7 @@ internal fun QueuedMessageBubble(message: QueuedChatMessage, chat: ChatModel) {
                 }
             }
             message.error?.takeIf { it.isNotBlank() }?.let {
-                Text(stringResource(R.string.chat_send_failed, it), color = MaterialTheme.colorScheme.error,
+                Text(if (message.phase == QueuedMessagePhase.Uncertain) it else stringResource(R.string.chat_send_failed, it), color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall)
             }
             if (message.phase == QueuedMessagePhase.Uncertain || message.phase == QueuedMessagePhase.Failed) {
@@ -118,6 +118,11 @@ internal data class ChatOutboxState(
     val draft: String,
     val attachments: List<DraftAttachment>,
     val messages: List<QueuedChatMessage>,
+    val terminalDraft: String = "",
+    val terminalComposerOpen: Boolean = false,
+    val questionText: Map<String, List<String>> = emptyMap(),
+    val picks: Map<String, List<Set<Int>>> = emptyMap(),
+    val answers: Map<String, String> = emptyMap(),
 )
 
 private fun attachmentsJson(attachments: List<DraftAttachment>) = org.json.JSONArray().apply {
@@ -130,8 +135,19 @@ private fun readAttachments(array: org.json.JSONArray) = (0 until array.length()
 }
 
 internal fun ChatOutboxState.encode(): String? {
-    if (draft.isEmpty() && attachments.isEmpty() && messages.isEmpty()) return null
-    return org.json.JSONObject().put("version", 1).put("draft", draft)
+    if (draft.isEmpty() && attachments.isEmpty() && messages.isEmpty() && terminalDraft.isEmpty() &&
+        !terminalComposerOpen && questionText.isEmpty() && picks.isEmpty() && answers.isEmpty()) return null
+    return org.json.JSONObject().put("version", 2).put("draft", draft)
+        .put("terminalDraft", terminalDraft).put("terminalComposerOpen", terminalComposerOpen)
+        .put("questionText", org.json.JSONObject().apply {
+            questionText.forEach { (id, parts) -> put(id, org.json.JSONArray(parts)) }
+        })
+        .put("picks", org.json.JSONObject().apply {
+            picks.forEach { (id, parts) -> put(id, org.json.JSONArray().apply {
+                parts.forEach { put(org.json.JSONArray(it.toList())) }
+            }) }
+        })
+        .put("answers", org.json.JSONObject(answers))
         .put("attachments", attachmentsJson(attachments))
         .put("messages", org.json.JSONArray().apply {
             messages.forEach { message -> put(org.json.JSONObject()
@@ -144,7 +160,7 @@ internal fun ChatOutboxState.encode(): String? {
 
 internal fun decodeChatOutbox(content: String): ChatOutboxState {
     val value = org.json.JSONObject(content)
-    require(value.getInt("version") == 1)
+    require(value.getInt("version") in 1..2)
     val messages = value.getJSONArray("messages")
     return ChatOutboxState(value.getString("draft"), readAttachments(value.getJSONArray("attachments")),
         (0 until messages.length()).map {
@@ -155,5 +171,23 @@ internal fun decodeChatOutbox(content: String): ChatOutboxState {
                 (0 until before.length()).map { i -> before.getString(i) }.toSet(),
                 QueuedMessagePhase.valueOf(message.getString("phase")), message.optBoolean("confirmed", false),
                 error = message.optString("error").takeIf { it.isNotEmpty() && it != "null" })
-        })
+        }, terminalDraft = value.optString("terminalDraft"), terminalComposerOpen = value.optBoolean("terminalComposerOpen"),
+        questionText = value.optJSONObject("questionText")?.let { questions ->
+            questions.keys().asSequence().associateWith { id ->
+                val parts = questions.getJSONArray(id)
+                (0 until parts.length()).map { parts.getString(it) }
+            }
+        }.orEmpty(),
+        picks = value.optJSONObject("picks")?.let { questions ->
+            questions.keys().asSequence().associateWith { id ->
+                val parts = questions.getJSONArray(id)
+                (0 until parts.length()).map { part ->
+                    val chosen = parts.getJSONArray(part)
+                    (0 until chosen.length()).map { chosen.getInt(it) }.toSet()
+                }
+            }
+        }.orEmpty(),
+        answers = value.optJSONObject("answers")?.let { answers ->
+            answers.keys().asSequence().associateWith { answers.getString(it) }
+        }.orEmpty())
 }

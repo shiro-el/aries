@@ -70,6 +70,7 @@ internal fun ConsoleTerminalRow(
     modifier: Modifier = Modifier,
     spaceName: String? = null,
     tabName: String? = null,
+    showHost: Boolean = true,
     compact: Boolean = false,
     selected: Boolean = false,
     live: Boolean = true,
@@ -83,12 +84,14 @@ internal fun ConsoleTerminalRow(
     val location = stringResource(R.string.terminal_subtitle, host, terminal.address)
     val spokenName = stringResource(R.string.console_agent_accessibility, displayName(terminal), location)
     val description = lastSeen ?: status?.let { stringResource(agentStatusLabel(it)) } ?: terminal.state
-    val folder = stringResource(R.string.console_agent_location, host, terminal.currentCwd ?: terminal.address)
+    val cwd = terminal.currentCwd ?: terminal.address
+    val path = compactAgentPath(cwd)
+    val folder = if (showHost) stringResource(R.string.console_agent_location, host, path) else path
     val sub = listOfNotNull(lastSeen, spaceName, tabName,
         if (waiting) statusMessage(status)?.takeIf { it.isNotBlank() } ?: description else folder).joinToString(" · ")
     val density = androidx.compose.ui.platform.LocalDensity.current
     val largeText = density.fontScale > 1.3f
-    val kindWidth = (48 * density.fontScale).dp
+    val program = terminal.currentProgram?.takeUnless { it.lowercase() in setOf("claude", "codex") }
     val ageWidth = (56 * density.fontScale).dp
     val titleHeight = with(density) { MaterialTheme.typography.bodyMedium.lineHeight.toDp() }
     val actionsLabel = stringResource(R.string.terminals_actions_label)
@@ -132,7 +135,7 @@ internal fun ConsoleTerminalRow(
                     if (largeText) {
                         Text(sub, style = MaterialTheme.typography.bodySmall,
                             color = if (waiting) statusColor(AgentStatus.Blocked(null, null)) else MaterialTheme.colorScheme.onSurfaceVariant)
-                        if (live && tabName == null) Text(terminal.currentProgram.orEmpty(), Modifier.testTag("terminal-kind:${terminal.address}"),
+                        if (live && program != null) Text(program, Modifier.testTag("terminal-kind:${terminal.address}"),
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Box(Modifier.testTag("terminal-age:${terminal.address}")) {
                             if (live && status != null) AgentElapsedTime(terminal.statusMs)
@@ -140,9 +143,9 @@ internal fun ConsoleTerminalRow(
                     } else Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(sub, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
                             color = if (waiting) statusColor(AgentStatus.Blocked(null, null)) else MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
-                        if (live && tabName == null) Box(Modifier.width(kindWidth), contentAlignment = Alignment.CenterStart) {
-                            Text(terminal.currentProgram.orEmpty(), Modifier.testTag("terminal-kind:${terminal.address}"),
+                            maxLines = 1, overflow = if (waiting || !live) TextOverflow.Ellipsis else TextOverflow.MiddleEllipsis)
+                        if (live && program != null) {
+                            Text(program, Modifier.testTag("terminal-kind:${terminal.address}"),
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
                         }
@@ -158,6 +161,18 @@ internal fun ConsoleTerminalRow(
             }
         }
     }
+}
+
+/** Keep the repo and leaf visible even when the parent path is long. */
+private fun compactAgentPath(path: String): String {
+    val parts = path.trimEnd('/').split('/').filter { it.isNotEmpty() }
+    if (parts.size <= 3) return path
+    val root = when {
+        path.startsWith("~/") -> "~"
+        path.startsWith('/') -> ""
+        else -> parts.first()
+    }
+    return "$root/…/${parts.takeLast(2).joinToString("/")}"
 }
 
 /** A plain Terminal has a prompt, with no Agent-status accessibility label. */
