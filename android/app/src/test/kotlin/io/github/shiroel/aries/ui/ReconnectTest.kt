@@ -5,9 +5,14 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasProgressBarRangeInfo
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -32,6 +37,8 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /** Seam 3: the line to a Host drops and the app restores what was on screen, against a fake core. */
 @RunWith(RobolectricTestRunner::class)
@@ -92,6 +99,71 @@ class ReconnectTest {
 
     private fun screenShows(text: String) =
         compose.onNode(hasContentDescription(text, substring = true)).assertExists()
+
+    @Test
+    @Config(qualifiers = "h1200dp")
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun connectingHasNoFailureActionsUntilTheHostNeedsUserRecovery() {
+        val core = FakeCore().apply { failWith = CoreException.Unreachable("no route") }
+        core.addHost("home", Endpoint.Ssh("home", 22u, "me"))
+        start(core)
+        compose.onNodeWithText("home").performClick()
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+
+        fun screenshot(name: String) {
+            val file = java.io.File("build/reports/connection-notice/$name.png")
+            file.parentFile?.mkdirs()
+            file.outputStream().use { compose.onRoot().captureToImage().asAndroidBitmap()
+                .compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+        }
+
+        compose.onNodeWithText(str(R.string.connect_retry_button)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.connect_settings_button)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.connect_failed_title)).assertDoesNotExist()
+        compose.onNode(hasProgressBarRangeInfo(ProgressBarRangeInfo.Indeterminate)).assertExists()
+        compose.onNodeWithText(str(R.string.reconnecting)).assertDoesNotExist()
+        screenshot("initial")
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.onNodeWithText(str(R.string.reconnecting)).assertDoesNotExist()
+        compose.mainClock.advanceTimeBy(600)
+        compose.onNodeWithText(str(R.string.reconnecting)).assertExists()
+        screenshot("delayed")
+
+        core.failWith = CoreException.AuthRejected()
+        compose.runOnIdle { model.networkChanged() }
+        compose.mainClock.advanceTimeByFrame()
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.connect_failed_title)).assertExists()
+        compose.onNodeWithText(str(R.string.connect_retry_button)).assertExists()
+        compose.onNodeWithText(str(R.string.connect_settings_button)).assertExists()
+        compose.onNode(hasProgressBarRangeInfo(ProgressBarRangeInfo.Indeterminate)).assertDoesNotExist()
+        screenshot("failed")
+
+        core.failWith = null
+        compose.onNodeWithText(str(R.string.connect_retry_button)).performClick()
+        compose.mainClock.advanceTimeByFrame()
+        compose.waitForIdle()
+        assertTrue(model.screen is Screen.Browse)
+        compose.onNodeWithText(str(R.string.connect_retry_button)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.reconnecting)).assertDoesNotExist()
+        compose.onNode(hasProgressBarRangeInfo(ProgressBarRangeInfo.Indeterminate)).assertDoesNotExist()
+        screenshot("connected")
+
+        // A later drop starts a fresh quiet period rather than retaining the old delayed label.
+        core.failWith = CoreException.Unreachable("no route")
+        compose.runOnIdle { model.networkChanged() }
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNode(hasProgressBarRangeInfo(ProgressBarRangeInfo.Indeterminate)).assertExists()
+        compose.onNodeWithText(str(R.string.reconnecting)).assertDoesNotExist()
+        compose.mainClock.advanceTimeBy(1_600)
+        compose.onNodeWithText(str(R.string.reconnecting)).assertExists()
+        core.failWith = null
+        compose.runOnIdle { model.networkChanged() }
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNode(hasProgressBarRangeInfo(ProgressBarRangeInfo.Indeterminate)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.reconnecting)).assertDoesNotExist()
+    }
 
     @Test
     fun aFirstConnectionFailureRetriesAndStillOpensTheNotificationTarget() {
@@ -191,6 +263,7 @@ class ReconnectTest {
         core.failWith = CoreException.Unreachable("network is unreachable")
         first.end()
         compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(1_600)
         compose.onNodeWithText(str(R.string.reconnecting)).assertExists()
         screenShows("before")
         assertTrue("the dead line is let go", dropped.disconnected)
@@ -345,6 +418,7 @@ class ReconnectTest {
         core.failWith = CoreException.Unreachable("no route")
         model.networkChanged()
         compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(1_600)
         compose.onNodeWithText(str(R.string.reconnecting)).assertExists()
 
         core.failWith = null
