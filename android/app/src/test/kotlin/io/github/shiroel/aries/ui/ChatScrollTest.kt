@@ -174,6 +174,22 @@ class ChatScrollTest {
         compose.onNodeWithContentDescription("Latest (1)").assertDoesNotExist()
     }
 
+    @Test fun editingAVisibleHistoryEntryUpdatesItsTextWithoutChangingRowKeys() {
+        open()
+        readReply(6)
+        assertReply(6)
+
+        val updated = entries(30).map {
+            if (it.id == "a6") it.copy(body = ChatEntryBody.Agent("Corrected reply\nSecond line\nThird line")) else it
+        }
+        push(updated)
+
+        awaitText("Corrected reply\nSecond line\nThird line")
+        compose.onNodeWithText("Corrected reply\nSecond line\nThird line").assertIsDisplayed()
+        compose.onNodeWithText("Reply 6\nSecond line\nThird line").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Latest").assertIsDisplayed()
+    }
+
     @Test fun prependedHistoryPreservesTheAnchorAndManualReturnToTheBottomClearsTheCount() {
         open()
         readReply(6)
