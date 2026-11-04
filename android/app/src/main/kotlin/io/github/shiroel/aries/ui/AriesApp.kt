@@ -14,6 +14,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -333,6 +335,41 @@ private fun PromptDialog(prompt: Prompt, model: HostsModel) {
             onDismissRequest = model::dismiss,
             title = { Text(stringResource(R.string.host_remove_title, prompt.host.name)) },
             confirmButton = { TextButton(onClick = { model.remove(prompt) }) { Text(stringResource(R.string.host_remove_confirm_button)) } },
+            dismissButton = { TextButton(onClick = model::dismiss) { Text(stringResource(R.string.cancel_button)) } },
+        )
+        is Prompt.ConfirmSavedLaunch -> AlertDialog(
+            onDismissRequest = model::dismiss,
+            title = { Text(stringResource(R.string.shortcuts_confirm_title)) },
+            text = {
+                val request = prompt.saved.request
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.shortcuts_confirm_body, prompt.saved.name, prompt.browser.host.name))
+                    Text(stringResource(R.string.launch_command), style = MaterialTheme.typography.labelLarge)
+                    request.preset?.let { Text(stringResource(it.label)) }
+                    if (request.command.isNotBlank()) Text(request.command)
+                    else if (request.preset == null) Text(stringResource(R.string.shortcuts_default_command))
+                    request.model?.let {
+                        Text(stringResource(R.string.launch_model_label), style = MaterialTheme.typography.labelLarge)
+                        Text(it)
+                    }
+                    request.effort?.let {
+                        Text(stringResource(R.string.launch_effort_label), style = MaterialTheme.typography.labelLarge)
+                        Text(it)
+                    }
+                    Text(stringResource(R.string.launch_cwd), style = MaterialTheme.typography.labelLarge)
+                    Text(request.cwd?.takeIf { it.isNotBlank() } ?: stringResource(R.string.launch_cwd_default))
+                    val space = prompt.browser.structure?.spaces?.find { it.id == request.spaceId }
+                    request.spaceId?.let {
+                        Text(stringResource(R.string.launch_space), style = MaterialTheme.typography.labelLarge)
+                        Text(space?.name ?: it)
+                    }
+                    request.tabId?.let { id ->
+                        Text(stringResource(R.string.launch_tab), style = MaterialTheme.typography.labelLarge)
+                        Text(space?.tabs?.find { it.id == id }?.name ?: id)
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { model.confirmSavedLaunch(prompt) }) { Text(stringResource(R.string.launch_button)) } },
             dismissButton = { TextButton(onClick = model::dismiss) { Text(stringResource(R.string.cancel_button)) } },
         )
         is Prompt.Problem -> AlertDialog(
