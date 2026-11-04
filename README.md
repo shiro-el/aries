@@ -93,7 +93,7 @@ Chat works for **Claude Code, Codex, OpenCode and Pi** (it needs the Beacon on t
 - Answer an Agent's question with one tap, or write your own answer. Pending and earlier questions stay answerable.
 - Send messages with newlines, slash-command completion and skill search. Attach photos, files or anything shared to Aries; they upload into the Terminal's folder on the Host and show as attachment cards.
 - Search a Chat, select and copy messages, and keep your reading position with a **Latest** button to jump back.
-- Read cached Chats offline (encrypted on the phone, kept 30 days by default), dictate with Groq Whisper using your own API key, and have replies read aloud with the system voice.
+- Read cached Chats offline (encrypted on the phone, kept 30 days by default) and have replies read aloud with the system voice.
 
 ### Work in a Terminal
 

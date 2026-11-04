@@ -15,12 +15,16 @@
     <string name="preview_auto_refresh">Agent 변경 후 자동 새로고침</string>
     <string name="preview_title">미리보기</string>
     <string name="preview_open_port">미리보기 열기 · %1$d</string>
-    <string name="preview_address">Host · http://127.0.0.1:%1$d</string>
+    <string name="preview_address">localhost:%1$d 미리보기</string>
     <string name="preview_reload">새로고침</string>
     <string name="preview_mobile">모바일 보기</string>
     <string name="preview_desktop">데스크톱 보기</string>
     <string name="preview_close">미리보기 닫기</string>
     <string name="preview_failed">미리보기를 열 수 없습니다. Host 연결과 개발 서버를 확인해 주세요.</string>
+    <string name="preview_loading">미리보기 불러오는 중…</string>
+    <string name="preview_page_failed">서버가 웹 페이지를 반환하지 않았습니다. HTTP 서버인지, 실행 중인지 확인해 주세요.</string>
+    <string name="preview_timeout">미리보기가 10초 안에 응답하지 않았습니다. 개발 서버를 확인하고 다시 시도해 주세요.</string>
+    <string name="preview_http_failed">서버가 HTTP %1$d 오류를 반환했습니다. 개발 서버를 확인하고 다시 시도해 주세요.</string>
     <string name="preview_retry">다시 시도</string>
 
     <!-- Preview capture and annotation -->
@@ -42,6 +46,8 @@
     <string name="agent_details_folder">폴더 · %1$s</string>
 
     <!-- Host creation and context sheets -->
+    <string name="creation_host_label">Host</string>
+    <string name="creation_host_disconnected">Agent를 만들려면 %1$s에 연결하세요.</string>
     <string name="host_create_title">새로 만들기</string>
     <string name="host_create_task_detail">Agent와 첫 프롬프트를 골라 작업 시작</string>
     <string name="host_create_terminal_detail">이 Host에서 명령 실행</string>
@@ -577,6 +583,12 @@
     <string name="chat_code_label">코드</string>
     <string name="chat_code_copy_button">코드 복사</string>
     <string name="chat_code_copied">복사됨</string>
+    <!-- Chat links -->
+    <string name="chat_link_share_failed">링크를 공유할 수 없습니다.</string>
+    <string name="chat_link_copy">링크 복사 · %1$s</string>
+    <string name="chat_link_share">링크 공유 · %1$s</string>
+    <string name="chat_link_open_failed">링크를 열 수 없습니다.</string>
+
     <!-- Chat text selection and clipboard actions. -->
     <string name="chat_text_actions">텍스트 메뉴</string>
     <string name="chat_copy_all">모두 복사</string>
@@ -703,6 +715,12 @@
     <string name="chat_send_button">보내기</string>
     <string name="chat_sent">메시지를 보냈습니다</string>
     <string name="chat_sending">보내는 중…</string>
+    <!-- Phone-local Chat queue -->
+    <string name="chat_queue_waiting">대기 중</string>
+    <string name="chat_queue_agent">Agent에 전달됨 · 차례 대기 중</string>
+    <string name="chat_queue_uncertain">전달 여부 미확인 · 다시 보내기 전에 대화를 확인하세요</string>
+    <string name="chat_queue_cancel_button">대기 메시지 취소</string>
+
     <string name="chat_send_held">누군가 이 Terminal에 입력하고 있어요. 입력이 멈추면 메시지를 넣을게요.</string>
     <string name="chat_send_refused">보내지 않았어요. Agent가 Blocked 상태라 Terminal에서 응답을 기다리고 있어요.</string>
     <string name="chat_send_failed">메시지를 보내지 못했어요: %1$s</string>
@@ -823,6 +841,7 @@
 
     <!-- Host connection status and recovery -->
     <string name="reconnecting">연결 중…</string>
+    <string name="connect_host_reconnecting">%1$s · 연결 중…</string>
     <string name="connect_host_status">%1$s · 연결</string>
     <string name="connect_retry_button">다시 시도</string>
     <string name="connect_settings_button">연결 설정</string>
@@ -1167,33 +1186,10 @@
     <string name="layout_close_space_button">Space 닫기</string>
     <string name="layout_close_tab_button">Tab 닫기</string>
     <string name="layout_target_gone">이미 닫힌 항목이에요.</string>
-    <string name="dictation_title">음성 입력</string>
-    <string name="dictation_key_label">Groq API 키</string>
-    <string name="dictation_key_saved">API 키 저장됨 (이 기기)</string>
-    <string name="dictation_key_save_button">키 저장</string>
-    <string name="dictation_key_remove_button">키 삭제</string>
-    <string name="dictation_key_failed">API 키를 저장하지 못했어요. 다시 입력해 주세요.</string>
-    <string name="dictation_language_label">언어</string>
     <!-- Shared searchable language picker -->
     <string name="language_picker_auto">자동 감지</string>
     <string name="language_picker_search">언어 검색</string>
     <string name="language_picker_no_results">검색 결과 없음</string>
-    <string name="dictation_model_label">음성 인식 모델</string>
-    <string name="dictation_vocabulary_label">자주 쓰는 단어 (이름, 용어)</string>
-    <string name="dictation_context_label">이름과 마지막 응답 함께 보내기</string>
-    <string name="dictation_start_button">음성 입력</string>
-    <string name="dictation_stop_button">녹음 끝내고 변환</string>
-    <string name="dictation_recording">녹음 중…</string>
-    <string name="dictation_uploading">텍스트로 변환 중…</string>
-    <string name="dictation_retry_button">다시 변환</string>
-    <string name="dictation_permission_denied">음성을 녹음하려면 마이크 권한을 허용해 주세요.</string>
-    <string name="dictation_record_failed">녹음하지 못했어요. 다시 시도해 주세요.</string>
-    <string name="dictation_failed">음성을 텍스트로 바꾸지 못했어요. 다시 시도해 주세요.</string>
-    <string name="dictation_empty">인식된 말이 없어요. 다시 녹음해 주세요.</string>
-    <string name="dictation_too_large">녹음 파일은 25MB 이하여야 해요. 더 짧게 녹음해 주세요.</string>
-    <string name="dictation_unauthorized">설정에서 Groq API 키를 확인해 주세요.</string>
-    <string name="dictation_rate_limit">Groq 사용 한도에 도달했어요. %1$d초 후에 다시 시도해 주세요.</string>
-    <string name="dictation_http_failed">Groq에서 음성을 변환하지 못했어요(HTTP %1$d).</string>
     <string name="terminal_compose_button">메시지 작성</string>
     <string name="terminal_direct_input_button">직접 입력</string>
     <string name="terminal_composer_hint">Terminal로 보낼 내용</string>

@@ -87,7 +87,7 @@ private val UrlPattern = Regex("""(https?|ftp|file)://[^\s\u0001<>"'`]+""")
 /** Columns of the printed URL covering [col], trailing punctuation dropped. */
 private fun urlAt(cells: Array<String>, col: Int): Pair<IntRange, String>? {
     for (m in UrlPattern.findAll(flat(cells))) {
-        val url = m.value.trimEnd('.', ',', ';', ':', '!', '?', ')', ']', '}')
+        val url = trimWebUrl(m.value)
         val range = m.range.first until m.range.first + url.length
         if (col in range) return range to url
     }

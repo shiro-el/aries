@@ -11,6 +11,7 @@ mod beacon;
 mod calls;
 mod chat;
 mod chat_cache;
+mod chat_outbox;
 mod diagnostics;
 mod error;
 mod files;
@@ -504,6 +505,36 @@ impl AriesCore {
         launch::SavedLaunches::in_host_dir(self.store.host_dir(&host.id)).list()
     }
 
+    /// Versioned, phone-owned Chat recovery state. Never contacts the Host.
+    pub fn chat_outbox(
+        &self,
+        host_id: String,
+        terminal: String,
+    ) -> Result<Option<String>, CoreError> {
+        let hosts = self.hosts.lock().expect("hosts lock");
+        if !hosts.iter().any(|host| host.id == host_id) {
+            return Err(CoreError::UnknownHost { id: host_id });
+        }
+        chat_outbox::ChatOutbox::new(self.store.host_dir(&host_id), self.vault.as_ref())
+            .get(&terminal)
+    }
+
+    /// Atomically seals recovery state before dispatch. None clears this Terminal only.
+    /// Stored below the Host directory so Host removal deletes it as well.
+    pub fn save_chat_outbox(
+        &self,
+        host_id: String,
+        terminal: String,
+        content: Option<String>,
+    ) -> Result<(), CoreError> {
+        let hosts = self.hosts.lock().expect("hosts lock");
+        if !hosts.iter().any(|host| host.id == host_id) {
+            return Err(CoreError::UnknownHost { id: host_id });
+        }
+        chat_outbox::ChatOutbox::new(self.store.host_dir(&host_id), self.vault.as_ref())
+            .save(terminal, content)
+    }
+
     /// Composer inputs on this phone, newest first. Never contacts the Host.
     pub fn input_history(
         &self,
@@ -861,6 +892,7 @@ impl AriesCore {
                 client,
                 names: Default::default(),
                 catalogs: Default::default(),
+                preview_cache: Default::default(),
                 recent: launch::RecentCwds::in_host_dir(self.store.host_dir(&host.id)),
                 saved: launch::SavedLaunches::in_host_dir(self.store.host_dir(&host.id)),
             }))
@@ -1708,6 +1740,7 @@ pub struct HostConnection {
     client: Arc<HcClient>,
     names: Arc<tokio::sync::Mutex<structure::Names>>,
     catalogs: tokio::sync::Mutex<agent_catalog::CatalogCache>,
+    preview_cache: tokio::sync::Mutex<Option<preview::Discovery>>,
     recent: launch::RecentCwds,
     saved: launch::SavedLaunches,
 }

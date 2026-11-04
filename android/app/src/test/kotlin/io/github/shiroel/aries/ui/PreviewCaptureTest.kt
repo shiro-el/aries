@@ -60,7 +60,7 @@ class PreviewCaptureTest {
             DisposableEffect(chat) { onDispose { chat.stop() } }
             MaterialTheme { ChatScreen(chat, onBack = {}) }
         }
-        compose.onNodeWithText("Open preview · 5173").performClick()
+        compose.onNodeWithContentDescription("Preview").performClick()
         if (desktop) compose.onNodeWithText("Desktop view").performClick()
         lateinit var web: WebView
         compose.runOnIdle {
