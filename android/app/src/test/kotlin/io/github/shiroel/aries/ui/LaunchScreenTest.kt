@@ -5,6 +5,12 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.test.*
+import androidx.compose.ui.graphics.asAndroidBitmap
+import android.graphics.Bitmap
+import java.io.File
+import org.robolectric.annotation.GraphicsMode
+import kotlinx.coroutines.CompletableDeferred
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -29,6 +35,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 /** Seam 3: launching a Terminal from a custom command against a fake core API. */
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 @RunWith(RobolectricTestRunner::class)
 @org.robolectric.annotation.Config(qualifiers = "h1200dp")
 class LaunchScreenTest {
@@ -36,6 +43,14 @@ class LaunchScreenTest {
 
     private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
     private fun str(id: Int, vararg args: Any) = context.getString(id, *args)
+
+    private fun screenshot(name: String) {
+        System.getenv("ARIES_TASK_RENDER_DIR")?.let { directory ->
+            File(directory, "$name.png").outputStream().use {
+                compose.onNodeWithTag("launch-dialog").captureToImage().asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it)
+            }
+        }
+    }
 
     private val claude = TerminalInfo("t1", "claude-main", "", listOf("claude"), "/repo", "live")
 
@@ -73,6 +88,48 @@ class LaunchScreenTest {
         compose.waitForIdle()
     }
 
+    // Regression: a delayed/lost launch reply must not allow a duplicate write after
+    // dismissal or through the saved-launch entry; existing spawn_failed tests miss it.
+    @Test fun delayedSavedLaunchAndLostReplyRequireExplicitDuplicateApproval() {
+        val saved = io.github.shiroel.aries.core.SavedLaunch("L1", "Build repo", LaunchRequest("make", "/repo", null, null))
+        val core = FakeCore().apply { savedLaunches += saved }
+        open(core)
+        val conn = core.connection!!
+        val reply = CompletableDeferred<Unit>()
+        conn.launchReplyHold = reply
+        conn.launchReplyFailure = CoreException.Closed()
+        fun runSaved() {
+            compose.onNodeWithContentDescription(str(R.string.host_create_title)).performClick()
+            compose.onNodeWithTag("saved_run:L1").performClick()
+        }
+        runSaved()
+        compose.onNodeWithText(str(R.string.launch_starting)).assertExists()
+        screenshot("launch-starting")
+        compose.onNodeWithText(str(R.string.cancel_button)).performClick()
+        runSaved()
+        assertEquals(1, conn.launched.size)
+        compose.runOnIdle { reply.complete(Unit) }
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.launch_button)).assertIsNotEnabled()
+        compose.onNodeWithText(str(R.string.cancel_button)).performClick()
+        // Leaving and reconnecting must retain uncertainty while rebinding its recovery to the new line.
+        compose.openConsoleDrawer()
+        compose.onNodeWithTag("drawer-hosts").performScrollTo().performClick()
+        compose.onNodeWithText("home").performClick()
+        runSaved()
+        val retryConnection = core.connection!!
+        compose.onNodeWithText(str(R.string.launch_button)).assertIsNotEnabled()
+        screenshot("launch-unknown")
+        compose.onNodeWithText(str(R.string.launch_review_button)).performScrollTo().performClick()
+        compose.onNodeWithText(str(R.string.launch_again_button)).assertExists()
+        assertEquals(1, conn.launched.size)
+        compose.onNodeWithText(str(R.string.launch_again_button)).performClick()
+        compose.waitForIdle()
+        assertEquals(1, conn.launched.size)
+        assertEquals(listOf(saved.request), retryConnection.launched)
+        compose.onNodeWithTag("terminal-screen").assertExists()
+    }
+
     @Test
     fun launchesIntoTheTabShownAndOpensTheNewTerminal() {
         val core = FakeCore().apply { structure = desktop }
@@ -91,7 +148,7 @@ class LaunchScreenTest {
             listOf(LaunchRequest("my-tool --flag", "/home/me/aries", "s1", "tab2")),
             core.connection!!.launched,
         )
-        // The form closed, the new Terminal is in the Tab and focused (zoom is offered).
+        // The creation opens the actual Terminal, even if its list row is folded.
         compose.onNodeWithText(str(R.string.launch_title)).assertDoesNotExist()
         compose.onNodeWithText("my-tool --flag").assertExists()
         compose.onNodeWithText("my-tool --flag").assertExists()
@@ -108,6 +165,8 @@ class LaunchScreenTest {
         command("htop")
         run()
         assertEquals(LaunchRequest("htop", null, "s2", "tab3"), core.connection!!.launched.last())
+        compose.onNodeWithTag("terminal-screen").assertExists()
+        compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         compose.onNodeWithTag("host-layout-context").assertExists()
         compose.onNodeWithText("notes · todo").assertExists()
         compose.onNodeWithText("htop").assertExists()
@@ -126,7 +185,9 @@ class LaunchScreenTest {
         run()
 
         assertEquals(LaunchRequest("make test", "/tmp", null, null), core.connection!!.launched.last())
-        // Unplaced Terminals show on the Space list.
+        compose.onNodeWithTag("terminal-screen").assertExists()
+        compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
+        // Unplaced Terminals show on the Host list.
         compose.onNodeWithTag("host-plain-terminals").performScrollTo().assertExists()
         compose.onNodeWithText("make test").performScrollTo().assertExists()
     }
