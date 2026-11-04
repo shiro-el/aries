@@ -160,8 +160,10 @@ private fun ProgramMark(terminal: TerminalInfo, modifier: Modifier) {
         "codex" -> R.drawable.program_codex
         else -> null
     }
+    // Codex ships as a one-colour mark, so it follows the text colour in both themes; Claude keeps its own colour.
     if (icon != null) Icon(painterResource(icon), contentDescription = null, modifier = modifier,
-        tint = androidx.compose.ui.graphics.Color.Unspecified)
+        tint = if (icon == R.drawable.program_codex) MaterialTheme.colorScheme.onSurface
+            else androidx.compose.ui.graphics.Color.Unspecified)
     else Box(modifier, contentAlignment = Alignment.Center) { TerminalMark() }
 }
 
