@@ -35,7 +35,7 @@ internal fun ConsoleInboxAction() {
     val state = stringResource(if (action.open) R.string.call_inbox_expanded else R.string.call_inbox_collapsed)
     val ink = MaterialTheme.colorScheme.onSurfaceVariant
     Row(
-        Modifier.height(44.dp).widthIn(min = 44.dp).testTag("console-inbox")
+        Modifier.heightIn(min = 48.dp).widthIn(min = 48.dp).testTag("console-inbox")
             .clickable(role = Role.Button, onClick = action.toggle)
             .semantics { contentDescription = label; stateDescription = state }
             .padding(horizontal = 10.dp),

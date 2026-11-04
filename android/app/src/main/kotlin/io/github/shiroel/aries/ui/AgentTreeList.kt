@@ -114,7 +114,7 @@ internal fun AgentFoldButton(entry: AgentEntry, descendants: List<AgentEntry>, f
     if (descendants.isEmpty()) return
     val label = stringResource(if (folded) R.string.agents_expand_children else R.string.agents_collapse_children,
         displayName(entry.terminal), descendants.size)
-    Row(Modifier.height(28.dp).clickable(role = Role.Button, onClick = onFold)
+    Row(Modifier.heightIn(min = 48.dp).widthIn(min = 48.dp).clickable(role = Role.Button, onClick = onFold)
         .padding(horizontal = 3.dp)
         .testTag("agent-fold:${entry.host.id}:${entry.terminal.address}")
         .semantics { contentDescription = label },
@@ -136,7 +136,7 @@ internal fun AgentPinButton(entry: AgentEntry, onPin: (Boolean) -> Unit) {
     val pinned = entry.terminal.pinned
     val label = stringResource(if (pinned) R.string.agent_unpin_button_label else R.string.agent_pin_button_label,
         displayName(entry.terminal), entry.host.name)
-    IconButton(onClick = { onPin(!pinned) }, modifier = Modifier.size(width = 40.dp, height = 48.dp)
+    IconButton(onClick = { onPin(!pinned) }, modifier = Modifier.size(48.dp)
         .testTag("agent-pin:${entry.host.id}:${entry.terminal.address}").semantics { selected = pinned }) {
         Icon(painterResource(if (pinned) R.drawable.agent_pin_off else R.drawable.agent_pin), label,
             Modifier.size(18.dp), tint = if (pinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
@@ -147,7 +147,7 @@ internal fun AgentPinButton(entry: AgentEntry, onPin: (Boolean) -> Unit) {
 @Composable
 internal fun TreeSectionRow(label: String, depth: Int, folded: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier) {
     val state = stringResource(if (folded) R.string.tree_collapsed else R.string.tree_expanded)
-    TextButton(onClick = onToggle, modifier = modifier.fillMaxWidth().heightIn(min = 44.dp)
+    TextButton(onClick = onToggle, modifier = modifier.fillMaxWidth().heightIn(min = 48.dp)
         .padding(start = (depth * 16).dp).semantics { stateDescription = state }) {
         TreeChevron(folded)
         Spacer(Modifier.width(8.dp))

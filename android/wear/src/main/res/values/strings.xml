@@ -5,21 +5,22 @@
     <string name="wear_progress_body">Working · %1$d subagents</string>
 
     <!-- Watch Inbox -->
-    <string name="wear_inbox_title">Inbox</string>
-    <string name="wear_inbox_attention">Needs you</string>
-    <string name="wear_inbox_agents">Agents</string>
-    <string name="wear_inbox_refresh">Refresh</string>
-    <string name="wear_inbox_refreshing">Requesting refresh…</string>
+    <string name="wear_inbox_title">INBOX</string>
+    <string name="wear_inbox_attention">WAITING</string>
+    <string name="wear_inbox_agents">AGENTS</string>
+    <string name="wear_inbox_refresh">REFRESH</string>
+    <string name="wear_inbox_refreshing">SYNC…</string>
     <string name="wear_inbox_requested">Refresh requested on phone</string>
-    <string name="wear_inbox_request">Request</string>
-    <string name="wear_inbox_summary">Last response</string>
+    <string name="wear_inbox_request">REQUEST</string>
+    <string name="wear_inbox_summary">RESPONSE</string>
     <string name="wear_inbox_no_request">No pending request</string>
     <string name="wear_inbox_no_summary">Open Chat on your phone to sync a response</string>
     <string name="wear_inbox_hidden">Details are hidden by your phone preview settings</string>
-    <string name="wear_inbox_answer">Answer</string>
-    <string name="wear_inbox_stop">Stop</string>
-    <string name="wear_inbox_watch">Watch progress</string>
-    <string name="wear_inbox_back">Back</string>
+    <string name="wear_inbox_answer">ANSWER</string>
+    <string name="wear_inbox_stop">STOP</string>
+    <string name="wear_inbox_watch">WATCH</string>
+    <string name="wear_inbox_open_phone">OPEN ON PHONE</string>
+    <string name="wear_inbox_back">BACK</string>
     <string name="wear_inbox_more">Showing the first %1$d. Open your phone for all Agents.</string>
 
     <!-- Console Tile and complication types -->
@@ -30,6 +31,7 @@
     <string name="wear_tile_working">Working · %1$d (top Agents)</string>
     <string name="wear_tile_stale">STALE · %1$s</string>
     <string name="wear_tile_open">OPEN</string>
+    <string name="wear_code_question">ASK</string>
     <string name="wear_code_blocked">BLK</string>
     <string name="wear_code_error">ERR</string>
     <string name="wear_code_working">RUN</string>
