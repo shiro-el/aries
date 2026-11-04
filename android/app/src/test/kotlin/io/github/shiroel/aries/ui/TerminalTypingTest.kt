@@ -273,6 +273,20 @@ class TerminalTypingTest {
         )
     }
 
+    // Regression: an IME clipboard commit must not submit each pasted line as Enter.
+    @Test
+    fun imeMultilineClipboardCommitUsesPasteAndKeepsKeyboardEnter() {
+        val core = FakeCore()
+        open(core)
+        val ic = focusInput()
+        ic.commitText("one\ntwo\r\n세", 1)
+        ic.commitText("carriage\rreturn", 1)
+        ic.commitText("\n", 1)
+        compose.waitForIdle()
+        assertEquals(listOf("paste:one\ntwo\r\n세", "paste:carriage\rreturn", "key:Enter"),
+            core.connection!!.views.last().sent)
+    }
+
     @Test
     fun altAppliesOnlyToTheNextUnicodeCharacter() {
         val core = FakeCore()
