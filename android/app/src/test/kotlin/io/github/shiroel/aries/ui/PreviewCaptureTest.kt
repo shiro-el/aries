@@ -64,6 +64,9 @@ class PreviewCaptureTest {
             DisposableEffect(chat) { onDispose { chat.stop() } }
             MaterialTheme { if (visible) ChatScreen(chat, onBack = {}) }
         }
+        // Queued sends need a live transcript baseline before dispatching to the Agent.
+        core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, null))
+        compose.waitForIdle()
         compose.onNodeWithContentDescription("Preview").performClick()
         if (desktop) compose.onNodeWithText("Desktop view").performClick()
         lateinit var web: WebView
