@@ -89,11 +89,11 @@ object WatchPhone {
                 (question.id.startsWith(PERMISSION_ID_PREFIX) && safePermission &&
                     part.options.map { it.label } in listOf(listOf("Allow", "Deny"), listOf("Allow", "Allow always", "Deny"))))
         return agent.copy(
-            requestBody = body?.questions?.joinToString("\n") { it.text } ?: agent.requestBody,
+            requestBody = NotificationMarkdown.render(body?.questions?.joinToString("\n") { it.text } ?: agent.requestBody).expanded.toString(),
             requestId = question?.id.orEmpty(),
-            choices = part?.options?.map { it.label }.orEmpty(),
+            choices = part?.options?.map { NotificationMarkdown.render(it.label).plain }.orEmpty(),
             canAnswerOnWatch = supported,
-            conversationSummary = entries.mapNotNull { (it.body as? ChatEntryBody.Agent)?.text }.lastOrNull().orEmpty(),
+            conversationSummary = NotificationMarkdown.render(entries.mapNotNull { (it.body as? ChatEntryBody.Agent)?.text }.lastOrNull().orEmpty()).expanded.toString(),
         )
     }
 
@@ -107,7 +107,7 @@ object WatchPhone {
         fun row(entry: io.github.shiroel.aries.ui.AgentEntry): WatchAgent {
             val terminal = entry.terminal
             val blocked = terminal.agentStatus as? AgentStatus.Blocked
-            return WatchAgent(entry.host.id, terminal.address, displayName(terminal), when (terminal.agentStatus) {
+            return WatchAgent(entry.host.id, terminal.address, NotificationMarkdown.render(displayName(terminal)).plain, when (terminal.agentStatus) {
                 is AgentStatus.Blocked -> "blocked"
                 is AgentStatus.Error -> "error"
                 AgentStatus.Done -> "done"
@@ -117,7 +117,7 @@ object WatchPhone {
                 stateToken = java.security.MessageDigest.getInstance("SHA-256").digest(
                     "${terminal.agentStatus}|${terminal.statusMs}|${terminal.turn}".toByteArray()).joinToString("") { "%02x".format(it) },
                 project = entry.space?.name ?: terminal.foreground?.cwd ?: terminal.cwd.orEmpty(),
-                requestBody = blocked?.message.orEmpty(), requestKind = when (blocked?.reason) {
+                requestBody = NotificationMarkdown.render(blocked?.message.orEmpty()).expanded.toString(), requestKind = when (blocked?.reason) {
                     BlockedReason.PERMISSION -> "permission"
                     BlockedReason.QUESTION -> "question"
                     else -> ""

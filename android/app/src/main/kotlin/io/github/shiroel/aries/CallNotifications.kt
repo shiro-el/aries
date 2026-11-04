@@ -6,6 +6,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.text.TextUtils
 import io.github.shiroel.aries.core.CallUrgency
 import io.github.shiroel.aries.core.PushContent
 import org.json.JSONArray
@@ -100,15 +101,17 @@ object CallNotifications {
             // A new state of the same Call must not ring again.
             .setOnlyAlertOnce(true)
         fun status(line: String, detail: String? = null) {
-            builder.setContentText(line)
-            builder.setStyle(
-                Notification.BigTextStyle().bigText(listOfNotNull(call.body.ifEmpty { null }, line, detail).joinToString("\n")),
-            )
+            val display = NotificationMarkdown.render(line)
+            builder.setContentText(display.plain)
+            builder.setStyle(Notification.BigTextStyle().bigText(TextUtils.concat(
+                NotificationMarkdown.render(call.body).expanded, if (call.body.isEmpty()) "" else "\n",
+                display.expanded, if (detail == null) "" else "\n",
+                NotificationMarkdown.render(detail.orEmpty()).expanded)))
         }
         when (view) {
             CallView.Plain -> InlineNotifications.add(context, builder, notice.hostId, notice.hostName, call.terminal, notice.tag, reply = true)
             CallView.Choices -> call.choices.forEachIndexed { i, choice ->
-                builder.addAction(action(choice, choiceIntent(context, notice, i)))
+                builder.addAction(action(NotificationMarkdown.render(choice).plain, choiceIntent(context, notice, i)))
             }
             CallView.OpenApp -> builder.addAction(action(context.getString(R.string.call_notify_open_app), openApp(context, notice)))
             is CallView.Sending -> status(context.getString(R.string.call_notify_sending, call.choices.getOrElse(view.choice) { "" }))

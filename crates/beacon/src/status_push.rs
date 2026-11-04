@@ -160,6 +160,99 @@ fn clip(text: Option<String>, chars: usize) -> Option<String> {
     })
 }
 
+/// Match the phone's compact Markdown projection before spending the excerpt budget.
+fn notification_text(markdown: &str) -> String {
+    use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd, TextMergeStream};
+    let mut text = String::new();
+    let mut code = None::<String>;
+    let line = |text: &mut String| {
+        if !text.is_empty() && !text.ends_with('\n') {
+            text.push('\n');
+        }
+    };
+    for event in TextMergeStream::new(Parser::new_ext(markdown, Options::ENABLE_TABLES)) {
+        match event {
+            Event::Start(Tag::CodeBlock(_)) => code = Some(String::new()),
+            Event::Text(t) if code.is_some() => code.as_mut().unwrap().push_str(&t),
+            Event::End(TagEnd::CodeBlock) => {
+                line(&mut text);
+                if let Some(first) = code.take().unwrap().lines().find(|s| !s.trim().is_empty()) {
+                    text.push_str(first.trim());
+                }
+                line(&mut text);
+            }
+            Event::Text(t) => {
+                // Unpaired emphasis/backticks are literal Text in CommonMark. Keep
+                // ordinary arithmetic and identifier underscores while dropping remnants.
+                let chars: Vec<_> = t.chars().collect();
+                let mut i = 0;
+                while i < chars.len() {
+                    let c = chars[i];
+                    if !matches!(c, '*' | '_' | '`') {
+                        text.push(c);
+                        i += 1;
+                        continue;
+                    }
+                    let start = i;
+                    while i < chars.len() && chars[i] == c {
+                        i += 1;
+                    }
+                    let before = start.checked_sub(1).map(|j| chars[j]);
+                    let after = chars.get(i).copied();
+                    let orphan = match c {
+                        '`' => true,
+                        '*' => {
+                            i - start > 1
+                                || before.is_some_and(|c| !c.is_whitespace())
+                                    != after.is_some_and(|c| !c.is_whitespace())
+                        }
+                        '_' => {
+                            !before.is_some_and(char::is_alphanumeric)
+                                || !after.is_some_and(char::is_alphanumeric)
+                        }
+                        _ => false,
+                    };
+                    if !orphan {
+                        text.extend(&chars[start..i]);
+                    }
+                }
+            }
+            Event::Code(t) => text.push_str(&t),
+            Event::Start(Tag::Item) => {
+                line(&mut text);
+                text.push_str("• ");
+            }
+            Event::Start(Tag::TableCell) if !text.is_empty() && !text.ends_with('\n') => {
+                text.push_str(" · ");
+            }
+            Event::End(
+                TagEnd::Paragraph
+                | TagEnd::Heading(_)
+                | TagEnd::BlockQuote
+                | TagEnd::Item
+                | TagEnd::TableHead
+                | TagEnd::TableRow,
+            )
+            | Event::Rule => line(&mut text),
+            Event::SoftBreak => text.push(' '),
+            Event::HardBreak => line(&mut text),
+            Event::Html(t) | Event::InlineHtml(t) => {
+                let mut in_tag = false;
+                for c in t.chars() {
+                    match c {
+                        '<' => in_tag = true,
+                        '>' => in_tag = false,
+                        c if !in_tag => text.push(c),
+                        _ => {}
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    text.trim().to_owned()
+}
+
 #[derive(Default)]
 struct Details {
     turn: Option<u64>,
@@ -292,7 +385,10 @@ fn message(c: Change, at: u64, details: Details) -> PushMessage {
         status,
         turn: details.turn,
         question: details.question,
-        excerpt: clip(details.excerpt, EXCERPT_CHARS),
+        excerpt: clip(
+            details.excerpt.map(|text| notification_text(&text)),
+            EXCERPT_CHARS,
+        ),
         at,
     };
     // Escaped control characters can still overflow: drop the free text.

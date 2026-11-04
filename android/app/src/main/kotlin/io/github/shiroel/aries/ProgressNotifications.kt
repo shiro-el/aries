@@ -56,7 +56,7 @@ internal object ProgressNotifications {
         manager.createNotificationChannel(NotificationChannel(CHANNEL, context.getString(R.string.push_progress_channel), NotificationManager.IMPORTANCE_LOW))
         val builder = Notification.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_aries)
-            .setContentTitle(context.getString(R.string.push_status_title, p.name ?: p.terminal, notice.hostName))
+            .setContentTitle(context.getString(R.string.push_status_title, NotificationMarkdown.render(p.name ?: p.terminal).plain, notice.hostName))
             .setContentText(context.getString(R.string.push_progress_body, (p.elapsedSecs / 60uL).toLong(), p.childAgents.toLong()))
             .setWhen(p.at.toLong() * 1000)
             .setOngoing(true)

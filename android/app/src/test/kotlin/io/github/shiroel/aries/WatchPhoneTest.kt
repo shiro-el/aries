@@ -98,18 +98,18 @@ class WatchPhoneTest {
         val host = core.addHost("Host", Endpoint.Ssh("one", 22u, "me"))
         val summary = WatchPhone.summary(core.hosts(), listOf(LastKnownState(host.id, listOf(
             agent("t1", AgentStatus.Working), agent("t2", AgentStatus.Idle, pinned = true),
-            agent("t3", AgentStatus.Done), agent("t4", AgentStatus.Blocked(BlockedReason.PERMISSION, "Run tests?")),
+            agent("t3", AgentStatus.Done), agent("t4", AgentStatus.Blocked(BlockedReason.PERMISSION, "**Run** tests?")),
         ), 123u)))
         assertEquals("t4", summary.inbox.first().terminal)
         assertEquals(4, summary.inbox.size)
         core.cachedChats[host.id to "t4"] = ChatSnapshot(listOf(
             ChatEntry("a", null, ChatEntryBody.Agent("Earlier response")),
             ChatEntry("b", null, ChatEntryBody.User("User secret")),
-            ChatEntry("c", null, ChatEntryBody.Agent("Latest result")),
+            ChatEntry("c", null, ChatEntryBody.Agent("# Latest **result** with `config`")),
         ), ChatStatus.LIVE, null)
         val detailed = WatchPhone.withCachedDetails(core, summary, false).inbox.first()
         assertEquals("Run tests?", detailed.requestBody)
-        assertEquals("Latest result", detailed.conversationSummary)
+        assertEquals("Latest result with config", detailed.conversationSummary)
         val hidden = WatchPhone.withCachedDetails(core, summary, true).inbox.first()
         assertTrue(hidden.contentHidden)
         assertEquals("", hidden.requestBody)

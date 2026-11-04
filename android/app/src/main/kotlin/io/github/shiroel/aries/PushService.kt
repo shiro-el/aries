@@ -5,6 +5,8 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import io.github.shiroel.aries.ui.ThemeSettings
+import android.text.SpannedString
+import android.text.TextUtils
 import android.util.Base64
 import android.util.Log
 import com.google.firebase.messaging.FirebaseMessagingService
@@ -115,9 +117,9 @@ class PushService : FirebaseMessagingService() {
             val channel = StatusChannels.channel(context, manager, content is PushContent.Status && content.status == AgentStatus.Done)
             val (title, body) = when (content) {
                 is PushContent.Test -> context.getString(R.string.push_test_title, notice.hostName) to
-                    context.getString(R.string.push_test_body, notice.hostName)
+                    NotificationMarkdown.render(context.getString(R.string.push_test_body, notice.hostName))
                 is PushContent.Status -> {
-                    val agent = content.name ?: content.title ?: content.terminal
+                    val agent = NotificationMarkdown.render(content.name ?: content.title ?: content.terminal).plain
                     val label = context.getString(agentStatusLabel(content.status))
                     val message = when (val s = content.status) {
                         is AgentStatus.Blocked -> s.message
@@ -125,9 +127,11 @@ class PushService : FirebaseMessagingService() {
                         AgentStatus.Done -> content.excerpt
                         else -> null
                     }
-                    context.getString(R.string.push_status_title, agent, notice.hostName) to
-                        (if (content.status == AgentStatus.Done) message ?: label
-                        else message?.let { context.getString(R.string.push_status_body, label, it) } ?: label)
+                    val display = NotificationMarkdown.render(message ?: label)
+                    val body = if (content.status == AgentStatus.Done || message == null) display else
+                        NotificationText(SpannedString(TextUtils.replace(context.getText(R.string.push_status_body),
+                            arrayOf("%1\$s", "%2\$s"), arrayOf(label, display.expanded))))
+                    context.getString(R.string.push_status_title, agent, notice.hostName) to body
                 }
                 is PushContent.Progress -> return // handled above
                 is PushContent.Call -> return // shown by showCall
@@ -136,12 +140,12 @@ class PushService : FirebaseMessagingService() {
                 .setSmallIcon(R.drawable.ic_stat_aries)
                 .setColor(ThemeSettings.from(context).accentArgb)
                 .setContentTitle(title)
-                .setContentText(body)
+                .setContentText(body.plain)
                 .setAutoCancel(true)
             // One notification per Agent: its newer status replaces the older.
             if (content is PushContent.Status) {
                 val tag = content.terminal
-                builder.setStyle(Notification.BigTextStyle().bigText(body))
+                builder.setStyle(Notification.BigTextStyle().bigText(body.expanded))
                 if (content.status == AgentStatus.Done) {
                     builder.addExtras(android.os.Bundle().apply { putBoolean(NotificationVisibility.PASSIVE, true) })
                     builder.setVisibility(Notification.VISIBILITY_PRIVATE)
@@ -201,14 +205,15 @@ class PushService : FirebaseMessagingService() {
         internal fun callBuilder(context: Context, manager: NotificationManager, hostId: String, hostName: String, call: PushContent.Call): Notification.Builder {
             val context = AppLanguage.context(context)
             val choices = call.choices.takeIf { it.isNotEmpty() }
-                ?.let { context.getString(R.string.call_choices, it.joinToString(" / ")) }
-            val text = call.body.ifEmpty { choices ?: "" }
-            val big = listOfNotNull(call.body.ifEmpty { null }, choices).joinToString("\n")
+                ?.let { context.getString(R.string.call_choices, it.joinToString(" / ") { choice -> NotificationMarkdown.render(choice).plain }) }
+            val text = NotificationMarkdown.render(call.body.ifEmpty { choices ?: "" })
+            val big = TextUtils.concat(NotificationMarkdown.render(call.body).expanded,
+                if (call.body.isNotEmpty() && choices != null) "\n" else "", choices.orEmpty())
             val builder = Notification.Builder(context, callChannel(context, manager, call.urgency))
                 .setSmallIcon(R.drawable.ic_stat_aries)
                 .setColor(ThemeSettings.from(context).accentArgb)
-                .setContentTitle(call.title)
-                .setContentText(text)
+                .setContentTitle(NotificationMarkdown.render(call.title).plain)
+                .setContentText(text.plain)
                 .setSubText(hostName)
                 .setStyle(Notification.BigTextStyle().bigText(big))
                 .setWhen(call.atMs.toLong())

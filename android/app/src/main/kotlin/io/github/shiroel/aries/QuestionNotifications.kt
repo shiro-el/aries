@@ -6,6 +6,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.text.TextUtils
 import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.core.BlockedReason
 import io.github.shiroel.aries.core.PushContent
@@ -62,9 +63,9 @@ object QuestionNotifications {
             builder.addExtras(android.os.Bundle().apply { putString(QUESTION_ID, question.id) })
             question.options.forEachIndexed { choice, label ->
                 val label = if (permission) permissionChoiceResource(label)?.let(context::getString) ?: label else label
-                builder.addAction(Notification.Action.Builder(null, label, choiceIntent(context, q, choice)).build())
+                builder.addAction(Notification.Action.Builder(null, NotificationMarkdown.render(label).plain, choiceIntent(context, q, choice)).build())
             }
-            builder.setStyle(Notification.BigTextStyle().bigText(question.text))
+            builder.setStyle(Notification.BigTextStyle().bigText(NotificationMarkdown.render(question.text).expanded))
         } else {
             builder.addAction(openAction(context, notice.hostId, status.terminal))
         }
@@ -88,8 +89,10 @@ object QuestionNotifications {
                 is QuestionView.Sending -> context.getString(R.string.call_notify_sending, notice.choiceLabel(context, view.choice))
                 is QuestionView.Done -> view.line
             }
-            builder.setContentText(line)
-                .setStyle(Notification.BigTextStyle().bigText(listOf(notice.question.text, line).joinToString("\n")))
+            val display = NotificationMarkdown.render(line)
+            builder.setContentText(display.plain)
+                .setStyle(Notification.BigTextStyle().bigText(TextUtils.concat(
+                    NotificationMarkdown.render(notice.question.text).expanded, "\n", display.expanded)))
             if (view is QuestionView.Done && view.openApp) builder.addAction(openAction(context, notice.hostId, notice.terminal))
             NotificationGroups.post(context, notice.hostId, notice.hostName, notice.terminal, builder.build())
         }

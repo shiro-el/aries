@@ -27,7 +27,7 @@ internal object WatchProgressPhone {
         val previous = latest(context)
         if (previous != null && (at < previous.atMs ||
             (at == previous.atMs && previous.cancelled && previous.hostId == host && previous.terminal == progress.terminal))) return
-        save(context, WatchProgress(host, progress.terminal, (progress.name ?: progress.terminal).take(128),
+        save(context, WatchProgress(host, progress.terminal, NotificationMarkdown.render(progress.name ?: progress.terminal).plain.take(128),
             (at - millis(progress.elapsedSecs)).coerceAtLeast(0),
             progress.childAgents.coerceAtMost(Int.MAX_VALUE.toUInt()).toInt(), at))
     }
