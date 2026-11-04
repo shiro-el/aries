@@ -16,6 +16,9 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
 import java.util.Locale
@@ -75,7 +78,7 @@ fun LanguagePicker(
                             LanguageRow(automatic, selectedCode == null) { onSelect(null); open = false }
                         }
                         items(matching, key = { it.code }) { choice ->
-                            LanguageRow(choice.label, selectedCode == choice.code) { onSelect(choice.code); open = false }
+                            LanguageRow(choice.localizedName, selectedCode == choice.code, choice.nativeName) { onSelect(choice.code); open = false }
                         }
                         if (matching.isEmpty()) item {
                             Text(stringResource(R.string.language_picker_no_results), Modifier.padding(16.dp))
@@ -95,13 +98,27 @@ private data class LanguageChoice(val code: String, val localizedName: String, v
 private fun String.languageSearchKey() = filterNot { it.isWhitespace() }.lowercase(Locale.ROOT)
 
 @Composable
-private fun LanguageRow(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun LanguageRow(label: String, selected: Boolean, nativeName: String? = null, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = 48.dp)
             .selectable(selected, role = Role.RadioButton, onClick = onClick).padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         RadioButton(selected = selected, onClick = null)
-        Text(label, Modifier.padding(end = 8.dp))
+        Text(
+            buildAnnotatedString {
+                append(label)
+                if (nativeName != null) withStyle(MaterialTheme.typography.bodySmall.toSpanStyle().copy(
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )) {
+                    append(" · ")
+                    append(nativeName)
+                }
+            },
+            Modifier.weight(1f).padding(end = 8.dp),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
     }
 }
