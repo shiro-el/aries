@@ -113,7 +113,15 @@ private fun AriesContent(
                                     hostEditor = { host -> if (host.endpoint is Endpoint.Ssh) HostEditSection(model, host) },
                                 )
                             }
-                            is Screen.Connecting -> ConnectionNotice(s.link)
+                            is Screen.Connecting -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                                ConnectionNotice(s.link)
+                                if ((s.link.state as? LinkState.Down)?.error is io.github.shiroel.aries.core.CoreException.AuthRejected &&
+                                    s.host.endpoint is Endpoint.Ssh) {
+                                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        HostKeyAuthorization(model, s.host)
+                                    }
+                                }
+                            }
                             is Screen.Browse -> {
                                 BrowseScreen(
                                     s.browser,
@@ -305,9 +313,7 @@ private fun HostConnectionForm(model: HostsModel) {
         model.key == null -> ConnectionKeySetup(model)
         model.addedHost != null -> {
             val host = model.addedHost!!
-            Text(stringResource(R.string.onboarding_manual_key_body))
-            KeySection(model)
-            TextButton(onClick = { model.askPassword(host) }) { Text(stringResource(R.string.host_install_key_button)) }
+            HostKeyAuthorization(model, host)
             TextButton(onClick = { model.connect(host) }, modifier = Modifier.testTag("host-setup-connect")) {
                 Text(stringResource(R.string.onboarding_continue_button))
             }
@@ -318,6 +324,13 @@ private fun HostConnectionForm(model: HostsModel) {
         }
         else -> AddHostForm(model)
     }
+}
+
+@Composable
+private fun HostKeyAuthorization(model: HostsModel, host: Host) {
+    Text(stringResource(R.string.onboarding_manual_key_body))
+    KeySection(model)
+    TextButton(onClick = { model.askPassword(host) }) { Text(stringResource(R.string.host_install_key_button)) }
 }
 
 @Composable

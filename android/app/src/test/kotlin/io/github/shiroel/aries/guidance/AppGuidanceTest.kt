@@ -58,7 +58,10 @@ class AppGuidanceTest {
     @Test fun firstConnectionCreatesKeyInlineAndRequiresConnectionBeforeBeaconSetup() {
         prefs.edit().clear().commit()
         val state = AppGuidanceState(prefs, 1, "0.1")
-        val core = FakeCore().apply { requireTrust = "SHA256:abc" }
+        val core = FakeCore().apply {
+            requireTrust = "SHA256:abc"
+            failFor["h1"] = io.github.shiroel.aries.core.CoreException.AuthRejected()
+        }
         var permissionRequested = false
         compose.setContent {
             val scope = rememberCoroutineScope()
@@ -75,6 +78,16 @@ class AppGuidanceTest {
         compose.onNodeWithText(context.getString(R.string.host_add_button)).performScrollTo().performClick()
         compose.onNodeWithTag("onboarding-connected").assertDoesNotExist()
         compose.onNodeWithText(context.getString(R.string.host_key_trust_button)).performClick()
+        compose.onNodeWithTag("onboarding-connected").assertDoesNotExist()
+        compose.onNodeWithText(context.getString(R.string.host_install_key_button)).performScrollTo().performClick()
+        compose.onNodeWithText(context.getString(R.string.key_install_password)).performTextReplacement("one-time password")
+        compose.onNodeWithText(context.getString(R.string.key_install_button)).performClick()
+        compose.runOnIdle {
+            assertEquals(listOf("h1" to "one-time password"), core.passwordsTried)
+            core.failFor.clear()
+        }
+        compose.onNodeWithText(context.getString(R.string.ok_button)).performClick()
+        compose.onNodeWithText(context.getString(R.string.connect_retry_button)).performClick()
         compose.onNodeWithTag("onboarding-connected").assertExists()
         compose.onNodeWithText(context.getString(R.string.beacon_install_button)).performScrollTo().performClick()
         compose.onNodeWithText(context.getString(R.string.beacon_reinstall_button)).assertExists()
