@@ -486,7 +486,15 @@ fun ChatScreen(
                 onMove = { selected = navigateChatSearch(matches, active, it) },
                 onClose = ::closeSearch,
             )
-            statusText(snapshot?.status ?: ChatStatus.CONNECTING)?.let { ChatNotice(it) }
+            val chatLink = chat.link
+            val reconnecting = snapshot?.status == ChatStatus.RECONNECTING
+            chatLink?.let { link ->
+                val state = if (link.state == LinkState.Up && reconnecting) LinkState.Reconnecting else link.state
+                ConnectionNotice(link, state) { link.retryNow(); chat.retryNow() }
+            }
+            if (chatLink == null || (chatLink.state == LinkState.Up && !reconnecting)) {
+                statusText(snapshot?.status ?: ChatStatus.CONNECTING)?.let { ChatNotice(it) }
+            }
             if (snapshot != null && entries.isEmpty() && snapshot.status == ChatStatus.LIVE) {
                 Text(stringResource(R.string.chat_empty))
             }

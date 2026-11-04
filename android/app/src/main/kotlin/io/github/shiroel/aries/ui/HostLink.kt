@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Host
 import io.github.shiroel.aries.core.HostConnection
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -23,7 +24,9 @@ sealed interface LinkState {
     data object Reconnecting : LinkState
 
     /** Connecting again needs the user first ([why]): a changed Host key, a rejected key, ... */
-    data class Down(val why: Prompt.Problem) : LinkState
+    data class Down(val error: CoreException) : LinkState {
+        val why: Prompt.Problem get() = problemFor(error)
+    }
 }
 
 /** Waits between reconnect attempts; the last one repeats. A network change or the app coming back retries at once. */
@@ -45,13 +48,14 @@ const val PROBE_TIMEOUT_MS = 5_000L
  */
 class HostLink(
     val host: Host,
-    first: HostConnection,
+    first: HostConnection?,
     private val scope: CoroutineScope,
     private val connect: suspend () -> HostConnection,
-    private val onDown: (Prompt.Problem) -> Unit = {},
+    private val onDown: (CoreException) -> Unit = {},
+    private val onSettings: (CoreException?) -> Unit = {},
     private val retryDelays: List<Long> = RETRY_DELAYS_MS,
 ) {
-    var state by mutableStateOf<LinkState>(LinkState.Up)
+    var state by mutableStateOf<LinkState>(if (first == null) LinkState.Reconnecting else LinkState.Up)
         private set
 
     private val current = MutableStateFlow<HostConnection?>(first)
@@ -68,8 +72,14 @@ class HostLink(
      * failures end it. While the link reconnects it waits.
      */
     suspend fun <T> keep(block: suspend (conn: HostConnection, resumed: Boolean) -> T): T {
+        // The owner registers this link and its screen before any failure
+        // callback can run (including an immediately rejected first connect).
+        if (!closed && current.value == null && reconnecting == null) {
+            reconnecting = scope.launch { reconnect() }
+        }
         var resumed = false
         while (true) {
+            if (closed) throw CancellationException("Host link closed")
             val conn = current.filterNotNull().first()
             try {
                 return block(conn, resumed)
@@ -88,6 +98,17 @@ class HostLink(
         scope.launch { conn.disconnect() }
         reconnecting = scope.launch { reconnect() }
     }
+
+    /** Explicit user retry also resumes a permanent failure after it has been fixed. */
+    fun retryNow() {
+        if (closed) return
+        if (state is LinkState.Down) {
+            state = LinkState.Reconnecting
+            reconnecting = scope.launch { reconnect() }
+        } else poke.trySend(Unit)
+    }
+
+    fun settings() = onSettings((state as? LinkState.Down)?.error)
 
     /** The phone's network changed: the old line is likely dead, so replace it now (or retry now). */
     fun networkChanged() {
@@ -123,7 +144,6 @@ class HostLink(
         poke.tryReceive()
         var attempt = 0
         while (!closed) {
-            var waitForPoke = false
             try {
                 val conn = connect()
                 if (closed) {
@@ -134,24 +154,15 @@ class HostLink(
                 current.value = conn
                 return
             } catch (e: CoreException) {
-                when (e) {
-                    // Transient: no network yet, the Host restarting, a cut line.
-                    is CoreException.Unreachable, is CoreException.Closed, is CoreException.Protocol -> {}
-                    // A biometric key opens only with the app in front; wait for that, don't prompt in a loop.
-                    is CoreException.KeyLocked -> waitForPoke = true
-                    else -> {
-                        val why = problemFor(e)
-                        state = LinkState.Down(why)
-                        onDown(why)
-                        return
-                    }
+                // Keep the typed error. Protocol, auth, trust, permission and key
+                // unlock failures need an explicit user action, never a timer.
+                if (e !is CoreException.Unreachable && e !is CoreException.Closed) {
+                    state = LinkState.Down(e)
+                    onDown(e)
+                    return
                 }
             }
-            if (waitForPoke) {
-                poke.receive()
-            } else {
-                withTimeoutOrNull(retryDelays[minOf(attempt, retryDelays.lastIndex)]) { poke.receive() }
-            }
+            withTimeoutOrNull(retryDelays[minOf(attempt, retryDelays.lastIndex)]) { poke.receive() }
             attempt++
         }
     }

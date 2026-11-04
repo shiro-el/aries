@@ -79,6 +79,74 @@ class ReconnectTest {
         compose.onNode(hasContentDescription(text, substring = true)).assertExists()
 
     @Test
+    fun aFirstConnectionFailureRetriesAndStillOpensTheNotificationTarget() {
+        val core = FakeCore().apply { terminals = listOf(agent) }
+        val home = core.addHost("home", Endpoint.Ssh("10.0.0.2", 22u, "me"))
+        core.failWith = CoreException.Unreachable("no route")
+        start(core)
+        compose.runOnIdle { model.openPushedAgent(home.id, agent.address) }
+        compose.waitForIdle()
+        assertTrue(model.screen is Screen.Agents)
+        core.failWith = null
+        // No new navigation request: the retry must remember the original target.
+        compose.mainClock.advanceTimeBy(600)
+        compose.waitForIdle()
+        assertEquals("t1", (model.screen as Screen.Terminal).viewer.terminal.address)
+        assertEquals("t1", core.connection!!.views.single().address)
+    }
+
+    @Test
+    fun permanentFailuresStopWithoutInterruptingAnotherHostsAgent() {
+        val core = FakeCore().apply { terminals = listOf(agent) }
+        val home = core.addHost("home", Endpoint.Ssh("home", 22u, "me"))
+        val errors = listOf(
+            CoreException.AuthRejected(),
+            CoreException.HostKeyChanged("old", "new"),
+            CoreException.Rpc("permission_denied", "not allowed"),
+            CoreException.Protocol("not a core protocol"),
+            CoreException.KeyLocked(),
+        )
+        val failedHosts = errors.mapIndexed { i, error ->
+            core.addHost("broken$i", Endpoint.Ssh("broken$i", 22u, "me")).also {
+                core.failFor[it.id] = error
+            }
+        }
+        start(core)
+        compose.runOnIdle { model.openPushedAgent(home.id, agent.address) }
+        compose.waitForIdle()
+        assertTrue("another Host must not open a modal", model.prompt == null)
+        compose.runOnIdle { model.networkChanged(); model.foregrounded() }
+        compose.mainClock.advanceTimeBy(35_000)
+        compose.waitForIdle()
+        failedHosts.forEach { host ->
+            assertEquals("permanent failure for ${host.name} must wait for the user", 1,
+                core.connectAttempts.count { it == host.id })
+        }
+        assertTrue(model.prompt == null)
+        assertTrue("foreground must not bypass paused links with a separate snapshot connection",
+            failedHosts.none { it.id in core.snapshotsRequested })
+        assertEquals("t1", (model.screen as Screen.Terminal).viewer.terminal.address)
+    }
+
+    @Test
+    fun aPermanentFirstBrowseFailureCanBeFixedAndRetriedInPlace() {
+        val core = FakeCore().apply { terminals = listOf(build); failWith = CoreException.AuthRejected() }
+        val home = core.addHost("home", Endpoint.Ssh("home", 22u, "me"))
+        start(core)
+        compose.onNodeWithText("home").performClick()
+        compose.waitForIdle()
+        assertTrue(model.screen is Screen.Connecting)
+        assertEquals(1, core.connectAttempts.count { it == home.id })
+        core.failWith = null
+        compose.onNodeWithText(str(R.string.connect_retry_button)).performClick()
+        compose.waitForIdle()
+        assertEquals(home.id, (model.screen as Screen.Browse).browser.host.id)
+        compose.onNodeWithText("build").performClick()
+        compose.waitForIdle()
+        assertEquals("t2", core.connection!!.views.single().address)
+    }
+
+    @Test
     fun aDroppedLineShowsReconnectingThenReattachesTheOpenTerminalResumed() {
         val core = FakeCore().apply { terminals = listOf(build) }
         val first = openBuild(core)
@@ -167,7 +235,6 @@ class ReconnectTest {
         first.end()
         compose.waitForIdle()
 
-        compose.onNodeWithText(str(R.string.terminal_connection_closed)).assertExists()
         compose.onNodeWithText(str(R.string.host_key_changed_title)).assertExists()
         compose.onNodeWithText(str(R.string.reconnecting)).assertDoesNotExist()
     }
