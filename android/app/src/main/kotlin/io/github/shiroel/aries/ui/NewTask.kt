@@ -36,6 +36,8 @@ internal val LocalStartTask = compositionLocalOf<((TaskIssue?) -> Unit)?> { null
 internal class NewTask(link: HostLink, val form: LaunchForm, prompt: String) {
     var link by mutableStateOf(link)
     var input by mutableStateOf(TextFieldValue(prompt, TextRange(prompt.length)))
+    // A non-null path owns the open folder browser across Activity recreation.
+    var browsingPath by mutableStateOf<String?>(null)
     val prompt: String get() = input.text
     var terminal by mutableStateOf<TerminalInfo?>(null)
         private set
@@ -189,7 +191,6 @@ internal fun NewTaskAccess(model: HostsModel, content: @Composable () -> Unit) {
 internal fun NewTaskDialog(task: NewTask, onStart: () -> Unit, onOpenChat: () -> Unit, onDismiss: () -> Unit,
     fullScreen: Boolean = false) {
     val form = task.form
-    var browsing by remember(task) { mutableStateOf(false) }
     var options by remember(task) { mutableStateOf(false) }
     var savedOpen by remember(task) { mutableStateOf(false) }
     val editable = !form.busy && task.terminal == null && !task.launchUnknown
@@ -225,7 +226,7 @@ internal fun NewTaskDialog(task: NewTask, onStart: () -> Unit, onOpenChat: () ->
                 supportingText = { Text(stringResource(R.string.new_task_folder_hint)) },
                 isError = form.cwd.isNotBlank() && !form.cwd.startsWith('/'),
                 modifier = Modifier.testTag("launch_cwd"))
-            TextButton(onClick = { browsing = true }, enabled = editable && task.link.connection != null) {
+            TextButton(onClick = { task.browsingPath = form.cwd.ifBlank { "/" } }, enabled = editable && task.link.connection != null) {
                 Text(stringResource(R.string.new_task_browse))
             }
             if (!fullScreen) promptField()
@@ -235,14 +236,9 @@ internal fun NewTaskDialog(task: NewTask, onStart: () -> Unit, onOpenChat: () ->
                 ConsoleField(form.command, { form.command = it }, enabled = editable,
                     singleLine = true, label = { Text(stringResource(R.string.launch_preset_args)) })
             }
-            NewTaskStatus(task)
+            NewTaskRecovery(task)
             val starting = stringResource(R.string.new_task_starting)
             if (form.busy) ConsoleProgress(Modifier.fillMaxWidth().semantics { contentDescription = starting })
-            if (task.launchUnknown && !form.busy) {
-                val owner = LocalTaskOwner.current
-                Text(stringResource(R.string.launch_stop_tracking_body))
-                TextButton(onClick = { owner?.stopTrackingTask() }) { Text(stringResource(R.string.launch_stop_tracking_button)) }
-            }
             if (task.terminal != null && !form.busy) TextButton(onClick = onOpenChat) { Text(stringResource(LocalLayoutScreens.current.openTaskLabel)) }
         }
     }
@@ -268,14 +264,22 @@ internal fun NewTaskDialog(task: NewTask, onStart: () -> Unit, onOpenChat: () ->
             Text(stringResource(if (task.terminal == null) LocalLayoutScreens.current.startTaskLabel else R.string.new_task_wait_again))
         } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel_button)) } })
-    if (browsing) TaskFolderDialog(task.link.connection, form.cwd.ifBlank { "/" },
-        onSelect = { form.cwd = it; browsing = false }, onDismiss = { browsing = false })
+    NewTaskFolderBrowser(task)
+}
+
+/** Only the active task surface renders this retained browser. Directory reads can safely restart. */
+@Composable
+internal fun NewTaskFolderBrowser(task: NewTask) {
+    task.browsingPath?.let { path ->
+        TaskFolderDialog(task.link.connection, path, onNavigate = { task.browsingPath = it },
+            onSelect = { task.form.cwd = it; task.browsingPath = null }, onDismiss = { task.browsingPath = null })
+    }
 }
 
 /** Explicit paths use list_files on the Host without needing an existing Terminal. */
 @Composable
-internal fun TaskFolderDialog(connection: HostConnection?, initial: String, onSelect: (String) -> Unit, onDismiss: () -> Unit) {
-    var path by remember { mutableStateOf(initial) }
+internal fun TaskFolderDialog(connection: HostConnection?, path: String, onNavigate: (String) -> Unit,
+    onSelect: (String) -> Unit, onDismiss: () -> Unit) {
     var directory by remember { mutableStateOf<RemoteDirectory?>(null) }
     var error by remember { mutableStateOf(false) }
     var revision by remember { mutableIntStateOf(0) }
@@ -290,7 +294,7 @@ internal fun TaskFolderDialog(connection: HostConnection?, initial: String, onSe
         Column {
             Text(directory?.path ?: path)
             Row {
-                TextButton(onClick = { path = path.trimEnd('/').substringBeforeLast('/').ifBlank { "/" } }, enabled = path != "/") {
+                TextButton(onClick = { onNavigate(path.trimEnd('/').substringBeforeLast('/').ifBlank { "/" }) }, enabled = path != "/") {
                     Text(stringResource(R.string.files_parent_folder_button))
                 }
                 TextButton(onClick = { revision++ }) { Text(stringResource(R.string.github_refresh)) }
@@ -299,7 +303,7 @@ internal fun TaskFolderDialog(connection: HostConnection?, initial: String, onSe
             else if (directory == null) ConsoleProgress(Modifier.fillMaxWidth())
             LazyColumn(Modifier.heightIn(max = 320.dp)) {
                 items(directory?.entries.orEmpty().filter { it.directory }, key = { it.name }) { entry ->
-                    TextButton(onClick = { path = directory!!.path.trimEnd('/') + "/" + entry.name }) { Text(entry.name) }
+                    TextButton(onClick = { onNavigate(directory!!.path.trimEnd('/') + "/" + entry.name) }) { Text(entry.name) }
                 }
             }
         }
@@ -318,4 +322,14 @@ internal fun NewTaskStatus(task: NewTask) {
     }
     AnnouncedText(message, color = if (task.form.error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
         style = MaterialTheme.typography.bodySmall)
+}
+
+/** Every task entry exposes the same way to retire an uncertain launch without replaying it. */
+@Composable
+internal fun NewTaskRecovery(task: NewTask, owner: HostsModel? = LocalTaskOwner.current) {
+    NewTaskStatus(task)
+    if (task.launchUnknown && !task.form.busy && owner != null) {
+        Text(stringResource(R.string.launch_stop_tracking_body))
+        TextButton(onClick = owner::stopTrackingTask) { Text(stringResource(R.string.launch_stop_tracking_button)) }
+    }
 }

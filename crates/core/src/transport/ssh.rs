@@ -487,6 +487,7 @@ impl Ssh {
         // russh's exec() only enqueues the request. Wait for the Host's
         // acknowledgement under the same opening deadline. Some Hosts send
         // stdout first; that also proves execution, and must be replayed.
+        let mut outcome = super::CommandExit::default();
         let prefix = loop {
             match channel.wait().await {
                 Some(russh::ChannelMsg::Success) => break Vec::new(),
@@ -497,7 +498,14 @@ impl Ssh {
                         detail: "SSH exec was refused".into(),
                     });
                 }
+                Some(russh::ChannelMsg::ExtendedData { data, ext: 1 }) => outcome.stderr(&data),
+                Some(russh::ChannelMsg::ExitStatus { exit_status }) => {
+                    outcome.status = Some(exit_status)
+                }
                 Some(russh::ChannelMsg::Close) | None => {
+                    if command == REMOTE_COMMAND && outcome.missing_core() {
+                        return Err(CoreError::HerdrCoreMissing);
+                    }
                     return Err(crate::error::protocol(
                         "SSH exec ended before acknowledgement; its result is unknown",
                     ));
@@ -506,13 +514,55 @@ impl Ssh {
             }
         };
         let session = Arc::new(session);
-        let (reader, writer) = tokio::io::split(channel.into_stream());
+        let (reader, writer, command_exit, task) = if command == REMOTE_COMMAND {
+            // into_stream discards stderr and exit status. Preserve those until
+            // hello succeeds, so a missing executable is not retried as a network loss.
+            let (mut incoming, outgoing) = channel.split();
+            let writer =
+                Box::new(outgoing.make_writer()) as Box<dyn tokio::io::AsyncWrite + Send + Unpin>;
+            let (reader, mut output) = tokio::io::duplex(64 * 1024);
+            let (tx, rx) = tokio::sync::oneshot::channel();
+            let task = tokio::spawn(async move {
+                use tokio::io::AsyncWriteExt;
+                while let Some(msg) = incoming.wait().await {
+                    match msg {
+                        russh::ChannelMsg::Data { data } => {
+                            if output.write_all(&data).await.is_err() {
+                                return;
+                            }
+                        }
+                        russh::ChannelMsg::ExtendedData { data, ext: 1 } => outcome.stderr(&data),
+                        russh::ChannelMsg::ExitStatus { exit_status } => {
+                            outcome.status = Some(exit_status)
+                        }
+                        russh::ChannelMsg::Close => break,
+                        _ => {}
+                    }
+                }
+                let _ = tx.send(outcome);
+            });
+            (
+                Box::new(reader) as Box<dyn tokio::io::AsyncRead + Send + Unpin>,
+                writer,
+                Some(rx),
+                Some(super::CommandTask(task.abort_handle())),
+            )
+        } else {
+            let (reader, writer) = tokio::io::split(channel.into_stream());
+            (
+                Box::new(reader) as Box<dyn tokio::io::AsyncRead + Send + Unpin>,
+                Box::new(writer) as Box<dyn tokio::io::AsyncWrite + Send + Unpin>,
+                None,
+                None,
+            )
+        };
         use tokio::io::AsyncReadExt;
         Ok(Stream {
             reader: Box::new(std::io::Cursor::new(prefix).chain(reader)),
             writer: Box::new(writer),
             // The jump sessions carry the Host's; keep them all alive.
-            guard: Box::new((Mutex::new(sessions), session.clone())),
+            guard: Box::new((Mutex::new(sessions), session.clone(), task)),
+            command_exit,
             ssh: Some(session),
         })
     }
