@@ -128,7 +128,6 @@ class ChatProfileActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        getSharedPreferences("chat_reading_positions", MODE_PRIVATE).edit().clear().apply()
         // Decode input bytes before the timed workload.
         picture
         Composer.setTracer(tracer)

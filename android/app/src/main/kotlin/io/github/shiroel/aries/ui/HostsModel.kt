@@ -86,7 +86,12 @@ sealed interface Screen {
     data class Browse(val browser: HostBrowser) : Screen
 
     /** One Terminal. Drafts belong to HostsModel; Back returns to [returnTo]. */
-    data class Terminal(val viewer: TerminalViewer, val returnTo: Screen) : Screen
+    data class Terminal(
+        val viewer: TerminalViewer,
+        val returnTo: Screen,
+        /** An in-place toggle belongs to the same Chat visit. */
+        val fromChatToggle: Boolean = false,
+    ) : Screen
 
     /** Every Host's Agents in one list. */
     data class Agents(val board: AgentBoard) : Screen
@@ -1457,12 +1462,15 @@ class HostsModel(
     internal fun taskChanges(key: AgentKey) = taskChanges.getOrPut(key) { TasksChangesState() }
     internal fun taskChangeStats(key: AgentKey, terminal: TerminalInfo) = taskChanges[key]?.takeIf { it.matches(terminal) }?.stats
 
-    private fun chat(link: HostLink?, terminal: TerminalInfo, returnTo: Screen, draft: String = "") {
+    private fun chat(link: HostLink?, terminal: TerminalInfo, returnTo: Screen, draft: String = "",
+        preserveReadingPosition: Boolean = false) {
         val line = link ?: return
         viewing?.cancel()
         viewing = null
         liveChat?.stop()
         val chat = conversation(line, terminal)
+        // Drafts/answers belong to the cached conversation; the viewport belongs to this visit.
+        if (!preserveReadingPosition) chat.readingSession = ChatReadingSession()
         if (draft.isNotEmpty()) chat.appendDraft(draft)
         screen = Screen.Chat(chat, returnTo)
         chat.start(scope, paused = screensPaused)
@@ -1485,14 +1493,14 @@ class HostsModel(
                     val link = s.viewer.link ?: return
                     viewing?.cancel()
                     viewing = null
-                    chat(link, s.viewer.terminal, s.returnTo)
+                    chat(link, s.viewer.terminal, s.returnTo, preserveReadingPosition = s.fromChatToggle)
                 }
             }
             is Screen.Chat -> {
                 if (view != AgentView.TERMINAL) return
                 val link = s.chat.link ?: return
                 s.chat.stop()
-                observe(link, s.chat.terminal, s.returnTo)
+                observe(link, s.chat.terminal, s.returnTo, fromChatToggle = true)
             }
             else -> return
         }
@@ -1539,7 +1547,7 @@ class HostsModel(
     }
 
     /** Re-attaches with `resumed` on each new line, so the screen comes back after a network change. */
-    private fun observe(link: HostLink, terminal: TerminalInfo, returnTo: Screen) {
+    private fun observe(link: HostLink, terminal: TerminalInfo, returnTo: Screen, fromChatToggle: Boolean = false) {
         viewing?.cancel()
         if (returnTo !is Screen.Chat) liveChat?.stop()
         val owner = conversation(link, terminal)
@@ -1547,7 +1555,7 @@ class HostsModel(
         viewer.inputHistory = owner.inputHistory
         viewer.link = link
         if (attachMode == AttachMode.INPUT) viewer.startTyping()
-        screen = Screen.Terminal(viewer, returnTo)
+        screen = Screen.Terminal(viewer, returnTo, fromChatToggle)
         viewing = scope.launch {
             try {
                 link.keepWatching(onFailure = { viewer.watchError = it }, onStart = { viewer.watchError = null }) { conn, resumed ->

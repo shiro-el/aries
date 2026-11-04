@@ -3,7 +3,6 @@ HPLio/github/shiroel/aries/ui/ChatFileLinksKt;->chatFileLocation(Ljava/lang/Stri
 HPLio/github/shiroel/aries/ui/ChatFileLinksKt;->looksLikeFile(Ljava/lang/String;)Z
 HPLio/github/shiroel/aries/ui/ChatMarkdownKt;->ChatMarkdownBlockView(Lio/github/shiroel/aries/ui/ChatMarkdownBlock;Landroidx/compose/ui/Modifier;Ljava/lang/String;ZLandroidx/compose/runtime/Composer;I)V
 HPLio/github/shiroel/aries/ui/ChatMarkdownKt;->markdownSource(Lio/github/shiroel/aries/core/ChatEntryBody;)Ljava/lang/String;
-HPLio/github/shiroel/aries/ui/ChatReadingStore;->save(Lio/github/shiroel/aries/ui/ChatReadingPosition;)V
 HPLio/github/shiroel/aries/ui/ChatScreenKt$ChatHistoryTranscript$lambda$0$0$$inlined$items$2;->invoke(Ljava/lang/Object;)Ljava/lang/Object;
 HPLio/github/shiroel/aries/ui/ChatScreenKt;->ChatHistoryTranscript$lambda$0$0$1(Lio/github/shiroel/aries/ui/ChatTranscriptRow;)Ljava/lang/Object;
 HPLio/github/shiroel/aries/ui/ChatScrollKt$rememberChatScrollState$1$1$2;->emit(Lkotlin/Triple;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;+]Landroidx/compose/foundation/lazy/LazyListItemInfo;Landroidx/compose/foundation/lazy/LazyListMeasuredItem;]Landroidx/compose/foundation/lazy/LazyListLayoutInfo;Landroidx/compose/foundation/lazy/LazyListMeasureResult;]Ljava/util/List;Lkotlin/collections/builders/ListBuilder;]Ljava/util/Set;Lkotlin/collections/EmptySet;
@@ -1397,8 +1396,6 @@ PLio/github/shiroel/aries/ui/ChatReadingPosition;->getIndex()I
 PLio/github/shiroel/aries/ui/ChatReadingPosition;->getOffset()I
 PLio/github/shiroel/aries/ui/ChatReadingPosition;->getPending()Ljava/util/Set;
 PLio/github/shiroel/aries/ui/ChatReadingPosition;->getTranscriptTail()Ljava/lang/String;
-PLio/github/shiroel/aries/ui/ChatReadingStore;-><init>(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;)V
-PLio/github/shiroel/aries/ui/ChatReadingStore;->load()Lio/github/shiroel/aries/ui/ChatReadingPosition;
 PLio/github/shiroel/aries/ui/ChatRenderedEntries;-><clinit>()V
 PLio/github/shiroel/aries/ui/ChatRenderedEntries;-><init>()V
 PLio/github/shiroel/aries/ui/ChatRenderedEntries;->update(Ljava/util/List;Ljava/util/Map;)Ljava/util/List;
@@ -1522,10 +1519,8 @@ PLio/github/shiroel/aries/ui/ChatScrollKt$$ExternalSyntheticLambda1;->invoke(Lja
 PLio/github/shiroel/aries/ui/ChatScrollKt$rememberChatScrollState$1$1$$ExternalSyntheticLambda0;-><init>(Landroidx/compose/runtime/State;Lio/github/shiroel/aries/ui/ChatScrollState;)V
 PLio/github/shiroel/aries/ui/ChatScrollKt$rememberChatScrollState$1$1$$ExternalSyntheticLambda0;->invoke()Ljava/lang/Object;
 PLio/github/shiroel/aries/ui/ChatScrollKt$rememberChatScrollState$1$1$2$emit$1;-><init>(Lio/github/shiroel/aries/ui/ChatScrollKt$rememberChatScrollState$1$1$2;Lkotlin/coroutines/Continuation;)V
-PLio/github/shiroel/aries/ui/ChatScrollKt$rememberChatScrollState$1$1$2;-><init>(Lio/github/shiroel/aries/ui/ChatModel;Lkotlin/jvm/internal/Ref$ObjectRef;Lkotlin/jvm/internal/Ref$ObjectRef;Lio/github/shiroel/aries/ui/ChatScrollState;Lkotlin/jvm/internal/Ref$ObjectRef;Lkotlin/jvm/internal/Ref$ObjectRef;Lkotlin/jvm/internal/Ref$IntRef;Lkotlin/jvm/internal/Ref$ObjectRef;Lio/github/shiroel/aries/ui/ChatReadingPosition;Lkotlin/jvm/internal/Ref$ObjectRef;Lio/github/shiroel/aries/ui/ChatReadingStore;)V
 PLio/github/shiroel/aries/ui/ChatScrollKt$rememberChatScrollState$1$1$2;->emit$viewport(Lio/github/shiroel/aries/ui/ChatScrollState;)Lkotlin/Pair;
 PLio/github/shiroel/aries/ui/ChatScrollKt$rememberChatScrollState$1$1$2;->emit(Ljava/lang/Object;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-PLio/github/shiroel/aries/ui/ChatScrollKt$rememberChatScrollState$1$1;-><init>(Lio/github/shiroel/aries/ui/ChatReadingPosition;Lio/github/shiroel/aries/ui/ChatScrollState;Landroidx/compose/runtime/State;Lio/github/shiroel/aries/ui/ChatModel;Lio/github/shiroel/aries/ui/ChatReadingStore;Lkotlin/coroutines/Continuation;)V
 PLio/github/shiroel/aries/ui/ChatScrollKt$rememberChatScrollState$1$1;->create(Ljava/lang/Object;Lkotlin/coroutines/Continuation;)Lkotlin/coroutines/Continuation;
 PLio/github/shiroel/aries/ui/ChatScrollKt$rememberChatScrollState$1$1;->invokeSuspend$lambda$0(Landroidx/compose/runtime/State;Lio/github/shiroel/aries/ui/ChatScrollState;)Lkotlin/Triple;
 PLio/github/shiroel/aries/ui/ChatScrollKt$rememberChatScrollState$1$1;->invokeSuspend(Ljava/lang/Object;)Ljava/lang/Object;

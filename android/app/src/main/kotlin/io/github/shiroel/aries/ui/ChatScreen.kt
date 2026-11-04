@@ -117,6 +117,7 @@ class ChatModel(
     /** Runs the calls that sign in to the Host (see [HostsModel]). */
     private val keyWork: CoroutineContext = EmptyCoroutineContext,
 ) {
+    internal var readingSession by mutableStateOf(ChatReadingSession())
     internal val files = RemoteFilesPanel()
     internal val preview = LocalhostPreview()
     internal var selectedSearchMatch by mutableStateOf<ChatSearchMatch?>(null)
