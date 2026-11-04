@@ -46,6 +46,7 @@ class GithubScreenTest {
         compose.onNodeWithText("octo/project").assertExists()
         compose.onNodeWithContentDescription(str(R.string.github_next)).performClick()
         compose.onNodeWithText(str(R.string.github_prs)).performClick()
+        compose.onNodeWithTag("github-state-filter").performClick()
         compose.onNodeWithText(str(R.string.github_closed)).performClick()
         compose.onNodeWithTag("github-search").performTextInput("search term")
         compose.onNodeWithContentDescription(str(R.string.github_search_button)).performClick()
@@ -53,12 +54,12 @@ class GithubScreenTest {
             assertEquals(listOf("PULL_REQUEST", "CLOSED", "search term", "1"), conn.githubRequests.last())
             assertEquals(1, conn.githubRepoReads)
         }
-        compose.onNodeWithText("#42 · Issue title").assertExists()
+        compose.onNodeWithText("Issue title").assertExists()
     }
 
     @Test fun draftAndMarkdownPreviewSurviveNavigationAndFailedPost() {
         val conn = open()
-        compose.onNodeWithText("#42 · Issue title").performClick()
+        compose.onNodeWithText("Issue title").performClick()
         compose.onNodeWithText("Issue body").assertExists()
         compose.onNodeWithTag("github-comment").performTextInput("**draft markdown**")
         compose.onNodeWithText(str(R.string.github_preview)).performClick()
@@ -69,7 +70,7 @@ class GithubScreenTest {
         compose.onNodeWithTag("github-back").performClick()
         compose.onNodeWithTag("agent-actions").performClick()
         compose.onNodeWithText(str(R.string.github_button)).performClick()
-        compose.onNodeWithText("#42 · Issue title").performClick()
+        compose.onNodeWithText("Issue title").performClick()
         compose.onNodeWithTag("github-comment").assertTextContains("**draft markdown**")
         compose.runOnIdle { conn.githubFailure = CoreException.Closed() }
         compose.onNodeWithText(str(R.string.github_send)).performClick()
@@ -88,9 +89,12 @@ class GithubScreenTest {
 
     @Test fun issueCanBeClosedAndReopened() {
         val conn = open()
-        compose.onNodeWithText("#42 · Issue title").performClick()
+        compose.onNodeWithText("Issue title").performClick()
+        compose.onNodeWithContentDescription(str(R.string.github_item_actions)).performClick()
         compose.onNodeWithText(str(R.string.github_close_issue)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.github_item_actions)).performClick()
         compose.onNodeWithText(str(R.string.github_reopen_issue)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.github_item_actions)).performClick()
         compose.onNodeWithText(str(R.string.github_close_issue)).assertExists()
         compose.runOnIdle { assertEquals(listOf(42u to true, 42u to false), conn.githubStateChanges) }
     }
@@ -99,7 +103,7 @@ class GithubScreenTest {
         val conn = open {
             it.githubPage = it.githubPage.copy(items = it.githubPage.items.map { item -> item.copy(kind = GithubKind.PULL_REQUEST, title = "Pull request") })
         }
-        compose.onNodeWithText("#42 · Pull request").performClick()
+        compose.onNodeWithText("Pull request").performClick()
         compose.onNodeWithText(str(R.string.github_close_issue)).assertDoesNotExist()
         compose.onNodeWithText(str(R.string.github_reopen_issue)).assertDoesNotExist()
         compose.onNodeWithTag("github-comment").performTextInput("PR comment")
@@ -116,6 +120,6 @@ class GithubScreenTest {
         compose.onNodeWithText(str(R.string.github_auth)).assertExists()
         compose.runOnIdle { conn.githubFailure = null }
         compose.onNodeWithContentDescription(str(R.string.github_refresh)).performClick()
-        compose.onNodeWithText("#42 · Issue title").assertExists()
+        compose.onNodeWithText("Issue title").assertExists()
     }
 }

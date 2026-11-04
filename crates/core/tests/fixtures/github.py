@@ -32,7 +32,8 @@ elif args == ["api", "--hostname", "github.example.com", "--method", "GET", "sea
     ]}))
 elif args == ["api", "--hostname", "github.example.com", "--method", "GET", "repos/octo/project/issues/42"]:
     print(json.dumps({"number": 42, "title": "Issue title", "state": "open", "user": None,
-        "created_at": "2026-11-04T00:00:00Z", "body": "# Hello\n```rust\nlet n = 1;\n```"}))
+        "created_at": "2026-11-04T00:00:00Z", "body": "# Hello\n```rust\nlet n = 1;\n```",
+        **({"pull_request": {}} if scenario in ("pr_detail_draft", "pr_detail_merged") else {})}))
 elif args == ["api", "--hostname", "github.example.com", "--method", "GET", "repos/octo/project/issues/42/comments", "-f", "per_page=100", "--paginate", "--slurp"]:
     print(json.dumps([
         [{"id": 1, "body": "**first**", "user": {"login": "octocat"}, "created_at": "2026-11-04T00:00:00Z"}],
@@ -50,7 +51,8 @@ elif args == ["api", "--hostname", "github.example.com", "--method", "GET", "rep
         [{"sha": "b" * 40, "author": None, "commit": {"message": "Other commit", "author": {"name": "Git author", "date": "2026-11-04T00:01:00Z"}}}]
     ]))
 elif args == ["api", "--hostname", "github.example.com", "--method", "GET", "repos/octo/project/pulls/42"]:
-    print(json.dumps({"number": 42, "head": {"sha": "c" * 40}}))
+    print(json.dumps({"number": 42, "head": {"sha": "c" * 40, "ref": "feature/한글"}, "base": {"ref": "main"},
+        "draft": scenario == "pr_detail_draft", "merged": scenario == "pr_detail_merged"}))
 elif args == ["api", "--hostname", "github.example.com", "--method", "GET", "repos/octo/project/commits/" + "c" * 40 + "/check-runs", "-f", "per_page=100", "--paginate", "--slurp"]:
     print(json.dumps([
         {"total_count": 2, "check_runs": [{"name": "Android CI", "status": "completed", "conclusion": "failure"}]},
