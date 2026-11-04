@@ -72,6 +72,7 @@ class AppGuidanceTest {
         compose.onNodeWithTag("onboarding-manual").performClick()
         screenshot("inline-key")
         compose.onNodeWithText(context.getString(R.string.key_create_button)).performScrollTo().performClick()
+        screenshot("manual-key-and-host")
         compose.onNodeWithTag("onboarding-connected").assertDoesNotExist()
         compose.onNodeWithText(context.getString(R.string.host_add_address)).performScrollTo().performTextReplacement("desk.example")
         compose.onNodeWithText(context.getString(R.string.host_add_user)).performScrollTo().performTextReplacement("me")
