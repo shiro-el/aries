@@ -478,7 +478,7 @@ class ChatModel(
 
     /** Home previews must come from an active, caught-up watch of this exact turn/status. */
     internal fun currentTranscript(current: TerminalInfo): ChatSnapshot? = snapshot?.takeIf {
-        transcriptReady && (link == null || link?.state == LinkState.Up) &&
+        transcriptReady && transcriptConnection === link?.connection && (link == null || link?.state == LinkState.Up) &&
             transcriptTerminal?.let { source ->
                 source.turn == current.turn && source.statusMs == current.statusMs && source.agentStatus == current.agentStatus
             } == true
@@ -917,6 +917,8 @@ class ChatModel(
 
     private fun startWatch() {
         val scope = scope ?: return
+        // Late packets from a retired watch cannot certify a replacement send line.
+        val sendConnection = link?.connection
         job?.cancel()
         watch?.stop()
         watch = null
@@ -958,7 +960,7 @@ class ChatModel(
                     snapshot = ChatSnapshot(update.order.mapNotNull { entries[it] }, update.status, update.cursor, update.usage)
                     connectionError = null
                     transcriptTerminal = terminal
-                    transcriptConnection = link?.connection
+                    transcriptConnection = sendConnection
                     transcriptReady = update.status == ChatStatus.LIVE
                     if (update.status in setOf(ChatStatus.ENDED, ChatStatus.NO_TERMINAL, ChatStatus.NO_AGENT)) {
                         returnWaitingToDraft()
