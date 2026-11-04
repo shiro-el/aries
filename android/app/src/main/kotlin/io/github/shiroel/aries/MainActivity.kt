@@ -38,13 +38,12 @@ class MainActivity : AppCompatActivity() {
         lockSession = AppLockSession(app.appLock, appUnlock, ::resumeUnlockedUi)
         // Entry targets wait behind the lock and survive recreation until consumed.
         if (savedInstanceState == null) {
-            pushTarget = PushTarget.from(intent)
+            pushIntent = intent.takeIf { PushTarget.from(it) != null }
             tileRequested = isTileIntent(intent)
             savedLaunchIntent = intent.takeIf { SavedLaunchTarget.from(it) != null }
             shareIntent = intent
-            NotificationGroups.opened(this, intent)
         } else {
-            pushTarget = PushTarget.from(savedInstanceState.getParcelable<Intent>("pending-push-target"))
+            pushIntent = savedInstanceState.getParcelable<Intent>("pending-push-target")
             savedLaunchIntent = savedInstanceState.getParcelable<Intent>("pending-launch-target")
             tileRequested = savedInstanceState.getBoolean("pending-tile-target")
             shareIntent = savedInstanceState.getParcelable("pending-share-intent")
@@ -84,7 +83,7 @@ class MainActivity : AppCompatActivity() {
     private var network: NetworkWatch? = null
 
     /** Pending entry targets wait for the model and the resumed biometric authorizer. */
-    private var pushTarget: PushTarget? = null
+    private var pushIntent: Intent? = null
     private var tileRequested = false
     private var savedLaunchIntent: Intent? = null
     private fun isTileIntent(intent: Intent?) = intent?.action == AgentSurfaces.OPEN_ATTENTION &&
@@ -104,16 +103,15 @@ class MainActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        NotificationGroups.opened(this, intent)
         intent.takeIf { SavedLaunchTarget.from(it) != null }?.let {
-            pushTarget = null
+            pushIntent = null
             tileRequested = false
             savedLaunchIntent = it
             openEntryTarget()
         }
         if (isTileIntent(intent)) {
             savedLaunchIntent = null
-            pushTarget = null
+            pushIntent = null
             tileRequested = true
             openEntryTarget()
         }
@@ -123,7 +121,7 @@ class MainActivity : AppCompatActivity() {
         PushTarget.from(intent)?.let {
             savedLaunchIntent = null
             tileRequested = false
-            pushTarget = it
+            pushIntent = intent
             openEntryTarget()
         }
     }
@@ -144,15 +142,17 @@ class MainActivity : AppCompatActivity() {
             m.start(layout = ThemeSettings.from(this).layout)
             return
         }
-        val target = pushTarget
-        pushTarget = null
+        val incoming = pushIntent
+        pushIntent = null
+        val target = PushTarget.from(incoming)
+        if (target != null && incoming != null) NotificationGroups.opened(this, incoming)
         m.start(target, layout = ThemeSettings.from(this).layout)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         // A language change recreates the activity; keep its Settings destination open.
         outState.putBoolean("settings-open", model?.screen == io.github.shiroel.aries.ui.Screen.Settings)
-        outState.putParcelable("pending-push-target", pushTarget?.intent(this))
+        outState.putParcelable("pending-push-target", pushIntent)
         // Preserve the received credential (or its absence); recreation must never sign an external entry.
         outState.putParcelable("pending-launch-target", savedLaunchIntent)
         outState.putBoolean("pending-tile-target", tileRequested)
