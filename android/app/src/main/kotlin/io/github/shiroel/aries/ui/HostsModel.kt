@@ -36,6 +36,7 @@ import io.github.shiroel.aries.core.TerminalUpdate
 import io.github.shiroel.aries.core.KeyProtection
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -44,12 +45,15 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.dropWhile
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 
 /** A message for the user: a string resource and its format arguments. */
@@ -345,9 +349,18 @@ class HostsModel(
         }
     }
 
+    private var screensPaused = false
+    private val screensActive = MutableStateFlow(true)
+    private val foregroundPulls = mutableSetOf<Job>()
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private suspend fun connectScreen(hostId: String): HostConnection = screensActive.transformLatest { active ->
+        if (active) emit(withContext(keyWork) { core.connect(hostId) })
+    }.first()
+
     private fun link(host: Host, conn: HostConnection?, onDown: (CoreException) -> Unit = {}) = HostLink(
         host, conn, scope,
-        connect = { withContext(keyWork) { core.connect(host.id) } },
+        connect = { connectScreen(host.id) },
         onDown = onDown,
         onSettings = { error ->
             when (error) {
@@ -357,7 +370,8 @@ class HostsModel(
                 else -> openHostSettings(host)
             }
         },
-    )
+    ).also { if (screensPaused) it.pause() }
+
 
     /** Every line the screens use now: the open Host's and the Agent list's. */
     private val links: List<HostLink> get() = listOfNotNull(browseLink, callLink) + agentLinks.values
@@ -369,12 +383,29 @@ class HostsModel(
      * own line, see `ChatWatch`) through [ChatModel.reconnect].
      */
     fun networkChanged() {
+        if (screensPaused) return
         links.forEach { it.networkChanged() }
         liveChat?.reconnect()
     }
 
-    /** The app is back in the foreground: reconnect any line that died meanwhile. */
+    /** Screen work releases its connections while notification workers keep their own ownership. */
+    fun backgrounded() {
+        screensPaused = true
+        screensActive.value = false
+        foregroundPulls.toList().forEach { it.cancel() }
+        links.forEach { it.pause() }
+        liveChat?.pause()
+    }
+
+    fun resumeScreens() {
+        screensPaused = false
+        screensActive.value = true
+        links.forEach { it.resume() }
+        liveChat?.resume()
+    }
+
     fun foregrounded() {
+        resumeScreens()
         links.forEach { it.check() }
         liveChat?.retryNow()
         val startupHost = startupHostId
@@ -388,7 +419,8 @@ class HostsModel(
 
     /** Foreground refresh, including biometric Hosts; surfaces use WorkManager instead. */
     fun refreshLastKnownState(hostId: String) {
-        scope.launch {
+        if (screensPaused) return
+        val pull = scope.launch {
             try {
                 val connection = links.firstOrNull { it.host.id == hostId }?.connection
                 withContext(keyWork) {
@@ -398,6 +430,8 @@ class HostsModel(
                 // Keep the previous value and its age on a failed pull.
             }
         }
+        foregroundPulls += pull
+        pull.invokeOnCompletion { foregroundPulls -= pull }
     }
 
     /** The Chat that is open, or still running under the Terminal opened from it. */
@@ -603,6 +637,7 @@ class HostsModel(
         status = scope.launch {
             link.keep { conn, _ ->
                 if (screen !== connecting) return@keep
+
                 val browser = HostBrowser(host)
                 browser.layoutEditor = LayoutEditor(browser, scope)
                 browser.link = link
@@ -937,6 +972,7 @@ class HostsModel(
         val host = link?.host ?: return
         val chat = ChatModel(core, host, terminal, link, keyWork).also { it.draft = draft }
         screen = Screen.Chat(chat, returnTo)
+        if (screensPaused) chat.pause()
         chat.start(scope)
     }
 
@@ -1115,7 +1151,7 @@ class HostsModel(
             viewer.searcher = null
             viewer.searchNavigator = null
             localChanges.close()
-            withContext(NonCancellable) { view.detach() }
+            withContext(NonCancellable) { withTimeoutOrNull(2_000L) { view.detach() } }
             view.close()
         }
     }
@@ -1219,6 +1255,7 @@ class HostsModel(
             var focusing = focus?.takeIf { it.hostId == host.id }
             agentJobs += scope.launch {
                 val link = link(host, null)
+
                 agentLinks[host.id] = link
                 board.links[host.id] = link
                 try {
@@ -1470,7 +1507,7 @@ class HostsModel(
         scope.launch {
             var pending: HostLink? = null
             try {
-                val link = link(entry.host, withContext(keyWork) { core.connect(entry.host.id) })
+                val link = link(entry.host, connectScreen(entry.host.id))
                 pending = link
                 if (!current()) return@launch
                 val terminal = link.keep { conn, _ -> conn.terminals() }

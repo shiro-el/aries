@@ -263,6 +263,7 @@ class ChatModel(
     enum class Sending { Sending, Held }
 
     private var watch: ChatWatch? = null
+    private var paused = false
     private var job: Job? = null
     private var scope: CoroutineScope? = null
     private var terminalPresent by mutableStateOf(true)
@@ -344,6 +345,7 @@ class ChatModel(
             var attempt = 0
             var w: ChatWatch
             while (true) {
+                if (paused) return@launch
                 try {
                     w = withContext(keyWork) { core.watchChat(host.id, terminal.address, snapshot?.cursor) }
                     break
@@ -357,6 +359,7 @@ class ChatModel(
                 }
             }
             watch = w
+            if (paused) w.pause()
             while (true) {
                 try {
                     snapshot = w.next()
@@ -367,6 +370,7 @@ class ChatModel(
                     connectionError = e
                     snapshot = snapshot?.copy(status = ChatStatus.RECONNECTING)
                 }
+
             }
         }
     }
@@ -475,6 +479,18 @@ class ChatModel(
             watch = null
             scope?.let(::start)
         } else watch?.reconnect()
+    }
+
+    fun pause() {
+        paused = true
+        if (watch == null) job?.cancel() else watch?.pause()
+    }
+
+    fun resume() {
+        if (!paused) return
+        paused = false
+        if (watch == null && connectionError?.retryableConnection() != false) scope?.let(::start)
+        else watch?.resume()
     }
 
     fun stop() {

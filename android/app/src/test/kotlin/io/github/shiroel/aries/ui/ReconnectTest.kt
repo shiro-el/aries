@@ -1,6 +1,7 @@
 package io.github.shiroel.aries.ui
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.hasContentDescription
@@ -8,6 +9,10 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentStatus
@@ -39,6 +44,7 @@ class ReconnectTest {
     private val agent = TerminalInfo("t1", "claude", "", listOf("claude"), "/repo", "live", AgentStatus.Working, false, 0uL)
 
     private lateinit var model: HostsModel
+    private lateinit var screenLifecycle: LifecycleRegistry
 
     private fun frame(text: String) = TerminalUpdate.Screen(
         ScreenFrame(
@@ -57,7 +63,15 @@ class ReconnectTest {
         compose.setContent {
             val scope = rememberCoroutineScope()
             model = remember { HostsModel(core, scope) }
-            MaterialTheme { AriesApp(model) }
+            val owner = remember {
+                object : LifecycleOwner {
+                    override val lifecycle = LifecycleRegistry(this).apply { currentState = Lifecycle.State.RESUMED }
+                }
+            }
+            screenLifecycle = owner.lifecycle
+            CompositionLocalProvider(LocalLifecycleOwner provides owner) {
+                MaterialTheme { AriesApp(model) }
+            }
         }
     }
 
@@ -245,6 +259,58 @@ class ReconnectTest {
         assertFalse(conn.disconnected)
         assertFalse(view.detached)
         screenShows("before")
+    }
+
+    @Test
+    fun backgroundingDetachesAndStopsReconnectUntilTheScreenResumes() {
+        val core = FakeCore().apply { terminals = listOf(build) }
+        val first = openBuild(core)
+        val old = core.connection!!
+        compose.runOnIdle {
+            (model.screen as Screen.Terminal).viewer.draft = "unfinished command"
+            screenLifecycle.currentState = Lifecycle.State.CREATED
+        }
+        compose.waitForIdle()
+        assertTrue(first.detached)
+        assertTrue(old.disconnected)
+        compose.runOnIdle { model.networkChanged() }
+        compose.waitForIdle()
+        assertTrue(core.connection === old)
+        screenShows("before")
+
+        compose.runOnIdle { screenLifecycle.currentState = Lifecycle.State.RESUMED }
+        compose.waitForIdle()
+        assertNotSame(old, core.connection)
+        assertTrue(core.connection!!.views.single().options.resumed)
+        assertEquals("unfinished command", (model.screen as Screen.Terminal).viewer.draft)
+    }
+
+    @Test
+    fun backgroundingChatPausesItsWatchAndKeepsTheDraftAndCursorOnResume() {
+        val core = FakeCore().apply { terminals = listOf(agent) }
+        core.addHost("home", Endpoint.Ssh("10.0.0.2", 22u, "me"))
+        start(core)
+        compose.onNodeWithText("home").performClick()
+        compose.onNodeWithText("claude").performClick()
+        compose.onNodeWithContentDescription(str(R.string.agent_switch_chat_label)).performClick()
+        compose.waitForIdle()
+        val chat = (model.screen as Screen.Chat).chat
+        core.pushChat(io.github.shiroel.aries.core.ChatSnapshot(emptyList(), io.github.shiroel.aries.core.ChatStatus.LIVE, "cursor-1"))
+        compose.waitForIdle()
+        compose.runOnIdle {
+            chat.draft = "unfinished question"
+            screenLifecycle.currentState = Lifecycle.State.CREATED
+            model.networkChanged()
+        }
+        compose.waitForIdle()
+        assertTrue(core.chatPaused)
+        assertEquals(0, core.chatReconnects)
+        compose.runOnIdle { screenLifecycle.currentState = Lifecycle.State.RESUMED }
+        compose.waitForIdle()
+        assertFalse(core.chatPaused)
+        assertTrue(chat === (model.screen as Screen.Chat).chat)
+        assertEquals("unfinished question", chat.draft)
+        assertEquals("cursor-1", chat.snapshot?.cursor)
     }
 
     @Test

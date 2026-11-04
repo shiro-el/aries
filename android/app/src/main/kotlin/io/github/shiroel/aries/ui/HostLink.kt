@@ -7,11 +7,13 @@ import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Host
 import io.github.shiroel.aries.core.HostConnection
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -65,6 +67,8 @@ class HostLink(
     private val poke = Channel<Unit>(Channel.CONFLATED)
     private var reconnecting: Job? = null
     private var closed = false
+    private var paused = false
+    private var probing: Job? = null
 
     /** The live connection; `null` while reconnecting. */
     val connection: HostConnection? get() = current.value
@@ -74,23 +78,26 @@ class HostLink(
      * time it fails with [CoreException.Closed] (the line dropped). Other
      * failures end it. While the link reconnects it waits.
      */
+    @OptIn(ExperimentalCoroutinesApi::class)
     suspend fun <T> keep(block: suspend (conn: HostConnection, resumed: Boolean) -> T): T {
         // The owner registers this link and its screen before any failure
         // callback can run (including an immediately rejected first connect).
-        if (!closed && current.value == null && reconnecting == null) {
+        if (!closed && !paused && current.value == null && reconnecting == null) {
             reconnecting = scope.launch { reconnect() }
         }
         var resumed = false
-        while (true) {
-            if (closed) throw CancellationException("Host link closed")
-            val conn = current.filterNotNull().first()
+        if (closed) throw CancellationException("Host link closed")
+        return current.transformLatest { conn ->
+            if (conn == null) return@transformLatest
+            val again = resumed
+            resumed = true
+
             try {
-                return block(conn, resumed)
+                emit(block(conn, again))
             } catch (e: CoreException.Closed) {
                 lost(conn)
             }
-            resumed = true
-        }
+        }.first()
     }
 
     /** [conn] stopped working: drop it and connect again. A connection already replaced is ignored. */
@@ -99,12 +106,12 @@ class HostLink(
         current.value = null
         state = LinkState.Reconnecting
         scope.launch { conn.disconnect() }
-        reconnecting = scope.launch { reconnect() }
+        if (!paused) reconnecting = scope.launch { reconnect() }
     }
 
     /** Explicit user retry also resumes a permanent failure after it has been fixed. */
     fun retryNow() {
-        if (closed) return
+        if (closed || paused) return
         if (state is LinkState.Down) {
             state = LinkState.Reconnecting
             reconnecting = scope.launch { reconnect() }
@@ -115,16 +122,19 @@ class HostLink(
 
     /** The phone's network changed: the old line is likely dead, so replace it now (or retry now). */
     fun networkChanged() {
+        if (closed || paused) return
         current.value?.let(::lost) ?: poke.trySend(Unit)
     }
 
     /** The app is back in the foreground: make sure the line still answers, or retry now. */
     fun check() {
+        if (closed || paused) return
         val conn = current.value ?: run {
             poke.trySend(Unit)
             return
         }
-        scope.launch {
+        probing?.cancel()
+        probing = scope.launch {
             val alive = try {
                 withTimeoutOrNull(PROBE_TIMEOUT_MS) { conn.terminals() } != null
             } catch (e: CoreException) {
@@ -134,9 +144,28 @@ class HostLink(
         }
     }
 
+    /** Releases screen streams and retries while retaining their models. */
+    fun pause() {
+        if (closed || paused) return
+        paused = true
+        probing?.cancel()
+        reconnecting?.cancel()
+        val conn = current.value
+        current.value = null
+        if (state !is LinkState.Down) state = LinkState.Reconnecting
+        conn?.let { scope.launch { it.disconnect() } }
+    }
+
+    fun resume() {
+        if (closed || !paused) return
+        paused = false
+        if (state !is LinkState.Down) reconnecting = scope.launch { reconnect() }
+    }
+
     /** Stops for good (the user left the Host) and disconnects. */
     fun close() {
         closed = true
+        probing?.cancel()
         reconnecting?.cancel()
         val conn = current.value
         current.value = null
@@ -146,10 +175,11 @@ class HostLink(
     private suspend fun reconnect() {
         poke.tryReceive()
         var attempt = 0
-        while (!closed) {
+        while (!closed && !paused) {
+
             try {
                 val conn = connect()
-                if (closed) {
+                if (closed || paused) {
                     conn.disconnect()
                     return
                 }

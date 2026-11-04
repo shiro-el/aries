@@ -567,6 +567,7 @@ class FakeCore : AriesCoreInterface {
     /** (host id, terminal) of each `watchChat` call. */
     val chatsOpened = mutableListOf<Pair<String, String>>()
     var chatStopped = false
+    var chatPaused = false
         private set
 
     /** Bytes `ChatWatch.image` returns, by image id. */
@@ -614,6 +615,8 @@ class FakeCore : AriesCoreInterface {
             override fun retryNow() {
                 chatRetries++
             }
+            override fun pause() { chatPaused = true }
+            override fun resume() { chatPaused = false }
             override fun image(id: String): ByteArray? = chatImages[id]
 
             override fun stop() {
