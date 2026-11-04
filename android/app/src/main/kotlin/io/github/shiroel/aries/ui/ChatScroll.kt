@@ -1,7 +1,5 @@
 package io.github.shiroel.aries.ui
 
-import android.content.Context
-import android.content.SharedPreferences
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.WindowInsets
@@ -19,10 +17,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.layout
-import androidx.compose.ui.platform.LocalContext
 import io.github.shiroel.aries.core.ChatEntry
-import org.json.JSONArray
-import org.json.JSONObject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -83,10 +78,9 @@ internal fun rememberChatScrollState(
     markdown: Map<String, ChatMarkdownDocument>,
     followEnabled: Boolean = true,
 ): ChatScrollState {
-    val context = LocalContext.current
-    val store = remember(chat, context) { ChatReadingStore(context, chat.host.id, chat.terminal.address) }
-    val saved = remember(store) { store.load() }
-    val state = remember(chat) { ChatScrollState(saved?.following ?: true) }
+    val session = chat.readingSession
+    val saved = remember(session) { session.position }
+    val state = remember(session) { ChatScrollState(saved?.following ?: true) }
     val content = rememberUpdatedState(ChatScrollContent(entries, callKeys, markdown, followEnabled))
     LaunchedEffect(state) {
         var previousEntries: List<ChatEntry>? = null
@@ -95,7 +89,6 @@ internal fun rememberChatScrollState(
         var lastViewport: Pair<Any?, Int>? = null
         var readingAnchor: Pair<String, Int>? = null
         var pending = emptySet<String>()
-        var lastSaved = saved
         var request = state.latestRequest
         var disclosures = chat.expanded to chat.rawInputsExpanded
         snapshotFlow {
@@ -164,7 +157,7 @@ internal fun rememberChatScrollState(
                     pending = (saved.pending + after(saved.transcriptTail, transcript) + after(saved.callTail, calls))
                         .intersect(keys.toSet())
                     // Restore even when the user left at the end: rows may
-                    // have arrived while Chat was closed. Follow again only
+                    // have arrived while this screen was covered. Follow again only
                     // if that saved viewport still reaches the current end.
                     val anchorIndex = keys.indexOf(saved.anchor)
                     if (followEnabled) {
@@ -222,10 +215,7 @@ internal fun rememberChatScrollState(
                     anchor!!, keys.indexOf(anchor), state.list.firstVisibleItemScrollOffset,
                     state.following, pending, transcript.lastOrNull(), calls.lastOrNull(),
                 )
-                if (position != lastSaved) {
-                    store.save(position)
-                    lastSaved = position
-                }
+                session.position = position
             }
         }
     }
@@ -245,7 +235,12 @@ private fun after(tail: String?, keys: List<String>): List<String> {
     return if (index < 0) emptyList() else keys.drop(index + 1)
 }
 
-private data class ChatReadingPosition(
+/** Owned by one Chat visit, retained by the ViewModel across recreation and covered screens. */
+internal class ChatReadingSession {
+    var position: ChatReadingPosition? = null
+}
+
+internal data class ChatReadingPosition(
     val anchor: String,
     val index: Int,
     val offset: Int,
@@ -254,33 +249,6 @@ private data class ChatReadingPosition(
     val transcriptTail: String?,
     val callTail: String?,
 )
-
-/** Phone-local IDs and pixel offsets only; no transcript text or credentials. */
-private class ChatReadingStore(context: Context, host: String, terminal: String) {
-    private val preferences: SharedPreferences = context.applicationContext
-        .getSharedPreferences("chat_reading_positions", Context.MODE_PRIVATE)
-    private val key = JSONArray(listOf(host, terminal)).toString()
-
-    fun load(): ChatReadingPosition? = runCatching {
-        val json = JSONObject(preferences.getString(key, null) ?: return null)
-        val pending = json.getJSONArray("pending")
-        ChatReadingPosition(
-            json.getString("anchor"), json.getInt("index").coerceAtLeast(0),
-            json.getInt("offset").coerceAtLeast(0), json.getBoolean("following"),
-            (0 until pending.length()).map { pending.getString(it) }.toSet(),
-            json.optString("transcriptTail").takeIf { it.isNotEmpty() },
-            json.optString("callTail").takeIf { it.isNotEmpty() },
-        )
-    }.getOrNull()
-
-    fun save(position: ChatReadingPosition) {
-        val json = JSONObject()
-            .put("anchor", position.anchor).put("index", position.index).put("offset", position.offset)
-            .put("following", position.following).put("pending", JSONArray(position.pending.toList()))
-            .put("transcriptTail", position.transcriptTail).put("callTail", position.callTail)
-        preferences.edit().putString(key, json.toString()).apply()
-    }
-}
 
 /** Prepending older history and replacing a conversation are not new tail rows. */
 private fun addedTail(previous: List<String>, current: List<String>): List<String> {

@@ -47,6 +47,7 @@ class ChatScrollTest {
     private val core = FakeCore()
     private val agent = TerminalInfo("t1", "claude", "", listOf("claude"), "/repo", "live", AgentStatus.Working)
     private val generation = mutableStateOf(0)
+    private val compositionGeneration = mutableStateOf(0)
     private val hostNumber = mutableStateOf(0)
     private val terminal = mutableStateOf(agent)
     private fun entries(count: Int) = (1..count).map {
@@ -54,7 +55,6 @@ class ChatScrollTest {
     }
 
     private fun open() {
-        context.getSharedPreferences("chat_reading_positions", Context.MODE_PRIVATE).edit().clear().commit()
         val hosts = listOf(
             core.addHost("home", Endpoint.Ssh("home.test", 22u, "me")),
             core.addHost("other", Endpoint.Ssh("other.test", 22u, "me")),
@@ -66,7 +66,7 @@ class ChatScrollTest {
                 val chat = remember { ChatModel(core, hosts[hostNumber.value], terminal.value).also { it.start(scope) } }
                 val calls = remember { CallsModel(core, scope).also { it.watch(hosts, everyHost = true) } }
                 DisposableEffect(chat) { onDispose { chat.stop(); calls.stopAll() } }
-                ChatScreen(chat, {}, calls = calls)
+                key(compositionGeneration.value) { ChatScreen(chat, {}, calls = calls) }
             }
         }
         push(entries(30))
@@ -145,36 +145,33 @@ class ChatScrollTest {
         assertReply(33)
     }
 
-    @Test fun reopeningRestoresTheEntryAndPixelOffsetAfterAnEmptyInitialSnapshot() {
+    // Regression: reopening a read Chat must discard its old viewport/count and follow new output.
+    @Test fun reopeningStartsAtLatestAfterAnEmptyInitialSnapshot() {
         open()
         readReply(6)
-        compose.onNodeWithTag("chat-transcript").performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 25f) }
         push(entries(32))
-        val before = compose.onNodeWithText("Reply 6\nSecond line\nThird line").fetchSemanticsNode().boundsInRoot.top
+        awaitLatest("Latest (2)")
 
-        // A fresh ChatModel and composition must read the saved viewport.
         compose.runOnIdle { generation.value++ }
         push(emptyList())
         push(entries(33))
 
-        assertReply(6)
-        val after = compose.onNodeWithText("Reply 6\nSecond line\nThird line").fetchSemanticsNode().boundsInRoot.top
-        assertEquals(before, after, 0.5f)
-        awaitLatest("Latest (3)")
-        compose.onNodeWithContentDescription("Latest (3)").assertIsDisplayed()
+        assertReply(33)
+        compose.onNodeWithContentDescription("Latest (3)").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Latest").assertDoesNotExist()
+        push(entries(34))
+        assertReply(34) // following is true without tapping Latest
     }
 
-    @Test fun reopeningAtThePreviousEndDoesNotSkipRowsThatArrivedWhileAway() {
+    @Test fun reopeningAtThePreviousEndStartsAtTheNewEndAndFollows() {
         open()
-        val before = compose.onNodeWithText("Reply 30\nSecond line\nThird line").fetchSemanticsNode().positionInRoot.y
         compose.runOnIdle { generation.value++ }
         push(entries(33))
 
-        assertReply(30)
-        val after = compose.onNodeWithText("Reply 30\nSecond line\nThird line").fetchSemanticsNode().positionInRoot.y
-        assertEquals(before, after, 0.5f)
-        awaitLatest("Latest (3)")
-        compose.onNodeWithContentDescription("Latest (3)").assertIsDisplayed()
+        assertReply(33)
+        compose.onNodeWithContentDescription("Latest (3)").assertDoesNotExist()
+        push(entries(34))
+        assertReply(34)
     }
 
     @Test fun streamingFollowsTheBottomOfAnOversizedRowButDoesNotInterruptHistoryReading() {
@@ -265,7 +262,7 @@ class ChatScrollTest {
         assertReply(33)
     }
 
-    @Test fun readingPositionsAreIndependentForEachHostAndTerminal() {
+    @Test fun switchingHostsAndTerminalsAlwaysOpensAtLatest() {
         open()
         readReply(6)
         compose.runOnIdle { hostNumber.value = 1 }
@@ -275,19 +272,19 @@ class ChatScrollTest {
 
         compose.runOnIdle { hostNumber.value = 0 }
         push(entries(30))
-        assertReply(6)
+        assertReply(30)
         compose.runOnIdle { terminal.value = agent.copy(address = "remote/t1") }
         push(entries(30))
         assertReply(30)
         compose.runOnIdle { terminal.value = agent }
         push(entries(30))
-        assertReply(6)
+        assertReply(30)
     }
 
     @Test fun aRemovedAnchorFallsBackWithinTheRemainingConversation() {
         open()
         readReply(16)
-        compose.runOnIdle { generation.value++ }
+        compose.runOnIdle { compositionGeneration.value++ }
         push(listOf(ChatEntry("replacement", null, ChatEntryBody.Agent("New conversation"))))
         awaitText("New conversation")
         compose.onNodeWithText("New conversation").assertIsDisplayed()
@@ -326,7 +323,7 @@ class ChatScrollTest {
         compose.onNodeWithContentDescription("Latest (1)").assertIsDisplayed()
         compose.onNodeWithTag("chat-transcript").performScrollToNode(hasText("Paragraph to keep reading"))
         val before = compose.onNodeWithText("Paragraph to keep reading").fetchSemanticsNode().positionInRoot.y
-        compose.runOnIdle { generation.value++ }
+        compose.runOnIdle { compositionGeneration.value++ }
         push(entries(30) + message + ChatEntry("a32", null, ChatEntryBody.Agent("Another response")))
 
         awaitText("Paragraph to keep reading")
