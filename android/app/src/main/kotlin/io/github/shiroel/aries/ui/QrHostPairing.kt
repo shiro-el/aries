@@ -34,6 +34,7 @@ internal class QrPairingReview {
 internal fun QrHostPairing(
     model: HostsModel,
     scanQr: (((String) -> Unit) -> Unit)? = null,
+    connectAfterPair: Boolean = false,
     onPaired: (io.github.shiroel.aries.core.Host) -> Unit = {},
 ) {
     val review = model.pairingReview
@@ -64,8 +65,9 @@ internal fun QrHostPairing(
             },
         ) { Text(stringResource(R.string.host_pair_scan_button)) }
         details?.let { offer ->
+            val errors = hostInputErrors(model.hosts, null, name, offer.address, offer.port.toInt(), offer.user)
             Text(stringResource(R.string.host_pair_review_title), style = MaterialTheme.typography.titleMedium)
-            OutlinedTextField(name, { name = it }, Modifier.testTag("host-pair-name"), enabled = !busy, label = { Text(stringResource(R.string.host_add_name)) }, singleLine = true)
+            OutlinedTextField(name, { name = it }, Modifier.testTag("host-pair-name"), enabled = !busy, label = { Text(stringResource(R.string.host_add_name)) }, singleLine = true, isError = errors.name != null, supportingText = hostInputSupport(errors.name))
             OutlinedTextField(offer.address, {}, Modifier.testTag("host-pair-address"), readOnly = true, label = { Text(stringResource(R.string.host_add_address)) })
             OutlinedTextField(offer.port.toString(), {}, Modifier.testTag("host-pair-port"), readOnly = true, label = { Text(stringResource(R.string.host_add_port)) })
             OutlinedTextField(offer.user, {}, Modifier.testTag("host-pair-user"), readOnly = true, label = { Text(stringResource(R.string.host_add_user)) })
@@ -82,7 +84,7 @@ internal fun QrHostPairing(
                         busy = true; error = null
                         scope.launch {
                             try {
-                                val host = model.pairHostQr(name, credential)
+                                val host = model.pairHostQr(name, credential, connectAfterPair)
                                 qr = null; details = null; name = ""
                                 onPaired(host)
                             } catch (e: CoreException) {

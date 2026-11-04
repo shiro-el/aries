@@ -1,8 +1,6 @@
 package io.github.shiroel.aries.ui
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -15,6 +13,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import io.github.shiroel.aries.core.CoreException
+import io.github.shiroel.aries.core.HostConnection
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.Host
 import io.github.shiroel.aries.core.SavedLaunch
@@ -34,6 +34,8 @@ data class AgentEntry(
     val layoutOrder: Int? = null,
     val hostOrder: Int = 0,
     val tabName: String? = null,
+    val live: Boolean = true,
+    val lastUpdatedMs: Long? = null,
 ) {
     val key: AgentKey get() = AgentKey(host.id, terminal.address)
 }
@@ -53,6 +55,15 @@ class AgentBoard(val hosts: List<Host>) {
 
     val savedLaunches = mutableStateMapOf<String, List<SavedLaunch>>()
 
+    private val updatedAt = mutableStateMapOf<String, Long>()
+    private val refreshing = mutableStateMapOf<String, Boolean>()
+    val watchErrors = mutableStateMapOf<String, CoreException>()
+    private val observedConnections = mutableMapOf<String, HostConnection?>()
+
+    private fun isLive(hostId: String): Boolean = (links[hostId]?.state ?: LinkState.Up) == LinkState.Up &&
+        hostId !in watchErrors && refreshing[hostId] != true &&
+        (links[hostId] == null || observedConnections[hostId] === links[hostId]?.connection)
+
     /** Hosts that could not be reached, with why. */
     val unavailable = mutableStateMapOf<String, Message>()
 
@@ -64,21 +75,21 @@ class AgentBoard(val hosts: List<Host>) {
 
     /** A connected socket is still loading until its first complete Terminal list arrives. */
     val loadingHosts: List<Host>
-        get() = hosts.filter { it.id !in lists && it.id !in unavailable && closed[it.id] != true && links[it.id]?.state !is LinkState.Down }
+        get() = hosts.filter { (it.id !in lists || !isLive(it.id)) && it.id !in watchErrors && it.id !in unavailable && closed[it.id] != true && links[it.id]?.state !is LinkState.Down }
 
     val isEmpty: Boolean
-        get() = hosts.isNotEmpty() && hosts.all { it.id in lists } && unavailable.isEmpty() &&
-            closed.values.none { it } && links.values.none { it.state != LinkState.Up } && agents.isEmpty()
+        get() = hosts.isNotEmpty() && hosts.all { it.id in lists && isLive(it.id) } && unavailable.isEmpty() &&
+            closed.values.none { it } && watchErrors.isEmpty() && links.values.none { it.state != LinkState.Up } && agents.isEmpty()
 
     /** Shared ordering, including descendant urgency and global pins. */
     val agents: List<AgentEntry>
         get() = orderAgents(hosts.flatMapIndexed { index, h ->
-            withAgentSpaces(agentFamily(h, lists[h.id].orEmpty()), structures[h.id]).map { it.copy(hostOrder = index) }
+            withAgentSpaces(agentFamily(h, lists[h.id].orEmpty()), structures[h.id]).map { it.copy(hostOrder = index, live = isLive(h.id), lastUpdatedMs = updatedAt[h.id]) }
         }, view)
 
     /** Reuses the existing watches; an empty live list must replace stored Agents. */
     val quickOpenSources: List<QuickOpenSource>
-        get() = hosts.filter { links[it.id]?.state == LinkState.Up && it.id in lists }.map {
+        get() = hosts.filter { isLive(it.id) && it.id in lists }.map {
             QuickOpenSource(it, structures[it.id], lists[it.id].orEmpty())
         }
 
@@ -91,18 +102,31 @@ class AgentBoard(val hosts: List<Host>) {
 
     fun find(key: AgentKey): AgentEntry? =
         hosts.find { it.id == key.hostId }?.let { h ->
-            lists[h.id]?.find { it.address == key.address }?.let { AgentEntry(h, it) }
+            lists[h.id]?.find { it.address == key.address }?.let { AgentEntry(h, it, live = isLive(h.id), lastUpdatedMs = updatedAt[h.id]) }
         }
 
     fun update(hostId: String, list: List<TerminalInfo>) {
         unavailable.remove(hostId)
         closed.remove(hostId)
+        watchErrors.remove(hostId)
+        refreshing[hostId] = false
+        updatedAt[hostId] = System.currentTimeMillis()
+        observedConnections[hostId] = links[hostId]?.connection
         lists[hostId] = list
     }
 
     /** One Terminal changed (the reply of a label write), ahead of the watch. */
     fun replace(hostId: String, t: TerminalInfo) {
         lists[hostId]?.let { list -> lists[hostId] = list.map { if (it.address == t.address) t else it } }
+    }
+
+    fun starting(hostId: String) {
+        watchErrors.remove(hostId)
+        refreshing[hostId] = true
+    }
+
+    fun fail(hostId: String, error: CoreException) {
+        watchErrors[hostId] = error
     }
 
     fun fail(hostId: String, why: Message) {
@@ -127,38 +151,47 @@ fun AgentsScreen(
     onOpenHosts: (() -> Unit)? = null,
 ) {
     val folds = rememberTreeFolds("agents")
+    val agents = board.agents
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val presentation = rememberAgentTreePresentation(agents, listState.isScrollInProgress)
     Column(Modifier.fillMaxSize()) {
         if (showHeader) ConsoleTopBar(stringResource(R.string.agents_title), onMenu = {}, onBack = onBack,
             showMark = false, inbox = {}, actions = { AgentActions(board) })
-        LazyColumn(Modifier.weight(1f)) {
+        LazyColumn(Modifier.weight(1f).then(presentation.modifier), state = listState) {
             if (board.hosts.isEmpty()) item {
                 Text(stringResource(R.string.agents_no_hosts))
                 onAddHost?.let { add ->
                     TextButton(onClick = add) { Text(stringResource(R.string.console_add_host)) }
                 }
             }
-            items(board.loadingHosts, key = { "loading:" + it.id }) { host ->
-                val compact = board.agents.isNotEmpty()
-                Box(if (compact) Modifier.fillMaxWidth() else Modifier.fillParentMaxHeight().fillMaxWidth()) {
-                    ScreenLoading(stringResource(R.string.connect_host_reconnecting, host.name), compact = compact,
-                        labelDelayMillis = if (compact) 1_500L else 0L, onRetry = {
-                            board.links[host.id]?.let { link ->
-                                if (link.state == LinkState.Up) link.networkChanged() else link.retryNow()
-                            }
-                        })
-                }
+            val connecting = board.hosts.filter {
+                it in board.loadingHosts || board.links[it.id]?.state == LinkState.Reconnecting
             }
-            items(board.hosts.filter { board.links[it.id]?.state != LinkState.Up && it !in board.loadingHosts }, key = { "connection:" + it.id }) { host ->
-                board.links[host.id]?.let { ConnectionNotice(it) }
+            if (connecting.isNotEmpty()) item(key = "connecting-hosts") {
+                ScreenLoading(stringResource(R.string.connect_host_reconnecting, connecting.joinToString(", ") { it.name }),
+                    compact = true, labelDelayMillis = if (board.agents.isEmpty()) 0L else 1_500L,
+                    onRetry = { connecting.forEach { host ->
+                        board.links[host.id]?.let { link ->
+                            if (link.state == LinkState.Up) link.networkChanged() else link.retryNow()
+                        }
+                    } })
             }
-            val agents = board.agents
             if (board.isEmpty) item {
                 Text(stringResource(R.string.agents_empty))
                 onOpenHosts?.let { open ->
                     TextButton(onClick = open) { Text(stringResource(R.string.agents_empty_hosts_button)) }
                 }
             }
-            agentTreeItems(agents, folds, onOpen, onPin, current = current)
+            agentTreeItems(agents, folds, onOpen, onPin, current = current, presentation = presentation.groups,
+                canPin = { board.links[it.host.id]?.let { link -> link.state == LinkState.Up && link.connection != null } == true })
+            items(board.hosts.filter { board.links[it.id]?.state is LinkState.Down || it.id in board.watchErrors },
+                key = { "failure:" + it.id }) { host ->
+                board.links[host.id]?.let { link ->
+                    val down = link.state as? LinkState.Down
+                    if (down != null) CompactHostFailure(link, down.error, stopped = false)
+                    else board.watchErrors[host.id]?.let { WatchFailureNotice(link, it) }
+                }
+            }
         }
     }
 }

@@ -162,4 +162,26 @@ class ChatCacheTest {
         assertEquals(1, core.chatRetries)
         assertSame(second, core.connection)
     }
+    @Test fun successfulRetentionRetryClearsThePreviousFailure() {
+        val fake = FakeCore()
+        var fail = true
+        val core = object : io.github.shiroel.aries.core.AriesCoreInterface by fake {
+            override fun setChatCacheRetentionDays(days: UInt) {
+                if (fail) throw CoreException.KeyLocked()
+                fake.setChatCacheRetentionDays(days)
+            }
+        }
+        compose.setContent {
+            val scope = rememberCoroutineScope()
+            val cache = remember { ChatCacheModel(core, scope) }
+            MaterialTheme { ChatCacheSettings(cache) }
+        }
+        compose.onNodeWithText(str(R.string.chat_cache_days, 7)).performClick()
+        compose.onNodeWithText(str(R.string.chat_cache_failed)).assertExists()
+        compose.runOnIdle { fail = false }
+        compose.onNodeWithText(str(R.string.chat_cache_days, 7)).performClick()
+        compose.runOnIdle { assertEquals(7u, fake.retentionDays) }
+        compose.onNodeWithText(str(R.string.chat_cache_failed)).assertDoesNotExist()
+    }
+
 }

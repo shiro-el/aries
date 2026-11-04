@@ -1,6 +1,5 @@
 package io.github.shiroel.aries.ui
 
-import io.github.shiroel.aries.core.HerdrCoreState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
@@ -183,14 +182,11 @@ fun SettingsScreen(
 /** Host configuration stays reachable even when a herdr-core Browse connection fails. */
 @Composable
 private fun HostSettingsScreen(model: HostsModel, host: Host, hostEditor: @Composable (Host) -> Unit) {
-    val installState = model.herdrInstall.state
-    val installFirst = installState == HerdrCoreState.Missing ||
-        (installState is HerdrCoreState.Installed && installState.needsUpdate) ||
-        model.herdrInstall.step != null
     LazyColumn(Modifier.fillMaxSize().testTag("host-actions:${host.id}")) {
         item {
             SettingsField {
                 Text(host.name, style = MaterialTheme.typography.titleMedium)
+                model.settingsReason?.let { AnnouncedText(stringResource(it.res, *it.args.toTypedArray())) }
                 // Ticket 60 supplies the name/address form here without changing this navigation.
                 hostEditor(host)
                 JumpSummary(model.jumps[host.id].orEmpty())
@@ -208,10 +204,9 @@ private fun HostSettingsScreen(model: HostsModel, host: Host, hostEditor: @Compo
                 }
             }
         }
-        if (installFirst) item(key = "herdr-install") { SettingsField { HerdrInstallSection(model.herdrInstall) { model.openHost(host) } } }
-        item { SettingsField { BeaconSection(model.beacon) } }
-        item { SettingsField { PushSection(model.push, beaconInstalled = model.beacon.installed) } }
-        if (!installFirst) item(key = "herdr-install") { SettingsField { HerdrInstallSection(model.herdrInstall) { model.openHost(host) } } }
+        item(key = "herdr-install") { SettingsField { HerdrInstallSection(model.herdrInstall) { model.openHost(host) } } }
+        item(key = "beacon") { SettingsField { BeaconSection(model.beacon) } }
+        item(key = "push") { SettingsField { PushSection(model.push, beaconState = model.beacon.ui) } }
     }
 }
 

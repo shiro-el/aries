@@ -157,16 +157,32 @@ class HostsModel(
     var push by mutableStateOf(PushModel(core, scope, pushPlatform, http, keyWork))
         private set
 
+    private data class HostSettings(
+        val beacon: BeaconModel,
+        val herdr: HerdrInstallModel,
+        val push: PushModel,
+    )
+    private val hostSettings = mutableMapOf<String, HostSettings>()
+
     private fun loadHostSettings(host: Host) {
-        herdrInstall = HerdrInstallModel(core, scope, beaconFetcher, keyWork).also { it.load(host) }
-        val hostPush = PushModel(core, scope, pushPlatform, http, keyWork)
-        push = hostPush
-        beacon = BeaconModel(core, scope, beaconFetcher, onRemoved = {
-            flushPushRevocations()
-            hostPush.load(host)
-        }, keyWork = keyWork)
+        val settings = hostSettings.getOrPut(host.id) {
+            val hostPush = PushModel(core, scope, pushPlatform, http, keyWork)
+            HostSettings(
+                BeaconModel(core, scope, beaconFetcher, onRemoved = {
+                    flushPushRevocations()
+                    hostPush.load(host)
+                }, keyWork = keyWork),
+                HerdrInstallModel(core, scope, beaconFetcher, keyWork),
+                hostPush,
+            )
+        }
+        beacon = settings.beacon
+        herdrInstall = settings.herdr
+        push = settings.push
+        // Each model rejects refresh/re-entry while its operation owns the Host.
+        herdrInstall.load(host)
         beacon.load(host)
-        hostPush.load(host)
+        push.load(host)
     }
 
     /** Sends the Relay revocations that Host or Beacon removal queued. */
@@ -220,15 +236,22 @@ class HostsModel(
         private set
     var addedHost by mutableStateOf<Host?>(null)
         private set
+    /** The Host submitted by the current setup flow, retained when its form closes. */
+    var setupHostId by mutableStateOf<String?>(null)
+        private set
+
+    private var setupRevision = 0
 
     fun startAddingHost(method: HostAddMethod = HostAddMethod.MANUAL) {
         pairingReview.clear()
         if (screen != Screen.Hosts) back()
         addedHost = null
+        setupHostId = null
+        setupRevision++
         hostAddMethod = method
     }
 
-    fun closeAddingHost() { pairingReview.clear(); hostAddMethod = null; addedHost = null }
+    fun closeAddingHost() { pairingReview.clear(); setupRevision++; hostAddMethod = null; addedHost = null }
 
     /** The open Host's connection and structure watch, while [Screen.Browse] shows (the latest line after a reconnect). */
     private var open: Pair<HostConnection, StructureWatch?>? = null
@@ -276,7 +299,7 @@ class HostsModel(
     val quickOpenSources: List<QuickOpenSource>
         get() {
             val live = when (val base = quickOpenBase()) {
-                is Screen.Browse -> listOfNotNull(base.browser.takeIf { it.link?.state == LinkState.Up && it.hasTerminalList }?.let {
+                is Screen.Browse -> listOfNotNull(base.browser.takeIf { it.link?.state == LinkState.Up && it.hasTerminalList && it.hasLiveTerminals }?.let {
                     QuickOpenSource(it.host, it.structure, it.agents.map { entry -> entry.terminal })
                 })
                 is Screen.Agents -> base.board.quickOpenSources
@@ -604,7 +627,7 @@ class HostsModel(
         recoveringKeys = true
     }
 
-    suspend fun recoverKey(keyId: String, privateKey: String? = null, passphrase: String = "") {
+    suspend fun recoverKey(keyId: String, privateKey: String? = null, passphrase: String = "") = modelOperation {
         withContext(keyWork) { core.recoverKey(keyId, privateKey, passphrase) }
         key = core.publicKey()
         keyProtection = core.keyProtection()
@@ -637,7 +660,7 @@ class HostsModel(
     }
 
     /** Import/decryption and vault work can block, including biometric authorization. */
-    suspend fun importKey(label: String, privateKey: String, passphrase: String) {
+    suspend fun importKey(label: String, privateKey: String, passphrase: String) = modelOperation {
         withContext(keyWork) { core.importKey(label.trim(), privateKey, passphrase) }
         key = core.publicKey()
         keyProtection = core.keyProtection()
@@ -660,29 +683,45 @@ class HostsModel(
         jumps = hosts.associate { it.id to core.jumpHosts(it.id) }
     }
 
-    fun addHost(name: String, address: String, port: Int, user: String, connectAfterAdd: Boolean = false) = guard {
-        val label = name.trim().ifBlank { address.trim() }
-        val host = core.addHost(label, Endpoint.Ssh(address.trim(), port.toUShort(), user.trim()))
-        hosts = core.hosts()
-        refreshRoutes()
-        hostsChanged()
-        if (hostAddMethod != null) addedHost = host
-        if (connectAfterAdd) connect(host)
+    fun addHost(name: String, address: String, port: Int, user: String, connectAfterAdd: Boolean = false): Boolean {
+        return try {
+            val label = name.trim().ifBlank { address.trim() }
+            val host = core.addHost(label, Endpoint.Ssh(address.trim(), port.toUShort(), user.trim()))
+            hosts = core.hosts()
+            refreshRoutes()
+            hostsChanged()
+            if (hostAddMethod != null) { addedHost = host; setupHostId = host.id }
+            if (connectAfterAdd) connect(host)
+            true
+        } catch (e: CoreException) {
+            prompt = problemFor(e)
+            false
+        }
     }
+
+    /** Submitted writes and the refresh after them belong to the ViewModel, not a form's lifetime. */
+    private suspend fun <T> modelOperation(write: suspend () -> T): T =
+        scope.async { runCatching { write() } }.await().getOrThrow()
 
     fun inspectPairingQr(qr: String) = core.inspectPairingQr(qr)
 
-    suspend fun pairHostQr(name: String, qr: String): Host {
+    suspend fun pairHostQr(name: String, qr: String, connectAfterPair: Boolean = false): Host = modelOperation {
+        val origin = screen
+        val revision = setupRevision
         val host = withContext(keyWork) { core.pairHostQr(name, qr) }
         hosts = core.hosts()
         refreshRoutes()
         hostsChanged()
-        return host
+        if (connectAfterPair && screen === origin && setupRevision == revision && hostAddMethod == HostAddMethod.QR) {
+            setupHostId = host.id
+            connect(host)
+        }
+        host
     }
 
     /** Saves in place; the core closes old lines only when the endpoint changed. */
-    suspend fun saveHost(host: Host, name: String, address: String, port: Int, user: String): Boolean {
-        return try {
+    suspend fun saveHost(host: Host, name: String, address: String, port: Int, user: String): Boolean = modelOperation {
+        try {
             val previous = hosts.firstOrNull { it.id == host.id } ?: host
             val endpoint = Endpoint.Ssh(address.trim(), port.toUShort(), user.trim())
             withContext(keyWork) {
@@ -702,6 +741,7 @@ class HostsModel(
     fun connect(host: Host) = connect(host, null)
 
     private fun connect(host: Host, restore: LastLocation?, savedLaunchId: String? = null, confirmSavedLaunch: Boolean = true) {
+        closeAddingHost()
         restoring = restore != null
         missingKeyHostId = null
         val link = link(host, null) { error ->
@@ -853,7 +893,7 @@ class HostsModel(
         } catch (_: CoreException) { false }
         if (screen !== connecting) return
         if (needsCore) {
-            openHostSettings(host)
+            openHostSettings(host, Message(R.string.herdr_install_connect_reason))
             return
         }
         when (error) {
@@ -1126,7 +1166,12 @@ class HostsModel(
     }
 
     /** Installs the public key on [host] with a one-time password login. The password is not kept. */
+    var installingKeyOn by mutableStateOf<String?>(null)
+        private set
+
     fun installKey(host: Host, password: String) {
+        if (installingKeyOn != null) return
+        installingKeyOn = host.id
         prompt = null
         scope.launch {
             prompt = try {
@@ -1136,6 +1181,8 @@ class HostsModel(
                 }
                 key = core.publicKey()
                 keys = core.keys()
+                links.filter { it.host.id == host.id && it.state is LinkState.Down }.forEach { it.retryNow() }
+                liveChat?.takeIf { it.host.id == host.id && it.connectionError != null }?.retryConnection()
                 Prompt.Problem(Message(R.string.key_install_done_title), Message(body, listOf(host.name)))
             } catch (e: CoreException) {
                 when (e) {
@@ -1144,7 +1191,7 @@ class HostsModel(
                         Prompt.TrustJumpHostKey(host, e.hop, e.address, e.fingerprint, AfterTrust.InstallKey)
                     else -> problemFor(e)
                 }
-            }
+            } finally { installingKeyOn = null }
         }
     }
 
@@ -1177,6 +1224,7 @@ class HostsModel(
         guard {
             conversations.filterKeys { it.hostId == prompt.host.id }.values.forEach { it.stop() }
             core.removeHost(prompt.host.id)
+            hostSettings.remove(prompt.host.id)
             conversations.keys.removeAll { it.hostId == prompt.host.id }
             hosts = core.hosts()
             hostsChanged()
@@ -1234,7 +1282,7 @@ class HostsModel(
             }
         }
         try {
-            link.keep { conn, _ ->
+            link.keepWatching(onFailure = { browser.watchError = it }, onStart = browser::startingWatch) { conn, _ ->
                 val structure = conn.watchStructure(object : StructureListener {
                     override fun onStructure(structure: HostStructure) {
                         scope.launch {
@@ -1413,7 +1461,7 @@ class HostsModel(
         screen = Screen.Terminal(viewer, returnTo)
         viewing = scope.launch {
             try {
-                link.keep { conn, resumed ->
+                link.keepWatching(onFailure = { viewer.watchError = it }, onStart = { viewer.watchError = null }) { conn, resumed ->
                     if (!viewer.typing) {
                         // Watch until the input is focused, then let go of the observer.
                         val options = AttachOptions(observe = true, cols = 80u, rows = 24u, history = SCROLLBACK_LINES, resumed = resumed)
@@ -1425,7 +1473,7 @@ class HostsModel(
                             watching.cancelAndJoin()
                             done
                         }
-                        if (exited) return@keep
+                        if (exited) return@keepWatching
                     }
                     // An ordinary viewer at the phone's grid; from now on the phone sets the size.
                     val (cols, rows) = snapshotFlow { viewer.phoneGrid }.filterNotNull().first()
@@ -1669,7 +1717,7 @@ class HostsModel(
                 board.links[host.id] = link
                 try {
                     // A new line starts from its snapshot, so what changed while away shows.
-                    link.keep { c, _ ->
+                    link.keepWatching(onFailure = { board.fail(host.id, it) }, onStart = { board.starting(host.id) }) { c, _ ->
                         board.savedLaunches[host.id] = c.savedLaunches()
                         val structure = c.watchStructure(object : StructureListener {
                             override fun onStructure(structure: HostStructure) {
@@ -1722,6 +1770,10 @@ class HostsModel(
         val agents = screen as? Screen.Agents ?: return
         if (agents.board !== board) return
         val current = board.find(entry.key) ?: return
+        if (!current.live) {
+            board.links[entry.host.id]?.retryNow()
+            return
+        }
         val link = agentLinks[current.host.id] ?: return
         val t = current.terminal
         val shared = pendingShare
@@ -1734,8 +1786,14 @@ class HostsModel(
     }
 
     /** Pin from any shared row, using the connection already owned by that surface. */
+    fun canPin(entry: AgentEntry): Boolean = pinLink(entry)?.let { it.state == LinkState.Up && it.connection != null } == true
+
+    private fun pinLink(entry: AgentEntry): HostLink? =
+        agentLinks[entry.host.id] ?: browseLink?.takeIf { it.host.id == entry.host.id }
+
     fun pin(entry: AgentEntry, pinned: Boolean) {
-        val link = agentLinks[entry.host.id] ?: browseLink?.takeIf { it.host.id == entry.host.id } ?: return
+        if (!canPin(entry)) return
+        val link = pinLink(entry) ?: return
         val conn = link.connection ?: return
         scope.launch {
             try {
@@ -1788,10 +1846,19 @@ class HostsModel(
         calls.watch(hosts, everyHost = true)
     }
 
+    fun callFeedSettings(host: Host) {
+        when (calls.startFailures[host.id]) {
+            is CoreException.KeyInvalidated -> openKeyRecovery()
+            is CoreException.NoKey, is CoreException.KeyLocked, is CoreException.BiometricUnavailable -> openKeySettings()
+            else -> openHostSettings(host)
+        }
+    }
+
     fun closeCallInbox() {
         if (!callInboxOpen) return
         callInboxOpen = false
         callOpenRequest++
+        openingCall = null
         calls.stopAll()
         if (callsActive) calls.watch(hosts, everyHost = false)
     }
@@ -1811,6 +1878,7 @@ class HostsModel(
 
     private fun hostsChanged() {
         onSavedLaunchesChanged()
+        calls.retainHosts(hosts)
         if (callsActive || callInboxOpen) calls.watch(hosts, everyHost = callInboxOpen)
     }
 
@@ -1923,9 +1991,13 @@ class HostsModel(
         screen = Screen.Settings
     }
 
+    var settingsReason by mutableStateOf<Message?>(null)
+        private set
+
     /** Shared destination for Host menus, Browse guidance and inbox install links (ticket 51). */
-    fun openHostSettings(host: Host) {
+    fun openHostSettings(host: Host, reason: Message? = null) {
         openSettings()
+        settingsReason = reason
         settingsHost = host
         loadHostSettings(host)
     }
@@ -1960,17 +2032,20 @@ class HostsModel(
     /** The connection owned by a Chat opened from the inbox. */
     private var callLink: HostLink? = null
     private var callOpenRequest = 0
+    var openingCall by mutableStateOf<String?>(null)
+        private set
 
     /** Opens the caller in Chat without changing the saved Agent view. */
     fun openCallChat(entry: CallEntry) {
         val address = entry.call.terminal ?: return
-        if (!callInboxOpen) return
+        if (!callInboxOpen || openingCall == entry.key) return
         val origin = screen
         if (origin is Screen.Chat && origin.chat.host.id == entry.host.id && origin.chat.terminal.address == address) {
             closeCallInbox()
             return
         }
         val request = ++callOpenRequest
+        openingCall = entry.key
         fun current() = callInboxOpen && screen === origin && request == callOpenRequest
         scope.launch {
             var pending: HostLink? = null
@@ -2005,6 +2080,7 @@ class HostsModel(
                 }
             } finally {
                 pending?.close()
+                if (request == callOpenRequest) openingCall = null
             }
         }
     }

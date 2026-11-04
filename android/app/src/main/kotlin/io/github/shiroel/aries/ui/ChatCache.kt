@@ -43,6 +43,7 @@ class ChatCacheModel(
         private set
 
     fun setRetention(days: Int) {
+        notice = null
         try {
             core.setChatCacheRetentionDays(days.toUInt())
         } catch (e: CoreException) {

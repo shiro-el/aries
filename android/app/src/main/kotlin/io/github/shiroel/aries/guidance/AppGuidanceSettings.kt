@@ -25,7 +25,7 @@ import kotlinx.coroutines.launch
 fun AppGuidanceSettings(state: AppGuidanceState) {
     val scope = rememberCoroutineScope()
     var url by rememberSaveable(state.updateUrl) { mutableStateOf(state.updateUrl) }
-    val valid = isAppUpdateUrl(url.trim())
+    val valid = url.isBlank() || isAppUpdateUrl(url.trim())
     Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.app_update_settings_title), style = MaterialTheme.typography.titleMedium)
         Text(stringResource(R.string.app_update_installed, state.versionName, state.versionCode))
@@ -38,14 +38,14 @@ fun AppGuidanceSettings(state: AppGuidanceState) {
             modifier = Modifier.fillMaxWidth().testTag("app-update-url"),
             singleLine = true,
             isError = !valid,
-            supportingText = if (!valid) ({ Text(stringResource(R.string.app_update_url_invalid)) }) else null,
+            supportingText = if (!valid) ({ Text(stringResource(R.string.app_update_url_invalid)) }) else ({ Text(stringResource(R.string.app_update_url_hint)) }),
         )
         TextButton(onClick = { state.setUpdateUrl(url) }, enabled = valid,
             modifier = Modifier.testTag("app-update-save")) {
             Text(stringResource(R.string.app_update_save_button))
         }
         TextButton(onClick = { scope.launch { state.checkForUpdate() } },
-            enabled = state.updateCheck != AppUpdateCheck.CHECKING && url.trim() == state.updateUrl,
+            enabled = state.updateUrl.isNotEmpty() && state.updateCheck != AppUpdateCheck.CHECKING && url.trim() == state.updateUrl,
             modifier = Modifier.testTag("app-update-check")) {
             Text(stringResource(R.string.app_update_check_button))
         }

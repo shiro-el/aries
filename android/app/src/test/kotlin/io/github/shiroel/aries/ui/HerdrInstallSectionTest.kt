@@ -3,6 +3,9 @@ package io.github.shiroel.aries.ui
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollToNode
@@ -23,9 +26,11 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "h1200dp")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class HerdrInstallSectionTest {
     @get:Rule val compose = createComposeRule()
     private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
@@ -52,12 +57,19 @@ class HerdrInstallSectionTest {
         val core = FakeCore().apply { herdrState = HerdrCoreState.Missing }
         show(core)
         click(R.string.herdr_install_button)
+        System.getenv("ARIES_SETTINGS_RENDER_DIR")?.let { directory ->
+            val file = java.io.File(directory, "herdr-consent.png")
+            file.parentFile?.mkdirs()
+            file.outputStream().use {
+                compose.onNode(isDialog()).captureToImage().asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+            }
+        }
         assertEquals(0, core.herdrInstalls)
         click(R.string.cancel_button)
         assertEquals(0, core.herdrInstalls)
         click(R.string.herdr_install_button)
         click(R.string.herdr_install_confirm)
-        compose.onNodeWithText(str(R.string.herdr_install_version, "0.1.17")).assertExists()
+        compose.onNodeWithText(str(R.string.herdr_install_ready)).assertExists()
         assertEquals(1, core.herdrInstalls)
         assertEquals(emptyList<String>(), core.offKeyWork)
     }
@@ -74,7 +86,8 @@ class HerdrInstallSectionTest {
         compose.onNodeWithText(str(R.string.herdr_install_download)).assertExists()
         compose.runOnIdle { gate.complete(Unit) }
         compose.waitForIdle()
-        compose.onNodeWithText("hc 0.1.17", substring = true).assertExists()
+        compose.onNodeWithTag("herdr-advanced").performScrollTo().performClick()
+        compose.onNodeWithText("hc 0.1.17", substring = true).performScrollTo().assertExists()
     }
 
     @Test fun checksumFailureExplainsRecoveryAndAllowsRetry() {
@@ -90,7 +103,7 @@ class HerdrInstallSectionTest {
         compose.runOnIdle { core.herdrFailWith = null }
         click(R.string.herdr_install_button)
         click(R.string.herdr_install_confirm)
-        compose.onNodeWithText(str(R.string.herdr_install_version, "0.1.17")).assertExists()
+        compose.onNodeWithText(str(R.string.herdr_install_ready)).assertExists()
         assertEquals(2, core.herdrInstalls)
     }
 
@@ -131,6 +144,7 @@ class HerdrInstallSectionTest {
     @Test fun aNewerCoreDoesNotOfferADowngrade() {
         val core = FakeCore().apply { herdrState = HerdrCoreState.Installed("0.2.1", false) }
         show(core)
+        compose.onNodeWithTag("herdr-advanced").performScrollTo().performClick()
         compose.onNodeWithText(str(R.string.herdr_install_version, "0.2.1")).performScrollTo().assertExists()
         compose.onNodeWithText(str(R.string.herdr_install_button)).assertDoesNotExist()
         compose.onNodeWithText(str(R.string.herdr_install_update)).assertDoesNotExist()
