@@ -1,5 +1,6 @@
 package io.github.shiroel.aries.ui
 
+import io.github.shiroel.aries.core.CallAnswerState
 import io.github.shiroel.aries.core.HerdrCoreState
 import androidx.annotation.StringRes
 import androidx.compose.runtime.getValue
@@ -153,7 +154,7 @@ class HostsModel(
     private val http: HttpClient = HttpRelayClient(),
     private val onSavedLaunchesChanged: () -> Unit = {},
     private val locationStore: LastLocationStore? = null,
-    private val onCallAnswered: (Host, String) -> Unit = { _, _ -> },
+    private val onCallAnswered: (Host, String, CallAnswerState) -> Unit = { _, _, _ -> },
 ) {
     internal val pairingReview = QrPairingReview()
     /** Current Host's settings models; a previous Host's pending work keeps its own state. */
@@ -1560,7 +1561,10 @@ class HostsModel(
         screen = Screen.Terminal(viewer, returnTo, fromChatToggle)
         viewing = scope.launch {
             try {
-                link.keepWatching(onFailure = { viewer.watchError = it }, onStart = { viewer.watchError = null }) { conn, resumed ->
+                link.keepWatching(onFailure = { viewer.watchError = it }, onStart = {
+                    viewer.discardInput()
+                    viewer.watchError = null
+                }) { conn, resumed ->
                     if (!viewer.typing) {
                         // Watch until the first key/paste, then let go of the observer.
                         val options = AttachOptions(observe = true, cols = 80u, rows = 24u, history = SCROLLBACK_LINES, resumed = resumed)
@@ -1635,7 +1639,14 @@ class HostsModel(
         options: AttachOptions,
         alongside: (CoroutineScope.(TerminalView) -> Unit)?,
     ): Boolean {
-        val view = conn.attachTerminal(viewer.terminal.address, options)
+        val view = try {
+            conn.attachTerminal(viewer.terminal.address, options)
+        } catch (e: Exception) {
+            // Failure can precede the view and its finally block. Only the
+            // intentional observer → typing cancellation preserves the first key.
+            if (e is CoreException || !options.observe || viewer.link?.connection !== conn) viewer.discardInput(conn)
+            throw e
+        }
         val localChanges = Channel<Unit>(Channel.CONFLATED)
         val localOperations = Channel<TerminalLocalOperation>(Channel.UNLIMITED,
             onUndeliveredElement = { it.result.cancel() })

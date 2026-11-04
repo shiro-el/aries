@@ -55,7 +55,8 @@ internal fun TasksChatDetail(model: HostsModel, chat: ChatModel) {
 internal fun TasksTerminalDetail(model: HostsModel, viewer: TerminalViewer, display: TerminalDisplaySettings) {
     // Plain Terminals still use the ordinary Terminal screen.
     if (viewer.terminal.agentStatus == null || viewer.link == null) {
-        TerminalScreen(viewer, onBack = model::closeTerminal, displaySettings = display)
+        TerminalScreen(viewer, onBack = model::closeTerminal, displaySettings = display,
+            onSelectionSend = model::sendTerminalSelectionToDraft)
         return
     }
     val link = viewer.link!!

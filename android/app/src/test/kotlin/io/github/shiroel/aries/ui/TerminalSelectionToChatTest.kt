@@ -44,10 +44,25 @@ class TerminalSelectionToChatTest {
     private val terminal = TerminalInfo("remote/t7", "build", "", listOf("make"), "/repo", "live")
     private lateinit var model: HostsModel
     private lateinit var core: FakeCore
+    private lateinit var settings: ThemeSettings
     private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
     private fun str(id: Int) = context.getString(id)
 
+    private fun screenshot(name: String) {
+        val directory = System.getenv("ARIES_TERMINAL_RENDER_DIR") ?: return
+        val file = java.io.File(directory, "$name.png")
+        file.parentFile!!.mkdirs()
+        file.outputStream().use { compose.onRoot().captureToImage().asAndroidBitmap()
+            .compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+    }
+
     private fun open(info: TerminalInfo = terminal): FakeTerminalView {
+        val prefs = context.getSharedPreferences("terminal-selection-test", android.content.Context.MODE_PRIVATE)
+        prefs.edit().clear().commit()
+        settings = ThemeSettings(prefs).apply {
+            chooseLayout(AppLayout.CONSOLE)
+            chooseMode(if (System.getenv("ARIES_TERMINAL_THEME") == "dark") ThemeMode.DARK else ThemeMode.LIGHT)
+        }
         core = FakeCore().apply {
             terminals = listOf(info)
             addHost("home", Endpoint.Ssh("10.0.0.2", 22u, "me"))
@@ -55,7 +70,7 @@ class TerminalSelectionToChatTest {
         compose.setContent {
             val scope = rememberCoroutineScope()
             model = remember { HostsModel(core, scope) }
-            AriesApp(model)
+            AriesApp(model, settings)
         }
         compose.onNodeWithText("home").performClick()
         compose.onNodeWithText(info.name!!).performClick()
@@ -69,6 +84,30 @@ class TerminalSelectionToChatTest {
         val screen = compose.onNodeWithTag("terminal-screen")
         val width = screen.fetchSemanticsNode().size.width
         screen.performTouchInput { longClick(Offset(1.5f * width / 40, 1f)) }
+    }
+
+    @Test
+    fun firstRemoteKeyEndsSelectionAndRevealsLiveOutput() {
+        open()
+        compose.runOnIdle { (model.screen as Screen.Terminal).viewer.startTyping() }
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(300)
+        compose.waitForIdle()
+        val typing = core.connection!!.views.last()
+        selectWord(typing)
+        compose.onNodeWithContentDescription(str(R.string.terminal_send_to_agent)).assertExists()
+        // Output is still read while the user examines the frozen selection.
+        val text = "live prompt"
+        typing.push(TerminalUpdate.Screen(ScreenFrame(40u, 2u, true,
+            listOf(ScreenLine(0u, listOf(CellRun(0u, text.length.toUShort(), text, false, null, null,
+                false, false, false, false, false, false)))), null, null)))
+        compose.waitForIdle()
+        screenshot("selection-frozen")
+        compose.onNodeWithText(str(R.string.key_esc)).performClick()
+        compose.waitForIdle()
+        assertEquals(listOf("key:Escape"), typing.sent)
+        compose.onNodeWithContentDescription(str(R.string.terminal_send_to_agent)).assertDoesNotExist()
+        screenshot("selection-ended-by-remote-key")
     }
 
     @Test
@@ -100,6 +139,22 @@ class TerminalSelectionToChatTest {
         compose.onNodeWithContentDescription(str(R.string.terminal_send_to_agent)).performClick()
         compose.onNodeWithTag("terminal-composer").assertTextEquals("```\nerror\n```")
         compose.runOnIdle { assertTrue(view.sent.isEmpty()) }
+    }
+
+    @Test
+    fun tasksPlainTerminalSelectionAppendsToItsLocalDraft() {
+        val view = open()
+        compose.runOnIdle { settings.chooseLayout(AppLayout.TASKS) }
+        selectWord(view)
+        screenshot("tasks-plain-terminal-selection")
+        compose.onNodeWithContentDescription(str(R.string.terminal_send_to_agent)).performClick()
+        compose.onNodeWithTag("terminal-composer").assertTextEquals("```\nerror\n```")
+        screenshot("tasks-plain-terminal-draft")
+        compose.runOnIdle {
+            assertFalse((model.screen as Screen.Terminal).viewer.typing)
+            assertTrue(view.sent.isEmpty())
+            assertTrue(core.connection!!.typed.isEmpty())
+        }
     }
 
     @Test

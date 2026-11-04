@@ -24,6 +24,9 @@ import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.graphics.asAndroidBitmap
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.core.AttachMode
@@ -39,6 +42,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /** Seam 3: typing into a Terminal (input mode, key bar), against a fake core. */
 @RunWith(RobolectricTestRunner::class)
@@ -48,15 +52,28 @@ class TerminalTypingTest {
 
     private fun str(id: Int, vararg args: Any) = compose.activity.getString(id, *args)
 
+    private fun screenshot(name: String) {
+        val directory = System.getenv("ARIES_TERMINAL_RENDER_DIR") ?: return
+        val file = java.io.File(directory, "$name.png")
+        file.parentFile!!.mkdirs()
+        file.outputStream().use { compose.onRoot().captureToImage().asAndroidBitmap()
+            .compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+    }
+
     private val agent = TerminalInfo("t1", "claude", "", listOf("claude"), "/repo", "live", AgentStatus.Working, false, 0uL)
 
     private fun open(core: FakeCore) {
         core.terminals = listOf(agent)
         core.addHost("home", Endpoint.Ssh("10.0.0.2", 22u, "me"))
+        val prefs = compose.activity.getSharedPreferences("terminal-typing-test", android.content.Context.MODE_PRIVATE)
+        prefs.edit().clear().commit()
+        val settings = ThemeSettings(prefs).apply {
+            chooseMode(if (System.getenv("ARIES_TERMINAL_THEME") == "dark") ThemeMode.DARK else ThemeMode.LIGHT)
+        }
         compose.setContent {
             val scope = rememberCoroutineScope()
             val model = remember { HostsModel(core, scope) }
-            MaterialTheme { AriesApp(model) }
+            MaterialTheme { AriesApp(model, settings) }
         }
         compose.onNodeWithText("home").performClick()
         compose.onNodeWithText("claude").performClick()
@@ -158,6 +175,26 @@ class TerminalTypingTest {
         assertEquals(listOf("text:x"), typing.sent)
     }
 
+
+    @Test
+    @Config(qualifiers = "w900dp-h360dp")
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun compactComposerKeysReachTheTerminalBeforeAnyTypedText() {
+        val core = FakeCore()
+        open(core)
+        val observer = core.connection!!.views.single()
+        compose.onNodeWithContentDescription(str(R.string.terminal_compose_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.terminal_keys_show_button)).performClick()
+        screenshot("compact-composer-key-dialog")
+        compose.onNodeWithText(str(R.string.key_esc)).performClick()
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(300)
+        compose.waitForIdle()
+        assertEquals(listOf("key:Escape"), core.connection!!.views.last().sent)
+        assertTrue(observer.detached)
+        compose.onNodeWithText(str(R.string.key_tab)).performClick()
+        compose.runOnIdle { assertEquals(listOf("key:Escape", "key:Tab"), core.connection!!.views.last().sent) }
+    }
 
     @Test
     fun composeEditsStayLocalAndSendAsOnePasteWithoutEnter() {

@@ -111,7 +111,7 @@ internal fun ConsoleChatCall(entry: CallEntry, calls: CallsModel) {
                     onClick = { calls.reply(entry, index) })
             }
         }
-        calls.replyNotes[entry.key]?.let { replyNoteText(it) }?.let { text ->
+        calls.replyNotes[entry.key]?.let { replyNoteText(it, call.answer) }?.let { text ->
             AnnouncedText(text, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
         if (entry.key in calls.replyNotes) {

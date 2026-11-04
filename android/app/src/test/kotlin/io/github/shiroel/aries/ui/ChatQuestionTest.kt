@@ -197,6 +197,55 @@ class ChatQuestionTest {
         assertEquals(listOf("t1" to "Blue"), core.connection!!.typed)
     }
 
+    // D15: losing only the terminal.send response must require confirmation before another answer.
+    @Test fun aLostHistoryAnswerResponseRequiresAnExplicitResendConfirmation() {
+        val core = FakeCore()
+        open(core, AgentStatus.Idle)
+        val response = kotlinx.coroutines.CompletableDeferred<Unit>()
+        core.connection!!.sendAfterTypingReply = response
+        core.connection!!.sendAfterTypingFailure = CoreException.Closed()
+        core.pushChat(ChatSnapshot(listOf(question("q1")), ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue")).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.chat_question_sending)).assertExists()
+        assertEquals(listOf("t1" to "Blue"), core.connection!!.typed)
+        response.complete(Unit)
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.chat_queue_uncertain)).assertExists()
+        compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue")).assertDoesNotExist()
+        screenshot("history-unconfirmed")
+        compose.onNodeWithText(str(R.string.chat_delivery_retry_button)).performClick()
+        compose.onNode(isDialog()).assertExists()
+        screenshot("history-resend-confirm", dialog = true)
+        compose.onNodeWithText(str(R.string.cancel_button)).performClick()
+        assertEquals(1, core.connection!!.calls.count { it == "sendMessage" })
+        assertEquals(listOf("t1" to "Blue"), core.connection!!.typed)
+        core.connection!!.sendAfterTypingFailure = null
+        compose.onNodeWithText(str(R.string.chat_delivery_retry_button)).performClick()
+        compose.onNode(hasText(str(R.string.chat_delivery_retry_button)) and hasAnyAncestor(isDialog())).performClick()
+        compose.waitForIdle()
+        assertEquals(listOf("t1" to "Blue", "t1" to "Blue"), core.connection!!.typed)
+        assertEquals(2, core.connection!!.calls.count { it == "sendMessage" })
+    }
+
+    // D15 recovery: a process death while sending must not silently enable duplicate answers.
+    @Test fun aJournalRestoresAnInterruptedHistoryAnswerAsUnconfirmed() {
+        val core = FakeCore()
+        core.saveChatOutbox("h1", "t1", ChatOutboxState("", emptyList(), emptyList(),
+            picks = mapOf("q1" to listOf(setOf(1))), answers = mapOf("q1" to "sending")).encode())
+        open(core, AgentStatus.Idle)
+        core.pushChat(ChatSnapshot(listOf(question("q1")), ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.chat_queue_uncertain)).assertExists()
+        compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue")).assertDoesNotExist()
+        compose.onNode(hasText("Blue") and isSelected()).assertExists()
+        compose.onNodeWithText(str(R.string.chat_delivery_retry_button)).performClick()
+        compose.onNode(isDialog()).assertExists()
+        assertTrue(core.connection!!.typed.isEmpty())
+        assertFalse(core.connection!!.calls.contains("sendMessage"))
+    }
+
     @Test fun queuedCodexRequestsAdvanceAfterTheFirstGetsAResult() {
         val core = FakeCore()
         open(core)

@@ -142,6 +142,16 @@ class CallReplyTest {
         choice("Merge").assertExists()
     }
 
+    // D26: a pre-claim failure has no answer record to carry its diagnostic.
+    @Test
+    fun aFailureBeforeClaimStillShowsItsDetail() {
+        openCalls(core().apply { replyResult = CallReply(CallReplyOutcome.FAILED, null, "answer lock unavailable") })
+        choice("Merge").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("answer lock unavailable", substring = true).assertExists()
+        choice("Wait").assertExists()
+    }
+
     @Test
     fun aFailedAnswerShowsWhy() {
         val core = core().apply {
