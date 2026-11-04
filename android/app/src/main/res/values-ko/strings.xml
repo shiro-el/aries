@@ -610,6 +610,46 @@
     <string name="chat_copy_all">모두 복사</string>
     <string name="chat_select_text">텍스트 선택</string>
     <string name="chat_thinking">생각 과정</string>
+    <!-- Thread Chat -->
+    <string name="thread_tools_summary">%1$s · %2$s</string>
+    <string name="thread_tools_separator">", "</string>
+    <string name="thread_tool_running">%1$s · %2$s</string>
+    <string name="thread_waiting_single">%1$s가 답을 기다려요 ›</string>
+    <string name="thread_waiting_urgent_single">긴급 · %1$s가 답을 기다려요 ›</string>
+    <plurals name="thread_tools_read">
+        <item quantity="one">파일 %1$d개 읽음</item>
+        <item quantity="other">파일 %1$d개 읽음</item>
+    </plurals>
+    <plurals name="thread_tools_modified">
+        <item quantity="one">%1$d개 수정</item>
+        <item quantity="other">%1$d개 수정</item>
+    </plurals>
+    <plurals name="thread_tools_steps">
+        <item quantity="one">%1$d단계</item>
+        <item quantity="other">%1$d단계</item>
+    </plurals>
+    <string name="thread_permission_waiting">권한 요청 · 답을 기다립니다</string>
+    <string name="thread_previous_waiting">이전 대기 대화</string>
+    <string name="thread_next_waiting_button">다음 대기 대화</string>
+    <string name="thread_question_waiting">질문 · 답을 기다립니다</string>
+    <string name="thread_chat_subtitle">%1$s · %2$s</string>
+    <string name="thread_chat_menu">⋯</string>
+    <plurals name="thread_waiting">
+        <item quantity="one">%1$s 외 %2$d개가 답을 기다려요 ›</item>
+        <item quantity="other">%1$s 외 %2$d개가 답을 기다려요 ›</item>
+    </plurals>
+    <plurals name="thread_waiting_urgent">
+        <item quantity="one">긴급 · %1$s 외 %2$d개가 답을 기다려요 ›</item>
+        <item quantity="other">긴급 · %1$s 외 %2$d개가 답을 기다려요 ›</item>
+    </plurals>
+    <string name="thread_waiting_position">%1$d/%2$d</string>
+    <string name="thread_previous">‹</string>
+    <string name="thread_next">›</string>
+    <string name="thread_open_conversation">대화 열기</string>
+    <string name="thread_next_waiting">다음 · %1$s</string>
+    <string name="thread_waiting_empty">답변을 모두 마쳤어요</string>
+    <string name="thread_waiting_open_required">이 Agent에게 연결하고 답하려면 대화를 열어 주세요.</string>
+
     <string name="chat_tool_done">완료</string>
     <string name="chat_tool_running">실행 중</string>
     <string name="chat_tool_failed">실패</string>

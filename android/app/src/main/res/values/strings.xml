@@ -610,6 +610,46 @@
     <string name="chat_copy_all">Copy all</string>
     <string name="chat_select_text">Select text</string>
     <string name="chat_thinking">Thinking</string>
+    <!-- Thread Chat -->
+    <string name="thread_tools_summary">%1$s · %2$s</string>
+    <string name="thread_tools_separator">", "</string>
+    <string name="thread_tool_running">%1$s · %2$s</string>
+    <string name="thread_waiting_single">%1$s needs an answer ›</string>
+    <string name="thread_waiting_urgent_single">Urgent · %1$s needs an answer ›</string>
+    <plurals name="thread_tools_read">
+        <item quantity="one">%1$d file read</item>
+        <item quantity="other">%1$d files read</item>
+    </plurals>
+    <plurals name="thread_tools_modified">
+        <item quantity="one">%1$d modified</item>
+        <item quantity="other">%1$d modified</item>
+    </plurals>
+    <plurals name="thread_tools_steps">
+        <item quantity="one">%1$d step</item>
+        <item quantity="other">%1$d steps</item>
+    </plurals>
+    <string name="thread_permission_waiting">Permission request · waiting for your answer</string>
+    <string name="thread_previous_waiting">Previous waiting conversation</string>
+    <string name="thread_next_waiting_button">Next waiting conversation</string>
+    <string name="thread_question_waiting">Question · waiting for your answer</string>
+    <string name="thread_chat_subtitle">%1$s · %2$s</string>
+    <string name="thread_chat_menu">⋯</string>
+    <plurals name="thread_waiting">
+        <item quantity="one">%1$s and %2$d other need an answer ›</item>
+        <item quantity="other">%1$s and %2$d others need an answer ›</item>
+    </plurals>
+    <plurals name="thread_waiting_urgent">
+        <item quantity="one">Urgent · %1$s and %2$d other need an answer ›</item>
+        <item quantity="other">Urgent · %1$s and %2$d others need an answer ›</item>
+    </plurals>
+    <string name="thread_waiting_position">%1$d/%2$d</string>
+    <string name="thread_previous">‹</string>
+    <string name="thread_next">›</string>
+    <string name="thread_open_conversation">Open conversation</string>
+    <string name="thread_next_waiting">Next · %1$s</string>
+    <string name="thread_waiting_empty">All caught up</string>
+    <string name="thread_waiting_open_required">Open the conversation to connect and answer this Agent.</string>
+
     <string name="chat_tool_done">done</string>
     <string name="chat_tool_running">running</string>
     <string name="chat_tool_failed">failed</string>
