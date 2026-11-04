@@ -36,14 +36,14 @@ internal fun WaitingSummary(
         else -> stringResource(R.string.console_agents_waiting, count)
     }
     Column(modifier.then(if (onClick == null) Modifier else Modifier.clickable(role = Role.Button, onClick = onClick))
-        .heightIn(min = 44.dp).padding(horizontal = 6.dp, vertical = 4.dp),
+        .heightIn(min = 48.dp).padding(horizontal = 6.dp, vertical = 4.dp),
         verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.End) {
-        Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        Text(label, style = MaterialTheme.typography.labelMedium, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis,
             color = if (count > 0) statusColor(AgentStatus.Blocked(null, null)) else MaterialTheme.colorScheme.onSurfaceVariant)
         if (oldest != null) Text(
             stringResource(R.string.surfaces_age_minutes, ((now.toULong().coerceAtLeast(oldest) - oldest) / 60_000uL).toLong()),
             style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1, overflow = TextOverflow.Ellipsis,
+            maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -54,10 +54,10 @@ internal val LocalNextWaitingAgent = staticCompositionLocalOf<NextWaitingAction?
 @Composable
 internal fun NextWaitingAgentButton() {
     val next = LocalNextWaitingAgent.current ?: return
-    TextButton(onClick = next.open, modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)) {
+    TextButton(onClick = next.open, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
         next.entry.terminal.agentStatus?.let { AgentStatusMark(it, modifier = Modifier.size(12.dp)) }
         Spacer(Modifier.width(8.dp))
         Text(stringResource(R.string.agents_next_waiting, displayName(next.entry.terminal), next.entry.host.name),
-            maxLines = 1, overflow = TextOverflow.Ellipsis)
+            maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
     }
 }

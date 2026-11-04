@@ -16,6 +16,8 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
@@ -40,13 +42,23 @@ private fun mix(a: Color, b: Color, t: Float) = Color(
     1f,
 )
 
-private fun on(c: Color) = if (c.luminance() > 0.38f) Brand.Ink else Color.White
+internal val LocalAccentColor = staticCompositionLocalOf { Brand.Saffron }
 
-/** Darkens [c] until it reads on a light surface. */
+internal fun onAccent(c: Color): Color {
+    val luminance = c.luminance()
+    return when {
+        (luminance + 0.05f) / (Brand.Ink.luminance() + 0.05f) >= 4.5f -> Brand.Ink
+        1.05f / (luminance + 0.05f) >= 4.5f -> Color.White
+        else -> Color.Black
+    }
+}
+
+/** Text must read even on the darkest light-theme surface container. Fills keep the original accent. */
 private fun forLight(c: Color): Color {
     var x = c
     var i = 0
-    while (x.luminance() > 0.28f && i < 20) { x = mix(x, Color.Black, 0.08f); i++ }
+    val surface = Color(0xFFE3DFDA).luminance()
+    while ((surface + 0.05f) / (x.luminance() + 0.05f) < 4.5f && i < 40) { x = mix(x, Color.Black, 0.08f); i++ }
     return x
 }
 
@@ -62,7 +74,7 @@ fun schemeFor(accent: Color, dark: Boolean): ColorScheme {
     return if (dark) {
         val bg = Brand.Night
         darkColorScheme(
-            primary = accent, onPrimary = on(accent),
+            primary = accent, onPrimary = onAccent(accent),
             primaryContainer = mix(accent, bg, 0.72f), onPrimaryContainer = mix(accent, Color.White, 0.55f),
             secondary = mix(accent, Color(0xFFB8B2AB), 0.6f), onSecondary = Brand.Ink,
             secondaryContainer = mix(accent, bg, 0.84f), onSecondaryContainer = Color(0xFFE6E1DB),
@@ -74,7 +86,7 @@ fun schemeFor(accent: Color, dark: Boolean): ColorScheme {
             surfaceContainerLowest = Color(0xFF0D0E10), surfaceContainerLow = Color(0xFF18191B),
             surfaceContainer = Color(0xFF1D1E20), surfaceContainerHigh = Color(0xFF242527),
             surfaceContainerHighest = Color(0xFF2C2D2F), surfaceBright = Color(0xFF333436), surfaceDim = bg,
-            outline = Color(0xFF55514D), outlineVariant = Color(0xFF34332F),
+            outline = Color(0xFF79736C), outlineVariant = Color(0xFF34332F),
             error = Color(0xFFF2756A), onError = Brand.Ink,
             errorContainer = Color(0xFF4A1E1A), onErrorContainer = Color(0xFFFFD9D3),
             inverseSurface = Color(0xFFECE8E3), inverseOnSurface = Brand.Ink, inversePrimary = forLight(accent),
@@ -83,7 +95,7 @@ fun schemeFor(accent: Color, dark: Boolean): ColorScheme {
         val p = forLight(accent)
         val bg = Color(0xFFFAF9F7)
         lightColorScheme(
-            primary = p, onPrimary = on(p),
+            primary = p, onPrimary = onAccent(p),
             primaryContainer = mix(accent, Color.White, 0.62f), onPrimaryContainer = mix(p, Color.Black, 0.45f),
             secondary = mix(p, Color(0xFF5E5852), 0.6f), onSecondary = Color.White,
             secondaryContainer = mix(accent, Color.White, 0.84f), onSecondaryContainer = Brand.Ink,
@@ -121,15 +133,17 @@ fun AriesTheme(settings: ThemeSettings, content: @Composable () -> Unit) {
             isAppearanceLightNavigationBars = !dark
         }
     }
-    MaterialTheme(
-        colorScheme = schemeFor(Color(settings.accentArgb), dark),
-        typography = ConsoleTypography,
-        shapes = Shapes(
-            extraSmall = RoundedCornerShape(0.dp), small = RoundedCornerShape(0.dp),
-            medium = RoundedCornerShape(0.dp), large = RoundedCornerShape(0.dp), extraLarge = RoundedCornerShape(0.dp),
-        ),
-        content = content,
-    )
+    CompositionLocalProvider(LocalAccentColor provides Color(settings.accentArgb)) {
+        MaterialTheme(
+            colorScheme = schemeFor(Color(settings.accentArgb), dark),
+            typography = ConsoleTypography,
+            shapes = Shapes(
+                extraSmall = RoundedCornerShape(0.dp), small = RoundedCornerShape(0.dp),
+                medium = RoundedCornerShape(0.dp), large = RoundedCornerShape(0.dp), extraLarge = RoundedCornerShape(0.dp),
+            ),
+            content = content,
+        )
+    }
 }
 
 /** Agent status colours: fixed meanings, not the accent (Working uses the accent). */

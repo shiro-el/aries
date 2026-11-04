@@ -33,7 +33,7 @@ import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentStatus
 import kotlinx.coroutines.launch
 
-/** Shared 44dp header. Ticket 05 can supply Agent actions; ticket 04 owns [inbox]. */
+/** Shared header with room for enlarged text. Ticket 05 can supply Agent actions; ticket 04 owns [inbox]. */
 @Composable
 fun ConsoleTopBar(
     title: String,
@@ -43,14 +43,14 @@ fun ConsoleTopBar(
     inbox: @Composable RowScope.() -> Unit = { ConsoleInboxAction() },
     showMark: Boolean = true,
     titleContent: @Composable RowScope.() -> Unit = {
-        Text(title, Modifier.weight(1f), fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(title, Modifier.weight(1f), fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
     },
 ) {
-    Row(Modifier.fillMaxWidth().height(44.dp).testTag("console-top-bar"), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("console-top-bar"), verticalAlignment = Alignment.CenterVertically) {
         val navigationLabel = stringResource(if (onBack == null) R.string.console_open_drawer else R.string.back_button)
         Box(
-            Modifier.size(44.dp).testTag(if (onBack == null) "console-menu" else "console-back")
-                .clickable(onClick = onBack ?: onMenu),
+            Modifier.size(48.dp).testTag(if (onBack == null) "console-menu" else "console-back")
+                .clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onBack ?: onMenu),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -208,7 +208,7 @@ private fun ConsoleDrawer(model: HostsModel, navigate: (() -> Unit) -> Unit) {
     }
     LazyColumn {
         item {
-            Row(Modifier.height(44.dp).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.heightIn(min = 48.dp).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                 ConsoleMark()
                 Text(stringResource(R.string.app_name), fontSize = 14.sp, fontWeight = FontWeight.Medium)
             }
@@ -247,12 +247,12 @@ private fun DrawerRow(
     trailing: @Composable () -> Unit = {},
 ) {
     Row(
-        modifier.fillMaxWidth().heightIn(min = 44.dp).semantics { selected = current }.clickable(onClick = onClick),
+        modifier.fillMaxWidth().height(IntrinsicSize.Min).heightIn(min = 48.dp).semantics { selected = current }.clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.width(3.dp).height(44.dp).background(if (current) MaterialTheme.colorScheme.primary else Color.Transparent))
+        Box(Modifier.width(3.dp).fillMaxHeight().background(if (current) MaterialTheme.colorScheme.primary else Color.Transparent))
         Row(Modifier.weight(1f).padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(title, Modifier.weight(1f), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(title, Modifier.weight(1f), fontSize = 14.sp, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
             trailing()
         }
     }
