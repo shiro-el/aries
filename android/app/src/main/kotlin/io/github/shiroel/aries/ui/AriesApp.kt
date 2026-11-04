@@ -220,6 +220,9 @@ private fun ConsoleHostRow(model: HostsModel, host: Host) {
             }
             Text(where, fontSize = 12.sp, lineHeight = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
         }
+        WaitingSummary(model.quickOpenSources.filter { it.host.id == host.id },
+            model.drawerAgents.filter { it.host.id == host.id }, Modifier.testTag("host-waiting:${host.id}"),
+            onClick = { model.openHostWaiting(host) })
         Text(
             stringResource(if (host.endpoint is Endpoint.Ssh) R.string.console_ssh else R.string.console_local),
             Modifier.border(1.dp, color.copy(alpha = .7f), RoundedCornerShape(3.dp)).padding(horizontal = 5.dp, vertical = 1.dp),
