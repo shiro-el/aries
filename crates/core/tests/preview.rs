@@ -18,6 +18,45 @@ use aries_test_support::SshdHost;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+// Regression: a shared Host's sshd/database listeners must not advertise previews.
+#[tokio::test]
+#[ignore = "needs docker"]
+async fn discovery_keeps_http_and_filters_non_http_listeners() {
+    let sshd = SshdHost::start();
+    let setup = std::process::Command::new("docker")
+        .args(["exec", sshd.network_name(), "sh", "-c", r#"
+(while :; do printf 'HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n' | nc -l -p 5173 -w 1; done) >/tmp/preview-http.log 2>&1 &
+printf '#!/bin/sh\nprintf "LISTEN 0 128 127.0.0.1:22 *:*\\nLISTEN 0 128 0.0.0.0:5173 *:*\\n"\n' > /usr/local/bin/ss
+chmod +x /usr/local/bin/ss
+"#]).status().unwrap();
+    assert!(setup.success());
+    let data = tempfile::tempdir().unwrap();
+    let core = common::core_in(data.path());
+    sshd.authorize(&core.ensure_key().unwrap().openssh);
+    let host = core
+        .add_host(
+            "preview".into(),
+            Endpoint::Ssh {
+                address: "127.0.0.1".into(),
+                port: sshd.port(),
+                user: SshdHost::USER.into(),
+            },
+        )
+        .unwrap();
+    core.trust_host_key(host.id.clone(), sshd.host_key_fingerprint())
+        .unwrap();
+    let connection = core.connect(host.id).await.unwrap();
+    assert_eq!(connection.preview_listening_ports().await, vec![5173]);
+    // Discovery is cached for the live connection, including negative probes.
+    let remove = std::process::Command::new("docker")
+        .args(["exec", sshd.network_name(), "rm", "/usr/local/bin/ss"])
+        .status()
+        .unwrap();
+    assert!(remove.success());
+    assert_eq!(connection.preview_listening_ports().await, vec![5173]);
+    connection.disconnect().await;
+}
+
 #[tokio::test]
 #[ignore = "needs docker"]
 async fn forwards_only_on_loopback_and_closes_streams_with_its_owner() {

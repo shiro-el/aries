@@ -1,18 +1,23 @@
 package io.github.shiroel.aries.ui
 
 import android.content.Intent
+import android.webkit.WebResourceError
+import android.graphics.Bitmap
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -27,6 +32,9 @@ import io.github.shiroel.aries.core.ChatEntryBody
 import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.PreviewForward
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayInputStream
@@ -42,7 +50,7 @@ internal class LocalhostPreview {
 
 @Composable
 internal fun rememberLocalhostPreview(link: HostLink?, output: String, address: String): LocalhostPreview {
-    val preview = remember(link) { LocalhostPreview() }
+    val preview = remember(link, address) { LocalhostPreview() }
     val enabled = link?.host?.endpoint is Endpoint.Ssh && !address.contains('/')
     val connection = link?.connection
     LaunchedEffect(preview, enabled, connection, output) {
@@ -64,7 +72,7 @@ internal fun rememberLocalhostPreview(link: HostLink?, output: String, address: 
 @Composable
 internal fun rememberChatLocalhostPreview(link: HostLink?, entries: List<ChatEntry>, address: String): LocalhostPreview {
     val preview = rememberLocalhostPreview(link, "", address)
-    val parsed = remember(link) { mutableMapOf<String, String>() }
+    val parsed = remember(preview) { mutableMapOf<String, String>() }
     val connection = link?.connection
     val latestEntries by rememberUpdatedState(entries)
     LaunchedEffect(preview, connection, address) {
@@ -132,9 +140,11 @@ internal fun LocalhostPreviewBrowser(
             failed = false
             var opened: PreviewForward? = null
             try {
-                opened = connection.openPreview(port)
+                opened = withTimeout(10_000) { connection.openPreview(port) }
                 forward = opened
                 kotlinx.coroutines.awaitCancellation()
+            } catch (_: TimeoutCancellationException) {
+                failed = true
             } catch (_: io.github.shiroel.aries.core.CoreException) {
                 failed = true
             } finally {
@@ -151,7 +161,10 @@ internal fun LocalhostPreviewBrowser(
             previousChange = change
         }
         link?.let { ConnectionNotice(it) }
-        Text(stringResource(R.string.preview_address, port.toInt()), Modifier.padding(horizontal = 12.dp))
+        Row(Modifier.fillMaxWidth().padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(stringResource(R.string.preview_address, port.toInt()), Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+            TextButton(onClick = { preview.selected = null }) { Text(stringResource(R.string.preview_close)) }
+        }
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TextButton(onClick = { webView?.reload() }, enabled = forward != null) { Text(stringResource(R.string.preview_reload)) }
             TextButton(onClick = { preview.desktop = !preview.desktop }) {
@@ -178,7 +191,6 @@ internal fun LocalhostPreviewBrowser(
                     } catch (_: Exception) { captureFailed = true }
                 }) { Text(stringResource(R.string.preview_capture_button)) }
             }
-            TextButton(onClick = { preview.selected = null }) { Text(stringResource(R.string.preview_close)) }
         }
         if (captureFailed) Text(stringResource(R.string.preview_capture_failed), Modifier.padding(horizontal = 12.dp),
             color = MaterialTheme.colorScheme.error)
@@ -195,7 +207,10 @@ internal fun LocalhostPreviewBrowser(
             Text(stringResource(R.string.preview_failed), Modifier.padding(12.dp))
             TextButton(onClick = { link?.retryNow(); retry++ }) { Text(stringResource(R.string.preview_retry)) }
         } else if (started) {
-            CircularProgressIndicator(Modifier.padding(12.dp))
+            Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                CircularProgressIndicator()
+                Text(stringResource(R.string.preview_loading), Modifier.padding(top = 12.dp))
+            }
         }
     }
     capture?.let { image ->
@@ -213,46 +228,102 @@ internal fun previewOriginAllows(origin: String, candidate: String): Boolean = t
 @Composable
 private fun RestrictedPreviewWebView(origin: String, desktop: Boolean, modifier: Modifier, onView: (WebView?) -> Unit) {
     val context = LocalContext.current
-    AndroidView(modifier = modifier, factory = {
-        WebView(it).apply {
-            settings.javaScriptEnabled = true
-            settings.domStorageEnabled = true
-            settings.allowFileAccess = false
-            settings.allowContentAccess = false
-            settings.javaScriptCanOpenWindowsAutomatically = false
-            settings.setSupportMultipleWindows(false)
-            settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-            // No addJavascriptInterface, file chooser, download handler or permission grants.
-            webViewClient = object : WebViewClient() {
-                override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                    val url = request.url.toString()
-                    if (previewOriginAllows(origin, url)) return false
-                    if (request.isForMainFrame && request.hasGesture() && request.url.scheme in listOf("http", "https")) {
-                        try { context.startActivity(Intent(Intent.ACTION_VIEW, request.url).addCategory(Intent.CATEGORY_BROWSABLE)) }
-                        catch (_: android.content.ActivityNotFoundException) { }
+    var state by remember(origin) { mutableStateOf(PreviewPageState.LOADING) }
+    var status by remember(origin) { mutableStateOf<Int?>(null) }
+    var navigation by remember(origin) { mutableIntStateOf(0) }
+    var currentView by remember(origin) { mutableStateOf<WebView?>(null) }
+    fun loading() { status = null; state = PreviewPageState.LOADING; navigation++ }
+    LaunchedEffect(origin, state, navigation) {
+        if (state == PreviewPageState.LOADING) {
+            delay(10_000)
+            state = PreviewPageState.TIMEOUT
+            currentView?.stopLoading()
+        }
+    }
+    // Native WebView drawing must stay below the preview title and close button.
+    Box(modifier.clipToBounds().background(MaterialTheme.colorScheme.surfaceVariant)) {
+        AndroidView(modifier = Modifier.fillMaxSize().clipToBounds(), factory = {
+            WebView(it).apply {
+                setBackgroundColor(android.graphics.Color.WHITE)
+                clipToOutline = true
+                currentView = this
+                settings.javaScriptEnabled = true
+                settings.domStorageEnabled = true
+                settings.allowFileAccess = false
+                settings.allowContentAccess = false
+                settings.javaScriptCanOpenWindowsAutomatically = false
+                settings.setSupportMultipleWindows(false)
+                settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                // No addJavascriptInterface, file chooser, download handler or permission grants.
+                webViewClient = object : WebViewClient() {
+                    override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) { loading() }
+                    override fun onPageCommitVisible(view: WebView, url: String?) {
+                        if (state == PreviewPageState.LOADING) state = PreviewPageState.READY
                     }
-                    return true
+                    override fun onPageFinished(view: WebView, url: String?) {
+                        if (state == PreviewPageState.LOADING) state = PreviewPageState.READY
+                    }
+                    override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+                        if (request.isForMainFrame) {
+                            state = if (error.errorCode == ERROR_TIMEOUT) PreviewPageState.TIMEOUT else PreviewPageState.FAILED
+                        }
+                    }
+                    override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: WebResourceResponse) {
+                        if (request.isForMainFrame) { status = response.statusCode; state = PreviewPageState.FAILED }
+                    }
+                    override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                        val url = request.url.toString()
+                        if (previewOriginAllows(origin, url)) return false
+                        if (request.isForMainFrame && request.hasGesture() && request.url.scheme in listOf("http", "https")) {
+                            try { context.startActivity(Intent(Intent.ACTION_VIEW, request.url).addCategory(Intent.CATEGORY_BROWSABLE)) }
+                            catch (_: android.content.ActivityNotFoundException) { }
+                        }
+                        return true
+                    }
+                    override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
+                        if (previewOriginAllows(origin, request.url.toString())) null
+                        else WebResourceResponse("text/plain", "utf-8", 403, "Blocked", emptyMap(), ByteArrayInputStream(byteArrayOf()))
                 }
-                override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
-                    if (previewOriginAllows(origin, request.url.toString())) null
-                    else WebResourceResponse("text/plain", "utf-8", 403, "Blocked", emptyMap(), ByteArrayInputStream(byteArrayOf()))
+                loadUrl(origin)
+                onView(this)
             }
-            loadUrl(origin)
-            onView(this)
+        }, update = { view ->
+            val default = WebSettings.getDefaultUserAgent(context)
+            val agent = if (desktop) default.replace("; wv", "").replace("Mobile", "").replace("Android", "X11; Linux x86_64") else default
+            if (view.settings.userAgentString != agent) {
+                view.settings.userAgentString = agent
+                view.settings.useWideViewPort = desktop
+                view.settings.loadWithOverviewMode = desktop
+                view.reload()
+            }
+        }, onRelease = { view ->
+            onView(null)
+            currentView = null
+            view.stopLoading()
+            view.webViewClient = WebViewClient()
+            view.destroy()
+        })
+        if (state != PreviewPageState.READY) {
+            Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surfaceVariant) {
+                Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally) {
+                    if (state == PreviewPageState.LOADING) {
+                        CircularProgressIndicator()
+                        Text(stringResource(R.string.preview_loading), Modifier.padding(top = 12.dp))
+                    } else {
+                        val message = when {
+                            state == PreviewPageState.TIMEOUT -> stringResource(R.string.preview_timeout)
+                            status != null -> stringResource(R.string.preview_http_failed, status!!)
+                            else -> stringResource(R.string.preview_page_failed)
+                        }
+                        Text(message)
+                        TextButton(onClick = { loading(); currentView?.reload() }) { Text(stringResource(R.string.preview_retry)) }
+                    }
+                }
+            }
         }
-    }, update = { view ->
-        val default = WebSettings.getDefaultUserAgent(context)
-        val agent = if (desktop) default.replace("; wv", "").replace("Mobile", "").replace("Android", "X11; Linux x86_64") else default
-        if (view.settings.userAgentString != agent) {
-            view.settings.userAgentString = agent
-            view.settings.useWideViewPort = desktop
-            view.settings.loadWithOverviewMode = desktop
-            view.reload()
-        }
-    }, onRelease = { view ->
-        onView(null)
-        view.stopLoading()
-        view.webViewClient = WebViewClient()
-        view.destroy()
-    })
+    }
 }
+
+private enum class PreviewPageState { LOADING, READY, FAILED, TIMEOUT }
+

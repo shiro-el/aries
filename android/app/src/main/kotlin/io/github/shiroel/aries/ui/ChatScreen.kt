@@ -178,10 +178,15 @@ class ChatModel(
 
     /** What the user is typing into the input. */
     var input by mutableStateOf(TextFieldValue(""))
-    // Keep the String seam for attachments and existing callers.
+    // External history/restoration/file edits use this String seam. The IME owns
+    // text, selection and composition until it commits; even an equal-text
+    // TextFieldValue replacement can end dictation and move the cursor.
     var draft: String
         get() = input.text
-        set(value) { input = TextFieldValue(value, TextRange(value.length)) }
+        set(value) {
+            if (value == input.text || input.composition != null) return
+            input = TextFieldValue(value, TextRange(value.length))
+        }
     var sending by mutableStateOf<Sending?>(null)
         private set
     var sent by mutableStateOf(false)
@@ -321,6 +326,9 @@ class ChatModel(
             sendError = CoreException.Closed().let { it.message ?: it.toString() }
             return
         }
+        // Send is an explicit user action: commit the IME text before handing
+        // it off, so the guarded external setter can clear the successful draft.
+        input = input.copy(composition = null)
         val sentDraft = draft
         val sentAttachments = attachments
         val text = sentAttachments.fold(sentDraft) { message, attachment ->
