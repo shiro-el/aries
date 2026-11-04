@@ -8,6 +8,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
@@ -233,9 +235,9 @@ internal fun NewTaskDialog(task: NewTask, onStart: () -> Unit, onOpenChat: () ->
                 ConsoleField(form.command, { form.command = it }, enabled = editable,
                     singleLine = true, label = { Text(stringResource(R.string.launch_preset_args)) })
             }
-            if (task.waiting) Text(stringResource(R.string.new_task_waiting))
-            if (form.busy) ConsoleProgress(Modifier.fillMaxWidth())
-            form.error?.let { Text(stringResource(it.res, *it.args.toTypedArray()), color = MaterialTheme.colorScheme.error) }
+            NewTaskStatus(task)
+            val starting = stringResource(R.string.new_task_starting)
+            if (form.busy) ConsoleProgress(Modifier.fillMaxWidth().semantics { contentDescription = starting })
             if (task.launchUnknown && !form.busy) {
                 val owner = LocalTaskOwner.current
                 Text(stringResource(R.string.launch_stop_tracking_body))
@@ -304,4 +306,16 @@ internal fun TaskFolderDialog(connection: HostConnection?, initial: String, onSe
     }, confirmButton = { TextButton(onClick = { directory?.path?.let(onSelect) }, enabled = directory != null) {
         Text(stringResource(R.string.new_task_use_folder))
     } }, dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel_button)) } })
+}
+
+@Composable
+internal fun NewTaskStatus(task: NewTask) {
+    val message = when {
+        task.form.error != null -> messageText(task.form.error!!)
+        task.waiting -> stringResource(R.string.new_task_waiting)
+        task.form.busy -> stringResource(R.string.new_task_starting)
+        else -> null
+    }
+    AnnouncedText(message, color = if (task.form.error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+        style = MaterialTheme.typography.bodySmall)
 }

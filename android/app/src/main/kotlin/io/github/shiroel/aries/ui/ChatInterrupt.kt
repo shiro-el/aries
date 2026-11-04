@@ -33,13 +33,11 @@ internal fun interruptMessage(outcome: InterruptOutcome): Message = Message(when
 
 @Composable
 internal fun ChatInterruptNotice(chat: ChatModel, modifier: Modifier = Modifier) {
-    chat.interruptNotice?.let { message ->
-        AnnouncedText(
-            messageText(message),
-            modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-            style = MaterialTheme.typography.bodySmall,
-        )
-    }
+    AnnouncedText(
+        chat.interruptNotice?.let { messageText(it) },
+        modifier.then(if (chat.interruptNotice != null) Modifier.padding(horizontal = 16.dp, vertical = 4.dp) else Modifier),
+        style = MaterialTheme.typography.bodySmall,
+    )
 }
 
 @Composable

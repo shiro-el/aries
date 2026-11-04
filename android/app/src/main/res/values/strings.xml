@@ -347,6 +347,14 @@
     <string name="git_clean">No changes.</string>
     <string name="git_staged">Staged</string>
     <string name="git_unstaged">Unstaged</string>
+    <string name="git_status_modified">Modified</string>
+    <string name="git_status_added">Added</string>
+    <string name="git_status_deleted">Deleted</string>
+    <string name="git_status_renamed">Renamed</string>
+    <string name="git_status_copied">Copied</string>
+    <string name="git_status_conflicted">Conflicted</string>
+    <string name="git_status_changed">Changed</string>
+    <string name="git_file_accessibility_label">%1$s: %2$s</string>
     <string name="git_untracked">Untracked</string>
     <string name="git_more_button">Show more</string>
     <string name="git_truncated">The Host output limit was reached. Only the received portion is shown.</string>
@@ -661,6 +669,7 @@
     <string name="thread_previous_waiting">Previous waiting conversation</string>
     <string name="thread_next_waiting_button">Next waiting conversation</string>
     <string name="thread_question_waiting">Question · waiting for your answer</string>
+    <string name="chat_agent_status_announcement">%1$s: %2$s</string>
     <string name="thread_chat_subtitle">%1$s · %2$s</string>
     <string name="thread_chat_menu">⋯</string>
     <plurals name="thread_waiting">
@@ -934,6 +943,7 @@
     <string name="tasks_activity">Activity</string>
     <string name="tasks_changes">Changes</string>
     <string name="tasks_changes_count">Changes %1$d</string>
+    <string name="tasks_change_stats_announcement">%1$d lines added, %2$d lines removed</string>
     <string name="tasks_change_stats">+%1$d −%2$d</string>
     <string name="tasks_tracked_change_stats">Tracked: +%1$d −%2$d</string>
     <string name="tasks_changes_previous_folder">Previous folder — refresh to review changes in the current folder.</string>
@@ -956,6 +966,8 @@
     <string name="tasks_tool_run">Ran</string>
 
 
+    <string name="new_task_starting">Starting…</string>
+    <string name="new_task_picker_label">%1$s: %2$s, change</string>
     <string name="new_task_title">New task</string>
     <string name="new_task_on_host">New task on %1$s</string>
     <string name="new_task_prompt">First prompt</string>

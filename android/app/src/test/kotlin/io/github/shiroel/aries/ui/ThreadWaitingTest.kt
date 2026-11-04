@@ -216,9 +216,9 @@ class ThreadWaitingTest {
         compose.onNodeWithText("home").performClick()
         compose.onNodeWithText("Current").performClick()
         compose.onNodeWithTag("thread-waiting-pill").performClick()
-        compose.onNode(hasText("Build failure") and hasAnyAncestor(isDialog())).assertExists()
+        assertQueueHeading("Build failure")
         compose.runOnIdle { core.push(core.terminals.map { if (it.address == "t2") it.copy(agentStatus = AgentStatus.Working) else it }) }
-        compose.onNode(hasText("Next request") and hasAnyAncestor(isDialog())).assertExists()
+        assertQueueHeading("Next request")
         compose.onNodeWithText(context.getString(R.string.thread_open_conversation)).performClick()
         compose.runOnIdle { assertEquals("t3", (model.screen as Screen.Chat).chat.terminal.address) }
     }
@@ -252,13 +252,27 @@ class ThreadWaitingTest {
         compose.onNodeWithTag("thread-waiting-pill").performClick()
         compose.runOnIdle { previewCore.pushChat(ChatSnapshot(listOf(ChatEntry("first-message", null,
             ChatEntryBody.User("Investigate the reconnect failure"))), ChatStatus.LIVE, null)) }
-        compose.onNode(hasText("Investigate the reconnect failure") and hasAnyAncestor(isDialog())).assertExists()
+        assertQueueHeading("Investigate the reconnect failure")
         compose.onNodeWithText(context.getString(R.string.thread_open_conversation)).performClick()
         compose.onNode(hasText("Investigate the reconnect failure") and SemanticsMatcher.expectValue(
             androidx.compose.ui.semantics.SemanticsProperties.Role, androidx.compose.ui.semantics.Role.Button,
         )).assertExists()
         compose.openConsoleDrawer()
         compose.onNodeWithTag("thread-agent:h1:t2").assertTextContains("Investigate the reconnect failure")
+    }
+
+    private fun assertQueueHeading(name: String) {
+        compose.waitForIdle()
+        fun descendants(view: android.view.View): Sequence<android.view.View> = sequence {
+            yield(view)
+            if (view is android.view.ViewGroup) for (index in 0 until view.childCount) yieldAll(descendants(view.getChildAt(index)))
+        }
+        // Native headings support accessibility focus, which is separate from Compose keyboard focus.
+        compose.runOnIdle {
+            val headings = android.view.inspector.WindowInspector.getGlobalWindowViews().asSequence()
+                .flatMap(::descendants).filterIsInstance<android.widget.TextView>()
+            org.junit.Assert.assertTrue(headings.any { it.isShown && it.isAccessibilityHeading && it.text.contains(name) })
+        }
     }
 
 }

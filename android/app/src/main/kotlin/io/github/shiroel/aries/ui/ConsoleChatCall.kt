@@ -23,6 +23,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
@@ -71,7 +73,7 @@ internal fun ConsoleChatChoice(
     ) {
         Row(
             Modifier.fillMaxWidth().heightIn(min = 48.dp).then(selection).semantics {
-                contentDescription = accessibilityLabel
+                contentDescription = listOfNotNull(accessibilityLabel, description?.takeIf(String::isNotBlank)).joinToString(". ")
                 this.selected = selected
             }.padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -90,21 +92,22 @@ internal fun ConsoleChatChoice(
 
 /** Reads the same feed/reply state as the inbox, scoped to this Chat's Host and whole address. */
 @Composable
-internal fun ConsoleChatCall(entry: CallEntry, calls: CallsModel) {
+internal fun ConsoleChatCall(entry: CallEntry, calls: CallsModel, announce: Boolean = false) {
     val call = entry.call
+    if (announce) AnnounceChanges(Triple(call.answer, entry.key in calls.replying, calls.replyNotes[entry.key]), callReplyStatus(entry, calls))
     ConsoleChatCallSurface(modifier = Modifier.presentsCalls(setOf(entry.key))) {
         Text(stringResource(R.string.console_chat_call_label), color = statusColor(AgentStatus.Blocked(null, null)),
             style = MaterialTheme.typography.labelLarge)
-        AnnouncedText(call.title)
+        Text(call.title)
         if (call.body.isNotEmpty()) Text(call.body)
         call.answer?.let { answer ->
-            AnnouncedText(stringResource(answer.state.labelResource(), answer.text), style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(answer.state.labelResource(), answer.text), style = MaterialTheme.typography.bodySmall)
             if (answer.state != CallAnswerState.DELIVERED) answer.detail?.let {
-                AnnouncedText(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
         }
         when {
-            entry.key in calls.replying -> AnnouncedText(stringResource(R.string.call_answer_sending))
+            entry.key in calls.replying -> Text(stringResource(R.string.call_answer_sending))
             entry.answerable -> call.choices.forEachIndexed { index, choice ->
                 ConsoleChatChoice(index + 1, choice,
                     accessibilityLabel = stringResource(R.string.call_answer_choice_label, call.title, choice),
@@ -112,7 +115,7 @@ internal fun ConsoleChatCall(entry: CallEntry, calls: CallsModel) {
             }
         }
         calls.replyNotes[entry.key]?.let { replyNoteText(it, call.answer) }?.let { text ->
-            AnnouncedText(text, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            Text(text, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
         if (entry.key in calls.replyNotes) {
             TextButton(onClick = { calls.dismissReplyNote(entry.key) }) {
@@ -120,4 +123,26 @@ internal fun ConsoleChatCall(entry: CallEntry, calls: CallsModel) {
             }
         }
     }
+}
+
+@Composable
+internal fun callReplyStatus(entry: CallEntry, calls: CallsModel): String? = when {
+    entry.key in calls.replying -> stringResource(R.string.call_answer_sending)
+    entry.key in calls.replyNotes -> calls.replyNotes[entry.key]?.let { replyNoteText(it, entry.call.answer) }
+    else -> entry.call.answer?.let { answer ->
+        listOfNotNull(stringResource(answer.state.labelResource(), answer.text),
+            answer.detail?.takeUnless { answer.state == CallAnswerState.DELIVERED }).joinToString(". ")
+    }
+}
+
+/** Lives outside the transcript/inbox lazy list, so results survive row replacement. */
+@Composable
+internal fun CallReplyAnnouncements(calls: CallsModel, hostId: String? = null, address: String? = null) {
+    val entries = calls.calls.filter { (hostId == null || it.host.id == hostId) && (address == null || it.call.terminal == address) }
+    val states = entries.associate { it.key to Triple(it.call.answer, it.key in calls.replying, calls.replyNotes[it.key]) }
+    var previous by androidx.compose.runtime.remember(calls, hostId, address) { androidx.compose.runtime.mutableStateOf(states) }
+    val changed = entries.lastOrNull { previous[it.key] != states[it.key] }
+    val message = changed?.let { callReplyStatus(it, calls) }
+    AnnounceChanges(states, message)
+    androidx.compose.runtime.SideEffect { previous = states }
 }

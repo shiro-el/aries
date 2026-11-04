@@ -46,6 +46,7 @@ internal fun CallInboxPanel(
     blockedAgents: Int = 0,
     onWaitingAgents: () -> Unit = {},
 ) {
+    CallReplyAnnouncements(model)
     val waiting = model.calls.filter { it.answerable }.let { calls ->
         if (LocalLayoutTokens.current == tokensFor(AppLayout.TASKS))
             calls.sortedWith(compareByDescending<CallEntry> { it.call.urgency.ordinal }.thenByDescending { it.call.atMs })
@@ -175,13 +176,13 @@ private fun CallRow(
             Text(stringResource(R.string.call_choices, call.choices.joinToString(" · ")), style = MaterialTheme.typography.bodySmall)
         }
         call.answer?.let { a ->
-            AnnouncedText(stringResource(a.state.labelResource(), a.text), style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(a.state.labelResource(), a.text), style = MaterialTheme.typography.bodySmall)
             if (a.state != CallAnswerState.DELIVERED) {
-                a.detail?.let { AnnouncedText(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+                a.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
             }
         }
         when {
-            sending -> AnnouncedText(stringResource(R.string.call_answer_sending), style = MaterialTheme.typography.bodySmall)
+            sending -> Text(stringResource(R.string.call_answer_sending), style = MaterialTheme.typography.bodySmall)
             entry.answerable -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 call.choices.forEachIndexed { i, choice ->
                     ConsoleChatChoice(i + 1, choice,
@@ -191,7 +192,7 @@ private fun CallRow(
             }
         }
         note?.let { replyNoteText(it, call.answer) }?.let { text ->
-            AnnouncedText(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         }
         call.terminal?.let {
             val label = stringResource(R.string.call_open_chat_label, callerName ?: stringResource(R.string.call_caller_unknown), call.title)

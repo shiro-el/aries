@@ -69,15 +69,19 @@ internal fun TasksNeedsSheet(model: HostsModel, board: AgentBoard, queue: TasksN
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         modifier = Modifier.testTag("tasks-needs-sheet")) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-            Text(stringResource(R.string.tasks_needs_position, queue.items.size, queue.position + 1),
-                Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.titleMedium)
+            val name = when (current) {
+                is TaskNeed.Agent -> displayName(board.find(current.entry.key)?.terminal ?: current.entry.terminal)
+                is TaskNeed.Call -> model.callCallerName(current.entry) ?: current.entry.call.title
+            }
+            QueueHeading(listOf(stringResource(R.string.tasks_needs_position, queue.items.size, queue.position + 1), name).joinToString(" · "),
+                current.key, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp))
             key(current.key) {
                 when (current) {
                     is TaskNeed.Call -> {
                         val entry = model.calls.calls.find { it.key == current.entry.key } ?: current.entry.copy(live = false)
                         val delivered = entry.call.answer?.state == CallAnswerState.DELIVERED
                         LaunchedEffect(delivered) { if (delivered) queue.resolve(current.key) }
-                        ConsoleChatCall(entry, model.calls)
+                        ConsoleChatCall(entry, model.calls, announce = true)
                         if (!entry.live) Text(stringResource(R.string.tasks_offline), Modifier.padding(16.dp))
                         if (entry.call.terminal != null) TextButton(onClick = {
                             onDismiss()
@@ -138,7 +142,7 @@ private fun TasksQuestion(model: HostsModel, board: AgentBoard, need: TaskNeed.A
                 Text(it, Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.error)
             }
         }
-        question != null && chat != null -> QuestionView(chat, question.id, question.body as ChatEntryBody.Question)
+        question != null && chat != null -> QuestionView(chat, question.id, question.body as ChatEntryBody.Question, announce = true)
         chat?.snapshot == null -> ScreenLoading(stringResource(R.string.chat_loading), compact = true, onRetry = { chat?.retryConnection() })
         else -> {
             Text(stringResource(R.string.tasks_needs_open), Modifier.padding(16.dp))

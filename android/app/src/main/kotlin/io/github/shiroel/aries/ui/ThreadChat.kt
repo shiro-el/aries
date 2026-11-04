@@ -212,7 +212,7 @@ private fun ThreadToolSummary(group: ThreadToolGroup, chat: ChatModel, scroll: C
             }
         }
         if (group.tools.any { (it.body as ChatEntryBody.Tool).status == ChatToolStatus.FAILED }) {
-            AnnouncedText(stringResource(R.string.chat_tool_failed), style = MaterialTheme.typography.labelSmall,
+            Text(stringResource(R.string.chat_tool_failed), style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.error)
         }
         val running = group.tools.lastOrNull { (it.body as ChatEntryBody.Tool).status == ChatToolStatus.RUNNING }?.body as? ChatEntryBody.Tool
@@ -229,18 +229,18 @@ internal fun threadAnswerQuestion(chat: ChatModel): ChatEntry? = chat.snapshot?.
 }
 
 @Composable
-internal fun ThreadAnswerPanel(chat: ChatModel, entry: ChatEntry, maxHeight: Dp = 360.dp) {
+internal fun ThreadAnswerPanel(chat: ChatModel, entry: ChatEntry, maxHeight: Dp = 360.dp, announce: Boolean = false) {
     // Large text and long questions scroll inside the panel.
     Box(Modifier.fillMaxWidth().heightIn(max = maxHeight).verticalScroll(rememberScrollState()).testTag("thread-answer-panel")) {
         CompositionLocalProvider(LocalChatSearchEntry provides entry.id) {
-            QuestionView(chat, entry.id, entry.body as ChatEntryBody.Question)
+            QuestionView(chat, entry.id, entry.body as ChatEntryBody.Question, announce = announce)
         }
     }
 }
 
 @Composable
 internal fun ThreadCallPanel(entry: CallEntry, calls: CallsModel, chat: ChatModel? = null, compact: Boolean = false,
-    onDismiss: (() -> Unit)? = null, maxHeight: Dp = 360.dp) {
+    onDismiss: (() -> Unit)? = null, maxHeight: Dp = 360.dp, announce: Boolean = false) {
     val urgent = entry.call.urgency in setOf(CallUrgency.URGENT, CallUrgency.EMERGENCY)
     val accent = if (urgent) Color(0xFFF0B23E) else MaterialTheme.colorScheme.outlineVariant
     Column(Modifier.fillMaxWidth().heightIn(max = maxHeight).verticalScroll(rememberScrollState()).testTag("thread-call-panel")) {
@@ -256,7 +256,7 @@ internal fun ThreadCallPanel(entry: CallEntry, calls: CallsModel, chat: ChatMode
         }
         val colors = MaterialTheme.colorScheme
         MaterialTheme(colorScheme = if (urgent) colors.copy(surfaceContainer = accent.copy(alpha = .1f).compositeOver(colors.surface)) else colors) {
-            ConsoleChatCall(entry, calls)
+            ConsoleChatCall(entry, calls, announce = announce)
         }
         if (entry.call.choices.isEmpty() && chat != null) MessageInput(chat, compact)
     }
@@ -277,18 +277,17 @@ internal fun ThreadChatHeader(chat: ChatModel, onBack: () -> Unit, onTerminal: (
             Icon(painterResource(if (openMenu != null) R.drawable.ic_menu else R.drawable.ic_arrow_left),
                 stringResource(if (openMenu != null) R.string.console_open_drawer else R.string.back_button), Modifier.size(20.dp))
         }
+        val status = if (chat.showInitialLoading) null else threadConnectionText(chat)
+        AnnounceChanges(status, status)
         Column(Modifier.weight(1f).clickable(role = Role.Button) { menu = true }.padding(vertical = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(LocalThreadChat.current?.threadTitle(chat) ?: displayName(chat.terminal), Modifier.weight(1f, fill = false), maxLines = 1,
+                Text(LocalThreadChat.current?.threadTitle(chat) ?: displayName(chat.terminal), Modifier.weight(1f, fill = false), maxLines = accessibleNameLines(),
                     overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
                 Icon(painterResource(R.drawable.ic_chevron_down), null, Modifier.size(16.dp))
             }
-            val status = if (chat.showInitialLoading) null else threadConnectionText(chat)
-            if (status != null) AnnouncedText(status, style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            else Text(stringResource(R.string.thread_chat_subtitle,
+            Text(status ?: stringResource(R.string.thread_chat_subtitle,
                 chat.terminal.agentStatus?.let { stringResource(agentStatusLabel(it)) }.orEmpty(), chat.host.name),
-                maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall,
+                maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         LocalThreadChat.current?.let { ThreadNewTaskButton(it) }
@@ -333,7 +332,7 @@ internal fun ThreadConnectionGuidance(chat: ChatModel) {
         val error = chat.connectionError ?: state?.error ?: if (chat.snapshot?.status == ChatStatus.NO_BEACON) CoreException.BeaconNotInstalled() else null
         if (error != null) {
             val detail = messageText(problemFor(error).body)
-            if (detail != text) AnnouncedText(detail, style = MaterialTheme.typography.bodySmall)
+            if (detail != text) Text(detail, style = MaterialTheme.typography.bodySmall)
         }
         Row {
             TextButton(onClick = { chat.link?.retryNow(); chat.retryConnection() }) { Text(stringResource(R.string.connect_retry_button)) }

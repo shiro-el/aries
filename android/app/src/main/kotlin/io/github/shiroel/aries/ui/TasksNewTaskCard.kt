@@ -7,6 +7,8 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -57,6 +59,7 @@ internal fun TasksNewTaskCard(model: HostsModel, board: AgentBoard) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Box {
                         AssistChip(onClick = { menu = "host" }, enabled = editable,
+                            modifier = Modifier.pickerDescription(stringResource(R.string.creation_host_label), host?.name.orEmpty()),
                             label = { Text(host?.name ?: stringResource(R.string.hosts_title)) })
                         DropdownMenu(expanded = menu == "host", onDismissRequest = { menu = null }) {
                             board.hosts.forEach { h -> DropdownMenuItem(text = { Text(h.name) },
@@ -70,6 +73,7 @@ internal fun TasksNewTaskCard(model: HostsModel, board: AgentBoard) {
                     }
                     Box {
                         AssistChip(onClick = { menu = "folder" }, enabled = task != null && editable,
+                            modifier = Modifier.pickerDescription(stringResource(R.string.launch_cwd), task?.form?.cwd.orEmpty()),
                             label = { Text(task?.form?.cwd?.takeIf(String::isNotBlank)?.let { it.substringAfterLast('/').ifBlank { it } }
                                 ?: stringResource(R.string.launch_cwd), maxLines = 1, overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.widthIn(max = 160.dp)) })
@@ -82,6 +86,7 @@ internal fun TasksNewTaskCard(model: HostsModel, board: AgentBoard) {
                     }
                     Box {
                         AssistChip(onClick = { menu = "agent" }, enabled = task != null && editable,
+                            modifier = Modifier.pickerDescription(stringResource(R.string.tasks_agent), task?.form?.preset?.let { stringResource(it.label) }.orEmpty()),
                             label = { Text(task?.form?.preset?.let { stringResource(it.label) } ?: stringResource(R.string.tasks_agent)) })
                         DropdownMenu(expanded = menu == "agent", onDismissRequest = { menu = null }) {
                             listOf(AgentPreset.CLAUDE_CODE, AgentPreset.CODEX).forEach { preset ->
@@ -95,10 +100,11 @@ internal fun TasksNewTaskCard(model: HostsModel, board: AgentBoard) {
                     OutlinedTextField(task.input, { task.input = it }, enabled = !task.form.busy && !task.sent,
                         placeholder = { Text(stringResource(R.string.tasks_prompt_hint)) }, minLines = 1, maxLines = 4,
                         modifier = Modifier.fillMaxWidth().testTag("tasks-new-prompt"))
+                    NewTaskStatus(task)
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        if (task.form.busy) LinearProgressIndicator(Modifier.weight(1f))
-                        else task.form.error?.let { Text(messageText(it),
-                            Modifier.weight(1f), color = MaterialTheme.colorScheme.error) } ?: Spacer(Modifier.weight(1f))
+                        val starting = stringResource(R.string.new_task_starting)
+                        if (task.form.busy) LinearProgressIndicator(Modifier.weight(1f).semantics { contentDescription = starting })
+                        else Spacer(Modifier.weight(1f))
                         TextButton(onClick = model::startInlineTask, enabled = task.canStart,
                             modifier = Modifier.testTag("tasks-new-start")) { Text(stringResource(R.string.new_task_start)) }
                         if (task.terminal != null) TextButton(onClick = model::openCreatedTask) {

@@ -18,10 +18,12 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
@@ -121,7 +123,7 @@ internal fun TasksHome(model: HostsModel, board: AgentBoard) {
             if (grouped) {
                 board.hosts.forEach { host ->
                     item(key = "host:${host.id}") {
-                        TextButton(onClick = { model.openHost(host) }, modifier = Modifier.fillMaxWidth()) {
+                        TextButton(onClick = { model.openHost(host) }, modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) { heading() }) {
                             Text(host.name, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
                             if (board.links[host.id]?.state != LinkState.Up) Text(
                                 stringResource(if (host in board.loadingHosts) R.string.reconnecting else R.string.tasks_offline),
@@ -209,6 +211,13 @@ private fun TasksCallRow(entry: CallEntry, onOpen: () -> Unit) {
         }, summary = entry.call.body.takeIf(String::isNotBlank))
 }
 
+internal data class TaskStatusChipColors(val background: Color, val foreground: Color)
+
+internal fun taskStatusChipColors(accent: Color, urgent: Boolean, surface: Color): TaskStatusChipColors {
+    val background = if (urgent) Brand.Saffron else accent.copy(alpha = .12f).compositeOver(surface)
+    return TaskStatusChipColors(background, if (urgent) Brand.Ink else readableAccent(accent, background, surface.luminance() < .5f))
+}
+
 @Composable
 private fun TasksRow(title: String, label: String, accent: Color, urgent: Boolean, modifier: Modifier,
     onOpen: () -> Unit, metadata: @Composable RowScope.() -> Unit, summary: String?, mono: Boolean = false,
@@ -220,9 +229,10 @@ private fun TasksRow(title: String, label: String, accent: Color, urgent: Boolea
         verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
             Text(title, Modifier.weight(1f), fontWeight = FontWeight.SemiBold, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
-            Surface(color = if (urgent) Brand.Saffron else accent.copy(alpha = .12f), shape = RoundedCornerShape(4.dp)) {
+            val chip = taskStatusChipColors(accent, urgent, MaterialTheme.colorScheme.background)
+            Surface(color = chip.background, shape = RoundedCornerShape(4.dp)) {
                 Text(label, Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
-                    style = MaterialTheme.typography.labelSmall, color = if (urgent) Brand.Ink else accent)
+                    style = MaterialTheme.typography.labelSmall, color = chip.foreground)
             }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), content = metadata)
