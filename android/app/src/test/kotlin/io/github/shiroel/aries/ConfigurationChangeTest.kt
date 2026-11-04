@@ -7,6 +7,10 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.test.core.app.ApplicationProvider
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -16,6 +20,9 @@ import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.ScreenFrame
 import io.github.shiroel.aries.core.TerminalInfo
 import io.github.shiroel.aries.core.TerminalUpdate
+import io.github.shiroel.aries.core.RemoteDirectory
+import io.github.shiroel.aries.core.RemoteFileEntry
+import io.github.shiroel.aries.core.RemoteFilePage
 import io.github.shiroel.aries.ui.FakeCore
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -52,6 +59,47 @@ class ConfigurationChangeTest {
         app.getSharedPreferences("app-guidance", android.content.Context.MODE_PRIVATE).edit()
             .putBoolean("onboarding_complete", true).putString("update_url", "").commit()
         return app
+    }
+
+    // Regression: Activity recreation must retain the open Files panel and the file
+    // reached by browsing, rather than silently returning to the Terminal/root folder.
+    @Test @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    fun recreationKeepsTheFileOpenedFromTerminal() {
+        val app = prepareApplication()
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup()
+        try {
+            compose.onNodeWithText("rotation-host").performClick()
+            compose.onNodeWithText("rotation-terminal").performClick()
+            val connection = app.fake.connection!!
+            connection.fileDirectory = RemoteDirectory("/repo", listOf(RemoteFileEntry("notes.txt", false)))
+            connection.fileReader = { _, _, offset, limit ->
+                val last = minOf(600uL, offset + limit - 1u)
+                RemoteFilePage((offset..last).joinToString("\n") { "line $it" }, offset, last, 600u)
+            }
+            compose.onNodeWithTag("agent-actions").performClick()
+            compose.onNodeWithTag("files-open").performClick()
+            compose.onNodeWithText("notes.txt").performClick()
+            compose.onNodeWithText("line 1").assertExists()
+            compose.onNodeWithTag("files-lines").performScrollToIndex(450)
+            compose.onNodeWithText("line 451").assertExists()
+
+            activity.recreate()
+            compose.waitForIdle()
+
+            compose.onNodeWithText("line 451").assertExists()
+            System.getenv("ARIES_FILES_RENDER_DIR")?.let { directory ->
+                val shot = java.io.File(directory, "files-after-rotation.png")
+                shot.parentFile!!.mkdirs()
+                shot.outputStream().use {
+                    compose.onNode(isDialog()).captureToImage().asAndroidBitmap()
+                        .compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+                }
+            }
+            compose.onNodeWithTag("files-back").performClick()
+            compose.onNodeWithText("notes.txt").assertExists()
+        } finally {
+            activity.pause().stop().destroy()
+        }
     }
 
     @Test fun recreationKeepsConnectionScrollbackAndUnsentDraftUntilActivityFinishes() {

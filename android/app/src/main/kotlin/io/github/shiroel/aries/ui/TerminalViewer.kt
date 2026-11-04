@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -53,6 +54,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentView
 import io.github.shiroel.aries.core.CellRun
@@ -89,6 +91,9 @@ class TerminalComposerState(private val changed: () -> Unit = {}) {
  * the Terminal's own size (observe mode): the desktop decides it.
  */
 class TerminalViewer(terminal: TerminalInfo, private val composer: TerminalComposerState = TerminalComposerState()) {
+    internal val files = RemoteFilesPanel()
+    internal val preview = LocalhostPreview()
+    internal val look = TerminalLook(this)
     var inputHistory: InputHistoryModel? = null
     var terminal by mutableStateOf(terminal)
         private set
@@ -114,6 +119,9 @@ class TerminalViewer(terminal: TerminalInfo, private val composer: TerminalCompo
     /** The stream ended without an exit (connection lost). */
     var closed by mutableStateOf(false)
         private set
+
+    /** A stopped attach may leave the SSH connection healthy. */
+    var watchError by mutableStateOf<CoreException?>(null)
 
     /** The Host line this screen streams over; its state shows while it reconnects. */
     var link: HostLink? = null
@@ -530,8 +538,8 @@ fun TerminalScreen(
     onSelectionSend: ((String) -> Unit)? = null,
     onPreviewCapture: ((SharedContent, () -> Unit) -> Boolean)? = null,
 ) {
-    val preview = rememberLocalhostPreview(viewer.link, viewer.version.let { viewer.text() }, viewer.terminal.address)
-    var searching by remember(viewer) { mutableStateOf(false) }
+    val preview = rememberLocalhostPreview(viewer.link, viewer.version.let { viewer.text() }, viewer.terminal.address, viewer.preview)
+    var searching by rememberSaveable(viewer) { mutableStateOf(false) }
     // The keyboard pushes the input and key bar up and shrinks the screen
     // (the Scaffold already keeps clear of the navigation bar).
     androidx.compose.runtime.CompositionLocalProvider(
@@ -558,11 +566,14 @@ fun TerminalScreen(
                 TerminalSearchBar(viewer, searching, onClose = { searching = false })
                 viewer.exit?.let { Banner(exitText(it)) }
                 val line = viewer.link?.state
-                if (viewer.exit == null) viewer.link?.let { ConnectionNotice(it) }
+                if (viewer.exit == null) viewer.link?.let {
+                    ConnectionNotice(it)
+                    if (line == LinkState.Up) viewer.watchError?.let { error -> WatchFailureNotice(it, error) }
+                }
                 if (viewer.exit == null && viewer.closed && (line == null || line == LinkState.Up)) {
                     Banner(stringResource(R.string.terminal_connection_closed))
                 }
-                val look = remember(viewer) { TerminalLook(viewer) }
+                val look = viewer.look
                 val scope = rememberCoroutineScope()
                 TerminalLookBar(viewer, look, onSelectionSend)
                 Box(Modifier.fillMaxWidth().weight(1f)) {

@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
@@ -109,7 +110,7 @@ internal fun GithubDialog(link: HostLink?, terminal: TerminalInfo, onDismiss: ()
                             modifier = Modifier.weight(1f).testTag("github-search"))
                     }
                     Box(Modifier.padding(horizontal = 8.dp)) {
-                        var filterMenu by remember { mutableStateOf(false) }
+                        var filterMenu by rememberSaveable { mutableStateOf(false) }
                         TextButton(onClick = { filterMenu = true }, modifier = Modifier.testTag("github-state-filter")) {
                             Text(stringResource(githubFilterLabel(state)))
                             Icon(painterResource(R.drawable.ic_chevron_down), null, Modifier.padding(start = 6.dp).size(16.dp))
@@ -151,7 +152,7 @@ private fun GithubConversation(
     refresh: Int,
     prFile: GithubPrFile?, onPrFile: (GithubPrFile?) -> Unit, modifier: Modifier,
 ) {
-    var tab by remember(selected.number) { mutableStateOf(GithubPrTab.Conversation) }
+    var tab by model::tab
     var detail by model::detail
     var detailError by model::readError
     val error = model.error ?: detailError
@@ -164,7 +165,10 @@ private fun GithubConversation(
     val revision = model.revision
     val startTask = LocalStartTask.current
     LaunchedEffect(connection, model) { model.attach(connection) }
-    LaunchedEffect(connection, repo, selected.number, refresh) { onPrFile(null) }
+    LaunchedEffect(model, refresh) {
+        if (model.resourceRefresh != null && model.resourceRefresh != refresh) onPrFile(null)
+        model.resourceRefresh = refresh
+    }
     LaunchedEffect(connection, repo, selected.number, refresh, revision) {
         detailError = null
         model.refreshing = true
@@ -200,7 +204,7 @@ private fun GithubConversation(
                 }
             }
             if (selected.kind == GithubKind.ISSUE) Box {
-                var actions by remember { mutableStateOf(false) }
+                var actions by rememberSaveable { mutableStateOf(false) }
                 ActionIcon(R.drawable.ic_ellipsis_vertical, R.string.github_item_actions, { actions = true }, enabled = !busy)
                 DropdownMenu(actions, onDismissRequest = { actions = false }) {
                     val closed = detail?.item?.state != "open"
