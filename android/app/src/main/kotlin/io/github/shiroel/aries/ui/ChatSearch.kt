@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -194,7 +193,7 @@ internal fun ChatSearchBar(
     val label = stringResource(R.string.chat_search_hint)
     Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
         Row {
-            OutlinedTextField(
+            ConsoleField(
                 value = query, onValueChange = onQuery,
                 modifier = Modifier.weight(1f).focusRequester(focus).semantics { contentDescription = label },
                 label = { Text(label) }, singleLine = true, shape = RectangleShape,

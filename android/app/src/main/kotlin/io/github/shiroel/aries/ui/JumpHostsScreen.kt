@@ -15,7 +15,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -77,7 +76,7 @@ fun ExtraKeysSection(model: HostsModel) {
                     ?.setPrimaryClip(ClipData.newPlainText(clipLabel, key.openssh))
             }) { Text(stringResource(R.string.key_copy_button)) }
         }
-        OutlinedTextField(label, { label = it }, label = { Text(stringResource(R.string.key_new_label)) }, singleLine = true)
+        ConsoleField(label, { label = it }, label = { Text(stringResource(R.string.key_new_label)) }, singleLine = true)
         ConsoleButton(enabled = label.isNotBlank(), onClick = {
             model.createExtraKey(label)
             label = ""
@@ -93,7 +92,7 @@ fun JumpHostsScreen(model: HostsModel, host: Host, jumps: List<JumpHost>, hostKe
     var targetKey by rememberSaveable(host.id) { mutableStateOf(hostKeyId) }
     // A plain scrolling Column: a route has a handful of hops, and every field stays composed.
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(LocalLayoutTokens.current.contentPadding),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         if (showHeader) TextButton(onClick = model::back) { Text(stringResource(R.string.back_button)) }
@@ -103,20 +102,20 @@ fun JumpHostsScreen(model: HostsModel, host: Host, jumps: List<JumpHost>, hostKe
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 HorizontalDivider()
                 Text(stringResource(R.string.jumps_hop_title, i + 1), style = MaterialTheme.typography.titleMedium)
-                OutlinedTextField(
+                ConsoleField(
                     d.address, { drafts[i] = d.copy(address = it) },
                     label = { Text(stringResource(R.string.host_add_address)) }, singleLine = true,
                     isError = d.address.isNotEmpty() && !validHostToken(d.address.trim()),
                     supportingText = hostInputSupport(R.string.host_input_address_error.takeUnless { validHostToken(d.address.trim()) }),
                 )
-                OutlinedTextField(
+                ConsoleField(
                     d.port, { drafts[i] = d.copy(port = it) },
                     label = { Text(stringResource(R.string.host_add_port)) }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     isError = d.portNumber == null,
                     supportingText = hostInputSupport(R.string.host_input_port_error.takeIf { d.portNumber == null }),
                 )
-                OutlinedTextField(
+                ConsoleField(
                     d.user, { drafts[i] = d.copy(user = it) },
                     label = { Text(stringResource(R.string.host_add_user)) }, singleLine = true,
                     isError = d.user.isNotEmpty() && !validHostToken(d.user.trim()),

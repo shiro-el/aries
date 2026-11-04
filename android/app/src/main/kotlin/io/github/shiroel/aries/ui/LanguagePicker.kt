@@ -43,7 +43,7 @@ fun LanguagePicker(
     }
     val automatic = stringResource(R.string.language_picker_auto)
     var open by rememberSaveable { mutableStateOf(false) }
-    OutlinedButton(onClick = { open = true }, modifier = modifier.fillMaxWidth()) {
+    ConsoleButton(onClick = { open = true }, modifier = modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start) {
             Text(label, style = MaterialTheme.typography.labelSmall)
             Text(choices.find { it.code == selectedCode }?.label ?: automatic)
@@ -55,7 +55,7 @@ fun LanguagePicker(
         val matching = choices.filter { choice ->
             listOf(choice.localizedName, choice.nativeName, choice.code).any { normalized in it.languageSearchKey() }
         }
-        ModalBottomSheet(onDismissRequest = { open = false }) {
+        ConsoleSheet(onDismissRequest = { open = false }) {
             Column(
                 Modifier.fillMaxWidth().heightIn(max = 560.dp).imePadding().padding(horizontal = 16.dp)
                     .testTag("language-picker-sheet"),
@@ -65,7 +65,7 @@ fun LanguagePicker(
                     Text(label, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
                     TextButton(onClick = { open = false }) { Text(stringResource(R.string.back_button)) }
                 }
-                OutlinedTextField(
+                ConsoleField(
                     value = query, onValueChange = { query = it }, singleLine = true,
                     label = { Text(stringResource(R.string.language_picker_search)) },
                     modifier = Modifier.fillMaxWidth(),

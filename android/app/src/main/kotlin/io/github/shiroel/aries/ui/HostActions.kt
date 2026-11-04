@@ -96,7 +96,7 @@ internal fun HostContextTitle(browser: HostBrowser, modifier: Modifier = Modifie
         Icon(androidx.compose.ui.res.painterResource(R.drawable.ic_chevron_down), null, Modifier.size(16.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (enabled) 1f else .38f))
     }
-    if (switch) ModalBottomSheet(onDismissRequest = { switch = false },
+    if (switch) ConsoleSheet(onDismissRequest = { switch = false },
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         LazyColumn(Modifier.fillMaxWidth().testTag("host-context-sheet"), contentPadding = PaddingValues(bottom = 24.dp)) {
             item {

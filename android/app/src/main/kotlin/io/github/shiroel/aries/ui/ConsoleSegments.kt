@@ -8,7 +8,8 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -31,6 +32,8 @@ fun <T> ConsoleSegments(
     segmentWidth: Dp? = null,
     textStyle: TextStyle = MaterialTheme.typography.labelLarge,
     inactiveColor: Color = MaterialTheme.colorScheme.onSurface,
+    enabled: Boolean = true,
+    segmentModifier: (T) -> Modifier = { Modifier },
     label: @Composable (T) -> String,
 ) {
     val colors = MaterialTheme.colorScheme
@@ -41,16 +44,18 @@ fun <T> ConsoleSegments(
             val active = selected == option
             val width = if (segmentWidth == null) Modifier.weight(1f) else Modifier.width(segmentWidth)
             Row(
-                width.heightIn(min = height)
+                width.then(segmentModifier(option)).heightIn(min = height)
                     .background(if (active) colors.surfaceContainerHighest else colors.surface)
-                    .selectable(active, role = Role.RadioButton, onClick = { if (!active) onSelect(option) })
+                    .selectable(active, enabled = enabled, role = Role.RadioButton, onClick = { if (!active) onSelect(option) })
+                    .drawBehind { if (active) drawLine(colors.primary, Offset(0f, size.height - 1.dp.toPx()),
+                        Offset(size.width, size.height - 1.dp.toPx()), 2.dp.toPx()) }
                     .padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(label(option), Modifier.weight(1f), color = if (active) colors.primary else inactiveColor,
                     style = textStyle, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal)
-                RadioButton(active, onClick = null, modifier = Modifier.size(24.dp))
+
             }
         }
     }

@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -33,7 +32,7 @@ fun QuietHoursSection() {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(stringResource(R.string.quiet_hours_title), Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-        Switch(checked = hours.enabled, onCheckedChange = null)
+        ConsoleToggle(checked = hours.enabled, onCheckedChange = null)
     }
     Text(stringResource(R.string.quiet_hours_body), style = MaterialTheme.typography.bodySmall)
     if (hours.enabled) Text(

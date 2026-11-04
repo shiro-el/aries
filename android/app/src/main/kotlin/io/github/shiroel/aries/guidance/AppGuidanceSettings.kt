@@ -1,11 +1,11 @@
 package io.github.shiroel.aries.guidance
 
+import io.github.shiroel.aries.ui.ConsoleField
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -31,7 +31,7 @@ fun AppGuidanceSettings(state: AppGuidanceState) {
         Text(stringResource(R.string.app_update_installed, state.versionName, state.versionCode))
         TextButton(state::openOnboarding, Modifier.testTag("guidance-open")) { Text(stringResource(R.string.onboarding_open_button)) }
         TextButton(state::openWhatsNew, Modifier.testTag("whats-new-open")) { Text(stringResource(R.string.whats_new_open_button)) }
-        OutlinedTextField(
+        ConsoleField(
             value = url,
             onValueChange = { url = it },
             label = { Text(stringResource(R.string.app_update_url_label)) },

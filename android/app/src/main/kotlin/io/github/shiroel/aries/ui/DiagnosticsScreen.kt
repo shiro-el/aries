@@ -124,7 +124,7 @@ fun DiagnosticsScreen(history: DiagnosticsModel, hosts: List<Host>) {
                 }
             }) { Text(exportTitle) }
         }
-        if (history.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+        if (history.loading) ConsoleProgress(Modifier.fillMaxWidth())
         if (history.failed) Text(stringResource(R.string.diagnostics_read_failed), color = MaterialTheme.colorScheme.error)
         if (notice != 0) Text(stringResource(notice), style = MaterialTheme.typography.bodySmall)
         HorizontalDivider()

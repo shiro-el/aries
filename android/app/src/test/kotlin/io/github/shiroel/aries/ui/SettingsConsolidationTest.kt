@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
@@ -50,7 +51,8 @@ class SettingsConsolidationTest {
         compose.onNodeWithText(str(R.string.key_create_button)).assertDoesNotExist()
         compose.openConsoleDrawer()
         compose.onNodeWithTag("settings-open").performClick()
-        compose.onNodeWithTag("settings-keys").performScrollTo().performClick()
+        compose.onNodeWithTag("settings-list").performScrollToNode(hasTestTag("settings-keys"))
+        compose.onNodeWithTag("settings-keys").performClick()
         compose.onNodeWithText(FakeCore.PUBLIC_KEY).assertExists()
         compose.onNodeWithText(str(R.string.key_biometric_label)).assertExists()
         compose.onNodeWithText(str(R.string.keys_title)).performScrollTo().assertExists()
@@ -125,7 +127,8 @@ class SettingsConsolidationTest {
         }
         compose.openHostActions("h1")
         compose.onNodeWithTag("console-back").performClick()
-        compose.onNodeWithTag("settings-host:h2").performScrollTo().performClick()
+        compose.onNodeWithTag("settings-list").performScrollToNode(hasTestTag("settings-host:h2"))
+        compose.onNodeWithTag("settings-host:h2").performClick()
         compose.onNodeWithTag("beacon-advanced").performScrollTo().performClick()
         compose.onNodeWithText(context.getString(R.string.beacon_version, "0.1.0")).performScrollTo().assertExists()
         compose.runOnIdle {

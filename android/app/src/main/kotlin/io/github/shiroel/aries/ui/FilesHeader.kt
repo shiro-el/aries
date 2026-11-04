@@ -29,7 +29,7 @@ internal fun FilesHeader(
     onSave: (() -> Unit)?, onShare: (() -> Unit)?, exportEnabled: Boolean,
 ) {
     var menu by remember(path) { mutableStateOf(false) }
-    Row(Modifier.fillMaxWidth().height(56.dp), verticalAlignment = Alignment.CenterVertically) {
+    ConsoleBar() {
         val backLabel = when {
             isFile -> R.string.files_back_folder_button
             canGoUp -> R.string.files_parent_folder_button

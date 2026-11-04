@@ -1195,6 +1195,11 @@
     <string name="push_policy_retry">Load the options again</string>
 
     <!-- Console appearance settings -->
+    <string name="settings_appearance_section">Appearance</string>
+    <string name="settings_interaction_section">Interaction</string>
+    <string name="settings_notifications_section">Notifications</string>
+    <string name="settings_connections_section">Hosts and security</string>
+    <string name="settings_storage_section">Storage and app</string>
     <string name="settings_title">Settings</string>
     <!-- Local diagnostics -->
     <string name="diagnostics_storage">Device storage</string>
@@ -1271,6 +1276,7 @@
     <string name="accent_hue">Hue</string>
     <string name="accent_saturation">Saturation</string>
     <string name="accent_brightness">Brightness</string>
+    <string name="console_field_invalid">Invalid value</string>
     <string name="console_open_drawer">Open Hosts and Agents</string>
     <string name="console_agents_waiting">Needs you · %1$d</string>
     <string name="console_all_hosts">Hosts</string>

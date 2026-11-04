@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -199,9 +198,9 @@ internal fun LayoutEditControls(browser: HostBrowser, editor: LayoutEditor) {
                 LayoutNameKind.RENAME_TAB -> R.string.layout_rename_tab_button
             })) },
             text = { Column {
-                OutlinedTextField(value = form.name, onValueChange = { form.name = it }, enabled = !editor.busy,
+                ConsoleField(value = form.name, onValueChange = { form.name = it }, enabled = !editor.busy,
                     modifier = Modifier.testTag("layout-name"), label = { Text(stringResource(R.string.layout_name_label)) })
-                if (form.creating) OutlinedTextField(value = form.folder, onValueChange = { form.folder = it }, enabled = !editor.busy,
+                if (form.creating) ConsoleField(value = form.folder, onValueChange = { form.folder = it }, enabled = !editor.busy,
                     modifier = Modifier.testTag("layout-folder"), label = { Text(stringResource(R.string.layout_folder_label)) })
                 editor.error?.let { Text(stringResource(it.res, *it.args.toTypedArray()), color = MaterialTheme.colorScheme.error) }
             } },

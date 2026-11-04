@@ -91,6 +91,7 @@ class SettingsScreenTest {
             assertEquals("#8C7CF0", ThemeSettings(preferences).accentHex)
         }
 
+        compose.onNodeWithTag("accent-custom").performClick()
         compose.onNodeWithTag("accent-hex").performTextReplacement("#12zz00")
         compose.onNodeWithText(str(R.string.accent_hex_invalid)).assertExists()
         compose.runOnIdle { assertEquals("#8C7CF0", ThemeSettings(preferences).accentHex) }
@@ -102,6 +103,7 @@ class SettingsScreenTest {
             .performSemanticsAction(SemanticsActions.SetProgress) { it(180f) }
         compose.runOnIdle { assertEquals("#208080", ThemeSettings(preferences).accentHex) }
 
+        compose.onNodeWithText(str(R.string.ok_button)).performClick()
         compose.onNodeWithTag("settings-list").performScrollToNode(hasText(str(R.string.chat_cache_days, 7)))
         compose.onNodeWithText(str(R.string.chat_cache_days, 7)).performClick()
         compose.runOnIdle { assertEquals(7u, core.retentionDays) }
@@ -112,4 +114,31 @@ class SettingsScreenTest {
         compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         compose.onNodeWithText(str(R.string.hosts_title)).assertExists()
     }
+    // Regression: lowering saturation/value to zero must not discard the custom hue when raised again.
+    @Test fun customAccentPreservesHueThroughGreyAndBlack() {
+        val prefs = context.getSharedPreferences("settings-hsv-test", Context.MODE_PRIVATE)
+        prefs.edit().clear().commit()
+        val settings = ThemeSettings(prefs).apply { setAccent("#00AAFF") }
+        compose.setContent {
+            val scope = rememberCoroutineScope()
+            val model = remember { HostsModel(FakeCore(), scope) }
+            AriesApp(model, settings)
+        }
+        compose.openConsoleDrawer()
+        compose.onNodeWithTag("settings-open").performClick()
+        compose.onNodeWithTag("accent-custom").performClick()
+        fun set(label: Int, value: Float) {
+            compose.onNodeWithContentDescription(str(label)).performScrollTo()
+                .performSemanticsAction(SemanticsActions.SetProgress) { it(value) }
+        }
+        set(R.string.accent_saturation, 0f)
+        compose.runOnIdle { assertEquals("#FFFFFF", settings.accentHex) }
+        set(R.string.accent_saturation, 1f)
+        compose.runOnIdle { assertEquals("#00AAFF", settings.accentHex) }
+        set(R.string.accent_brightness, 0f)
+        compose.runOnIdle { assertEquals("#000000", settings.accentHex) }
+        set(R.string.accent_brightness, 1f)
+        compose.runOnIdle { assertEquals("#00AAFF", settings.accentHex) }
+    }
+
 }

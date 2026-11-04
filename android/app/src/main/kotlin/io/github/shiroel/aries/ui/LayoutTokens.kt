@@ -45,7 +45,7 @@ private val ConsoleTokens = LayoutTokens(
     dark = LayoutPalette(Color(0xFF121315), Color(0xFFECE8E3), Color(0xFF1D1E20), Color(0xFF2C2D2F),
         Color(0xFFA9A49E), Color(0xFF79736C), Color(0xFF34332F)),
     bodyFont = FontFamily.Monospace, bodySize = 14.sp, bodyLineHeight = 18.sp,
-    contentPadding = 16.dp, itemSpacing = 8.dp, cornerRadius = 0.dp,
+    contentPadding = 12.dp, itemSpacing = 8.dp, cornerRadius = 0.dp,
 )
 
 private val ThreadTokens = LayoutTokens(

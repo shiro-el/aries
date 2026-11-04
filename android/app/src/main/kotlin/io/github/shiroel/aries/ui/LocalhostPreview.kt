@@ -144,7 +144,7 @@ internal fun PreviewChips(preview: LocalhostPreview) {
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         preview.ports.forEach { port ->
-            FilterChip(selected = preview.selected == port,
+            SingleChoiceChip(selected = preview.selected == port,
                 onClick = { preview.selected = if (preview.selected == port) null else port },
                 label = { Text(stringResource(R.string.preview_open_port, port.toInt())) })
         }
@@ -241,7 +241,7 @@ internal fun LocalhostPreviewBrowser(
             color = MaterialTheme.colorScheme.error)
         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             Text(stringResource(R.string.preview_auto_refresh), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-            Switch(checked = preview.autoRefresh, onCheckedChange = { preview.autoRefresh = it })
+            ConsoleToggle(checked = preview.autoRefresh, onCheckedChange = { preview.autoRefresh = it })
         }
         val currentOrigin = origin
         if (currentOrigin != null) {
@@ -256,7 +256,7 @@ internal fun LocalhostPreviewBrowser(
             TextButton(onClick = { link.retryNow(); retry++ }) { Text(stringResource(R.string.preview_retry)) }
         } else if (started && forward == null && connection != null) {
             Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                CircularProgressIndicator()
+                ConsoleBusyIndicator()
                 Text(stringResource(R.string.preview_loading), Modifier.padding(top = 12.dp))
             }
         }
@@ -386,7 +386,7 @@ private fun RestrictedPreviewWebView(
                 Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally) {
                     if (state == PreviewPageState.LOADING) {
-                        CircularProgressIndicator()
+                        ConsoleBusyIndicator()
                         Text(stringResource(R.string.preview_loading), Modifier.padding(top = 12.dp))
                     } else {
                         val message = when {

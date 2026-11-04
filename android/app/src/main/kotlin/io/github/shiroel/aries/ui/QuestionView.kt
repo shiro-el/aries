@@ -13,7 +13,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -105,7 +104,7 @@ internal fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question
                 }
                 if (!permission) {
                     val inputLabel = stringResource(R.string.chat_question_text_label, question.text)
-                    OutlinedTextField(
+                    ConsoleField(
                         value = chat.questionText[id]?.getOrNull(part).orEmpty(),
                         onValueChange = { chat.writeAnswer(id, q, part, it) },
                         label = { Text(stringResource(R.string.chat_question_text_hint)) },

@@ -10,7 +10,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -190,7 +189,7 @@ fun LaunchDialog(
             ) {
                 if (form.busy) {
                     Text(stringResource(R.string.launch_starting))
-                    androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
+                    ConsoleProgress(Modifier.fillMaxWidth())
                 }
                 if (form.launchUnknown && !form.busy) {
                     Text(stringResource(R.string.launch_unknown_body), color = MaterialTheme.colorScheme.error)
@@ -233,7 +232,7 @@ fun LaunchDialog(
                     }
                 }
                 form.preset?.let { preset -> LaunchOptions(form, preset, enabled = !form.busy && !form.launchUnknown) }
-                OutlinedTextField(
+                ConsoleField(
                     form.command, { form.command = it }, enabled = !form.busy && !form.launchUnknown,
                     modifier = Modifier.testTag("launch_command"),
                     label = {
@@ -241,7 +240,7 @@ fun LaunchDialog(
                     },
                     singleLine = true,
                 )
-                OutlinedTextField(
+                ConsoleField(
                     form.cwd, { form.cwd = it }, enabled = !form.busy && !form.launchUnknown,
                     label = { Text(stringResource(R.string.launch_cwd)) },
                     placeholder = { Text(stringResource(R.string.launch_cwd_default)) },
@@ -294,7 +293,7 @@ fun LaunchDialog(
                         }
                     }
                 }
-                OutlinedTextField(
+                ConsoleField(
                     form.name, { form.name = it }, enabled = !form.busy,
                     modifier = Modifier.testTag("launch_name"),
                     label = { Text(stringResource(R.string.launch_save_name)) },

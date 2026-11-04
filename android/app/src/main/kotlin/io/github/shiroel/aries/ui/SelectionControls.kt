@@ -43,7 +43,9 @@ internal fun SingleChoiceChip(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
-    Surface(border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline), modifier = modifier) {
+    Surface(border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline), modifier = modifier,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(LocalLayoutTokens.current.cornerRadius),
+        color = if (selected) MaterialTheme.colorScheme.surfaceContainerHighest else MaterialTheme.colorScheme.surface) {
         Row(
             Modifier.heightIn(min = 48.dp).selectable(selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
                 .padding(horizontal = 8.dp, vertical = 4.dp),
@@ -103,6 +105,6 @@ internal fun SwitchRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(label, Modifier.weight(1f))
-        Switch(checked, onCheckedChange = null, enabled = enabled)
+        ConsoleToggle(checked, onCheckedChange = null, enabled = enabled)
     }
 }

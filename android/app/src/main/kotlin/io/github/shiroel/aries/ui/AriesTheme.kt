@@ -2,6 +2,7 @@
 package io.github.shiroel.aries.ui
 
 import android.app.Activity
+import android.graphics.drawable.ColorDrawable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
@@ -21,12 +22,14 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import io.github.shiroel.aries.core.AgentStatus
 
 object Brand {
     val Saffron = Color(0xFFF4B73A)
+    val LightSaffron = Color(0xFFB7790B)
     val Ink = Color(0xFF2B2724)
     val GoldTop = Color(0xFFF8D98A)
     val GoldBottom = Color(0xFFD9952E)
@@ -61,6 +64,21 @@ private fun forLight(c: Color): Color {
     return x
 }
 
+/** Clamp text accents against the most raised surface, including arbitrary custom colours. */
+private fun readableAccent(c: Color, surface: Color, dark: Boolean): Color {
+    var result = c
+    repeat(60) {
+        val a = result.luminance() + .05f
+        val b = surface.luminance() + .05f
+        if (maxOf(a, b) / minOf(a, b) >= 4.5f) return result
+        result = mix(result, if (dark) Color.White else Color.Black, .06f)
+    }
+    return result
+}
+
+private fun accentSeed(accent: Color, dark: Boolean) =
+    if (!dark && accent == Brand.Saffron) Brand.LightSaffron else accent
+
 fun hueShift(c: Color, degrees: Float): Color {
     val hsv = FloatArray(3)
     android.graphics.Color.colorToHSV(android.graphics.Color.argb(255, (c.red * 255).toInt(), (c.green * 255).toInt(), (c.blue * 255).toInt()), hsv)
@@ -69,7 +87,8 @@ fun hueShift(c: Color, degrees: Float): Color {
 }
 
 fun schemeFor(accent: Color, dark: Boolean, layout: AppLayout = AppLayout.CONSOLE): ColorScheme {
-    val base = consoleSchemeFor(accent, dark)
+    val seed = accentSeed(accent, dark)
+    val base = consoleSchemeFor(seed, dark)
     if (layout == AppLayout.CONSOLE) return base
     val tokens = tokensFor(layout)
     val p = if (dark) tokens.dark else tokens.light
@@ -84,7 +103,9 @@ fun schemeFor(accent: Color, dark: Boolean, layout: AppLayout = AppLayout.CONSOL
         surfaceBright = if (dark) p.raisedSurface else p.background,
         surfaceDim = if (dark) p.background else mix(p.raisedSurface, Color.Black, .05f),
         outline = p.outline, outlineVariant = p.divider,
-        primaryContainer = mix(accent, p.background, if (dark) .72f else .2f),
+        primary = readableAccent(seed, p.raisedSurface, dark),
+        onPrimary = onAccent(readableAccent(seed, p.raisedSurface, dark)),
+        primaryContainer = mix(seed, p.background, if (dark) .72f else .2f),
         secondaryContainer = mix(accent, p.background, .84f), onSecondaryContainer = p.foreground,
     )
 }
@@ -93,8 +114,9 @@ private fun consoleSchemeFor(accent: Color, dark: Boolean): ColorScheme {
     val tertiarySeed = hueShift(accent, 165f)
     return if (dark) {
         val bg = Brand.Night
+        val p = readableAccent(accent, Color(0xFF2C2D2F), true)
         darkColorScheme(
-            primary = accent, onPrimary = onAccent(accent),
+            primary = p, onPrimary = onAccent(p),
             primaryContainer = mix(accent, bg, 0.72f), onPrimaryContainer = mix(accent, Color.White, 0.55f),
             secondary = mix(accent, Color(0xFFB8B2AB), 0.6f), onSecondary = Brand.Ink,
             secondaryContainer = mix(accent, bg, 0.84f), onSecondaryContainer = Color(0xFFE6E1DB),
@@ -146,8 +168,10 @@ fun isDarkTheme(mode: ThemeMode): Boolean = when (mode) {
 fun AriesTheme(settings: ThemeSettings, content: @Composable () -> Unit) {
     val dark = isDarkTheme(settings.mode)
     val view = LocalView.current
+    val scheme = schemeFor(Color(settings.accentArgb), dark, settings.layout)
     SideEffect {
         val window = (view.context as? Activity)?.window ?: return@SideEffect
+        window.setBackgroundDrawable(ColorDrawable(scheme.background.toArgb()))
         WindowCompat.getInsetsController(window, view).apply {
             isAppearanceLightStatusBars = !dark
             isAppearanceLightNavigationBars = !dark
@@ -155,9 +179,9 @@ fun AriesTheme(settings: ThemeSettings, content: @Composable () -> Unit) {
     }
     val tokens = tokensFor(settings.layout)
     val corner = RoundedCornerShape(tokens.cornerRadius)
-    CompositionLocalProvider(LocalAccentColor provides Color(settings.accentArgb), LocalLayoutTokens provides tokens) {
+    CompositionLocalProvider(LocalAccentColor provides accentSeed(Color(settings.accentArgb), dark), LocalLayoutTokens provides tokens) {
         MaterialTheme(
-            colorScheme = schemeFor(Color(settings.accentArgb), dark, settings.layout),
+            colorScheme = scheme,
             typography = typographyFor(tokens),
             shapes = Shapes(extraSmall = corner, small = corner, medium = corner, large = corner, extraLarge = corner),
             content = content,

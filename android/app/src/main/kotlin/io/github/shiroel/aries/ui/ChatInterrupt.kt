@@ -3,7 +3,6 @@ package io.github.shiroel.aries.ui
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -46,7 +45,7 @@ internal fun ChatInterruptNotice(chat: ChatModel, modifier: Modifier = Modifier)
 @Composable
 internal fun ChatInterruptProgress() {
     val label = stringResource(R.string.chat_interrupt_pending)
-    CircularProgressIndicator(
+    ConsoleBusyIndicator(
         Modifier.size(20.dp).semantics { contentDescription = label },
         strokeWidth = 2.dp,
     )

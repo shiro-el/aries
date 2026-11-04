@@ -55,7 +55,7 @@ internal fun LazyListScope.githubOverviewItems(overview: GithubOverview, onTab: 
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 checks == null -> {
                     Text(stringResource(R.string.github_pr_checks), Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                    ConsoleBusyIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                 }
                 checks.checks.isEmpty() -> Text(stringResource(R.string.github_pr_no_checks), Modifier.weight(1f),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -79,7 +79,7 @@ internal fun LazyListScope.githubOverviewItems(overview: GithubOverview, onTab: 
         GithubSection(stringResource(R.string.github_pr_files), overview.files?.files?.size) { onTab(GithubPrTab.Files) }
         overview.filesError?.let { Text(stringResource(it), Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
-        if (overview.files == null && overview.filesError == null) LinearProgressIndicator(Modifier.fillMaxWidth())
+        if (overview.files == null && overview.filesError == null) ConsoleProgress(Modifier.fillMaxWidth())
         if (overview.files?.files?.isEmpty() == true) Text(stringResource(R.string.github_pr_no_files), Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (overview.files?.limited == true) Text(stringResource(R.string.github_pr_files_limited), Modifier.padding(horizontal = 16.dp, vertical = 8.dp),

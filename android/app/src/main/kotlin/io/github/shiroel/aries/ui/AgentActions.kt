@@ -37,7 +37,7 @@ internal fun AgentActions(board: AgentBoard) {
             if (board.hosts.size > 1) Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp)) {
                 Text(stringResource(R.string.creation_host_label), style = MaterialTheme.typography.labelMedium)
                 Box {
-                    OutlinedButton(onClick = { choosing = true }, modifier = Modifier.testTag("creation-host")) {
+                    ConsoleButton(onClick = { choosing = true }, modifier = Modifier.testTag("creation-host")) {
                         Text(host?.name.orEmpty(), Modifier.weight(1f))
                         Icon(painterResource(R.drawable.ic_chevron_down), null, Modifier.size(16.dp))
                     }

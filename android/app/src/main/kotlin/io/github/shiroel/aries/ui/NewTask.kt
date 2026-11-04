@@ -189,7 +189,7 @@ internal fun NewTaskDialog(task: NewTask, onStart: () -> Unit, onOpenChat: () ->
     var savedOpen by remember(task) { mutableStateOf(false) }
     val editable = !form.busy && task.terminal == null && !task.launchUnknown
     val promptField: @Composable () -> Unit = {
-        OutlinedTextField(task.input, { task.input = it }, enabled = !form.busy && !task.sent,
+        ConsoleField(task.input, { task.input = it }, enabled = !form.busy && !task.sent,
             minLines = 4, maxLines = 8, label = { Text(stringResource(R.string.new_task_prompt)) },
             modifier = Modifier.fillMaxWidth().testTag("new-task-prompt"))
     }
@@ -211,11 +211,11 @@ internal fun NewTaskDialog(task: NewTask, onStart: () -> Unit, onOpenChat: () ->
             }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 taskPresets.forEach { preset ->
-                    FilterChip(selected = form.preset == preset, enabled = editable,
+                    SingleChoiceChip(selected = form.preset == preset, enabled = editable,
                         onClick = { form.preset = preset }, label = { Text(stringResource(preset.label)) })
                 }
             }
-            OutlinedTextField(form.cwd, { form.cwd = it }, enabled = editable, singleLine = true,
+            ConsoleField(form.cwd, { form.cwd = it }, enabled = editable, singleLine = true,
                 label = { Text(stringResource(R.string.launch_cwd)) },
                 supportingText = { Text(stringResource(R.string.new_task_folder_hint)) },
                 isError = form.cwd.isNotBlank() && !form.cwd.startsWith('/'),
@@ -227,11 +227,11 @@ internal fun NewTaskDialog(task: NewTask, onStart: () -> Unit, onOpenChat: () ->
             TextButton(onClick = { options = !options }, enabled = editable) { Text(stringResource(R.string.new_task_options)) }
             if (options && editable) {
                 form.preset?.let { LaunchOptions(form, it) }
-                OutlinedTextField(form.command, { form.command = it }, enabled = editable,
+                ConsoleField(form.command, { form.command = it }, enabled = editable,
                     singleLine = true, label = { Text(stringResource(R.string.launch_preset_args)) })
             }
             if (task.waiting) Text(stringResource(R.string.new_task_waiting))
-            if (form.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (form.busy) ConsoleProgress(Modifier.fillMaxWidth())
             form.error?.let { Text(stringResource(it.res, *it.args.toTypedArray()), color = MaterialTheme.colorScheme.error) }
             if (task.terminal != null && !form.busy) TextButton(onClick = onOpenChat) { Text(stringResource(R.string.new_task_open_chat)) }
         }
@@ -245,11 +245,8 @@ internal fun NewTaskDialog(task: NewTask, onStart: () -> Unit, onOpenChat: () ->
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize().testTag("new-task-dialog"), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize().imePadding()) {
-                Row(Modifier.fillMaxWidth().heightIn(min = 56.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel_button)) }
-                    Text(stringResource(R.string.new_task_title), style = MaterialTheme.typography.titleLarge)
-                }
-                HorizontalDivider()
+                ConsoleTopBar(stringResource(R.string.new_task_title), onMenu = {}, onBack = onDismiss,
+                    showMark = false, showNavigationActions = false)
                 Box(Modifier.weight(1f).padding(LocalLayoutTokens.current.contentPadding)) { fields() }
                 HorizontalDivider()
                 Column(Modifier.fillMaxWidth().padding(LocalLayoutTokens.current.contentPadding)) { start() }
@@ -289,7 +286,7 @@ private fun TaskFolderDialog(connection: HostConnection?, initial: String, onSel
                 TextButton(onClick = { revision++ }) { Text(stringResource(R.string.github_refresh)) }
             }
             if (error) Text(stringResource(R.string.files_failed), color = MaterialTheme.colorScheme.error)
-            else if (directory == null) LinearProgressIndicator(Modifier.fillMaxWidth())
+            else if (directory == null) ConsoleProgress(Modifier.fillMaxWidth())
             LazyColumn(Modifier.heightIn(max = 320.dp)) {
                 items(directory?.entries.orEmpty().filter { it.directory }, key = { it.name }) { entry ->
                     TextButton(onClick = { path = directory!!.path.trimEnd('/') + "/" + entry.name }) { Text(entry.name) }

@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
@@ -36,6 +37,17 @@ import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentStatus
 import kotlinx.coroutines.launch
 
+/** Minimum bar/touch metrics shared by screen and full-screen tool headers. Text can grow. */
+internal val ConsoleBarHeight = 48.dp
+internal val LocalConsoleHeaderMeasured = compositionLocalOf<(Int) -> Unit> { {} }
+
+@Composable
+internal fun ConsoleBar(modifier: Modifier = Modifier, reportHeight: Boolean = false, content: @Composable RowScope.() -> Unit) {
+    val measured = LocalConsoleHeaderMeasured.current
+    Row(modifier.fillMaxWidth().heightIn(min = ConsoleBarHeight).onSizeChanged { if (reportHeight) measured(it.height) },
+        verticalAlignment = Alignment.CenterVertically, content = content)
+}
+
 /** Shared header with room for enlarged text. Ticket 05 can supply Agent actions; ticket 04 owns [inbox]. */
 @Composable
 fun ConsoleTopBar(
@@ -46,15 +58,18 @@ fun ConsoleTopBar(
     inbox: @Composable RowScope.() -> Unit = { ConsoleInboxAction() },
     showMark: Boolean = true,
     showNavigationActions: Boolean = true,
+    reportHeight: Boolean = false,
+    backEnabled: Boolean = true,
+    backTag: String? = null,
     titleContent: @Composable RowScope.() -> Unit = {
         ConsoleTitle(title, Modifier.weight(1f))
     },
 ) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("console-top-bar"), verticalAlignment = Alignment.CenterVertically) {
+    ConsoleBar(Modifier.testTag("console-top-bar"), reportHeight = reportHeight) {
         val navigationLabel = stringResource(if (onBack == null) R.string.console_open_drawer else R.string.back_button)
         Box(
-            Modifier.size(48.dp).testTag(if (onBack == null) "console-menu" else "console-back")
-                .clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onBack ?: onMenu),
+            Modifier.size(48.dp).testTag(backTag ?: if (onBack == null) "console-menu" else "console-back")
+                .clickable(enabled = backEnabled, role = androidx.compose.ui.semantics.Role.Button, onClick = onBack ?: onMenu),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -65,11 +80,11 @@ fun ConsoleTopBar(
         }
         if (showMark) ConsoleMark()
         titleContent()
-        actions()
         if (showNavigationActions) {
             QuickOpenButton()
             inbox()
         }
+        actions()
     }
     HorizontalDivider()
 }
@@ -85,7 +100,7 @@ private fun ConsoleMark() {
     Image(
         painterResource(if (MaterialTheme.colorScheme.background.luminance() < .5f) R.drawable.mark_light else R.drawable.mark_ink),
         contentDescription = null,
-        modifier = Modifier.padding(end = 8.dp).size(26.dp),
+        modifier = Modifier.padding(end = 8.dp).size(22.dp),
     )
 }
 
@@ -104,7 +119,8 @@ internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit) {
     val drawerWidth = (LocalConfiguration.current.screenWidthDp.dp - 16.dp).coerceAtMost(420.dp)
     val density = LocalDensity.current
     val edgeWidth = with(density) { 24.dp.toPx() }
-    val terminalHeaderHeight = with(density) { 56.dp.toPx() }
+    var measuredHeaderHeight by remember { mutableIntStateOf(0) }
+    val terminalHeaderHeight = measuredHeaderHeight.toFloat().takeIf { it > 0 } ?: with(density) { ConsoleBarHeight.toPx() }
     val swipeThreshold = with(density) { 48.dp.toPx() }
     LaunchedEffect(screen) { drawer.close(); model.closeCallInbox() }
     LaunchedEffect(model.callInboxOpen) { if (model.callInboxOpen) drawer.close() }
@@ -129,7 +145,7 @@ internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit) {
             model.closeCallInbox()
             scope.launch { drawer.open() }
         }
-        CompositionLocalProvider(LocalConsoleMenu provides openDrawer, LocalQuickOpen provides {
+        CompositionLocalProvider(LocalConsoleHeaderMeasured provides { measuredHeaderHeight = it }, LocalConsoleMenu provides openDrawer, LocalQuickOpen provides {
             scope.launch { drawer.close(); model.openQuickOpen() }
         }, LocalCallInbox provides CallInboxAction(model.calls, model.callInboxOpen) {
             scope.launch {
@@ -185,7 +201,7 @@ internal val LocalConsoleMenu = compositionLocalOf<(() -> Unit)?> { null }
 @Composable
 internal fun ConsoleScreenHeader(model: HostsModel, screen: Screen, onMenu: () -> Unit) {
     if (screen is Screen.Terminal || screen is Screen.Chat) return
-    ConsoleTopBar(consoleTitle(screen), onMenu = onMenu,
+    ConsoleTopBar(consoleTitle(screen), onMenu = onMenu, reportHeight = true,
         onBack = if (screen == Screen.Settings || screen is Screen.JumpHosts) model::settingsBack
             else if (screen is Screen.Connecting) model::back else null,
         actions = {
@@ -238,7 +254,7 @@ private fun ConsoleDrawer(model: HostsModel, navigate: (() -> Unit) -> Unit) {
     }
     LazyColumn {
         item {
-            Row(Modifier.heightIn(min = 48.dp).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.heightIn(min = 48.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 ConsoleMark()
                 Text(stringResource(R.string.app_name), fontSize = 14.sp, fontWeight = FontWeight.Medium)
             }

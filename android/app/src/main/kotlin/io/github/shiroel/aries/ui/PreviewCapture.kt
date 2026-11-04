@@ -100,14 +100,15 @@ internal fun PreviewCaptureEditor(
         Surface(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).imePadding().padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(stringResource(R.string.preview_capture_title), style = MaterialTheme.typography.titleLarge)
+                ConsoleTopBar(stringResource(R.string.preview_capture_title), onMenu = {},
+                    onBack = { if (!exporting) onDismiss() }, showMark = false, showNavigationActions = false, backEnabled = !exporting)
                 Text(capture.url, style = MaterialTheme.typography.bodySmall, maxLines = 2)
                 Text(mode, style = MaterialTheme.typography.bodySmall)
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = tool == PreviewMarkTool.Pen, onClick = { tool = PreviewMarkTool.Pen },
+                    SingleChoiceChip(selected = tool == PreviewMarkTool.Pen, onClick = { tool = PreviewMarkTool.Pen },
                         enabled = !exporting, label = { Text(stringResource(R.string.preview_capture_pen)) })
-                    FilterChip(selected = tool == PreviewMarkTool.Rectangle, onClick = { tool = PreviewMarkTool.Rectangle },
+                    SingleChoiceChip(selected = tool == PreviewMarkTool.Rectangle, onClick = { tool = PreviewMarkTool.Rectangle },
                         enabled = !exporting, label = { Text(stringResource(R.string.preview_capture_rectangle)) })
                     TextButton(onClick = { marks = marks.dropLast(1) }, enabled = marks.isNotEmpty() && !exporting) {
                         Text(stringResource(R.string.preview_capture_undo))
@@ -153,14 +154,14 @@ internal fun PreviewCaptureEditor(
                         } finally { native.restore() }
                     }
                 }
-                OutlinedTextField(value = note, onValueChange = { note = it }, enabled = !exporting,
+                ConsoleField(value = note, onValueChange = { note = it }, enabled = !exporting,
                     label = { Text(stringResource(R.string.preview_capture_note)) }, maxLines = 3,
                     modifier = Modifier.fillMaxWidth())
                 if (failed) Text(stringResource(R.string.preview_capture_attach_failed), color = MaterialTheme.colorScheme.error)
                 val captureContext = stringResource(R.string.preview_capture_context, capture.url, mode)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     TextButton(onClick = onDismiss, enabled = !exporting) { Text(stringResource(R.string.cancel_button)) }
-                    Button(enabled = !exporting, onClick = {
+                    ConsoleButton(enabled = !exporting, onClick = {
                         val annotations = marks.toList()
                         val text = captureContext +
                             note.trim().takeIf { it.isNotEmpty() }?.let { "\n\n$it" }.orEmpty()

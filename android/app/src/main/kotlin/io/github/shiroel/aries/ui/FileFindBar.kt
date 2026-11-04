@@ -21,7 +21,7 @@ internal fun FileFindBar(
     onPrevious: () -> Unit, onNext: () -> Unit,
 ) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-        OutlinedTextField(query, onQuery, Modifier.weight(1f).padding(vertical = 4.dp),
+        ConsoleField(query, onQuery, Modifier.weight(1f).padding(vertical = 4.dp),
             singleLine = true, keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { if (query.isNotEmpty() && !searching) onNext() }), label = { Text(stringResource(R.string.files_find_hint)) })
         ActionIcon(R.drawable.ic_chevron_left, R.string.files_find_previous, onPrevious, enabled = query.isNotEmpty() && !searching)

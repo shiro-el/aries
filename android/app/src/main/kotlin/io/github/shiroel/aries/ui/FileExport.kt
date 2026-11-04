@@ -11,7 +11,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -131,8 +130,8 @@ private fun FileExportActions(
             catch (_: Exception) { picking = false; status = R.string.files_export_failed }
         }, { start(null) }, connection != null && !busy && !picking)
         if (busy) {
-            if (saving || total == null) LinearProgressIndicator(Modifier.fillMaxWidth())
-            else LinearProgressIndicator(progress = { if (total == 0L) 1f else completed.toFloat() / total!!.toFloat() }, modifier = Modifier.fillMaxWidth())
+            if (saving || total == null) ConsoleProgress(Modifier.fillMaxWidth())
+            else ConsoleProgress(progress = { if (total == 0L) 1f else completed.toFloat() / total!!.toFloat() }, modifier = Modifier.fillMaxWidth())
             Text(when {
                 saving -> stringResource(R.string.files_export_saving)
                 total == null -> stringResource(R.string.files_export_starting)
