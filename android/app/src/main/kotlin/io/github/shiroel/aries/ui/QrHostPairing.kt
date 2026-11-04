@@ -21,17 +21,26 @@ import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.HostPairingDetails
 import kotlinx.coroutines.launch
 
-/** QR credentials deliberately use remember, never saved state or disk. */
+/** Review survives UI recreation in memory; QR credentials never enter saved state or disk. */
+internal class QrPairingReview {
+    var qr by mutableStateOf<String?>(null)
+    var details by mutableStateOf<HostPairingDetails?>(null)
+    var name by mutableStateOf("")
+    var error by mutableStateOf<Int?>(null)
+    fun clear() { qr = null; details = null; name = ""; error = null }
+}
+
 @Composable
 internal fun QrHostPairing(
     model: HostsModel,
     scanQr: (((String) -> Unit) -> Unit)? = null,
     onPaired: (io.github.shiroel.aries.core.Host) -> Unit = {},
 ) {
-    var qr by remember { mutableStateOf<String?>(null) }
-    var details by remember { mutableStateOf<HostPairingDetails?>(null) }
-    var name by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf<Int?>(null) }
+    val review = model.pairingReview
+    var qr by review::qr
+    var details by review::details
+    var name by review::name
+    var error by review::error
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val scanned: (String) -> Unit = { value ->
@@ -67,6 +76,9 @@ internal fun QrHostPairing(
                     enabled = !busy && qr != null && validHostInput(model.hosts, null, name, offer.address, offer.port.toInt(), offer.user),
                     onClick = {
                         val credential = qr ?: return@ConsoleButton
+                        // A submitted one-use credential cannot be replayed if
+                        // recreation interrupts the form's wait for its result.
+                        qr = null
                         busy = true; error = null
                         scope.launch {
                             try {

@@ -29,7 +29,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /** A visited folder owns its listing, expansion and reading position until Files closes. */
-private class FolderView {
+internal class FolderView {
     var directory by mutableStateOf<RemoteDirectory?>(null)
     var loading by mutableStateOf(true)
     var failed by mutableStateOf(false)
@@ -42,6 +42,37 @@ private class FolderView {
     val scroll = LazyListState()
 }
 
+/** Navigation and visited folders belong to the Agent, beyond its composition. */
+class RemoteFilesState internal constructor(val initialLocation: FileLocation? = null) {
+    internal var folder by mutableStateOf(initialLocation?.path?.substringBeforeLast('/')?.ifEmpty { "/" })
+    internal val folders = mutableMapOf<String?, FolderView>()
+    internal val reading = mutableMapOf<String, FileReadingState>()
+    internal var history by mutableStateOf<List<String?>>(emptyList())
+    private var selectedFile by mutableStateOf(initialLocation?.path)
+    internal var fullFile by mutableStateOf(false)
+    internal var preview by mutableStateOf(false)
+    internal var file: String?
+        get() = selectedFile
+        set(value) {
+            if (value == selectedFile) return
+            selectedFile = value
+            fullFile = false
+            preview = initialLocation?.path != value
+        }
+}
+
+/** Opening a new target resets navigation; hiding the app retains the current target. */
+internal class RemoteFilesPanel {
+    var open by mutableStateOf(false)
+    var noFolder by mutableStateOf(false)
+    var navigation by mutableStateOf(RemoteFilesState())
+    fun show(location: FileLocation? = null, missingFolder: Boolean = false) {
+        navigation = RemoteFilesState(location)
+        noFolder = missingFolder
+        open = true
+    }
+}
+
 /** Read-only files and changes on the current Terminal’s Host. */
 @Composable
 fun RemoteFilesScreen(
@@ -51,16 +82,16 @@ fun RemoteFilesScreen(
     onSend: ((String) -> Unit)? = null,
     initialLocation: FileLocation? = null,
     onDiffSend: ((String) -> Unit)? = onSend,
+    navigation: RemoteFilesState = remember(address, initialLocation) { RemoteFilesState(initialLocation) },
 ) {
-    val initialFolder = initialLocation?.path?.substringBeforeLast('/')?.ifEmpty { "/" }
-    var folder by remember(address, initialLocation) { mutableStateOf(initialFolder) }
-    val folders = remember(address, initialLocation) { mutableMapOf<String?, FolderView>() }
+    var folder by navigation::folder
+    val folders = navigation.folders
     val view = folders.getOrPut(folder) { FolderView() }
     var directory by view::directory
     var loading by view::loading
     var failed by view::failed
-    var history by remember(address, initialLocation) { mutableStateOf<List<String?>>(emptyList()) }
-    var file by remember(address, initialLocation) { mutableStateOf(initialLocation?.path) }
+    var history by navigation::history
+    var file by navigation::file
     val viewerSettings = rememberFileViewerSettings()
     val wrap = viewerSettings.wrap
     var retry by remember { mutableIntStateOf(0) }
@@ -69,9 +100,9 @@ fun RemoteFilesScreen(
     val requestedRevision = retry
     val changesLoaded = loadedRevision == requestedRevision
     var gitError by remember(connection, address) { mutableStateOf<String?>(null) }
-    var fullFile by remember(address, file) { mutableStateOf(false) }
+    var fullFile by navigation::fullFile
     val changedFile = changes?.let { git -> git.files.find { gitFilePath(git.cwd, it.path) == file?.let { path -> java.nio.file.Paths.get(path).normalize().toString() } } }
-    var preview by remember(address, file) { mutableStateOf(initialLocation?.path != file) }
+    var preview by navigation::preview
     val markupFile = file?.substringAfterLast('.', "")?.lowercase(java.util.Locale.ROOT) in setOf("md", "mmd", "mermaid")
     val mediaFile = remoteMediaKind(file.orEmpty()) != null
     val showingDiff = changedFile != null && !fullFile && !mediaFile
@@ -244,7 +275,12 @@ fun RemoteFilesScreen(
             }
             else -> key(connection, address, file, retry) {
                 RemoteTextFile(connection, address, file!!,
-                    initialLocation?.takeIf { it.path == file }?.line ?: 1uL, wrap, onSend, onRefresh = { retry++ })
+                    initialLocation?.takeIf { it.path == file }?.line ?: 1uL, wrap, onSend, onRefresh = {
+                        navigation.reading.remove(file)
+                        retry++
+                    }, reading = navigation.reading.getOrPut(file!!) {
+                        FileReadingState(initialLocation?.takeIf { it.path == file }?.line ?: 1uL)
+                    })
             }
         }
     }
@@ -293,9 +329,13 @@ internal fun RemoteFilesAccess(model: HostsModel, content: @Composable () -> Uni
         is Screen.Chat -> screen.chat.link
         is Screen.Terminal -> screen.viewer.link
     } ?: run { body(); return }
-    var open by remember(screen) { mutableStateOf(false) }
-    var noFolder by remember(screen) { mutableStateOf(false) }
-    var location by remember(screen) { mutableStateOf<FileLocation?>(null) }
+    val panel = when (screen) {
+        is Screen.Chat -> screen.chat.files
+        is Screen.Terminal -> screen.viewer.files
+    }
+    var open by panel::open
+    val noFolder = panel.noFolder
+    val location = panel.navigation.initialLocation
     fun sendReference(reference: String, diff: Boolean) {
         if (model.screen === screen) {
             model.switchView(io.github.shiroel.aries.core.AgentView.CHAT)
@@ -306,12 +346,11 @@ internal fun RemoteFilesAccess(model: HostsModel, content: @Composable () -> Uni
         open = false
     }
     CompositionLocalProvider(LocalOpenFiles provides {
-        noFolder = false; location = null; open = true
+        panel.show()
     }, LocalOpenRemoteFile provides { target ->
-        noFolder = !target.path.startsWith('/') && terminal.currentCwd.isNullOrBlank()
-        location = target.copy(path = if (target.path.startsWith('/')) target.path
-            else terminal.currentCwd.orEmpty().trimEnd('/') + "/" + target.path)
-        open = true
+        panel.show(target.copy(path = if (target.path.startsWith('/')) target.path
+            else terminal.currentCwd.orEmpty().trimEnd('/') + "/" + target.path),
+            missingFolder = !target.path.startsWith('/') && terminal.currentCwd.isNullOrBlank())
     }) { body() }
     if (open) androidx.compose.ui.window.Dialog(
         onDismissRequest = { open = false },
@@ -326,6 +365,7 @@ internal fun RemoteFilesAccess(model: HostsModel, content: @Composable () -> Uni
                 ConnectionNotice(link)
                 RemoteFilesScreen(connection, terminal.address, { open = false },
                     initialLocation = location,
+                    navigation = panel.navigation,
                     onSend = if (terminal.agentStatus == null) null else { reference -> sendReference(reference, false) },
                     onDiffSend = if (terminal.agentStatus == null) null else { reference -> sendReference(reference, true) },
                 )

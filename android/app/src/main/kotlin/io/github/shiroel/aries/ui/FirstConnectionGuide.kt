@@ -11,6 +11,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -61,7 +62,7 @@ internal fun FirstConnectionGuide(
         step == 2 && browser != null && model.beacon.host?.id == browser.host.id -> {
             val scope = rememberCoroutineScope()
             var requesting by remember { mutableStateOf(false) }
-            var allowed by remember { mutableStateOf<Boolean?>(null) }
+            var allowed by rememberSaveable { mutableStateOf<Boolean?>(null) }
             Column(
                 Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
