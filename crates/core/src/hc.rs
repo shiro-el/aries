@@ -91,6 +91,8 @@ pub(crate) struct HcClient {
     next_id: AtomicU64,
     reader: JoinHandle<()>,
     _guard: Box<dyn Send + Sync>,
+    pub(crate) ssh: Option<Arc<crate::transport::ssh::Session>>,
+    pub(crate) closed: tokio::sync::watch::Sender<bool>,
 }
 
 impl HcClient {
@@ -100,6 +102,7 @@ impl HcClient {
             reader,
             mut writer,
             guard,
+            ssh,
         } = stream;
         let hello = json!({
             "jsonrpc": "2.0",
@@ -126,7 +129,13 @@ impl HcClient {
 
         let pending: Pending = Arc::new(std::sync::Mutex::new(Some(HashMap::new())));
         let channels = SharedChannels::default();
-        let reader = tokio::spawn(read_frames(reader, pending.clone(), channels.clone()));
+        let (closed, _) = tokio::sync::watch::channel(false);
+        let ended = closed.clone();
+        let frames = read_frames(reader, pending.clone(), channels.clone());
+        let reader = tokio::spawn(async move {
+            frames.await;
+            ended.send_replace(true);
+        });
         Ok(Self {
             hello,
             writer: Arc::new(Mutex::new(writer)),
@@ -135,6 +144,8 @@ impl HcClient {
             next_id: AtomicU64::new(1),
             reader,
             _guard: guard,
+            ssh,
+            closed,
         })
     }
 
@@ -249,6 +260,7 @@ impl HcClient {
     }
 
     pub async fn close(&self) {
+        self.closed.send_replace(true);
         let _ = self.writer.lock().await.shutdown().await;
         self.reader.abort();
         fail_all(&self.pending);
@@ -263,6 +275,7 @@ impl HcClient {
 
 impl Drop for HcClient {
     fn drop(&mut self) {
+        self.closed.send_replace(true);
         self.reader.abort();
     }
 }

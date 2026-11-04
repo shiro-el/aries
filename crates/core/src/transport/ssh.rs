@@ -265,7 +265,7 @@ pub(crate) async fn handshake(
     Ok((sessions, session))
 }
 
-pub(super) fn unreachable_err(e: impl std::fmt::Display) -> CoreError {
+pub(crate) fn unreachable_err(e: impl std::fmt::Display) -> CoreError {
     CoreError::Unreachable {
         detail: e.to_string(),
     }
@@ -368,7 +368,7 @@ impl Ssh {
     }
 
     async fn stream_on(
-        mut sessions: Vec<Session>,
+        sessions: Vec<Session>,
         session: Session,
         command: &str,
     ) -> Result<Stream, CoreError> {
@@ -377,13 +377,14 @@ impl Ssh {
             .await
             .map_err(unreachable_err)?;
         channel.exec(true, command).await.map_err(unreachable_err)?;
-        sessions.push(session);
+        let session = Arc::new(session);
         let (reader, writer) = tokio::io::split(channel.into_stream());
         Ok(Stream {
             reader: Box::new(reader),
             writer: Box::new(writer),
             // The jump sessions carry the Host's; keep them all alive.
-            guard: Box::new(Mutex::new(sessions)),
+            guard: Box::new((Mutex::new(sessions), session.clone())),
+            ssh: Some(session),
         })
     }
 }

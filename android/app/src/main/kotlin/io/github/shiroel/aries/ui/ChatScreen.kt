@@ -444,6 +444,11 @@ fun ChatScreen(
     }
     val snapshot = chat.snapshot
     val rawEntries = snapshot?.entries.orEmpty()
+    val previewOutput = remember(rawEntries) { rawEntries.takeLast(100).joinToString("\n") { entry ->
+        val body = entry.body
+        if (body is ChatEntryBody.Tool) body.output.orEmpty() else body.markdownSource().orEmpty()
+    } }
+    val preview = rememberLocalhostPreview(chat.link, previewOutput, chat.terminal.address)
     val markdownState = rememberChatMarkdown(rawEntries)
     val markdown by markdownState
     val rendered = remember(chat) { ChatRenderedEntries() }
@@ -480,98 +485,104 @@ fun ChatScreen(
     CompositionLocalProvider(LocalChatSearch provides searchDecoration) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))) {
             AgentScreenHeader(chat.terminal, chat.host.name, onBack, AgentView.CHAT, onView,
-                link = chat.link, onTerminalUpdate = { chat.update(listOf(it)) }, onSearch = { searchOpen = true })
-            ChatSearchBar(searchOpen, query, selectedIndex + 1, matches.size,
-                onQuery = { query = it; selected = null },
-                onMove = { selected = navigateChatSearch(matches, active, it) },
-                onClose = ::closeSearch,
-            )
-            statusText(snapshot?.status ?: ChatStatus.CONNECTING)?.let { ChatNotice(it) }
-            if (snapshot != null && entries.isEmpty() && snapshot.status == ChatStatus.LIVE) {
-                Text(stringResource(R.string.chat_empty))
-            }
-            io.github.shiroel.aries.speech.ReadAloudPlayback(readAloud, showInactiveNotice = false)
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                // Scrollable clearance, rather than a footer that shrinks the viewport.
-                val transcriptPadding = PaddingValues(bottom = if (scroll.following || searchOpen) 0.dp else 64.dp)
-                val transcriptModifier = Modifier.fillMaxSize().chatImeAnchor(scroll.list).testTag("chat-transcript")
-                if (scroll.following) {
-                    // Keep main's follow renderer inline: its lazy provider and
-                    // forced scroll measure must consume the same content update.
-                    LazyColumn(transcriptModifier, state = scroll.list, contentPadding = transcriptPadding) {
-                        entries.forEach { entry ->
-                            val body = entry.body
-                            val source = body.markdownSource()
-                            item(key = "transcript:${entry.id}") {
-                                CompositionLocalProvider(LocalChatSearchEntry provides entry.id) {
-                                    if (body is ChatEntryBody.Question) {
-                                        QuestionView(chat, entry.id, body)
-                                    } else {
-                                        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (body is ChatEntryBody.Agent) 0.dp else 12.dp)) {
-                                            ChatEntryView(entry, markdown[entry.id]?.attachments, chat, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image, readAloud) { chat.toggle(entry.id) }
+                preview = preview, link = chat.link, onTerminalUpdate = { chat.update(listOf(it)) }, onSearch = { searchOpen = true })
+            PreviewChips(preview)
+            if (preview.selected != null) {
+                LocalhostPreviewBrowser(preview, chat.link, Modifier.weight(1f).fillMaxWidth(),
+                    change = chat.terminal.turn to rawEntries.mapNotNull { (it.body as? ChatEntryBody.Tool)?.diff })
+            } else {
+                ChatSearchBar(searchOpen, query, selectedIndex + 1, matches.size,
+                    onQuery = { query = it; selected = null },
+                    onMove = { selected = navigateChatSearch(matches, active, it) },
+                    onClose = ::closeSearch,
+                )
+                statusText(snapshot?.status ?: ChatStatus.CONNECTING)?.let { ChatNotice(it) }
+                if (snapshot != null && entries.isEmpty() && snapshot.status == ChatStatus.LIVE) {
+                    Text(stringResource(R.string.chat_empty))
+                }
+                io.github.shiroel.aries.speech.ReadAloudPlayback(readAloud, showInactiveNotice = false)
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    // Scrollable clearance, rather than a footer that shrinks the viewport.
+                    val transcriptPadding = PaddingValues(bottom = if (scroll.following || searchOpen) 0.dp else 64.dp)
+                    val transcriptModifier = Modifier.fillMaxSize().chatImeAnchor(scroll.list).testTag("chat-transcript")
+                    if (scroll.following) {
+                        // Keep main's follow renderer inline: its lazy provider and
+                        // forced scroll measure must consume the same content update.
+                        LazyColumn(transcriptModifier, state = scroll.list, contentPadding = transcriptPadding) {
+                            entries.forEach { entry ->
+                                val body = entry.body
+                                val source = body.markdownSource()
+                                item(key = "transcript:${entry.id}") {
+                                    CompositionLocalProvider(LocalChatSearchEntry provides entry.id) {
+                                        if (body is ChatEntryBody.Question) {
+                                            QuestionView(chat, entry.id, body)
+                                        } else {
+                                            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (body is ChatEntryBody.Agent) 0.dp else 12.dp)) {
+                                                ChatEntryView(entry, markdown[entry.id]?.attachments, chat, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image, readAloud) { chat.toggle(entry.id) }
+                                            }
+                                            if (source == null) HorizontalDivider()
                                         }
-                                        if (source == null) HorizontalDivider()
+                                    }
+                                }
+                                if (source != null) {
+                                    chatMarkdownItems(entry.id, markdown[entry.id], thinking = body is ChatEntryBody.Thinking)
+                                    item(key = "transcript:${entry.id}:footer") {
+                                        if (body is ChatEntryBody.User && body.images.isNotEmpty()) {
+                                            Column(Modifier.padding(horizontal = 16.dp)) {
+                                                body.images.forEach { ChatImageView(it, chat::image) }
+                                            }
+                                        }
+                                        if (body is ChatEntryBody.Agent) body.metadata?.let { metadata ->
+                                            Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                                                ChatResponseMetadataView(metadata)
+                                            }
+                                        }
+                                        HorizontalDivider(Modifier.padding(top = 8.dp))
                                     }
                                 }
                             }
-                            if (source != null) {
-                                chatMarkdownItems(entry.id, markdown[entry.id], thinking = body is ChatEntryBody.Thinking)
-                                item(key = "transcript:${entry.id}:footer") {
-                                    if (body is ChatEntryBody.User && body.images.isNotEmpty()) {
-                                        Column(Modifier.padding(horizontal = 16.dp)) {
-                                            body.images.forEach { ChatImageView(it, chat::image) }
-                                        }
-                                    }
-                                    if (body is ChatEntryBody.Agent) body.metadata?.let { metadata ->
-                                        Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                                            ChatResponseMetadataView(metadata)
-                                        }
-                                    }
-                                    HorizontalDivider(Modifier.padding(top = 8.dp))
-                                }
+                            items(agentCalls, key = { "call:${it.key}" }) { entry ->
+                                if (calls != null) ConsoleChatCall(entry, calls)
                             }
                         }
-                        items(agentCalls, key = { "call:${it.key}" }) { entry ->
-                            if (calls != null) ConsoleChatCall(entry, calls)
-                        }
+                    } else {
+                        ChatHistoryTranscript(transcriptModifier, scroll.list, transcript, chat, readAloud, agentCalls, calls, transcriptPadding)
                     }
-                } else {
-                    ChatHistoryTranscript(transcriptModifier, scroll.list, transcript, chat, readAloud, agentCalls, calls, transcriptPadding)
+                    if (!searchOpen && !scroll.following && (entries.isNotEmpty() || agentCalls.isNotEmpty())) {
+                        LatestButton(
+                            description = if (scroll.unreadCount == 0) stringResource(R.string.chat_latest_button)
+                                else stringResource(R.string.chat_latest_count_button, scroll.unreadCount),
+                            onClick = scroll::latest,
+                            modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp),
+                            unreadCount = scroll.unreadCount,
+                        )
+                    }
                 }
-                if (!searchOpen && !scroll.following && (entries.isNotEmpty() || agentCalls.isNotEmpty())) {
-                    LatestButton(
-                        description = if (scroll.unreadCount == 0) stringResource(R.string.chat_latest_button)
-                            else stringResource(R.string.chat_latest_count_button, scroll.unreadCount),
-                        onClick = scroll::latest,
-                        modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp),
-                        unreadCount = scroll.unreadCount,
-                    )
+                (chat.terminal.agentStatus as? AgentStatus.Blocked)?.let {
+                    // A question the Chat shows open is answered with its own buttons;
+                    // the Terminal notice is for what the Chat cannot answer.
+                    val answerable = it.reason == BlockedReason.QUESTION && entries.any { e ->
+                        (e.body as? ChatEntryBody.Question)?.status == ChatToolStatus.RUNNING
+                    }
+                    if (!answerable || chat.refused) BlockedNotice(it, refused = chat.refused, onOpenTerminal)
                 }
-            }
-            (chat.terminal.agentStatus as? AgentStatus.Blocked)?.let {
-                // A question the Chat shows open is answered with its own buttons;
-                // the Terminal notice is for what the Chat cannot answer.
-                val answerable = it.reason == BlockedReason.QUESTION && entries.any { e ->
-                    (e.body as? ChatEntryBody.Question)?.status == ChatToolStatus.RUNNING
+                when (chat.sending) {
+                    ChatModel.Sending.Sending -> ChatNotice(stringResource(R.string.chat_sending))
+                    ChatModel.Sending.Held -> ChatNotice(stringResource(R.string.chat_send_held))
+                    null -> {}
                 }
-                if (!answerable || chat.refused) BlockedNotice(it, refused = chat.refused, onOpenTerminal)
-            }
-            when (chat.sending) {
-                ChatModel.Sending.Sending -> ChatNotice(stringResource(R.string.chat_sending))
-                ChatModel.Sending.Held -> ChatNotice(stringResource(R.string.chat_send_held))
-                null -> {}
-            }
-            chat.sendError?.let {
-                Text(stringResource(R.string.chat_send_failed, it), color = MaterialTheme.colorScheme.error)
-            }
-            if (chat.uploading) {
-                LinearProgressIndicator(Modifier.fillMaxWidth())
-                ChatNotice(stringResource(R.string.attachments_uploading))
-            }
-            chat.attachmentError?.let { Text(stringResource(it.res, *it.args.toTypedArray()), color = MaterialTheme.colorScheme.error) }
-            if (chat.link != null) {
-                ChatCatalogControls(chat)
-                MessageInput(chat)
+                chat.sendError?.let {
+                    Text(stringResource(R.string.chat_send_failed, it), color = MaterialTheme.colorScheme.error)
+                }
+                if (chat.uploading) {
+                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                    ChatNotice(stringResource(R.string.attachments_uploading))
+                }
+                chat.attachmentError?.let { Text(stringResource(it.res, *it.args.toTypedArray()), color = MaterialTheme.colorScheme.error) }
+                if (chat.link != null) {
+                    ChatCatalogControls(chat)
+                    MessageInput(chat)
+                }
             }
         }
     }

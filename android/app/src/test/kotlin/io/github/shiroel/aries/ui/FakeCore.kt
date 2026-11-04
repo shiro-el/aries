@@ -729,6 +729,9 @@ class FakeConnection(
     private val core: FakeCore? = null,
     private val saved: MutableList<SavedLaunch> = core?.savedLaunches ?: mutableListOf(),
 ) : HostConnection(NoHandle) {
+    override fun previewPorts(output: String): List<UShort> = emptyList()
+    override suspend fun previewListeningPorts(): List<UShort> = emptyList()
+
     var githubRepo = io.github.shiroel.aries.core.GithubRepository("/repo", null, "octo/project", "github.com")
     var githubRepoReads = 0
     var githubPrFiles = io.github.shiroel.aries.core.GithubPrFiles(emptyList(), false)

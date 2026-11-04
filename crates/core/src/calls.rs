@@ -305,6 +305,7 @@ pub(crate) async fn reply(
         reader,
         writer,
         guard,
+        ..
     } = runner
         .open_within(&reply_command(call_id, choice), sign_in)
         .await?;
