@@ -2132,8 +2132,12 @@ class HostsModel(
     var callInboxOpen by mutableStateOf(false)
         private set
 
+    internal var callInboxOpenedAtNavigation = 0L
+        private set
+
     fun openCallInbox() {
         navigationIntent()
+        callInboxOpenedAtNavigation = overlayNavigationVersion
         callInboxOpen = true
         calls.dismissBanner()
         calls.watch(hosts, everyHost = true)

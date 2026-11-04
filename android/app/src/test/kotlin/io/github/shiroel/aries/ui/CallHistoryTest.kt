@@ -138,7 +138,7 @@ class CallHistoryTest {
         compose.onNodeWithTag("console-inbox-count", useUnmergedTree = true).assertTextEquals("1")
         compose.onNodeWithTag("console-urgent:h1/c1").assertExists()
         openCalls()
-        compose.onNodeWithContentDescription(str(R.string.call_open_chat_label, "t3", "Review")).performClick()
+        compose.onNodeWithContentDescription(str(R.string.call_open_chat_label, str(R.string.call_caller_unknown), "Review")).performClick()
         compose.runOnIdle { assertTrue(model.calls.calls.single().live) }
         compose.onNodeWithTag("console-inbox-count", useUnmergedTree = true).assertTextEquals("1")
         restart.complete(Unit)
@@ -162,7 +162,7 @@ class CallHistoryTest {
         show(api)
         compose.onNodeWithText("home").performClick()
         compose.runOnIdle { model.openCallInbox() }
-        compose.onNodeWithContentDescription(str(R.string.call_open_chat_label, "t3", "Review")).performClick()
+        compose.onNodeWithContentDescription(str(R.string.call_open_chat_label, str(R.string.call_caller_unknown), "Review")).performClick()
         compose.runOnIdle { initial.complete(Unit) }
         compose.onNodeWithTag("call-inbox-panel").assertExists()
         compose.runOnIdle { assertTrue(model.screen is Screen.Browse); caller.complete(Unit) }

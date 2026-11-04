@@ -128,12 +128,16 @@ internal fun ConsoleShell(
     var measuredHeaderHeight by remember { mutableIntStateOf(0) }
     val terminalHeaderHeight = measuredHeaderHeight.toFloat().takeIf { it > 0 } ?: with(density) { ConsoleBarHeight.toPx() }
     val swipeThreshold = with(density) { 48.dp.toPx() }
-    var observedNavigation by remember(model) { mutableLongStateOf(model.overlayNavigationVersion) }
-    LaunchedEffect(model.overlayNavigationVersion) {
-        if (observedNavigation != model.overlayNavigationVersion) {
-            observedNavigation = model.overlayNavigationVersion
-            drawer.close()
-            model.closeCallInbox()
+    val navigation = model.overlayNavigationVersion
+    var observedNavigation by remember(model) { mutableLongStateOf(navigation) }
+    var drawerOpenedAtNavigation by remember(model) { mutableLongStateOf(navigation) }
+    LaunchedEffect(navigation) {
+        if (observedNavigation != navigation) {
+            observedNavigation = navigation
+            // A freshly opened overlay belongs to this destination, even if
+            // the previous destination's dismissal effect has not run yet.
+            if (!drawer.isClosed && drawerOpenedAtNavigation != navigation) drawer.close()
+            if (model.callInboxOpenedAtNavigation != navigation) model.closeCallInbox()
         }
     }
     LaunchedEffect(model.callInboxOpen) { if (model.callInboxOpen) drawer.close() }
@@ -188,7 +192,7 @@ internal fun ConsoleShell(
                             change.consume()
                         } && distance > swipeThreshold) {
                         model.interactWithHome()
-                        scope.launch { drawer.open() }
+                        openDrawer()
                     }
                 }
             }) {
