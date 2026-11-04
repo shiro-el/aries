@@ -220,7 +220,8 @@ class ChatMarkdownTest {
         val reads = mutableListOf<Pair<String, ULong>>()
         core.connection!!.fileReader = { _, path, offset, _ ->
             reads += path to offset
-            io.github.shiroel.aries.core.RemoteFilePage("val answer = 42\n", offset, offset, 800u)
+            // Keep short responses: pagination must fetch just the missing visible lines.
+            io.github.shiroel.aries.core.RemoteFilePage("source line $offset\n", offset, offset, 800u)
         }
         for ((source, displayed, expected) in listOf(
             Triple("See `src/Main.kt:415`.", "See src/Main.kt:415.", "/repo/src/Main.kt" to 415uL),
@@ -229,9 +230,15 @@ class ChatMarkdownTest {
         )) {
             core.pushChat(ChatSnapshot(listOf(entry("a1", ChatEntryBody.Agent(source))), ChatStatus.LIVE, null))
             compose.waitUntil(5_000) { compose.onAllNodesWithText(displayed).fetchSemanticsNodes().isNotEmpty() }
+            reads.clear()
             compose.onNodeWithText(displayed).performFirstLinkClick()
-            compose.onNodeWithTag("files-line:${expected.second}").assertExists()
-            assertEquals(expected, reads.last())
+            compose.onNodeWithTag("files-line:${expected.second}").assertIsDisplayed()
+            compose.onNodeWithText("source line ${expected.second}").assertIsDisplayed()
+            assertEquals(expected, reads.first())
+            for ((path, line) in reads.toList()) {
+                assertEquals(expected.first, path)
+                compose.onNodeWithTag("files-line:$line").assertIsDisplayed()
+            }
             compose.onNodeWithContentDescription(str(R.string.files_actions_label)).performClick()
             compose.onNodeWithText(str(R.string.files_close_button)).performClick()
         }

@@ -14,6 +14,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
@@ -164,20 +165,26 @@ class ChatCopySelectionTest {
     @Test
     fun aFileReferenceCanBeCopiedWithALongPressAndStillOpenedWithATap() {
         open()
-        var reads = 0
-        core.connection!!.fileReader = { _, _, offset, _ ->
-            reads++
-            RemoteFilePage("file contents", offset, offset, 20u)
+        val reads = mutableListOf<Triple<String, String, ULong>>()
+        core.connection!!.fileReader = { address, path, offset, _ ->
+            reads += Triple(address, path, offset)
+            // A short Host response must still fill the viewport after opening the link.
+            RemoteFilePage("file contents $offset", offset, offset, 20u)
         }
         show(ChatEntryBody.Agent("README.md:7"))
         val reference = compose.onNodeWithText("README.md:7")
         reference.performTouchInput { longClick() }
         compose.onNodeWithText(str(R.string.chat_copy_all)).performClick()
         assertEquals("README.md:7", clipboard())
-        assertEquals(0, reads)
+        assertEquals(emptyList<Triple<String, String, ULong>>(), reads)
         reference.performFirstLinkClick()
-        compose.onNodeWithTag("files-line:7").assertExists()
-        assertEquals(1, reads)
+        compose.onNodeWithTag("files-line:7").assertIsDisplayed()
+        compose.onNodeWithText("file contents 7").assertIsDisplayed()
+        assertEquals(Triple("t1", "/repo/README.md", 7uL), reads.first())
+        for ((address, path, line) in reads.toList()) {
+            assertEquals("t1" to "/repo/README.md", address to path)
+            compose.onNodeWithTag("files-line:$line").assertIsDisplayed()
+        }
     }
 
     @Test
