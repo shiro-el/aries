@@ -3,6 +3,7 @@
 //! the final rename with Host edits/removal; file reads and serialization never
 //! hold the global Host registry lock.
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -37,8 +38,21 @@ pub(crate) struct States {
     pub hosts: Arc<Mutex<Vec<SavedHost>>>,
     pub changes: tokio::sync::watch::Sender<u64>,
     pub sessions: crate::host_edit::HostSessions,
-    pub io: Arc<Mutex<HashMap<String, Arc<Mutex<()>>>>>,
+    pub io: Arc<Mutex<HashMap<String, Arc<Mutex<WriteOrder>>>>>,
     pub diagnostics: crate::diagnostics::Log,
+}
+
+/// Completion order can differ from observation order across one-shot reads
+/// and watches. Track each field independently, including same-millisecond reads.
+#[derive(Default)]
+pub(crate) struct WriteOrder {
+    agents: u64,
+    structure: u64,
+}
+
+static OBSERVATION: AtomicU64 = AtomicU64::new(1);
+fn observation() -> u64 {
+    OBSERVATION.fetch_add(1, Ordering::Relaxed)
 }
 
 fn storage(e: impl std::fmt::Display) -> CoreError {
@@ -109,7 +123,9 @@ impl States {
             .entry(host.into())
             .or_default()
             .clone();
-        let _guard = gate.lock().expect("Host state writer");
+        let mut order = gate.lock().expect("Host state writer");
+        let mut next_agents = order.agents;
+        let mut next_structure = order.structure;
         let now = update.time();
         let mut state = self.read(host)?.unwrap_or(LastKnownState {
             host_id: host.into(),
@@ -119,8 +135,9 @@ impl States {
             structure_fetched_at_ms: None,
         });
         match update {
-            Update::Snapshot(agents, structure, time) => {
-                if time >= state.fetched_at_ms {
+            Update::Snapshot(agents, structure, time, observed) => {
+                if observed >= order.agents && time >= state.fetched_at_ms {
+                    next_agents = observed;
                     state.agents = agents
                         .into_iter()
                         .filter(|t| t.agent_status.is_some())
@@ -128,26 +145,32 @@ impl States {
                     state.fetched_at_ms = time;
                 }
                 if let Some(structure) = structure
+                    && observed >= order.structure
                     && state.structure_fetched_at_ms.is_none_or(|t| time >= t)
                 {
+                    next_structure = observed;
                     state.structure = Some(structure);
                     state.structure_fetched_at_ms = Some(time);
                 }
             }
-            Update::Agents(agents, time) => {
-                if time < state.fetched_at_ms {
+            Update::Agents(agents, time, observed) => {
+                if observed < order.agents || time < state.fetched_at_ms {
                     return Ok(());
                 }
+                next_agents = observed;
                 state.agents = agents
                     .into_iter()
                     .filter(|t| t.agent_status.is_some())
                     .collect();
                 state.fetched_at_ms = time;
             }
-            Update::Structure(structure, time) => {
-                if state.structure_fetched_at_ms.is_some_and(|t| time < t) {
+            Update::Structure(structure, time, observed) => {
+                if observed < order.structure
+                    || state.structure_fetched_at_ms.is_some_and(|t| time < t)
+                {
                     return Ok(());
                 }
+                next_structure = observed;
                 state.structure = Some(structure);
                 state.structure_fetched_at_ms = Some(time);
             }
@@ -172,6 +195,10 @@ impl States {
             Ok(())
         };
         let result = commit();
+        if result.is_ok() {
+            order.agents = next_agents;
+            order.structure = next_structure;
+        }
         if result.is_err() {
             let _ = std::fs::remove_file(tmp);
         }
@@ -207,21 +234,21 @@ impl States {
 
 #[derive(Clone)]
 pub(crate) enum Update {
-    Snapshot(Vec<TerminalInfo>, Option<HostStructure>, u64),
-    Agents(Vec<TerminalInfo>, u64),
-    Structure(HostStructure, u64),
+    Snapshot(Vec<TerminalInfo>, Option<HostStructure>, u64, u64),
+    Agents(Vec<TerminalInfo>, u64, u64),
+    Structure(HostStructure, u64, u64),
 }
 
 impl Update {
     pub fn agents(agents: Vec<TerminalInfo>) -> Self {
-        Self::Agents(agents, now())
+        Self::Agents(agents, now(), observation())
     }
     pub fn structure(structure: HostStructure) -> Self {
-        Self::Structure(structure, now())
+        Self::Structure(structure, now(), observation())
     }
     fn time(&self) -> u64 {
         match self {
-            Self::Agents(_, t) | Self::Structure(_, t) | Self::Snapshot(_, _, t) => *t,
+            Self::Agents(_, t, _) | Self::Structure(_, t, _) | Self::Snapshot(_, _, t, _) => *t,
         }
     }
 }
@@ -283,7 +310,7 @@ impl AriesCore {
                     .save_checked(
                         host_id.clone(),
                         connection.revision,
-                        Update::Snapshot(list?, structure, now()),
+                        Update::Snapshot(list?, structure, now(), observation()),
                     )
                     .await?;
                 let states = self.last_known.clone();
