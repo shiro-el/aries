@@ -491,12 +491,14 @@ fun ChatScreen(
                 Text(stringResource(R.string.chat_empty))
             }
             io.github.shiroel.aries.speech.ReadAloudPlayback(readAloud, showInactiveNotice = false)
-            Column(Modifier.weight(1f).fillMaxWidth()) {
-                val transcriptModifier = Modifier.weight(1f).fillMaxWidth().chatImeAnchor(scroll.list).testTag("chat-transcript")
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                // Scrollable clearance, rather than a footer that shrinks the viewport.
+                val transcriptPadding = PaddingValues(bottom = if (scroll.following || searchOpen) 0.dp else 64.dp)
+                val transcriptModifier = Modifier.fillMaxSize().chatImeAnchor(scroll.list).testTag("chat-transcript")
                 if (scroll.following) {
                     // Keep main's follow renderer inline: its lazy provider and
                     // forced scroll measure must consume the same content update.
-                    LazyColumn(transcriptModifier, state = scroll.list) {
+                    LazyColumn(transcriptModifier, state = scroll.list, contentPadding = transcriptPadding) {
                         entries.forEach { entry ->
                             val body = entry.body
                             val source = body.markdownSource()
@@ -534,16 +536,14 @@ fun ChatScreen(
                         }
                     }
                 } else {
-                    ChatHistoryTranscript(transcriptModifier, scroll.list, transcript, chat, readAloud, agentCalls, calls)
+                    ChatHistoryTranscript(transcriptModifier, scroll.list, transcript, chat, readAloud, agentCalls, calls, transcriptPadding)
                 }
                 if (!searchOpen && !scroll.following && (entries.isNotEmpty() || agentCalls.isNotEmpty())) {
-                    // Reserve the button's measured height so bringing a Choice or
-                    // message into view never leaves its tap target under Latest.
                     LatestButton(
                         description = if (scroll.unreadCount == 0) stringResource(R.string.chat_latest_button)
                             else stringResource(R.string.chat_latest_count_button, scroll.unreadCount),
                         onClick = scroll::latest,
-                        modifier = Modifier.align(Alignment.CenterHorizontally).padding(8.dp),
+                        modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp),
                         unreadCount = scroll.unreadCount,
                     )
                 }
@@ -587,8 +587,9 @@ private fun ChatHistoryTranscript(
     readAloud: io.github.shiroel.aries.speech.ReadAloudState,
     agentCalls: List<CallEntry>,
     calls: CallsModel?,
+    contentPadding: PaddingValues,
 ) {
-    LazyColumn(modifier, state = list) {
+    LazyColumn(modifier, state = list, contentPadding = contentPadding) {
         items(transcript.rows, key = { it.key }, contentType = { it.contentType }) { row ->
             ChatTranscriptRowView(row, chat, readAloud)
         }

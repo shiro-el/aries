@@ -1,5 +1,7 @@
 package io.github.shiroel.aries.ui
 
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -26,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,6 +60,11 @@ import io.github.shiroel.aries.core.CursorPos
 import io.github.shiroel.aries.core.KeyMods
 import io.github.shiroel.aries.core.TerminalKey
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.job
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import io.github.shiroel.aries.core.ScreenFrame
 import io.github.shiroel.aries.core.ScreenLine
 import io.github.shiroel.aries.core.TerminalExit
@@ -119,13 +127,35 @@ class TerminalViewer(terminal: TerminalInfo) {
     var searcher by mutableStateOf<((String, Boolean, Boolean) -> Unit)?>(null)
     var searchNavigator: ((Boolean) -> Unit)? = null
 
+    private var liveScroll: Job? = null
+
+    /** The button animates locally through the cached scrollback, then follows live output. */
+    suspend fun animateToLive() {
+        liveScroll?.cancel()
+        val job = currentCoroutineContext().job
+        liveScroll = job
+        try {
+            animate(scrolled.toFloat(), 0f, animationSpec = tween(250)) { value, _ ->
+                val to = value.roundToInt().coerceAtLeast(0)
+                if (to != scrolled) scrollTo(to)
+            }
+            scrollTo(0)
+        } finally {
+            if (liveScroll === job) liveScroll = null
+        }
+    }
+
     /** Reads [lines] further back (negative: towards live), within the scrollback. */
     fun scrollBack(lines: Int) {
+        liveScroll?.cancel()
         val to = (scrolled + lines).coerceIn(0, maxOf(history, scrolled))
         if (to != scrolled) scrollTo(to)
     }
 
-    fun scrollToLive() = scrollTo(0)
+    fun scrollToLive() {
+        liveScroll?.cancel()
+        scrollTo(0)
+    }
 
     private fun scrollTo(to: Int) {
         val at = scroller?.invoke(to.toUInt()) ?: return
@@ -404,13 +434,14 @@ fun TerminalScreen(
             Banner(stringResource(R.string.terminal_connection_closed))
         }
         val look = remember(viewer) { TerminalLook(viewer) }
+        val scope = rememberCoroutineScope()
         TerminalLookBar(viewer, look, onSelectionSend)
         Box(Modifier.fillMaxWidth().weight(1f)) {
             TerminalCanvas(viewer, look, displaySettings, Modifier.fillMaxSize())
             if (viewer.scrolled > 0) {
                 LatestButton(
                     description = stringResource(R.string.terminal_back_to_live),
-                    onClick = viewer::scrollToLive,
+                    onClick = { scope.launch { viewer.animateToLive() } },
                     modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp),
                 )
             }
