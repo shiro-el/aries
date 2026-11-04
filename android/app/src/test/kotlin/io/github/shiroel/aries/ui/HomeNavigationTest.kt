@@ -5,6 +5,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.OnBackPressedDispatcher
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.runtime.*
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -59,6 +60,27 @@ class HomeNavigationTest {
         compose.waitForIdle()
     }
 
+    // D112: a header-edge drag must keep the task, and overflow navigation must reach Tasks Hosts.
+    @Test fun detailEdgeDragKeepsTheTaskAndOverflowNavigatesToTasksHosts() {
+        show()
+        compose.runOnIdle {
+            val home = model.screen as Screen.Agents
+            model.openAgent(home.board, home.board.agents.single(), openChat = true)
+        }
+        val detail = model.screen
+        compose.onNodeWithTag("console-top-bar").performTouchInput {
+            swipe(Offset(1f, 24f), Offset(width * .8f, 24f), 300)
+        }
+        compose.onNodeWithTag("console-drawer").assertIsNotDisplayed()
+        compose.runOnIdle { assertSame(detail, model.screen) }
+        compose.onNodeWithTag("agent-actions").performClick()
+        compose.onNodeWithText(context.getString(R.string.hosts_title)).performClick()
+        compose.runOnIdle { assertEquals(Screen.Hosts, model.screen) }
+        compose.onNodeWithText("me@host.test").assertIsDisplayed()
+        compose.runOnIdle { back.onBackPressed() }
+        compose.onNodeWithTag("tasks-home").assertIsDisplayed()
+    }
+
     // D03: system Back at Tasks root must reach the Activity fallback, not cycle through Hosts.
     @Test fun tasksRootBackExitsWithoutDisconnectingOrNavigatingToHosts() {
         show()
@@ -98,19 +120,27 @@ class HomeNavigationTest {
             assertFalse(connection.disconnected)
         }
         compose.runOnIdle { back.onBackPressed() }
+        // D36: a Host page returns through Hosts, just like its header arrow.
+        compose.runOnIdle { assertEquals(Screen.Hosts, model.screen) }
+        compose.onNodeWithText("me@host.test").assertIsDisplayed()
+        compose.onNodeWithText("Development").performClick()
+        compose.onNodeWithTag("tasks-host-content").assertIsDisplayed()
+        compose.onNodeWithTag("console-back").performClick()
+        compose.runOnIdle { assertEquals(Screen.Hosts, model.screen) }
+        compose.runOnIdle { back.onBackPressed() }
         compose.runOnIdle {
             assertSame(home, model.screen)
             assertFalse(connection.disconnected)
             assertFalse(connection.watchStopped)
-            // One additional Browse line is allowed; the retained home line never reconnects.
-            assertEquals(attempts + "h1", core.connectAttempts)
+            // Browse reuses the retained home line (#297).
+            assertEquals(attempts, core.connectAttempts)
         }
         compose.onNodeWithTag("tasks-hosts").performClick()
         compose.runOnIdle { model.openPushedAgent("h1", "t1", openChat = true) }
         compose.runOnIdle {
             assertSame(home, (model.screen as Screen.Chat).returnTo)
             assertSame(connection, (model.screen as Screen.Chat).chat.link?.connection)
-            assertEquals(attempts + "h1", core.connectAttempts)
+            assertEquals(attempts, core.connectAttempts)
         }
         compose.runOnIdle { model.closeChat() }
         compose.onNodeWithTag("tasks-hosts").performClick()
