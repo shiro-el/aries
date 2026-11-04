@@ -59,6 +59,9 @@ class PushCallNotificationTest {
             importance,
         )
         assertEquals(Notification.CATEGORY_ALARM, byId.getValue("call:c3").category)
+        // Regression: high importance alone gives heads-up/sound, but does not enable Urgent vibration.
+        assertTrue(manager.getNotificationChannel(channels[1]).shouldVibrate())
+        assertTrue(manager.getNotificationChannel(channels[2]).shouldVibrate())
         val names = channels.map { manager.getNotificationChannel(it).name.toString() }
         assertEquals(
             listOf(R.string.push_call_channel_check, R.string.push_call_channel_urgent, R.string.push_call_channel_emergency)
