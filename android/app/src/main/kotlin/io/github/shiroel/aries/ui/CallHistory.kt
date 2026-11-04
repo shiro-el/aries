@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.Role
@@ -85,7 +86,7 @@ internal fun CallInboxPanel(
             }
         }
         if (model.syncingHosts.isNotEmpty()) item {
-            Text(stringResource(R.string.call_inbox_syncing, model.syncingHosts.size), Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
+            Text(pluralStringResource(R.plurals.call_inbox_syncing, model.syncingHosts.size, model.syncingHosts.size), Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
         }
         if (waiting.isEmpty() && model.syncingHosts.isEmpty() && model.problems.isEmpty()) item {
             Text(stringResource(R.string.call_inbox_empty), Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)

@@ -1150,7 +1150,10 @@
     <string name="call_inbox_read_only">읽기 전용 · 마지막 확인 %1$s</string>
     <string name="call_inbox_blocked">Blocked Agent %1$d개가 기다려요 · Agent 보기</string>
     <string name="call_reply_dismiss">답장 안내 닫기</string>
-    <string name="call_inbox_syncing">Host %1$d개 확인 중…</string>
+    <plurals name="call_inbox_syncing">
+        <item quantity="one">Host %1$d개 확인 중…</item>
+        <item quantity="other">Host %1$d개 확인 중…</item>
+    </plurals>
     <string name="call_inbox_empty">여기서 답할 Call이 없어요.</string>
     <string name="call_inbox_caller">%2$s의 %1$s</string>
     <string name="call_open_chat">Chat에서 열기</string>
