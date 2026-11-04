@@ -10,6 +10,7 @@ import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.*
 import kotlinx.coroutines.awaitCancellation
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -21,7 +22,7 @@ import org.robolectric.annotation.Config
 class ThreadWaitingTest {
     @get:Rule val compose = createComposeRule()
 
-    // Regression: opening a previewed conversation must not let sheet disposal stop its newly adopted stream.
+    // Regression: opening a preview must retire its old stream and keep the newly adopted Chat stream alive.
     @Test fun openingTheWaitingConversationKeepsItsChatStreamAlive() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val fake = FakeCore().apply {
@@ -66,6 +67,10 @@ class ThreadWaitingTest {
         compose.onNodeWithText(context.getString(R.string.thread_open_conversation)).performClick()
         compose.waitUntil(5_000) { (model.screen as? Screen.Chat)?.chat?.terminal?.address == "t2" }
         compose.waitForIdle()
-        compose.runOnIdle { assertFalse("The visible Chat owns the latest stream", streams.last { it.terminal == "t2" }.stopped) }
+        compose.runOnIdle {
+            val targetStreams = streams.filter { it.terminal == "t2" }
+            assertFalse("The visible Chat owns the latest stream", targetStreams.last().stopped)
+            assertTrue("The preview releases every superseded stream", targetStreams.dropLast(1).all { it.stopped })
+        }
     }
 }

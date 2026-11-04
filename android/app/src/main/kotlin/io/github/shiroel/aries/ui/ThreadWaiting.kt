@@ -76,6 +76,7 @@ internal fun ThreadWaitingPill(model: HostsModel, chat: ChatModel) {
                 }
                 TextButton(onClick = {
                     sheet = false
+                    model.releaseWaitingChat(target.key)
                     model.openPushedAgent(target.key.hostId, target.key.address, openChat = true)
                 }) { Text(stringResource(R.string.thread_open_conversation)) }
                 if (target.call != null) {

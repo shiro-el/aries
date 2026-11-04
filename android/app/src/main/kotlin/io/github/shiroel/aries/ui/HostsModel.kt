@@ -1997,6 +1997,11 @@ class HostsModel(
         return conversation(line, entry.terminal)
     }
 
+    /** Retire the sheet's watch before navigation starts this same conversation owner again. */
+    internal fun releaseWaitingChat(key: AgentKey) {
+        conversations[key]?.takeIf { it !== liveChat }?.stop()
+    }
+
     /** Switch in place over the original list, using the same entry path as drawer and inbox. */
     fun openNextWaitingAgent() {
         val next = nextWaitingAgent ?: return
