@@ -13,6 +13,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
@@ -45,14 +47,6 @@ private fun insertSkill(input: TextFieldValue, token: String): TextFieldValue {
 internal fun ChatCatalogControls(chat: ChatModel,
     composer: (@Composable (openTools: () -> Unit) -> Unit)? = null) {
     var showTools by rememberSaveable(chat) { mutableStateOf(false) }
-    val context = androidx.compose.ui.platform.LocalContext.current
-    // Shared content is consumed even while Thread's secondary input tools are folded.
-    LaunchedEffect(chat, chat.pendingShare, chat.inputUnavailable) {
-        chat.pendingShare?.takeUnless { chat.inputUnavailable }?.let {
-            chat.pendingShare = null
-            chat.attach(context.applicationContext, it)
-        }
-    }
     val connection = chat.link?.connection
     val process = chat.terminal.foreground
     val cwd = process?.cwd ?: chat.terminal.cwd
@@ -108,22 +102,30 @@ internal fun ChatCatalogControls(chat: ChatModel,
             }
         }
     }
-    val tools: @Composable () -> Unit = {
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-            AttachmentControls(chat)
-            InputHistoryButton(chat.inputHistory, enabled = enabled, onSelect = chat::appendDraft)
-            ActionIcon(R.drawable.ic_library, R.string.chat_skills_button,
-                { query = ""; showTools = false; showSkills = true }, enabled = enabled)
-        }
-    }
-    if (composer == null) tools()
-    else {
-        composer { showTools = true }
-        if (showTools) ModalBottomSheet(onDismissRequest = { showTools = false }) {
-            Text(stringResource(R.string.chat_input_tools_button), Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
-            tools()
-            Spacer(Modifier.height(24.dp))
-        }
+    // Picker owners outlive the tools sheet: closing it must not unregister a
+    // pending document/camera result or remove the newly opened history dialog.
+    AttachmentControls(chat) { files, camera, attachmentsEnabled ->
+        InputHistoryButton(chat.inputHistory, enabled = enabled, button = { history ->
+            val skills = { query = ""; showTools = false; showSkills = true }
+            if (composer == null) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                ActionIcon(R.drawable.ic_paperclip, R.string.attachments_file_button, files, attachmentsEnabled)
+                ActionIcon(R.drawable.ic_camera, R.string.attachments_camera_button, camera, attachmentsEnabled)
+                ActionIcon(R.drawable.ic_history, R.string.input_history_title, history, enabled)
+                ActionIcon(R.drawable.ic_library, R.string.chat_skills_button, skills, enabled)
+            } else {
+                composer { showTools = true }
+                if (showTools) ModalBottomSheet(onDismissRequest = { showTools = false }) {
+                    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+                        Text(stringResource(R.string.chat_input_tools_button), Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
+                        ChatToolRow(R.drawable.ic_paperclip, R.string.attachments_file_button, attachmentsEnabled) { showTools = false; files() }
+                        ChatToolRow(R.drawable.ic_camera, R.string.attachments_camera_button, attachmentsEnabled) { showTools = false; camera() }
+                        ChatToolRow(R.drawable.ic_history, R.string.input_history_title, enabled) { showTools = false; history() }
+                        ChatToolRow(R.drawable.ic_library, R.string.chat_skills_button, enabled, skills)
+                        Spacer(Modifier.height(24.dp))
+                    }
+                }
+            }
+        }, onSelect = chat::appendDraft)
     }
     if (showSkills) {
         ConsoleSheet(onDismissRequest = { showSkills = false }) {
@@ -155,6 +157,19 @@ internal fun ChatCatalogControls(chat: ChatModel,
             }
         }
     }
+}
+
+@Composable
+private fun ChatToolRow(icon: Int, label: Int, enabled: Boolean, onClick: () -> Unit) {
+    ListItem(
+        headlineContent = { Text(stringResource(label)) },
+        leadingContent = { Icon(painterResource(icon), null, Modifier.size(24.dp)) },
+        modifier = Modifier.fillMaxWidth().clickable(enabled = enabled, role = Role.Button, onClick = onClick),
+        colors = ListItemDefaults.colors(
+            headlineColor = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = .38f),
+            leadingIconColor = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .38f),
+        ),
+    )
 }
 
 @Composable

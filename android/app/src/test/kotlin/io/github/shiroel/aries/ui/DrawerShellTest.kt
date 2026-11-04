@@ -115,6 +115,15 @@ class DrawerShellTest {
         compose.openConsoleDrawer()
         compose.onNodeWithTag("drawer-host:h1").assertIsSelected()
         compose.onNodeWithTag("drawer-agent:h1:t1").assertExists()
+        compose.onNodeWithTag("drawer-agent:h2:t1").assertDoesNotExist()
+        compose.onNodeWithTag("drawer-agent:h1:t1").performClick()
+        compose.onNode(hasTestTag("console-top-bar") and hasAnyDescendant(hasText("home-agent"))).assertExists()
+        compose.onNodeWithContentDescription(context.getString(R.string.back_button)).performClick()
+        compose.openConsoleDrawer()
+        // The Host selection scopes the tree, while the retained home still owns both Hosts.
+        compose.onNodeWithText(context.getString(R.string.agents_button)).performClick()
+        compose.openConsoleDrawer()
+        compose.onNodeWithTag("drawer-agent:h1:t1").assertExists()
         compose.onNodeWithTag("drawer-agent:h2:t1").assertExists()
     }
 

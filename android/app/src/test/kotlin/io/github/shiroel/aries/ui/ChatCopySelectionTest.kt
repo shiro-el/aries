@@ -276,6 +276,37 @@ class ChatCopySelectionTest {
         compose.onNode(hasText(str(R.string.back_button)) and hasAnyAncestor(isDialog())).performClick()
         compose.onNodeWithText("New transcript").assertExists()
     }
+
+    // D45: streaming must pause follow while a menu is open, and recycling its source must retain frozen actions.
+    @Test
+    fun textActionsPauseFollowingAndSurviveReplacementOfTheirSource() {
+        open()
+        val original = ChatEntry("entry", null, ChatEntryBody.Agent("Copy the original response"))
+        show(original.body)
+        compose.onNodeWithText("Copy the original response").performTouchInput { longClick() }
+        val appended = (1..40).map { ChatEntry("new$it", null, ChatEntryBody.Agent("New reply $it\nMore output\nMore output")) }
+        core.pushChat(ChatSnapshot(listOf(original) + appended, ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.chat_copy_all)).assertIsDisplayed()
+        compose.onNodeWithText("Copy the original response").assertIsDisplayed()
+
+        core.pushChat(ChatSnapshot(appended, ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.chat_copy_all)).performClick()
+        assertEquals("Copy the original response", clipboard())
+    }
+
+    // A streaming row must freeze its current source on long press, rather than an earlier or later revision.
+    @Test
+    fun textActionsFreezeTheResponseAtTheMomentOfTheLongPress() {
+        open()
+        show(ChatEntryBody.Agent("Before the update"))
+        show(ChatEntryBody.Agent("Copy this current response"))
+        compose.onNodeWithText("Copy this current response").performTouchInput { longClick() }
+        show(ChatEntryBody.Agent("This arrived after the long press"))
+        compose.onNodeWithText(str(R.string.chat_copy_all)).performClick()
+        assertEquals("Copy this current response", clipboard())
+    }
 }
 
 /** Robolectric has no Surface for Android's selection magnifier to draw into. */
