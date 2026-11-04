@@ -37,6 +37,7 @@ impl Sender {
             let mut progress = ProgressWatch::default();
             let mut agents = Vec::new();
             let mut pending = std::collections::BTreeMap::new();
+            let mut last_status_ms = 0;
             loop {
                 let mut changes = Vec::new();
                 match rx.recv_timeout(Duration::from_secs(1)) {
@@ -71,7 +72,8 @@ impl Sender {
                 for c in changes {
                     if policy.allows(&c.status, c.top_level) {
                         let extra = details(&c, &mut lookup, &chat_agents);
-                        pending.insert(c.terminal.clone(), message(c, now / 1000, extra));
+                        last_status_ms = now.max(last_status_ms + 1);
+                        pending.insert(c.terminal.clone(), message(c, last_status_ms, extra));
                     }
                 }
                 for m in progress.update(agents.clone(), now) {
@@ -84,7 +86,6 @@ impl Sender {
                             top_level,
                             status,
                             turn,
-                            at,
                             ..
                         } => {
                             let c = Change {
@@ -96,7 +97,8 @@ impl Sender {
                                 turn: turn.unwrap_or(0),
                             };
                             let extra = details(&c, &mut lookup, &chat_agents);
-                            message(c, at, extra)
+                            last_status_ms = now.max(last_status_ms + 1);
+                            message(c, last_status_ms, extra)
                         }
                         m => m,
                     };
@@ -369,7 +371,7 @@ fn details(c: &Change, lookup: &mut CoreLookup, agents: &[Box<dyn Agent>]) -> De
 }
 
 /// The push for `c`, cut down until it fits the envelope.
-fn message(c: Change, at: u64, details: Details) -> PushMessage {
+fn message(c: Change, at_ms: u64, details: Details) -> PushMessage {
     let mut status = c.status;
     match &mut status {
         AgentStatus::Blocked { message, .. } | AgentStatus::Error { message } => {
@@ -389,7 +391,8 @@ fn message(c: Change, at: u64, details: Details) -> PushMessage {
             details.excerpt.map(|text| notification_text(&text)),
             EXCERPT_CHARS,
         ),
-        at,
+        at: at_ms / 1000,
+        at_ms: Some(at_ms),
     };
     // Escaped control characters can still overflow: drop the free text.
     let fits = |m: &PushMessage| serde_json::to_vec(m).is_ok_and(|j| j.len() <= PADDED_LEN - 2);
@@ -418,6 +421,39 @@ fn message(c: Change, at: u64, details: Details) -> PushMessage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // D75: two status changes within a second must survive sealing as distinct generations.
+    #[test]
+    fn same_second_statuses_keep_millisecond_identity_in_the_envelope() {
+        let change = || Change {
+            terminal: "t1".into(),
+            turn: 1,
+            name: None,
+            title: None,
+            top_level: true,
+            status: AgentStatus::Done,
+        };
+        let kp = aries_protocol::push::KeyPair::generate();
+        let messages: Vec<_> = [1_700_000_000_123, 1_700_000_000_124]
+            .into_iter()
+            .map(|time| {
+                let envelope = aries_protocol::push::seal(
+                    &message(change(), time, Details::default()),
+                    &kp.public,
+                    &kp,
+                )
+                .unwrap();
+                serde_json::to_value(
+                    aries_protocol::push::open(&envelope, &kp, &kp.public).unwrap(),
+                )
+                .unwrap()
+            })
+            .collect();
+        assert_eq!(messages[0]["at"], 1_700_000_000u64);
+        assert_eq!(messages[1]["at"], 1_700_000_000u64);
+        assert_eq!(messages[0]["at_ms"], 1_700_000_000_123u64);
+        assert_eq!(messages[1]["at_ms"], 1_700_000_000_124u64);
+    }
 
     #[test]
     fn a_long_message_is_cut_to_fit_the_envelope() {

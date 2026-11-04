@@ -17,7 +17,7 @@ internal object WatchProgressNotifications {
     private const val ID = 191
     private const val CHANNEL = "agent_progress"
 
-    fun show(context: Context, progress: WatchProgress, summary: WatchSummary, remainingMs: Long) {
+    fun show(context: Context, progress: WatchProgress, summary: WatchSummary, remainingMs: Long, localStartedAtMs: Long) {
         val manager = context.getSystemService(NotificationManager::class.java)
         val id = progress.dataPath.hashCode()
         if (progress.cancelled || remainingMs == 0L) { clear(context, progress); return }
@@ -36,7 +36,7 @@ internal object WatchProgressNotifications {
             .addTemplate(localized.getString(R.string.wear_progress_status))
             .addPart("name", Status.TextPart(name))
             .addPart("time", Status.StopwatchPart(SystemClock.elapsedRealtime() -
-                (System.currentTimeMillis() - progress.startedAtMs).coerceAtLeast(0)))
+                (System.currentTimeMillis() - localStartedAtMs).coerceAtLeast(0)))
             .addPart("children", Status.TextPart(progress.childAgents.toString()))
             .build()
         val builder = NotificationCompat.Builder(context, CHANNEL)
@@ -44,7 +44,7 @@ internal object WatchProgressNotifications {
             .setContentTitle(name)
             .setContentText(localized.getString(R.string.wear_progress_body, progress.childAgents))
             .setContentIntent(tap)
-            .setWhen(progress.startedAtMs).setUsesChronometer(true)
+            .setWhen(localStartedAtMs).setUsesChronometer(true)
             .setTimeoutAfter(remainingMs)
             .setOngoing(true).setLocalOnly(true).setSilent(true).setOnlyAlertOnce(true)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)

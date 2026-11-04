@@ -108,6 +108,7 @@ impl ProgressWatch {
                     question: None,
                     excerpt: None,
                     at: now_ms / 1000,
+                    at_ms: Some(now_ms),
                 });
             }
         }
