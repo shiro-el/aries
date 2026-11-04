@@ -108,24 +108,22 @@ private fun AriesContent(
             }
         }
     }
-    NewTaskAccess(model) {
-        Scaffold { padding ->
-            Box(Modifier.padding(padding).fillMaxSize()) {
-                FirstConnectionGuide(model, guidance, allowNotifications) {
-                    ConsoleShell(model) {
-                        RemoteFilesAccess(model) {
-                            AdaptiveHostLayout(
-                                listScreen = model.listScreen,
-                                hasDetail = model.screen is Screen.Chat || model.screen is Screen.Terminal,
-                                listContent = { ScreenContent(model, settings, terminalDisplay, it) },
-                                detailContent = { ScreenContent(model, settings, terminalDisplay, model.screen) },
-                            )
-                        }
+    Scaffold { padding ->
+        Box(Modifier.padding(padding).fillMaxSize()) {
+            FirstConnectionGuide(model, guidance, allowNotifications) {
+                ConsoleShell(model) {
+                    RemoteFilesAccess(model) {
+                        AdaptiveHostLayout(
+                            listScreen = model.listScreen,
+                            hasDetail = model.screen is Screen.Chat || model.screen is Screen.Terminal,
+                            listContent = { ScreenContent(model, settings, terminalDisplay, it) },
+                            detailContent = { ScreenContent(model, settings, terminalDisplay, model.screen) },
+                        )
                     }
                 }
             }
-            model.prompt?.let { PromptDialog(it, model) }
         }
+        model.prompt?.let { PromptDialog(it, model) }
     }
 }
 
@@ -168,9 +166,6 @@ private fun ScreenContent(model: HostsModel, settings: ThemeSettings, terminalDi
                 current = model.currentAgentKey,
                 onPin = model::pin,
                 onNewTerminal = { model.newTerminal(s.browser) },
-                onLaunch = { model.launch(s.browser, it) },
-                onSaveLaunch = { model.saveLaunch(s.browser, it) },
-                onDeleteLaunch = { form, saved -> model.deleteSavedLaunch(s.browser, form, saved) },
                 onRunSaved = { model.runSaved(s.browser, it) },
                 hostSections = {
                     if (model.beacon.ui == BeaconUi.Known(io.github.shiroel.aries.core.BeaconState.NotInstalled)) {

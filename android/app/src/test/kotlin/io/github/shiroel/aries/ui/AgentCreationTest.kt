@@ -43,7 +43,7 @@ class AgentCreationTest {
         }
         open(core)
         compose.onNodeWithText(str(R.string.new_task_title)).performClick()
-        compose.onNodeWithTag("launch_cwd").performTextInput("/repo")
+        compose.onNodeWithTag("launch_cwd").performTextReplacement("/repo")
         compose.onNodeWithTag("new-task-prompt").performScrollTo().performTextInput("Fix the race")
         compose.onNodeWithText(str(R.string.new_task_start)).performClick()
         compose.waitForIdle()
@@ -111,7 +111,7 @@ class AgentCreationTest {
         compose.onNodeWithTag("creation-host").performClick()
         compose.onNodeWithTag("creation-host:h2").performClick()
         compose.onNodeWithText(str(R.string.new_task_title)).performClick()
-        compose.onNodeWithTag("launch_cwd").performTextInput("/server/repo")
+        compose.onNodeWithTag("launch_cwd").performTextReplacement("/server/repo")
         compose.onNodeWithTag("new-task-prompt").performScrollTo().performTextInput("Server task")
         compose.onNodeWithText(str(R.string.new_task_start)).performClick()
         compose.waitForIdle()

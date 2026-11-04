@@ -783,6 +783,8 @@ class FakeConnection(
     var githubPage = io.github.shiroel.aries.core.GithubPage(listOf(
         io.github.shiroel.aries.core.GithubItem(42u, "Issue title", "open", "octocat", "2026-11-04", "**Issue body**", io.github.shiroel.aries.core.GithubKind.ISSUE),
     ), true, false)
+    var githubListReply: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+    var githubDetailReply: kotlinx.coroutines.CompletableDeferred<Unit>? = null
     val githubRequests = mutableListOf<List<String>>()
     override suspend fun githubRepository(address: String): io.github.shiroel.aries.core.GithubRepository {
         githubRepoReads++
@@ -791,20 +793,24 @@ class FakeConnection(
     }
     override suspend fun githubList(repo: io.github.shiroel.aries.core.GithubRepository, kind: io.github.shiroel.aries.core.GithubKind, state: io.github.shiroel.aries.core.GithubState, search: String, page: UInt): io.github.shiroel.aries.core.GithubPage {
         githubRequests += listOf(kind.name, state.name, search, page.toString())
+        githubListReply?.await()
         githubFailure?.let { throw it }
         return githubPage
     }
     var githubThread: io.github.shiroel.aries.core.GithubDetail? = null
     override suspend fun githubDetail(repo: io.github.shiroel.aries.core.GithubRepository, number: UInt): io.github.shiroel.aries.core.GithubDetail {
+        githubDetailReply?.await()
         githubFailure?.let { throw it }
         return githubThread ?: io.github.shiroel.aries.core.GithubDetail(githubPage.items.first(), emptyList(), null, null)
     }
+    var githubCommentReply: kotlinx.coroutines.CompletableDeferred<Unit>? = null
     val githubComments = mutableListOf<Triple<io.github.shiroel.aries.core.GithubKind, UInt, String>>()
     override suspend fun githubComment(repo: io.github.shiroel.aries.core.GithubRepository, kind: io.github.shiroel.aries.core.GithubKind, number: UInt, body: String) {
         githubComments += Triple(kind, number, body)
         githubFailure?.let { throw it }
         val current = githubThread ?: io.github.shiroel.aries.core.GithubDetail(githubPage.items.first(), emptyList(), null, null)
         githubThread = current.copy(comments = current.comments + io.github.shiroel.aries.core.GithubComment((current.comments.size + 1).toULong(), body, "me", "2026-11-04"))
+        githubCommentReply?.await()
     }
     val githubStateChanges = mutableListOf<Pair<UInt, Boolean>>()
     override suspend fun githubSetIssueClosed(repo: io.github.shiroel.aries.core.GithubRepository, number: UInt, closed: Boolean) {
@@ -813,9 +819,18 @@ class FakeConnection(
         val current = githubThread ?: io.github.shiroel.aries.core.GithubDetail(githubPage.items.first(), emptyList(), null, null)
         githubThread = current.copy(item = current.item.copy(state = if (closed) "closed" else "open"))
     }
-    val githubDrafts = mutableMapOf<Pair<String, UInt>, String>()
-    override fun githubLoadDraft(repo: io.github.shiroel.aries.core.GithubRepository, number: UInt): String = githubDrafts[repo.nameWithOwner to number].orEmpty()
+    @Volatile var githubDraftAccessedOnMain = false
+    @Volatile var githubDraftReadFailure: CoreException? = null
+    @Volatile var githubDraftSaveFailure: CoreException? = null
+    val githubDrafts = java.util.concurrent.ConcurrentHashMap<Pair<String, UInt>, String>()
+    override fun githubLoadDraft(repo: io.github.shiroel.aries.core.GithubRepository, number: UInt): String {
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) githubDraftAccessedOnMain = true
+        githubDraftReadFailure?.let { throw it }
+        return githubDrafts[repo.nameWithOwner to number].orEmpty()
+    }
     override fun githubSaveDraft(repo: io.github.shiroel.aries.core.GithubRepository, number: UInt, body: String) {
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) githubDraftAccessedOnMain = true
+        githubDraftSaveFailure?.let { throw it }
         githubDrafts[repo.nameWithOwner to number] = body
     }
     var worktrees = emptyList<io.github.shiroel.aries.core.WorktreeInfo>()
@@ -829,9 +844,17 @@ class FakeConnection(
     override suspend fun openWorktree(folder: String, spaceId: String?, preset: io.github.shiroel.aries.core.AgentPreset?): io.github.shiroel.aries.core.WorktreeOpen {
         openedWorktrees += Triple(folder, spaceId, preset)
         worktreeFailure?.let { throw it }
+        val terminal = TerminalInfo("t9", "worktree", "", listOf("sh"), folder, "live")
+        core?.let { core ->
+            val next = (core.terminalsOf[hostId] ?: core.terminals) + terminal
+            if (hostId in core.terminalsOf) core.push(hostId, next) else core.push(next)
+        }
         return if (spaceId != null) io.github.shiroel.aries.core.WorktreeOpen.Tab(spaceId, "tb2", "t9")
         else io.github.shiroel.aries.core.WorktreeOpen.Terminal("t9")
     }
+    override suspend fun machineExec(argv: List<String>, cwd: String?, timeoutSeconds: UInt) =
+        io.github.shiroel.aries.core.ExecOutput(0, null, "/home/me".toByteArray(), byteArrayOf(), false, false)
+
     var fileDirectory = io.github.shiroel.aries.core.RemoteDirectory("/repo", emptyList())
     override suspend fun listFiles(address: String, path: String?) = fileDirectory
     var fileReader: (String, String, ULong, UInt) -> io.github.shiroel.aries.core.RemoteFilePage = { _, _, _, _ ->
@@ -902,7 +925,7 @@ class FakeConnection(
     override suspend fun terminals(): List<TerminalInfo> {
         calls += "terminals"
         if (dead) throw CoreException.Closed()
-        return list
+        return core?.let { it.terminalsOf[hostId] ?: it.terminals } ?: list
     }
 
     override suspend fun watchTerminals(): TerminalWatch =
@@ -928,6 +951,8 @@ class FakeConnection(
 
     /** When set, `launch` fails with it. */
     var launchFailWith: CoreException? = null
+    var launchReplyHold: CompletableDeferred<Unit>? = null
+    var launchReplyFailure: CoreException? = null
 
     var recentCwds: List<String> = emptyList()
 
@@ -964,6 +989,8 @@ class FakeConnection(
             if (hostId in core.terminalsOf) core.push(hostId, next) else core.push(next)
         }
         push(current.copy(spaces = placed, unplaced = if (inTab) current.unplaced else current.unplaced + t))
+        launchReplyHold?.await()
+        launchReplyFailure?.let { throw it }
         return t
     }
 
@@ -1093,15 +1120,20 @@ class FakeTerminalView(val address: String, val options: AttachOptions) : Termin
     /** Grids asked for with `resize`, in order. */
     val resizes = mutableListOf<Pair<Int, Int>>()
 
+    var textReply: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+    var pasteReply: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+
     override fun observing(): Boolean = options.observe
 
     override suspend fun sendText(text: String) {
         check(!options.observe) { "an observer cannot type" }
+        textReply?.await()
         sent += "text:$text"
     }
 
     override suspend fun pasteText(text: String) {
         check(!options.observe) { "an observer cannot paste" }
+        pasteReply?.await()
         sent += "paste:$text"
     }
 
@@ -1126,11 +1158,18 @@ class FakeTerminalView(val address: String, val options: AttachOptions) : Termin
 
     val searches = mutableListOf<Triple<String, Boolean, Boolean>>()
     val searchMoves = mutableListOf<Boolean>()
+    var duringSearch: ((String) -> Unit)? = null
+    @Volatile var closed = false
+        private set
+    @Volatile var searchedAfterClose = false
+        private set
     override fun search(query: String, caseSensitive: Boolean, regex: Boolean) {
+        duringSearch?.invoke(query)
+        if (closed) searchedAfterClose = true
         if (regex && query == "[") throw CoreException.Protocol("invalid terminal search pattern")
         searches += Triple(query, caseSensitive, regex)
     }
     override fun searchNext(backwards: Boolean) { searchMoves += backwards }
 
-    override fun close() {}
+    override fun close() { closed = true }
 }

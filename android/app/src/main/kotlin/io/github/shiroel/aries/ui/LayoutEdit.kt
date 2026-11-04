@@ -73,10 +73,17 @@ class LayoutEditor(private val browser: HostBrowser, private val scope: Coroutin
         private set
     var busy by mutableStateOf(false)
         private set
-    var error by mutableStateOf<Message?>(null)
-        private set
-    var ending by mutableStateOf<LayoutEndTarget?>(null)
-    var naming by mutableStateOf<LayoutNameForm?>(null)
+    private var operationError by mutableStateOf<Message?>(null)
+    private var availabilityError by mutableStateOf<Message?>(null)
+    val error: Message? get() = operationError ?: availabilityError
+    private var endTarget by mutableStateOf<LayoutEndTarget?>(null)
+    var ending: LayoutEndTarget?
+        get() = endTarget
+        set(value) { operationError = null; availabilityError = null; endTarget = value }
+    private var nameForm by mutableStateOf<LayoutNameForm?>(null)
+    var naming: LayoutNameForm?
+        get() = nameForm
+        set(value) { operationError = null; availabilityError = null; nameForm = value }
 
     /** Recomputed from the latest layout and status watches while the dialog
      * is open, including pane-less descendants herdr-app will clean up. */
@@ -110,7 +117,7 @@ class LayoutEditor(private val browser: HostBrowser, private val scope: Coroutin
 
     fun requireAvailable(): Boolean {
         if (available) return true
-        error = Message(R.string.layout_app_unavailable)
+        availabilityError = Message(R.string.layout_app_unavailable)
         return false
     }
 
@@ -119,13 +126,13 @@ class LayoutEditor(private val browser: HostBrowser, private val scope: Coroutin
         val conn = browser.link?.connection ?: return
         if (busy || !requireAvailable()) return
         busy = true
-        error = null
+        operationError = null
         scope.launch {
             try {
                 conn.editLayout(form.request())
                 naming = null
             } catch (e: CoreException) {
-                error = problemFor(e).body
+                operationError = problemFor(e).body
             } finally {
                 busy = false
             }
@@ -133,12 +140,14 @@ class LayoutEditor(private val browser: HostBrowser, private val scope: Coroutin
     }
 
     suspend fun check() {
-        val conn = browser.link?.connection ?: run { available = false; return }
+        val link = browser.link
+        val conn = link?.takeIf { it.state == LinkState.Up }?.connection ?: run { available = false; return }
         try {
             available = conn.herdrAppAvailable()
+            if (available) availabilityError = null
         } catch (e: CoreException) {
             available = false
-            error = problemFor(e).body
+            if (link.state == LinkState.Up) availabilityError = problemFor(e).body
         }
     }
 
@@ -149,7 +158,7 @@ class LayoutEditor(private val browser: HostBrowser, private val scope: Coroutin
         val conn = browser.link?.connection ?: return
         if (busy || (target !is LayoutEndTarget.Terminal && !requireAvailable())) return
         busy = true
-        error = null
+        operationError = null
         scope.launch {
             try {
                 when (target) {
@@ -160,7 +169,7 @@ class LayoutEditor(private val browser: HostBrowser, private val scope: Coroutin
                 }
                 ending = null
             } catch (e: CoreException) {
-                error = problemFor(e).body
+                operationError = problemFor(e).body
             } finally {
                 busy = false
             }

@@ -85,7 +85,10 @@ class TerminalLatencyTest {
         compose.waitUntil(30_000) { viewer.text().contains("ready") }
 
         val view = findInput(compose.activity.window.decorView)!!
-        val ic = compose.runOnUiThread { view.requestFocus(); view.onCreateInputConnection(EditorInfo()) }
+        val ic = compose.runOnUiThread {
+            view.requestFocus()
+            requireNotNull(view.onCreateInputConnection(EditorInfo()))
+        }
         val root = compose.activity.window.decorView
 
         val alphabet = "abcdefghijklmnopqrstuvwxyz"
