@@ -39,6 +39,8 @@
     <string name="agent_details_folder">Folder · %1$s</string>
 
     <!-- Host creation and context sheets -->
+    <string name="creation_host_label">Host</string>
+    <string name="creation_host_disconnected">Connect to %1$s to create an Agent.</string>
     <string name="host_create_title">Create new</string>
     <string name="host_create_task_detail">Choose an Agent and write its first prompt</string>
     <string name="host_create_terminal_detail">Run a command on this Host</string>
@@ -1172,33 +1174,10 @@
     <string name="layout_close_space_button">Close Space</string>
     <string name="layout_close_tab_button">Close Tab</string>
     <string name="layout_target_gone">This item has already been closed.</string>
-    <string name="dictation_title">Voice dictation</string>
-    <string name="dictation_key_label">Groq API key</string>
-    <string name="dictation_key_saved">API key saved on this device</string>
-    <string name="dictation_key_save_button">Save key</string>
-    <string name="dictation_key_remove_button">Remove key</string>
-    <string name="dictation_key_failed">Could not store the API key. Enter it again.</string>
-    <string name="dictation_language_label">Language</string>
     <!-- Shared searchable language picker -->
     <string name="language_picker_auto">Auto-detect</string>
     <string name="language_picker_search">Search languages</string>
     <string name="language_picker_no_results">No languages found</string>
-    <string name="dictation_model_label">Transcription model</string>
-    <string name="dictation_vocabulary_label">Vocabulary (names and terms)</string>
-    <string name="dictation_context_label">Include names and last response</string>
-    <string name="dictation_start_button">Dictate</string>
-    <string name="dictation_stop_button">Stop and transcribe</string>
-    <string name="dictation_recording">Recording…</string>
-    <string name="dictation_uploading">Transcribing…</string>
-    <string name="dictation_retry_button">Retry transcription</string>
-    <string name="dictation_permission_denied">Allow microphone access to record dictation.</string>
-    <string name="dictation_record_failed">Could not record audio. Try again.</string>
-    <string name="dictation_failed">Could not transcribe audio. Try again.</string>
-    <string name="dictation_empty">No speech was transcribed. Try recording again.</string>
-    <string name="dictation_too_large">Audio must be no larger than 25 MB. Make a shorter recording.</string>
-    <string name="dictation_unauthorized">Check your Groq API key in Settings.</string>
-    <string name="dictation_rate_limit">Groq rate limit reached. Retry in %1$d seconds.</string>
-    <string name="dictation_http_failed">Groq could not transcribe audio (HTTP %1$d).</string>
     <string name="terminal_compose_button">Compose message</string>
     <string name="terminal_direct_input_button">Direct typing</string>
     <string name="terminal_composer_hint">Edit text to send to the Terminal</string>

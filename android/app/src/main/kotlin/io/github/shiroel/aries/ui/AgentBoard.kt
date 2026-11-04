@@ -22,6 +22,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.Host
+import io.github.shiroel.aries.core.SavedLaunch
 import io.github.shiroel.aries.core.HostStructure
 import io.github.shiroel.aries.core.TerminalInfo
 
@@ -54,6 +55,8 @@ class AgentBoard(val hosts: List<Host>) {
     private val structures = mutableStateMapOf<String, HostStructure>()
     /** Compatibility with older callers; orderAgents ignores the retired Grouped value. */
     var view by mutableStateOf(AgentListView.Priority)
+
+    val savedLaunches = mutableStateMapOf<String, List<SavedLaunch>>()
 
     /** Hosts that could not be reached, with why. */
     val unavailable = mutableStateMapOf<String, Message>()
@@ -131,7 +134,7 @@ fun AgentsScreen(
     val folds = rememberTreeFolds("agents")
     Column(Modifier.fillMaxSize()) {
         if (showHeader) ConsoleTopBar(stringResource(R.string.agents_title), onMenu = {}, onBack = onBack,
-            showMark = false, inbox = {})
+            showMark = false, inbox = {}, actions = { AgentActions(board) })
         LazyColumn(Modifier.weight(1f)) {
             if (board.hosts.isEmpty()) item {
                 Text(stringResource(R.string.agents_no_hosts))
