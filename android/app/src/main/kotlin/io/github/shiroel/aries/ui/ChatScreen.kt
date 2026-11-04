@@ -1144,9 +1144,9 @@ fun ChatScreen(
                     thread != null && it.call.pushesByDefault && it.call.answer == null))
         }.sortedBy { it.call.atMs }
     }.orEmpty()
-    var closedThreadCalls by remember(chat) { mutableStateOf(emptySet<String>()) }
-    val activeThreadCall = if (thread != null) agentCalls.sortedByDescending { it.call.urgency.ordinal }
-        .firstOrNull { it.key !in closedThreadCalls } else null
+    val activeThreadCall = if (thread != null) agentCalls.firstOrNull { it.key == calls?.openedThreadCall }
+        ?: agentCalls.sortedByDescending { it.call.urgency.ordinal }.firstOrNull { calls?.isThreadPanelVisible(it) == true }
+        else null
     val callKeys = agentCalls.map { "call:${it.key}" }
     val toolUnreadKeys = toolGroups.flatMap { group -> group.entries.map { it.id to group.key } }.toMap()
     val scroll = rememberChatScrollState(chat, entries, callKeys + chat.queuedMessages.map { "queued:${it.id}" } +
@@ -1187,10 +1187,7 @@ fun ChatScreen(
             },
             input = { compact ->
                 if (preview.selected == null) {
-                    if (thread != null) ThreadChatInput(thread, chat, activeThreadCall, calls, answerQuestion, compact, onDismissCall = { call ->
-                        closedThreadCalls = closedThreadCalls + call.key
-                        if (calls?.banner?.key == call.key) calls.dismissBanner()
-                    })
+                    if (thread != null) ThreadChatInput(thread, chat, activeThreadCall, calls, answerQuestion, compact)
                     else if (chat.link != null) {
                         if (!compact) ChatCatalogControls(chat)
                         MessageInput(chat, compact)
