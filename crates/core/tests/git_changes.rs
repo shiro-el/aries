@@ -72,6 +72,13 @@ async fn git_changes_and_binary_diffs_work_on_a_korean_nested_machine() {
     assert_eq!(changes.files.len(), 1);
     assert_eq!(changes.files[0].path, name);
     assert!(changes.files[0].staged && changes.files[0].unstaged);
+    // Binary numstat markers must never become exact zero-line totals.
+    assert!(
+        conn.git_stats("box/t1".into(), cwd.clone())
+            .await
+            .unwrap()
+            .binary
+    );
     let diff = conn
         .git_diff(
             "box/t1".into(),
@@ -137,6 +144,14 @@ async fn reader_uses_launch_folder_and_reads_staged_unstaged_and_untracked_witho
     assert_eq!(changes.files.len(), 2);
     let both = changes.files.iter().find(|f| f.path == "both [1]").unwrap();
     assert!(both.staged && both.unstaged);
+    // Regression D51: aggregate both index sides without downloading patches, even with
+    // configured external diff/textconv programs. Untracked is explicitly excluded.
+    let stats = conn
+        .git_stats(address.clone(), changes.cwd.clone())
+        .await
+        .unwrap();
+    assert_eq!((stats.added, stats.removed), (2, 2));
+    assert!(!stats.binary && !stats.truncated);
     for (kind, path, expected) in [
         (aries_core::GitDiffKind::Staged, "both [1]", "+staged"),
         (aries_core::GitDiffKind::Unstaged, "both [1]", "+unstaged"),

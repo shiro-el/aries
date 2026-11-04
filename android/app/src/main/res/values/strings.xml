@@ -907,6 +907,9 @@
     <string name="tasks_changes">Changes</string>
     <string name="tasks_changes_count">Changes %1$d</string>
     <string name="tasks_change_stats">+%1$d −%2$d</string>
+    <string name="tasks_tracked_change_stats">Tracked: +%1$d −%2$d</string>
+    <string name="tasks_changes_previous_folder">Previous folder — refresh to review changes in the current folder.</string>
+    <string name="tasks_changes_working_age">Snapshot: %1$s · The task is still working.</string>
     <string name="tasks_request">Request</string>
     <string name="tasks_plan">Plan</string>
     <string name="tasks_plan_completed">Done</string>
@@ -1328,6 +1331,7 @@
         <item quantity="other">Checking %1$d Hosts…</item>
     </plurals>
     <string name="call_inbox_empty">No Calls to answer here.</string>
+    <string name="call_caller_unknown">Agent</string>
     <string name="call_inbox_caller">%1$s on %2$s</string>
     <string name="call_open_chat">Open in Chat</string>
     <string name="call_open_chat_label">Open %1$s in Chat for Call: %2$s</string>

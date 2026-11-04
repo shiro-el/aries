@@ -1555,7 +1555,9 @@ class HostsModel(
 
     private val taskChanges = mutableMapOf<AgentKey, TasksChangesState>()
     internal fun taskChanges(key: AgentKey) = taskChanges.getOrPut(key) { TasksChangesState() }
-    internal fun taskChangeStats(key: AgentKey, terminal: TerminalInfo) = taskChanges[key]?.takeIf { it.matches(terminal) }?.stats
+    internal fun taskChangeStats(key: AgentKey, terminal: TerminalInfo) = taskChanges[key]?.takeIf {
+        terminal.agentStatus != AgentStatus.Working && it.matches(terminal, agentLinks[key.hostId]?.connection)
+    }?.stats
 
     private fun chat(link: HostLink?, terminal: TerminalInfo, returnTo: Screen, draft: String = "",
         preserveReadingPosition: Boolean = false) {
@@ -2199,7 +2201,9 @@ class HostsModel(
                 route.chat.terminal else find(route.returnTo)
             else -> null
         }
-        return find(screen)?.let(::displayName)?.takeIf { it.isNotBlank() }
+        val terminal = find(screen) ?: drawerAgents.firstOrNull { it.key == key }?.terminal
+            ?: quickOpenSources.firstOrNull { it.host.id == key.hostId }?.terminals?.firstOrNull { it.address == address }
+        return terminal?.let(::displayName)?.takeIf { it.isNotBlank() }
     }
 
     fun openHost(host: Host) {
@@ -2393,9 +2397,10 @@ class HostsModel(
         screen = s.returnTo
     }
 
-    /** Hidden composers share the Host's status feed without opening another watch. */
+    /** Hidden composers and Changes share the Host's status feed without another watch. */
     private fun updateConversations(hostId: String, terminals: List<TerminalInfo>) {
         conversations.filterKeys { it.hostId == hostId }.values.forEach { it.update(terminals) }
+        terminals.forEach { terminal -> taskChanges[AgentKey(hostId, terminal.address)]?.updateTerminal(terminal) }
     }
 
     private fun terminalOn(hostId: String): TerminalViewer? =

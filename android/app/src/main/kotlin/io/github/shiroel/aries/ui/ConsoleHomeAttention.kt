@@ -34,13 +34,14 @@ internal fun ConsoleHomeAttention(model: HostsModel, selectedHost: String? = nul
             val accent = if (entry.call.urgency == CallUrgency.EMERGENCY) MaterialTheme.colorScheme.error
                 else statusColor(io.github.shiroel.aries.core.AgentStatus.Blocked(null, null))
             Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("console-urgent:${entry.key}")
+                .presentsCalls(setOf(entry.key))
                 .clickable(role = Role.Button, onClickLabel = stringResource(R.string.call_open_chat)) { model.openCallInbox(); model.openCallChat(entry) }
                 .padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(urgencyLabel(entry.call.urgency), color = accent, style = MaterialTheme.typography.labelMedium)
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(entry.call.title, style = MaterialTheme.typography.bodyMedium,
                         maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
-                    Text(stringResource(R.string.call_inbox_caller, model.callCallerName(entry) ?: entry.call.terminal.orEmpty(), entry.host.name),
+                    Text(stringResource(R.string.call_inbox_caller, model.callCallerName(entry) ?: stringResource(R.string.call_caller_unknown), entry.host.name),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
                 }

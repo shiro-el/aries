@@ -57,12 +57,11 @@ internal fun TasksHome(model: HostsModel, board: AgentBoard) {
     }
     val folds = rememberTreeFolds("tasks-hosts")
     Column(Modifier.fillMaxSize().testTag("tasks-home")) {
-        if (queue == null) model.calls.banner?.let { entry ->
-            CallAttentionBanner(entry, model.callCallerName(entry), onOpen = {
-                needs.firstOrNull { it is TaskNeed.Call && it.entry.key == entry.key }?.let(openNeed)
-                model.calls.dismissBanner()
-            }, onDismiss = model.calls::dismissBanner)
-        }
+        if (queue == null && model.screen is Screen.Agents) CallAttentionSlot(onOpen = { entry ->
+            val need = needs.firstOrNull { it is TaskNeed.Call && it.entry.key == entry.key }
+            if (need == null) model.openCallInbox()
+            else { openNeed(need); model.calls.dismissBanner() }
+        })
         if (model.pendingShare != null) {
             Text(stringResource(R.string.attachments_choose_agent), Modifier.padding(12.dp))
             TextButton(onClick = model::cancelShare) { Text(stringResource(R.string.cancel_button)) }
@@ -192,7 +191,7 @@ internal fun TasksTaskRow(entry: AgentEntry, transcript: ChatSnapshot? = null, s
 private fun TasksCallRow(entry: CallEntry, onOpen: () -> Unit) {
     val urgent = entry.call.urgency == CallUrgency.URGENT || entry.call.urgency == CallUrgency.EMERGENCY
     TasksRow(entry.call.title, stringResource(if (urgent) R.string.tasks_urgent_call else R.string.console_chat_call_label),
-        tasksAttentionColor(), urgent, Modifier.testTag("task-call:${entry.key}"), onOpen,
+        tasksAttentionColor(), urgent, Modifier.testTag("task-call:${entry.key}").presentsCalls(setOf(entry.key)), onOpen,
         metadata = {
             val host = if (entry.live) entry.host.name else listOf(entry.host.name, stringResource(R.string.tasks_offline)).joinToString(" · ")
             Text(host, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
