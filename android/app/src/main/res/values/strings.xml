@@ -614,6 +614,10 @@
     <string name="shortcuts_missing_title">Saved launch unavailable</string>
     <string name="shortcuts_missing_body">This saved launch or its Host was removed. Choose another saved launch in Aries.</string>
     <string name="shortcuts_pin_button">Pin shortcut</string>
+    <!-- Saved-launch intent approval (179). -->
+    <string name="shortcuts_confirm_title">Run saved launch?</string>
+    <string name="shortcuts_confirm_body">Review %1$s before running it on Host %2$s.</string>
+    <string name="shortcuts_default_command">Host default shell</string>
     <!-- Worktree picker: read-only discovery and opening. -->
     <string name="worktrees_button">Worktrees</string>
     <string name="worktrees_title">Open a worktree</string>
