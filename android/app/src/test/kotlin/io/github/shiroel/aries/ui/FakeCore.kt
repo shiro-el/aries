@@ -97,6 +97,7 @@ class FakeCore : AriesCoreInterface {
 
     /** When set, `connect` fails with it. */
     var failWith: CoreException? = null
+    val connectAttempts = mutableListOf<String>()
 
     private var terminalList: List<TerminalInfo>? = null
     /** Structure-only fixtures describe the same Terminal inventory to both watches.
@@ -370,6 +371,7 @@ class FakeCore : AriesCoreInterface {
     }
 
     override suspend fun connect(hostId: String): HostConnection {
+        connectAttempts += hostId
         signsIn("connect")
         failWith?.let { throw it }
         val host = hosts.find { it.id == hostId } ?: throw CoreException.UnknownHost(hostId)

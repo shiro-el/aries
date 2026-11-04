@@ -436,7 +436,7 @@
     <string name="terminal_exited_signal">The program was stopped by signal %1$s.</string>
     <string name="terminal_exited_reason">The program ended (%1$s).</string>
     <string name="terminal_connection_closed">The connection to the Terminal closed. What you see may be out of date.</string>
-    <string name="reconnecting">Connection lost. Reconnecting…</string>
+    <string name="reconnecting">Connecting… Retrying automatically.</string>
     <string name="terminal_scrolled_back">%1$d lines back</string>
     <string name="terminal_back_to_live">Back to live</string>
     <string name="terminal_zoom_reset">Zoom %1$d%% · Reset</string>
@@ -724,6 +724,12 @@
     <string name="incompatible_core_too_old">This Host runs herdr-core %1$s. Aries needs %2$s or newer: run `hc update` on the Host.</string>
     <string name="incompatible_missing_methods">This Host\'s herdr-core lacks %1$s. Run `hc update` on the Host.</string>
 
+    <!-- Host connection recovery -->
+    <string name="connect_host_status">%1$s · connection</string>
+    <string name="connect_retry_button">Try again</string>
+    <string name="connect_settings_button">Connection settings</string>
+    <string name="connect_action_needed">Automatic retries paused. Check Host settings, then try again.</string>
+    <string name="connect_permission_denied">The Host denied access: %1$s</string>
     <string name="connect_failed_title">Could not connect</string>
     <string name="connect_auth_rejected">The Host did not accept this phone\'s SSH key. Add the public key to ~/.ssh/authorized_keys on the Host.</string>
     <string name="connect_no_key">Create an SSH key first.</string>

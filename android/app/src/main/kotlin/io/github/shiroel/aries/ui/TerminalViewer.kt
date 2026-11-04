@@ -434,8 +434,8 @@ fun TerminalScreen(
             TerminalSearchBar(viewer, searching, onClose = { searching = false })
             viewer.exit?.let { Banner(exitText(it)) }
             val line = viewer.link?.state
-            if (viewer.exit == null && line == LinkState.Reconnecting) Banner(stringResource(R.string.reconnecting))
-            if (viewer.exit == null && (viewer.closed || line is LinkState.Down)) {
+            if (viewer.exit == null) viewer.link?.let { ConnectionNotice(it) }
+            if (viewer.exit == null && viewer.closed && (line == null || line == LinkState.Up)) {
                 Banner(stringResource(R.string.terminal_connection_closed))
             }
             val look = remember(viewer) { TerminalLook(viewer) }
