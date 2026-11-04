@@ -3,13 +3,11 @@ package io.github.shiroel.aries.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -104,12 +102,11 @@ private fun CallRow(
         }
         when {
             sending -> Text(stringResource(R.string.call_answer_sending), style = MaterialTheme.typography.bodySmall)
-            entry.answerable -> FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            entry.answerable -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 call.choices.forEachIndexed { i, choice ->
-                    val label = stringResource(R.string.call_answer_choice_label, call.title, choice)
-                    OutlinedButton(onClick = { onChoice(i) }, shape = androidx.compose.ui.graphics.RectangleShape, modifier = Modifier.semantics { contentDescription = label }) {
-                        Text(choice)
-                    }
+                    ConsoleChatChoice(i + 1, choice,
+                        accessibilityLabel = stringResource(R.string.call_answer_choice_label, call.title, choice),
+                        onClick = { onChoice(i) })
                 }
             }
         }

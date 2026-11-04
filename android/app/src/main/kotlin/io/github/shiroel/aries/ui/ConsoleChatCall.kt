@@ -1,6 +1,14 @@
 package io.github.shiroel.aries.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.RadioButton
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -10,11 +18,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Icon
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -23,7 +28,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
@@ -53,28 +57,32 @@ internal fun ConsoleChatChoice(
     accessibilityLabel: String,
     enabled: Boolean = true,
     selected: Boolean = false,
+    multi: Boolean = false,
     onClick: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
-    OutlinedButton(
-        onClick = onClick, enabled = enabled, shape = RectangleShape,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp).semantics {
-            contentDescription = accessibilityLabel
-            this.selected = selected
-        },
-        colors = ButtonDefaults.outlinedButtonColors(
-            containerColor = if (selected) colors.primaryContainer else colors.surface,
-            contentColor = if (selected) colors.onPrimaryContainer else colors.onSurface,
-        ),
+    val selection = if (multi) Modifier.toggleable(selected, enabled = enabled, role = Role.Checkbox) { onClick() }
+        else Modifier.selectable(selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
+    Surface(
+        shape = RectangleShape, border = BorderStroke(1.dp, colors.outline),
+        color = if (selected) colors.primaryContainer else colors.surface,
+        contentColor = if (selected) colors.onPrimaryContainer else colors.onSurface,
     ) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (selected) Icon(painterResource(R.drawable.ic_check), contentDescription = null,
-                modifier = Modifier.size(24.dp), tint = colors.onPrimaryContainer)
-            else Text(stringResource(R.string.console_chat_choice_number, number), Modifier.width(24.dp), color = colors.primary)
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 48.dp).then(selection).semantics {
+                contentDescription = accessibilityLabel
+                this.selected = selected
+            }.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(stringResource(R.string.console_chat_choice_number, number), Modifier.width(24.dp), color = colors.primary)
             Column(Modifier.weight(1f)) {
                 Text(label)
                 description?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             }
+            if (multi) Checkbox(selected, onCheckedChange = null, enabled = enabled, modifier = Modifier.size(24.dp))
+            else RadioButton(selected, onClick = null, enabled = enabled, modifier = Modifier.size(24.dp))
         }
     }
 }

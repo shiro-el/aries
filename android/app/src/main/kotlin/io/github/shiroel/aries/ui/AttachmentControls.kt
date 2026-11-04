@@ -43,6 +43,20 @@ fun AttachmentControls(chat: ChatModel) {
         }
     }
     val enabled = !chat.uploading && chat.sending == null
+    val takePhoto = rememberCameraAccess {
+        if (enabled) {
+            try {
+                val directory = File(context.cacheDir, "attachments").apply { mkdirs() }
+                val file = File.createTempFile("photo-", ".jpg", directory)
+                cameraPath = file.absolutePath
+                camera.launch(FileProvider.getUriForFile(context, "${context.packageName}.attachments", file))
+            } catch (e: Exception) {
+                cameraPath?.let { File(it).delete() }
+                cameraPath = null
+                chat.attachmentFailed(e)
+            }
+        }
+    }
     val fileLabel = stringResource(R.string.attachments_file_button)
     val cameraLabel = stringResource(R.string.attachments_camera_button)
     Row {
@@ -54,18 +68,7 @@ fun AttachmentControls(chat: ChatModel) {
         ) { Icon(painterResource(R.drawable.ic_paperclip), contentDescription = fileLabel) }
         IconButton(
             enabled = enabled,
-            onClick = {
-                try {
-                    val directory = File(context.cacheDir, "attachments").apply { mkdirs() }
-                    val file = File.createTempFile("photo-", ".jpg", directory)
-                    cameraPath = file.absolutePath
-                    camera.launch(FileProvider.getUriForFile(context, "${context.packageName}.attachments", file))
-                } catch (e: Exception) {
-                    cameraPath?.let { File(it).delete() }
-                    cameraPath = null
-                    chat.attachmentFailed(e)
-                }
-            },
+            onClick = takePhoto,
         ) { Icon(painterResource(R.drawable.ic_camera), contentDescription = cameraLabel) }
     }
 }

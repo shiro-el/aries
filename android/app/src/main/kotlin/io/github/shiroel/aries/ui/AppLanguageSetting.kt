@@ -2,7 +2,6 @@ package io.github.shiroel.aries.ui
 
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
@@ -18,8 +17,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.selected
 import io.github.shiroel.aries.AppLanguage
 import io.github.shiroel.aries.R
 
@@ -55,8 +52,9 @@ internal fun AppLanguageSetting() {
                     (tag == "en" && "영어 English".contains(search.trim(), ignoreCase = true)) ||
                     (tag == "ko" && "한국어 Korean".contains(search.trim(), ignoreCase = true))
             }.forEach { (tag, label) ->
-                DropdownMenuItem(
-                    modifier = Modifier.testTag("app-language:$tag").semantics { this.selected = tag == selected },
+                SingleChoiceMenuItem(
+                    selected = tag == selected,
+                    modifier = Modifier.testTag("app-language:$tag"),
                     text = { Text(label) },
                     onClick = {
                         expanded = false

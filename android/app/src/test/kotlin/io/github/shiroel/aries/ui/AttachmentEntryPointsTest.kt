@@ -1,7 +1,9 @@
 package io.github.shiroel.aries.ui
 
+import android.Manifest
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -67,8 +69,18 @@ class AttachmentEntryPointsTest {
     }
 
     @Test fun cameraGetsAFullSizeOutputUriThenAppendsTheUploadedPhotoPath() {
+        shadowOf(compose.activity.application).denyPermissions(Manifest.permission.CAMERA)
         val connection = openChat()
         compose.onNodeWithContentDescription(str(R.string.attachments_camera_button)).performClick()
+        compose.waitForIdle()
+        val permission = shadowOf(compose.activity).nextStartedActivityForResult
+        assertNotNull("Tapping the camera must request permission", permission)
+        assertEquals("android.content.pm.action.REQUEST_PERMISSIONS", permission.intent.action)
+        compose.runOnIdle {
+            shadowOf(compose.activity.application).grantPermissions(Manifest.permission.CAMERA)
+            compose.activity.onRequestPermissionsResult(permission.requestCode,
+                arrayOf(Manifest.permission.CAMERA), intArrayOf(PackageManager.PERMISSION_GRANTED))
+        }
         compose.waitForIdle()
         val request = shadowOf(compose.activity).nextStartedActivityForResult
         assertNotNull(compose.onRoot().printToString(), request)
@@ -76,6 +88,9 @@ class AttachmentEntryPointsTest {
         @Suppress("DEPRECATION")
         val uri = request.intent.getParcelableExtra<Uri>(MediaStore.EXTRA_OUTPUT)!!
         assertEquals("content", uri.scheme)
+        assertEquals(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            request.intent.flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION))
+        assertEquals(uri, request.intent.clipData!!.getItemAt(0).uri)
         val bitmap = Bitmap.createBitmap(3000, 1000, Bitmap.Config.ARGB_8888)
         compose.activity.contentResolver.openOutputStream(uri)!!.use { bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }
         bitmap.recycle()
