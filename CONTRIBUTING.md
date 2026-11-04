@@ -295,7 +295,7 @@ the runner's native artifact is also smoke-tested with `--version`.
 
 ## License
 
-Code is Apache-2.0 (`LICENSE`, `NOTICE`). The logo set in `assets/aries/` is
+Code is MIT (`LICENSE`, `NOTICE`). The logo set in `assets/aries/` is
 excluded from it and carries its own license (`assets/aries/LICENSE`); so do
 icons generated from it. Third-party notices are generated for release builds:
 Rust crates by cargo-about (`licenses/cargo-about.toml`, shipped as

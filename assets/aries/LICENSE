@@ -6,7 +6,7 @@ This license covers every file in this directory (assets/aries/) and any
 image derived from them, such as launcher icons, notification icons and store
 artwork generated from these files elsewhere in this repository.
 
-These files are NOT covered by the Apache License 2.0 that applies to the rest
+These files are NOT covered by the MIT License that applies to the rest
 of this repository (see LICENSE and NOTICE at the repository root).
 
 You may use the files unmodified only to build, package, distribute and
