@@ -76,6 +76,11 @@ fn pin(core: &AriesCore, bytes: &[u8]) {
 #[ignore = "needs docker"]
 async fn installs_missing_core_with_progress_and_can_connect_afterwards() {
     let (_host, core, id, _data) = setup();
+    // D02: the actual SSH channel's exit 127 must request installation, never a retry.
+    assert!(matches!(
+        core.connect(id.clone()).await,
+        Err(aries_core::CoreError::HerdrCoreMissing)
+    ));
     assert_eq!(
         core.herdr_core_status(id.clone()).await.unwrap(),
         HerdrCoreState::Missing
