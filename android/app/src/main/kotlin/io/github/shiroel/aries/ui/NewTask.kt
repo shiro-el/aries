@@ -172,7 +172,7 @@ internal fun NewTaskAccess(model: HostsModel, content: @Composable () -> Unit) {
                 } else null)
         }
         model.task?.takeIf { model.taskVisible }?.let { current ->
-            NewTaskDialog(current,
+            LocalLayoutScreens.current.NewTask(current,
                 onStart = model::startTask,
                 onOpenChat = model::openCreatedTask,
                 onDismiss = model::dismissTask)
@@ -181,7 +181,7 @@ internal fun NewTaskAccess(model: HostsModel, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun NewTaskDialog(task: NewTask, onStart: () -> Unit, onOpenChat: () -> Unit, onDismiss: () -> Unit) {
+internal fun NewTaskDialog(task: NewTask, onStart: () -> Unit, onOpenChat: () -> Unit, onDismiss: () -> Unit) {
     val form = task.form
     var browsing by remember(task) { mutableStateOf(false) }
     var options by remember(task) { mutableStateOf(false) }

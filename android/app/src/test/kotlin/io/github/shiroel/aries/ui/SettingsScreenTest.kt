@@ -6,6 +6,8 @@ import android.content.Context
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.hasScrollToKeyAction
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollToKey
@@ -100,7 +102,8 @@ class SettingsScreenTest {
             .performSemanticsAction(SemanticsActions.SetProgress) { it(180f) }
         compose.runOnIdle { assertEquals("#208080", ThemeSettings(preferences).accentHex) }
 
-        compose.onNodeWithText(str(R.string.chat_cache_days, 7)).performScrollTo().performClick()
+        compose.onNodeWithTag("settings-list").performScrollToNode(hasText(str(R.string.chat_cache_days, 7)))
+        compose.onNodeWithText(str(R.string.chat_cache_days, 7)).performClick()
         compose.runOnIdle { assertEquals(7u, core.retentionDays) }
         compose.onNode(hasScrollToKeyAction()).performScrollToKey("attach-mode")
         compose.onNodeWithText(str(R.string.attach_input_label)).performClick()

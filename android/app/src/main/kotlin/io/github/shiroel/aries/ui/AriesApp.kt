@@ -27,7 +27,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -40,10 +39,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -75,9 +74,11 @@ fun AriesApp(
     terminalDisplay: TerminalDisplaySettings = rememberTerminalDisplaySettings(),
 ) {
     AriesTheme(settings) {
-        NewTaskAccess(model) {
-            if (guidance == null) AriesContent(model, settings, terminalDisplay)
-            else io.github.shiroel.aries.guidance.AppGuidance(guidance) { AriesContent(model, settings, terminalDisplay, guidance, allowNotifications) }
+        androidx.compose.runtime.CompositionLocalProvider(LocalLayoutScreens provides layoutScreensFor(settings.layout)) {
+            NewTaskAccess(model) {
+                if (guidance == null) AriesContent(model, settings, terminalDisplay)
+                else io.github.shiroel.aries.guidance.AppGuidance(guidance) { AriesContent(model, settings, terminalDisplay, guidance, allowNotifications) }
+            }
         }
     }
 }
@@ -111,13 +112,13 @@ private fun AriesContent(
     Scaffold { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
             FirstConnectionGuide(model, guidance, allowNotifications) {
-                ConsoleShell(model) {
+                LocalLayoutScreens.current.Shell(model) {
                     RemoteFilesAccess(model) {
                         AdaptiveHostLayout(
                             listScreen = model.listScreen,
                             hasDetail = model.screen is Screen.Chat || model.screen is Screen.Terminal,
-                            listContent = { ScreenContent(model, settings, terminalDisplay, it) },
-                            detailContent = { ScreenContent(model, settings, terminalDisplay, model.screen) },
+                            listContent = { LocalLayoutScreens.current.Screen(model, settings, terminalDisplay, it) },
+                            detailContent = { LocalLayoutScreens.current.Screen(model, settings, terminalDisplay, model.screen) },
                         )
                     }
                 }
@@ -132,100 +133,7 @@ private fun AriesContent(
 }
 
 @Composable
-private fun ScreenContent(model: HostsModel, settings: ThemeSettings, terminalDisplay: TerminalDisplaySettings, screen: Screen) {
-    val context = LocalContext.current.applicationContext
-    when (val s = screen) {
-        Screen.Hosts -> HostListScreen(model)
-        Screen.Settings -> {
-            SettingsScreen(
-                model, settings, onBack = model::back, showHeader = false,
-                terminalDisplay = terminalDisplay,
-                hostEditor = { host -> if (host.endpoint is Endpoint.Ssh) HostEditSection(model, host) },
-            )
-        }
-        is Screen.Connecting -> {
-            val authorization: @Composable () -> Unit = {
-                if ((s.link.state as? LinkState.Down)?.error is io.github.shiroel.aries.core.CoreException.AuthRejected &&
-                    s.host.endpoint is Endpoint.Ssh) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        HostKeyAuthorization(model, s.host)
-                    }
-                }
-            }
-            val cached = s.cachedBrowser
-            if (cached != null) {
-                BrowseScreen(cached, onBack = model::back, showHeader = false, hostSections = authorization)
-            } else Column(if (s.link.state == LinkState.Reconnecting) Modifier.fillMaxSize()
-                else Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                ConnectionNotice(s.link, firstLoad = true)
-                authorization()
-            }
-        }
-        is Screen.Browse -> {
-            BrowseScreen(
-                s.browser,
-                showHeader = false,
-                onBack = model::back,
-                onOpen = { model.selectListedTerminal(s.browser, it) },
-                current = model.currentAgentKey,
-                onPin = model::pin,
-                onNewTerminal = { model.newTerminal(s.browser) },
-                onRunSaved = { model.runSaved(s.browser, it) },
-                hostSections = {
-                    if (model.beacon.ui == BeaconUi.Known(io.github.shiroel.aries.core.BeaconState.NotInstalled)) {
-                        TextButton(
-                            onClick = { model.openHostSettings(s.browser.host) },
-                            modifier = Modifier.testTag("browse-host-settings:${s.browser.host.id}"),
-                        ) { Text(stringResource(R.string.settings_beacon_missing), maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis) }
-                    }
-                },
-            )
-        }
-        is Screen.Terminal -> {
-            TerminalScreen(
-                s.viewer,
-                onBack = model::closeTerminal,
-                onView = model::switchView.takeIf { s.viewer.terminal.agentStatus != null },
-                displaySettings = terminalDisplay,
-                onSelectionSend = model::sendTerminalSelectionToDraft,
-                onPreviewCapture = { content, cleanup -> model.attachPreviewToChat(context, content, cleanup) },
-            )
-        }
-        is Screen.JumpHosts -> {
-            JumpHostsScreen(model, s.host, s.jumps, s.hostKeyId, showHeader = false)
-        }
-        is Screen.Agents -> {
-            Column {
-                if (model.pendingShare != null) {
-                    Text(stringResource(R.string.attachments_choose_agent), Modifier.padding(12.dp))
-                    TextButton(onClick = model::cancelShare) { Text(stringResource(R.string.cancel_button)) }
-                }
-                AgentsScreen(
-                    s.board,
-                    showHeader = false,
-                    onBack = model::back,
-                    onOpen = { model.selectListedAgent(s.board, it) },
-                    current = model.currentAgentKey,
-                    onPin = { entry, pinned -> model.pin(s.board, entry, pinned) },
-                    onAddHost = { model.startAddingHost() },
-                    onOpenHosts = model::back,
-                )
-            }
-        }
-        is Screen.Chat -> {
-            ChatScreen(
-                s.chat,
-                onBack = model::closeChat,
-                onOpenTerminal = { model.openTerminal(s.chat.terminal) },
-                onView = model::switchView,
-                calls = model.calls,
-            )
-        }
-    }
-}
-
-@Composable
-private fun HostListScreen(model: HostsModel) {
+internal fun HostListScreen(model: HostsModel) {
     val adding = model.hostAddMethod != null
     LazyColumn(Modifier.fillMaxSize()) {
         if (model.hosts.isEmpty()) item { Text(stringResource(R.string.hosts_empty), Modifier.padding(12.dp), fontSize = 12.sp) }
@@ -369,7 +277,7 @@ private fun HostConnectionForm(model: HostsModel) {
 }
 
 @Composable
-private fun HostKeyAuthorization(model: HostsModel, host: Host) {
+internal fun HostKeyAuthorization(model: HostsModel, host: Host) {
     Text(stringResource(R.string.onboarding_manual_key_body))
     KeySection(model)
     TextButton(onClick = { model.askPassword(host) }) { Text(stringResource(R.string.host_install_key_button)) }
