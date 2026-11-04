@@ -80,7 +80,8 @@ internal fun ChatTextActions(
     val dialogs = sharedDialogs ?: remember { ChatDialogState() }
     var bounds by remember { mutableStateOf(Rect.Zero) }
     val metadata = LocalChatResponseMetadata.current
-    val openMenu = rememberUpdatedState { dialogs.textMenu = ChatTextMenu(text, bounds, metadata) }
+    val entryId = LocalChatSearchEntry.current
+    val openMenu = rememberUpdatedState { dialogs.textMenu = ChatTextMenu(text, bounds, metadata, entryId) }
     val actionsLabel = stringResource(R.string.chat_text_actions)
     Box {
         val gestures = if (interceptChildLongPress && text.isNotEmpty()) {
@@ -100,7 +101,7 @@ internal fun ChatTextActions(
 
 /** The popup is owned by the screen; its frozen anchor can outlive a recycled lazy row. */
 @Composable
-private fun ChatTextMenuView(menu: ChatTextMenu, dialogs: ChatDialogState) {
+private fun ChatTextMenuView(menu: ChatTextMenu, dialogs: ChatDialogState, chat: ChatModel?) {
     val text = menu.text
     val context = LocalContext.current
     val copyLabel = stringResource(R.string.chat_copy_all)
@@ -156,6 +157,15 @@ private fun ChatTextMenuView(menu: ChatTextMenu, dialogs: ChatDialogState) {
                         },
                     )
                 }
+                chat?.rewindTarget(menu.entryId)?.let { target ->
+                    ActionMenuItem(
+                        label = stringResource(R.string.chat_rewind_here), icon = R.drawable.ic_history,
+                        enabled = chat.canRewind,
+                        detail = if (chat.terminal.agentStatus == io.github.shiroel.aries.core.AgentStatus.Working)
+                            stringResource(R.string.chat_rewind_stop_first) else null,
+                        onClick = { dialogs.rewind = target; dialogs.textMenu = null },
+                    )
+                }
                 ActionMenuItem(
                     label = copyLabel, icon = R.drawable.ic_copy,
                     onClick = {
@@ -203,6 +213,7 @@ internal class ChatDialogState {
     var showUsage by mutableStateOf(false)
     var textMenu by mutableStateOf<ChatTextMenu?>(null)
     var tasksRequest by mutableStateOf<TasksRequest?>(null)
+    var rewind by mutableStateOf<ChatRewindTarget?>(null)
     var selection by mutableStateOf<String?>(null)
     var image by mutableStateOf<ByteArray?>(null)
     var diagram by mutableStateOf<String?>(null)
@@ -212,20 +223,22 @@ internal class ChatDialogState {
         textMenu = null
         tasksRequest = null
         selection = null
+        rewind = null
         image = null
         diagram = null
         responseMetadata = null
     }
-    val isOpen: Boolean get() = textMenu != null || tasksRequest != null || selection != null || image != null || diagram != null || responseMetadata != null
+    val isOpen: Boolean get() = textMenu != null || rewind != null || tasksRequest != null || selection != null || image != null || diagram != null || responseMetadata != null
 }
 
-internal data class ChatTextMenu(val text: String, val bounds: Rect, val metadata: ChatResponseMetadata? = null)
+internal data class ChatTextMenu(val text: String, val bounds: Rect, val metadata: ChatResponseMetadata? = null, val entryId: String? = null)
 
 internal val LocalChatDialogs = staticCompositionLocalOf<ChatDialogState?> { null }
 internal val LocalChatImageRevision = staticCompositionLocalOf { 0 }
 
 @Composable
-internal fun ChatDialogs(dialogs: ChatDialogState) {
+internal fun ChatDialogs(dialogs: ChatDialogState, chat: ChatModel? = null, onRewind: (String) -> Unit = {}) {
+    ChatRewindConfirmation(dialogs, chat, onRewind)
     dialogs.responseMetadata?.let { metadata ->
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { dialogs.responseMetadata = null },
@@ -234,7 +247,7 @@ internal fun ChatDialogs(dialogs: ChatDialogState) {
             confirmButton = { TextButton(onClick = { dialogs.responseMetadata = null }) { Text(stringResource(R.string.ok_button)) } },
         )
     }
-    dialogs.textMenu?.let { ChatTextMenuView(it, dialogs) }
+    dialogs.textMenu?.let { ChatTextMenuView(it, dialogs, chat) }
     dialogs.selection?.let { selected ->
         Dialog(onDismissRequest = { dialogs.selection = null }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
             Surface(Modifier.fillMaxSize()) {

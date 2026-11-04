@@ -136,7 +136,7 @@ internal open class LayoutScreens {
 
     @Composable open fun Chat(model: HostsModel, chat: ChatModel) {
         ChatScreen(chat, onBack = model::closeChat, onOpenTerminal = { model.openTerminal(chat.terminal) },
-            onView = model::switchView, calls = model.calls)
+            onView = model::switchView, calls = model.calls, onRewind = model::rewindChat)
     }
 
     @Composable open fun Terminal(model: HostsModel, viewer: TerminalViewer, display: TerminalDisplaySettings) {
