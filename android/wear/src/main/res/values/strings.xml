@@ -1,4 +1,17 @@
 <resources>
+    <!-- Watch interrupt -->
+    <string name="wear_interrupt_confirm_body">Stop %1$s? Your phone will check that this Agent is still Working.</string>
+    <string name="wear_interrupt_confirm">Confirm stop</string>
+    <string name="wear_interrupt_cancel">Cancel</string>
+    <string name="wear_interrupt_pending">Stopping…</string>
+    <string name="wear_interrupt_stopped">Agent stopped</string>
+    <string name="wear_interrupt_exited">Agent exited</string>
+    <string name="wear_interrupt_still_working">The Agent is still Working. Check your phone.</string>
+    <string name="wear_interrupt_not_working">The Agent is no longer Working. No stop key was sent.</string>
+    <string name="wear_interrupt_open_phone">Open your phone to unlock this Host.</string>
+    <string name="wear_interrupt_busy">Another stop request is pending.</string>
+    <string name="wear_interrupt_unknown">Stop could not be verified. Check your phone before trying again.</string>
+
     <!-- Watch Inbox -->
     <string name="wear_inbox_title">Inbox</string>
     <string name="wear_inbox_attention">Needs you</string>
