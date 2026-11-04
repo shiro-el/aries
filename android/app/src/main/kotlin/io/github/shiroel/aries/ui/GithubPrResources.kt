@@ -35,7 +35,6 @@ internal fun GithubPrResources(
 ) {
     var resource by remember(connection, repo, number, tab, refresh) { mutableStateOf<PrResource?>(null) }
     var error by remember(connection, repo, number, tab, refresh) { mutableStateOf<Int?>(null) }
-    var visible by remember(file) { mutableIntStateOf(200) }
     LaunchedEffect(connection, repo, number, tab, refresh) {
         onFile(null)
         try {
@@ -67,7 +66,7 @@ internal fun GithubPrResources(
             Text(opened.path, Modifier.padding(16.dp), fontFamily = FontFamily.Monospace)
             val patch = opened.patch
             if (patch == null) Text(stringResource(R.string.github_pr_patch_unavailable), Modifier.padding(16.dp))
-            else GitDiffView(patch, Modifier.weight(1f), visible, { visible += 200 })
+            else GitDiffView(patch, Modifier.weight(1f))
         } else {
             LazyColumn(Modifier.weight(1f).testTag("github-pr-resources")) {
                 when (val data = resource) {

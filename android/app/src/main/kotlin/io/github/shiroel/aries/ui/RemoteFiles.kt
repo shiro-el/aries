@@ -2,11 +2,9 @@ package io.github.shiroel.aries.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -15,22 +13,20 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.GitChanges
 import io.github.shiroel.aries.core.GitFile
-import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.HostConnection
 import io.github.shiroel.aries.core.RemoteDirectory
-import io.github.shiroel.aries.core.RemoteFilePage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
-/** One page at a time: no unbounded accumulation of file text in the phone. */
+/** Read-only files and changes on the current Terminal’s Host. */
 @Composable
 fun RemoteFilesScreen(
     connection: HostConnection?,
@@ -45,15 +41,10 @@ fun RemoteFilesScreen(
     var startingFolder by remember(address, initialLocation) { mutableStateOf(initialFolder) }
     var directory by remember(address, initialLocation) { mutableStateOf<RemoteDirectory?>(null) }
     var file by remember(address, initialLocation) { mutableStateOf(initialLocation?.path) }
-    var offsets by remember(address, initialLocation) { mutableStateOf(listOf(initialLocation?.line ?: 1uL)) }
-    var page by remember(address) { mutableStateOf<RemoteFilePage?>(null) }
     var wrap by remember(address) { mutableStateOf(false) }
     var retry by remember { mutableIntStateOf(0) }
     var loading by remember { mutableStateOf(true) }
     var failed by remember { mutableStateOf(false) }
-    var notText by remember { mutableStateOf(false) }
-    var missing by remember { mutableStateOf(false) }
-    var unavailableLine by remember { mutableStateOf<ULong?>(null) }
     var changes by remember(connection, address) { mutableStateOf<GitChanges?>(null) }
     var loadedRevision by remember(connection, address) { mutableIntStateOf(-1) }
     val requestedRevision = retry
@@ -98,7 +89,7 @@ fun RemoteFilesScreen(
         catch (e: Exception) { changes = null; gitError = e.message ?: e.toString() }
         finally { loadedRevision = requestedRevision }
     }
-    fun backToFolder() { file = null; offsets = listOf(1uL) }
+    fun backToFolder() { file = null }
     fun navigateBack() {
         when {
             file != null -> backToFolder()
@@ -107,50 +98,22 @@ fun RemoteFilesScreen(
         }
     }
     BackHandler(onBack = ::navigateBack)
-    LaunchedEffect(connection, address, folder, file, offsets, retry, changesLoaded, showingDiff, showingMarkup) {
+    LaunchedEffect(connection, address, folder, file, retry, changesLoaded) {
         if (!changesLoaded) return@LaunchedEffect
         loading = true
         failed = false
-        notText = false
-        missing = false
-        unavailableLine = null
-        page = null
         try {
-            checkNotNull(connection)
             if (file == null) {
                 // Failed navigation must use the requested path, never a stale listing.
                 directory = null
-                val result = connection.listFiles(address, folder ?: startingFolder)
+                val result = checkNotNull(connection).listFiles(address, folder ?: startingFolder)
                 // Keep the exit anchor stable while navigating; accept the Host's canonical path.
                 if (startingFolder == null || startingFolder == folder) startingFolder = result.path
                 directory = result
-            } else if (!showingDiff && !showingMarkup && remoteMediaKind(file!!) == null) {
-                val requested = offsets.last()
-                val result = try {
-                    connection.readFilePage(address, file!!, requested, 200u)
-                } catch (e: CoreException.Rpc) {
-                    // A transcript can outlive the referenced lines. Keep the file readable.
-                    if (e.kind != "invalid_params" || requested <= 1uL) throw e
-                    val start = connection.readFilePage(address, file!!, 1uL, 200u)
-                    if (start.lines >= requested) throw e
-                    unavailableLine = requested
-                    start
-                }
-                // herdr-core rejects non-UTF-8; valid UTF-8 containing NUL is binary too.
-                notText = '\u0000' in result.text
-                if (!notText) page = result
             }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            when {
-                e is CoreException.Rpc && e.kind == "not_text" -> notText = true
-                e is CoreException.Rpc && e.kind == "not_found" -> missing = true
-                else -> failed = true
-            }
-        } finally {
-            loading = false
-        }
+        } catch (e: CancellationException) { throw e }
+        catch (_: Exception) { failed = true }
+        finally { loading = false }
     }
     Column(Modifier.fillMaxSize().safeDrawingPadding().padding(12.dp)) {
         val header: @Composable ((() -> Unit)?, (() -> Unit)?, Boolean) -> Unit = { save, share, exportEnabled ->
@@ -160,7 +123,7 @@ fun RemoteFilesScreen(
                 onFolder = { path -> folder = path; backToFolder() },
                 onRefresh = { retry++ }, refreshing = loading || !changesLoaded,
                 diffAvailable = changedFile != null && !mediaFile, fullFile = fullFile, onFullFile = { fullFile = !fullFile },
-                wrap = wrap, onWrap = if (file != null && !showingDiff && page != null) ({ wrap = !wrap }) else null,
+                wrap = wrap, onWrap = if (file != null && !showingDiff && !showingMarkup && !mediaFile) ({ wrap = !wrap }) else null,
                 onSend = if (file != null && !showingDiff && onSend != null) ({ onSend(quotedFileReference(file!!)) }) else null,
                 onSave = save, onShare = share, exportEnabled = exportEnabled,
             )
@@ -203,7 +166,6 @@ fun RemoteFilesScreen(
                             val path = gitFilePath(changes!!.cwd, entry.path)
                             if (folder == null && directory == null) folder = path.substringBeforeLast('/').ifEmpty { "/" }
                             file = path
-                            offsets = listOf(1uL)
                         }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                             Surface(color = MaterialTheme.colorScheme.secondaryContainer) {
                                 Text(gitFileBadge(entry), Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontFamily = FontFamily.Monospace)
@@ -225,7 +187,7 @@ fun RemoteFilesScreen(
                         val folderState = stringResource(if (isExpanded) R.string.files_folder_expanded else R.string.files_folder_collapsed)
                         Row(Modifier.fillMaxWidth().clickable {
                             if (entry.directory) toggleFolder(entry.path)
-                            else { file = entry.path; offsets = listOf(1uL) }
+                            else { file = entry.path }
                         }.then(if (entry.directory) Modifier.semantics { stateDescription = folderState } else Modifier)
                             .padding(start = (entry.depth * 16).dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                             if (entry.directory) {
@@ -242,8 +204,6 @@ fun RemoteFilesScreen(
                     }
                 }
             }
-            notText -> Text(stringResource(R.string.files_not_text))
-            missing -> Text(stringResource(R.string.files_missing, file.orEmpty()), color = MaterialTheme.colorScheme.error)
             failed -> Text(stringResource(R.string.files_failed), color = MaterialTheme.colorScheme.error)
             showingDiff -> GitFileDiff(connection, address, changes!!.cwd, changedFile, retry, onDiffSend)
             showingMarkup -> key(connection, address, file, retry) {
@@ -253,47 +213,9 @@ fun RemoteFilesScreen(
                 RemoteFilePreview(connection, address, file!!, Modifier.weight(1f),
                     preview = initialLocation?.takeIf { it.path == file }?.preview)
             }
-            else -> page?.let { content ->
-                unavailableLine?.let { Text(stringResource(R.string.files_line_unavailable, it.toLong())) }
-                if (content.lines == 0uL) Text(stringResource(R.string.files_empty_file))
-                else Text(stringResource(R.string.files_range, content.first.toLong(), content.last.toLong(), content.lines.toLong()))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    ActionIcon(R.drawable.ic_chevron_left, R.string.files_previous_button,
-                        enabled = offsets.size > 1 || content.first > 1uL, onClick = {
-                            offsets = if (offsets.size > 1) offsets.dropLast(1)
-                                else listOf(if (content.first > 200uL) content.first - 200uL else 1uL)
-                        })
-                    ActionIcon(R.drawable.ic_chevron_right, R.string.files_next_button,
-                        enabled = content.last < content.lines, onClick = { offsets = offsets + (content.last + 1uL) })
-                }
-                // Drop only the split's synthetic trailing line; blank lines in the file remain.
-                val lines = remember(content) {
-                    if (content.text.isEmpty()) emptyList()
-                    else content.text.split('\n').let { if (content.text.endsWith('\n')) it.dropLast(1) else it }
-                }
-                val colors = MaterialTheme.colorScheme
-                val highlighted = remember(content, file, colors) { highlightFileCode(content.text, file.orEmpty(), colors) }
-                val starts = remember(lines) {
-                    var offset = 0
-                    lines.map { line -> offset.also { offset += line.length + 1 } }
-                }
-                val scroll = rememberScrollState()
-                LazyColumn(Modifier.weight(1f).then(if (wrap) Modifier.fillMaxWidth() else Modifier.horizontalScroll(scroll))) {
-                    itemsIndexed(lines) { index, line ->
-                        val number = content.first + index.toULong()
-                        val label = stringResource(R.string.files_send_line_label, number.toLong())
-                        Row(Modifier.then(if (wrap) Modifier.fillMaxWidth() else Modifier).testTag("files-line:$number")
-                            .then(if (onSend == null) Modifier else Modifier.clickable {
-                                onSend(quotedFileReference(file!!) + ":$number\n" + line)
-                            }.semantics { contentDescription = label })
-                            .padding(vertical = 6.dp)) {
-                            Text(number.toString(), Modifier.widthIn(min = 48.dp), fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(highlighted.subSequence(starts[index], starts[index] + line.length),
-                                modifier = if (wrap) Modifier.weight(1f) else Modifier,
-                                fontFamily = FontFamily.Monospace, softWrap = wrap)
-                        }
-                    }
-                }
+            else -> key(connection, address, file, retry) {
+                RemoteTextFile(connection, address, file!!,
+                    initialLocation?.takeIf { it.path == file }?.line ?: 1uL, wrap, onSend)
             }
         }
     }
