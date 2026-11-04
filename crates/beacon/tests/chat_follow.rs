@@ -14,6 +14,7 @@ use aries_beacon::chat::{
     Agent, Interpreter, JsonlSource, Located, Options, Poll, TerminalFacts, TerminalLookup, run,
 };
 use aries_protocol::chat::{ChatEvent, ChatItem, ChatLine, ChatState};
+use sha2::{Digest, Sha256};
 
 const FIXTURES: [&str; 4] = [
     "main-session.jsonl",
@@ -155,6 +156,103 @@ fn states(lines: &[ChatLine]) -> Vec<ChatState> {
 
 fn last_cursor(lines: &[ChatLine]) -> String {
     lines.iter().rev().find_map(|l| l.cursor.clone()).unwrap()
+}
+
+#[test]
+fn a_rewind_removes_abandoned_items_while_following_or_resuming() {
+    // Regression: a branch appended after the saved cursor must remove cached
+    // rows too, without resetting or resending the shared conversation prefix.
+    let text = fixture("rewind-branch.jsonl");
+    let transcript: Vec<&str> = text.lines().collect();
+    for resume in [false, true] {
+        let env = Env::new();
+        env.point_at("s");
+        let path = env.path("s");
+        append(&path, &(transcript[..5].join("\n") + "\n"));
+        let first = env.run(None, vec![nothing()]);
+        let cursor = resume.then(|| last_cursor(&first));
+        let replacement = transcript[5..].join("\n") + "\n";
+        let second = env.run(
+            cursor,
+            vec![nothing(), Box::new(move || append(&path, &replacement))],
+        );
+        let removed: Vec<&str> = second
+            .iter()
+            .filter_map(|l| match &l.event {
+                ChatEvent::Remove { id } => Some(id.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            removed,
+            [
+                "discarded",
+                "discarded:1",
+                "old-tool",
+                "old-user",
+                "old-answer"
+            ]
+        );
+        assert_eq!(
+            second
+                .iter()
+                .filter(|l| matches!(&l.event,
+                    ChatEvent::Item { item } if item.id == "root"
+                ))
+                .count(),
+            usize::from(!resume)
+        );
+        assert_eq!(
+            second
+                .iter()
+                .filter(|l| matches!(l.event, ChatEvent::Reset { .. }))
+                .count(),
+            usize::from(!resume)
+        );
+        let mut all = first;
+        all.extend(second);
+        assert_eq!(
+            items(&all)
+                .iter()
+                .map(|i| i.id.as_str())
+                .collect::<Vec<_>>(),
+            ["root", "replacement", "replacement-answer"]
+        );
+    }
+}
+
+#[test]
+fn a_cursor_saved_before_branch_support_rebuilds_the_cached_chat() {
+    // Regression: a pre-upgrade cache already contains abandoned rows. Quiet
+    // replay at its otherwise valid byte cursor would suppress their removals.
+    let env = Env::new();
+    env.point_at("s");
+    let transcript = fixture("rewind-branch.jsonl");
+    append(&env.path("s"), &transcript);
+    let current = env.run(None, vec![nothing()]);
+    let hash: String = Sha256::digest(transcript.as_bytes())
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    let old_cursor = format!("claude-code:s:{}.{hash}", transcript.len());
+    let mut legacy_cache: Vec<_> = current
+        .into_iter()
+        .filter(|l| !matches!(l.event, ChatEvent::Remove { .. }))
+        .collect();
+    let reopened = env.run(Some(old_cursor), vec![nothing()]);
+    assert!(
+        reopened
+            .iter()
+            .any(|l| matches!(l.event, ChatEvent::Reset { .. }))
+    );
+    legacy_cache.extend(reopened);
+    assert_eq!(
+        items(&legacy_cache)
+            .iter()
+            .map(|i| i.id.as_str())
+            .collect::<Vec<_>>(),
+        ["root", "replacement", "replacement-answer"]
+    );
 }
 
 #[test]

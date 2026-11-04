@@ -68,7 +68,7 @@ internal object ThreadScreens : LayoutScreens() {
     @Composable override fun Chat(model: HostsModel, chat: ChatModel) {
         CompositionLocalProvider(LocalThreadChat provides model) {
             ChatScreen(chat, onBack = model::closeChat, onOpenTerminal = { model.openTerminal(chat.terminal) },
-                onView = model::switchView, calls = model.calls)
+                onView = model::switchView, calls = model.calls, onRewind = model::rewindChat)
         }
     }
 }
