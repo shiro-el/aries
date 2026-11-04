@@ -301,13 +301,26 @@ pub(crate) async fn reply(
     choice: u32,
     sign_in: Duration,
 ) -> Result<CallReply, CoreError> {
+    let stream = match runner
+        .open_within(&reply_command(call_id, choice), sign_in)
+        .await
+    {
+        // Exec submission can reach the Host even if its acknowledgement or
+        // transport fails. Preserve that uncertainty; never suggest replay.
+        Err(CoreError::Protocol { detail }) => {
+            return Ok(CallReply {
+                outcome: CallReplyOutcome::Unknown,
+                answer: None,
+                detail: Some(detail),
+            });
+        }
+        result => result?,
+    };
     let Stream {
         reader,
         writer,
         guard,
-    } = runner
-        .open_within(&reply_command(call_id, choice), sign_in)
-        .await?;
+    } = stream;
     let mut lines = BufReader::new(reader).lines();
     let mut line = None;
     let read = tokio::time::timeout(REPLY_WAIT, async {

@@ -88,10 +88,14 @@ private fun rememberThemeSettings(): ThemeSettings {
 
 @Composable
 private fun AriesContent(model: HostsModel, settings: ThemeSettings, terminalDisplay: TerminalDisplaySettings) {
-    // Calls are followed (for the banner) only while the app is in front.
+    // Screen connections and the Call banner follow the visible lifecycle.
     LifecycleStartEffect(model) {
+        model.resumeScreens()
         model.resumeCalls()
-        onStopOrDispose { model.pauseCalls() }
+        onStopOrDispose {
+            model.backgrounded()
+            model.pauseCalls()
+        }
     }
     Scaffold { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {

@@ -351,14 +351,20 @@ impl Inner {
         if self.detached.swap(true, Ordering::SeqCst) {
             return;
         }
-        // The core answers with an empty CLOSE, which ends the pump.
-        let _ = self.client.send(self.channel, KIND_CLOSE, &[]).await;
-        let mut st = self.state.lock().expect("state lock");
-        st.ended = true;
-        st.dirty = false;
-        st.exit = None;
-        drop(st);
+        {
+            let mut st = self.state.lock().expect("state lock");
+            st.ended = true;
+            st.dirty = false;
+            st.exit = None;
+        }
         self.wake.notify_one();
+        // Local teardown is immediate; a stalled Host cannot keep detach
+        // (including Android's NonCancellable cleanup) waiting indefinitely.
+        let _ = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            self.client.send(self.channel, KIND_CLOSE, &[]),
+        )
+        .await;
     }
 }
 
@@ -469,6 +475,7 @@ impl TerminalView {
     /// Detaches from the Terminal (the program keeps running). Later `next`
     /// calls fail with [`CoreError::Closed`].
     pub async fn detach(&self) {
+        self.task.abort();
         let inner = self.inner.clone();
         let _ = crate::on_runtime(async move {
             inner.detach().await;

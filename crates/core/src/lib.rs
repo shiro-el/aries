@@ -269,12 +269,19 @@ fn runtime() -> &'static tokio::runtime::Runtime {
 async fn on_runtime<T: Send + 'static>(
     fut: impl std::future::Future<Output = Result<T, CoreError>> + Send + 'static,
 ) -> Result<T, CoreError> {
-    runtime()
-        .spawn(fut)
-        .await
-        .map_err(|e| CoreError::Protocol {
-            detail: format!("core task failed: {e}"),
-        })?
+    // A JoinHandle normally detaches on drop. The caller (including UniFFI's
+    // cancelled future) owns this work until its result has been collected.
+    struct AbortOnDrop(tokio::task::AbortHandle);
+    impl Drop for AbortOnDrop {
+        fn drop(&mut self) {
+            self.0.abort();
+        }
+    }
+    let task = runtime().spawn(fut);
+    let _owner = AbortOnDrop(task.abort_handle());
+    task.await.map_err(|e| CoreError::Protocol {
+        detail: format!("core task failed: {e}"),
+    })?
 }
 
 #[derive(uniffi::Object)]
@@ -818,9 +825,16 @@ impl AriesCore {
                     jumps: self.ssh_hops(host.jumps)?,
                 }),
             };
-            let client =
-                on_runtime(async move { HcClient::handshake(transport.open().await?).await })
-                    .await?;
+            let client = on_runtime(async move {
+                tokio::time::timeout(std::time::Duration::from_secs(20), async {
+                    HcClient::handshake(transport.open().await?).await
+                })
+                .await
+                .map_err(|_| CoreError::Unreachable {
+                    detail: "Host connection timed out".into(),
+                })?
+            })
+            .await?;
             let client = Arc::new(client);
             if !self.register_client(&host_id, revision, &client) {
                 on_runtime(async move {
