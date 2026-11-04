@@ -6,11 +6,14 @@ import android.content.Context
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.hasScrollToKeyAction
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollToKey
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -156,6 +159,29 @@ class SettingsScreenTest {
         restore.emulateSavedInstanceStateRestore()
         compose.onNodeWithTag("accent-hex").assertExists()
         compose.onNodeWithText(str(R.string.accent_hex_invalid)).assertExists()
+    }
+
+    // D122: the local licence picker must survive its settings item leaving the lazy viewport.
+    @Test
+    @Config(qualifiers = "h600dp")
+    fun fontLicenseDialogRemainsOpenWhenSettingsScrollsAway() {
+        val restoration = StateRestorationTester(compose)
+        val settings = ThemeSettings.from(context)
+        restoration.setContent {
+            val scope = rememberCoroutineScope()
+            val model = remember { HostsModel(FakeCore(), scope) }
+            AriesTheme(settings) { SettingsScreen(model, settings, onBack = {}) }
+        }
+        compose.onNodeWithTag("settings-list").performScrollToKey("terminal-display")
+        compose.onNodeWithText(str(R.string.terminal_display_license_button)).performScrollTo().performClick()
+        compose.onNode(isDialog()).assertExists()
+        compose.onNodeWithTag("settings-list").performScrollToIndex(0)
+        compose.onNode(isDialog()).assertExists()
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNode(isDialog()).assertExists()
+        compose.onNodeWithText(str(R.string.ok_button)).performClick()
+        compose.onNodeWithTag("settings-list").performScrollToKey("terminal-display")
+        compose.onNode(isDialog()).assertDoesNotExist()
     }
 
 }

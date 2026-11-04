@@ -45,7 +45,7 @@ internal fun KeyRecoverySection(model: HostsModel) {
             TextButton(enabled = !busy, onClick = { generatingId = key.id }, modifier = Modifier.testTag("key-recover-generate-${key.id}")) {
                 Text(stringResource(R.string.key_recover_generate_button))
             }
-            TextButton(enabled = !busy, onClick = { importingId = key.id }, modifier = Modifier.testTag("key-recover-import-${key.id}")) {
+            TextButton(enabled = !busy, onClick = { model.keyImport.clear(); importingId = key.id }, modifier = Modifier.testTag("key-recover-import-${key.id}")) {
                 Text(stringResource(R.string.key_import_button))
             }
         }
