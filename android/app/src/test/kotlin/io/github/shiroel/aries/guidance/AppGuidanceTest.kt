@@ -91,7 +91,9 @@ class AppGuidanceTest {
         compose.onNodeWithText(context.getString(R.string.connect_retry_button)).performClick()
         compose.onNodeWithTag("onboarding-connected").assertExists()
         compose.onNodeWithText(context.getString(R.string.beacon_install_button)).performScrollTo().performClick()
+        compose.onNodeWithTag("beacon-advanced").performScrollTo().performClick()
         compose.onNodeWithText(context.getString(R.string.beacon_reinstall_button)).assertExists()
+        compose.onNodeWithTag("beacon-advanced").performScrollTo().performClick()
         compose.onNodeWithTag("onboarding-permission").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(true, permissionRequested) }
         screenshot("connected-beacon")
