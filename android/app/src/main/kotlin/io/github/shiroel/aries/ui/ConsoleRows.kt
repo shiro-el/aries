@@ -83,6 +83,7 @@ internal fun ConsoleTerminalRow(
     val sub = listOfNotNull(spaceName, tabName,
         if (waiting) statusMessage(status)?.takeIf { it.isNotBlank() } ?: description else folder).joinToString(" · ")
     val density = androidx.compose.ui.platform.LocalDensity.current
+    val largeText = density.fontScale > 1.3f
     val kindWidth = (48 * density.fontScale).dp
     val ageWidth = (56 * density.fontScale).dp
     val titleHeight = with(density) { MaterialTheme.typography.bodyMedium.lineHeight.toDp() }
@@ -95,18 +96,18 @@ internal fun ConsoleTerminalRow(
         else -> androidx.compose.ui.graphics.Color.Transparent
     }
     val rowModifier = modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(background)
-        .hoverable(interactions).combinedClickable(onClick = onOpen, onLongClick = onLongClick, onLongClickLabel = actionsLabel)
+        .hoverable(interactions).combinedClickable(role = Role.Button, onClick = onOpen, onLongClick = onLongClick, onLongClickLabel = actionsLabel)
         .semantics {
             contentDescription = spokenName
             stateDescription = description
             this.selected = selected
         }
     if (compact) {
-        Row(rowModifier.heightIn(min = 26.dp).padding(horizontal = 8.dp, vertical = 2.dp),
+        Row(rowModifier.heightIn(min = 48.dp).padding(horizontal = 8.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ProgramMark(terminal, Modifier.size(14.dp))
             Text(displayName(terminal), Modifier.weight(1f), fontSize = 12.5.sp, lineHeight = 18.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
             trailing()
             if (status != null) AgentStatusMark(status, Modifier.size(20.dp)) else TerminalMark()
         }
@@ -122,15 +123,23 @@ internal fun ConsoleTerminalRow(
                 }
                 Column(Modifier.weight(1f)) {
                     Text(displayName(terminal), style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
+                    if (largeText) {
+                        Text(sub, style = MaterialTheme.typography.bodySmall,
+                            color = if (waiting) statusColor(AgentStatus.Blocked(null, null)) else MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (tabName == null) Text(terminal.currentProgram.orEmpty(), Modifier.testTag("terminal-kind:${terminal.address}"),
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Box(Modifier.testTag("terminal-age:${terminal.address}")) {
+                            if (status != null) AgentElapsedTime(terminal.statusMs)
+                        }
+                    } else Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(sub, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
                             color = if (waiting) statusColor(AgentStatus.Blocked(null, null)) else MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
                         if (tabName == null) Box(Modifier.width(kindWidth), contentAlignment = Alignment.CenterStart) {
                             Text(terminal.currentProgram.orEmpty(), Modifier.testTag("terminal-kind:${terminal.address}"),
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
                         }
                         Box(Modifier.width(ageWidth).testTag("terminal-age:${terminal.address}"), contentAlignment = Alignment.CenterEnd) {
                             if (status != null) AgentElapsedTime(terminal.statusMs)

@@ -83,24 +83,27 @@ class SettingsConsolidationTest {
         compose.onNodeWithText(str(R.string.beacon_install_button)).assertExists()
     }
 
-    @Test fun missingKeyAtAddLinksToKeySettings() {
+    @Test fun missingKeyAtAddCreatesInlineAndContinuesToHostDetails() {
         show(FakeCore())
         compose.onNodeWithText(str(R.string.key_missing)).assertDoesNotExist()
         compose.openHostAddForm()
-        compose.onNodeWithTag("missing-key-settings").performScrollTo().performClick()
-        compose.onNodeWithText(str(R.string.key_create_button)).performClick()
-        compose.onNodeWithText(FakeCore.PUBLIC_KEY).assertExists()
+        compose.onNodeWithText(str(R.string.key_create_button)).performScrollTo().performClick()
+        compose.onNodeWithText(str(R.string.host_add_address)).assertExists()
+        compose.onNodeWithTag("settings-keys").assertDoesNotExist()
     }
 
-    @Test fun missingKeyAtConnectLinksToKeySettings() {
-        show(FakeCore().apply {
+    @Test fun missingKeyAtConnectCreatesInlineAndOffersReconnect() {
+        val core = FakeCore().apply {
             addHost("box", Endpoint.Ssh("box.example", 22u, "me"))
             failWith = CoreException.NoKey()
-        })
+        }
+        show(core)
         compose.onNodeWithText("box").performClick()
-        compose.onNodeWithTag("missing-key-settings").performClick()
         compose.onNodeWithText(str(R.string.key_create_button)).performClick()
-        compose.onNodeWithText(FakeCore.PUBLIC_KEY).assertExists()
+        compose.onNodeWithTag("missing-key-connect").assertExists()
+        core.failWith = null
+        compose.onNodeWithTag("missing-key-connect").performClick()
+        compose.onNodeWithTag("browse-host-settings:h1").assertExists()
     }
 
     @Test fun aLateBeaconResultCannotReplaceAnotherHostsSettings() {

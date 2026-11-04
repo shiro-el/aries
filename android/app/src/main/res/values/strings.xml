@@ -207,6 +207,21 @@
     <string name="whats_new_title">What’s New · %1$s</string>
     <string name="whats_new_body">This release adds a three-step getting started guide, bundled release notes and an app update banner. Find the guide, release notes and update feed in Settings.</string>
 
+    <!-- First connection guide (195) -->
+    <string name="onboarding_welcome_title">Connect your first Host</string>
+    <string name="onboarding_welcome_body">Connect to a Host running herdr-core to see its Agents. Choose how to register it; Aries will help you prepare an SSH key.</string>
+    <string name="onboarding_qr_button">Connect with QR</string>
+    <string name="onboarding_manual_button">Connect manually</string>
+    <string name="onboarding_connect_body">Add or select a Host, confirm its Host key, then connect. Beacon setup follows a successful connection.</string>
+    <string name="onboarding_key_body">Create an SSH key for this phone, or import a key already authorized on your Host. Your selected connection method will continue here.</string>
+    <string name="onboarding_qr_body">On your Host, run aries-beacon pair-qr --address ADDRESS. Use an address reachable from this phone, then scan the QR. The QR installs your public key and registers the Host.</string>
+    <string name="onboarding_manual_key_body">Authorize this public key in ~/.ssh/authorized_keys on the Host before connecting. You can also register the Host and install the key with a one-time password below.</string>
+    <string name="onboarding_connected">Connected to %1$s</string>
+    <string name="onboarding_beacon_body">Beacon enables Chat, Calls and push notifications on this Host. Install it here, then allow notifications and enable push to send a test notification. You can finish now and return in Host settings.</string>
+    <string name="onboarding_hosts_button">Choose a saved Host</string>
+    <string name="onboarding_continue_button">Connect to Host</string>
+    <string name="agents_empty_hosts_button">Open Hosts to start an Agent</string>
+
     <string name="onboarding_title">Get started · %1$d of 3</string>
     <string name="onboarding_host_title">Add a Host</string>
     <string name="onboarding_beacon_title">Install Beacon</string>
@@ -323,6 +338,7 @@
     <string name="cancel_button">Cancel</string>
     <string name="back_button">Back</string>
 
+    <string name="hosts_connect_button">Connect</string>
     <string name="hosts_title">Hosts</string>
     <string name="hosts_empty">No Hosts yet. Add one below.</string>
 
@@ -435,6 +451,8 @@
     <string name="terminal_exited_code">The program exited with code %1$d.</string>
     <string name="terminal_exited_signal">The program was stopped by signal %1$s.</string>
     <string name="terminal_exited_reason">The program ended (%1$s).</string>
+    <string name="terminal_accessibility_summary">Terminal, %1$d columns, %2$d rows</string>
+    <string name="terminal_accessibility_cursor">Cursor line %1$d: %2$s</string>
     <string name="terminal_connection_closed">The connection to the Terminal closed. What you see may be out of date.</string>
     <string name="reconnecting">Connecting… Retrying automatically.</string>
     <string name="terminal_scrolled_back">%1$d lines back</string>
@@ -458,6 +476,12 @@
     <string name="terminal_search_invalid">Invalid search pattern or query too long</string>
 
     <string name="agents_button">All Agents</string>
+    <!-- Waiting Agent flow (194). -->
+    <string name="agents_loading_hosts">Connecting to %1$d Hosts…</string>
+    <string name="agents_waiting_unknown">Waiting · —</string>
+    <string name="agents_waiting_partial">%1$d+ waiting</string>
+    <string name="agents_next_waiting">Next waiting Agent: %1$s · %2$s</string>
+
     <string name="agents_title">Agents</string>
     <string name="agents_empty">No Agents are running on your Hosts.</string>
     <string name="agents_no_hosts">Add a Host first.</string>
@@ -527,6 +551,28 @@
     <string name="chat_thinking">Thinking</string>
     <string name="chat_tool_running">running</string>
     <string name="chat_tool_failed">failed</string>
+    <!-- Agent usage and context (193) -->
+    <string name="usage_title">Usage &amp; limits</string>
+    <string name="usage_source">Last readings recorded by this Agent. Account limits may be shared with other Agents. Readings can be stale; times are shown in your local time zone.</string>
+    <string name="usage_context_title">Last recorded context</string>
+    <string name="usage_context_unavailable">Context: Data unavailable</string>
+    <string name="usage_context_remaining">Context: %1$s%% left</string>
+    <string name="usage_context_tokens">%1$s / %2$s context tokens used</string>
+    <string name="usage_account_title">Account limits</string>
+    <string name="usage_limits_unavailable">Account limits: Data unavailable</string>
+    <string name="usage_unavailable">Data unavailable</string>
+    <string name="usage_used">%1$s%% used</string>
+    <string name="usage_used_unknown">Used: Data unavailable</string>
+    <string name="usage_resets">Resets: %1$s</string>
+    <string name="usage_updated">Recorded: %1$s</string>
+    <string name="usage_five_hours">5-hour limit</string>
+    <string name="usage_seven_days">7-day limit</string>
+    <string name="usage_week_opus">Opus · 7-day limit</string>
+    <string name="usage_week_sonnet">Sonnet · 7-day limit</string>
+    <string name="usage_window">%1$s-minute limit</string>
+    <string name="usage_window_unknown">Window: Data unavailable</string>
+    <string name="usage_close">Close</string>
+
     <!-- Chat tool details and response metadata -->
     <string name="chat_details_expanded">Expanded</string>
     <string name="chat_details_collapsed">Collapsed</string>
@@ -620,6 +666,7 @@
 
     <string name="chat_input_label">Message to the Agent</string>
     <string name="chat_send_button">Send</string>
+    <string name="chat_sent">Message sent</string>
     <string name="chat_sending">Sending…</string>
     <string name="chat_send_held">Someone is typing in this Terminal. The message goes in once they pause.</string>
     <string name="chat_send_refused">Not sent: the Agent is Blocked and waits for you in the Terminal.</string>

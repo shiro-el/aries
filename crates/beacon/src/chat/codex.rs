@@ -197,6 +197,7 @@ fn is_uuid(s: &str) -> bool {
 /// `UserMessage` item.
 #[derive(Default)]
 pub struct CodexInterpreter {
+    usage: aries_protocol::chat::AgentUsage,
     calls: HashMap<String, ChatItem>,
     /// The `exec` call whose output has not come yet.
     open_exec: Option<String>,
@@ -219,7 +220,8 @@ impl Interpreter for CodexInterpreter {
         };
         let ts = record["timestamp"].as_str().map(str::to_owned);
         let payload = &record["payload"];
-        match record["type"].as_str() {
+        let usage = super::usage::codex(&mut self.usage, &record);
+        let mut events = match record["type"].as_str() {
             Some("turn_context") => {
                 self.model = super::details::text(&payload["model"]);
                 Vec::new()
@@ -228,7 +230,9 @@ impl Interpreter for CodexInterpreter {
             Some("response_item") => self.response_item(payload, ts),
             Some("event_msg") => self.event(payload, ts),
             _ => Vec::new(),
-        }
+        };
+        events.extend(usage);
+        events
     }
 }
 

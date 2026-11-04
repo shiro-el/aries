@@ -42,7 +42,10 @@ class AppGuidanceState(
         showWhatsNew = false
     }
 
-    fun openOnboarding() { onboardingStep = 0 }
+    fun openOnboarding() {
+        preferences.edit().putBoolean("onboarding_complete", false).putInt("onboarding_step", 0).apply()
+        onboardingStep = 0
+    }
 
     var updateUrl by mutableStateOf(preferences.getString("update_url", DEFAULT_APP_UPDATE_URL) ?: DEFAULT_APP_UPDATE_URL)
         private set
