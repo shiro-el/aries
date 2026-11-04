@@ -72,6 +72,55 @@ class LocalhostPreviewTest {
         compose.runOnIdle { assertNull(preview.selected) }
     }
 
+    // Regression: reconnecting must preserve an in-progress capture and the user's note.
+    @Test fun reconnectKeepsCaptureEditorAndNote() {
+        val conn = object : HostConnection(NoHandle) {
+            override suspend fun disconnect() {}
+            override suspend fun openPreview(port: UShort) = object : PreviewForward(NoHandle) {
+                override fun url() = "http://127.0.0.1:49152/"
+                override suspend fun stop() {}
+            }
+        }
+        val host = FakeCore().addHost("fixture", Endpoint.Ssh("host", 22u, "me"))
+        val link = HostLink(host, conn, CoroutineScope(Dispatchers.Main), { conn })
+        val preview = LocalhostPreview().apply { selected = 5173u }
+        var generation by mutableIntStateOf(0)
+        compose.setContent { generation; MaterialTheme { LocalhostPreviewBrowser(preview, link, Modifier.fillMaxSize(), onAttachCapture = { _, _ -> true }) } }
+        compose.waitForIdle()
+        compose.onNodeWithText("Capture").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { click ->
+            val web = findWebView(compose.activity.window.decorView)!!
+            web.right = web.left + web.measuredWidth
+            web.bottom = web.top + web.measuredHeight
+            click()
+        }
+        compose.onNodeWithText("Short note").performTextInput("Keep my note")
+        compose.runOnIdle { link.pause(); generation++ }
+        compose.onNodeWithText("Keep my note").assertExists()
+        compose.runOnIdle { link.resume() }
+        compose.onNodeWithText("Keep my note").assertExists()
+    }
+
+    // Regression: stopped candidates must disappear and later servers must be found without new output.
+    @Test fun portCandidatesRefreshOnOpenAndWhileVisible() {
+        var listening = listOf<UShort>(5173u)
+        val conn = object : HostConnection(NoHandle) {
+            override suspend fun previewListeningPorts() = listening
+        }
+        val host = FakeCore().addHost("fixture", Endpoint.Ssh("host", 22u, "me"))
+        val link = HostLink(host, conn, CoroutineScope(Dispatchers.Main), { conn })
+        lateinit var preview: LocalhostPreview
+        compose.setContent { MaterialTheme {
+            preview = rememberLocalhostPreview(link, "", "t1")
+            PreviewChips(preview)
+        } }
+        compose.runOnIdle { assertEquals(listOf<UShort>(5173u), preview.ports); listening = listOf(3000u); preview.selected = 5173u }
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals(listOf<UShort>(3000u), preview.ports); listening = listOf(8080u) }
+        compose.mainClock.advanceTimeBy(30_100)
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals(listOf<UShort>(8080u), preview.ports) }
+    }
+
     private fun findWebView(view: android.view.View): android.webkit.WebView? {
         if (view is android.webkit.WebView) return view
         if (view is android.view.ViewGroup) for (i in 0 until view.childCount) {
@@ -227,6 +276,8 @@ class LocalhostPreviewTest {
         compose.waitUntil { closed == 1 }
         compose.runOnIdle { owner.registry.currentState = Lifecycle.State.RESUMED }
         compose.waitUntil { opened == 2 }
+        // Regression: STOP/START must retain the WebView object and its page state.
+        compose.runOnIdle { assertSame(web, findWebView(compose.activity.window.decorView)) }
         compose.runOnIdle { visible = false }
         compose.waitForIdle()
         compose.waitUntil { closed == 2 }

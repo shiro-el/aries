@@ -14,6 +14,7 @@ import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performClick
@@ -50,6 +51,176 @@ class RemoteFilesTest {
         }
     }
 
+    // Regression: delayed git status must not block browsing or opening files.
+    @Test fun filesRemainUsableWhileGitIsPending() {
+        val git = kotlinx.coroutines.CompletableDeferred<GitChanges>()
+        val conn = object : HostConnection(NoHandle) {
+            override suspend fun gitChanges(address: String) = git.await()
+            override suspend fun listFiles(address: String, path: String?) =
+                RemoteDirectory("/repo", listOf(RemoteFileEntry("a.txt", false)))
+            override suspend fun readFilePage(address: String, path: String, offset: ULong, limit: UInt) =
+                RemoteFilePage("ready before git", 1u, 1u, 1u)
+        }
+        compose.setContent { MaterialTheme { RemoteFilesScreen(conn, "t1", {}) } }
+        compose.onNodeWithText("a.txt").performClick()
+        compose.onNodeWithText("ready before git").assertExists()
+        compose.runOnIdle { git.complete(GitChanges("/repo", emptyList(), false, false)) }
+    }
+
+    // Regression: inline retry must recover when the Host changes a file's line count.
+    @Test fun inlineRefreshReloadsTheFileAfterItsLineCountChanges() {
+        var total = 500uL
+        val conn = object : HostConnection(NoHandle) {
+            override suspend fun readFilePage(address: String, path: String, offset: ULong, limit: UInt): RemoteFilePage {
+                val last = minOf(total, offset + limit - 1u)
+                return RemoteFilePage((offset..last).joinToString("\n") { "line $it" }, offset, last, total)
+            }
+        }
+        compose.setContent { MaterialTheme { RemoteFilesScreen(conn, "t1", {}, initialLocation = FileLocation("/a.txt")) } }
+        compose.onNodeWithText("line 1").assertExists()
+        compose.runOnIdle { total = 600uL }
+        compose.onNodeWithTag("files-lines").performScrollToIndex(400)
+        screenshot("file-changed-refresh")
+        compose.onNodeWithText(str(R.string.files_refresh_button)).performClick()
+        compose.onNodeWithText("line 1").assertExists()
+        compose.onNodeWithTag("files-lines").performScrollToIndex(599)
+        compose.onNodeWithText("line 600").assertExists()
+    }
+
+    // Regression: opening a file must preserve the expanded tree and scroll on Back without another listing.
+    @Test fun backFromFileRestoresExpandedTreeAndScroll() {
+        var listings = 0
+        val conn = object : HostConnection(NoHandle) {
+            override suspend fun listFiles(address: String, path: String?): RemoteDirectory {
+                listings++
+                return if (path == null) RemoteDirectory("/repo", listOf(RemoteFileEntry("src", true)))
+                else RemoteDirectory(path, (1..50).map { RemoteFileEntry("file-$it.txt", false) })
+            }
+            override suspend fun readFilePage(address: String, path: String, offset: ULong, limit: UInt) =
+                RemoteFilePage("source", 1u, 1u, 1u)
+        }
+        compose.setContent { MaterialTheme { RemoteFilesScreen(conn, "t1", {}) } }
+        compose.onNodeWithText("src/").performClick()
+        compose.onNodeWithTag("files-tree").performScrollToIndex(35)
+        compose.onNodeWithText("file-33.txt").performClick()
+        compose.onNodeWithTag("files-back").performClick()
+        compose.onNodeWithText("file-33.txt").assertExists()
+        compose.runOnIdle { assertEquals(2, listings) }
+        screenshot("tree-restored")
+    }
+
+    // Regression: Up then Back must return to the project instead of walking toward /.
+    @Test fun backAfterParentEntryReturnsToThePreviouslyVisitedFolder() {
+        val conn = object : HostConnection(NoHandle) {
+            override suspend fun listFiles(address: String, path: String?) =
+                RemoteDirectory(path ?: "/home/me/repo", listOf(RemoteFileEntry(if (path == null) "project.txt" else "parent.txt", false)))
+        }
+        var closed = false
+        compose.setContent { MaterialTheme { RemoteFilesScreen(conn, "t1", { closed = true }) } }
+        compose.onNodeWithText("..").performClick()
+        compose.onNodeWithText("parent.txt").assertExists()
+        compose.onNodeWithTag("files-back").performClick()
+        compose.onNodeWithText("project.txt").assertExists()
+        compose.onNodeWithTag("files-back").performClick()
+        compose.runOnIdle { assertEquals(true, closed) }
+    }
+
+    // Regression: search must start at the viewport and reuse scanned ranges when stepping backwards.
+    @Test fun findStartsAtTheVisibleLineAndReusesItsIndex() {
+        val reads = mutableListOf<ULong>()
+        val conn = object : HostConnection(NoHandle) {
+            override suspend fun readFilePage(address: String, path: String, offset: ULong, limit: UInt): RemoteFilePage {
+                reads += offset
+                val last = minOf(1200uL, offset + limit - 1u)
+                return RemoteFilePage((offset..last).joinToString("\n") {
+                    if (it in listOf(750uL, 900uL)) "needle $it" else "line $it"
+                }, offset, last, 1200u)
+            }
+        }
+        compose.setContent { MaterialTheme { RemoteFilesScreen(conn, "t1", {}, initialLocation = FileLocation("/a.txt", 700u)) } }
+        compose.onNodeWithText("line 700").assertExists()
+        compose.onNodeWithText(str(R.string.files_find_hint)).performTextInput("needle")
+        compose.waitUntil(5000) { compose.onAllNodesWithText("needle 750").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription(str(R.string.files_find_next)).performClick()
+        compose.waitUntil(5000) { compose.onAllNodesWithText("needle 900").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription(str(R.string.files_find_previous)).performClick()
+        compose.waitUntil(5000) { compose.onAllNodesWithText("needle 750").fetchSemanticsNodes().isNotEmpty() }
+        compose.runOnIdle { org.junit.Assert.assertTrue(reads.all { it >= 700uL }) }
+    }
+
+    // Regression: extending an absent query must not reread the whole Host file on every keystroke.
+    @Test fun refiningAMissingQueryReusesAlreadyScannedRanges() {
+        var reads = 0
+        val conn = object : HostConnection(NoHandle) {
+            override suspend fun readFilePage(address: String, path: String, offset: ULong, limit: UInt): RemoteFilePage {
+                reads++
+                val last = minOf(4000uL, offset + limit - 1u)
+                return RemoteFilePage((offset..last).joinToString("\n") { "line $it" }, offset, last, 4000u)
+            }
+        }
+        compose.setContent { MaterialTheme { RemoteFilesScreen(conn, "t1", {}, initialLocation = FileLocation("/a.txt")) } }
+        compose.onNodeWithText(str(R.string.files_find_hint)).performTextInput("absent")
+        compose.waitUntil(5000) { compose.onAllNodesWithText(str(R.string.files_find_no_matches)).fetchSemanticsNodes().isNotEmpty() }
+        val scanned = compose.runOnIdle { reads }
+        compose.onNodeWithText(str(R.string.files_find_hint)).performTextInput("More")
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(300)
+        compose.waitUntil(5000) { compose.onAllNodesWithText(str(R.string.files_find_no_matches)).fetchSemanticsNodes().isNotEmpty() }
+        compose.runOnIdle { assertEquals(scanned, reads) }
+    }
+
+    // Regression: comments spanning a page boundary must not turn into executable-looking code.
+    @Test fun blockCommentHighlightContinuesAcrossPageBoundary() {
+        val conn = object : HostConnection(NoHandle) {
+            override suspend fun readFilePage(address: String, path: String, offset: ULong, limit: UInt): RemoteFilePage {
+                val last = minOf(400uL, offset + limit - 1u)
+                return RemoteFilePage((offset..last).joinToString("\n") {
+                    when (it) { 1uL -> "/*"; 201uL -> "val hidden = 1"; 202uL -> "*/"; else -> "comment" }
+                }, offset, last, 400u)
+            }
+        }
+        lateinit var colors: androidx.compose.material3.ColorScheme
+        compose.setContent { MaterialTheme { colors = MaterialTheme.colorScheme; RemoteFilesScreen(conn, "t1", {}, initialLocation = FileLocation("/a.kt")) } }
+        compose.onNodeWithText("1", substring = false).assertExists()
+        compose.onNodeWithTag("files-lines").performScrollToIndex(200)
+        val results = mutableListOf<TextLayoutResult>()
+        compose.onNodeWithText("val hidden = 1").performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
+        org.junit.Assert.assertEquals(colors.onSurfaceVariant, results.single().layoutInput.text.spanStyles.first().item.color)
+    }
+
+    // Regression: Files must observe connection replacement while its dialog stays open, without a null-connection error.
+    @Test fun openFilesRecoversAfterTheHostReconnects() {
+        val core = FakeCore().apply {
+            terminals = listOf(TerminalInfo("t1", "agent", "", listOf("codex"), "/repo", "live", AgentStatus.Idle))
+            savedView = AgentView.CHAT
+            addHost("home", Endpoint.Ssh("example.invalid", 22u, "me"))
+        }
+        lateinit var model: HostsModel
+        compose.setContent {
+            val scope = androidx.compose.runtime.rememberCoroutineScope()
+            model = androidx.compose.runtime.remember { HostsModel(core, scope) }
+            AriesApp(model)
+        }
+        compose.onNodeWithText("home").performClick()
+        compose.onNodeWithText("agent").performClick()
+        core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        val original = core.connection!!
+        original.fileDirectory = RemoteDirectory("/repo", listOf(RemoteFileEntry("before.txt", false)))
+        compose.onNodeWithTag("agent-actions").performClick()
+        compose.onNodeWithTag("files-open").performClick()
+        compose.onNodeWithText("before.txt").assertExists()
+        val link = compose.runOnIdle { (model.screen as Screen.Chat).chat.link!! }
+        compose.runOnIdle { link.pause() }
+        compose.mainClock.advanceTimeBy(1_600)
+        compose.onNodeWithText("Required value was null.", substring = true).assertDoesNotExist()
+        screenshot("files-reconnecting")
+        compose.runOnIdle { link.resume() }
+        compose.onNodeWithText(str(R.string.files_empty_folder)).assertExists()
+        compose.onNodeWithText("before.txt").assertDoesNotExist()
+        compose.runOnIdle { org.junit.Assert.assertNotSame(original, core.connection) }
+    }
+
     @Test fun parentEntryBrowsesAboveTheStartingFolderToTheHostRoot() {
         val requests = mutableListOf<String?>()
         val conn = object : HostConnection(NoHandle) {
@@ -78,7 +249,7 @@ class RemoteFilesTest {
         screenshot("root")
     }
 
-    @Test fun toolbarAndSystemBackClimbFoldersAndCloseAtTheStartingFolder() {
+    @Test fun toolbarAndSystemBackReturnThroughVisitedFoldersThenClose() {
         val requests = mutableListOf<String?>()
         val conn = object : HostConnection(NoHandle) {
             override suspend fun gitChanges(address: String) = GitChanges("/repo", emptyList(), false, true)
@@ -107,9 +278,8 @@ class RemoteFilesTest {
         compose.runOnIdle { assertEquals("/repo/src/deep", requests.last()) }
         screenshot("nested-folder")
         compose.onNodeWithTag("files-back").performClick()
-        compose.runOnIdle { assertEquals("/repo/src", requests.last()); assertEquals(0, closed) }
-        compose.runOnIdle { back.onBackPressed() }
-        compose.runOnIdle { assertEquals("/repo", requests.last()); assertEquals(0, closed) }
+        compose.onNodeWithText("src/").assertExists()
+        compose.runOnIdle { assertEquals(0, closed) }
         compose.runOnIdle { back.onBackPressed() }
         compose.runOnIdle { assertEquals(1, closed) }
     }
@@ -193,14 +363,16 @@ class RemoteFilesTest {
             return results.single().lineCount
         }
         assertEquals(1, lineCount(diffLine))
-        assertEquals(emptyList<ULong>(), reads)
+        // Source can load immediately while Git status resolves.
+        val readsBeforeFullFile = reads.size
         screenshot("wrap-diff-off")
         compose.onNodeWithContentDescription(str(R.string.files_wrap_lines)).performClick()
         compose.waitUntil(5000) { lineCount(diffLine) > 1 }
         screenshot("wrap-diff-on")
         compose.onNodeWithContentDescription("Full file").performClick()
         compose.waitUntil(5000) { lineCount(sourceLine) > 1 }
-        assertEquals(listOf(415uL), reads)
+        assertEquals(415uL, reads.last())
+        assertEquals(readsBeforeFullFile + 1, reads.size)
         compose.onNodeWithContentDescription("Diff").performClick()
         compose.onNodeWithText(str(R.string.git_staged)).performClick()
         compose.waitUntil(5000) { lineCount(diffLine) > 1 }
@@ -397,7 +569,7 @@ class RemoteFilesTest {
         }
         found("val needle = 415")
         compose.onNodeWithTag("files-line:415").assertExists()
-        compose.onNodeWithContentDescription(str(R.string.files_find_next)).performClick()
+        compose.onNodeWithText(str(R.string.files_find_hint)).performImeAction()
         found("val needle = 1001")
         compose.onNodeWithContentDescription(str(R.string.files_find_next)).performClick()
         found("val needle = 415")
