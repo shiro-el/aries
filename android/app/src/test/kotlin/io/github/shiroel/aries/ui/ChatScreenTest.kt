@@ -61,12 +61,13 @@ class ChatScreenTest {
         ),
     )
 
-    private fun openChat(core: FakeCore, asking: Boolean = false) {
+    private fun openChat(core: FakeCore, asking: Boolean = false): HostsModel {
         core.terminals = listOf(if (asking) claude.copy(agentStatus = AgentStatus.Blocked(io.github.shiroel.aries.core.BlockedReason.QUESTION, null)) else claude, vim)
         core.addHost("home", Endpoint.Ssh("10.0.0.2", 22u, "me"))
+        lateinit var model: HostsModel
         compose.setContent {
             val scope = rememberCoroutineScope()
-            val model = remember { HostsModel(core, scope) }
+            model = remember { HostsModel(core, scope) }
             MaterialTheme { AriesApp(model) }
         }
         compose.onNodeWithText("home").performClick()
@@ -75,6 +76,7 @@ class ChatScreenTest {
         compose.waitForIdle()
         compose.onNodeWithContentDescription(str(R.string.agent_switch_chat_label)).performClick()
         compose.waitForIdle()
+        return model
     }
 
     @Test
@@ -171,9 +173,10 @@ class ChatScreenTest {
         compose.waitForIdle()
         compose.onNodeWithText("File created successfully").assertExists()
         compose.onNodeWithText(write.body.let { (it as ChatEntryBody.Tool).input }).assertDoesNotExist()
-        compose.onNodeWithText(str(R.string.chat_tool_raw_input)).performClick()
+        // Expanded tools can move this disclosure outside the small viewport.
+        compose.onNodeWithText(str(R.string.chat_tool_raw_input)).performScrollTo().assertIsDisplayed().performClick()
         compose.onNodeWithText(write.body.let { (it as ChatEntryBody.Tool).input }).assertExists()
-        compose.onNodeWithText(str(R.string.chat_tool_raw_input)).performClick()
+        compose.onNodeWithText(str(R.string.chat_tool_raw_input)).performScrollTo().assertIsDisplayed().performClick()
         compose.onNodeWithText(write.body.let { (it as ChatEntryBody.Tool).input }).assertDoesNotExist()
 
         compose.onNodeWithContentDescription(str(R.string.chat_tool_expand_label, "Write")).performClick()
@@ -311,13 +314,28 @@ class ChatScreenTest {
     @Test
     fun showsWhyThereIsNoChatAndWhatANewerBeaconSent() {
         val core = FakeCore()
-        openChat(core)
+        val model = openChat(core)
         core.pushChat(
             ChatSnapshot(listOf(entry("q", ChatEntryBody.Unsupported)), ChatStatus.RECONNECTING, null),
         )
         compose.waitForIdle()
         compose.onNodeWithText(str(R.string.chat_unsupported)).assertExists()
-        compose.onNodeWithText(str(R.string.chat_status_reconnecting)).assertExists()
+        // Chat has its own stream: it can reconnect while the Host link is Up.
+        compose.onNodeWithText(str(R.string.reconnecting)).assertExists()
+        compose.onNodeWithText(str(R.string.connect_retry_button)).assertExists()
+        compose.onNodeWithText(str(R.string.connect_settings_button)).assertExists()
+
+        // Losing the Host as well must still show one shared recovery notice.
+        core.failWith = CoreException.Unreachable("network is unreachable")
+        compose.runOnIdle { model.networkChanged() }
+        compose.onNodeWithText(str(R.string.reconnecting)).assertExists()
+        core.failWith = null
+        compose.onNodeWithText(str(R.string.connect_retry_button)).performClick()
+        core.pushChat(ChatSnapshot(listOf(entry("q", ChatEntryBody.Unsupported)), ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.chat_unsupported)).assertExists()
+        compose.onNodeWithText(str(R.string.reconnecting)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.connect_retry_button)).assertDoesNotExist()
 
         core.pushChat(ChatSnapshot(emptyList(), ChatStatus.NO_BEACON, null))
         compose.waitForIdle()

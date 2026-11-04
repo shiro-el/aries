@@ -191,6 +191,10 @@ class QuickOpenScreenTest {
         compose.onNodeWithTag("quick-open-query").performTextReplacement("Aries")
         result("Aries").performClick()
         compose.onNodeWithText(str(R.string.cancel_button)).performClick()
+        compose.runOnIdle {
+            assertTrue("Cancelling initial Host trust returns to Hosts", model.screen is Screen.Hosts)
+            assertNull(model.prompt)
+        }
         core.requireTrust = null
         compose.onNodeWithText("home").performClick()
         compose.waitForIdle()

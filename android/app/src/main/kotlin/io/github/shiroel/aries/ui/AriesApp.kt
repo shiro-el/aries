@@ -2,6 +2,7 @@ package io.github.shiroel.aries.ui
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -88,7 +89,7 @@ private fun rememberThemeSettings(): ThemeSettings {
 
 @Composable
 private fun AriesContent(model: HostsModel, settings: ThemeSettings, terminalDisplay: TerminalDisplaySettings) {
-    val activity = LocalContext.current as? android.app.Activity
+    val activity = LocalActivity.current
     // Screen connections and the Call banner follow the visible lifecycle.
     LifecycleStartEffect(model) {
         model.resumeScreens()
