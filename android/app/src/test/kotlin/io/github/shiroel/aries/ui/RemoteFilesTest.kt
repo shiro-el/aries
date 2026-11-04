@@ -10,6 +10,8 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performTextInput
@@ -159,6 +161,8 @@ class RemoteFilesTest {
 
     }
     @Test fun changedFileLinkStartsWithDiffAndFullFileKeepsTheLinkedLine() {
+        val diffLine = "+updated " + "long comment ".repeat(20)
+        val sourceLine = "full source // " + "long comment ".repeat(20)
         val reads = mutableListOf<ULong>()
         val diffs = mutableListOf<Triple<String, String, GitDiffKind>>()
         val conn = object : HostConnection(NoHandle) {
@@ -167,27 +171,39 @@ class RemoteFilesTest {
             override suspend fun gitDiff(address: String, cwd: String, path: String, kind: GitDiffKind): GitDiff {
                 assertEquals("box/t7", address)
                 diffs += Triple(cwd, path, kind)
-                return GitDiff(listOf(GitDiffLine("+updated", null, 415u)), false, false)
+                return GitDiff(listOf(GitDiffLine(diffLine, null, 415u)), false, false)
             }
             override suspend fun readFilePage(address: String, path: String, offset: ULong, limit: UInt): RemoteFilePage {
                 assertEquals("box/t7", address)
                 assertEquals("/repo/src/Main.kt", path)
                 reads += offset
                 val last = minOf(800uL, offset + limit - 1u)
-                return RemoteFilePage((offset..last).joinToString("\n") { if (it == 415uL) "full source" else "line $it" }, offset, last, 800u)
+                return RemoteFilePage((offset..last).joinToString("\n") { if (it == 415uL) sourceLine else "line $it" }, offset, last, 800u)
             }
         }
         compose.setContent { MaterialTheme {
             RemoteFilesScreen(conn, "box/t7", {}, initialLocation = FileLocation("/repo/src/Main.kt", 415u))
         } }
-        compose.onNodeWithText("+updated").assertExists()
+        fun lineCount(text: String): Int {
+            val results = mutableListOf<TextLayoutResult>()
+            compose.onNodeWithText(text, useUnmergedTree = true)
+                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
+            return results.single().lineCount
+        }
+        assertEquals(1, lineCount(diffLine))
         assertEquals(emptyList<ULong>(), reads)
+        screenshot("wrap-diff-off")
+        compose.onNodeWithContentDescription(str(R.string.files_wrap_lines)).performClick()
+        compose.waitUntil(5000) { lineCount(diffLine) > 1 }
+        screenshot("wrap-diff-on")
         compose.onNodeWithContentDescription("Full file").performClick()
-        compose.onNodeWithText("full source").assertExists()
+        compose.waitUntil(5000) { lineCount(sourceLine) > 1 }
         assertEquals(listOf(415uL), reads)
         compose.onNodeWithContentDescription("Diff").performClick()
         compose.onNodeWithText(str(R.string.git_staged)).performClick()
-        compose.onNodeWithText("+updated").assertExists()
+        compose.waitUntil(5000) { lineCount(diffLine) > 1 }
+        compose.onNodeWithContentDescription(str(R.string.files_wrap_lines)).assertIsOn().performClick()
+        compose.waitUntil(5000) { lineCount(diffLine) == 1 }
         assertEquals(Triple("/repo", "src/Main.kt", GitDiffKind.UNSTAGED), diffs.first())
         assertEquals(Triple("/repo", "src/Main.kt", GitDiffKind.STAGED), diffs.last())
     }
@@ -328,28 +344,36 @@ class RemoteFilesTest {
         compose.onNodeWithContentDescription(str(R.string.files_actions_label)).assertExists()
     }
 
-    @Test fun codeCanWrapWithoutChangingItsText() {
+    @Test fun toolbarWrapsCodeAndRestoresTheChoiceWhenTheViewerReopens() {
         val line = "val answer = 42 // " + "long comment ".repeat(20)
         val conn = object : HostConnection(NoHandle) {
             override suspend fun readFilePage(address: String, path: String, offset: ULong, limit: UInt) =
                 RemoteFilePage(line, 1u, 1u, 1u)
         }
-        compose.setContent { MaterialTheme { RemoteFilesScreen(conn, "t1", {}, initialLocation = FileLocation("/a.kt")) } }
+        var generation by androidx.compose.runtime.mutableIntStateOf(0)
+        compose.setContent { androidx.compose.runtime.key(generation) {
+            MaterialTheme { RemoteFilesScreen(conn, "t1", {}, initialLocation = FileLocation("/a.kt")) }
+        } }
         fun layout(): TextLayoutResult {
             val results = mutableListOf<TextLayoutResult>()
             compose.onNodeWithText(line).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
             return results.single()
         }
         assertEquals(1, layout().lineCount)
-        compose.onNodeWithContentDescription(str(R.string.files_actions_label)).performClick()
-        compose.onNodeWithText("Wrap lines").performSemanticsAction(SemanticsActions.OnClick) { it() }
-        compose.waitForIdle()
+        compose.onNodeWithContentDescription(str(R.string.files_wrap_lines)).assertIsOff()
+        screenshot("wrap-file-off")
+        compose.onNodeWithContentDescription(str(R.string.files_wrap_lines)).performClick()
         compose.waitUntil(5000) { layout().lineCount > 1 }
+        compose.onNodeWithContentDescription(str(R.string.files_wrap_lines)).assertIsOn()
         org.junit.Assert.assertTrue(layout().layoutInput.text.spanStyles.isNotEmpty())
-        compose.onNodeWithContentDescription(str(R.string.files_actions_label)).performClick()
-        compose.onNodeWithText("Wrap lines").performSemanticsAction(SemanticsActions.OnClick) { it() }
-        compose.waitForIdle()
+        screenshot("wrap-file-on")
+        compose.runOnIdle { generation++ }
+        compose.waitUntil(5000) { layout().lineCount > 1 }
+        compose.onNodeWithContentDescription(str(R.string.files_wrap_lines)).assertIsOn().performClick()
         compose.waitUntil(5000) { layout().lineCount == 1 }
+        compose.runOnIdle { generation++ }
+        compose.waitUntil(5000) { layout().lineCount == 1 }
+        compose.onNodeWithContentDescription(str(R.string.files_wrap_lines)).assertIsOff()
     }
 
     @Test fun findReachesUnloadedLinesAndWrapsAcrossTheWholeFile() {
