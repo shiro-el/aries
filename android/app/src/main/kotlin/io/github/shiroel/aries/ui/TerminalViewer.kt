@@ -410,6 +410,7 @@ fun TerminalScreen(
     onView: ((AgentView) -> Unit)? = null,
     displaySettings: TerminalDisplaySettings = rememberTerminalDisplaySettings(),
     onSelectionSend: ((String) -> Unit)? = null,
+    onPreviewCapture: ((SharedContent, () -> Unit) -> Boolean)? = null,
 ) {
     val preview = rememberLocalhostPreview(viewer.link, viewer.version.let { viewer.text() }, viewer.terminal.address)
     var searching by remember(viewer) { mutableStateOf(false) }
@@ -421,7 +422,9 @@ fun TerminalScreen(
             preview = preview, link = viewer.link, onTerminalUpdate = { viewer.update(listOf(it)) }, onSearch = { searching = true })
         PreviewChips(preview)
         if (preview.selected != null) {
-            LocalhostPreviewBrowser(preview, viewer.link, Modifier.weight(1f).fillMaxWidth(), change = viewer.terminal.turn)
+            LocalhostPreviewBrowser(preview, viewer.link, Modifier.weight(1f).fillMaxWidth(), change = viewer.terminal.turn,
+                captureEnabled = viewer.terminal.state == "live",
+                onAttachCapture = onPreviewCapture.takeIf { viewer.terminal.agentStatus != null })
         } else {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(

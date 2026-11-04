@@ -89,6 +89,7 @@ private fun rememberThemeSettings(): ThemeSettings {
 @Composable
 private fun AriesContent(model: HostsModel, settings: ThemeSettings, terminalDisplay: TerminalDisplaySettings) {
     val activity = LocalContext.current as? android.app.Activity
+    val context = LocalContext.current.applicationContext
     // Screen connections and the Call banner follow the visible lifecycle.
     LifecycleStartEffect(model) {
         model.resumeScreens()
@@ -144,6 +145,7 @@ private fun AriesContent(model: HostsModel, settings: ThemeSettings, terminalDis
                                 onView = model::switchView.takeIf { s.viewer.terminal.agentStatus != null },
                                 displaySettings = terminalDisplay,
                                 onSelectionSend = model::sendTerminalSelectionToDraft,
+                                onPreviewCapture = { content, cleanup -> model.attachPreviewToChat(context, content, cleanup) },
                             )
                         }
                         is Screen.JumpHosts -> {

@@ -17,6 +17,20 @@
     <string name="preview_failed">Could not open the preview. Check the Host connection and development server.</string>
     <string name="preview_retry">Retry</string>
 
+    <!-- Preview capture and annotation -->
+    <string name="preview_capture_button">Capture</string>
+    <string name="preview_capture_title">Annotate preview</string>
+    <string name="preview_capture_canvas">Captured preview. Drag to draw with the selected tool.</string>
+    <string name="preview_capture_pen">Pen</string>
+    <string name="preview_capture_rectangle">Rectangle</string>
+    <string name="preview_capture_undo">Undo</string>
+    <string name="preview_capture_note">Short note</string>
+    <string name="preview_capture_attach">Add to Agent Chat</string>
+    <string name="preview_capture_preparing">Preparing…</string>
+    <string name="preview_capture_failed">Could not capture this preview. Wait for the page to load and try again.</string>
+    <string name="preview_capture_attach_failed">Could not add the capture. Check the Agent connection and try again.</string>
+    <string name="preview_capture_context">Preview: %1$s\nView mode: %2$s</string>
+
     <!-- Action menus -->
     <string name="menu_switch">Switch</string>
     <string name="menu_current">Current</string>
