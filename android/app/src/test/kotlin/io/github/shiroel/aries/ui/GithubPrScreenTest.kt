@@ -99,6 +99,10 @@ class GithubPrScreenTest {
         compose.onNodeWithText(str(R.string.github_pr_pending)).assertExists()
         screenshot("checks")
         tab("reviews")
+        // Markdown is parsed on Dispatchers.Default, outside Compose's idle synchronization.
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithText("Please fix parser").fetchSemanticsNodes().isNotEmpty()
+        }
         compose.onNodeWithText("Please fix parser").assertExists()
         screenshot("reviews")
         tab("conversation")

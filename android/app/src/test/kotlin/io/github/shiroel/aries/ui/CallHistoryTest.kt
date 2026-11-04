@@ -18,6 +18,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.hasTestTag
@@ -461,7 +462,8 @@ class CallHistoryTest {
         for ((index, urgency) in listOf(CallUrgency.CHECK, CallUrgency.URGENT, CallUrgency.EMERGENCY).withIndex()) {
             val fresh = call("h1", "c$index", "Attention $urgency", (index + 1).toULong(), urgency = urgency)
             compose.runOnIdle { core.sendCall(fresh) }
-            compose.onNodeWithText(fresh.title).assertExists()
+            // Urgent Calls also appear in the Host overview; verify the arrival banner itself.
+            compose.onNodeWithTag("call_banner").assertTextContains(fresh.title)
             screenshot("attention-${urgency.name.lowercase()}")
             compose.runOnIdle { core.callListeners.getValue("h1").onCalls(core.callsOf.getValue("h1")) }
             compose.waitForIdle()
@@ -473,7 +475,7 @@ class CallHistoryTest {
             core.sendCall(call("h1", "burst-1", "First request", 4uL))
             core.sendCall(call("h1", "burst-2", "Second request", 5uL))
         }
-        compose.onNodeWithText("Second request").assertExists()
+        compose.onNodeWithTag("call_banner").assertTextContains("Second request")
         assertEquals(5, haptics.size)
         compose.runOnIdle {
             core.callListeners.getValue("h1").onCalls(core.callsOf.getValue("h1").map {

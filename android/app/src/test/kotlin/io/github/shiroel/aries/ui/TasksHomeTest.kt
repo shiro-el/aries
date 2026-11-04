@@ -129,7 +129,8 @@ class TasksHomeTest {
         compose.onNodeWithTag("tasks-new-expand").performClick()
         compose.onNodeWithTag("new-task-prompt").performScrollTo().assertTextContains("Fix the queue")
         screenshot("fullscreen-new-task", "new-task-dialog")
-        compose.onNodeWithText(context.getString(R.string.cancel_button)).performClick()
+        compose.onNode(hasContentDescription(context.getString(R.string.back_button)) and
+            hasAnyAncestor(hasTestTag("new-task-dialog"))).performClick()
         compose.onNodeWithTag("tasks-new-prompt").assertTextContains("Fix the queue")
         compose.onNodeWithTag("tasks-new-start").performClick()
         compose.runOnIdle { core.push(core.terminals.map { it.copy(agentStatus = AgentStatus.Idle) }) }
