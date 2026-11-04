@@ -401,7 +401,16 @@ fun TerminalScreen(
         }
         val look = remember(viewer) { TerminalLook(viewer) }
         TerminalLookBar(viewer, look, onSelectionSend)
-        TerminalCanvas(viewer, look, displaySettings, Modifier.fillMaxWidth().weight(1f))
+        Box(Modifier.fillMaxWidth().weight(1f)) {
+            TerminalCanvas(viewer, look, displaySettings, Modifier.fillMaxSize())
+            if (viewer.scrolled > 0) {
+                LatestButton(
+                    description = stringResource(R.string.terminal_back_to_live),
+                    onClick = viewer::scrollToLive,
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp),
+                )
+            }
+        }
         if (viewer.typing) KeyBar(viewer)
         TerminalComposer(viewer)
     }
