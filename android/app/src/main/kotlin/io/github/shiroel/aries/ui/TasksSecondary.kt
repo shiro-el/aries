@@ -119,49 +119,90 @@ internal fun TasksHostContent(model: HostsModel, browser: HostBrowser, hostSecti
     }
 }
 
-/** Tools pin the selected Terminal for the duration of a panel; no new connection or task. */
+/** The HostBrowser survives Activity recreation; no connection, WebView or tunnel is retained here. */
+internal class TasksHostToolsState {
+    var tool by mutableStateOf<String?>(null)
+    var terminal by mutableStateOf<TerminalInfo?>(null)
+        private set
+    var files = RemoteFilesState()
+        private set
+    var preview = LocalhostPreview()
+        private set
+
+    fun open(id: String, target: TerminalInfo) {
+        terminal = target
+        files = RemoteFilesState().apply { folder = target.cwd?.takeIf(String::isNotBlank) }
+        preview = LocalhostPreview()
+        tool = id
+    }
+}
+
+/** Tools pin the displayed Terminal for the duration of a panel; no new connection or task. */
 @Composable
 private fun TasksHostTools(browser: HostBrowser) {
     val link = browser.link
     val pane = browser.tab?.let { tab -> tab.panes.find { it.id == browser.focusedPane(tab) } ?: tab.panes.firstOrNull() }
     val selected = pane?.terminalAddress?.let(browser::findTerminal) ?: browser.terminals.firstOrNull { !it.address.contains('/') }
-    var tool by remember(browser) { mutableStateOf<String?>(null) }
-    var terminal by remember(browser) { mutableStateOf<TerminalInfo?>(null) }
+    val state = browser.tools
+    var tool by state::tool
     val enabled = selected != null && link?.state == LinkState.Up && !browser.closed
-    Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        listOf(Triple("files", R.string.files_title, R.drawable.ic_folder),
-            Triple("github", R.string.github_button, R.drawable.file_type_git),
-            Triple("preview", R.string.preview_title, R.drawable.ic_browser_preview)).forEach { (id, label, icon) ->
-            Surface(onClick = { terminal = selected; tool = id },
-                enabled = enabled && (id != "preview" || link?.host?.endpoint is Endpoint.Ssh),
-                modifier = Modifier.weight(1f).testTag("tasks-host-$id"), shape = MaterialTheme.shapes.small,
-                color = MaterialTheme.colorScheme.surfaceContainer, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
-                Column(Modifier.padding(horizontal = 4.dp, vertical = 14.dp), horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(painterResource(icon), null, Modifier.size(22.dp))
-                    Text(stringResource(label), style = MaterialTheme.typography.labelLarge, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
+    val previewEnabled = link?.host?.endpoint is Endpoint.Ssh && selected?.address?.contains('/') == false
+    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        selected?.let {
+            Text(stringResource(R.string.tasks_host_tools_terminal, displayName(it), it.address),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(Triple("files", R.string.files_title, R.drawable.ic_folder),
+                Triple("github", R.string.github_button, R.drawable.file_type_git),
+                Triple("preview", R.string.preview_title, R.drawable.ic_browser_preview)).forEach { (id, label, icon) ->
+                Surface(onClick = { selected?.let { state.open(id, it) } },
+                    enabled = enabled && (if (id == "preview") previewEnabled else !selected?.cwd.isNullOrBlank()),
+                    modifier = Modifier.weight(1f).testTag("tasks-host-$id"), shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.surfaceContainer, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+                    Column(Modifier.padding(horizontal = 8.dp, vertical = 14.dp), horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(painterResource(icon), null, Modifier.size(22.dp))
+                        Text(stringResource(label), style = MaterialTheme.typography.labelLarge, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
+                        selected?.cwd?.takeIf(String::isNotBlank)?.let { folder ->
+                            Text(folder, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
                 }
             }
         }
+        val reasons = when {
+            selected == null -> listOf(R.string.tasks_host_tools_start_terminal)
+            !enabled -> listOf(R.string.error_connection)
+            else -> listOfNotNull(
+                R.string.tasks_host_tools_need_folder.takeIf { selected.cwd.isNullOrBlank() },
+                R.string.tasks_host_preview_direct_ssh.takeIf { !previewEnabled },
+            )
+        }
+        reasons.forEach { Text(stringResource(it), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
-    val target = terminal ?: return
+    val target = state.terminal ?: return
     if (tool == "github") GithubDialog(link, target) { tool = null }
     if (tool == "files") Dialog(onDismissRequest = { tool = null }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize()) {
             val connection = link?.connections?.collectAsState()?.value
-            RemoteFilesScreen(connection, target.address, onClose = { tool = null })
+            RemoteFilesScreen(connection, target.address, onClose = { tool = null }, navigation = state.files)
         }
     }
     if (tool == "preview") Dialog(onDismissRequest = { tool = null }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        val preview = rememberLocalhostPreview(link, "", target.address)
+        val preview = rememberLocalhostPreview(link, "", target.address, state.preview)
         Surface(Modifier.fillMaxSize()) {
-            Column {
+            Column(Modifier.safeDrawingPadding()) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(stringResource(R.string.preview_title), Modifier.weight(1f).padding(16.dp), style = MaterialTheme.typography.titleLarge)
+                    Column(Modifier.weight(1f).padding(16.dp)) {
+                        Text(stringResource(R.string.preview_title), style = MaterialTheme.typography.titleLarge)
+                        Text(target.cwd.orEmpty(), style = MaterialTheme.typography.bodySmall)
+                    }
                     ActionIcon(R.drawable.ic_x, R.string.preview_close, { tool = null })
                 }
                 HorizontalDivider()
-                if (preview.ports.isEmpty()) Text(stringResource(R.string.preview_no_servers), Modifier.padding(16.dp))
+                PreviewDiscoveryNotice(preview) { link?.retryNow(); preview.retryDiscovery() }
                 // Select a detected port explicitly; never open a guessed endpoint.
                 FlowRow(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     preview.ports.forEach { port ->

@@ -38,6 +38,7 @@ import io.github.shiroel.aries.core.TerminalInfo
  * the phone never moves the desktop.
  */
 class HostBrowser(val host: Host, private val onNavigate: () -> Unit = {}) {
+    internal val tools = TasksHostToolsState()
     var layoutEditor: LayoutEditor? = null
     var structure by mutableStateOf<HostStructure?>(null)
         private set

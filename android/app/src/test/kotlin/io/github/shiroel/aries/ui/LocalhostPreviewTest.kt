@@ -38,6 +38,68 @@ import org.robolectric.annotation.Config
 class LocalhostPreviewTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
+    // D117: delayed discovery errors must offer recovery, and Retry must run a fresh scan.
+    @Test fun hostDiscoveryDistinguishesPendingFailureAndSuccessfulEmptyScan() {
+        val scan = kotlinx.coroutines.CompletableDeferred<List<UShort>>()
+        var scans = 0
+        val conn = object : HostConnection(NoHandle) {
+            override suspend fun previewListeningPorts(): List<UShort> {
+                scans++
+                return if (scans == 1) scan.await() else emptyList()
+            }
+        }
+        val host = Host("h1", "home", Endpoint.Ssh("home.test", 22u, "me"), null)
+        val scope = CoroutineScope(Dispatchers.Main)
+        val browser = HostBrowser(host).apply {
+            link = HostLink(host, conn, scope, { conn })
+            updateTerminals(listOf(TerminalInfo("t1", "Build", "", listOf("sh"), "/repo", "live")))
+        }
+        compose.setContent { MaterialTheme { TasksHostContent(remember { HostsModel(FakeCore(), scope) }, browser) } }
+        compose.onNodeWithTag("tasks-host-preview").performClick()
+        val empty = compose.activity.getString(R.string.preview_no_servers)
+        compose.onNodeWithText(empty).assertDoesNotExist()
+        compose.runOnIdle { scan.completeExceptionally(CoreException.Closed()) }
+        compose.onNodeWithText(compose.activity.getString(R.string.error_connection)).assertExists()
+        compose.onNodeWithText(empty).assertDoesNotExist()
+        compose.onNodeWithText(compose.activity.getString(R.string.preview_retry)).performClick()
+        compose.onNodeWithText(empty).assertExists()
+        compose.runOnIdle { assertEquals(2, scans) }
+        scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
+    }
+
+    // D52: reopening the tunnel after rotation must restore the visited path and display mode.
+    @Test fun previewRecreationRestoresTheVisitedPathOnTheNewTunnel() {
+        var forwards = 0
+        val conn = object : HostConnection(NoHandle) {
+            override suspend fun openPreview(port: UShort) = object : PreviewForward(NoHandle) {
+                val origin = "http://127.0.0.1:${49152 + forwards++}/"
+                override fun url() = origin
+                override suspend fun stop() {}
+            }
+        }
+        val host = Host("h1", "home", Endpoint.Ssh("home.test", 22u, "me"), null)
+        val scope = CoroutineScope(Dispatchers.Main)
+        val link = HostLink(host, conn, scope, { conn })
+        val preview = LocalhostPreview().apply { selected = 5173u }
+        val restoration = androidx.compose.ui.test.junit4.StateRestorationTester(compose)
+        restoration.setContent { MaterialTheme { LocalhostPreviewBrowser(preview, link, Modifier.fillMaxSize()) } }
+        compose.onNodeWithText(compose.activity.getString(R.string.preview_desktop)).performClick()
+        compose.runOnIdle {
+            val web = findWebView(compose.activity.window.decorView)!!
+            val url = "http://127.0.0.1:49152/docs?tab=api#methods"
+            web.loadUrl(url)
+            web.webViewClient.onPageStarted(web, url, null)
+            web.webViewClient.onPageFinished(web, url)
+        }
+        restoration.emulateSavedInstanceStateRestore()
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals("http://127.0.0.1:49153/docs?tab=api#methods", findWebView(compose.activity.window.decorView)!!.url)
+        }
+        compose.onNodeWithText(compose.activity.getString(R.string.preview_mobile)).assertExists()
+        scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
+    }
+
     // Regression: streaming output must not rebuild/scan every frame on Main or miss the final server hint.
     @Test fun terminalOutputScanningCoalescesFramesOffMainAndKeepsTheLatestHint() {
         val scans = java.util.Collections.synchronizedList(mutableListOf<Pair<String, Boolean>>())
