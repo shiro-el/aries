@@ -261,6 +261,14 @@ internal fun KeySection(model: HostsModel) {
         ConsoleButton(onClick = model::createKey) { Text(stringResource(R.string.key_create_button)) }
         return
     }
+    PublicKeyDetails(model)
+    TextButton(onClick = model::openKeyRecovery) { Text(stringResource(R.string.key_recover_button)) }
+    BiometricToggle(model.keyProtection == KeyProtection.BIOMETRIC, model::requireBiometric)
+}
+
+@Composable
+private fun PublicKeyDetails(model: HostsModel) {
+    val key = model.key ?: return
     val context = LocalContext.current
     val clipLabel = stringResource(R.string.key_clip_label)
     Text(stringResource(R.string.key_title), style = MaterialTheme.typography.titleMedium)
@@ -271,8 +279,6 @@ internal fun KeySection(model: HostsModel) {
             ?.setPrimaryClip(ClipData.newPlainText(clipLabel, key.openssh))
     }) { Text(stringResource(R.string.key_copy_button)) }
     ConsoleButton(onClick = model::showKeyQr) { Text(stringResource(R.string.key_qr_button)) }
-    TextButton(onClick = model::openKeyRecovery) { Text(stringResource(R.string.key_recover_button)) }
-    BiometricToggle(model.keyProtection == KeyProtection.BIOMETRIC, model::requireBiometric)
 }
 
 @Composable
@@ -342,6 +348,7 @@ private fun AddHostForm(model: HostsModel) {
     val portNumber = port.toIntOrNull()?.takeIf { it in 1..65535 }
     val guided = io.github.shiroel.aries.guidance.LocalAppGuidance.current?.onboardingStep != null
     Text(stringResource(R.string.onboarding_manual_key_body), style = MaterialTheme.typography.bodySmall)
+    PublicKeyDetails(model)
     Text(stringResource(R.string.host_add_title), style = MaterialTheme.typography.titleMedium)
     OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.host_add_name)) }, singleLine = true)
     OutlinedTextField(address, { address = it }, label = { Text(stringResource(R.string.host_add_address)) }, singleLine = true)
