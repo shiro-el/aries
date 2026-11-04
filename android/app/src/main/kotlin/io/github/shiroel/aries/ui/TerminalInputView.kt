@@ -15,8 +15,8 @@ import io.github.shiroel.aries.core.TerminalKey
 /**
  * The Terminal's input field: a plain focusable View so the soft keyboard
  * talks to our own [TerminalInputConnection] instead of a text editor.
- * Tapping it focuses it, shows the keyboard and starts typing mode on
- * [viewer]. Restored Android focus after a reconnect keeps observe mode.
+ * Tapping it focuses it and shows the keyboard. The first key or paste starts
+ * typing mode, so opening the keyboard alone preserves the desktop's grid.
  */
 @SuppressLint("ViewConstructor")
 class TerminalInputView(context: Context, viewer: TerminalViewer) : View(context) {
@@ -48,7 +48,6 @@ class TerminalInputView(context: Context, viewer: TerminalViewer) : View(context
 
     fun showKeyboard() {
         if (!viewer.canInput) return
-        viewer.startTyping()
         requestFocus()
         context.getSystemService(InputMethodManager::class.java)?.showSoftInput(this, 0)
     }
