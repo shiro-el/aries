@@ -12,3 +12,4 @@ android/app/google-services.json
 relay/node_modules/
 relay/.wrangler/
 relay/wrangler.deploy.jsonc
+/_site/
