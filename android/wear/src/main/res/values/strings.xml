@@ -1,4 +1,22 @@
 <resources>
+    <!-- Watch Inbox -->
+    <string name="wear_inbox_title">Inbox</string>
+    <string name="wear_inbox_attention">Needs you</string>
+    <string name="wear_inbox_agents">Agents</string>
+    <string name="wear_inbox_refresh">Refresh</string>
+    <string name="wear_inbox_refreshing">Requesting refresh…</string>
+    <string name="wear_inbox_requested">Refresh requested on phone</string>
+    <string name="wear_inbox_request">Request</string>
+    <string name="wear_inbox_summary">Last response</string>
+    <string name="wear_inbox_no_request">No pending request</string>
+    <string name="wear_inbox_no_summary">Open Chat on your phone to sync a response</string>
+    <string name="wear_inbox_hidden">Details are hidden by your phone preview settings</string>
+    <string name="wear_inbox_answer">Answer</string>
+    <string name="wear_inbox_stop">Stop</string>
+    <string name="wear_inbox_watch">Watch progress</string>
+    <string name="wear_inbox_back">Back</string>
+    <string name="wear_inbox_more">Showing the first %1$d. Open your phone for all Agents.</string>
+
     <!-- Console Tile and complication types -->
     <string name="wear_complication_agent_description">%1$s · %2$s</string>
     <string name="wear_tile_waiting">ARIES · %1$d WAITING</string>
