@@ -657,6 +657,7 @@ fn open_local(env: &HashMap<String, String>, command: &str) -> Result<Stream, Co
     let stdin = child.stdin.take().expect("piped stdin");
     let stdout = child.stdout.take().expect("piped stdout");
     Ok(Stream {
+        ssh: None,
         reader: Box::new(stdout),
         writer: Box::new(stdin),
         guard: Box::new(std::sync::Mutex::new(child)),
@@ -727,6 +728,7 @@ async fn answer_result(stream: Stream) -> Result<(), CoreError> {
         reader,
         writer,
         guard,
+        ..
     } = stream;
     let mut lines = BufReader::new(reader).lines();
     let mut reply = None;
@@ -940,6 +942,7 @@ async fn follow(
                 reader,
                 writer,
                 guard,
+                ..
             } = stream;
             let mut lines = BufReader::new(reader).lines();
             let mut heard = Instant::now();

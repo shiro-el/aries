@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
+    <!-- Preview forwards bind exclusively to phone loopback. -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+    </domain-config>
     <!-- The development APK feed is served here over the private network. -->
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="false">100.117.188.97</domain>

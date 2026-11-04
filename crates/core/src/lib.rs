@@ -26,6 +26,7 @@ mod input_history;
 mod last_known_state;
 mod launch;
 mod layout_edit;
+mod preview;
 mod private_content;
 mod push;
 mod push_ownership;
@@ -77,6 +78,7 @@ pub use host_pairing::HostPairingDetails;
 pub use last_known_state::{LastKnownState, LastKnownStateWatch};
 pub use launch::{AgentPreset, LaunchRequest, RECENT_CWDS_KEPT, SavedLaunch};
 pub use layout_edit::{ExecOutput, LayoutEdit};
+pub use preview::{PreviewForward, preview_ports};
 pub use push::{
     HttpClient, HttpRequest, HttpResponse, PushContent, PushDevice, PushDisable, PushNotice,
     PushPairing, PushPolicy, PushProgress, PushQuestion, PushStep,
