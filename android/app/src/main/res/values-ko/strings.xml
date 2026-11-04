@@ -458,6 +458,12 @@
     <string name="terminal_search_invalid">검색 패턴이 잘못됐거나 너무 길어요</string>
 
     <string name="agents_button">모든 Agent</string>
+    <!-- Waiting Agent flow (194). -->
+    <string name="agents_loading_hosts">Host %1$d곳 연결 중…</string>
+    <string name="agents_waiting_unknown">확인 필요 · —</string>
+    <string name="agents_waiting_partial">확인 필요 %1$d+</string>
+    <string name="agents_next_waiting">다음 대기 Agent: %1$s · %2$s</string>
+
     <string name="agents_title">Agent</string>
     <string name="agents_empty">Host에서 실행 중인 Agent가 없어요.</string>
     <string name="agents_no_hosts">먼저 Host를 추가해 주세요.</string>
@@ -527,6 +533,28 @@
     <string name="chat_thinking">생각 과정</string>
     <string name="chat_tool_running">실행 중</string>
     <string name="chat_tool_failed">실패</string>
+    <!-- Agent usage and context (193) -->
+    <string name="usage_title">사용량 및 한도</string>
+    <string name="usage_source">이 Agent에 기록된 마지막 수치입니다. 다른 Agent와 계정 한도를 공유할 수 있습니다. 이전 수치일 수 있으며, 시각은 기기의 시간대로 표시됩니다.</string>
+    <string name="usage_context_title">마지막 컨텍스트 기록</string>
+    <string name="usage_context_unavailable">컨텍스트: 데이터 없음</string>
+    <string name="usage_context_remaining">컨텍스트: %1$s%% 남음</string>
+    <string name="usage_context_tokens">컨텍스트 토큰 %1$s / %2$s 사용</string>
+    <string name="usage_account_title">계정 한도</string>
+    <string name="usage_limits_unavailable">계정 한도: 데이터 없음</string>
+    <string name="usage_unavailable">데이터 없음</string>
+    <string name="usage_used">%1$s%% 사용</string>
+    <string name="usage_used_unknown">사용량: 데이터 없음</string>
+    <string name="usage_resets">리셋: %1$s</string>
+    <string name="usage_updated">기록: %1$s</string>
+    <string name="usage_five_hours">5시간 한도</string>
+    <string name="usage_seven_days">7일 한도</string>
+    <string name="usage_week_opus">Opus · 7일 한도</string>
+    <string name="usage_week_sonnet">Sonnet · 7일 한도</string>
+    <string name="usage_window">%1$s분 한도</string>
+    <string name="usage_window_unknown">한도 기간: 데이터 없음</string>
+    <string name="usage_close">닫기</string>
+
     <!-- Chat tool details and response metadata -->
     <string name="chat_details_expanded">펼침</string>
     <string name="chat_details_collapsed">접힘</string>
