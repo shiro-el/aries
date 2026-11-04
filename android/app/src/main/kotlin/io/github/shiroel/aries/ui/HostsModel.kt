@@ -115,6 +115,8 @@ sealed interface Prompt {
 
 enum class AfterTrust { Connect, InstallKey }
 
+enum class HostAddMethod { QR, MANUAL }
+
 /**
  * UI state over the core API. Compose reads the `by mutableStateOf` fields.
  *
@@ -197,6 +199,20 @@ class HostsModel(
         private set
     var missingKeyHostId by mutableStateOf<String?>(null)
         private set
+
+    /** Shared entry for the welcome guide and empty states; key setup stays in this flow. */
+    var hostAddMethod by mutableStateOf<HostAddMethod?>(null)
+        private set
+    var addedHost by mutableStateOf<Host?>(null)
+        private set
+
+    fun startAddingHost(method: HostAddMethod = HostAddMethod.MANUAL) {
+        if (screen != Screen.Hosts) back()
+        addedHost = null
+        hostAddMethod = method
+    }
+
+    fun closeAddingHost() { hostAddMethod = null; addedHost = null }
 
     /** The open Host's connection and structure watch, while [Screen.Browse] shows (the latest line after a reconnect). */
     private var open: Pair<HostConnection, StructureWatch?>? = null
@@ -591,21 +607,24 @@ class HostsModel(
         jumps = hosts.associate { it.id to core.jumpHosts(it.id) }
     }
 
-    fun addHost(name: String, address: String, port: Int, user: String) = guard {
+    fun addHost(name: String, address: String, port: Int, user: String, connectAfterAdd: Boolean = false) = guard {
         val label = name.trim().ifBlank { address.trim() }
-        core.addHost(label, Endpoint.Ssh(address.trim(), port.toUShort(), user.trim()))
+        val host = core.addHost(label, Endpoint.Ssh(address.trim(), port.toUShort(), user.trim()))
         hosts = core.hosts()
         refreshRoutes()
         hostsChanged()
+        if (hostAddMethod != null) addedHost = host
+        if (connectAfterAdd) connect(host)
     }
 
     fun inspectPairingQr(qr: String) = core.inspectPairingQr(qr)
 
-    suspend fun pairHostQr(name: String, qr: String) {
-        withContext(keyWork) { core.pairHostQr(name, qr) }
+    suspend fun pairHostQr(name: String, qr: String): Host {
+        val host = withContext(keyWork) { core.pairHostQr(name, qr) }
         hosts = core.hosts()
         refreshRoutes()
         hostsChanged()
+        return host
     }
 
     /** Saves in place; the core closes old lines only when the endpoint changed. */

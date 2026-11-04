@@ -77,10 +77,8 @@ fun AriesApp(
     terminalDisplay: TerminalDisplaySettings = rememberTerminalDisplaySettings(),
 ) {
     AriesTheme(settings) {
-        NewTaskAccess(model) {
-            if (guidance == null) AriesContent(model, settings, terminalDisplay)
-            else io.github.shiroel.aries.guidance.AppGuidance(guidance, allowNotifications) { AriesContent(model, settings, terminalDisplay) }
-        }
+        if (guidance == null) AriesContent(model, settings, terminalDisplay)
+        else io.github.shiroel.aries.guidance.AppGuidance(guidance) { AriesContent(model, settings, terminalDisplay, guidance, allowNotifications) }
     }
 }
 
@@ -91,8 +89,12 @@ private fun rememberThemeSettings(): ThemeSettings {
 }
 
 @Composable
-private fun AriesContent(model: HostsModel, settings: ThemeSettings, terminalDisplay: TerminalDisplaySettings) {
-    val activity = LocalContext.current as? android.app.Activity
+private fun AriesContent(
+    model: HostsModel, settings: ThemeSettings, terminalDisplay: TerminalDisplaySettings,
+    guidance: io.github.shiroel.aries.guidance.AppGuidanceState? = null,
+    allowNotifications: suspend () -> Boolean = { false },
+) {
+    val activity = androidx.activity.compose.LocalActivity.current
     // Screen connections and the Call banner follow the visible lifecycle.
     LifecycleStartEffect(model) {
         model.resumeScreens()
@@ -107,75 +109,87 @@ private fun AriesContent(model: HostsModel, settings: ThemeSettings, terminalDis
     }
     Scaffold { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
-            ConsoleShell(model) {
-                RemoteFilesAccess(model) {
-                    when (val s = model.screen) {
-                        Screen.Hosts -> HostListScreen(model)
-                        Screen.Settings -> {
-                            SettingsScreen(
-                                model, settings, onBack = model::back, showHeader = false,
-                                terminalDisplay = terminalDisplay,
-                                hostEditor = { host -> if (host.endpoint is Endpoint.Ssh) HostEditSection(model, host) },
-                            )
-                        }
-                        is Screen.Connecting -> ConnectionNotice(s.link)
-                        is Screen.Browse -> {
-                            BrowseScreen(
-                                s.browser,
-                                showHeader = false,
-                                onBack = model::back,
-                                onOpen = model::openTerminal,
-                                onPin = model::pin,
-                                onNewTerminal = { model.newTerminal(s.browser) },
-                                onLaunch = { model.launch(s.browser, it) },
-                                onSaveLaunch = { model.saveLaunch(s.browser, it) },
-                                onDeleteLaunch = { form, saved -> model.deleteSavedLaunch(s.browser, form, saved) },
-                                onRunSaved = { model.runSaved(s.browser, it) },
-                                hostSections = {
-                                    if (model.beacon.ui == BeaconUi.Known(io.github.shiroel.aries.core.BeaconState.NotInstalled)) {
-                                        TextButton(
-                                            onClick = { model.openHostSettings(s.browser.host) },
-                                            modifier = Modifier.testTag("browse-host-settings:${s.browser.host.id}"),
-                                        ) { Text(stringResource(R.string.settings_beacon_missing), maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis) }
-                                    }
-                                },
-                            )
-                        }
-                        is Screen.Terminal -> {
-                            TerminalScreen(
-                                s.viewer,
-                                onBack = model::closeTerminal,
-                                onView = model::switchView.takeIf { s.viewer.terminal.agentStatus != null },
-                                displaySettings = terminalDisplay,
-                                onSelectionSend = model::sendTerminalSelectionToDraft,
-                            )
-                        }
-                        is Screen.JumpHosts -> {
-                            JumpHostsScreen(model, s.host, s.jumps, s.hostKeyId, showHeader = false)
-                        }
-                        is Screen.Agents -> {
-                            Column {
-                                if (model.pendingShare != null) {
-                                    Text(stringResource(R.string.attachments_choose_agent), Modifier.padding(12.dp))
-                                    TextButton(onClick = model::cancelShare) { Text(stringResource(R.string.cancel_button)) }
-                                }
-                                AgentsScreen(
-                                    s.board,
-                                    showHeader = false,
-                                    onBack = model::back,
-                                    onOpen = { model.openAgent(s.board, it) },
-                                    onPin = { entry, pinned -> model.pin(s.board, entry, pinned) },
+            FirstConnectionGuide(model, guidance, allowNotifications) {
+                ConsoleShell(model) {
+                    RemoteFilesAccess(model) {
+                        when (val s = model.screen) {
+                            Screen.Hosts -> HostListScreen(model)
+                            Screen.Settings -> {
+                                SettingsScreen(
+                                    model, settings, onBack = model::back, showHeader = false,
+                                    terminalDisplay = terminalDisplay,
+                                    hostEditor = { host -> if (host.endpoint is Endpoint.Ssh) HostEditSection(model, host) },
                                 )
                             }
-                        }
-                        is Screen.Chat -> {
-                            ChatScreen(
-                                s.chat,
-                                onBack = model::closeChat,
-                                onOpenTerminal = { model.openTerminal(s.chat.terminal) },
-                                onView = model::switchView,
-                                calls = model.calls,
-                            )
+                            is Screen.Connecting -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                                ConnectionNotice(s.link)
+                                if ((s.link.state as? LinkState.Down)?.error is io.github.shiroel.aries.core.CoreException.AuthRejected &&
+                                    s.host.endpoint is Endpoint.Ssh) {
+                                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        HostKeyAuthorization(model, s.host)
+                                    }
+                                }
+                            }
+                            is Screen.Browse -> {
+                                BrowseScreen(
+                                    s.browser,
+                                    showHeader = false,
+                                    onBack = model::back,
+                                    onOpen = model::openTerminal,
+                                    onPin = model::pin,
+                                    onNewTerminal = { model.newTerminal(s.browser) },
+                                    onLaunch = { model.launch(s.browser, it) },
+                                    onSaveLaunch = { model.saveLaunch(s.browser, it) },
+                                    onDeleteLaunch = { form, saved -> model.deleteSavedLaunch(s.browser, form, saved) },
+                                    onRunSaved = { model.runSaved(s.browser, it) },
+                                    hostSections = {
+                                        if (model.beacon.ui == BeaconUi.Known(io.github.shiroel.aries.core.BeaconState.NotInstalled)) {
+                                            TextButton(
+                                                onClick = { model.openHostSettings(s.browser.host) },
+                                                modifier = Modifier.testTag("browse-host-settings:${s.browser.host.id}"),
+                                            ) { Text(stringResource(R.string.settings_beacon_missing), maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis) }
+                                        }
+                                    },
+                                )
+                            }
+                            is Screen.Terminal -> {
+                                TerminalScreen(
+                                    s.viewer,
+                                    onBack = model::closeTerminal,
+                                    onView = model::switchView.takeIf { s.viewer.terminal.agentStatus != null },
+                                    displaySettings = terminalDisplay,
+                                    onSelectionSend = model::sendTerminalSelectionToDraft,
+                                )
+                            }
+                            is Screen.JumpHosts -> {
+                                JumpHostsScreen(model, s.host, s.jumps, s.hostKeyId, showHeader = false)
+                            }
+                            is Screen.Agents -> {
+                                Column {
+                                    if (model.pendingShare != null) {
+                                        Text(stringResource(R.string.attachments_choose_agent), Modifier.padding(12.dp))
+                                        TextButton(onClick = model::cancelShare) { Text(stringResource(R.string.cancel_button)) }
+                                    }
+                                    AgentsScreen(
+                                        s.board,
+                                        showHeader = false,
+                                        onBack = model::back,
+                                        onOpen = { model.openAgent(s.board, it) },
+                                        onPin = { entry, pinned -> model.pin(s.board, entry, pinned) },
+                                        onAddHost = { model.startAddingHost() },
+                                        onOpenHosts = model::back,
+                                    )
+                                }
+                            }
+                            is Screen.Chat -> {
+                                ChatScreen(
+                                    s.chat,
+                                    onBack = model::closeChat,
+                                    onOpenTerminal = { model.openTerminal(s.chat.terminal) },
+                                    onView = model::switchView,
+                                    calls = model.calls,
+                                )
+                            }
                         }
                     }
                 }
@@ -187,7 +201,7 @@ private fun AriesContent(model: HostsModel, settings: ThemeSettings, terminalDis
 
 @Composable
 private fun HostListScreen(model: HostsModel) {
-    var adding by rememberSaveable { mutableStateOf(false) }
+    val adding = model.hostAddMethod != null
     LazyColumn(Modifier.fillMaxSize()) {
         if (model.hosts.isEmpty()) item { Text(stringResource(R.string.hosts_empty), Modifier.padding(12.dp), fontSize = 12.sp) }
         items(model.hosts, key = { it.id }) { host -> ConsoleHostRow(model, host) }
@@ -196,11 +210,13 @@ private fun HostListScreen(model: HostsModel) {
             Text(
                 stringResource(if (adding) R.string.console_add_close else R.string.console_add_host),
                 Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("hosts-add-toggle")
-                    .semantics { stateDescription = expansion }.clickable(role = Role.Button) { adding = !adding }.padding(12.dp),
+                    .semantics { stateDescription = expansion }.clickable(role = Role.Button) {
+                    if (adding) model.closeAddingHost() else model.startAddingHost()
+                }.padding(12.dp),
                 fontSize = 14.sp, color = MaterialTheme.colorScheme.primary,
             )
             if (adding) Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (model.key == null) MissingKeySettingsLink(model) else AddHostForm(model)
+                HostConnectionForm(model)
             }
         }
     }
@@ -240,8 +256,13 @@ private fun ConsoleHostRow(model: HostsModel, host: Host) {
             contentAlignment = Alignment.Center,
         ) { Text(stringResource(R.string.console_more), Modifier.clearAndSetSemantics {}, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
-    if (model.missingKeyHostId == host.id && model.key == null) {
-        Column(Modifier.padding(12.dp)) { MissingKeySettingsLink(model) }
+    if (model.missingKeyHostId == host.id) {
+        Column(Modifier.padding(12.dp)) {
+            if (model.key == null) ConnectionKeySetup(model)
+            else TextButton(onClick = { model.connect(host) }, modifier = Modifier.testTag("missing-key-connect")) {
+                Text(stringResource(R.string.onboarding_continue_button))
+            }
+        }
     }
     HorizontalDivider()
 }
@@ -254,6 +275,14 @@ internal fun KeySection(model: HostsModel) {
         ConsoleButton(onClick = model::createKey) { Text(stringResource(R.string.key_create_button)) }
         return
     }
+    PublicKeyDetails(model)
+    TextButton(onClick = model::openKeyRecovery) { Text(stringResource(R.string.key_recover_button)) }
+    BiometricToggle(model.keyProtection == KeyProtection.BIOMETRIC, model::requireBiometric)
+}
+
+@Composable
+private fun PublicKeyDetails(model: HostsModel) {
+    val key = model.key ?: return
     val context = LocalContext.current
     val clipLabel = stringResource(R.string.key_clip_label)
     Text(stringResource(R.string.key_title), style = MaterialTheme.typography.titleMedium)
@@ -264,8 +293,6 @@ internal fun KeySection(model: HostsModel) {
             ?.setPrimaryClip(ClipData.newPlainText(clipLabel, key.openssh))
     }) { Text(stringResource(R.string.key_copy_button)) }
     ConsoleButton(onClick = model::showKeyQr) { Text(stringResource(R.string.key_qr_button)) }
-    TextButton(onClick = model::openKeyRecovery) { Text(stringResource(R.string.key_recover_button)) }
-    BiometricToggle(model.keyProtection == KeyProtection.BIOMETRIC, model::requireBiometric)
 }
 
 @Composable
@@ -291,11 +318,39 @@ internal fun OptionToggle(label: Int, on: Boolean, onChange: (Boolean) -> Unit) 
 }
 
 @Composable
-internal fun MissingKeySettingsLink(model: HostsModel) {
-    Text(stringResource(R.string.key_missing), style = MaterialTheme.typography.bodySmall)
-    TextButton(onClick = model::openKeySettings, modifier = Modifier.testTag("missing-key-settings")) {
-        Text(stringResource(R.string.settings_keys_open))
+internal fun ConnectionKeySetup(model: HostsModel) {
+    Text(stringResource(R.string.onboarding_key_body), style = MaterialTheme.typography.bodySmall)
+    KeySection(model)
+    KeyImportButton(model)
+}
+
+@Composable
+private fun HostConnectionForm(model: HostsModel) {
+    val method = model.hostAddMethod ?: return
+    ConsoleSegments(HostAddMethod.entries, method, model::startAddingHost,
+        label = { stringResource(if (it == HostAddMethod.QR) R.string.onboarding_qr_button else R.string.onboarding_manual_button) })
+    when {
+        model.key == null -> ConnectionKeySetup(model)
+        model.addedHost != null -> {
+            val host = model.addedHost!!
+            HostKeyAuthorization(model, host)
+            TextButton(onClick = { model.connect(host) }, modifier = Modifier.testTag("host-setup-connect")) {
+                Text(stringResource(R.string.onboarding_continue_button))
+            }
+        }
+        method == HostAddMethod.QR -> {
+            Text(stringResource(R.string.onboarding_qr_body), style = MaterialTheme.typography.bodySmall)
+            QrHostPairing(model, onPaired = model::connect)
+        }
+        else -> AddHostForm(model)
     }
+}
+
+@Composable
+private fun HostKeyAuthorization(model: HostsModel, host: Host) {
+    Text(stringResource(R.string.onboarding_manual_key_body))
+    KeySection(model)
+    TextButton(onClick = { model.askPassword(host) }) { Text(stringResource(R.string.host_install_key_button)) }
 }
 
 @Composable
@@ -305,7 +360,9 @@ private fun AddHostForm(model: HostsModel) {
     var port by rememberSaveable { mutableStateOf("22") }
     var user by rememberSaveable { mutableStateOf("") }
     val portNumber = port.toIntOrNull()?.takeIf { it in 1..65535 }
-    QrHostPairing(model)
+    val guided = io.github.shiroel.aries.guidance.LocalAppGuidance.current?.onboardingStep != null
+    Text(stringResource(R.string.onboarding_manual_key_body), style = MaterialTheme.typography.bodySmall)
+    PublicKeyDetails(model)
     Text(stringResource(R.string.host_add_title), style = MaterialTheme.typography.titleMedium)
     OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.host_add_name)) }, singleLine = true)
     OutlinedTextField(address, { address = it }, label = { Text(stringResource(R.string.host_add_address)) }, singleLine = true)
@@ -319,7 +376,8 @@ private fun AddHostForm(model: HostsModel) {
     ConsoleButton(
         enabled = validHostInput(model.hosts, null, name, address, portNumber, user),
         onClick = {
-            model.addHost(name, address, portNumber ?: 22, user)
+            model.addHost(name, address, portNumber ?: 22, user,
+                connectAfterAdd = guided)
             name = ""; address = ""; port = "22"; user = ""
         },
     ) { Text(stringResource(R.string.host_add_button)) }
