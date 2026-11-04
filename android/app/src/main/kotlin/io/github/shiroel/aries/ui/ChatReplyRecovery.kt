@@ -80,5 +80,6 @@ internal object ChatReplyRecovery {
     fun message(generation: String, text: String, line: String, uncertain: Boolean) = QueuedChatMessage(
         id = "notification:$generation", draft = text, attachments = emptyList(), text = text, before = emptySet(),
         phase = if (uncertain) QueuedMessagePhase.Uncertain else QueuedMessagePhase.Failed, error = line,
+        needsRecoveryBaseline = uncertain,
     )
 }

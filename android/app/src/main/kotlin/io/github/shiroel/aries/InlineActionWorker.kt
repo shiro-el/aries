@@ -98,7 +98,8 @@ class InlineActionWorker(context: Context, params: WorkerParameters) : Coroutine
                 e is CoreException.KeyLocked || e is CoreException.KeyInvalidated -> R.string.notification_action_key_locked
                 e is CoreException.Rpc && e.kind == "no_agent" -> R.string.chat_input_agent_ended
                 else -> R.string.notification_action_failed
-            }, uncertain = e !is CoreException.Rpc || e.kind != "no_agent")
+            }, uncertain = e !is CoreException.KeyLocked && e !is CoreException.KeyInvalidated &&
+                (e !is CoreException.Rpc || e.kind !in setOf("no_agent", "status_mismatch")))
         } catch (cancelled: kotlinx.coroutines.CancellationException) {
             throw cancelled
         } catch (_: Exception) {

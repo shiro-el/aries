@@ -49,6 +49,8 @@ data class QueuedChatMessage(
     val error: String? = null,
     /** herdr-core increments this counter when a Working turn ends. */
     val dispatchTurn: ULong? = null,
+    /** Recovery without a live watch must first exclude its initial transcript. */
+    val needsRecoveryBaseline: Boolean = false,
 )
 
 /** Only allowlisted, argument-free problem sentences may cross the outbox boundary. */
@@ -182,6 +184,7 @@ internal data class ChatOutboxState(
     val picks: Map<String, List<Set<Int>>> = emptyMap(),
     val answers: Map<String, String> = emptyMap(),
     val waitingReturned: Boolean = false,
+    val capturedPhotos: List<CapturedPhoto> = emptyList(),
 )
 
 private fun attachmentsJson(attachments: List<DraftAttachment>) = org.json.JSONArray().apply {
@@ -195,7 +198,7 @@ private fun readAttachments(array: org.json.JSONArray) = (0 until array.length()
 
 internal fun ChatOutboxState.encode(): String? {
     if (draft.isEmpty() && attachments.isEmpty() && messages.isEmpty() && terminalDraft.isEmpty() &&
-        !terminalComposerOpen && questionText.isEmpty() && picks.isEmpty() && answers.isEmpty() && !waitingReturned) return null
+        !terminalComposerOpen && questionText.isEmpty() && picks.isEmpty() && answers.isEmpty() && !waitingReturned && capturedPhotos.isEmpty()) return null
     return org.json.JSONObject().put("version", 2).put("draft", draft).put("waitingReturned", waitingReturned)
         .put("terminalDraft", terminalDraft).put("terminalComposerOpen", terminalComposerOpen)
         .put("questionText", org.json.JSONObject().apply {
@@ -207,12 +210,16 @@ internal fun ChatOutboxState.encode(): String? {
             }) }
         })
         .put("answers", org.json.JSONObject(answers))
+        .put("capturedPhotos", org.json.JSONArray().apply {
+            capturedPhotos.forEach { photo -> put(org.json.JSONObject().put("path", photo.path).put("uploadedPath", photo.uploadedPath)) }
+        })
         .put("attachments", attachmentsJson(attachments))
         .put("messages", org.json.JSONArray().apply {
             messages.forEach { message -> put(org.json.JSONObject()
                 .put("id", message.id).put("draft", message.draft).put("text", message.text)
                 .put("attachments", attachmentsJson(message.attachments))
                 .put("before", org.json.JSONArray(message.before.toList())).put("phase", message.phase.name)
+                .put("needsRecoveryBaseline", message.needsRecoveryBaseline)
                 .put("confirmed", message.confirmed).put("error", message.error?.let { code ->
                     (QueuedMessageProblem.entries.firstOrNull { it.name == code } ?: QueuedMessageProblem.Other).name
                 }).put("dispatchTurn", message.dispatchTurn?.toString())) }
@@ -232,7 +239,10 @@ internal fun decodeChatOutbox(content: String): ChatOutboxState {
                 (0 until before.length()).map { i -> before.getString(i) }.toSet(),
                 QueuedMessagePhase.valueOf(message.getString("phase")), message.optBoolean("confirmed", false),
                 error = message.optString("error").takeIf { it.isNotEmpty() && it != "null" },
-                dispatchTurn = message.optString("dispatchTurn").toULongOrNull())
+                dispatchTurn = message.optString("dispatchTurn").toULongOrNull(),
+                needsRecoveryBaseline = message.optBoolean("needsRecoveryBaseline",
+                    message.getString("id").startsWith("notification:") && before.length() == 0 &&
+                        message.getString("phase") == QueuedMessagePhase.Uncertain.name))
         }, terminalDraft = value.optString("terminalDraft"), terminalComposerOpen = value.optBoolean("terminalComposerOpen"),
         questionText = value.optJSONObject("questionText")?.let { questions ->
             questions.keys().asSequence().associateWith { id ->
@@ -251,7 +261,13 @@ internal fun decodeChatOutbox(content: String): ChatOutboxState {
         }.orEmpty(),
         answers = value.optJSONObject("answers")?.let { answers ->
             answers.keys().asSequence().associateWith { answers.getString(it) }
-        }.orEmpty(), waitingReturned = value.optBoolean("waitingReturned"))
+        }.orEmpty(), waitingReturned = value.optBoolean("waitingReturned"),
+        capturedPhotos = value.optJSONArray("capturedPhotos")?.let { photos ->
+            (0 until photos.length()).map { index ->
+                val photo = photos.getJSONObject(index)
+                CapturedPhoto(photo.getString("path"), photo.optString("uploadedPath").takeIf { it.isNotEmpty() && it != "null" })
+            }
+        }.orEmpty())
 }
 
 /** Recovery remains usable when the ended Agent has disabled its composer. */
