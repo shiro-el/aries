@@ -33,11 +33,11 @@ internal fun interruptMessage(outcome: InterruptOutcome): Message = Message(when
 })
 
 @Composable
-internal fun ChatInterruptNotice(chat: ChatModel) {
+internal fun ChatInterruptNotice(chat: ChatModel, modifier: Modifier = Modifier) {
     chat.interruptNotice?.let { message ->
-        Text(
+        AnnouncedText(
             stringResource(message.res, *message.args.toTypedArray()),
-            Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             style = MaterialTheme.typography.bodySmall,
         )
     }
@@ -54,7 +54,7 @@ internal fun ChatInterruptProgress() {
 
 /** Shares the composer's send slot; confirmation still rechecks live eligibility. */
 @Composable
-internal fun ChatInterruptButton(chat: ChatModel) {
+internal fun ChatInterruptButton(chat: ChatModel, onConfirmed: () -> Unit = {}) {
     var confirming by remember(chat) { mutableStateOf(false) }
     LaunchedEffect(chat.canInterrupt) {
         if (!chat.canInterrupt) confirming = false
@@ -74,7 +74,7 @@ internal fun ChatInterruptButton(chat: ChatModel) {
             title = { Text(stringResource(R.string.chat_interrupt_title)) },
             text = { Text(stringResource(R.string.chat_interrupt_body, displayName(chat.terminal))) },
             confirmButton = {
-                TextButton(onClick = { confirming = false; chat.interrupt() }) {
+                TextButton(onClick = { confirming = false; onConfirmed(); chat.interrupt() }) {
                     Text(stringResource(R.string.chat_interrupt_confirm_button))
                 }
             },

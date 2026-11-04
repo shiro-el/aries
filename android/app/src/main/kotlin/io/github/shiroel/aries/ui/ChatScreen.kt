@@ -33,6 +33,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.TextButton
@@ -53,6 +57,7 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -1227,14 +1232,32 @@ private fun MessageInput(chat: ChatModel) {
         fontSize = 14.sp,
         lineHeight = 20.sp,
     )
+    val inputFocus = remember(chat) { FocusRequester() }
+    val noticeFocus = remember(chat) { FocusRequester() }
+    var returningFromInterrupt by remember(chat) { mutableStateOf(false) }
+    var noticeHadFocus by remember(chat) { mutableStateOf(false) }
+    LaunchedEffect(chat.interrupting, chat.interruptNotice, returningFromInterrupt) {
+        if (returningFromInterrupt && !chat.interrupting) {
+            if (chat.interruptNotice != null) noticeFocus.requestFocus()
+            else {
+                if (chat.canEdit) inputFocus.requestFocus()
+                returningFromInterrupt = false
+            }
+        }
+    }
     HorizontalDivider()
-    ChatInterruptNotice(chat)
+    ChatInterruptNotice(chat, Modifier.focusRequester(noticeFocus).onFocusChanged {
+        // Follow a removed result back to the composer, but do not pull focus
+        // back after the user has deliberately moved elsewhere.
+        if (noticeHadFocus && !it.isFocused && chat.interruptNotice != null && !chat.interrupting) returningFromInterrupt = false
+        noticeHadFocus = it.isFocused
+    }.focusable())
     DraftAttachments(chat)
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
         BasicTextField(
             value = chat.input,
             onValueChange = { chat.input = it },
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f).focusRequester(inputFocus)
                 .heightIn(min = 48.dp)
                 .semantics { contentDescription = inputLabel },
             textStyle = inputStyle.copy(color = MaterialTheme.colorScheme.onSurface),
@@ -1254,7 +1277,7 @@ private fun MessageInput(chat: ChatModel) {
         val showInterrupt = chat.draft.isEmpty() && chat.attachments.isEmpty() &&
             ((chat.terminalAvailable && chat.terminal.agentStatus == AgentStatus.Working) || chat.interrupting)
         if (showInterrupt) {
-            ChatInterruptButton(chat)
+            ChatInterruptButton(chat, onConfirmed = { returningFromInterrupt = true })
         } else {
             TextButton(
                 onClick = chat::send,
@@ -1435,11 +1458,11 @@ private fun ToolContent(
         annotateChatFileLinks(chatToolPathText(tool.title, tool.details?.path), open, color)
     }
     Column(Modifier.fillMaxWidth()) {
-        ChatTextActions(tool.output?.takeIf { it.isNotEmpty() } ?: tool.input, onClick = onToggle,
+        ChatTextActions(tool.output?.takeIf { it.isNotEmpty() } ?: tool.input, onClick = onToggle, onClickLabel = label,
             showIndication = false) { actions ->
             Row(
                 Modifier.fillMaxWidth().heightIn(min = 36.dp).then(actions)
-                    .semantics { contentDescription = label; stateDescription = disclosure },
+                    .semantics { stateDescription = "$disclosure, $status" },
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -1457,7 +1480,7 @@ private fun ToolContent(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
-                    status, style = MaterialTheme.typography.labelSmall,
+                    status, modifier = Modifier.clearAndSetSemantics {}, style = MaterialTheme.typography.labelSmall,
                     color = when (tool.status) {
                         ChatToolStatus.FAILED -> MaterialTheme.colorScheme.error
                         ChatToolStatus.RUNNING -> MaterialTheme.colorScheme.primary

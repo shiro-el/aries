@@ -31,7 +31,9 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
@@ -51,8 +53,19 @@ import kotlinx.coroutines.launch
 @Composable
 internal fun TerminalKeyBar(viewer: TerminalViewer) {
     BoxWithConstraints(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant)) {
-        // Seven keys still need 48dp each on narrow phones; scroll the two rows together.
-        val rowWidth = maxWidth.coerceAtLeast(336.dp)
+        // Measure at the system font scale instead of splitting HOME / PGUP
+        // into multiple lines. Both rows share the same horizontal scroll.
+        val labels = listOf(R.string.key_esc, R.string.key_slash, R.string.key_dash,
+            R.string.key_home, R.string.key_end, R.string.key_page_up, R.string.key_tab,
+            R.string.key_ctrl, R.string.key_alt, R.string.key_page_down).map { stringResource(it) }
+        val measurer = rememberTextMeasurer()
+        val style = MaterialTheme.typography.labelLarge.copy(fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+        val density = LocalDensity.current
+        val keyWidth = remember(labels, style, density, measurer) {
+            with(density) { labels.maxOf { measurer.measure(it, style, softWrap = false).size.width }.toDp() + 16.dp }
+                .coerceAtLeast(48.dp)
+        }
+        val rowWidth = maxWidth.coerceAtLeast(keyWidth * 7)
         Column(Modifier.horizontalScroll(rememberScrollState())) {
             Row(Modifier.width(rowWidth).height(IntrinsicSize.Min)) {
                 BarKey(enabled = viewer.canInput, label = R.string.key_esc) { viewer.press(TerminalKey.Escape) }
@@ -154,7 +167,8 @@ private fun RowScope.BarKey(
                 else -> colors.onSurface
             },
             style = MaterialTheme.typography.labelLarge.copy(fontFamily = FontFamily.Monospace, fontSize = fontSize),
-            maxLines = accessibleNameLines(),
+            maxLines = 1,
+            softWrap = false,
         )
     }
 }

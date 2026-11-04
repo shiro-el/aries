@@ -41,7 +41,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.text
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.TextMeasurer
@@ -473,21 +476,20 @@ class TerminalViewer(terminal: TerminalInfo, private val composer: TerminalCompo
         inputs.trySend(PendingTerminalInput(link?.connection, input))
     }
 
-    /** A bounded excerpt; never build the whole screen merely to focus its Canvas. */
-    fun cursorLineText(): String? {
-        val row = cursor?.row?.toInt() ?: return null
-        val runs = line(row)?.runs ?: return null
-        val excerpt = StringBuilder()
-        for (run in runs) {
-            if (excerpt.length >= 240) break
-            val column = run.column.toInt().coerceAtMost(240)
-            while (excerpt.length < column) excerpt.append(' ')
-            excerpt.append(run.text.take(240 - excerpt.length))
-        }
-        // Avoid exposing half of an emoji when the cap falls between UTF-16 surrogates.
-        if (excerpt.lastOrNull()?.isHighSurrogate() == true) excerpt.deleteCharAt(excerpt.lastIndex)
-        return excerpt.toString().trimEnd()
-    }
+    /** The last 20 nonblank visible rows, capped at 240 UTF-16 units per row. */
+    fun accessibleOutput(): String = (rows - 1 downTo 0).asSequence()
+        .mapNotNull { row -> line(row)?.runs?.let { runs ->
+            val excerpt = StringBuilder()
+            for (run in runs) {
+                if (excerpt.length >= 240) break
+                val column = run.column.toInt().coerceAtMost(240)
+                while (excerpt.length < column) excerpt.append(' ')
+                excerpt.append(run.text.take(240 - excerpt.length))
+            }
+            if (excerpt.lastOrNull()?.isHighSurrogate() == true) excerpt.deleteCharAt(excerpt.lastIndex)
+            excerpt.toString().trimEnd().takeIf { it.isNotBlank() }
+        } }
+        .take(20).toList().asReversed().joinToString("\n")
 
     /** The visible text, one string per row (explicit copy/export and tests). */
     fun text(): String = (0 until rows).joinToString("\n") { row ->
@@ -640,10 +642,9 @@ private fun TerminalCanvas(viewer: TerminalViewer, look: TerminalLook, settings:
     val probe = remember(measurer, family) {
         measurer.measure("M", TextStyle(fontFamily = family, fontSize = 100.sp))
     }
-    val cursorLine = viewer.version.let { viewer.cursorLineText() }
+    val output = remember(viewer, viewer.version) { viewer.accessibleOutput() }
     val summary = stringResource(R.string.terminal_accessibility_summary, viewer.cols, viewer.rows)
-    val description = if (cursorLine == null) summary else summary + ". " +
-        stringResource(R.string.terminal_accessibility_cursor, viewer.cursor!!.row.toInt() + 1, cursorLine)
+    val reading = remember(summary, output) { AnnotatedString(if (output.isEmpty()) summary else "$summary\n$output") }
     // The selected cells moved away.
     LaunchedEffect(look, viewer.scrolled, viewer.cols, viewer.rows) { look.selection = null }
     BoxWithConstraints(modifier.background(TerminalBackground)) {
@@ -674,7 +675,7 @@ private fun TerminalCanvas(viewer: TerminalViewer, look: TerminalLook, settings:
         val minimumContrast = settings.minimumContrast
         Canvas(
             Modifier.fillMaxSize().clipToBounds().testTag("terminal-screen")
-                .semantics { contentDescription = description }
+                .semantics { text = reading; liveRegion = LiveRegionMode.Polite }
                 .terminalGestures(look, viewer),
         ) {
             viewer.version // redraw on every frame
