@@ -479,6 +479,7 @@
 
     <string name="chat_empty">아직 메시지가 없어요.</string>
     <string name="chat_status_connecting">Beacon에 연결 중…</string>
+    <string name="chat_input_agent_ended">Agent가 종료됐거나 이 Terminal에서 실행 중이 아니에요. Chat 입력은 사용할 수 없어요. 작성 중인 내용은 보관돼요. 계속하려면 Terminal을 여세요.</string>
     <string name="chat_status_reconnecting">연결이 끊겨 다시 연결하는 중…</string>
     <string name="chat_status_no_terminal">이 Terminal은 이제 없어요.</string>
     <string name="chat_status_no_beacon">Chat을 보려면 이 Host에 Beacon이 필요해요. Host 화면에서 설치할 수 있어요.</string>

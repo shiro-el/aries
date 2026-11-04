@@ -594,6 +594,7 @@ fn deliver(terminal: &str, recipient: Option<&Recipient>, text: &str) -> Sent {
     match link.call("terminal.get", serde_json::json!({ "terminal": terminal })) {
         Ok(t)
             if t["state"] == "live"
+                && !t["status"].is_null()
                 && t["pid"].as_u64() == Some(u64::from(recipient.terminal_pid))
                 && t["created_ms"].as_u64() == Some(recipient.created_ms)
                 && process_identity(recipient.agent_pid).as_ref() == Some(&recipient.process) => {}
