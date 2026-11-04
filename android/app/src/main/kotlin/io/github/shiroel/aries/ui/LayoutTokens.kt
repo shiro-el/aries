@@ -17,7 +17,10 @@ internal data class LayoutPalette(
     val muted: Color,
     val outline: Color,
     val divider: Color,
+    val diff: DiffColors? = null,
 )
+
+internal data class DiffColors(val added: Color, val removed: Color)
 
 internal data class LayoutTokens(
     val light: LayoutPalette,
@@ -56,9 +59,11 @@ private val ThreadTokens = LayoutTokens(
 
 private val TasksTokens = LayoutTokens(
     light = LayoutPalette(Color(0xFFF6F5F2), Color(0xFF1B1B1A), Color(0xFFFFFFFF), Color(0xFFEEECE7),
-        Color(0xFF6B6862), Color(0xFF8E8B86), Color(0xFFE1DED7)),
+        Color(0xFF6B6862), Color(0xFF8E8B86), Color(0xFFE1DED7),
+        diff = DiffColors(Color(0xFF2E7D4A), Color(0xFFB3261E))),
     dark = LayoutPalette(Color(0xFF151617), Color(0xFFE9E7E3), Color(0xFF1F2022), Color(0xFF26272A),
-        Color(0xFFB0ADA7), Color(0xFF8E8B86), Color(0xFF3A3B3F)),
+        Color(0xFFB0ADA7), Color(0xFF8E8B86), Color(0xFF3A3B3F),
+        diff = DiffColors(Color(0xFF7CC891), Color(0xFFF2756A))),
     bodyFont = FontFamily.SansSerif, bodySize = 14.sp, bodyLineHeight = 20.sp,
     contentPadding = 16.dp, itemSpacing = 6.dp, cornerRadius = 6.dp,
 )

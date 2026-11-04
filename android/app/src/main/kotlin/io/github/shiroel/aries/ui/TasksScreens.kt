@@ -32,6 +32,9 @@ internal object TasksScreens : LayoutScreens() {
             screen !is Screen.Chat && screen !is Screen.Terminal) TasksSecondaryHeader(model, screen)
     }
     @Composable override fun Agents(model: HostsModel, board: AgentBoard) = TasksHome(model, board)
+    @Composable override fun Chat(model: HostsModel, chat: ChatModel) = TasksChatDetail(model, chat)
+    @Composable override fun Terminal(model: HostsModel, viewer: TerminalViewer, display: TerminalDisplaySettings) =
+        TasksTerminalDetail(model, viewer, display)
     @Composable override fun Hosts(model: HostsModel) = HostListScreen(model, tasks = true)
     @Composable override fun Home(model: HostsModel, browser: HostBrowser) =
         BrowseScreen(browser, onBack = model::back, showHeader = false,

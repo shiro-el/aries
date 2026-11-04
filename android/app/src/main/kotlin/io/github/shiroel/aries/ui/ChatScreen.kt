@@ -66,6 +66,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
@@ -1148,36 +1149,21 @@ fun ChatScreen(
                             val source = body.markdownSource()
                             item(key = "transcript:${entry.id}", contentType = body::class) {
                                 CompositionLocalProvider(LocalChatSearchEntry provides entry.id) {
-                                    if (body is ChatEntryBody.Question) {
-                                        QuestionView(chat, entry.id, body)
-                                    } else {
-                                        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (body is ChatEntryBody.Agent || body is ChatEntryBody.Tool) 0.dp else 12.dp)) {
-                                            ChatEntryView(entry, markdown[entry.id]?.attachments, chat, expanded = entry.id in chat.expanded, chat::image, readAloud) { toggleTool(entry.id) }
-                                        }
-                                        if (source == null && body !is ChatEntryBody.Tool) HorizontalDivider()
-                                    }
+                                    ChatEntryHeader(entry, markdown[entry.id]?.attachments, chat, readAloud, toggleTool)
                                 }
                             }
                             if (source != null) {
                                 chatMarkdownItems(entry.id, markdown[entry.id], thinking = body is ChatEntryBody.Thinking)
                                 item(key = "transcript:${entry.id}:footer", contentType = ChatTranscriptContent.Footer::class) {
-                                    if (body is ChatEntryBody.User && body.images.isNotEmpty()) {
-                                        Column(Modifier.padding(horizontal = 16.dp)) {
-                                            body.images.forEach { ChatImageView(it, chat::image) }
-                                        }
-                                    }
-                                    if (body is ChatEntryBody.Agent) body.metadata?.let { metadata ->
-                                        Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                                            val key = "response:${entry.id}"
-                                            ChatResponseMetadataView(metadata, key in chat.expanded) { toggleTool(key) }
-                                        }
-                                    }
-                                    HorizontalDivider(Modifier.padding(top = 8.dp))
+                                    ChatEntryFooter((body as? ChatEntryBody.User)?.images.orEmpty(),
+                                        (body as? ChatEntryBody.Agent)?.metadata, chat, entry.id, toggleTool)
                                 }
                             }
                         }
                         items(agentCalls, key = { "call:${it.key}" }, contentType = { "call" }) { entry ->
-                            if (calls != null) ConsoleChatCall(entry, calls)
+                            if (calls != null) {
+                                if (LocalTasksDetail.current != null) TasksCallTrace(entry, calls) else ConsoleChatCall(entry, calls)
+                            }
                         }
                         queuedChatMessages(chat)
                     }
@@ -1247,7 +1233,9 @@ private fun chatHistoryContent(
         ChatTranscriptRowView(row, chat, readAloud, toggleTool)
     }
     items(agentCalls, key = { "call:${it.key}" }, contentType = { "call" }) { entry ->
-        if (calls != null) ConsoleChatCall(entry, calls)
+        if (calls != null) {
+            if (LocalTasksDetail.current != null) TasksCallTrace(entry, calls) else ConsoleChatCall(entry, calls)
+        }
     }
     queuedChatMessages(chat)
 }
@@ -1288,7 +1276,11 @@ internal fun ChatTranscriptRowView(
 @Composable
 private fun ChatEntryHeader(entry: ChatEntry, attachments: ChatAttachments?, chat: ChatModel, readAloud: io.github.shiroel.aries.speech.ReadAloudState, toggleTool: (String) -> Unit) {
     val body = entry.body
-    if (body is ChatEntryBody.Question) {
+    if (LocalTasksDetail.current != null) {
+        TasksActivityEntry(entry, chat) {
+            ChatEntryView(entry, attachments, chat, expanded = entry.id in chat.expanded, chat::image, readAloud) { toggleTool(entry.id) }
+        }
+    } else if (body is ChatEntryBody.Question) {
         QuestionView(chat, entry.id, body)
     } else {
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (body is ChatEntryBody.Agent || body is ChatEntryBody.Tool) 0.dp else 12.dp)) {
@@ -1310,6 +1302,9 @@ private fun ChatEntryFooter(images: List<ChatImage>, metadata: ChatResponseMetad
             val key = "response:$entryId"
             ChatResponseMetadataView(it, key in chat.expanded) { toggleDetails(key) }
         }
+    }
+    if (LocalTasksDetail.current != null && entryId == chat.snapshot?.entries?.firstOrNull { it.body is ChatEntryBody.User }?.id) {
+        TasksPlan(chat.snapshot?.entries.orEmpty())
     }
     HorizontalDivider(Modifier.padding(top = 8.dp))
 }
@@ -1566,7 +1561,9 @@ private fun ToolContent(
                     contentDescription = null, modifier = Modifier.size(14.dp),
                     tint = MaterialTheme.colorScheme.primary,
                 )
-                SearchableChatText(tool.name, "tool-name", Modifier.widthIn(max = 120.dp), style = MaterialTheme.typography.labelMedium,
+                if (LocalTasksDetail.current != null && !expanded) {
+                    Text(tasksToolVerb(tool.name), Modifier.widthIn(max = 100.dp), style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                } else SearchableChatText(tool.name, "tool-name", Modifier.widthIn(max = 120.dp), style = MaterialTheme.typography.labelMedium,
                     fontFamily = FontFamily.Monospace, maxLines = 1)
                 SearchableChatText(
                     title, "tool-title", Modifier.weight(1f),
@@ -1574,8 +1571,16 @@ private fun ToolContent(
                     maxLines = 1, fontFamily = FontFamily.Monospace,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                val patch = if (LocalTasksDetail.current != null) tool.diff?.takeUnless { it.truncated } else null
+                val patchStats = remember(patch) {
+                    patch?.hunks?.flatMap { it.lines }?.let { lines ->
+                        TaskChangeStats(lines.count { it.startsWith("+") }, lines.count { it.startsWith("-") })
+                    }
+                }
                 Text(
-                    status, modifier = Modifier.clearAndSetSemantics {}, style = MaterialTheme.typography.labelSmall,
+                    if (LocalTasksDetail.current != null && patchStats != null)
+                        tasksChangeText(patchStats) else AnnotatedString(status),
+                    modifier = Modifier.clearAndSetSemantics {}, style = MaterialTheme.typography.labelSmall,
                     color = when (tool.status) {
                         ChatToolStatus.FAILED -> MaterialTheme.colorScheme.error
                         ChatToolStatus.RUNNING -> MaterialTheme.colorScheme.primary
@@ -1585,6 +1590,7 @@ private fun ToolContent(
                 )
             }
         }
+        if (LocalTasksDetail.current != null && !expanded) tool.diff?.let { DiffView(it, expanded = false) }
         if (expanded) {
             ChatToolDetailsPane {
                 tool.details?.let { ChatToolDetailsView(it) }
