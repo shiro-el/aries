@@ -97,9 +97,9 @@ internal fun ConsoleChatCall(entry: CallEntry, calls: CallsModel) {
         Text(call.title)
         if (call.body.isNotEmpty()) Text(call.body)
         call.answer?.let { answer ->
-            Text(stringResource(answer.state.labelResource(), answer.text), style = MaterialTheme.typography.bodySmall)
+            AnnouncedText(stringResource(answer.state.labelResource(), answer.text), style = MaterialTheme.typography.bodySmall)
             if (answer.state != CallAnswerState.DELIVERED) answer.detail?.let {
-                Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                AnnouncedText(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
         }
         when {
@@ -111,7 +111,7 @@ internal fun ConsoleChatCall(entry: CallEntry, calls: CallsModel) {
             }
         }
         calls.replyNotes[entry.key]?.let { replyNoteText(it) }?.let { text ->
-            Text(text, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            AnnouncedText(text, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
     }
 }

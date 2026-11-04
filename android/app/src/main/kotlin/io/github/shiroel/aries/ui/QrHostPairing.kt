@@ -86,6 +86,6 @@ internal fun QrHostPairing(model: HostsModel, scanQr: (((String) -> Unit) -> Uni
                 }
             }
         }
-        error?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error) }
+        error?.let { AnnouncedText(stringResource(it), color = MaterialTheme.colorScheme.error) }
     }
 }

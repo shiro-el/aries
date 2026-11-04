@@ -131,7 +131,7 @@ internal fun QuickOpenButton() {
     val open = LocalQuickOpen.current ?: return
     val label = stringResource(R.string.quick_open_title)
     val color = MaterialTheme.colorScheme.onSurface
-    Box(Modifier.size(44.dp).testTag("quick-open-button").clickable(onClick = open)
+    Box(Modifier.size(48.dp).testTag("quick-open-button").clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = open)
         .semantics { contentDescription = label }, contentAlignment = Alignment.Center) {
         Canvas(Modifier.size(18.dp)) {
             drawCircle(color, radius = size.width * .30f, center = Offset(size.width * .4f, size.height * .4f), style = Stroke(1.5.dp.toPx()))

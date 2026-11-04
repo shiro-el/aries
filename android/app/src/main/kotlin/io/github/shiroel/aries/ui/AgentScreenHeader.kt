@@ -46,7 +46,7 @@ internal fun AgentScreenHeader(
     val hostPrefix = hostName?.let { stringResource(R.string.console_agent_host_prefix, it) }
     val openFiles = LocalOpenFiles.current
     val quickOpen = LocalQuickOpen.current
-    Row(Modifier.fillMaxWidth().height(56.dp).testTag("console-top-bar"), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("console-top-bar"), verticalAlignment = Alignment.CenterVertically) {
         val backLabel = stringResource(R.string.back_button)
         IconButton(onClick = onBack, modifier = Modifier.size(48.dp).testTag("console-back")) {
             Icon(painterResource(R.drawable.ic_arrow_left), contentDescription = backLabel, modifier = Modifier.size(20.dp))
@@ -57,7 +57,7 @@ internal fun AgentScreenHeader(
                     hostPrefix?.let { withStyle(SpanStyle(color = colors.onSurfaceVariant, fontSize = 12.sp)) { append(it) } }
                     append(title)
                 }, Modifier.weight(1f, fill = false), fontFamily = FontFamily.Monospace,
-                    fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
                 if (terminal.watched) {
                     val label = stringResource(R.string.agent_watch_label)
                     Canvas(Modifier.padding(start = 4.dp).size(12.dp).semantics { contentDescription = label }) {
@@ -66,15 +66,17 @@ internal fun AgentScreenHeader(
                     }
                 }
             }
+            val largeText = accessibleNameLines() > 1
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 terminal.agentStatus?.let { status ->
                     AgentStatusMark(status, modifier = Modifier.size(10.dp))
                     Text(stringResource(agentStatusLabel(status)), color = statusColor(status), fontSize = 10.sp, maxLines = 1)
                 }
                 Text(terminal.currentCwd ?: stringResource(R.string.console_agent_unknown_folder), Modifier.weight(1f),
-                    color = colors.onSurfaceVariant, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                AgentElapsedTime(terminal.statusMs, R.string.console_agent_missing_value, R.string.console_agent_unknown_age)
+                    color = colors.onSurfaceVariant, fontSize = 10.sp, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
+                if (!largeText) AgentElapsedTime(terminal.statusMs, R.string.console_agent_missing_value, R.string.console_agent_unknown_age)
             }
+            if (largeText) AgentElapsedTime(terminal.statusMs, R.string.console_agent_missing_value, R.string.console_agent_unknown_age)
         }
         onView?.let { AgentViewSwitch(current, it) }
         ConsoleInboxAction()

@@ -5,6 +5,8 @@ import android.content.ClipboardManager
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -50,6 +52,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
@@ -132,7 +136,7 @@ private fun AriesContent(model: HostsModel, settings: ThemeSettings, terminalDis
                                         TextButton(
                                             onClick = { model.openHostSettings(s.browser.host) },
                                             modifier = Modifier.testTag("browse-host-settings:${s.browser.host.id}"),
-                                        ) { Text(stringResource(R.string.settings_beacon_missing), maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                                        ) { Text(stringResource(R.string.settings_beacon_missing), maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis) }
                                     }
                                 },
                             )
@@ -188,9 +192,11 @@ private fun HostListScreen(model: HostsModel) {
         if (model.hosts.isEmpty()) item { Text(stringResource(R.string.hosts_empty), Modifier.padding(12.dp), fontSize = 12.sp) }
         items(model.hosts, key = { it.id }) { host -> ConsoleHostRow(model, host) }
         item(key = "add") {
+            val expansion = stringResource(if (adding) R.string.tree_expanded else R.string.tree_collapsed)
             Text(
                 stringResource(if (adding) R.string.console_add_close else R.string.console_add_host),
-                Modifier.fillMaxWidth().testTag("hosts-add-toggle").clickable { adding = !adding }.padding(12.dp),
+                Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("hosts-add-toggle")
+                    .semantics { stateDescription = expansion }.clickable(role = Role.Button) { adding = !adding }.padding(12.dp),
                 fontSize = 14.sp, color = MaterialTheme.colorScheme.primary,
             )
             if (adding) Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -203,15 +209,16 @@ private fun HostListScreen(model: HostsModel) {
 @Composable
 private fun ConsoleHostRow(model: HostsModel, host: Host) {
     val color = if (host.endpoint is Endpoint.Local) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
-    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.width(3.dp).height(48.dp).background(color))
-        Column(Modifier.weight(1f).clickable { model.connect(host) }.padding(horizontal = 12.dp, vertical = 6.dp)) {
-            Text(host.name, fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    val connectLabel = stringResource(R.string.hosts_connect_button)
+    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.width(3.dp).fillMaxHeight().background(color))
+        Column(Modifier.weight(1f).heightIn(min = 48.dp).clickable(onClickLabel = connectLabel, role = Role.Button) { model.connect(host) }.padding(horizontal = 12.dp, vertical = 6.dp)) {
+            Text(host.name, fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
             val where = when (val endpoint = host.endpoint) {
                 is Endpoint.Ssh -> stringResource(R.string.host_ssh_address, endpoint.user, endpoint.address, endpoint.port.toInt())
                 is Endpoint.Local -> stringResource(R.string.host_local_address)
             }
-            Text(where, fontSize = 12.sp, lineHeight = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(where, fontSize = 12.sp, lineHeight = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
         }
         WaitingSummary(model.quickOpenSources.filter { it.host.id == host.id },
             model.drawerAgents.filter { it.host.id == host.id }, Modifier.testTag("host-waiting:${host.id}"),
@@ -228,10 +235,10 @@ private fun ConsoleHostRow(model: HostsModel, host: Host) {
             })
         val moreLabel = stringResource(R.string.console_host_menu, host.name)
         Box(
-            Modifier.size(48.dp).testTag("host-menu:${host.id}").clickable { model.openHostSettings(host) }
+            Modifier.size(48.dp).testTag("host-menu:${host.id}").clickable(role = Role.Button) { model.openHostSettings(host) }
                 .semantics { contentDescription = moreLabel },
             contentAlignment = Alignment.Center,
-        ) { Text(stringResource(R.string.console_more), fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        ) { Text(stringResource(R.string.console_more), Modifier.clearAndSetSemantics {}, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
     if (model.missingKeyHostId == host.id && model.key == null) {
         Column(Modifier.padding(12.dp)) { MissingKeySettingsLink(model) }
@@ -386,7 +393,7 @@ private fun PromptDialog(prompt: Prompt, model: HostsModel) {
         is Prompt.Problem -> AlertDialog(
             onDismissRequest = model::dismiss,
             title = { Text(text(prompt.title)) },
-            text = { Text(text(prompt.body)) },
+            text = { AnnouncedText(text(prompt.body)) },
             confirmButton = {
                 TextButton(onClick = { if (prompt.recoverKey) model.openKeyRecovery() else model.dismiss() }) {
                     Text(stringResource(if (prompt.recoverKey) R.string.key_recover_button else R.string.ok_button))
