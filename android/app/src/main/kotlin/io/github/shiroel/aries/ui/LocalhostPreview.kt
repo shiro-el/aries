@@ -27,6 +27,7 @@ import io.github.shiroel.aries.core.ChatEntryBody
 import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.PreviewForward
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayInputStream
 
@@ -46,7 +47,7 @@ internal fun rememberLocalhostPreview(link: HostLink?, output: String, address: 
     val connection = link?.connection
     LaunchedEffect(preview, enabled, connection, output) {
         if (enabled && connection != null && output.isNotEmpty()) {
-            preview.ports = (preview.ports + connection.previewPorts(output)).distinct().take(24)
+            preview.ports = (connection.previewPorts(output) + preview.ports).distinct().take(24)
         }
     }
     LaunchedEffect(preview, enabled, connection) {
@@ -65,17 +66,20 @@ internal fun rememberChatLocalhostPreview(link: HostLink?, entries: List<ChatEnt
     val preview = rememberLocalhostPreview(link, "", address)
     val parsed = remember(link) { mutableMapOf<String, String>() }
     val connection = link?.connection
-    LaunchedEffect(preview, connection, entries) {
+    val latestEntries by rememberUpdatedState(entries)
+    LaunchedEffect(preview, connection, address) {
         if (link?.host?.endpoint !is Endpoint.Ssh || address.contains('/') || connection == null) return@LaunchedEffect
-        val recent = entries.takeLast(100)
-        parsed.keys.retainAll(recent.mapTo(mutableSetOf()) { it.id })
-        for (entry in recent) {
-            val body = entry.body
-            val output = if (body is ChatEntryBody.Tool) body.output else body.markdownSource()
-            if (output != null && parsed[entry.id] != output) {
-                val ports = withContext(kotlinx.coroutines.Dispatchers.Default) { connection.previewPorts(output) }
-                parsed[entry.id] = output
-                preview.ports = (preview.ports + ports).distinct().take(24)
+        snapshotFlow { latestEntries }.collect { batch ->
+            val recent = batch.takeLast(100)
+            parsed.keys.retainAll(recent.mapTo(mutableSetOf()) { it.id })
+            for (entry in recent) {
+                val body = entry.body
+                val output = if (body is ChatEntryBody.Tool) body.output else body.markdownSource()
+                if (output != null && parsed[entry.id] != output) {
+                    val ports = withContext(kotlinx.coroutines.Dispatchers.Default) { connection.previewPorts(output) }
+                    parsed[entry.id] = output
+                    preview.ports = (ports + preview.ports).distinct().take(24)
+                }
             }
         }
     }
