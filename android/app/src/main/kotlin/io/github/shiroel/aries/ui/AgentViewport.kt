@@ -18,14 +18,19 @@ internal val LocalAgentViewportHeight = staticCompositionLocalOf { Dp.Infinity }
 internal fun AgentViewport(
     header: @Composable () -> Unit,
     input: @Composable (compact: Boolean) -> Unit,
+    collapseHeaderForIme: Boolean = false,
     content: @Composable ColumnScope.(compact: Boolean) -> Unit,
 ) {
     BoxWithConstraints(Modifier.fillMaxSize()
         .windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))) {
-        val compact = maxHeight < 480.dp || WindowInsets.ime.getBottom(LocalDensity.current) > 0
+        val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+        val compact = maxHeight < 480.dp || imeVisible
+        val showHeader = !collapseHeaderForIme || !imeVisible || maxHeight >= 200.dp
         CompositionLocalProvider(LocalAgentViewportHeight provides maxHeight) {
             Column(Modifier.widthIn(max = 960.dp).fillMaxSize().align(Alignment.TopCenter)) {
-                header()
+                // Reclaim chrome only in Chat's shortest keyboard panes so
+                // two editor lines and their caret fit at large font scales.
+                if (showHeader) header()
                 CallAttentionSlot(compact)
                 // Measure input outside the weighted body so notices and pickers
                 // cannot consume its height, even when the transcript has no room.

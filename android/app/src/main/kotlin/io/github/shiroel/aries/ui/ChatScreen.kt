@@ -1291,6 +1291,7 @@ fun ChatScreen(
         ChatDialogs(dialogs, chat, onRewind)
         TasksRequestDialogs(dialogs, chat, calls)
         AgentViewport(
+            collapseHeaderForIme = true,
             header = {
                 if (thread != null) ThreadChatHeader(chat, onBack, onOpenTerminal, { searchOpen = true }, preview, snapshot?.usage)
                 else AgentScreenHeader(chat.terminal, chat.host.name, onBack, AgentView.CHAT, onView,
