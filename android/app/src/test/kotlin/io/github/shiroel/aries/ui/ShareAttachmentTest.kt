@@ -63,6 +63,9 @@ class ShareAttachmentTest {
         compose.onNodeWithTag("agent-row:h2:box/t1").performClick()
         compose.waitForIdle()
         assertTrue(model.screen is Screen.Chat) // shared input opens Chat even if Terminal is the saved view
+        // Ticket 263 waits for a caught-up transcript before dispatching input.
+        core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, null))
+        compose.waitForIdle()
         compose.onNodeWithText(str(R.string.attachments_uploading)).assertExists()
         compose.onNodeWithText(str(R.string.chat_send_button)).assertIsNotEnabled()
         hold.complete(Unit)
