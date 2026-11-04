@@ -4,6 +4,10 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.*
@@ -13,6 +17,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -27,7 +33,7 @@ import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentStatus
 import kotlinx.coroutines.launch
 
-/** Shared 44dp header. Ticket 05 can supply Agent actions; ticket 04 owns [inbox]. */
+/** Shared header with room for enlarged text. Ticket 05 can supply Agent actions; ticket 04 owns [inbox]. */
 @Composable
 fun ConsoleTopBar(
     title: String,
@@ -37,14 +43,14 @@ fun ConsoleTopBar(
     inbox: @Composable RowScope.() -> Unit = { ConsoleInboxAction() },
     showMark: Boolean = true,
     titleContent: @Composable RowScope.() -> Unit = {
-        Text(title, Modifier.weight(1f), fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(title, Modifier.weight(1f), fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
     },
 ) {
-    Row(Modifier.fillMaxWidth().height(44.dp).testTag("console-top-bar"), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("console-top-bar"), verticalAlignment = Alignment.CenterVertically) {
         val navigationLabel = stringResource(if (onBack == null) R.string.console_open_drawer else R.string.back_button)
         Box(
-            Modifier.size(44.dp).testTag(if (onBack == null) "console-menu" else "console-back")
-                .clickable(onClick = onBack ?: onMenu),
+            Modifier.size(48.dp).testTag(if (onBack == null) "console-menu" else "console-back")
+                .clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onBack ?: onMenu),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -83,6 +89,10 @@ internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit) {
             !model.callInboxOpen && !model.quickOpenVisible && model.prompt == null,
     )
     val drawerWidth = (LocalConfiguration.current.screenWidthDp.dp - 16.dp).coerceAtMost(420.dp)
+    val density = LocalDensity.current
+    val edgeWidth = with(density) { 24.dp.toPx() }
+    val terminalHeaderHeight = with(density) { 56.dp.toPx() }
+    val swipeThreshold = with(density) { 48.dp.toPx() }
     LaunchedEffect(screen) { drawer.close(); model.closeCallInbox() }
     LaunchedEffect(model.callInboxOpen) { if (model.callInboxOpen) drawer.close() }
     val navigate: (() -> Unit) -> Unit = { action ->
@@ -109,22 +119,42 @@ internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit) {
                 drawer.close()
                 if (model.callInboxOpen) model.closeCallInbox() else model.openCallInbox()
             }
-        }) {
-            Column(Modifier.fillMaxSize()) {
-                // Agent screens supply their own ConsoleTopBar in ticket 05.
-                val agentHeader = screen is Screen.Terminal || screen is Screen.Chat
-                if (!agentHeader) {
-                    ConsoleTopBar(consoleTitle(screen), onMenu = {
-                        model.closeCallInbox()
+        }, LocalNextWaitingAgent provides model.nextWaitingAgent?.let { NextWaitingAction(it, model::openNextWaitingAgent) }) {
+            Box(Modifier.fillMaxSize().pointerInput(screen, drawer.isClosed, model.callInboxOpen, model.quickOpenVisible) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    // Observe at the parent so normal edge taps still reach header buttons.
+                    // Terminal owns all canvas gestures; only its header edge opens navigation.
+                    if (!drawer.isClosed || model.callInboxOpen || model.quickOpenVisible ||
+                        down.position.x > edgeWidth || (screen is Screen.Terminal && down.position.y > terminalHeaderHeight)) return@awaitEachGesture
+                    var distance = 0f
+                    val drag = awaitHorizontalTouchSlopOrCancellation(down.id) { change, over ->
+                        if (over > 0) { change.consume(); distance = over }
+                    }
+                    if (drag != null && horizontalDrag(drag.id) { change ->
+                            distance += change.position.x - change.previousPosition.x
+                            change.consume()
+                        } && distance > swipeThreshold) {
                         scope.launch { drawer.open() }
-                    }, onBack = consoleBack(model), actions = {
-                        if (screen is Screen.Browse) HostActions(screen.browser) { model.newTerminal(screen.browser) }
-                    })
+                    }
                 }
-                Box(Modifier.weight(1f)) {
-                    content()
-                    if (model.callInboxOpen && drawer.isClosed && drawer.targetValue == DrawerValue.Closed) {
-                        CallInboxOverlay(model, Modifier.padding(top = if (agentHeader) 45.dp else 0.dp))
+            }) {
+                Column(Modifier.fillMaxSize()) {
+                    // Agent screens supply their own ConsoleTopBar in ticket 05.
+                    val agentHeader = screen is Screen.Terminal || screen is Screen.Chat
+                    if (!agentHeader) {
+                        ConsoleTopBar(consoleTitle(screen), onMenu = {
+                            model.closeCallInbox()
+                            scope.launch { drawer.open() }
+                        }, onBack = consoleBack(model), actions = {
+                            if (screen is Screen.Browse) HostActions(screen.browser) { model.newTerminal(screen.browser) }
+                        })
+                    }
+                    Box(Modifier.weight(1f)) {
+                        content()
+                        if (model.callInboxOpen && drawer.isClosed && drawer.targetValue == DrawerValue.Closed) {
+                            CallInboxOverlay(model, Modifier.padding(top = if (agentHeader) 57.dp else 0.dp))
+                        }
                     }
                 }
             }
@@ -165,7 +195,6 @@ private fun consoleBack(model: HostsModel): (() -> Unit)? = when (val screen = m
 private fun ConsoleDrawer(model: HostsModel, navigate: (() -> Unit) -> Unit) {
     val agents = model.drawerAgents
     val folds = rememberTreeFolds("agents")
-    val waiting = agents.count { it.terminal.parent == null && isWaiting(it.terminal.agentStatus) }
     val current = model.screen
     val currentAgent = when (current) {
         is Screen.Terminal -> current.viewer.link?.host?.id?.let { AgentKey(it, current.viewer.terminal.address) }
@@ -179,7 +208,7 @@ private fun ConsoleDrawer(model: HostsModel, navigate: (() -> Unit) -> Unit) {
     }
     LazyColumn {
         item {
-            Row(Modifier.height(44.dp).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.heightIn(min = 48.dp).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                 ConsoleMark()
                 Text(stringResource(R.string.app_name), fontSize = 14.sp, fontWeight = FontWeight.Medium)
             }
@@ -188,8 +217,7 @@ private fun ConsoleDrawer(model: HostsModel, navigate: (() -> Unit) -> Unit) {
                 stringResource(R.string.agents_button), current is Screen.Agents,
                 onClick = { navigate(model::openAgents) },
             ) {
-                Text(stringResource(R.string.console_agents_waiting, waiting), fontSize = 12.sp,
-                    color = if (waiting > 0) statusColor(AgentStatus.Blocked(null, null)) else MaterialTheme.colorScheme.onSurfaceVariant)
+                WaitingSummary(model.quickOpenSources, agents)
             }
             Text(stringResource(R.string.hosts_title), Modifier.padding(horizontal = 12.dp, vertical = 8.dp), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -219,12 +247,12 @@ private fun DrawerRow(
     trailing: @Composable () -> Unit = {},
 ) {
     Row(
-        modifier.fillMaxWidth().heightIn(min = 44.dp).semantics { selected = current }.clickable(onClick = onClick),
+        modifier.fillMaxWidth().height(IntrinsicSize.Min).heightIn(min = 48.dp).semantics { selected = current }.clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.width(3.dp).height(44.dp).background(if (current) MaterialTheme.colorScheme.primary else Color.Transparent))
+        Box(Modifier.width(3.dp).fillMaxHeight().background(if (current) MaterialTheme.colorScheme.primary else Color.Transparent))
         Row(Modifier.weight(1f).padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(title, Modifier.weight(1f), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(title, Modifier.weight(1f), fontSize = 14.sp, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
             trailing()
         }
     }

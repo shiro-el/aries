@@ -113,7 +113,7 @@ fun AppGuidance(
                             Text(stringResource(R.string.onboarding_permission_button))
                         }
                         permissionResult?.let { allowed ->
-                            Text(stringResource(if (allowed) R.string.onboarding_permission_granted else R.string.onboarding_permission_denied))
+                            io.github.shiroel.aries.ui.AnnouncedText(stringResource(if (allowed) R.string.onboarding_permission_granted else R.string.onboarding_permission_denied))
                         }
                     }
                 }

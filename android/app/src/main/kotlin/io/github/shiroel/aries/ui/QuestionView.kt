@@ -72,7 +72,7 @@ internal fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question
                 painterResource(if (answered) R.drawable.ic_check else R.drawable.ic_x),
                 contentDescription = null, tint = accent, modifier = Modifier.size(18.dp),
             )
-            Text(stringResource(label), style = MaterialTheme.typography.labelMedium, color = accent)
+            AnnouncedText(stringResource(label), style = MaterialTheme.typography.labelMedium, color = accent)
         }
         q.questions.forEachIndexed { part, question ->
             if (part > 0) androidx.compose.material3.HorizontalDivider(Modifier.padding(vertical = 4.dp))
@@ -145,8 +145,8 @@ internal fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question
             }
         }
         when {
-            state == AnswerState.Sending -> Text(stringResource(R.string.chat_question_sending), style = MaterialTheme.typography.bodySmall)
-            state is AnswerState.Failed -> Text(stringResource(state.why.res, *state.why.args.toTypedArray()),
+            state == AnswerState.Sending -> AnnouncedText(stringResource(R.string.chat_question_sending), style = MaterialTheme.typography.bodySmall)
+            state is AnswerState.Failed -> AnnouncedText(stringResource(state.why.res, *state.why.args.toTypedArray()),
                 style = MaterialTheme.typography.bodySmall, color = colors.error)
         }
     }
