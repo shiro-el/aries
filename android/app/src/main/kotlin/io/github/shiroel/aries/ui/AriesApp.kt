@@ -111,16 +111,18 @@ private fun AriesContent(
     Scaffold { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
             FirstConnectionGuide(model, guidance, allowNotifications) {
-                LocalLayoutScreens.current.Shell(model) {
-                    RemoteFilesAccess(model) {
-                        AdaptiveHostLayout(
-                            listScreen = model.listScreen.takeIf { LocalLayoutScreens.current.usesListPane },
-                            hasDetail = model.screen != model.listScreen,
-                            listHeader = { LocalLayoutScreens.current.Header(model, it) },
-                            detailHeader = { LocalLayoutScreens.current.Header(model, model.screen) },
-                            listContent = { LocalLayoutScreens.current.Screen(model, settings, terminalDisplay, it) },
-                            detailContent = { LocalLayoutScreens.current.Screen(model, settings, terminalDisplay, model.screen) },
-                        )
+                CallAttentionHost(model) {
+                    LocalLayoutScreens.current.Shell(model) {
+                        RemoteFilesAccess(model) {
+                            AdaptiveHostLayout(
+                                listScreen = model.listScreen.takeIf { LocalLayoutScreens.current.usesListPane },
+                                hasDetail = model.screen != model.listScreen,
+                                listHeader = { LocalLayoutScreens.current.Header(model, it) },
+                                detailHeader = { LocalLayoutScreens.current.Header(model, model.screen) },
+                                listContent = { LocalLayoutScreens.current.Screen(model, settings, terminalDisplay, it) },
+                                detailContent = { LocalLayoutScreens.current.Screen(model, settings, terminalDisplay, model.screen) },
+                            )
+                        }
                     }
                 }
             }

@@ -1329,6 +1329,7 @@
         <item quantity="other">Checking %1$d Hosts…</item>
     </plurals>
     <string name="call_inbox_empty">No Calls to answer here.</string>
+    <string name="call_caller_unknown">Agent</string>
     <string name="call_inbox_caller">%1$s on %2$s</string>
     <string name="call_open_chat">Open in Chat</string>
     <string name="call_open_chat_label">Open %1$s in Chat for Call: %2$s</string>

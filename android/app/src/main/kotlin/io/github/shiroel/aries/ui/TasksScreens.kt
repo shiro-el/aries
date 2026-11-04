@@ -105,6 +105,7 @@ private fun TasksShell(model: HostsModel, content: @Composable () -> Unit) {
                     }
                 }
                 HorizontalDivider()
+                if (screen == Screen.Hosts) CallAttentionSlot()
                 Box(Modifier.weight(1f)) { content() }
             }
             if (model.callInboxOpen) CallInboxOverlay(model)
