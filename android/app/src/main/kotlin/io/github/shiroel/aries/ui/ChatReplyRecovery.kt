@@ -38,7 +38,9 @@ internal object ChatReplyRecovery {
 
     suspend fun recoverFromWorker(core: AriesCoreInterface, key: AgentKey, message: QueuedChatMessage) {
         val owner = saveOrOwner(core, key, message) ?: return
-        withContext(Dispatchers.Main.immediate) { owner.recoverReply(message) }
+        // The notification worker must outlive the owner's asynchronous encrypted
+        // checkpoint, including a debounce or earlier write already in flight.
+        withContext(Dispatchers.Main.immediate) { owner.recoverReply(message)?.join() }
     }
 
     fun message(generation: String, text: String, line: String, uncertain: Boolean) = QueuedChatMessage(

@@ -315,7 +315,12 @@ class InlineNotificationTest {
         online()
         val host = core.addHost("box", io.github.shiroel.aries.core.Endpoint.Ssh("box", 22u, "me"))
         val terminal = io.github.shiroel.aries.core.TerminalInfo("t1", "Agent", "", emptyList(), null, "live", AgentStatus.Done)
-        val owner = io.github.shiroel.aries.ui.ChatModel(core, host, terminal)
+        val journalWrites = java.util.concurrent.ConcurrentLinkedQueue<Runnable>()
+        val journalDispatcher = object : CoroutineDispatcher() {
+            override fun dispatch(context: kotlin.coroutines.CoroutineContext, block: Runnable) { journalWrites.add(block) }
+        }
+        fun flushJournalIo() { while (true) (journalWrites.poll() ?: break).run() }
+        val owner = io.github.shiroel.aries.ui.ChatModel(core, host, terminal, journalWork = journalDispatcher)
         owner.draft = "a different draft"
         PushService.show(context, status())
         val accepted = target()
@@ -330,13 +335,29 @@ class InlineNotificationTest {
         assertTrue(manager.activeNotifications.isEmpty())
         hold.complete(Unit)
         withTimeout(5_000) {
+            while (owner.queuedMessages.isEmpty() || journalWrites.isEmpty()) {
+                shadowOf(Looper.getMainLooper()).idle(); delay(10)
+            }
+        }
+        val completedBeforeCheckpoint = withTimeoutOrNull(2_000) {
             while (!result.isCompleted) { shadowOf(Looper.getMainLooper()).idle(); delay(10) }
+            true
+        }
+        assertNull("Reply work must wait until the recovered text is durable", completedBeforeCheckpoint)
+        withTimeout(5_000) {
+            while (!result.isCompleted) { flushJournalIo(); shadowOf(Looper.getMainLooper()).idle(); delay(10) }
         }
         result.await()
         assertEquals("a different draft", owner.draft)
         assertEquals("run tests", owner.queuedMessages.single().draft)
         assertEquals(io.github.shiroel.aries.ui.QueuedMessagePhase.Uncertain, owner.queuedMessages.single().phase)
         owner.draft = "edited after failure"
+        owner.stop() // Navigation flushes the debounced composer, as in the real owner.
+        withTimeout(5_000) {
+            while (core.chatOutbox(host.id, "t1")?.let { io.github.shiroel.aries.ui.decodeChatOutbox(it).draft } != "edited after failure") {
+                flushJournalIo(); shadowOf(Looper.getMainLooper()).idle(); delay(10)
+            }
+        }
         val restored = io.github.shiroel.aries.ui.ChatModel(core, host, terminal)
         assertEquals("edited after failure", restored.draft)
         assertEquals("run tests", restored.queuedMessages.single().draft)
