@@ -91,7 +91,7 @@ internal fun AgentScreenHeader(
                     ActionMenuItem(stringResource(R.string.menu_search), R.drawable.ic_search,
                         onClick = { menu = false; it() }, modifier = Modifier.semantics { contentDescription = searchLabel })
                 }
-                ActionMenuItem(stringResource(R.string.github_button), R.drawable.ic_link,
+                ActionMenuItem(stringResource(R.string.github_button), R.drawable.ic_github,
                     enabled = link?.connection != null, onClick = { menu = false; showGithub = true })
                 quickOpen?.let { ActionMenuItem(stringResource(R.string.quick_open_title), R.drawable.ic_terminal_view,
                     onClick = { menu = false; it() }) }

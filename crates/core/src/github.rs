@@ -51,6 +51,8 @@ pub struct GithubComment {
 pub struct GithubDetail {
     pub item: GithubItem,
     pub comments: Vec<GithubComment>,
+    pub head_branch: Option<String>,
+    pub base_branch: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -67,6 +69,8 @@ struct RawItem {
     created_at: String,
     body: Option<String>,
     pull_request: Option<serde_json::Value>,
+    #[serde(default)]
+    draft: bool,
 }
 
 impl RawItem {
@@ -81,7 +85,13 @@ impl RawItem {
         Ok(GithubItem {
             number: self.number,
             title: self.title,
-            state: if merged { "merged".into() } else { self.state },
+            state: if merged {
+                "merged".into()
+            } else if self.state == "open" && self.draft && self.pull_request.is_some() {
+                "draft".into()
+            } else {
+                self.state
+            },
             author: self.user.map_or_else(String::new, |u| u.login),
             created_at: self.created_at,
             body: self.body.unwrap_or_default(),
@@ -413,10 +423,47 @@ impl HostConnection {
             .await?;
         let raw: RawItem =
             serde_json::from_slice(&bytes).map_err(|_| protocol("invalid gh detail JSON"))?;
-        let item = raw.into_item()?;
+        let mut item = raw.into_item()?;
         if item.number != number {
             return Err(protocol("GitHub returned a different issue"));
         }
+        // Issues carry the conversation, but branch/draft/merge metadata is
+        // available only from the PR endpoint. Never infer it from the checkout.
+        let (head_branch, base_branch) = if item.kind == GithubKind::PullRequest {
+            #[derive(Deserialize)]
+            struct Branch {
+                r#ref: String,
+            }
+            #[derive(Deserialize)]
+            struct Pull {
+                number: u32,
+                head: Branch,
+                base: Branch,
+                draft: bool,
+                merged: bool,
+            }
+            let bytes = self
+                .github_api(
+                    &repo,
+                    format!("repos/{}/pulls/{number}", repo.name_with_owner),
+                    vec![],
+                    false,
+                )
+                .await?;
+            let pull: Pull = serde_json::from_slice(&bytes)
+                .map_err(|_| protocol("invalid GitHub PR metadata JSON"))?;
+            if pull.number != number || pull.head.r#ref.is_empty() || pull.base.r#ref.is_empty() {
+                return Err(protocol("invalid GitHub PR metadata"));
+            }
+            if pull.merged {
+                item.state = "merged".into();
+            } else if item.state == "open" && pull.draft {
+                item.state = "draft".into();
+            }
+            (Some(pull.head.r#ref), Some(pull.base.r#ref))
+        } else {
+            (None, None)
+        };
         let bytes = self
             .github_api(
                 &repo,
@@ -436,6 +483,8 @@ impl HostConnection {
             serde_json::from_slice(&bytes).map_err(|_| protocol("invalid gh comment JSON"))?;
         Ok(GithubDetail {
             item,
+            head_branch,
+            base_branch,
             comments: pages
                 .into_iter()
                 .flatten()
