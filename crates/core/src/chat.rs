@@ -283,11 +283,14 @@ pub struct ChatSnapshot {
     pub status: ChatStatus,
     /// Resume point of what `entries` covers.
     pub cursor: Option<String>,
+    #[uniffi(default = None)]
+    pub usage: Option<crate::AgentUsage>,
 }
 
 /// Applies Chat lines to entries (upsert by id; `reset` clears).
 #[derive(Debug, Clone)]
 pub(crate) struct ChatModel {
+    usage: Option<aries_protocol::chat::AgentUsage>,
     entries: Vec<ChatEntry>,
     /// The Beacon's items behind `entries`, same order (what the cache keeps).
     items: Vec<ChatItem>,
@@ -303,6 +306,7 @@ pub(crate) type Images = Arc<std::sync::Mutex<HashMap<String, Arc<Vec<u8>>>>>;
 impl ChatModel {
     pub fn new(cursor: Option<String>) -> Self {
         Self {
+            usage: None,
             entries: Vec::new(),
             items: Vec::new(),
             index: HashMap::new(),
@@ -315,6 +319,7 @@ impl ChatModel {
     /// Shows a cached Chat (its images included) and resumes after its cursor.
     pub fn seed(&mut self, chat: CachedChat) {
         self.cursor = chat.cursor;
+        self.usage = chat.usage;
         for item in chat
             .items
             .into_iter()
@@ -340,6 +345,7 @@ impl ChatModel {
 
     pub fn to_cache(&self) -> CachedChat {
         CachedChat {
+            usage: self.usage.clone(),
             items: self
                 .items
                 .iter()
@@ -412,6 +418,7 @@ impl ChatModel {
 
     pub fn snapshot(&self) -> ChatSnapshot {
         ChatSnapshot {
+            usage: self.usage.clone().map(Into::into),
             entries: self.entries.clone(),
             status: self.status,
             cursor: self.cursor.clone(),
@@ -431,11 +438,13 @@ impl ChatModel {
     pub fn apply(&mut self, line: ChatLine) {
         match line.event {
             ChatEvent::Reset { .. } => {
+                self.usage = None;
                 self.entries.clear();
                 self.items.clear();
                 self.index.clear();
                 self.images().clear();
             }
+            ChatEvent::Usage { usage } => self.usage = Some(usage),
             ChatEvent::Item { item } => self.upsert(item),
             ChatEvent::Remove { id } => {
                 self.forget_images(&id);

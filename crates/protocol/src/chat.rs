@@ -70,10 +70,42 @@ pub enum ChatEvent {
     State {
         state: ChatState,
     },
+    /// Transcript readings for this Agent, separate from response metadata.
+    Usage {
+        usage: AgentUsage,
+    },
     Heartbeat,
     /// An event type this reader does not know; skip it.
     #[serde(other)]
     Unknown,
+}
+
+/// Last recorded readings, scoped to one Agent transcript/account. Missing
+/// measurements stay absent; refresh times are transcript times, never fetch times.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentUsage {
+    #[serde(default)]
+    pub context: Option<ContextUsage>,
+    #[serde(default)]
+    pub limits: Vec<UsageLimit>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ContextUsage {
+    pub used_tokens: Option<u64>,
+    pub window_tokens: Option<u64>,
+    pub updated_at: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UsageLimit {
+    pub name: String,
+    pub window_minutes: Option<u64>,
+    /// Hundredths of a percent: 1250 = 12.5%. None is not 0%.
+    pub used_basis_points: Option<u32>,
+    /// Unix seconds, as recorded by the Agent.
+    pub resets_at: Option<u64>,
+    pub updated_at: Option<String>,
 }
 
 /// What the Beacon is doing for this Chat.

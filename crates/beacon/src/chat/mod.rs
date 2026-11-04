@@ -20,6 +20,7 @@ pub mod permission;
 pub mod pi;
 mod question;
 mod source;
+mod usage;
 
 use std::path::PathBuf;
 
