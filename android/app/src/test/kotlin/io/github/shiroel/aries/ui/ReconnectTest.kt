@@ -124,13 +124,19 @@ class ReconnectTest {
         compose.onNodeWithText(str(R.string.connect_settings_button)).assertDoesNotExist()
         compose.onNodeWithText(str(R.string.connect_failed_title)).assertDoesNotExist()
         compose.onNode(hasProgressBarRangeInfo(ProgressBarRangeInfo.Indeterminate)).assertExists()
-        compose.onNodeWithText(str(R.string.connect_host_reconnecting, "home")).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.connect_host_reconnecting, "home")).assertExists()
         screenshot("initial")
         compose.mainClock.advanceTimeBy(1_000)
-        compose.onNodeWithText(str(R.string.connect_host_reconnecting, "home")).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.connect_host_reconnecting, "home")).assertExists()
         compose.mainClock.advanceTimeBy(600)
         compose.onNodeWithText(str(R.string.connect_host_reconnecting, "home")).assertExists()
         screenshot("delayed")
+
+        compose.mainClock.advanceTimeBy(20_000)
+        compose.onNodeWithText(str(R.string.loading_slow)).assertExists()
+        compose.onNodeWithText(str(R.string.connect_retry_button)).assertExists()
+        compose.onNode(hasProgressBarRangeInfo(ProgressBarRangeInfo.Indeterminate)).assertDoesNotExist()
+        screenshot("slow")
 
         core.failWith = CoreException.AuthRejected()
         compose.runOnIdle { model.networkChanged() }

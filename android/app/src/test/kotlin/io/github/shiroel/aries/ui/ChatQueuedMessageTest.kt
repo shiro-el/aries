@@ -115,13 +115,13 @@ class ChatQueuedMessageTest {
         // Repeating the first update must not also consume the second identical send.
         core.pushChat(ChatSnapshot(listOf(ChatEntry("u1", null, ChatEntryBody.User("next step", emptyList(), false))), ChatStatus.LIVE, null))
         compose.waitForIdle()
-        compose.onNodeWithText("Passed to Agent · waiting for its turn").assertExists()
+        compose.onNodeWithText("Entered in Terminal").assertExists()
         core.pushChat(ChatSnapshot(listOf(
             ChatEntry("u1", null, ChatEntryBody.User("next step", emptyList(), false)),
             ChatEntry("u2", null, ChatEntryBody.User("next step", emptyList(), false)),
         ), ChatStatus.LIVE, null))
         compose.waitUntil(5_000) {
-            compose.onAllNodesWithText("Passed to Agent · waiting for its turn").fetchSemanticsNodes().isEmpty() &&
+            compose.onAllNodesWithText("Entered in Terminal").fetchSemanticsNodes().isEmpty() &&
                 compose.onAllNodesWithText("next step").fetchSemanticsNodes().size == 2
         }
         assertEquals(listOf("t1" to "next step", "t1" to "next step"), connection.typed)

@@ -12,7 +12,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.joinAll
-import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -84,7 +83,7 @@ class HostLink(
     internal fun finishBeforeDisconnect(conn: HostConnection, send: suspend () -> Unit): Job {
         val job = scope.launch(NonCancellable, start = CoroutineStart.UNDISPATCHED) {
             // A lifecycle handoff gets one existing RPC timeout, not an ongoing service.
-            withTimeout(30_000L) { send() }
+            withTimeoutOrNull(30_000L) { send() }
         }
         finishingSends.getOrPut(conn) { mutableSetOf() }.add(job)
         job.invokeOnCompletion {

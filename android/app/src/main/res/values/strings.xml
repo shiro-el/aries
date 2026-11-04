@@ -715,6 +715,18 @@
     <string name="chat_send_button">Send</string>
     <string name="chat_sent">Message sent</string>
     <string name="chat_sending">Sending…</string>
+    <!-- Shared first load and Chat activity -->
+    <string name="chat_loading">Loading conversation…</string>
+    <string name="hosts_loading">Loading Host…</string>
+    <string name="loading_slow">Loading is taking longer than expected. Check the Host connection and try again.</string>
+    <string name="chat_working">Working</string>
+    <!-- Chat delivery status -->
+    <string name="chat_delivery_entered">Entered in Terminal</string>
+    <string name="chat_delivery_received">Received by Agent</string>
+    <string name="chat_delivery_failed">Not sent</string>
+    <string name="chat_delivery_retry_button">Retry</string>
+    <string name="chat_delivery_restore_button">Restore to input</string>
+    <string name="chat_delivery_resend_title">Resend message?</string>
     <!-- Phone-local Chat queue -->
     <string name="chat_queue_waiting">Waiting</string>
     <string name="chat_queue_agent">Passed to Agent · waiting for its turn</string>

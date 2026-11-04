@@ -1,14 +1,11 @@
 package io.github.shiroel.aries.ui
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -16,10 +13,8 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.Host
 import io.github.shiroel.aries.core.SavedLaunch
@@ -142,17 +137,18 @@ fun AgentsScreen(
                     TextButton(onClick = add) { Text(stringResource(R.string.console_add_host)) }
                 }
             }
-            if (board.loadingHosts.isNotEmpty()) item {
-                Row(
-                    Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                    Spacer(Modifier.size(8.dp))
-                    Text(stringResource(R.string.agents_loading_hosts, board.loadingHosts.size))
+            items(board.loadingHosts, key = { "loading:" + it.id }) { host ->
+                val compact = board.agents.isNotEmpty()
+                Box(if (compact) Modifier.fillMaxWidth() else Modifier.fillParentMaxHeight().fillMaxWidth()) {
+                    ScreenLoading(stringResource(R.string.connect_host_reconnecting, host.name), compact = compact,
+                        labelDelayMillis = if (compact) 1_500L else 0L, onRetry = {
+                            board.links[host.id]?.let { link ->
+                                if (link.state == LinkState.Up) link.networkChanged() else link.retryNow()
+                            }
+                        })
                 }
             }
-            items(board.hosts.filter { board.links[it.id]?.state != LinkState.Up }, key = { "connection:" + it.id }) { host ->
+            items(board.hosts.filter { board.links[it.id]?.state != LinkState.Up && it !in board.loadingHosts }, key = { "connection:" + it.id }) { host ->
                 board.links[host.id]?.let { ConnectionNotice(it) }
             }
             val agents = board.agents

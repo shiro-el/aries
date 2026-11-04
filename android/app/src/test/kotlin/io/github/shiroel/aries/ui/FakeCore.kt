@@ -1003,6 +1003,7 @@ class FakeConnection(
 
     /** When set, `sendMessage` is held (someone types at the Host) until it completes. */
     var sendHold: CompletableDeferred<Unit>? = null
+    var sendReply: CompletableDeferred<Unit>? = null
 
     override suspend fun sendMessage(address: String, text: String, listener: SendListener): SendOutcome {
         calls += "sendMessage"
@@ -1010,6 +1011,7 @@ class FakeConnection(
             listener.onHeld()
             it.await()
         }
+        sendReply?.await()
         sendFailWith?.let { throw it }
         if (sendOutcome == SendOutcome.Sent) typed += address to text
         return sendOutcome

@@ -230,7 +230,7 @@ class ChatSendTest {
 
         assertEquals(listOf("t1" to "now add a test"), conn.typed)
         compose.onNodeWithText("now add a test").assertExists()
-        compose.onNodeWithText(str(R.string.chat_queue_agent)).assertExists()
+        compose.onNodeWithText(str(R.string.chat_delivery_entered)).assertExists()
     }
 
     @Test
@@ -331,7 +331,7 @@ class ChatSendTest {
     }
 
     @Test
-    fun aFailedSendSaysWhy() {
+    fun aLostSendReplyKeepsTheMessageWithItsRecoveryStatus() {
         val core = FakeCore()
         val conn = openChat(core)
         conn.sendFailWith = CoreException.Closed()
@@ -339,7 +339,7 @@ class ChatSendTest {
         type("hello")
 
         compose.onNodeWithText("hello").assertExists()
-        compose.onNodeWithText(str(R.string.chat_send_failed, ""), substring = true).assertExists()
+        compose.onNodeWithText(str(R.string.chat_queue_uncertain)).assertExists()
     }
 
     @Test
