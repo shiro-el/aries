@@ -1295,7 +1295,7 @@ fun ChatScreen(
     val selectedIndex = selectedChatSearchIndex(matches, selected)
     val active = matches.getOrNull(selectedIndex)
     fun closeSearch() { searchOpen = false; query = ""; selected = null }
-    BackHandler(enabled = searchOpen, onBack = ::closeSearch)
+    BackHandler(enabled = searchOpen && !LocalConsoleOverlayOpen.current, onBack = ::closeSearch)
     val agentCalls = calls?.let { model ->
         model.calls.filter {
             it.host.id == chat.host.id && it.call.terminal == chat.terminal.address &&
@@ -1590,7 +1590,7 @@ internal fun MessageInput(chat: ChatModel, compact: Boolean = false, leading: (@
         fontSize = 14.sp,
         lineHeight = 20.sp,
     )
-    // IME visibility also enables compact chrome on tall phones. Only the
+    // Compact chrome follows the remaining pane height. Only the
     // genuinely short viewport (landscape / split screen) needs fewer lines.
     val maxLines = if (!compact) 6 else if (LocalAgentViewportHeight.current < 300.dp) 2 else 4
     var inputLayout by remember(chat) { mutableStateOf<TextLayoutResult?>(null) }

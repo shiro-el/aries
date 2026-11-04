@@ -13,6 +13,8 @@ import androidx.compose.ui.unit.Dp
 
 internal val LocalAgentViewportHeight = staticCompositionLocalOf { Dp.Infinity }
 
+internal fun agentViewportIsCompact(availableHeight: Dp): Boolean = availableHeight < 480.dp
+
 /** Use the pane's available height, including IME and split-screen constraints. */
 @Composable
 internal fun AgentViewport(
@@ -24,7 +26,7 @@ internal fun AgentViewport(
     BoxWithConstraints(Modifier.fillMaxSize()
         .windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))) {
         val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-        val compact = maxHeight < 480.dp || imeVisible
+        val compact = agentViewportIsCompact(maxHeight)
         val showHeader = !collapseHeaderForIme || !imeVisible || maxHeight >= 200.dp
         CompositionLocalProvider(LocalAgentViewportHeight provides maxHeight) {
             Column(Modifier.widthIn(max = 960.dp).fillMaxSize().align(Alignment.TopCenter)) {
