@@ -39,10 +39,10 @@ import io.github.shiroel.aries.core.CallAnswerState
 
 /** Shared visual treatment; transcript questions and Beacon Calls keep their own reply protocols. */
 @Composable
-internal fun ConsoleChatCallSurface(accent: Color? = null, content: @Composable ColumnScope.() -> Unit) {
+internal fun ConsoleChatCallSurface(accent: Color? = null, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     val blocked = accent ?: statusColor(AgentStatus.Blocked(null, null))
     Column(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainer)
+        modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainer)
             .drawBehind { drawLine(blocked, Offset(1.dp.toPx(), 0f), Offset(1.dp.toPx(), size.height), strokeWidth = 2.dp.toPx()) }
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp), content = content,
@@ -92,7 +92,7 @@ internal fun ConsoleChatChoice(
 @Composable
 internal fun ConsoleChatCall(entry: CallEntry, calls: CallsModel) {
     val call = entry.call
-    ConsoleChatCallSurface {
+    ConsoleChatCallSurface(modifier = Modifier.presentsCalls(setOf(entry.key))) {
         Text(stringResource(R.string.console_chat_call_label), color = statusColor(AgentStatus.Blocked(null, null)),
             style = MaterialTheme.typography.labelLarge)
         AnnouncedText(call.title)

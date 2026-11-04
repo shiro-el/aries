@@ -31,7 +31,7 @@ import java.time.ZoneId
 @Composable
 internal fun ThreadShell(model: HostsModel, content: @Composable () -> Unit) {
     ConsoleShell(model, content, drawerContent = { navigate -> ThreadDrawer(model, navigate) },
-        showAttentionBanner = false, onHome = model::openThreadHome, isHome = { it is Screen.Agents })
+        onHome = model::openThreadHome, isHome = { it is Screen.Agents })
 }
 
 @Composable
@@ -62,6 +62,7 @@ internal fun ThreadSecondaryHeader(model: HostsModel, screen: Screen) {
         if (home) ThreadNewTaskButton(model)
     }
     HorizontalDivider()
+    CallAttentionSlot()
 }
 
 @Composable

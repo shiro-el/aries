@@ -54,6 +54,7 @@ internal fun TasksSecondaryHeader(model: HostsModel, screen: Screen) {
         }
     }
     HorizontalDivider()
+    if (screen == model.screen) CallAttentionSlot()
 }
 
 /** Host content uses the same task rows as Home, grouped by actual Space membership. */

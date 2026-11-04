@@ -110,7 +110,6 @@ internal fun ConsoleShell(
     model: HostsModel,
     content: @Composable () -> Unit,
     drawerContent: (@Composable ((() -> Unit) -> Unit) -> Unit)? = null,
-    showAttentionBanner: Boolean = true,
     onHome: (() -> Unit)? = null,
     isHome: (Screen) -> Boolean = { it == Screen.Hosts },
 ) {
@@ -154,7 +153,8 @@ internal fun ConsoleShell(
             model.closeCallInbox()
             scope.launch { drawer.open() }
         }
-        CompositionLocalProvider(LocalConsoleHeaderMeasured provides { measuredHeaderHeight = it }, LocalConsoleMenu provides openDrawer, LocalQuickOpen provides {
+        CompositionLocalProvider(LocalCallAttentionEnabled provides (drawer.isClosed && drawer.targetValue == DrawerValue.Closed),
+            LocalConsoleHeaderMeasured provides { measuredHeaderHeight = it }, LocalConsoleMenu provides openDrawer, LocalQuickOpen provides {
             scope.launch { drawer.close(); model.openQuickOpen() }
         }, LocalCallInbox provides CallInboxAction(model.calls, model.callInboxOpen) {
             scope.launch {
@@ -184,13 +184,7 @@ internal fun ConsoleShell(
                 }
             }) {
                 val inboxVisible = model.callInboxOpen && drawer.isClosed && drawer.targetValue == DrawerValue.Closed
-                val compactHeight = maxHeight < 480.dp || WindowInsets.ime.getBottom(density) > 0
-                Column(Modifier.fillMaxSize().semantics { if (inboxVisible) hideFromAccessibility() }) {
-                    if (showAttentionBanner && !inboxVisible && !compactHeight) model.calls.banner?.let { entry ->
-                        CallAttentionBanner(entry, model.callCallerName(entry), model::openCallInbox, model.calls::dismissBanner)
-                    }
-                    Box(Modifier.weight(1f)) { content() }
-                }
+                Box(Modifier.fillMaxSize().semantics { if (inboxVisible) hideFromAccessibility() }) { content() }
                 if (inboxVisible) CallInboxOverlay(model)
             }
         }

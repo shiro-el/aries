@@ -150,7 +150,7 @@ private fun CallRow(
                 style = MaterialTheme.typography.labelSmall)
         }
         Text(call.title, style = MaterialTheme.typography.titleMedium)
-        val caller = call.terminal?.let { stringResource(R.string.call_inbox_caller, callerName ?: it, entry.host.name) }
+        val caller = call.terminal?.let { stringResource(R.string.call_inbox_caller, callerName ?: stringResource(R.string.call_caller_unknown), entry.host.name) }
             ?: entry.host.name
         Text(
             stringResource(R.string.call_meta, urgencyLabel(call.urgency), caller, formatTime(call.atMs)),
@@ -193,8 +193,8 @@ private fun CallRow(
         note?.let { replyNoteText(it) }?.let { text ->
             AnnouncedText(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         }
-        call.terminal?.let { address ->
-            val label = stringResource(R.string.call_open_chat_label, address, call.title)
+        call.terminal?.let {
+            val label = stringResource(R.string.call_open_chat_label, callerName ?: stringResource(R.string.call_caller_unknown), call.title)
             TextButton(onClick = onChat, enabled = !opening, modifier = Modifier.semantics { contentDescription = label }) {
                 Text(stringResource(if (opening) R.string.reconnecting else R.string.call_open_chat))
             }
