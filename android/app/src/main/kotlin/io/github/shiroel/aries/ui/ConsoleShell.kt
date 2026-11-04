@@ -25,6 +25,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -92,6 +93,7 @@ internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit) {
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val screen = model.screen
+    CallAttentionEffect(model.calls.banner)
     SeenAgentEffect(
         screen,
         enabled = drawer.isClosed && drawer.targetValue == DrawerValue.Closed &&
@@ -148,7 +150,11 @@ internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit) {
                     }
                 }
             }) {
-                Column(Modifier.fillMaxSize()) {
+                val inboxVisible = model.callInboxOpen && drawer.isClosed && drawer.targetValue == DrawerValue.Closed
+                Column(Modifier.fillMaxSize().semantics { if (inboxVisible) hideFromAccessibility() }) {
+                    if (!inboxVisible) model.calls.banner?.let { entry ->
+                        CallAttentionBanner(entry, model.callCallerName(entry), model::openCallInbox, model.calls::dismissBanner)
+                    }
                     // Agent screens supply their own ConsoleTopBar in ticket 05.
                     val agentHeader = screen is Screen.Terminal || screen is Screen.Chat
                     if (!agentHeader) {
@@ -165,11 +171,9 @@ internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit) {
                     }
                     Box(Modifier.weight(1f)) {
                         content()
-                        if (model.callInboxOpen && drawer.isClosed && drawer.targetValue == DrawerValue.Closed) {
-                            CallInboxOverlay(model, Modifier.padding(top = if (agentHeader) 57.dp else 0.dp))
-                        }
                     }
                 }
+                if (inboxVisible) CallInboxOverlay(model)
             }
         }
     }

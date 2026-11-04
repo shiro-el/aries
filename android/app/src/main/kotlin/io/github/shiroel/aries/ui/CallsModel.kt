@@ -272,7 +272,7 @@ class CallsModel(
                 val host = hosts[hostId]
                 if (!current || host == null) return@launch
                 // Helper Agents' and unconfirmed Calls are only recorded.
-                if (call.pushesByDefault) banner = CallEntry(host, call)
+                if (call.pushesByDefault && call.answer == null) banner = CallEntry(host, call)
             }
         }
 

@@ -164,7 +164,7 @@ private fun CallRow(
             }
         }
         when {
-            sending -> Text(stringResource(R.string.call_answer_sending), style = MaterialTheme.typography.bodySmall)
+            sending -> AnnouncedText(stringResource(R.string.call_answer_sending), style = MaterialTheme.typography.bodySmall)
             entry.answerable -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 call.choices.forEachIndexed { i, choice ->
                     ConsoleChatChoice(i + 1, choice,
@@ -186,7 +186,7 @@ private fun CallRow(
 }
 
 @Composable
-private fun urgencyLabel(u: CallUrgency): String = stringResource(
+internal fun urgencyLabel(u: CallUrgency): String = stringResource(
     when (u) {
         CallUrgency.RECORD -> R.string.call_urgency_record
         CallUrgency.CHECK -> R.string.call_urgency_check

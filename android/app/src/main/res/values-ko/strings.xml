@@ -1173,6 +1173,9 @@
 
     <!-- Call inbox -->
     <string name="call_inbox_label">대기 중인 Call %1$d개</string>
+    <string name="call_banner_meta">%1$s Call · %2$s</string>
+    <string name="call_banner_open">Call 보기</string>
+    <string name="call_banner_dismiss">Call 배너 닫기</string>
     <string name="call_inbox_expanded">펼침</string>
     <string name="call_inbox_collapsed">접힘</string>
     <string name="call_inbox_past">지난 Call</string>
