@@ -74,6 +74,7 @@ internal fun AgentScreenHeader(
             }
         }
         if (tasks == null) onView?.let { AgentViewSwitch(current, it) }
+        if (LocalLayoutScreens.current === ThreadScreens || LocalLayoutScreens.current === TasksScreens) QuickOpenButton()
         val inbox = LocalCallInbox.current
         ConsoleInboxAction()
         if (preview != null && preview.ports.isNotEmpty()) {

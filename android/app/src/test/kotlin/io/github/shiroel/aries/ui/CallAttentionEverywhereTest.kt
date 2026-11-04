@@ -52,6 +52,97 @@ class CallAttentionEverywhereTest {
         compose.onNodeWithTag("call_banner").assertIsDisplayed()
     }
 
+    // D46: a modal file viewer must expose a Call even when the obscured Chat owns its presentation.
+    @Test fun threadFileViewerShowsNewCallAndOpensItsDestination() {
+        core.terminals = listOf(TerminalInfo("t1", "Current", "", listOf("claude"), "/repo", "live", AgentStatus.Working))
+        show(AppLayout.THREAD)
+        compose.runOnIdle { model.openPushedAgent("h1", "t1", openChat = true) }
+        compose.runOnIdle { core.sendCall(call.copy(id = "older", atMs = 99uL, title = "Earlier review")) }
+        compose.runOnIdle {
+            core.connection!!.fileDirectory = RemoteDirectory("/repo", listOf(RemoteFileEntry("notes.txt", false)))
+            core.connection!!.fileReader = { _, _, _, _ -> RemoteFilePage("Reading the result", 1u, 1u, 1u) }
+        }
+        compose.onNodeWithTag("agent-actions").performClick()
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        compose.onNodeWithText(context.getString(io.github.shiroel.aries.R.string.menu_open_files)).performClick()
+        compose.onNodeWithTag("files-tree").assertIsDisplayed()
+        compose.onNodeWithText("notes.txt").performClick()
+        compose.onNodeWithTag("files-lines").assertIsDisplayed()
+        compose.runOnIdle { core.sendCall(call) }
+        compose.onNode(hasTestTag("call_banner") and hasAnyAncestor(isDialog())).assertIsDisplayed().performClick()
+        compose.onNodeWithTag("files-lines").assertDoesNotExist()
+        compose.onNodeWithTag("call-inbox-panel").assertIsDisplayed()
+        compose.onNodeWithTag("call-check").assertIsDisplayed()
+    }
+
+    // D46: opening a Call from a nested image must close both windows, not reveal Files over it.
+    @Test @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    fun nestedImageViewerShowsCallAndClosesItsFileBrowser() {
+        core.terminals = listOf(TerminalInfo("t1", "Current", "", listOf("claude"), "/repo", "live", AgentStatus.Working))
+        show(AppLayout.THREAD)
+        compose.runOnIdle { model.openPushedAgent("h1", "t1", openChat = true) }
+        compose.runOnIdle {
+            val bytes = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\"><rect width=\"16\" height=\"16\" fill=\"red\"/></svg>".toByteArray()
+            core.connection!!.fileDirectory = RemoteDirectory("/repo", listOf(RemoteFileEntry("image.svg", false)))
+            core.connection!!.fileBytesReader = { _, _, _, _ -> RemoteFileBytes(bytes, 0uL, bytes.size.toULong(), true) }
+        }
+        compose.onNodeWithTag("agent-actions").performClick()
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        compose.onNodeWithText(context.getString(io.github.shiroel.aries.R.string.menu_open_files)).performClick()
+        compose.onNodeWithText("image.svg").performClick()
+        val image = hasContentDescription(context.getString(io.github.shiroel.aries.R.string.image_viewer_title))
+        compose.waitUntil(10_000) { compose.onAllNodes(image).fetchSemanticsNodes().isNotEmpty() }
+        compose.runOnIdle { core.sendCall(call) }
+        compose.onNode(hasTestTag("call_banner") and hasAnyAncestor(isDialog() and hasAnyDescendant(image)))
+            .assertIsDisplayed().performClick()
+        compose.onNodeWithTag("files-back").assertDoesNotExist()
+        compose.onNode(image).assertDoesNotExist()
+        compose.onNodeWithTag("call-inbox-panel").assertIsDisplayed()
+        compose.onNodeWithTag("call-check").assertIsDisplayed()
+    }
+
+    // D46: sibling task/GitHub windows must both close, even when the caller is already open.
+    @Test fun threadCreationAboveGithubShowsNewCallAndOpensItsDestination() {
+        core.terminals = listOf(TerminalInfo("t1", "Current", "", listOf("claude"), "/repo", "live", AgentStatus.Working))
+        show(AppLayout.THREAD)
+        compose.runOnIdle { model.openPushedAgent("h1", "t1", openChat = true) }
+        compose.onNodeWithTag("agent-actions").performClick()
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        compose.onNodeWithText(context.getString(io.github.shiroel.aries.R.string.github_button)).performClick()
+        compose.onNodeWithTag("github-dialog").assertIsDisplayed()
+        compose.runOnIdle { model.beginThreadTask(model.hosts.first()) }
+        compose.onNodeWithTag("new-task-dialog").assertIsDisplayed()
+        compose.runOnIdle { core.sendCall(call) }
+        compose.onNode(hasTestTag("call_banner") and hasAnyAncestor(isDialog())).assertIsDisplayed().performClick()
+        compose.onNodeWithTag("new-task-dialog").assertDoesNotExist()
+        compose.onNodeWithTag("github-dialog").assertDoesNotExist()
+        compose.onNodeWithTag("call-inbox-panel").assertIsDisplayed()
+        compose.onNodeWithTag("call-check").assertIsDisplayed()
+    }
+
+    // D46: all Host tool windows must expose incoming Calls and close before showing the Call in its inbox.
+    @Test fun tasksHostDialogsShowNewCallsAndOpenTheirDestination() {
+        core.terminals = listOf(TerminalInfo("t1", "Current", "", listOf("claude"), "/repo", "live", AgentStatus.Working))
+        show(AppLayout.TASKS)
+        for (tool in listOf("files", "preview", "github")) {
+            compose.runOnIdle { model.openHost(model.hosts.first()) }
+            compose.onNodeWithTag("tasks-host-$tool").performClick()
+            compose.runOnIdle { core.sendCall(call.copy(id = tool, title = "Review $tool")) }
+            compose.onNode(hasTestTag("call_banner") and hasAnyAncestor(isDialog())).assertIsDisplayed().performClick()
+            compose.onNodeWithTag("call-inbox-panel").assertIsDisplayed()
+            compose.onNodeWithTag("call-$tool").assertIsDisplayed()
+            when (tool) {
+                "files" -> compose.onNodeWithTag("files-back").assertDoesNotExist()
+                "github" -> compose.onNodeWithTag("github-dialog").assertDoesNotExist()
+                "preview" -> {
+                    val context = ApplicationProvider.getApplicationContext<Context>()
+                    compose.onNode(hasText(context.getString(io.github.shiroel.aries.R.string.preview_title)) and hasAnyAncestor(isDialog())).assertDoesNotExist()
+                }
+            }
+            compose.runOnIdle { model.closeCallInbox() }
+        }
+    }
+
     // D36: landscape/IME must not leave a no-Choice CHECK Call with only a vibration.
     @Test @Config(qualifiers = "h400dp")
     fun compactCheckWithoutChoicesHasAttentionAndInboxCount() {

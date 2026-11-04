@@ -362,9 +362,8 @@ internal fun RemoteFilesAccess(model: HostsModel, content: @Composable () -> Uni
         }
         open = false
     }
-    if (open) androidx.compose.ui.window.Dialog(
+    if (open) CallAttentionDialog(
         onDismissRequest = { open = false },
-        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Surface(Modifier.fillMaxSize()) {
             if (noFolder) Column(Modifier.padding(LocalLayoutTokens.current.contentPadding)) {

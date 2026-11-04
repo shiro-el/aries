@@ -62,6 +62,7 @@ internal fun ThreadSecondaryHeader(model: HostsModel, screen: Screen) {
             maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
         if (screen is Screen.Browse) HostActions(screen.browser,
             onRunSaved = { model.runSaved(screen.browser, it) }, onNewTerminal = { model.newTerminal(screen.browser) })
+        QuickOpenButton()
         if (home) ThreadNewTaskButton(model)
     }
     HorizontalDivider()
@@ -88,7 +89,7 @@ internal fun ThreadEmptyHome(model: HostsModel, board: AgentBoard) {
     Column(Modifier.fillMaxSize().testTag("thread-empty-home")) {
         AgentHomeScope(model, board)
         if (model.pendingShare != null) {
-            Text(stringResource(R.string.attachments_choose_agent), Modifier.padding(16.dp))
+            Text(stringResource(LocalLayoutScreens.current.shareDestinationLabel), Modifier.padding(16.dp))
             LazyColumn(Modifier.weight(1f)) {
                 threadBoardStatus(board)
                 items(board.agents.filter { it.terminal.agentStatus != null }, key = { "${it.host.id}:${it.terminal.address}" }) { entry ->

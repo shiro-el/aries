@@ -195,7 +195,7 @@ internal fun PreviewCaptureEditor(
                                     exporting = false
                                 }
                             }
-                        }) { Text(stringResource(if (exporting) R.string.preview_capture_preparing else R.string.preview_capture_attach)) }
+                        }) { Text(stringResource(if (exporting) R.string.preview_capture_preparing else LocalLayoutScreens.current.captureAttachLabel)) }
                     }
                 }
             }

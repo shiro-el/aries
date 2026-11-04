@@ -13,8 +13,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.*
 
@@ -44,6 +42,7 @@ internal fun TasksSecondaryHeader(model: HostsModel, screen: Screen) {
             Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge,
                 maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
         }
+        QuickOpenButton()
         if (screen is Screen.Browse) {
             IconButton(onClick = { model.openHostSettings(screen.browser.host) },
                 modifier = Modifier.testTag("tasks-host-settings")) {
@@ -187,13 +186,13 @@ private fun TasksHostTools(browser: HostBrowser) {
     }
     val target = state.terminal ?: return
     if (tool == "github") GithubDialog(link, target) { link?.github(target.address)?.dismiss(); tool = null }
-    if (tool == "files") Dialog(onDismissRequest = { tool = null }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    if (tool == "files") CallAttentionDialog(onDismissRequest = { tool = null }) {
         Surface(Modifier.fillMaxSize()) {
             val connection = link?.connections?.collectAsState()?.value
             RemoteFilesScreen(connection, target.address, onClose = { tool = null }, navigation = state.files)
         }
     }
-    if (tool == "preview") Dialog(onDismissRequest = { tool = null }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    if (tool == "preview") CallAttentionDialog(onDismissRequest = { tool = null }) {
         val preview = rememberLocalhostPreview(link, "", target.address, state.preview)
         Surface(Modifier.fillMaxSize()) {
             Column(Modifier.safeDrawingPadding()) {

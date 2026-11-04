@@ -21,8 +21,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.*
 import kotlinx.coroutines.CancellationException
@@ -65,7 +63,7 @@ internal fun GithubDialog(link: HostLink?, terminal: TerminalInfo, onDismiss: ()
         } catch (e: CoreException) { error = githubError(e)
         } finally { loading = false }
     }
-    Dialog(onDismissRequest = ::back, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    CallAttentionDialog(onDismissRequest = ::back, onCloseForCall = onDismiss) {
         BackHandler(onBack = ::back)
         Surface(Modifier.fillMaxSize().testTag("github-dialog")) {
             Column(Modifier.fillMaxSize().safeDrawingPadding().imePadding()) {

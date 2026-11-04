@@ -72,7 +72,7 @@ internal fun TasksHome(model: HostsModel, board: AgentBoard) {
             else { openNeed(need); model.calls.dismissBanner() }
         })
         if (model.pendingShare != null) {
-            Text(stringResource(R.string.attachments_choose_agent), Modifier.padding(12.dp))
+            Text(stringResource(LocalLayoutScreens.current.shareDestinationLabel), Modifier.padding(12.dp))
             TextButton(onClick = model::cancelShare) { Text(stringResource(R.string.cancel_button)) }
         }
         LazyColumn(Modifier.weight(1f)) {

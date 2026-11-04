@@ -23,6 +23,11 @@ import io.github.shiroel.aries.R
 
 /** Tasks presentation reuses the shared navigation and operation owners. */
 internal object TasksScreens : LayoutScreens() {
+    override val callDestinationLabel = R.string.tasks_call_open
+    override val callDestinationAccessibilityLabel = R.string.tasks_call_open_label
+    override val helperCallLabel = R.string.tasks_call_helper
+    override val shareDestinationLabel = R.string.tasks_share_destination
+    override val captureAttachLabel = R.string.tasks_capture_attach
     override val messageInputLabel = R.string.chat_message_input_label
     override val messageReceivedLabel = R.string.chat_message_received
     override val messageQueuedLabel = R.string.chat_message_queued
@@ -109,6 +114,7 @@ private fun TasksHomeHeader(model: HostsModel, screen: Screen) {
             ActionIcon(R.drawable.ic_chat_view, R.string.calls_title, model::openCallInbox,
                 modifier = Modifier.testTag("tasks-inbox"))
         }
+        QuickOpenButton()
         IconButton(onClick = model::openSettings, modifier = Modifier.testTag("settings-open")) {
             Icon(painterResource(R.drawable.file_type_settings), stringResource(R.string.settings_title), Modifier.size(20.dp))
         }
