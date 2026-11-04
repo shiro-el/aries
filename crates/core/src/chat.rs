@@ -20,7 +20,7 @@ use tokio::time::Instant;
 
 use aries_protocol::answer::{Answer, AnswerOutcome, AnswerReply};
 
-use crate::chat_cache::{CachedChat, ChatCache, SAVE_EVERY};
+use crate::chat_cache::{CacheChanges, CachedChat, ChatCache, SAVE_EVERY};
 use crate::error::{AnswerProblem, CoreError};
 use crate::transport::{Ssh, Stream};
 
@@ -287,13 +287,32 @@ pub struct ChatSnapshot {
     pub usage: Option<crate::AgentUsage>,
 }
 
+/// Changes since this watch's previous delivery. `order` is authoritative:
+/// entries absent from it are removed. A reset replaces the previous session.
+/// Computing against the last delivery preserves changes across skipped publishes.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ChatUpdate {
+    #[uniffi(default = None)]
+    pub usage: Option<crate::AgentUsage>,
+    pub reset: bool,
+    pub order: Vec<String>,
+    pub upserts: Vec<ChatEntry>,
+    pub status: ChatStatus,
+    pub cursor: Option<String>,
+}
+
 /// Applies Chat lines to entries (upsert by id; `reset` clears).
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct ChatModel {
     usage: Option<aries_protocol::chat::AgentUsage>,
-    entries: Vec<ChatEntry>,
+    entries: Vec<Arc<ChatEntry>>,
     /// The Beacon's items behind `entries`, same order (what the cache keeps).
-    items: Vec<ChatItem>,
+    items: Vec<Arc<ChatItem>>,
+    positions: Vec<u64>,
+    next_position: u64,
+    pending: CacheChanges,
+    changed: bool,
+    generation: u64,
     index: HashMap<String, usize>,
     pub status: ChatStatus,
     pub cursor: Option<String>,
@@ -309,6 +328,14 @@ impl ChatModel {
             usage: None,
             entries: Vec::new(),
             items: Vec::new(),
+            positions: Vec::new(),
+            next_position: 0,
+            pending: CacheChanges {
+                reset: true,
+                ..Default::default()
+            },
+            changed: false,
+            generation: 0,
             index: HashMap::new(),
             status: ChatStatus::Connecting,
             cursor,
@@ -320,13 +347,15 @@ impl ChatModel {
     pub fn seed(&mut self, chat: CachedChat) {
         self.cursor = chat.cursor;
         self.usage = chat.usage;
-        for item in chat
-            .items
-            .into_iter()
-            .filter(|item| !item.id.starts_with("permission:"))
-        {
-            self.upsert(item);
+        for (i, item) in chat.items.into_iter().enumerate() {
+            let position = chat.positions.get(i).copied().unwrap_or(i as u64);
+            self.next_position = position;
+            if !item.id.starts_with("permission:") {
+                self.upsert(item);
+            }
         }
+        self.pending = CacheChanges::default();
+        self.changed = false;
     }
 
     // Live screen projections have no transcript cursor. Clear them before
@@ -343,32 +372,45 @@ impl ChatModel {
         }
     }
 
-    pub fn to_cache(&self) -> CachedChat {
-        CachedChat {
-            usage: self.usage.clone(),
-            items: self
-                .items
-                .iter()
-                .filter(|item| !item.id.starts_with("permission:"))
-                .cloned()
-                .collect(),
-            cursor: self.cursor.clone(),
-        }
+    fn take_changes(&mut self) -> CacheChanges {
+        let mut changes = std::mem::take(&mut self.pending);
+        changes.cursor = self.cursor.clone();
+        changes.usage = self.usage.clone();
+        changes.baseline = self
+            .positions
+            .iter()
+            .copied()
+            .zip(self.items.iter().cloned())
+            .filter(|(_, item)| !item.id.starts_with("permission:"))
+            .collect();
+        changes
     }
 
     fn upsert(&mut self, item: ChatItem) {
-        let entry = self.entry(item.clone());
-        match self.index.get(&entry.id) {
+        let entry = Arc::new(self.entry(item.clone()));
+        let item = Arc::new(item);
+        let position = match self.index.get(&entry.id) {
             Some(&i) => {
                 self.entries[i] = entry;
-                self.items[i] = item;
+                self.items[i] = item.clone();
+                self.positions[i]
             }
             None => {
                 self.index.insert(entry.id.clone(), self.entries.len());
                 self.entries.push(entry);
-                self.items.push(item);
+                self.items.push(item.clone());
+                let position = self.next_position;
+                self.next_position += 1;
+                self.positions.push(position);
+                position
             }
+        };
+        if !item.id.starts_with("permission:") {
+            self.pending
+                .items
+                .insert(item.id.clone(), Some((position, item)));
         }
+        self.changed = true;
     }
 
     fn images(&self) -> std::sync::MutexGuard<'_, HashMap<String, Arc<Vec<u8>>>> {
@@ -419,6 +461,16 @@ impl ChatModel {
     pub fn snapshot(&self) -> ChatSnapshot {
         ChatSnapshot {
             usage: self.usage.clone().map(Into::into),
+            entries: self.entries.iter().map(|e| e.as_ref().clone()).collect(),
+            status: self.status,
+            cursor: self.cursor.clone(),
+        }
+    }
+
+    fn shared_snapshot(&self) -> SharedSnapshot {
+        SharedSnapshot {
+            usage: self.usage.clone().map(Into::into),
+            generation: self.generation,
             entries: self.entries.clone(),
             status: self.status,
             cursor: self.cursor.clone(),
@@ -430,7 +482,10 @@ impl ChatModel {
     pub fn apply_text(&mut self, text: &str) {
         match ChatLine::parse(text) {
             Ok(line) => self.apply(line),
-            Err(ChatLineError::NewerFormat(_)) => self.status = ChatStatus::Incompatible,
+            Err(ChatLineError::NewerFormat(_)) => {
+                self.changed |= self.status != ChatStatus::Incompatible;
+                self.status = ChatStatus::Incompatible;
+            }
             Err(ChatLineError::Malformed(_)) => {}
         }
     }
@@ -439,16 +494,33 @@ impl ChatModel {
         match line.event {
             ChatEvent::Reset { .. } => {
                 self.usage = None;
+                self.generation = self.generation.wrapping_add(1);
                 self.entries.clear();
                 self.items.clear();
                 self.index.clear();
+                self.positions.clear();
+                self.next_position = 0;
+                self.pending = CacheChanges {
+                    reset: true,
+                    ..Default::default()
+                };
+                self.changed = true;
+                self.cursor = None;
                 self.images().clear();
             }
-            ChatEvent::Usage { usage } => self.usage = Some(usage),
+            ChatEvent::Usage { usage } => {
+                self.changed |= self.usage.as_ref() != Some(&usage);
+                self.usage = Some(usage);
+            }
             ChatEvent::Item { item } => self.upsert(item),
             ChatEvent::Remove { id } => {
                 self.forget_images(&id);
-                if self.index.remove(&id).is_some() {
+                if let Some(i) = self.index.remove(&id) {
+                    self.positions.remove(i);
+                    self.changed = true;
+                    if !id.starts_with("permission:") {
+                        self.pending.items.insert(id.clone(), None);
+                    }
                     self.entries.retain(|e| e.id != id);
                     self.items.retain(|e| e.id != id);
                     self.index = (self.entries.iter().enumerate())
@@ -458,12 +530,14 @@ impl ChatModel {
             }
             ChatEvent::State { state } => {
                 if let Some(s) = status(state) {
+                    self.changed |= self.status != s;
                     self.status = s;
                 }
             }
             ChatEvent::Heartbeat | ChatEvent::Unknown => {}
         }
         if let Some(c) = line.cursor {
+            self.changed |= self.cursor.as_ref() != Some(&c);
             self.cursor = Some(c);
         }
     }
@@ -781,13 +855,36 @@ async fn answer_result(stream: Stream) -> Result<(), CoreError> {
 /// heartbeat every 15 s).
 const SILENCE: Duration = Duration::from_secs(45);
 
-/// Snapshots and typed connection problems share one ordered update stream.
-type ChatUpdate = Result<Option<ChatSnapshot>, CoreError>;
+/// Publication shares historical payloads. A slow consumer may skip revisions
+/// safely because the published value still contains the complete current model.
+#[derive(Clone)]
+struct SharedSnapshot {
+    usage: Option<crate::AgentUsage>,
+    generation: u64,
+    entries: Vec<Arc<ChatEntry>>,
+    status: ChatStatus,
+    cursor: Option<String>,
+}
+
+impl SharedSnapshot {
+    fn snapshot(&self) -> ChatSnapshot {
+        ChatSnapshot {
+            usage: self.usage.clone(),
+            entries: self.entries.iter().map(|e| e.as_ref().clone()).collect(),
+            status: self.status,
+            cursor: self.cursor.clone(),
+        }
+    }
+}
+
+/// Snapshots and typed connection failures share one ordered stream.
+type ChatDelivery = Result<Option<SharedSnapshot>, CoreError>;
 
 /// A running Chat for one Terminal.
 #[derive(uniffi::Object)]
 pub struct ChatWatch {
-    rx: Arc<Mutex<watch::Receiver<ChatUpdate>>>,
+    rx: Arc<Mutex<watch::Receiver<ChatDelivery>>>,
+    previous: Arc<std::sync::Mutex<Option<SharedSnapshot>>>,
     task: JoinHandle<()>,
     wake: Arc<Wake>,
     images: Images,
@@ -821,7 +918,7 @@ impl ChatWatch {
         retry: Duration,
     ) -> Self {
         let model = ChatModel::new(cursor);
-        let (tx, rx) = watch::channel(Ok(Some(model.snapshot())));
+        let (tx, rx) = watch::channel(Ok(Some(model.shared_snapshot())));
         let images = model.images.clone();
         let wake = Arc::new(Wake::default());
         let signals = wake.clone();
@@ -833,7 +930,7 @@ impl ChatWatch {
                 && (model.cursor.is_none() || model.cursor == cached.cursor)
             {
                 model.seed(cached);
-                if tx.send(Ok(Some(model.snapshot()))).is_err() {
+                if tx.send(Ok(Some(model.shared_snapshot()))).is_err() {
                     return;
                 }
             }
@@ -841,6 +938,7 @@ impl ChatWatch {
         });
         Self {
             rx: Arc::new(Mutex::new(rx)),
+            previous: Default::default(),
             task,
             wake,
             images,
@@ -862,42 +960,81 @@ impl CacheSlot {
             .ok()?
             .ok()?
     }
-
-    /// Best effort: a Chat that cannot be cached still shows.
-    async fn save(&self, terminal: &str, model: &ChatModel) {
-        let (cache, host, terminal) = (self.cache.clone(), self.host.clone(), terminal.to_owned());
-        let chat = model.to_cache();
-        let _ = tokio::task::spawn_blocking(move || cache.save(&host, &terminal, &chat)).await;
-    }
 }
 
-/// Writes the model to the cache at most every [`SAVE_EVERY`], and when
-/// asked to flush.
-struct Saver<'a> {
-    slot: Option<&'a CacheSlot>,
-    dirty: bool,
-    next: Instant,
+/// One coalescing writer per watch. The accumulator retains every changed ID;
+/// notifications may coalesce but deltas cannot be lost. Dropping the stream
+/// closes the channel and flushes its last pending batch outside the live task.
+struct Saver {
+    pending: Arc<std::sync::Mutex<Option<CacheChanges>>>,
+    wake: watch::Sender<u64>,
 }
 
-impl Saver<'_> {
-    /// When the pending write is due, if one is pending.
-    fn due(&self) -> Option<Instant> {
-        (self.dirty && self.slot.is_some()).then_some(self.next)
+impl Saver {
+    fn new(slot: CacheSlot, terminal: String) -> Self {
+        let pending = Arc::new(std::sync::Mutex::new(None::<CacheChanges>));
+        let queue = pending.clone();
+        let (wake, mut rx) = watch::channel(0u64);
+        crate::runtime().spawn(async move {
+            let mut next = Instant::now();
+            let mut failed: Option<CacheChanges> = None;
+            loop {
+                let closed = rx.changed().await.is_err();
+                if !closed {
+                    // The rate limit lives on the writer, never the stream reader.
+                    tokio::select! {
+                        _ = tokio::time::sleep_until(next) => {},
+                        _ = rx.wait_for(|_| false) => {}, // sender dropped: flush now
+                    }
+                }
+                let queued = queue.lock().expect("pending Chat cache").take();
+                let mut batch = failed.take();
+                if let Some(queued) = queued {
+                    if let Some(batch) = &mut batch {
+                        batch.merge(queued);
+                    } else {
+                        batch = Some(queued);
+                    }
+                }
+                let Some(batch) = batch else {
+                    if closed {
+                        break;
+                    } else {
+                        continue;
+                    }
+                };
+                let cache = slot.cache.clone();
+                let host = slot.host.clone();
+                let terminal = terminal.clone();
+                let result = tokio::task::spawn_blocking(move || {
+                    let result = cache.save(&host, &terminal, &batch);
+                    (result, batch)
+                })
+                .await;
+                next = Instant::now() + SAVE_EVERY;
+                if let Ok((Err(_), batch)) = result {
+                    // Keep failed changes for the next update, rather than moving
+                    // the cursor past an item that did not reach disk.
+                    failed = Some(batch);
+                }
+                if closed {
+                    break;
+                }
+            }
+        });
+        Self { pending, wake }
     }
 
-    async fn changed(&mut self, terminal: &str, model: &ChatModel) {
-        self.dirty = true;
-        if Instant::now() >= self.next {
-            self.flush(terminal, model).await;
+    fn changed(&self, model: &mut ChatModel) {
+        let mut pending = self.pending.lock().expect("pending Chat cache");
+        let changes = model.take_changes();
+        if let Some(pending) = &mut *pending {
+            pending.merge(changes);
+        } else {
+            *pending = Some(changes);
         }
-    }
-
-    async fn flush(&mut self, terminal: &str, model: &ChatModel) {
-        if let (true, Some(slot)) = (self.dirty, self.slot) {
-            slot.save(terminal, model).await;
-            self.next = Instant::now() + SAVE_EVERY;
-        }
-        self.dirty = false;
+        drop(pending);
+        self.wake.send_modify(|v| *v = v.wrapping_add(1));
     }
 }
 
@@ -906,15 +1043,11 @@ async fn follow(
     terminal: String,
     mut model: ChatModel,
     cache: Option<CacheSlot>,
-    tx: watch::Sender<ChatUpdate>,
+    tx: watch::Sender<ChatDelivery>,
     retry: Duration,
     wake: &Wake,
 ) {
-    let mut saver = Saver {
-        slot: cache.as_ref(),
-        dirty: false,
-        next: Instant::now(),
-    };
+    let saver = cache.map(|slot| Saver::new(slot, terminal.clone()));
     let mut backoff = retry;
     let mut active = wake.active.subscribe();
     loop {
@@ -931,7 +1064,6 @@ async fn follow(
         if let Err(error) = opened.as_ref()
             && !error.retryable_connection()
         {
-            saver.flush(&terminal, &model).await;
             if tx.send(Err(error.clone())).is_err() {
                 return;
             }
@@ -957,40 +1089,36 @@ async fn follow(
             let mut heard = Instant::now();
             loop {
                 let silent = heard + SILENCE;
-                let wake_at = saver.due().map_or(silent, |d| d.min(silent));
+
                 let next = tokio::select! {
-                    next = tokio::time::timeout_at(wake_at, lines.next_line()) => next,
+                    next = tokio::time::timeout_at(silent, lines.next_line()) => next,
                     _ = wake.replace.notified() => break,
                     _ = active.changed() => break,
                 };
                 let text = match next {
                     Ok(Ok(Some(text))) => text,
                     Ok(_) => break,
-                    Err(_) if Instant::now() >= silent => break,
-                    Err(_) => {
-                        saver.flush(&terminal, &model).await;
-                        continue;
-                    }
+                    Err(_) => break,
                 };
                 heard = Instant::now();
                 model.apply_text(&text);
                 backoff = retry;
                 // Publish once the burst is read, not for every line.
                 let burst_read = lines.get_ref().buffer().is_empty();
-                if burst_read || model.status.is_final() {
-                    saver.changed(&terminal, &model).await;
-                    if tx.send(Ok(Some(model.snapshot()))).is_err() {
-                        saver.flush(&terminal, &model).await;
+                if (burst_read || model.status.is_final()) && model.changed {
+                    model.changed = false;
+                    if let Some(saver) = &saver {
+                        saver.changed(&mut model);
+                    }
+                    if tx.send(Ok(Some(model.shared_snapshot()))).is_err() {
                         return;
                     }
                 }
                 if model.status.is_final() {
-                    saver.flush(&terminal, &model).await;
                     return;
                 }
             }
             drop((writer, guard));
-            saver.flush(&terminal, &model).await;
         }
         if model.status.is_final() {
             return;
@@ -999,7 +1127,7 @@ async fn follow(
             continue;
         }
         model.status = ChatStatus::Reconnecting;
-        if tx.send(Ok(Some(model.snapshot()))).is_err() {
+        if tx.send(Ok(Some(model.shared_snapshot()))).is_err() {
             return;
         }
         tokio::select! {
@@ -1023,7 +1151,47 @@ impl ChatWatch {
         crate::on_runtime(async move {
             let mut rx = rx.lock().await;
             rx.changed().await.map_err(|_| CoreError::Closed)?;
-            rx.borrow_and_update().clone()?.ok_or(CoreError::Closed)
+            let snapshot = rx.borrow_and_update().clone()?.ok_or(CoreError::Closed)?;
+            Ok(snapshot.snapshot())
+        })
+        .await
+    }
+
+    /// Delivers only changed bodies plus the current ordering. `next` remains
+    /// available for snapshot consumers; use one delivery API per watch.
+    pub async fn next_update(&self) -> Result<ChatUpdate, CoreError> {
+        let rx = self.rx.clone();
+        let previous = self.previous.clone();
+        crate::on_runtime(async move {
+            let mut rx = rx.lock().await;
+            rx.changed().await.map_err(|_| CoreError::Closed)?;
+            let snapshot = rx.borrow_and_update().clone()?.ok_or(CoreError::Closed)?;
+            let mut previous = previous.lock().expect("Chat delivery");
+            let reset = previous
+                .as_ref()
+                .is_none_or(|p| p.generation != snapshot.generation);
+            let old: HashMap<_, _> = previous
+                .as_ref()
+                .into_iter()
+                .flat_map(|p| p.entries.iter())
+                .map(|e| (e.id.as_str(), e))
+                .collect();
+            let upserts = snapshot
+                .entries
+                .iter()
+                .filter(|e| reset || old.get(e.id.as_str()).is_none_or(|p| !Arc::ptr_eq(p, e)))
+                .map(|e| e.as_ref().clone())
+                .collect();
+            let update = ChatUpdate {
+                usage: snapshot.usage.clone(),
+                reset,
+                order: snapshot.entries.iter().map(|e| e.id.clone()).collect(),
+                upserts,
+                status: snapshot.status,
+                cursor: snapshot.cursor.clone(),
+            };
+            *previous = Some(snapshot);
+            Ok(update)
         })
         .await
     }

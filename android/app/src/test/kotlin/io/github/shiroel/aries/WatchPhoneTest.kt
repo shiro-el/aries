@@ -5,6 +5,8 @@ import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.core.*
 import io.github.shiroel.aries.ui.FakeCore
 import io.github.shiroel.aries.weardata.OpenWatchAgent
+import io.github.shiroel.aries.weardata.WatchInterrupt
+import io.github.shiroel.aries.weardata.WatchInterruptResult
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -12,12 +14,59 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.Robolectric
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.tasks.await
 import io.github.shiroel.aries.weardata.WatchSummary
 
 @RunWith(RobolectricTestRunner::class)
 @Config(application = FakeCoreApp::class, sdk = [33])
 class WatchPhoneTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
+
+    @Test fun staleWorkingWatchCannotInterruptAnAgentThatNowNeedsAnAnswer() = runBlocking {
+        val core = (context as FakeCoreApp).core
+        core.ensureKey()
+        val host = core.addHost("one", Endpoint.Ssh("one", 22u, "me"))
+        core.terminalsOf[host.id] = listOf(agent("remote/t7", AgentStatus.Working))
+        core.snapshot(host.id)
+        core.terminalsOf[host.id] = listOf(agent("remote/t7", AgentStatus.Blocked(BlockedReason.PERMISSION, "Allow?")))
+        val controller = Robolectric.buildService(WatchPhoneService::class.java).create()
+        try {
+            val task = controller.get().onRequest("watch", WatchInterrupt.PATH, OpenWatchAgent(host.id, "remote/t7").toBytes())
+            assertNotNull("The phone must handle watch interruption", task)
+            assertEquals(WatchInterruptResult.NOT_WORKING, WatchInterruptResult.fromBytes(task!!.await()))
+            assertTrue(core.connection!!.interrupted.isEmpty())
+            assertTrue(core.connection!!.disconnected)
+        } finally { controller.destroy() }
+    }
+
+    @Test fun watchStopReachesOnlyTheRequestedWorkingAgentAndReturnsItsOutcome() = runBlocking {
+        val core = (context as FakeCoreApp).core
+        core.ensureKey()
+        val host = core.addHost("one", Endpoint.Ssh("one", 22u, "me"))
+        core.terminalsOf[host.id] = listOf(agent("t7", AgentStatus.Working), agent("remote/t7", AgentStatus.Working))
+        val controller = Robolectric.buildService(WatchPhoneService::class.java).create()
+        try {
+            val reply = controller.get().onRequest("watch", WatchInterrupt.PATH, OpenWatchAgent(host.id, "remote/t7").toBytes())!!.await()
+            assertEquals(WatchInterruptResult.STOPPED, WatchInterruptResult.fromBytes(reply))
+            assertEquals(listOf("remote/t7"), core.connection!!.interrupted)
+            assertTrue(core.connection!!.disconnected)
+        } finally { controller.destroy() }
+    }
+
+    @Test fun watchStopRejectsMalformedRequestsAndRequiresPhoneForBiometricKeys() = runBlocking {
+        val core = (context as FakeCoreApp).core
+        core.ensureKey()
+        core.setKeyProtection(KeyProtection.BIOMETRIC)
+        val host = core.addHost("one", Endpoint.Ssh("one", 22u, "me"))
+        val controller = Robolectric.buildService(WatchPhoneService::class.java).create()
+        try {
+            val service = controller.get()
+            assertTrue(service.onRequest("watch", WatchInterrupt.PATH, byteArrayOf(9))!!.await().isEmpty())
+            val reply = service.onRequest("watch", WatchInterrupt.PATH, OpenWatchAgent(host.id, "remote/t7").toBytes())!!.await()
+            assertEquals(WatchInterruptResult.OPEN_PHONE, WatchInterruptResult.fromBytes(reply))
+            assertTrue(core.connectAttempts.isEmpty())
+        } finally { controller.destroy() }
+    }
     private fun agent(address: String, status: AgentStatus, parent: String? = null, pinned: Boolean = false) = TerminalInfo(
         address, address, "", listOf("agent"), "/repo", "live", status, false, 0u, pinned, null, parent,
         statusMs = if (status is AgentStatus.Error) 180_000u else 60_000u,

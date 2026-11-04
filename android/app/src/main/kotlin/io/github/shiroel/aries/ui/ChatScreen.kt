@@ -233,11 +233,10 @@ class ChatModel(
     }
 
     /** Saves bytes and adds attachment chips to the current draft; never calls sendMessage. */
-    fun attach(context: Context, content: SharedContent, cleanup: () -> Unit = {}) {
-        val scope = scope ?: return
-        if (inputUnavailable) { cleanup(); return }
-        if (uploading || sending != null) return
-        val connection = link?.connection ?: run { attachmentFailed(CoreException.Closed()); return }
+    fun attach(context: Context, content: SharedContent, cleanup: () -> Unit = {}): Boolean {
+        val scope = scope ?: run { cleanup(); return false }
+        if (inputUnavailable || uploading || sending != null) { cleanup(); return false }
+        val connection = link?.connection ?: run { attachmentFailed(CoreException.Closed()); cleanup(); return false }
         val resize = AttachmentSettings.from(context).resizeImages
         attachmentError = null
         uploading = true
@@ -263,6 +262,7 @@ class ChatModel(
                 cleanup()
             }
         }
+        return true
     }
 
     enum class Sending { Sending, Held }
@@ -367,9 +367,14 @@ class ChatModel(
             }
             watch = w
             if (paused) w.pause()
+            val entries = LinkedHashMap<String, ChatEntry>()
             while (true) {
                 try {
-                    snapshot = w.next()
+                    val update = w.nextUpdate()
+                    if (update.reset) entries.clear()
+                    update.upserts.forEach { entries[it.id] = it }
+                    entries.keys.retainAll(update.order.toSet())
+                    snapshot = ChatSnapshot(update.order.mapNotNull { entries[it] }, update.status, update.cursor, update.usage)
                     connectionError = null
                 } catch (e: CoreException) {
                     if (e is CoreException.Closed) return@launch
@@ -377,7 +382,6 @@ class ChatModel(
                     connectionError = e
                     snapshot = snapshot?.copy(status = ChatStatus.RECONNECTING)
                 }
-
             }
         }
     }
@@ -591,7 +595,13 @@ fun ChatScreen(
             PreviewChips(preview)
             if (preview.selected != null) {
                 LocalhostPreviewBrowser(preview, chat.link, Modifier.weight(1f).fillMaxWidth(),
-                    change = chat.terminal.turn to rawEntries.mapNotNull { (it.body as? ChatEntryBody.Tool)?.diff })
+                    change = chat.terminal.turn to rawEntries.mapNotNull { (it.body as? ChatEntryBody.Tool)?.diff },
+                    captureEnabled = chat.canEdit && !chat.uploading,
+                    onAttachCapture = { content, cleanup ->
+                        chat.attach(context.applicationContext, content, cleanup).also { accepted ->
+                            if (accepted) preview.selected = null
+                        }
+                    })
             } else {
                 ChatSearchBar(searchOpen, query, selectedIndex + 1, matches.size,
                     onQuery = { query = it; selected = null },

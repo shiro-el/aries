@@ -62,7 +62,7 @@ pub use calls::{
 pub use chat::{
     ChatEntry, ChatEntryBody, ChatQuestionAnswer, ChatQuestionOption, ChatQuestionPart,
     ChatResponseCompletion, ChatResponseMetadata, ChatSnapshot, ChatStatus, ChatToolDetails,
-    ChatToolStatus, ChatWatch,
+    ChatToolStatus, ChatUpdate, ChatWatch,
 };
 pub use diagnostics::{
     DIAGNOSTICS_KEPT, DiagnosticEntry, DiagnosticError, DiagnosticEvent, DiagnosticSource,
@@ -318,10 +318,14 @@ impl AriesCore {
             store.read_settings()?.chat_cache_days,
         );
         let hosts = Arc::new(Mutex::new(saved.hosts));
+        let sessions = host_edit::HostSessions::default();
         let last_known = last_known_state::States {
             store: store.clone(),
             hosts: hosts.clone(),
             changes: tokio::sync::watch::channel(0).0,
+            sessions: sessions.clone(),
+            io: Default::default(),
+            diagnostics: diagnostics::Log::new(store.clone()),
         };
         Ok(Arc::new(Self {
             diagnostics: diagnostics::Log::new(store.clone()),
@@ -331,7 +335,7 @@ impl AriesCore {
             chat_cache,
             push_replay: Default::default(),
             hosts,
-            sessions: Default::default(),
+            sessions,
             beacon_release: Mutex::new(pinned_release()),
             herdr_release: Mutex::new(pinned_herdr_core_release()),
         }))
@@ -1715,15 +1719,34 @@ impl HostConnection {
         self.client.core_version().to_owned()
     }
 
-    /// The Host's Terminals (live ones, as `terminal.list` returns them).
-    pub async fn terminals(&self) -> Result<Vec<TerminalInfo>, CoreError> {
+    fn check_current(&self) -> Result<(), CoreError> {
+        self.sessions
+            .lock()
+            .expect("sessions lock")
+            .get(&self.host_id)
+            .ok_or(CoreError::Closed)?
+            .check(self.revision)
+    }
+
+    async fn fetch_terminals(&self) -> Result<Vec<TerminalInfo>, CoreError> {
         let client = self.client.clone();
         let result =
             on_runtime(async move { client.call("terminal.list", serde_json::json!({})).await })
                 .await?;
+        self.check_current()?;
         let list = result["terminals"].as_array().cloned().unwrap_or_default();
-        let infos: Vec<_> = list.iter().map(terminal_info).collect();
-        self.last_known.save(&self.host_id, infos.clone())?;
+        Ok(list.iter().map(terminal_info).collect())
+    }
+
+    /// The Host's live Terminals. Last-known state is persisted independently;
+    /// `AriesCore::snapshot` explicitly waits for a durable background refresh.
+    pub async fn terminals(&self) -> Result<Vec<TerminalInfo>, CoreError> {
+        let infos = self.fetch_terminals().await?;
+        self.last_known.queue(
+            self.host_id.clone(),
+            self.revision,
+            last_known_state::Update::agents(infos.clone()),
+        );
         Ok(infos)
     }
 
@@ -1749,8 +1772,9 @@ impl HostConnection {
         let client = self.client.clone();
         let states = self.last_known.clone();
         let host_id = self.host_id.clone();
+        let revision = self.revision;
         on_runtime(async move {
-            TerminalWatch::start(client, states, host_id)
+            TerminalWatch::start(client, states, host_id, revision)
                 .await
                 .map(Arc::new)
         })
@@ -1764,8 +1788,12 @@ impl HostConnection {
         let client = self.client.clone();
         let names = self.names.clone();
         let structure = on_runtime(async move { read_structure(&client, &names).await }).await?;
-        self.last_known
-            .save_structure(&self.host_id, structure.clone())?;
+        self.check_current()?;
+        self.last_known.queue(
+            self.host_id.clone(),
+            self.revision,
+            last_known_state::Update::structure(structure.clone()),
+        );
         Ok(structure)
     }
 
@@ -1780,11 +1808,13 @@ impl HostConnection {
         let names = self.names.clone();
         let states = self.last_known.clone();
         let host_id = self.host_id.clone();
+        let revision = self.revision;
         let task = on_runtime(async move {
+            let writer = states.writer(host_id, revision);
             // Subscribe before reading, so no change falls in between.
             let (_, mut events) = client.subscribe_events(serde_json::json!({})).await?;
             let structure = read_structure(&client, &names).await?;
-            states.save_structure(&host_id, structure.clone())?;
+            writer.send_replace(Some(last_known_state::Update::structure(structure.clone())));
             listener.on_structure(structure);
             Ok(tokio::spawn(async move {
                 while let Some(msg) = events.recv().await {
@@ -1797,9 +1827,8 @@ impl HostConnection {
                     }
                     match read_structure(&client, &names).await {
                         Ok(s) => {
-                            if states.save_structure(&host_id, s.clone()).is_err() {
-                                break;
-                            }
+                            writer
+                                .send_replace(Some(last_known_state::Update::structure(s.clone())));
                             listener.on_structure(s);
                         }
                         Err(_) => break,

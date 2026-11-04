@@ -95,6 +95,7 @@ private fun AriesContent(
     allowNotifications: suspend () -> Boolean = { false },
 ) {
     val activity = androidx.activity.compose.LocalActivity.current
+    val context = LocalContext.current.applicationContext
     // Screen connections and the Call banner follow the visible lifecycle.
     LifecycleStartEffect(model) {
         model.resumeScreens()
@@ -159,6 +160,7 @@ private fun AriesContent(
                                     onView = model::switchView.takeIf { s.viewer.terminal.agentStatus != null },
                                     displaySettings = terminalDisplay,
                                     onSelectionSend = model::sendTerminalSelectionToDraft,
+                                    onPreviewCapture = { content, cleanup -> model.attachPreviewToChat(context, content, cleanup) },
                                 )
                             }
                             is Screen.JumpHosts -> {
