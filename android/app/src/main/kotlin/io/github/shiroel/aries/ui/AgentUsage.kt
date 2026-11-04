@@ -2,7 +2,6 @@ package io.github.shiroel.aries.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -14,10 +13,6 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -36,16 +31,8 @@ import java.time.format.FormatStyle
 /** Readings are scoped to this Agent; absent values never become zero. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun AgentUsageHeader(usage: AgentUsage?) {
-    var open by remember { mutableStateOf(false) }
-    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp),
-        verticalAlignment = Alignment.CenterVertically) {
-        Text(contextRemaining(usage?.context), Modifier.weight(1f),
-            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        TextButton(onClick = { open = true }) { Text(stringResource(R.string.usage_title)) }
-    }
-    HorizontalDivider()
-    if (open) ModalBottomSheet(onDismissRequest = { open = false }) {
+internal fun AgentUsageSheet(usage: AgentUsage?, onDismiss: () -> Unit) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp).padding(bottom = 24.dp).testTag("agent-usage-sheet"),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -63,7 +50,7 @@ internal fun AgentUsageHeader(usage: AgentUsage?) {
             Text(stringResource(R.string.usage_account_title), style = MaterialTheme.typography.titleMedium)
             if (usage?.limits.isNullOrEmpty()) Text(stringResource(R.string.usage_limits_unavailable))
             usage?.limits?.forEach { limit -> UsageLimitView(limit) }
-            TextButton(onClick = { open = false }, modifier = Modifier.align(Alignment.End)) {
+            TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
                 Text(stringResource(R.string.usage_close))
             }
         }
@@ -71,7 +58,7 @@ internal fun AgentUsageHeader(usage: AgentUsage?) {
 }
 
 @Composable
-private fun contextRemaining(context: ContextUsage?): String {
+internal fun contextRemaining(context: ContextUsage?): String {
     val used = context?.usedTokens
     val window = context?.windowTokens
     if (used == null || window == null || window == 0uL) return stringResource(R.string.usage_context_unavailable)
