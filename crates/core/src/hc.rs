@@ -82,6 +82,16 @@ struct FramedWriter {
 }
 
 impl FramedWriter {
+    async fn shutdown(&self) {
+        let _ = tokio::time::timeout(Duration::from_secs(2), async {
+            let mut io = self.io.lock().await;
+            if let Some(mut writer) = io.take() {
+                let _ = writer.shutdown().await;
+            }
+        })
+        .await;
+    }
+
     fn end(&self) {
         self.closed.send_replace(true);
         self.reader.abort();
@@ -290,6 +300,9 @@ impl HcClient {
 
     /// Sends one frame on a stream channel (CREDIT, DATA, RESIZE, CLOSE...).
     pub async fn send(&self, channel: u32, kind: u8, payload: &[u8]) -> Result<(), CoreError> {
+        if self.channels.lock().expect("channels lock").closed {
+            return Err(CoreError::Closed);
+        }
         send_frame(&self.writer, channel, kind, payload)
             .await
             .map_err(|_| CoreError::Closed)
@@ -301,16 +314,17 @@ impl HcClient {
         }
     }
 
-    pub async fn close(&self) {
-        // Wake consumers and cancel in-flight writes before waiting for I/O.
+    /// Revoke synchronously for Host edits/removal, using the same local
+    /// cancellation path as partial writes and asynchronous disconnect.
+    pub fn close_now(&self) {
         self.writer.end();
-        let _ = tokio::time::timeout(Duration::from_secs(2), async {
-            let mut io = self.writer.io.lock().await;
-            if let Some(mut writer) = io.take() {
-                let _ = writer.shutdown().await;
-            }
-        })
-        .await;
+        let writer = self.writer.clone();
+        crate::runtime().spawn(async move { writer.shutdown().await });
+    }
+
+    pub async fn close(&self) {
+        self.writer.end();
+        self.writer.shutdown().await;
     }
 }
 

@@ -307,7 +307,7 @@ impl AriesCore {
         let chat_cache = chat_cache::ChatCache::new(
             store.root(),
             vault.clone(),
-            store.read_settings().chat_cache_days,
+            store.read_settings()?.chat_cache_days,
         );
         let hosts = Arc::new(Mutex::new(saved.hosts));
         let last_known = last_known_state::States {
@@ -489,7 +489,7 @@ impl AriesCore {
     /// Saved launch configs for launcher shortcuts, without connecting or opening a key.
     pub fn saved_launches(&self, host_id: String) -> Result<Vec<SavedLaunch>, CoreError> {
         let host = self.saved_host(&host_id)?;
-        Ok(launch::SavedLaunches::in_host_dir(self.store.host_dir(&host.id)).list())
+        launch::SavedLaunches::in_host_dir(self.store.host_dir(&host.id)).list()
     }
 
     /// Composer inputs on this phone, newest first. Never contacts the Host.
@@ -760,12 +760,15 @@ impl AriesCore {
             .ok_or_else(|| CoreError::UnknownHost {
                 id: host_id.clone(),
             })?;
+        // Local handle writes and late handshake registration use this same lock.
+        let mut sessions = self.sessions.lock().expect("sessions lock");
         removal::run(&host, &self.store, &self.diagnostics)?;
         let next: Vec<_> = hosts.iter().filter(|h| h.id != host_id).cloned().collect();
         self.store.save(&store::Saved {
             hosts: next.clone(),
         })?;
         *hosts = next;
+        sessions.entry(host_id).or_default().invalidate(true);
         self.last_known.changed();
         Ok(())
     }
@@ -811,6 +814,8 @@ impl AriesCore {
             }
             Ok(Arc::new(HostConnection {
                 last_known: self.last_known.clone(),
+                sessions: self.sessions.clone(),
+                revision,
                 host_id: host_id.clone(),
                 client,
                 names: Default::default(),
@@ -916,11 +921,7 @@ impl AriesCore {
         let mut hosts = self.hosts.lock().expect("hosts lock");
         let mut next = hosts.clone();
         f(&mut next);
-        self.store.save(&store::Saved {
-            hosts: next.clone(),
-        })?;
-        *hosts = next;
-        Ok(())
+        self.publish_hosts(&mut hosts, next)
     }
 }
 
@@ -1280,13 +1281,15 @@ impl AriesCore {
 
     /// Whether connecting updates an out-of-date Beacon by itself (default on).
     pub fn beacon_auto_update(&self) -> bool {
-        self.store.read_settings().beacon_auto_update
+        self.store
+            .read_settings()
+            .unwrap_or_default()
+            .beacon_auto_update
     }
 
     pub fn set_beacon_auto_update(&self, on: bool) -> Result<(), CoreError> {
-        let mut settings = self.store.read_settings();
-        settings.beacon_auto_update = on;
-        self.store.write_settings(&settings)
+        self.store
+            .update_settings(|settings| settings.beacon_auto_update = on, |_| {})
     }
 }
 
@@ -1353,11 +1356,10 @@ impl AriesCore {
     /// deleted on the next cache use.
     pub fn set_chat_cache_retention_days(&self, days: u32) -> Result<(), CoreError> {
         let days = days.max(1);
-        let mut settings = self.store.read_settings();
-        settings.chat_cache_days = days;
-        self.store.write_settings(&settings)?;
-        self.chat_cache.set_retention_days(days);
-        Ok(())
+        self.store.update_settings(
+            |settings| settings.chat_cache_days = days,
+            |settings| self.chat_cache.set_retention_days(settings.chat_cache_days),
+        )
     }
 
     /// Answers the open question `question_id` (a
@@ -1657,6 +1659,8 @@ fn ssh_for_saved_host(
 /// A live connection to one Host's herdr-core.
 #[derive(uniffi::Object)]
 pub struct HostConnection {
+    sessions: host_edit::HostSessions,
+    revision: u64,
     last_known: last_known_state::States,
     host_id: String,
     client: Arc<HcClient>,
@@ -1817,7 +1821,7 @@ impl HostConnection {
         let result = on_runtime(async move { client.call("terminal.run", params).await }).await?;
         if let Some(cwd) = launch::cwd_to_remember(&request) {
             // The Terminal runs either way; a full disk only loses the hint.
-            let _ = self.recent.remember(cwd);
+            let _ = self.with_active_session(|| self.recent.remember(cwd));
         }
         Ok(terminal_info(&result))
     }
@@ -1832,18 +1836,20 @@ impl HostConnection {
     /// phone, per Host; run one with [`HostConnection::launch`] on its
     /// `request`.
     pub fn saved_launches(&self) -> Vec<SavedLaunch> {
-        self.saved.list()
+        // Preserve this infallible FFI getter; repository updates and the
+        // fallible offline listing API still report unreadable presets.
+        self.saved.list().unwrap_or_default()
     }
 
     /// Saves `launch` under its (trimmed) name: a new one when its `id` is
     /// empty, else replaces the one with that id. Returns it as stored.
     pub fn save_launch(&self, launch: SavedLaunch) -> Result<SavedLaunch, CoreError> {
-        self.saved.save(launch)
+        self.with_active_session(|| self.saved.save(launch))
     }
 
     /// Deletes the saved launch `id`; succeeds if it is already gone.
     pub fn delete_saved_launch(&self, id: String) -> Result<(), CoreError> {
-        self.saved.delete(&id)
+        self.with_active_session(|| self.saved.delete(&id))
     }
 
     /// Types `text` into the Agent's Terminal at `address` and submits it, as
@@ -2054,4 +2060,19 @@ fn new_id() -> String {
     use rand::RngExt;
     let bytes: [u8; 8] = rand::rng().random();
     bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+impl HostConnection {
+    /// Hold through local writes so invalidation/removal cannot race a check.
+    fn with_active_session<T>(
+        &self,
+        f: impl FnOnce() -> Result<T, CoreError>,
+    ) -> Result<T, CoreError> {
+        let sessions = self.sessions.lock().expect("sessions lock");
+        sessions
+            .get(&self.host_id)
+            .ok_or(CoreError::Closed)?
+            .check(self.revision)?;
+        f()
+    }
 }
