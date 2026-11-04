@@ -84,6 +84,29 @@ class TerminalSearchTest {
         assertTrue(view.options.observe)
     }
 
+    // Regression: a historical match at row zero must be below the opaque search controls.
+    @Test
+    fun historyMatchIsRevealedBelowSearchControlsWithoutResizingTheHost() {
+        val view = open()
+        compose.onNodeWithTag("agent-actions").performClick()
+        compose.onNodeWithContentDescription(str(R.string.terminal_search_button)).performClick()
+        compose.onNodeWithTag("terminal-search-query").performTextInput("error")
+        compose.waitUntil(5000) { view.searches.any { it.first == "error" } }
+        results(view, 0u, 180u)
+        val screen = compose.onNodeWithTag("terminal-screen").fetchSemanticsNode().boundsInRoot
+        val controlsBottom = compose.onNodeWithContentDescription(str(R.string.terminal_search_next))
+            .fetchSemanticsNode().boundsInRoot.bottom
+        compose.runOnIdle {
+            val viewer = (model.screen as Screen.Terminal).viewer
+            val match = viewer.search!!.highlights.single { it.current }
+            val matchTop = screen.top + match.row.toInt() * viewer.look.cellH + viewer.look.panY
+            assertTrue("match at $matchTop is hidden by controls ending at $controlsBottom", matchTop >= controlsBottom)
+            assertTrue("match remains in the viewport", matchTop + viewer.look.cellH <= screen.bottom)
+            assertTrue(view.resizes.isEmpty())
+            assertTrue(view.sent.isEmpty())
+        }
+    }
+
     @Test
     fun invalidRegexExplainsTheErrorAndNoMatchesDisablesNavigation() {
         val view = open()

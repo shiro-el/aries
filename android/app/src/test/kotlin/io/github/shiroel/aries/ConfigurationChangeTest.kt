@@ -61,6 +61,22 @@ class ConfigurationChangeTest {
         return app
     }
 
+    // D29: Activity recreation must not start another foreground snapshot on an unseen Host.
+    @Test fun recreationDoesNotRepeatForegroundRefresh() {
+        val app = prepareApplication()
+        app.fake.ensureKey()
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup()
+        try {
+            compose.waitUntil(5_000) { app.fake.snapshotsRequested.isNotEmpty() }
+            val requests = app.fake.snapshotsRequested.toList()
+            activity.recreate()
+            compose.waitForIdle()
+            compose.runOnIdle { assertEquals(requests, app.fake.snapshotsRequested) }
+        } finally {
+            activity.pause().stop().destroy()
+        }
+    }
+
     // Regression: Activity recreation must retain the open Files panel and the file
     // reached by browsing, rather than silently returning to the Terminal/root folder.
     @Test @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)

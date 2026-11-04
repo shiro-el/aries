@@ -179,6 +179,9 @@ pub enum PushContent {
         turn: Option<u64>,
         question: Option<PushQuestion>,
         excerpt: Option<String>,
+        /// Host generation in milliseconds; absent on older Beacons.
+        #[uniffi(default = None)]
+        at_ms: Option<u64>,
     },
     /// Live progress for an explicitly Watched Agent; cancelled removes its card.
     Progress {
@@ -775,6 +778,7 @@ pub(crate) fn open(
                         turn,
                         question,
                         excerpt,
+                        at_ms,
                     } => PushContent::Status {
                         terminal,
                         name,
@@ -789,6 +793,7 @@ pub(crate) fn open(
                             options: q.options,
                         }),
                         excerpt,
+                        at_ms,
                     },
                     envelope::PushMessage::Progress {
                         terminal,

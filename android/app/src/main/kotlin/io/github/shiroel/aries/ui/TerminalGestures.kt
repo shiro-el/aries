@@ -156,6 +156,7 @@ class TerminalLook(private val viewer: TerminalViewer) {
     private var baseH = 1f
     private var viewW = 0f
     private var viewH = 0f
+    private var topInset = 0f
 
     /** Vertical drag not yet turned into whole scrollback lines. */
     private var scrollRest = 0f
@@ -163,11 +164,12 @@ class TerminalLook(private val viewer: TerminalViewer) {
     val cellW get() = baseW * zoom
     val cellH get() = baseH * zoom
 
-    fun layout(cellW: Float, cellH: Float, width: Float, height: Float) {
+    fun layout(cellW: Float, cellH: Float, width: Float, height: Float, topInset: Float = 0f) {
         baseW = cellW.coerceAtLeast(0.01f)
         baseH = cellH.coerceAtLeast(0.01f)
         viewW = width
         viewH = height
+        this.topInset = topInset.coerceAtLeast(0f)
         clamp()
     }
 
@@ -182,7 +184,7 @@ class TerminalLook(private val viewer: TerminalViewer) {
         if (selection != null || !viewer.typing || viewer.scrolled != 0 || viewer.search != null) return
         val cursor = viewer.cursor ?: return
         val y = cursor.row.toInt() * cellH
-        if (y + panY < 0) panY = -y
+        if (y + panY < topInset) panY = topInset - y
         else if (y + cellH + panY > viewH) panY = viewH - y - cellH
         clamp()
     }
@@ -195,7 +197,7 @@ class TerminalLook(private val viewer: TerminalViewer) {
         val y = match.row.toInt() * cellH
         if (x + panX < 0) panX = -x
         else if (x + cellW + panX > viewW) panX = viewW - x - cellW
-        if (y + panY < 0) panY = -y
+        if (y + panY < topInset) panY = topInset - y
         else if (y + cellH + panY > viewH) panY = viewH - y - cellH
         clamp()
     }
@@ -225,7 +227,7 @@ class TerminalLook(private val viewer: TerminalViewer) {
      */
     private fun drag(dy: Float) {
         if (dy > 0) {
-            val room = -panY
+            val room = topInset - panY
             val used = minOf(dy, room)
             panY += used
             scrollBy(dy - used)
@@ -248,7 +250,7 @@ class TerminalLook(private val viewer: TerminalViewer) {
         val minX = minOf(0f, viewW - cellW * cols)
         val minY = minOf(0f, viewH - cellH * rows)
         panX = panX.coerceIn(minX, 0f)
-        panY = panY.coerceIn(minY, 0f)
+        panY = panY.coerceIn(minY, topInset)
     }
 
     private companion object {
@@ -281,13 +283,22 @@ fun Modifier.terminalGestures(look: TerminalLook, viewer: TerminalViewer): Modif
             null -> {
                 val at = look.cellAt(down.position)
                 val picked = selectAt(look.selection?.snapshot ?: viewer.snapshot(), at)
-                look.selection = picked
+                var dragging = picked
+                look.selection = dragging
                 while (true) {
                     val ev = awaitPointerEvent()
                     val c = ev.changes.firstOrNull { it.id == down.id } ?: break
-                    if (!c.pressed) break
+                    // Input or another action ended this selection while the finger
+                    // stayed down. That gesture no longer owns the frozen snapshot.
+                    if (!c.pressed || look.selection !== dragging) break
                     val to = look.cellAt(c.position)
-                    if (to != at) look.selection = picked.copy(end = to, link = null)
+                    if (to != at) {
+                        val extended = picked.copy(end = to, link = null)
+                        if (extended != dragging) {
+                            dragging = extended
+                            look.selection = dragging
+                        }
+                    }
                     c.consume()
                 }
             }

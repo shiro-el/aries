@@ -934,10 +934,12 @@ class FakeConnection(
         return result
     }
     val gitDiffRequests = mutableListOf<Pair<String, String>>()
+    val gitDiffKinds = mutableListOf<io.github.shiroel.aries.core.GitDiffKind>()
     var gitDiffFailure: CoreException? = null
     var gitDiffHold: CompletableDeferred<Unit>? = null
     override suspend fun gitDiff(address: String, cwd: String, path: String, kind: io.github.shiroel.aries.core.GitDiffKind): io.github.shiroel.aries.core.GitDiff {
         gitDiffRequests += cwd to path
+        gitDiffKinds += kind
         gitDiffHold?.await()
         gitDiffFailure?.let { throw it }
         return gitPatch
