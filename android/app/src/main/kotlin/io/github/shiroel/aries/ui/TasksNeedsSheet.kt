@@ -16,23 +16,45 @@ import io.github.shiroel.aries.core.*
 internal sealed interface TaskNeed {
     val key: String
     data class Call(val entry: CallEntry) : TaskNeed { override val key = "call:${entry.key}" }
-    data class Agent(val entry: AgentEntry) : TaskNeed { override val key = "agent:${entry.key.hostId}:${entry.key.address}:${entry.terminal.turn}:${entry.terminal.statusMs}:${entry.terminal.agentStatus}" }
+    data class Agent(val entry: AgentEntry, val questionId: String? = null) : TaskNeed {
+        override val key = "agent:${entry.key.hostId}:${entry.key.address}:${entry.terminal.turn}:${entry.terminal.statusMs}:${entry.terminal.agentStatus}:$questionId"
+    }
 }
 
-internal fun taskNeeds(agents: List<AgentEntry>, calls: List<CallEntry>): List<TaskNeed> =
-    calls.filter { it.call.answer == null && it.call.urgency != CallUrgency.RECORD }
+/** Current-turn question identity, including confirmed completion while status catches up. */
+internal fun taskNeedQuestion(entry: AgentEntry, snapshot: ChatSnapshot?): ChatEntry? {
+    val reason = (entry.terminal.agentStatus as? AgentStatus.Blocked)?.reason ?: return null
+    if (reason != BlockedReason.QUESTION && reason != BlockedReason.PERMISSION) return null
+    val entries = snapshot?.entries.orEmpty()
+    val questions = entries.drop(entries.indexOfLast { (it.body as? ChatEntryBody.User)?.queued == false } + 1)
+        .filter { candidate -> (candidate.body as? ChatEntryBody.Question)?.let {
+            (it.name == "permission") == (reason == BlockedReason.PERMISSION)
+        } == true }
+    val running = questions.filter { (it.body as ChatEntryBody.Question).status == ChatToolStatus.RUNNING }
+    return if ((running.firstOrNull()?.body as? ChatEntryBody.Question)?.name == "request_user_input")
+        running.first() else running.lastOrNull() ?: questions.lastOrNull()
+}
+
+internal fun taskNeeds(agents: List<AgentEntry>, calls: List<CallEntry>,
+    transcript: (AgentKey) -> ChatSnapshot? = { null }): List<TaskNeed> =
+    calls.filter { it.needsAttention }
         .sortedWith(compareByDescending<CallEntry> { it.call.urgency.ordinal }.thenByDescending { it.call.atMs })
-        .map { TaskNeed.Call(it) } + agents.filter { isWaiting(it.terminal.agentStatus) }.map { TaskNeed.Agent(it) }
+        .map { TaskNeed.Call(it) } + agents.filter { isWaiting(it.terminal.agentStatus) }.mapNotNull { entry ->
+            val snapshot = transcript(entry.key)
+            val question = taskNeedQuestion(entry, snapshot)
+            if (entry.live && snapshot?.status == ChatStatus.LIVE &&
+                (question?.body as? ChatEntryBody.Question)?.status == ChatToolStatus.DONE) null
+            else TaskNeed.Agent(entry, question?.id)
+        }
 
 /** Captures identity/order on entry. Feed changes cannot shift the cursor past an unanswered item. */
-internal class TasksNeedsQueue(val items: List<TaskNeed>, start: Int = 0, private val onResolved: (String) -> Unit = {}) {
+internal class TasksNeedsQueue(val items: List<TaskNeed>, start: Int = 0) {
     var position by mutableIntStateOf(start)
         private set
     val current get() = items.getOrNull(position)
     fun next() { position++ }
     fun resolve(key: String) {
         if (current?.key != key) return
-        onResolved(key)
         next()
     }
 }
@@ -43,10 +65,6 @@ internal fun TasksNeedsSheet(model: HostsModel, board: AgentBoard, queue: TasksN
     val current = queue.current
     LaunchedEffect(current) { if (current == null) onDismiss() }
     if (current == null) return
-    LifecycleStartEffect(model) {
-        model.beginTaskNeeds()
-        onStopOrDispose { model.endTaskNeeds() }
-    }
     ModalBottomSheet(onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         modifier = Modifier.testTag("tasks-needs-sheet")) {
@@ -66,7 +84,7 @@ internal fun TasksNeedsSheet(model: HostsModel, board: AgentBoard, queue: TasksN
                             model.openPushedAgent(entry.host.id, entry.call.terminal!!, openChat = true)
                         }) { Text(stringResource(R.string.call_open_chat)) }
                     }
-                    is TaskNeed.Agent -> TasksQuestion(model, board, current.entry, onAnswered = { queue.resolve(current.key) }, onDismiss = onDismiss)
+                    is TaskNeed.Agent -> TasksQuestion(model, board, current, onAnswered = { queue.resolve(current.key) }, onDismiss = onDismiss)
                 }
                 TextButton(onClick = queue::next, modifier = Modifier.testTag("tasks-needs-next")) {
                     Text(stringResource(R.string.tasks_needs_next))
@@ -77,8 +95,9 @@ internal fun TasksNeedsSheet(model: HostsModel, board: AgentBoard, queue: TasksN
 }
 
 @Composable
-private fun TasksQuestion(model: HostsModel, board: AgentBoard, original: AgentEntry,
+private fun TasksQuestion(model: HostsModel, board: AgentBoard, need: TaskNeed.Agent,
     onAnswered: () -> Unit, onDismiss: () -> Unit) {
+    val original = need.entry
     val entry = board.find(original.key) ?: original.copy(live = false)
     val link = board.links[entry.host.id]
     val connection = link?.connection
@@ -92,20 +111,21 @@ private fun TasksQuestion(model: HostsModel, board: AgentBoard, original: AgentE
         chat?.resume()
         onStopOrDispose { if (chat != null && !model.isViewedChat(chat)) chat.pause() }
     }
-    // Remember the question displayed for this queue item, even if the Host resolves it before
-    // the answer RPC returns. Only an acknowledged phone answer automatically moves the cursor.
-    var questionId by remember { mutableStateOf<String?>(null) }
-    val question = chat?.snapshot?.entries?.firstOrNull {
-        it.body is ChatEntryBody.Question && chat.questionMode(it.id) == ChatModel.QuestionMode.Live && chat.answers[it.id] != AnswerState.Sent
-    }
+    // A key receipt is not confirmation. Keep the displayed question (and its
+    // Unconfirmed recovery UI) until transcript completion or a live status change.
+    var questionId by remember(need.key) { mutableStateOf(need.questionId) }
+    val snapshot = chat?.snapshot
+    val question = snapshot?.entries?.find { it.id == questionId && it.body is ChatEntryBody.Question }
+        ?: taskNeedQuestion(entry, snapshot)
     LaunchedEffect(question?.id) { if (question != null) questionId = question.id }
-    val sent = questionId?.let { chat?.answers?.get(it) } == AnswerState.Sent
-    LaunchedEffect(sent) { if (sent) onAnswered() }
+    val confirmed = entry.live && (!isWaiting(entry.terminal.agentStatus) ||
+        snapshot?.status == ChatStatus.LIVE && (question?.body as? ChatEntryBody.Question)?.status == ChatToolStatus.DONE)
+    LaunchedEffect(confirmed) { if (confirmed) onAnswered() }
     Text(displayName(entry.terminal), Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.titleMedium)
     Text(entry.host.name, Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall)
     when {
         !entry.live -> Text(stringResource(R.string.tasks_offline), Modifier.padding(16.dp))
-        question != null -> QuestionView(chat, question.id, question.body as ChatEntryBody.Question)
+        question != null && chat != null -> QuestionView(chat, question.id, question.body as ChatEntryBody.Question)
         chat?.snapshot == null -> ScreenLoading(stringResource(R.string.chat_loading), compact = true, onRetry = { chat?.retryConnection() })
         else -> {
             (entry.terminal.agentStatus as? AgentStatus.Error)?.message?.takeIf { it.isNotBlank() }?.let {
