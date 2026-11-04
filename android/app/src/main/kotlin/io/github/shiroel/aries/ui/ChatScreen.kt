@@ -399,7 +399,8 @@ class ChatModel(
         drainQueue()
     }
 
-    val canSend: Boolean get() = !recoveryFailed && connectionError == null && link?.state == LinkState.Up && canEdit && !interrupting && !uploading && pendingShare == null &&
+    val canSend: Boolean get() = !recoveryFailed && connectionError == null && link?.state == LinkState.Up &&
+        snapshot?.status != ChatStatus.RECONNECTING && canEdit && !interrupting && !uploading && pendingShare == null &&
         (draft.isNotBlank() || attachments.isNotEmpty())
 
     /** Working Agents keep a cancellable FIFO on the phone until they finish. */

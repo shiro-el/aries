@@ -29,6 +29,8 @@ import io.github.shiroel.aries.core.ScreenFrame
 import io.github.shiroel.aries.core.ScreenLine
 import io.github.shiroel.aries.core.TerminalInfo
 import io.github.shiroel.aries.core.TerminalUpdate
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.advanceTimeBy
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotSame
@@ -287,7 +289,7 @@ class ReconnectTest {
     }
 
     @Test
-    fun aNetworkChangeReplacesTheLineAndTheListComesFromTheNewSnapshot() {
+    fun reconnectingKeepsStructureUntilTheFreshSnapshotReplacesIt() {
         val core = FakeCore().apply { terminals = listOf(build) }
         core.addHost("home", Endpoint.Ssh("10.0.0.2", 22u, "me"))
         start(core)
@@ -295,15 +297,47 @@ class ReconnectTest {
         compose.waitForIdle()
         val dropped = core.connection!!
 
-        // While the phone switched networks, an Agent started on the Host.
-        core.terminals = listOf(build, agent)
-        model.networkChanged()
+        val browser = (model.screen as Screen.Browse).browser
+        val cached = browser.structure
+        core.failWith = CoreException.Unreachable("no route")
+        compose.runOnIdle { model.networkChanged() }
+        compose.waitForIdle()
+        assertTrue(cached === browser.structure)
+        compose.onNodeWithText("build").assertExists()
+
+        // The old Terminal disappeared and a new Agent started while offline.
+        core.terminals = listOf(agent)
+        core.failWith = null
+        compose.runOnIdle { model.foregrounded() }
         compose.waitForIdle()
 
         assertTrue(dropped.disconnected)
         assertNotSame(dropped, core.connection)
         compose.onNodeWithText("claude").assertExists()
+        compose.onNodeWithText("build").assertDoesNotExist()
+        assertEquals(listOf("t1"), browser.terminals.map { it.address })
         compose.onNodeWithText(str(R.string.structure_connection_closed)).assertDoesNotExist()
+    }
+
+    @Test
+    fun reopeningAHostShowsStoredStructureUntilTheFirstFreshSnapshot() {
+        val core = FakeCore().apply { failWith = CoreException.Unreachable("no route") }
+        val host = core.addHost("home", Endpoint.Ssh("home", 22u, "me"))
+        core.storedStates[host.id] = io.github.shiroel.aries.core.LastKnownState(
+            host.id, emptyList(), 1uL,
+            io.github.shiroel.aries.core.HostStructure(emptyList(), listOf(build), null), 1uL,
+        )
+        start(core)
+        compose.onNodeWithText("home").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("build").assertExists()
+
+        core.terminals = listOf(agent)
+        core.failWith = null
+        compose.runOnIdle { model.foregrounded() }
+        compose.waitForIdle()
+        compose.onNodeWithText("build").assertDoesNotExist()
+        compose.onNodeWithText("claude").assertExists()
     }
 
     @Test
@@ -322,21 +356,28 @@ class ReconnectTest {
     }
 
     @Test
-    fun aLiveLineIsKeptWhenTheAppComesBack() {
+    fun aShortBackgroundVisitKeepsTheLiveLineAndTerminal() {
         val core = FakeCore().apply { terminals = listOf(build) }
         val view = openBuild(core)
         val conn = core.connection!!
 
-        model.foregrounded()
+        compose.runOnIdle { screenLifecycle.currentState = Lifecycle.State.CREATED }
+        compose.mainClock.advanceTimeBy(30_000)
+        compose.runOnIdle {
+            screenLifecycle.currentState = Lifecycle.State.RESUMED
+            model.foregrounded()
+        }
         compose.waitForIdle()
 
+        // The old background deadline must also be cancelled after returning.
+        compose.mainClock.advanceTimeBy(120_100)
         assertFalse(conn.disconnected)
         assertFalse(view.detached)
         screenShows("before")
     }
 
     @Test
-    fun backgroundingDetachesAndStopsReconnectUntilTheScreenResumes() {
+    fun aLongBackgroundVisitReleasesTheLineAndResumesTheTerminal() {
         val core = FakeCore().apply { terminals = listOf(build) }
         val first = openBuild(core)
         val old = core.connection!!
@@ -344,6 +385,7 @@ class ReconnectTest {
             (model.screen as Screen.Terminal).viewer.draft = "unfinished command"
             screenLifecycle.currentState = Lifecycle.State.CREATED
         }
+        compose.mainClock.advanceTimeBy(120_100)
         compose.waitForIdle()
         assertTrue(first.detached)
         assertTrue(old.disconnected)
@@ -360,7 +402,7 @@ class ReconnectTest {
     }
 
     @Test
-    fun backgroundingChatPausesItsWatchAndKeepsTheDraftAndCursorOnResume() {
+    fun backgroundingChatReusesItsWatchBrieflyThenReleasesItAfterTheGracePeriod() {
         val core = FakeCore().apply { terminals = listOf(agent) }
         core.addHost("home", Endpoint.Ssh("10.0.0.2", 22u, "me"))
         start(core)
@@ -376,6 +418,19 @@ class ReconnectTest {
             screenLifecycle.currentState = Lifecycle.State.CREATED
             model.networkChanged()
         }
+        compose.mainClock.advanceTimeBy(30_000)
+        compose.waitForIdle()
+        assertFalse(core.chatPaused)
+        compose.runOnIdle {
+            screenLifecycle.currentState = Lifecycle.State.RESUMED
+            model.foregrounded()
+        }
+        compose.waitForIdle()
+        assertEquals(1, core.chatsOpened.size)
+        assertEquals("cursor-1", chat.snapshot?.cursor)
+        // Returning cancelled the first deadline; a second visit starts a fresh one.
+        compose.runOnIdle { screenLifecycle.currentState = Lifecycle.State.CREATED }
+        compose.mainClock.advanceTimeBy(120_100)
         compose.waitForIdle()
         assertTrue(core.chatPaused)
         assertEquals(0, core.chatReconnects)
@@ -385,6 +440,29 @@ class ReconnectTest {
         assertTrue(chat === (model.screen as Screen.Chat).chat)
         assertEquals("unfinished question", chat.draft)
         assertEquals("cursor-1", chat.snapshot?.cursor)
+    }
+
+    @Test
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    fun foregroundRetriesImmediatelyAndResetsAnExhaustedBackoff() = kotlinx.coroutines.test.runTest {
+        val core = FakeCore().apply { failWith = CoreException.Unreachable("no route") }
+        val host = core.addHost("home", Endpoint.Ssh("home", 22u, "me"))
+        val model = HostsModel(core, backgroundScope)
+        model.connect(host)
+        runCurrent()
+        advanceTimeBy(50_000)
+        runCurrent()
+        val attempts = core.connectAttempts.size
+
+        // Still offline on return: retry now, then restart from the shortest delay.
+        model.foregrounded()
+        runCurrent()
+        assertEquals(attempts + 1, core.connectAttempts.size)
+        core.failWith = null
+        advanceTimeBy(500)
+        runCurrent()
+        assertTrue("foreground must reset the 30-second backoff to 500 ms", model.screen is Screen.Browse)
+        model.back()
     }
 
     @Test
