@@ -36,6 +36,11 @@ internal val LocalThreadChat = staticCompositionLocalOf<HostsModel?> { null }
 
 internal object ThreadScreens : LayoutScreens() {
     override val newTaskTitle = R.string.new_task_conversation_title
+    override val callDestinationLabel = R.string.thread_call_open
+    override val callDestinationAccessibilityLabel = R.string.thread_call_open_label
+    override val helperCallLabel = R.string.thread_call_helper
+    override val shareDestinationLabel = R.string.thread_share_destination
+    override val captureAttachLabel = R.string.thread_capture_attach
     override val messageInputLabel = R.string.chat_message_input_label
     override val messageReceivedLabel = R.string.chat_message_received
     override val messageQueuedLabel = R.string.chat_message_queued
@@ -266,7 +271,11 @@ internal fun ThreadCallPanel(entry: CallEntry, calls: CallsModel, chat: ChatMode
         MaterialTheme(colorScheme = if (urgent) colors.copy(surfaceContainer = accent.copy(alpha = .1f).compositeOver(colors.surface)) else colors) {
             ConsoleChatCall(entry, calls, announce = announce)
         }
-        if (entry.call.choices.isEmpty() && chat != null) MessageInput(chat, compact)
+        if (entry.call.choices.isEmpty() && chat != null) ChatCatalogControls(chat) { openTools ->
+            MessageInput(chat, compact, leading = {
+                ActionIcon(R.drawable.ic_plus, R.string.chat_input_tools_button, openTools, enabled = chat.canEdit)
+            })
+        }
     }
 }
 
@@ -298,6 +307,7 @@ internal fun ThreadChatHeader(chat: ChatModel, onBack: () -> Unit, onTerminal: (
                 maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+        QuickOpenButton()
         LocalThreadChat.current?.let { ThreadNewTaskButton(it) }
         Box {
             val menuLabel = stringResource(R.string.agent_actions_label)

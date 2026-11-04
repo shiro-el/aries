@@ -47,6 +47,11 @@ internal open class LayoutScreens {
     open val openTaskLabel = R.string.new_task_open_chat
     open val defaultViewLabel = R.string.settings_agent_view
     open val chatViewLabel = R.string.agent_view_chat
+    open val callDestinationLabel = R.string.call_open_chat
+    open val callDestinationAccessibilityLabel = R.string.call_open_chat_label
+    open val helperCallLabel = R.string.call_inbox_helper
+    open val shareDestinationLabel = R.string.attachments_choose_agent
+    open val captureAttachLabel = R.string.preview_capture_attach
     open val usesListPane: Boolean = true
     @Composable open fun Shell(model: HostsModel, content: @Composable () -> Unit) = ConsoleShell(model, content)
 
@@ -124,7 +129,7 @@ internal open class LayoutScreens {
     @Composable open fun Agents(model: HostsModel, board: AgentBoard) {
         Column {
             if (model.pendingShare != null) {
-                Text(stringResource(R.string.attachments_choose_agent), Modifier.padding(12.dp))
+                Text(stringResource(LocalLayoutScreens.current.shareDestinationLabel), Modifier.padding(12.dp))
                 TextButton(onClick = model::cancelShare) { Text(stringResource(R.string.cancel_button)) }
             }
             AgentsScreen(board, showHeader = false, onBack = model::back,

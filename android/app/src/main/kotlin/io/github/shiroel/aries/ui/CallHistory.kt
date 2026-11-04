@@ -167,7 +167,7 @@ private fun CallRow(
         if (call.answer == null) {
             val reason = when {
                 call.terminal == null -> R.string.call_unconfirmed
-                !call.topLevel -> R.string.call_inbox_helper
+                !call.topLevel -> LocalLayoutScreens.current.helperCallLabel
                 else -> null
             }
             reason?.let { Text(stringResource(it), style = MaterialTheme.typography.bodySmall) }
@@ -195,9 +195,9 @@ private fun CallRow(
             Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         }
         call.terminal?.let {
-            val label = stringResource(R.string.call_open_chat_label, callerName ?: stringResource(R.string.call_caller_unknown), call.title)
+            val label = stringResource(LocalLayoutScreens.current.callDestinationAccessibilityLabel, callerName ?: stringResource(R.string.call_caller_unknown), call.title)
             TextButton(onClick = onChat, enabled = !opening, modifier = Modifier.semantics { contentDescription = label }) {
-                Text(stringResource(if (opening) R.string.reconnecting else R.string.call_open_chat))
+                Text(stringResource(if (opening) R.string.reconnecting else LocalLayoutScreens.current.callDestinationLabel))
             }
         }
     }

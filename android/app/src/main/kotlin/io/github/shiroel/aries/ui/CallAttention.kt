@@ -22,6 +22,8 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.CallUrgency
 
@@ -29,9 +31,15 @@ import io.github.shiroel.aries.core.CallUrgency
  * The waiting rules belong to those screens; this owner only prevents duplicate attention.
  */
 internal class CallAttentionState(val model: HostsModel) {
-    val presentations = mutableStateMapOf<Any, Set<String>>()
+    val presentations = mutableStateMapOf<Any, CallPresentation>()
+    val dialogs = mutableStateListOf<CallAttentionDialogSurface>()
 }
 
+internal class CallAttentionDialogSurface(val close: () -> Unit)
+
+internal data class CallPresentation(val surface: CallAttentionDialogSurface?, val keys: Set<String>)
+
+private val LocalCallAttentionSurface = staticCompositionLocalOf<CallAttentionDialogSurface?> { null }
 private val LocalCallAttention = staticCompositionLocalOf<CallAttentionState?> { null }
 internal val LocalCallAttentionEnabled = compositionLocalOf { true }
 
@@ -49,7 +57,8 @@ internal fun Modifier.presentsCalls(keys: Set<String>): Modifier {
     var visible by remember { mutableStateOf(false) }
     DisposableEffect(state, owner) { onDispose { state.presentations.remove(owner) } }
     val presented = if (visible) keys else emptySet()
-    SideEffect { state.presentations[owner] = presented }
+    val surface = LocalCallAttentionSurface.current
+    SideEffect { state.presentations[owner] = CallPresentation(surface, presented) }
     return onGloballyPositioned { visible = !it.boundsInWindow().isEmpty }
 }
 
@@ -61,11 +70,50 @@ internal fun CallAttentionSlot(
 ) {
     val state = LocalCallAttention.current ?: return
     val model = state.model
+    val surface = LocalCallAttentionSurface.current
+    if (surface != state.dialogs.lastOrNull()) return
     if (!LocalCallAttentionEnabled.current || model.callInboxOpen || model.quickOpenVisible) return
     val entry = model.calls.banner ?: return
-    if (state.presentations.values.any { entry.key in it }) return
+    if (state.presentations.values.any { it.surface == surface && entry.key in it.keys }) return
     CallAttentionBanner(entry, model.callCallerName(entry), onOpen = { onOpen?.invoke(entry) ?: model.openCallInbox() },
         onDismiss = model.calls::dismissBanner, compact = compact)
+}
+
+/** Full-screen tools own attention while their Android window obscures the screen below.
+ * Close all obscuring tools before opening the Call, including nested viewers and sibling task forms.
+ */
+@Composable
+internal fun CallAttentionDialog(
+    onDismissRequest: () -> Unit,
+    properties: DialogProperties = DialogProperties(usePlatformDefaultWidth = false),
+    onCloseForCall: () -> Unit = onDismissRequest,
+    content: @Composable () -> Unit,
+) {
+    val state = LocalCallAttention.current
+    val latestClose by rememberUpdatedState(onCloseForCall)
+    val surface = remember { CallAttentionDialogSurface { latestClose() } }
+    Dialog(onDismissRequest = onDismissRequest, properties = properties) {
+        if (state == null) content()
+        else {
+            DisposableEffect(state, surface) {
+                state.dialogs.add(surface)
+                onDispose { state.dialogs.remove(surface) }
+            }
+            CompositionLocalProvider(LocalCallAttentionSurface provides surface, LocalCallAttentionEnabled provides true) {
+                Surface(Modifier.fillMaxSize()) {
+                    Column(Modifier.fillMaxSize().safeDrawingPadding()) {
+                        CallAttentionSlot(onOpen = { entry ->
+                            state.dialogs.toList().asReversed().forEach { it.close() }
+                            state.model.openCallInbox()
+                            state.model.calls.openThreadCall(entry)
+                            state.model.openCallChat(entry)
+                        })
+                        Box(Modifier.weight(1f)) { content() }
+                    }
+                }
+            }
+        }
+    }
 }
 
 /** Each fresh arrival owns its haptic; snapshots and recreated screens never replay it. */

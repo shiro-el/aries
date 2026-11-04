@@ -1394,6 +1394,18 @@
     <string name="console_more">···</string>
     <string name="console_host_menu">Actions for %1$s</string>
 
+    <!-- Layout-specific Call, share and capture destinations. -->
+    <string name="thread_call_open">Open conversation</string>
+    <string name="thread_call_open_label">Open %1$s conversation for Call: %2$s</string>
+    <string name="thread_call_helper">This Call is from a helper conversation. Open the conversation to follow up; Choices cannot be sent here.</string>
+    <string name="thread_share_destination">Choose a conversation for the shared content</string>
+    <string name="thread_capture_attach">Add to conversation</string>
+    <string name="tasks_call_open">Open task</string>
+    <string name="tasks_call_open_label">Open %1$s task for Call: %2$s</string>
+    <string name="tasks_call_helper">This Call is from a helper task. Open the task to follow up; Choices cannot be sent here.</string>
+    <string name="tasks_share_destination">Choose a task for the shared content</string>
+    <string name="tasks_capture_attach">Add to task</string>
+
     <!-- Call inbox -->
     <string name="call_inbox_label">Calls · Needs you %1$d</string>
     <string name="call_banner_meta">%1$s · %2$s</string>
