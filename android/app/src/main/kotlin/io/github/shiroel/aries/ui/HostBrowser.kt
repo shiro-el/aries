@@ -36,7 +36,7 @@ import io.github.shiroel.aries.core.TerminalInfo
  * and zoom live only here: nothing of it is sent to the Host, so browsing on
  * the phone never moves the desktop.
  */
-class HostBrowser(val host: Host) {
+class HostBrowser(val host: Host, private val onNavigate: () -> Unit = {}) {
     var layoutEditor: LayoutEditor? = null
     var structure by mutableStateOf<HostStructure?>(null)
         private set
@@ -142,26 +142,32 @@ class HostBrowser(val host: Host) {
     }
 
     fun openSpace(id: String) {
+        onNavigate()
         openSpaceId = id
     }
 
     fun closeSpace() {
+        onNavigate()
         openSpaceId = null
     }
 
     fun selectTab(tab: TabInfo) {
+        onNavigate()
         openSpaceId?.let { tabOfSpace[it] = tab.id }
     }
 
     fun focus(tab: TabInfo, pane: PaneInfo) {
+        onNavigate()
         focusOfTab[key(tab)] = pane.id
     }
 
     fun zoom(tab: TabInfo) {
+        onNavigate()
         focusOfTab[key(tab)]?.let { zoomOfTab[key(tab)] = it }
     }
 
     fun unzoom(tab: TabInfo) {
+        onNavigate()
         zoomOfTab.remove(key(tab))
     }
 

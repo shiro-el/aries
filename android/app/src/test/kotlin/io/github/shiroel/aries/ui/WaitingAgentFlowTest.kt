@@ -193,4 +193,29 @@ class WaitingAgentFlowTest {
         compose.onNodeWithTag("console-drawer").assertIsDisplayed()
     }
 
+    // Regression: drawer entry must preserve Browse's live line and Back destination without unlocking other Hosts.
+    @Test fun drawerAgentReusesBrowseWithoutConnectingOtherHosts() {
+        val current = agent("remote/t1", "Current", AgentStatus.Working)
+        val core = FakeCore().apply {
+            addHost("home", Endpoint.Ssh("home.test", 22u, "me"))
+            addHost("work", Endpoint.Ssh("work.test", 22u, "me"))
+            terminalsOf["h1"] = listOf(current)
+        }
+        val model = show(core)
+        compose.onNodeWithText("home").performClick()
+        val browse = model().screen
+        val connection = core.connectionsOf.getValue("h1")
+        compose.openConsoleDrawer()
+        compose.onNodeWithTag("drawer-agent:h1:remote/t1").performClick()
+        compose.runOnIdle {
+            assertFalse(connection.disconnected)
+            assertSame(connection, core.connectionsOf.getValue("h1"))
+            assertFalse(core.connectionsOf.containsKey("h2"))
+            assertSame(browse, (model().screen as Screen.Terminal).returnTo)
+        }
+        screenshot("drawer-agent-reused")
+        compose.onNodeWithTag("console-back").performClick()
+        compose.runOnIdle { assertSame(browse, model().screen) }
+    }
+
 }
