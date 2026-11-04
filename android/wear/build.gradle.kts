@@ -25,6 +25,7 @@ dependencies {
     implementation(project(":wear-data"))
     implementation(libs.wear.tiles)
     implementation(libs.wear.protolayout)
+    implementation(libs.wear.protolayout.material3)
     implementation(libs.wear.complications)
     implementation(libs.wear.remote)
     implementation(libs.kotlinx.coroutines.android)

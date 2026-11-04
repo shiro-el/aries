@@ -5,6 +5,18 @@
   Add every new string to values-ko/strings.xml too (TranslationsTest checks it).
 -->
 <resources>
+    <!-- Host localhost preview -->
+    <string name="preview_auto_refresh">Auto refresh after Agent updates</string>
+    <string name="preview_title">Preview</string>
+    <string name="preview_open_port">Open preview · %1$d</string>
+    <string name="preview_address">Host · http://127.0.0.1:%1$d</string>
+    <string name="preview_reload">Reload</string>
+    <string name="preview_mobile">Mobile view</string>
+    <string name="preview_desktop">Desktop view</string>
+    <string name="preview_close">Close preview</string>
+    <string name="preview_failed">Could not open the preview. Check the Host connection and development server.</string>
+    <string name="preview_retry">Retry</string>
+
     <!-- Action menus -->
     <string name="menu_switch">Switch</string>
     <string name="menu_current">Current</string>
