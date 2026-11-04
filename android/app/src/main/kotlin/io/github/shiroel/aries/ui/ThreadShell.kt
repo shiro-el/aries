@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
@@ -88,18 +89,23 @@ internal fun ThreadEmptyHome(model: HostsModel, board: AgentBoard) {
         if (model.pendingShare != null) {
             Text(stringResource(R.string.attachments_choose_agent), Modifier.padding(16.dp))
             LazyColumn(Modifier.weight(1f)) {
+                threadBoardStatus(board)
                 items(board.agents.filter { it.terminal.agentStatus != null }, key = { "${it.host.id}:${it.terminal.address}" }) { entry ->
                     ThreadConversationRow(model, entry) { model.openAgent(board, entry, openChat = true) }
                 }
             }
             TextButton(onClick = model::cancelShare) { Text(stringResource(R.string.cancel_button)) }
         } else {
-            Column(Modifier.weight(1f).fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(stringResource(R.string.thread_home_empty_title), style = MaterialTheme.typography.headlineSmall)
-                Spacer(Modifier.height(8.dp))
-                Text(stringResource(R.string.thread_home_empty_body), style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.Center) {
+                threadBoardStatus(board)
+                if (board.isEmpty || board.hosts.isEmpty()) item {
+                    Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(stringResource(R.string.thread_home_empty_title), style = MaterialTheme.typography.headlineSmall)
+                        Spacer(Modifier.height(8.dp))
+                        Text(stringResource(R.string.thread_home_empty_body), style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
             }
             ThreadNewTaskEntry(model, board)
         }
@@ -110,7 +116,7 @@ internal fun ThreadEmptyHome(model: HostsModel, board: AgentBoard) {
 private fun ThreadDrawer(model: HostsModel, navigate: (() -> Unit) -> Unit) {
     var query by remember { mutableStateOf("") }
     val agents = model.drawerAgents.filter { it.terminal.agentStatus != null }.filter { entry ->
-        listOf(model.threadTitle(entry), entry.space?.name.orEmpty(), entry.host.name).any { it.contains(query, true) }
+        (listOf(model.threadTitle(entry)) + threadMetadata(entry)).any { it.contains(query, true) }
     }
     val calls = model.calls.calls.filter(model.calls::isThreadWaiting)
     val urgent = calls.filter { it.call.urgency >= CallUrgency.URGENT }.mapNotNull { call ->
@@ -144,6 +150,7 @@ private fun ThreadDrawer(model: HostsModel, navigate: (() -> Unit) -> Unit) {
                 onClick = { navigate(model::openCallInbox) })
         }
         LazyColumn(Modifier.weight(1f)) {
+            (model.listScreen as? Screen.Agents)?.board?.let { threadBoardStatus(it) }
             listOf(R.string.thread_section_needs, R.string.thread_section_working,
                 R.string.thread_section_today, R.string.thread_section_earlier).forEach { section ->
                 val entries = sections[section].orEmpty().sortedWith(compareByDescending<AgentEntry> { it.key in urgent }
@@ -193,6 +200,27 @@ private fun ThreadDrawer(model: HostsModel, navigate: (() -> Unit) -> Unit) {
     }
 }
 
+/** A connected socket is still restoring the home until its first complete list arrives. */
+private fun LazyListScope.threadBoardStatus(board: AgentBoard) {
+    items(board.hosts, key = { "status:${it.id}" }) { host ->
+        val link = board.links[host.id]
+        when {
+            link?.state is LinkState.Down -> ConnectionNotice(link)
+            host.id in board.watchErrors && link != null -> WatchFailureNotice(link, board.watchErrors.getValue(host.id))
+            host in board.loadingHosts || link?.state == LinkState.Reconnecting -> ScreenLoading(
+                stringResource(R.string.connect_host_reconnecting, host.name), compact = true,
+                labelDelayMillis = if (board.agents.isEmpty()) 0L else 1_500L,
+                onRetry = { link?.let { if (it.state == LinkState.Up) it.networkChanged() else it.retryNow() } })
+            host.id in board.unavailable || board.closed[host.id] == true -> Row(
+                Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(board.unavailable[host.id]?.let { messageText(it) }
+                    ?: stringResource(R.string.agents_host_offline, host.name), Modifier.weight(1f))
+                TextButton(onClick = { link?.retryNow() }) { Text(stringResource(R.string.connect_retry_button)) }
+            }
+        }
+    }
+}
+
 @Composable
 private fun ThreadConversationRow(model: HostsModel, entry: AgentEntry, urgent: Boolean = false, onOpen: () -> Unit) {
     val current = model.currentAgentKey == entry.key
@@ -207,8 +235,7 @@ private fun ThreadConversationRow(model: HostsModel, entry: AgentEntry, urgent: 
         verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(model.threadTitle(entry), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium,
             maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
-        val metadata = listOfNotNull(entry.terminal.currentProgram ?: entry.terminal.argv.firstOrNull()?.substringAfterLast('/'),
-            entry.space?.name ?: entry.terminal.cwd.orEmpty().substringAfterLast('/').takeIf { it.isNotBlank() }, entry.host.name).joinToString(" · ")
+        val metadata = threadMetadata(entry).joinToString(" · ")
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             entry.terminal.agentStatus?.let { AgentStatusMark(it, modifier = Modifier.size(12.dp), live = entry.live) }
             Text(metadata, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
@@ -224,3 +251,10 @@ private fun ThreadConversationRow(model: HostsModel, entry: AgentEntry, urgent: 
             color = MaterialTheme.colorScheme.primary)
     }
 }
+
+/** Search uses the same identity text as the row, including an unplaced conversation's project. */
+private fun threadMetadata(entry: AgentEntry): List<String> = listOfNotNull(
+    entry.terminal.currentProgram ?: entry.terminal.argv.firstOrNull()?.substringAfterLast('/'),
+    entry.space?.name ?: entry.terminal.cwd.orEmpty().trimEnd('/').substringAfterLast('/').takeIf { it.isNotBlank() },
+    entry.host.name,
+)

@@ -44,6 +44,19 @@ class ThreadChatStatusComposerTest {
         return core.connection!!
     }
 
+    // D69: history opened from Thread tools must survive sheet dismissal and append without leaving that sheet over the composer.
+    @Test fun choosingHistoryClosesToolsAndKeepsTheHistoryPickerUsable() {
+        val core = FakeCore()
+        open(core)
+        compose.runOnIdle { core.rememberInput("h1", "t1", "Previous instruction") }
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).performTextInput("Keep this draft")
+        compose.onNodeWithContentDescription(str(R.string.chat_input_tools_button)).performClick()
+        compose.onNode(hasText(str(R.string.input_history_title)) or hasContentDescription(str(R.string.input_history_title))).performClick()
+        compose.onNodeWithText("Previous instruction").performClick()
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextContains("Keep this draft\n\nPrevious instruction")
+        compose.onNodeWithText(str(R.string.chat_input_tools_button)).assertDoesNotExist()
+    }
+
     // D07: stale/pending questions must not remove normal send or Working's Stop while only Live owns the panel.
     @Test fun onlyALiveQuestionReplacesTheComposerAsStatusAndWatchCatchUp() {
         val core = FakeCore()
