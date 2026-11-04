@@ -30,6 +30,8 @@ internal fun CallReplyOutcome.labelResource(): Int = when (this) {
 internal fun replyNoteText(note: ReplyNote, answer: CallAnswer? = null): String? = when (note) {
     is ReplyNote.NotSent -> stringResource(R.string.call_reply_not_sent, note.detail)
     is ReplyNote.Outcome -> when (note.outcome) {
+        CallReplyOutcome.ANSWERED -> if (answer?.state == CallAnswerState.CLAIMED) null
+            else stringResource(note.outcome.labelResource())
         CallReplyOutcome.FAILED -> if (answer?.state == CallAnswerState.FAILED) null
             else stringResource(R.string.call_notify_not_sent, note.detail.orEmpty())
         CallReplyOutcome.UNCONFIRMED -> if (answer?.state == CallAnswerState.UNCONFIRMED) null

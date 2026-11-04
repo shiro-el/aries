@@ -451,7 +451,8 @@ const SEND_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// `aries-beacon reply CALL CHOICE`: types Choice `CHOICE` (0-based) of Call
 /// `CALL` into the Terminal that sent it, then Enter. Claims the Call in the
-/// log first, so it is typed at most once ever. Prints one [`ReplyLine`];
+/// log first, so an in-flight or possibly delivered answer cannot be typed twice.
+/// A proven failure permits an explicit retry. Prints one [`ReplyLine`];
 /// exit 0 only when delivered, 2 on bad usage.
 pub fn reply_command(log: &Log, args: &[String]) -> i32 {
     let (id, choice) = match args {
@@ -478,8 +479,8 @@ fn reply_usage(why: &str) -> i32 {
 }
 
 fn reply(log: &Log, id: &str, choice: u32) -> ReplyLine {
-    // The durable claim: under the log lock, only a Call without any
-    // answer gets one.
+    // Under the durable log lock, only an unanswered Call or a proven
+    // non-delivery can claim an explicit attempt. Uncertain delivery stays locked.
     let claimed = log.locked(|entries, seq| {
         let Some((_, call)) = fold(entries.iter().cloned())
             .into_iter()
@@ -487,7 +488,7 @@ fn reply(log: &Log, id: &str, choice: u32) -> ReplyLine {
         else {
             return (None, Err(ReplyLine::new(ReplyOutcome::NoCall, None, None)));
         };
-        if let Some(answer) = call.answer {
+        if let Some(answer) = call.answer.filter(|a| a.state != AnswerState::Failed) {
             return (
                 None,
                 Err(ReplyLine::new(ReplyOutcome::Answered, Some(answer), None)),

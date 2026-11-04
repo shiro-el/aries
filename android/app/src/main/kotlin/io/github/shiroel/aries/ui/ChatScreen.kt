@@ -1076,7 +1076,8 @@ class ChatModel(
                     saveOutbox()
                     throw e
                 } catch (e: CoreException) {
-                    if (historyDispatched && e !is CoreException.AnswerRefused &&
+                    if (e is CoreException.AnswerRefused && e.reason == AnswerProblem.UNCONFIRMED) AnswerState.Unconfirmed
+                    else if (historyDispatched && e !is CoreException.AnswerRefused &&
                         !(e is CoreException.Rpc && e.kind in setOf("no_agent", "status_mismatch"))) AnswerState.Unconfirmed
                     else AnswerState.Failed(if (mode == QuestionMode.History && e is CoreException.AnswerRefused &&
                         e.reason == AnswerProblem.GONE &&
@@ -1176,6 +1177,7 @@ fun answerProblem(e: CoreException): Message = when (e) {
         AnswerProblem.UNSUPPORTED -> Message(R.string.chat_answer_unsupported)
         AnswerProblem.NO_BEACON -> Message(R.string.chat_status_no_beacon)
         AnswerProblem.NO_CORE -> Message(R.string.chat_answer_no_core)
+        AnswerProblem.UNCONFIRMED -> Message(R.string.chat_question_unconfirmed)
         AnswerProblem.FAILED -> Message(R.string.chat_answer_failed, listOf(errorMessage(e)))
     }
     else -> Message(R.string.chat_answer_failed, listOf(errorMessage(e)))
@@ -1253,7 +1255,8 @@ fun ChatScreen(
     val agentCalls = calls?.let { model ->
         model.calls.filter {
             it.host.id == chat.host.id && it.call.terminal == chat.terminal.address &&
-                (it.key in model.replying || it.live && (it.answerable || it.key in model.replyNotes ||
+                (it.key in model.replying || it.live && (thread != null || !it.acknowledged) &&
+                    (it.answerable || it.unresolvedAnswer || it.key in model.replyNotes ||
                     thread != null && it.call.pushesByDefault && it.call.answer == null))
         }.sortedBy { it.call.atMs }
     }.orEmpty()
@@ -1363,11 +1366,12 @@ fun ChatScreen(
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     // Scrollable clearance, rather than a footer that shrinks the viewport.
                     val transcriptPadding = PaddingValues(bottom = if (scroll.following || searchOpen) 0.dp else 64.dp)
+                    // Calls have their own feed and remain usable before a transcript arrives.
                     val transcriptModifier = Modifier.fillMaxSize().chatImeAnchor(scroll.list)
-                        .then(if (scroll.positioned) Modifier else Modifier.graphicsLayer { alpha = 0f }.clearAndSetSemantics { })
+                        .then(if (scroll.positioned || entries.isEmpty()) Modifier else Modifier.graphicsLayer { alpha = 0f }.clearAndSetSemantics { })
                         .testTag("chat-transcript")
-                    val historyContent = remember(chat, transcript, readAloud, agentCalls, calls, toggleTool) {
-                        chatHistoryContent(transcript, chat, readAloud, agentCalls, calls, toggleTool)
+                    val historyContent = remember(chat, transcript, readAloud, agentCalls, calls, toggleTool, onOpenTerminal) {
+                        chatHistoryContent(transcript, chat, readAloud, agentCalls, calls, toggleTool, onOpenTerminal)
                     }
                     val threadContent = remember(chat, transcript, toolGroupsState, readAloud, answerQuestion?.id, agentCalls, toggleTool, scroll) {
                         threadHistoryContent(transcript, toolGroupsState, chat, readAloud,
@@ -1443,13 +1447,14 @@ private fun chatHistoryContent(
     agentCalls: List<CallEntry>,
     calls: CallsModel?,
     toggleTool: (String) -> Unit,
+    onOpenTerminal: () -> Unit,
 ): LazyListScope.() -> Unit = {
     items(transcript.rows, key = { it.key }, contentType = { it.contentType }) { row ->
         ChatTranscriptRowView(row, chat, readAloud, toggleTool)
     }
     items(agentCalls, key = { "call:${it.key}" }, contentType = { "call" }) { entry ->
         if (calls != null) {
-            if (LocalTasksDetail.current != null) TasksCallTrace(entry) else ConsoleChatCall(entry, calls)
+            if (LocalTasksDetail.current != null) TasksCallTrace(entry) else ConsoleChatCall(entry, calls, onOpenTerminal = onOpenTerminal)
         }
     }
     queuedChatMessages(chat)

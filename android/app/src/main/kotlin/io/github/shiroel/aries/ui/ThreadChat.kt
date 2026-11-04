@@ -248,7 +248,7 @@ internal fun ThreadAnswerPanel(chat: ChatModel, entry: ChatEntry, maxHeight: Dp 
 
 @Composable
 internal fun ThreadCallPanel(entry: CallEntry, calls: CallsModel, chat: ChatModel? = null, compact: Boolean = false,
-    onDismiss: (() -> Unit)? = null, maxHeight: Dp = 360.dp, announce: Boolean = false) {
+    onDismiss: (() -> Unit)? = null, maxHeight: Dp = 360.dp, announce: Boolean = false, onOpenTerminal: (() -> Unit)? = null) {
     val urgent = entry.call.urgency in setOf(CallUrgency.URGENT, CallUrgency.EMERGENCY)
     val accent = if (urgent) Color(0xFFF0B23E) else MaterialTheme.colorScheme.outlineVariant
     Column(Modifier.fillMaxWidth().heightIn(max = maxHeight).verticalScroll(rememberScrollState()).testTag("thread-call-panel")) {
@@ -264,7 +264,7 @@ internal fun ThreadCallPanel(entry: CallEntry, calls: CallsModel, chat: ChatMode
         }
         val colors = MaterialTheme.colorScheme
         MaterialTheme(colorScheme = if (urgent) colors.copy(surfaceContainer = accent.copy(alpha = .1f).compositeOver(colors.surface)) else colors) {
-            ConsoleChatCall(entry, calls, announce = announce)
+            ConsoleChatCall(entry, calls, announce = announce, onOpenTerminal = onOpenTerminal)
         }
         if (entry.call.choices.isEmpty() && chat != null) MessageInput(chat, compact)
     }
@@ -372,7 +372,7 @@ internal fun ThreadChatInput(model: HostsModel, chat: ChatModel, activeCall: Cal
         ThreadConnectionGuidance(chat)
         if (activeCall != null && calls != null) ThreadCallPanel(activeCall, calls, chat, compact, onDismiss = {
             calls.closeThreadCall(activeCall)
-        }, maxHeight = panelHeight)
+        }, maxHeight = panelHeight, onOpenTerminal = { model.openTerminal(chat.terminal) })
         else if (question != null) ThreadAnswerPanel(chat, question, panelHeight)
         else if (chat.link != null) ThreadComposer(chat, compact)
     }
