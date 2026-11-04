@@ -558,6 +558,7 @@
     <string name="agent_status_blocked_question">Blocked: question</string>
     <string name="agent_status_blocked_auth">Blocked: sign-in</string>
     <string name="agent_status_error">Error</string>
+    <string name="agents_waiting_error">An error occurred. Open to inspect it.</string>
     <string name="agent_status_done">Done</string>
     <string name="agent_status_idle">Idle</string>
     <string name="agent_attention_label">Needs you</string>
@@ -623,7 +624,7 @@
     <string name="thread_new_body">Choose a Host, folder and Agent, then describe your task.</string>
     <string name="thread_host_online">%1$s · Connected</string>
     <string name="thread_search_hint">Search conversations</string>
-    <string name="thread_section_needs">Needs an answer</string>
+    <string name="thread_section_needs">Needs attention</string>
     <string name="thread_section_working">In progress</string>
     <string name="thread_section_today">Today</string>
     <string name="thread_section_earlier">Earlier</string>
@@ -632,8 +633,8 @@
     <string name="thread_tools_summary">%1$s · %2$s</string>
     <string name="thread_tools_separator">", "</string>
     <string name="thread_tool_running">%1$s · %2$s</string>
-    <string name="thread_waiting_single">%1$s needs an answer ›</string>
-    <string name="thread_waiting_urgent_single">Urgent · %1$s needs an answer ›</string>
+    <string name="thread_waiting_single">%1$s needs attention ›</string>
+    <string name="thread_waiting_urgent_single">Urgent · %1$s needs attention ›</string>
     <plurals name="thread_tools_read">
         <item quantity="one">%1$d file read</item>
         <item quantity="other">%1$d files read</item>
@@ -653,12 +654,12 @@
     <string name="thread_chat_subtitle">%1$s · %2$s</string>
     <string name="thread_chat_menu">⋯</string>
     <plurals name="thread_waiting">
-        <item quantity="one">%1$s and %2$d other need an answer ›</item>
-        <item quantity="other">%1$s and %2$d others need an answer ›</item>
+        <item quantity="one">%1$s and %2$d other need attention ›</item>
+        <item quantity="other">%1$s and %2$d others need attention ›</item>
     </plurals>
     <plurals name="thread_waiting_urgent">
-        <item quantity="one">Urgent · %1$s and %2$d other need an answer ›</item>
-        <item quantity="other">Urgent · %1$s and %2$d others need an answer ›</item>
+        <item quantity="one">Urgent · %1$s and %2$d other need attention ›</item>
+        <item quantity="other">Urgent · %1$s and %2$d others need attention ›</item>
     </plurals>
     <string name="thread_waiting_position">%1$d/%2$d</string>
     <string name="thread_previous">‹</string>
@@ -1333,7 +1334,7 @@
     <string name="call_inbox_other">Other unanswered Calls</string>
     <string name="call_inbox_helper">This Call is from a helper Agent. Open its Chat to follow up; Choices cannot be sent here.</string>
     <string name="call_inbox_read_only">Read-only · Last checked %1$s.</string>
-    <string name="call_inbox_blocked">Blocked Agents: %1$d · View Agents</string>
+    <string name="call_inbox_blocked">Waiting Agents: %1$d · Open Agents</string>
     <string name="call_reply_dismiss">Dismiss reply note</string>
     <plurals name="call_inbox_syncing">
         <item quantity="one">Checking %1$d Host…</item>
@@ -1382,6 +1383,8 @@
 
     <string name="attachments_choose_agent">Choose an Agent for the shared content</string>
     <string name="attachments_uploading">Uploading attachment…</string>
+    <string name="attachments_cancel_button">Cancel upload</string>
+    <string name="attachments_canceled">Upload canceled. Files left out of the draft: %1$s. Already attached files are kept; camera originals remain on this phone.</string>
     <string name="attachments_too_large">Attachment exceeds %1$d MiB. Choose a smaller file or enable image resizing.</string>
     <string name="attachments_failed">Could not attach the file. Choose it again. If this keeps happening, reconnect to the Host and try again.</string>
     <string name="attachments_connection_failed">Could not attach because the Host connection is unavailable. Reconnect to the Host, then choose the file again.</string>
