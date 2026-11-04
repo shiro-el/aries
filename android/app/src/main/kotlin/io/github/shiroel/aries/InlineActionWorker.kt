@@ -63,7 +63,11 @@ class InlineActionWorker(context: Context, params: WorkerParameters) : Coroutine
         } catch (_: TimeoutCancellationException) {
             show(R.string.notification_action_failed)
         } catch (e: CoreException) {
-            show(if (e is CoreException.KeyLocked) R.string.notification_action_key_locked else R.string.notification_action_failed)
+            show(when {
+                e is CoreException.KeyLocked || e is CoreException.KeyInvalidated -> R.string.notification_action_key_locked
+                e is CoreException.Rpc && e.kind == "no_agent" -> R.string.chat_input_agent_ended
+                else -> R.string.notification_action_failed
+            })
         }
         Result.success()
     }

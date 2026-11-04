@@ -102,8 +102,11 @@ sealed interface Prompt {
     /** Ask before removing [host] and everything stored for it. */
     data class ConfirmRemove(val host: Host) : Prompt
 
+    /** An untrusted entry may connect, but only this approval can execute its reviewed request. */
+    data class ConfirmSavedLaunch(val browser: HostBrowser, val saved: SavedLaunch) : Prompt
+
     /** Something the user must read; [title] and [body] are resources. */
-    data class Problem(val title: Message, val body: Message) : Prompt
+    data class Problem(val title: Message, val body: Message, val recoverKey: Boolean = false) : Prompt
 }
 
 enum class AfterTrust { Connect, InstallKey }
@@ -477,6 +480,22 @@ class HostsModel(
         keys = core.keys()
     }
 
+    var recoveringKeys by mutableStateOf(false)
+        private set
+
+    fun openKeyRecovery() {
+        dismiss()
+        openKeySettings()
+        recoveringKeys = true
+    }
+
+    suspend fun recoverKey(keyId: String, privateKey: String? = null, passphrase: String = "") {
+        withContext(keyWork) { core.recoverKey(keyId, privateKey, passphrase) }
+        key = core.publicKey()
+        keyProtection = core.keyProtection()
+        keys = core.keys()
+    }
+
     /** Re-seals every SSH key with or without a biometric requirement. */
     fun requireBiometric(required: Boolean) {
         val protection = if (required) KeyProtection.BIOMETRIC else KeyProtection.PLAIN
@@ -564,7 +583,7 @@ class HostsModel(
 
     fun connect(host: Host) = connect(host, null)
 
-    private fun connect(host: Host, restore: LastLocation?, savedLaunchId: String? = null) {
+    private fun connect(host: Host, restore: LastLocation?, savedLaunchId: String? = null, confirmSavedLaunch: Boolean = true) {
         restoring = restore != null
         missingKeyHostId = null
         val connecting = Screen.Connecting(host)
@@ -585,7 +604,7 @@ class HostsModel(
                 open = conn to null
                 screen = Screen.Browse(browser)
                 loadHostSettings(host)
-                status = watchBrowse(link, browser, restore, savedLaunchId)
+                status = watchBrowse(link, browser, restore, savedLaunchId, confirmSavedLaunch)
             } catch (e: CoreException) {
                 if (screen !== connecting) return@launch
                 restoring = false
@@ -774,7 +793,7 @@ class HostsModel(
     /** The open Host's structure and live Agent status, on each line [HostLink] brings; cancelled on [back]. */
     private var status: Job? = null
 
-    private fun watchBrowse(link: HostLink, browser: HostBrowser, restore: LastLocation? = null, savedLaunchId: String? = null): Job = scope.launch {
+    private fun watchBrowse(link: HostLink, browser: HostBrowser, restore: LastLocation? = null, savedLaunchId: String? = null, confirmSavedLaunch: Boolean = true): Job = scope.launch {
         var pendingLaunch = savedLaunchId
         var pending = restore
         var terminals: List<TerminalInfo>? = null
@@ -814,7 +833,9 @@ class HostsModel(
                             pendingLaunch = null
                             if (id != null && (screen as? Screen.Browse)?.browser === browser) {
                                 val saved = browser.savedLaunches.find { it.id == id }
-                                if (saved != null) runSaved(browser, saved) else savedLaunchMissing()
+                                if (saved == null) savedLaunchMissing()
+                                else if (confirmSavedLaunch) prompt = Prompt.ConfirmSavedLaunch(browser, saved)
+                                else runSaved(browser, saved)
                             }
                             restoreIfReady()
                             pendingQuickOpen?.takeIf { it.host.id == browser.host.id }?.let {
@@ -1124,12 +1145,25 @@ class HostsModel(
         if (target == null) openAgents() else openPushedAgent(target.hostId, target.terminal)
     }
 
-    /** Connect through the existing biometric/trust path before resolving and executing a preset. */
-    fun openSavedLaunch(hostId: String, launchId: String) {
+    /** Every exported Activity entry uses this gate; only published capabilities bypass approval. */
+    fun openSavedLaunch(context: android.content.Context, intent: android.content.Intent) {
+        val target = io.github.shiroel.aries.SavedLaunchTarget.from(intent) ?: return
+        openSavedLaunch(target.hostId, target.launchId, !io.github.shiroel.aries.SavedLaunchAuthorization.trusted(context, intent))
+    }
+
+    private fun openSavedLaunch(hostId: String, launchId: String, confirm: Boolean) {
         explicitSurfaceEntry = true
         back()
+        prompt = null
         val host = hosts.find { it.id == hostId }
-        if (host == null) savedLaunchMissing() else connect(host, restore = null, savedLaunchId = launchId)
+        if (host == null) savedLaunchMissing() else connect(host, restore = null, savedLaunchId = launchId, confirmSavedLaunch = confirm)
+    }
+
+    fun confirmSavedLaunch(approval: Prompt.ConfirmSavedLaunch) {
+        if (prompt !== approval) return
+        prompt = null
+        if ((screen as? Screen.Browse)?.browser !== approval.browser) return
+        runSaved(approval.browser, approval.saved)
     }
 
     private fun savedLaunchMissing() {
@@ -1360,6 +1394,7 @@ class HostsModel(
         back()
         settingsHost = null
         settingsKeys = false
+        recoveringKeys = false
         settingsDiagnostics = false
         screen = Screen.Settings
     }
@@ -1468,6 +1503,7 @@ class HostsModel(
         (screen as? Screen.Terminal)?.viewer?.takeIf { it.link?.host?.id == hostId }
 
     fun back() {
+        if (prompt is Prompt.ConfirmSavedLaunch) prompt = null
         closeQuickOpen()
         pendingQuickOpen = null
         restoring = false
@@ -1542,6 +1578,11 @@ fun problemFor(e: CoreException): Prompt.Problem {
         is CoreException.NoKey -> Prompt.Problem(failed, Message(R.string.connect_no_key))
         is CoreException.InvalidPrivateKey -> Prompt.Problem(
             Message(R.string.key_import_title), Message(R.string.key_import_invalid),
+        )
+        is CoreException.KeyInvalidated -> Prompt.Problem(
+            Message(R.string.key_locked_title),
+            Message(R.string.key_invalidated_body),
+            recoverKey = true,
         )
         is CoreException.KeyLocked -> Prompt.Problem(
             Message(R.string.key_locked_title),

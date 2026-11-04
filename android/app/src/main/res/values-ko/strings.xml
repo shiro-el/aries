@@ -321,6 +321,16 @@
     <string name="key_fingerprint">지문: %1$s</string>
     <string name="key_copy_button">공개 키 복사</string>
     <string name="key_clip_label">Aries SSH 공개 키</string>
+    <!-- SSH key invalidation recovery -->
+    <string name="key_invalidated_body">생체정보나 화면 잠금이 변경되어 SSH 키가 영구적으로 잠겼을 수 있습니다. 영향을 받은 키를 교체한 뒤 Host에 공개키를 다시 등록하세요.</string>
+    <string name="key_recover_button">SSH 키 복구</string>
+    <string name="key_recover_title">SSH 키 복구</string>
+    <string name="key_recover_body">생체인증 SSH 키는 하나의 암호화 키를 공유합니다. 영향을 받은 키마다 새 키를 생성하거나 백업을 가져오세요. Host 설정과 키 연결은 유지됩니다. 생체인증 보호도 유지되므로 필요한 경우 먼저 생체정보를 다시 등록하세요.</string>
+    <string name="key_recover_generate_button">교체할 새 키 생성</string>
+    <string name="key_recover_replace_button">키 교체</string>
+    <string name="key_recover_replace_body">이 휴대폰에 저장된 선택한 비밀키를 교체합니다. 기존 공개키를 유지하려면 해당 키의 백업을 가져오세요. 새 키를 생성한 뒤에는 이 키를 사용하는 모든 Host와 점프 Host에 공개키를 등록하고, 접속을 확인한 후 이전 공개키를 제거하세요.</string>
+    <string name="key_recover_register_body">위에서 복구한 공개키를 복사해 Host와 점프 Host의 authorized_keys에 추가하세요. Host가 비밀번호 로그인을 허용하면 아래 등록 버튼으로 해당 Host에 연결된 키를 등록할 수 있습니다. 다시 접속해 확인하세요. 기존 Host 키 신뢰 정보는 유지됩니다.</string>
+
     <string name="key_biometric_label">SSH 키를 쓸 때 생체 인증</string>
     <string name="key_biometric_prompt_title">SSH 키 잠금 해제</string>
     <string name="key_locked_title">SSH 키 잠김</string>
@@ -479,6 +489,7 @@
 
     <string name="chat_empty">아직 메시지가 없어요.</string>
     <string name="chat_status_connecting">Beacon에 연결 중…</string>
+    <string name="chat_input_agent_ended">Agent가 종료됐거나 이 Terminal에서 실행 중이 아니에요. Chat 입력은 사용할 수 없어요. 작성 중인 내용은 보관돼요. 계속하려면 Terminal을 여세요.</string>
     <string name="chat_status_reconnecting">연결이 끊겨 다시 연결하는 중…</string>
     <string name="chat_status_no_terminal">이 Terminal은 이제 없어요.</string>
     <string name="chat_status_no_beacon">Chat을 보려면 이 Host에 Beacon이 필요해요. Host 화면에서 설치할 수 있어요.</string>
@@ -621,6 +632,10 @@
     <string name="shortcuts_missing_title">실행 설정을 찾을 수 없음</string>
     <string name="shortcuts_missing_body">이 실행 설정이나 Host가 삭제됐어요. Aries에서 다른 실행 설정을 골라 주세요.</string>
     <string name="shortcuts_pin_button">홈 화면에 추가</string>
+    <!-- Saved-launch intent approval (179). -->
+    <string name="shortcuts_confirm_title">저장한 실행 설정을 실행할까요?</string>
+    <string name="shortcuts_confirm_body">Host %2$s에서 실행하기 전에 %1$s 설정을 확인해 주세요.</string>
+    <string name="shortcuts_default_command">Host 기본 셸</string>
     <!-- Worktree picker: read-only discovery and opening. -->
     <string name="worktrees_button">워크트리</string>
     <string name="worktrees_title">워크트리 열기</string>

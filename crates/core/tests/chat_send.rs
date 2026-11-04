@@ -53,6 +53,52 @@ fn inputs_after(agent: &FakeAgent, want: usize) -> Vec<String> {
 }
 
 #[tokio::test]
+async fn chat_and_notification_replies_never_type_into_a_shell_without_an_agent() {
+    let hc = HcSession::start();
+    let data = tempfile::tempdir().unwrap();
+    let log = data.path().join("shell-input");
+    // The pane remains live after the Agent has returned to a shell.
+    let address = hc.run_bg(
+        "shell",
+        &[
+            "/bin/sh",
+            "-c",
+            "while IFS= read -r line; do printf '%s\\n' \"$line\" >> \"$1\"; done",
+            "shell",
+            log.to_str().unwrap(),
+        ],
+    );
+    let core = core_in(data.path());
+    let host = core.add_host("dev".into(), local_endpoint(&hc)).unwrap();
+    let conn = core.connect(host.id.clone()).await.unwrap();
+    let foreground = conn
+        .send_message(
+            address.clone(),
+            "please run the tests".into(),
+            Arc::new(Held::default()),
+        )
+        .await;
+    let background = core
+        .send_message_background(
+            host.id,
+            address,
+            "please continue".into(),
+            Arc::new(Held::default()),
+        )
+        .await;
+
+    assert!(
+        foreground.is_err(),
+        "Chat must refuse a shell: {foreground:?}"
+    );
+    assert!(
+        background.is_err(),
+        "a notification must refuse a shell: {background:?}"
+    );
+    assert_eq!(std::fs::read_to_string(log).unwrap_or_default(), "");
+}
+
+#[tokio::test]
 async fn a_message_is_typed_into_the_agents_terminal() {
     let hc = HcSession::start();
     let agent = hc.run_fake_agent("agent", "status idle\nwait\nstatus working\n");

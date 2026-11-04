@@ -43,12 +43,12 @@ class MainActivity : AppCompatActivity() {
         if (savedInstanceState == null) {
             pushTarget = PushTarget.from(intent)
             tileRequested = isTileIntent(intent)
-            savedLaunchTarget = SavedLaunchTarget.from(intent)
+            savedLaunchIntent = intent.takeIf { SavedLaunchTarget.from(it) != null }
             shareIntent = intent
             NotificationGroups.opened(this, intent)
         } else {
             pushTarget = PushTarget.from(savedInstanceState.getParcelable<Intent>("pending-push-target"))
-            savedLaunchTarget = SavedLaunchTarget.from(savedInstanceState.getParcelable<Intent>("pending-launch-target"))
+            savedLaunchIntent = savedInstanceState.getParcelable<Intent>("pending-launch-target")
             tileRequested = savedInstanceState.getBoolean("pending-tile-target")
             shareIntent = savedInstanceState.getParcelable("pending-share-intent")
         }
@@ -96,7 +96,7 @@ class MainActivity : AppCompatActivity() {
     /** Pending entry targets wait for the model and the resumed biometric authorizer. */
     private var pushTarget: PushTarget? = null
     private var tileRequested = false
-    private var savedLaunchTarget: SavedLaunchTarget? = null
+    private var savedLaunchIntent: Intent? = null
     private fun isTileIntent(intent: Intent?) = intent?.action == AgentSurfaces.OPEN_ATTENTION &&
         intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY == 0
     private var shareIntent: Intent? = null
@@ -115,14 +115,14 @@ class MainActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         NotificationGroups.opened(this, intent)
-        SavedLaunchTarget.from(intent)?.let {
+        intent.takeIf { SavedLaunchTarget.from(it) != null }?.let {
             pushTarget = null
             tileRequested = false
-            savedLaunchTarget = it
+            savedLaunchIntent = it
             openEntryTarget()
         }
         if (isTileIntent(intent)) {
-            savedLaunchTarget = null
+            savedLaunchIntent = null
             pushTarget = null
             tileRequested = true
             openEntryTarget()
@@ -131,7 +131,7 @@ class MainActivity : AppCompatActivity() {
         openShare()
         // Warm start: the app was running when the notification was tapped.
         PushTarget.from(intent)?.let {
-            savedLaunchTarget = null
+            savedLaunchIntent = null
             tileRequested = false
             pushTarget = it
             openEntryTarget()
@@ -142,9 +142,9 @@ class MainActivity : AppCompatActivity() {
     private fun openEntryTarget() {
         val m = model ?: return
         if (!resumed || app.appLock.locked) return
-        savedLaunchTarget?.let {
-            savedLaunchTarget = null
-            m.openSavedLaunch(it.hostId, it.launchId)
+        savedLaunchIntent?.let {
+            savedLaunchIntent = null
+            m.openSavedLaunch(this, it)
             m.start()
             return
         }
@@ -163,7 +163,8 @@ class MainActivity : AppCompatActivity() {
         // A language change recreates the activity; keep its Settings destination open.
         outState.putBoolean("settings-open", model?.screen == io.github.shiroel.aries.ui.Screen.Settings)
         outState.putParcelable("pending-push-target", pushTarget?.intent(this))
-        outState.putParcelable("pending-launch-target", savedLaunchTarget?.intent(this))
+        // Preserve the received credential (or its absence); recreation must never sign an external entry.
+        outState.putParcelable("pending-launch-target", savedLaunchIntent)
         outState.putBoolean("pending-tile-target", tileRequested)
         outState.putParcelable("pending-share-intent", shareIntent)
         super.onSaveInstanceState(outState)
@@ -179,7 +180,7 @@ class MainActivity : AppCompatActivity() {
     private fun resumeModel() {
         if (!resumed || app.appLock.locked) return
         val m = model ?: return
-        val explicitSurface = savedLaunchTarget != null || tileRequested
+        val explicitSurface = savedLaunchIntent != null || tileRequested
         openShare()
         openEntryTarget()
         if (needsForegroundRefresh) {

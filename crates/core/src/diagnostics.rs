@@ -199,6 +199,7 @@ pub(crate) fn category(error: &CoreError) -> DiagnosticError {
         | C::InvalidPrivateKey
         | C::Vault { .. }
         | C::KeyLocked
+        | C::KeyInvalidated
         | C::BiometricUnavailable { .. } => D::KeyUnavailable,
         C::HostKeyUnknown { .. } | C::JumpHostKeyUnknown { .. } => D::HostKeyUntrusted,
         C::HostKeyChanged { .. } | C::JumpHostKeyChanged { .. } => D::HostKeyChanged,

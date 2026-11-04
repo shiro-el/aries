@@ -1,4 +1,4 @@
-//! Host edits keep identity and local state, and invalidate only changed endpoints.
+//! Host edits keep identity/local state and invalidate changed connection settings.
 mod common;
 
 use aries_core::{CoreError, Endpoint, JumpHost, LaunchRequest, SavedLaunch};
@@ -113,7 +113,7 @@ async fn validates_add_and_edit_without_changing_the_original() {
 }
 
 #[tokio::test]
-async fn every_ssh_endpoint_change_requires_new_trust_but_rename_keeps_trust() {
+async fn ssh_address_or_port_changes_require_trust_but_username_and_rename_keep_it() {
     let data = tempfile::tempdir().unwrap();
     let core = core_in(data.path());
     let host = core.add_host("box".into(), ssh("box", 22, "me")).unwrap();
@@ -124,11 +124,7 @@ async fn every_ssh_endpoint_change_requires_new_trust_but_rename_keeps_trust() {
         .await
         .unwrap();
     assert_eq!(renamed.host_key.as_deref(), Some("SHA256:key"));
-    for endpoint in [
-        ssh("other", 22, "me"),
-        ssh("other", 2222, "me"),
-        ssh("other", 2222, "dev"),
-    ] {
+    for endpoint in [ssh("other", 22, "me"), ssh("other", 2222, "me")] {
         core.trust_host_key(host.id.clone(), "SHA256:key".into())
             .unwrap();
         assert_eq!(
@@ -139,6 +135,14 @@ async fn every_ssh_endpoint_change_requires_new_trust_but_rename_keeps_trust() {
             None
         );
     }
+    core.trust_host_key(host.id.clone(), "SHA256:key".into())
+        .unwrap();
+    let changed = core
+        .edit_host(host.id.clone(), "renamed".into(), ssh("other", 2222, "dev"))
+        .await
+        .unwrap();
+    assert_eq!(changed.host_key.as_deref(), Some("SHA256:key"));
+    assert_eq!(core_in(data.path()).hosts()[0].host_key, changed.host_key);
 }
 
 #[tokio::test]
@@ -226,45 +230,175 @@ async fn failed_persistence_keeps_settings_trust_and_live_connection() {
 }
 
 #[tokio::test]
-async fn an_in_flight_connection_to_the_old_address_cannot_escape_an_edit() {
+async fn in_flight_connections_cannot_escape_endpoint_jump_key_edits_or_removal() {
+    for change in ["endpoint", "jump", "key", "remove"] {
+        let hc = HcSession::start();
+        let data = tempfile::tempdir().unwrap();
+        let core = core_in(data.path());
+        let started = data.path().join("started");
+        let proceed = data.path().join("proceed");
+        let Endpoint::Local { argv, env } = local_endpoint(&hc) else {
+            unreachable!()
+        };
+        let script = format!(
+            "touch '{}'; while [ ! -f '{}' ]; do sleep 0.01; done; exec \"$@\"",
+            started.display(),
+            proceed.display()
+        );
+        let mut delayed = vec![
+            "/bin/sh".into(),
+            "-c".into(),
+            script,
+            "delayed-connect".into(),
+        ];
+        delayed.extend(argv);
+        let host = core
+            .add_host("box".into(), Endpoint::Local { argv: delayed, env })
+            .unwrap();
+        let task = tokio::spawn({
+            let core = core.clone();
+            let id = host.id.clone();
+            async move { core.connect(id).await }
+        });
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            while !started.exists() {
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+        match change {
+            "endpoint" => {
+                core.edit_host(host.id, "box".into(), local_endpoint(&hc))
+                    .await
+                    .unwrap();
+            }
+            "jump" => {
+                core.set_jump_hosts(
+                    host.id.clone(),
+                    vec![JumpHost {
+                        address: "jump".into(),
+                        port: 22,
+                        user: "me".into(),
+                        key_id: None,
+                        host_key: None,
+                    }],
+                )
+                .unwrap();
+                core.set_jump_hosts(host.id, vec![]).unwrap();
+            }
+            "key" => {
+                let key = core.create_key("new key".into()).unwrap();
+                core.set_host_ssh_key(host.id.clone(), Some(key.id))
+                    .unwrap();
+                core.set_host_ssh_key(host.id, None).unwrap();
+            }
+            "remove" => core.remove_host(host.id).unwrap(),
+            _ => unreachable!(),
+        }
+        std::fs::write(proceed, b"go").unwrap();
+        assert!(
+            matches!(task.await.unwrap(), Err(CoreError::Closed)),
+            "{change}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn removed_host_handles_cannot_run_commands_or_recreate_local_state() {
     let hc = HcSession::start();
     let data = tempfile::tempdir().unwrap();
     let core = core_in(data.path());
-    let started = data.path().join("started");
-    let proceed = data.path().join("proceed");
-    let Endpoint::Local { argv, env } = local_endpoint(&hc) else {
-        unreachable!()
+    let host = core.add_host("gone".into(), local_endpoint(&hc)).unwrap();
+    let kept = core.add_host("kept".into(), local_endpoint(&hc)).unwrap();
+    let connection = core.connect(host.id.clone()).await.unwrap();
+    let other = core.connect(kept.id).await.unwrap();
+    let request = LaunchRequest {
+        command: "sleep 300".into(),
+        cwd: Some(data.path().to_string_lossy().into_owned()),
+        space_id: None,
+        tab_id: None,
+        preset: None,
+        model: None,
+        effort: None,
     };
-    let script = format!(
-        "touch '{}'; while [ ! -f '{}' ]; do sleep 0.01; done; exec \"$@\"",
-        started.display(),
-        proceed.display()
+    let saved = connection
+        .save_launch(SavedLaunch {
+            id: String::new(),
+            name: "sleep".into(),
+            request: request.clone(),
+        })
+        .unwrap();
+    let host_dir = data.path().join("hosts").join(&host.id);
+    core.remove_host(host.id).unwrap();
+    assert!(!host_dir.exists());
+    let save = connection.save_launch(saved.clone());
+    assert!(
+        !host_dir.exists(),
+        "stale save recreated the Host directory"
     );
-    let mut delayed = vec![
-        "/bin/sh".into(),
-        "-c".into(),
-        script,
-        "delayed-connect".into(),
-    ];
-    delayed.extend(argv);
-    let host = core
-        .add_host("box".into(), Endpoint::Local { argv: delayed, env })
-        .unwrap();
-    let task = tokio::spawn({
-        let core = core.clone();
-        let id = host.id.clone();
-        async move { core.connect(id).await }
-    });
-    tokio::time::timeout(std::time::Duration::from_secs(5), async {
-        while !started.exists() {
-            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    assert!(matches!(save, Err(CoreError::Closed)));
+    assert!(matches!(
+        connection.delete_saved_launch(saved.id),
+        Err(CoreError::Closed)
+    ));
+    assert!(matches!(
+        connection.launch(request).await,
+        Err(CoreError::Closed)
+    ));
+    assert!(matches!(
+        connection.terminals().await,
+        Err(CoreError::Closed)
+    ));
+    assert!(
+        other.terminals().await.unwrap().is_empty(),
+        "stale launch ran on the Host"
+    );
+    assert!(!host_dir.exists());
+    other.disconnect().await;
+}
+
+#[tokio::test]
+async fn jump_and_key_edits_close_old_connections_but_unchanged_settings_keep_them() {
+    for change in ["jump", "key"] {
+        let hc = HcSession::start();
+        let data = tempfile::tempdir().unwrap();
+        let core = core_in(data.path());
+        let host = core.add_host("box".into(), local_endpoint(&hc)).unwrap();
+        let connection = core.connect(host.id.clone()).await.unwrap();
+        let watch = connection.watch_terminals().await.unwrap();
+        watch.next().await.unwrap();
+        core.set_jump_hosts(host.id.clone(), vec![]).unwrap();
+        core.set_host_ssh_key(host.id.clone(), None).unwrap();
+        connection.terminals().await.unwrap();
+        if change == "jump" {
+            core.set_jump_hosts(
+                host.id.clone(),
+                vec![JumpHost {
+                    address: "jump".into(),
+                    port: 22,
+                    user: "me".into(),
+                    key_id: None,
+                    host_key: None,
+                }],
+            )
+            .unwrap();
+        } else {
+            let key = core.create_key("new key".into()).unwrap();
+            core.set_host_ssh_key(host.id.clone(), Some(key.id))
+                .unwrap();
         }
-    })
-    .await
-    .unwrap();
-    core.edit_host(host.id, "box".into(), local_endpoint(&hc))
-        .await
-        .unwrap();
-    std::fs::write(proceed, b"go").unwrap();
-    assert!(matches!(task.await.unwrap(), Err(CoreError::Closed)));
+        assert!(
+            matches!(connection.terminals().await, Err(CoreError::Closed)),
+            "{change}"
+        );
+        let result = tokio::time::timeout(std::time::Duration::from_secs(1), watch.next()).await;
+        assert!(
+            matches!(result, Ok(Err(CoreError::Closed))),
+            "{change}: {result:?}"
+        );
+        let next = core.connect(host.id).await.unwrap();
+        next.terminals().await.unwrap();
+        next.disconnect().await;
+    }
 }

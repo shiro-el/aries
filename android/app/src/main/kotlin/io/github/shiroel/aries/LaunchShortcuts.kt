@@ -39,11 +39,13 @@ object LaunchShortcuts {
             .setShortLabel(saved.name)
             .setLongLabel(hostName?.let { context.getString(R.string.shortcuts_host_label, saved.name, it) } ?: saved.name)
             .setIcon(Icon.createWithResource(context, R.mipmap.ic_launcher))
-            .setIntent(target.intent(context)).setRank(rank).build()
+            .setIntent(SavedLaunchAuthorization.intent(context, target)).setRank(rank).build()
     }
 
     private fun same(a: ShortcutInfo, b: ShortcutInfo) = a.id == b.id && a.shortLabel == b.shortLabel &&
-        a.longLabel == b.longLabel && a.rank == b.rank && a.intent?.filterEquals(b.intent) == true
+        a.longLabel == b.longLabel && a.rank == b.rank && a.intent?.let { old ->
+            b.intent?.let { new -> old.filterEquals(new) && SavedLaunchAuthorization.sameCredential(old, new) }
+        } == true
 
     /** Call on IO: Android may take seconds to publish. No SSH connection or key opening. */
     @Synchronized
