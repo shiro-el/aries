@@ -94,6 +94,11 @@ class LastKnownStateWorker(context: Context, private val params: WorkerParameter
     override suspend fun doWork(): Result {
         val core = (applicationContext as? HasCore)?.core ?: return Result.failure()
         LastKnownStates.refreshInBackground(core, LastKnownStates.hostId(params))
+        try {
+            NotificationGroups.reconcile(applicationContext, core, core.lastKnownStates())
+        } catch (_: CoreException) {
+            // Unreadable storage cannot prove that a card is stale. Keep existing surfaces.
+        }
         HomeWidgets.update(applicationContext, core)
         return Result.success()
     }
