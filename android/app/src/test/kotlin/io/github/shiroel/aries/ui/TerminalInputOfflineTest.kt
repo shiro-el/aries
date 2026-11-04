@@ -33,7 +33,8 @@ class TerminalInputOfflineTest {
     private fun str(id: Int) = compose.activity.getString(id)
 
     private fun screenshot(name: String) {
-        val file = File("build/reports/terminal-input-offline/$name.png")
+        val directory = System.getenv("ARIES_TERMINAL_RENDER_DIR") ?: "build/reports/terminal-input-offline"
+        val file = File(directory, "$name.png")
         file.parentFile!!.mkdirs()
         file.outputStream().use {
             compose.onRoot().captureToImage().asAndroidBitmap()
@@ -41,13 +42,18 @@ class TerminalInputOfflineTest {
         }
     }
 
-    private fun open(core: FakeCore): TerminalInputView {
+    private fun open(core: FakeCore, typeFirstKey: Boolean = true): TerminalInputView {
         core.terminals = listOf(TerminalInfo("t1", "build", "", listOf("make"), "/repo", "live", null))
         core.addHost("home", Endpoint.Ssh("home", 22u, "me"))
+        val prefs = compose.activity.getSharedPreferences("terminal-input-test", android.content.Context.MODE_PRIVATE)
+        prefs.edit().clear().commit()
+        val settings = ThemeSettings(prefs).apply {
+            chooseMode(if (System.getenv("ARIES_TERMINAL_THEME") == "dark") ThemeMode.DARK else ThemeMode.LIGHT)
+        }
         compose.setContent {
             val scope = rememberCoroutineScope()
             model = remember { HostsModel(core, scope) }
-            MaterialTheme { AriesApp(model) }
+            MaterialTheme { AriesApp(model, settings) }
         }
         compose.onNodeWithText("home").performClick()
         compose.onNodeWithText("build").performClick()
@@ -60,12 +66,55 @@ class TerminalInputOfflineTest {
         return find(compose.activity.window.decorView)!!.also {
             compose.runOnUiThread { it.performClick() }
             compose.waitForIdle()
+            if (!typeFirstKey) return@also
             it.onCreateInputConnection(EditorInfo())!!.commitText("x", 1)
             compose.waitForIdle()
             compose.mainClock.advanceTimeBy(300)
             compose.waitForIdle()
             core.connection!!.views.last().sent.clear()
         }
+    }
+
+    // Regression: a failed typing attach on a healthy SSH line must discard its queued
+    // commands and release an unconfirmed paste; Retry must require an explicit resubmit.
+    @Test fun failedAttachDiscardsQueuedInputAndKeepsTheDraftForExplicitRetry() {
+        val core = FakeCore()
+        val input = open(core, typeFirstKey = false)
+        val ime = input.onCreateInputConnection(EditorInfo())!!
+        core.attachHold = CompletableDeferred()
+        core.attachFailure = CoreException.Protocol("attach refused")
+        compose.onNodeWithContentDescription(str(R.string.terminal_compose_button)).performClick()
+        compose.onNodeWithTag("terminal-composer").performTextReplacement("review before sending")
+        compose.onNodeWithContentDescription(str(R.string.terminal_composer_send_button)).performClick()
+        compose.runOnIdle { ime.commitText("queued command\n", 1) }
+        compose.mainClock.advanceTimeBy(300)
+        compose.runOnIdle { core.attachHold!!.complete(Unit) }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertFalse("a failed attach must disable remote input", viewer.canInput)
+            assertFalse("paste cannot remain pending after attach fails", viewer.pasteSending)
+            assertEquals("review before sending", viewer.draft)
+            ime.commitText("typed during failure\n", 1)
+            viewer.press(TerminalKey.Enter)
+        }
+        screenshot("attach-failed-draft-retained")
+        core.attachHold = null
+        core.attachFailure = null
+        compose.onNodeWithText(str(R.string.connect_retry_button)).performClick()
+        compose.waitForIdle()
+        val fresh = core.connection!!.views.last()
+        compose.runOnIdle {
+            ime.commitText("late callback from the failed attachment\n", 1)
+        }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertTrue("Retry must not replay any old input: ${fresh.sent}", fresh.sent.isEmpty())
+            assertEquals("review before sending", viewer.draft)
+        }
+        screenshot("attach-retried-draft-retained")
+        compose.onNodeWithContentDescription(str(R.string.terminal_composer_send_button)).performClick()
+        compose.waitForIdle()
+        assertEquals(listOf("paste:review before sending"), fresh.sent)
     }
 
     @Test fun queuedKeysAndOfflineImeInputAreNotReplayedOnTheNextConnection() {
