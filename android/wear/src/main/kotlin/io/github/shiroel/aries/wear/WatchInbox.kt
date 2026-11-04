@@ -27,6 +27,7 @@ import androidx.wear.compose.material.Scaffold
 import androidx.wear.compose.material.SwipeToDismissBox
 import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.TimeText
+import androidx.wear.compose.material.scrollAway
 import androidx.wear.compose.foundation.rememberSwipeToDismissBoxState
 import io.github.shiroel.aries.weardata.WatchAgent
 import io.github.shiroel.aries.weardata.WatchSummary
@@ -59,7 +60,7 @@ fun WatchInbox(
         SwipeToDismissBox(state = dismiss, onDismissed = { onTarget(null) }, hasBackground = selected != null) { background ->
             if (!background) key(selected?.hostId, selected?.terminal) {
                 val scroll = rememberScalingLazyListState(initialCenterItemIndex = 0)
-                Scaffold(timeText = { TimeText() }, positionIndicator = { PositionIndicator(scroll) }) {
+                Scaffold(timeText = { TimeText(modifier = Modifier.scrollAway(scroll)) }, positionIndicator = { PositionIndicator(scroll) }) {
                     ScalingLazyColumn(
                         modifier = Modifier.fillMaxSize(), state = scroll, autoCentering = null,
                         contentPadding = PaddingValues(horizontal = 18.dp, vertical = 36.dp),
@@ -99,7 +100,7 @@ fun WatchInbox(
                             item { Caption(statusLabel(selected.status)) }
                             if (selected.contentHidden) item { Caption(stringResource(R.string.wear_inbox_hidden)) }
                             else {
-                                item { DetailSection(R.string.wear_inbox_request, selected.requestBody.ifBlank { stringResource(R.string.wear_inbox_no_request) }) }
+                                item { DetailSection(R.string.wear_inbox_request, selected.requestBody.ifBlank { stringResource(if (selected.status.equals("blocked", true)) R.string.wear_open_phone else R.string.wear_inbox_no_request) }) }
                                 selected.choices.forEach { choice -> item { Text(choice, modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) } }
                                 item { DetailSection(R.string.wear_inbox_summary, selected.conversationSummary.ifBlank { stringResource(R.string.wear_inbox_no_summary) }) }
                             }

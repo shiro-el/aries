@@ -40,9 +40,9 @@ class WatchInboxActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         summary = store.summary()
-        target = savedInstanceState?.let { state ->
+        target = if (savedInstanceState != null) savedInstanceState.let { state ->
             state.getString("host")?.let { it to state.getString("terminal").orEmpty() }
-        } ?: targetFrom(intent)
+        } else targetFrom(intent)
         preferences.registerOnSharedPreferenceChangeListener(listener)
         setContent {
             CompositionLocalProvider(LocalContext provides summary.localizedContext(this)) {
