@@ -8,7 +8,9 @@ import androidx.compose.ui.test.assert
 
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
+import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.hasTestTag
@@ -114,13 +116,30 @@ class DrawerShellTest {
         compose.onNodeWithTag("drawer-host:h1").performClick()
         compose.openConsoleDrawer()
         compose.onNodeWithTag("drawer-host:h1").assertIsSelected()
-        compose.onNodeWithTag("drawer-agent:h1:t1").assertExists()
-        compose.onNodeWithTag("drawer-agent:h2:t1").assertDoesNotExist()
+        compose.onNodeWithTag("drawer-host:h2").assertIsNotSelected()
+        // D58: Host selection highlights navigation and keeps every Host's Agents reachable.
+        compose.onNodeWithTag("drawer-agent:h1:t1").assertIsDisplayed()
+        compose.onNodeWithTag("drawer-agent:h2:t1").assertIsDisplayed()
+        compose.onNode(hasText(context.getString(R.string.agents_button)) and
+            hasText(context.getString(R.string.console_agents_waiting, 2)) and
+            hasAnyAncestor(hasTestTag("console-drawer"))).assertExists()
+        // Both Hosts use t1: opening work from home must attach on work's connection.
+        compose.onNodeWithTag("drawer-agent:h2:t1").performClick()
+        compose.onNode(hasTestTag("console-top-bar") and hasAnyDescendant(hasText("work-agent"))).assertExists()
+        compose.runOnIdle {
+            org.junit.Assert.assertEquals("t1", core.connectionsOf.getValue("h2").views.last().address)
+            assertTrue(core.connectionsOf.getValue("h1").views.isEmpty())
+        }
+        compose.onNodeWithContentDescription(context.getString(R.string.back_button)).performClick()
+        compose.onNodeWithTag("console-top-bar").assert(hasAnyDescendant(hasText("home")))
+        compose.openConsoleDrawer()
+        compose.onNodeWithTag("drawer-host:h1").assertIsSelected()
+        compose.onNodeWithTag("drawer-agent:h2:t1").assertIsDisplayed()
         compose.onNodeWithTag("drawer-agent:h1:t1").performClick()
         compose.onNode(hasTestTag("console-top-bar") and hasAnyDescendant(hasText("home-agent"))).assertExists()
         compose.onNodeWithContentDescription(context.getString(R.string.back_button)).performClick()
         compose.openConsoleDrawer()
-        // The Host selection scopes the tree, while the retained home still owns both Hosts.
+        // Returning to the retained home keeps the same cross-Host drawer tree.
         compose.onNodeWithText(context.getString(R.string.agents_button)).performClick()
         compose.openConsoleDrawer()
         compose.onNodeWithTag("drawer-agent:h1:t1").assertExists()
