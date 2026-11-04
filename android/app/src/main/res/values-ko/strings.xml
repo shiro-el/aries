@@ -824,6 +824,28 @@
 
     <!-- 폰에서 새 작업 -->
     <string name="new_task_folder_hint">이 Host의 절대 폴더 경로를 입력하거나 찾아서 선택하세요.</string>
+    <!-- Tasks home and needs queue -->
+    <string name="tasks_home">작업</string>
+    <string name="tasks_hosts_count">Host %1$d/%2$d</string>
+    <string name="tasks_prompt_hint">무엇을 시킬까요?</string>
+    <string name="tasks_expand_label">새 작업 전체 화면으로 열기</string>
+    <string name="tasks_agent">Agent</string>
+    <string name="tasks_filter_all">전체</string>
+    <string name="tasks_filter_needs">필요</string>
+    <string name="tasks_filter_working">진행</string>
+    <string name="tasks_filter_done">끝남</string>
+    <string name="tasks_filter_count">%1$s %2$d</string>
+    <string name="tasks_list_view">목록 보기</string>
+    <string name="tasks_host_view">Host별 보기</string>
+    <string name="tasks_offline">연결 끊김</string>
+    <string name="tasks_host_connected">연결됨</string>
+    <string name="tasks_needs_position">필요 %1$d건 중 %2$d</string>
+    <string name="tasks_needs_next">나중에 · 다음 건</string>
+    <string name="tasks_needs_open">Chat에서 이 요청을 확인하세요.</string>
+    <string name="tasks_empty">이 보기에 작업이 없습니다.</string>
+    <string name="tasks_answer_needed">답 필요</string>
+    <string name="tasks_urgent_call">ϟ 긴급 Call</string>
+
     <string name="new_task_title">새 작업</string>
     <string name="new_task_on_host">%1$s에서 새 작업</string>
     <string name="new_task_prompt">첫 프롬프트</string>

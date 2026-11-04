@@ -181,13 +181,16 @@ internal fun NewTaskAccess(model: HostsModel, content: @Composable () -> Unit) {
 }
 
 @Composable
-internal fun NewTaskDialog(task: NewTask, onStart: () -> Unit, onOpenChat: () -> Unit, onDismiss: () -> Unit) {
+internal fun NewTaskDialog(task: NewTask, onStart: () -> Unit, onOpenChat: () -> Unit, onDismiss: () -> Unit,
+    fullScreen: Boolean = false) {
     val form = task.form
     var browsing by remember(task) { mutableStateOf(false) }
     var options by remember(task) { mutableStateOf(false) }
     var savedOpen by remember(task) { mutableStateOf(false) }
     val editable = !form.busy && task.terminal == null && !task.launchUnknown
-    AlertDialog(onDismissRequest = onDismiss, modifier = Modifier.testTag("new-task-dialog"),
+    AlertDialog(onDismissRequest = onDismiss,
+        modifier = (if (fullScreen) Modifier.fillMaxSize() else Modifier).testTag("new-task-dialog"),
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = !fullScreen),
         title = { Text(stringResource(R.string.new_task_title)) },
         text = {
             Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -204,7 +207,7 @@ internal fun NewTaskDialog(task: NewTask, onStart: () -> Unit, onOpenChat: () ->
                         }) }
                     }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     taskPresets.forEach { preset ->
                         FilterChip(selected = form.preset == preset, enabled = editable,
                             onClick = { form.preset = preset }, label = { Text(stringResource(preset.label)) })
