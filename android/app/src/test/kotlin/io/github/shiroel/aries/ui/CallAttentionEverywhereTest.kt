@@ -71,7 +71,8 @@ class CallAttentionEverywhereTest {
         compose.runOnIdle { core.sendCall(call) }
         compose.onNode(hasTestTag("call_banner") and hasAnyAncestor(isDialog())).assertIsDisplayed().performClick()
         compose.onNodeWithTag("files-lines").assertDoesNotExist()
-        compose.onNode(hasText(call.title) and hasAnyAncestor(hasTestTag("thread-call-panel"))).assertIsDisplayed()
+        compose.onNodeWithTag("call-inbox-panel").assertIsDisplayed()
+        compose.onNodeWithTag("call-check").assertIsDisplayed()
     }
 
     // D46: opening a Call from a nested image must close both windows, not reveal Files over it.
@@ -94,8 +95,10 @@ class CallAttentionEverywhereTest {
         compose.runOnIdle { core.sendCall(call) }
         compose.onNode(hasTestTag("call_banner") and hasAnyAncestor(isDialog() and hasAnyDescendant(image)))
             .assertIsDisplayed().performClick()
-        compose.onNode(isDialog()).assertDoesNotExist()
-        compose.onNodeWithTag("thread-call-panel").assertIsDisplayed()
+        compose.onNodeWithTag("files-back").assertDoesNotExist()
+        compose.onNode(image).assertDoesNotExist()
+        compose.onNodeWithTag("call-inbox-panel").assertIsDisplayed()
+        compose.onNodeWithTag("call-check").assertIsDisplayed()
     }
 
     // D46: sibling task/GitHub windows must both close, even when the caller is already open.
@@ -112,11 +115,12 @@ class CallAttentionEverywhereTest {
         compose.runOnIdle { core.sendCall(call) }
         compose.onNode(hasTestTag("call_banner") and hasAnyAncestor(isDialog())).assertIsDisplayed().performClick()
         compose.onNodeWithTag("new-task-dialog").assertDoesNotExist()
-        compose.onNode(isDialog()).assertDoesNotExist()
-        compose.onNodeWithTag("thread-call-panel").assertIsDisplayed()
+        compose.onNodeWithTag("github-dialog").assertDoesNotExist()
+        compose.onNodeWithTag("call-inbox-panel").assertIsDisplayed()
+        compose.onNodeWithTag("call-check").assertIsDisplayed()
     }
 
-    // D46: all Host tool windows must expose incoming Calls and close before showing the task.
+    // D46: all Host tool windows must expose incoming Calls and close before showing the Call in its inbox.
     @Test fun tasksHostDialogsShowNewCallsAndOpenTheirDestination() {
         core.terminals = listOf(TerminalInfo("t1", "Current", "", listOf("claude"), "/repo", "live", AgentStatus.Working))
         show(AppLayout.TASKS)
@@ -125,8 +129,17 @@ class CallAttentionEverywhereTest {
             compose.onNodeWithTag("tasks-host-$tool").performClick()
             compose.runOnIdle { core.sendCall(call.copy(id = tool, title = "Review $tool")) }
             compose.onNode(hasTestTag("call_banner") and hasAnyAncestor(isDialog())).assertIsDisplayed().performClick()
-            compose.onNodeWithTag("tasks-detail-tabs").assertIsDisplayed()
-            compose.onNode(isDialog()).assertDoesNotExist()
+            compose.onNodeWithTag("call-inbox-panel").assertIsDisplayed()
+            compose.onNodeWithTag("call-$tool").assertIsDisplayed()
+            when (tool) {
+                "files" -> compose.onNodeWithTag("files-back").assertDoesNotExist()
+                "github" -> compose.onNodeWithTag("github-dialog").assertDoesNotExist()
+                "preview" -> {
+                    val context = ApplicationProvider.getApplicationContext<Context>()
+                    compose.onNode(hasText(context.getString(io.github.shiroel.aries.R.string.preview_title)) and hasAnyAncestor(isDialog())).assertDoesNotExist()
+                }
+            }
+            compose.runOnIdle { model.closeCallInbox() }
         }
     }
 

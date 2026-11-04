@@ -102,11 +102,9 @@ internal fun CallAttentionDialog(
             CompositionLocalProvider(LocalCallAttentionSurface provides surface, LocalCallAttentionEnabled provides true) {
                 Surface(Modifier.fillMaxSize()) {
                     Column(Modifier.fillMaxSize().safeDrawingPadding()) {
-                        CallAttentionSlot(onOpen = { entry ->
+                        CallAttentionSlot(onOpen = {
                             state.dialogs.toList().asReversed().forEach { it.close() }
                             state.model.openCallInbox()
-                            state.model.calls.openThreadCall(entry)
-                            state.model.openCallChat(entry)
                         })
                         Box(Modifier.weight(1f)) { content() }
                     }
