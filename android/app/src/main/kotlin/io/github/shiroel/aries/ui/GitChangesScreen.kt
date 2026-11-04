@@ -18,6 +18,7 @@ internal fun ColumnScope.GitFileDiff(
     cwd: String,
     selectedFile: GitFile,
     revision: Int,
+    wrap: Boolean,
     onSend: ((String) -> Unit)?,
 ) {
     var kind by remember(selectedFile) { mutableStateOf(when {
@@ -61,6 +62,6 @@ internal fun ColumnScope.GitFileDiff(
             if (onSend == null) null else { index ->
                 val first = selection
                 selection = if (first == null || first.first != first.last) index..index else minOf(first.first, index)..maxOf(first.first, index)
-            })
+            }, wrap = wrap)
     }
 }
