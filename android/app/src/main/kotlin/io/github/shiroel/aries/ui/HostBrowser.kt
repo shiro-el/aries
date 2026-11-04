@@ -61,6 +61,7 @@ class HostBrowser(val host: Host) {
     /** The latest facts per Terminal address, from the live Agent status watch. */
     private val live = mutableStateMapOf<String, TerminalInfo>()
     private var liveOrder by mutableStateOf<List<String>?>(null)
+    val hasTerminalList: Boolean get() = liveOrder != null
 
     /** A Terminal as the status watch last saw it (the structure may be older). */
     fun current(t: TerminalInfo): TerminalInfo = live[t.address] ?: t

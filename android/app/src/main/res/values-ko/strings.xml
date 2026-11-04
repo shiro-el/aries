@@ -446,6 +446,12 @@
     <string name="terminal_search_invalid">검색 패턴이 잘못됐거나 너무 길어요</string>
 
     <string name="agents_button">모든 Agent</string>
+    <!-- Waiting Agent flow (194). -->
+    <string name="agents_loading_hosts">Host %1$d곳 연결 중…</string>
+    <string name="agents_waiting_unknown">확인 필요 · —</string>
+    <string name="agents_waiting_partial">확인 필요 %1$d+</string>
+    <string name="agents_next_waiting">다음 대기 Agent: %1$s · %2$s</string>
+
     <string name="agents_title">Agent</string>
     <string name="agents_empty">Host에서 실행 중인 Agent가 없어요.</string>
     <string name="agents_no_hosts">먼저 Host를 추가해 주세요.</string>

@@ -1,9 +1,14 @@
 package io.github.shiroel.aries.ui
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -11,8 +16,10 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.Host
 import io.github.shiroel.aries.core.HostStructure
@@ -57,6 +64,14 @@ class AgentBoard(val hosts: List<Host>) {
     /** Each reached Host's line, by Host id; its state shows while it reconnects. */
     val links = mutableStateMapOf<String, HostLink>()
 
+    /** A connected socket is still loading until its first complete Terminal list arrives. */
+    val loadingHosts: List<Host>
+        get() = hosts.filter { it.id !in lists && it.id !in unavailable && closed[it.id] != true && links[it.id]?.state !is LinkState.Down }
+
+    val isEmpty: Boolean
+        get() = hosts.isNotEmpty() && hosts.all { it.id in lists } && unavailable.isEmpty() &&
+            closed.values.none { it } && agents.isEmpty()
+
     /** Shared ordering, including descendant urgency and global pins. */
     val agents: List<AgentEntry>
         get() = orderAgents(hosts.flatMapIndexed { index, h ->
@@ -65,7 +80,7 @@ class AgentBoard(val hosts: List<Host>) {
 
     /** Reuses the existing watches; an empty live list must replace stored Agents. */
     val quickOpenSources: List<QuickOpenSource>
-        get() = hosts.filter { links[it.id]?.state == LinkState.Up }.map {
+        get() = hosts.filter { links[it.id]?.state == LinkState.Up && it.id in lists }.map {
             QuickOpenSource(it, structures[it.id], lists[it.id].orEmpty())
         }
 
@@ -83,6 +98,7 @@ class AgentBoard(val hosts: List<Host>) {
 
     fun update(hostId: String, list: List<TerminalInfo>) {
         unavailable.remove(hostId)
+        closed.remove(hostId)
         lists[hostId] = list
     }
 
@@ -96,7 +112,7 @@ class AgentBoard(val hosts: List<Host>) {
     }
 
     fun markClosed(hostId: String) {
-        if (hostId in lists) closed[hostId] = true
+        closed[hostId] = true
     }
 
 }
@@ -115,6 +131,16 @@ fun AgentsScreen(
             showMark = false, inbox = {})
         LazyColumn(Modifier.weight(1f)) {
             if (board.hosts.isEmpty()) item { Text(stringResource(R.string.agents_no_hosts)) }
+            if (board.loadingHosts.isNotEmpty()) item {
+                Row(
+                    Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.size(8.dp))
+                    Text(stringResource(R.string.agents_loading_hosts, board.loadingHosts.size))
+                }
+            }
             items(board.hosts.filter { it.id in board.unavailable }, key = { "down:" + it.id }) { host ->
                 Column {
                     Text(
@@ -137,7 +163,7 @@ fun AgentsScreen(
                 )
             }
             val agents = board.agents
-            if (board.hosts.isNotEmpty() && agents.isEmpty()) item { Text(stringResource(R.string.agents_empty)) }
+            if (board.isEmpty) item { Text(stringResource(R.string.agents_empty)) }
             agentTreeItems(agents, folds, onOpen, onPin)
         }
     }

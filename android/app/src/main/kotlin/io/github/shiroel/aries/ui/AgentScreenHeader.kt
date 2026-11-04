@@ -76,6 +76,7 @@ internal fun AgentScreenHeader(
             }
         }
         onView?.let { AgentViewSwitch(current, it) }
+        ConsoleInboxAction()
         Box {
             val label = stringResource(R.string.agent_actions_label)
             IconButton(onClick = { menu = true }, modifier = Modifier.testTag("agent-actions").semantics { contentDescription = label }) {
@@ -107,4 +108,5 @@ internal fun AgentScreenHeader(
         }
     }
     HorizontalDivider()
+    NextWaitingAgentButton()
 }
