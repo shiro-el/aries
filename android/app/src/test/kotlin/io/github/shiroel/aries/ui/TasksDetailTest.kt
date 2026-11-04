@@ -71,6 +71,7 @@ class TasksDetailTest {
             ), ChatStatus.LIVE, null))
             core.connection!!.gitFiles = GitChanges("/repo", listOf(GitFile("ui/Task.kt", null, " M", false, true, false)), false, false)
             core.connection!!.gitPatch = GitDiff(listOf(GitDiffLine("-old", 1u, null), GitDiffLine("+hello", null, 1u), GitDiffLine("+world", null, 2u)), false, false)
+            core.connection!!.gitTotals = GitStats(2u, 1u, false, false)
             assertEquals(0, core.connection!!.gitChangesRequests)
         }
         compose.waitUntil(5_000) {
