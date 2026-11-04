@@ -129,7 +129,7 @@ class QuestionNotificationAnswerTest {
         val notice = QuestionNotice.fromJson(shadowOf(shown().actions[2].actionIntent).savedIntent
             .getStringExtra(QuestionChoiceReceiver.EXTRA_NOTICE)!!)!!
         assertEquals(ListenableWorker.Result.success(), TestListenableWorkerBuilder<QuestionReplyWorker>(context)
-            .setInputData(QuestionReplyWorker.input(notice, 2)).build().doWork())
+            .setInputData(QuestionReplyWorker.input(context, notice, 2)).build().doWork())
         assertEquals(listOf(Triple("remote/t3", "permission:current", listOf(listOf(2u)))), core.backgroundAnswers)
         assertTrue(buttons().isEmpty())
     }
