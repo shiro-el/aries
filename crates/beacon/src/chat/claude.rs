@@ -151,6 +151,7 @@ fn proc_start(pid: u32) -> Option<String> {
 /// line can resend the whole call with its output.
 #[derive(Default)]
 pub struct ClaudeInterpreter {
+    branch: Branch,
     usage: super::usage::ClaudeUsage,
     tools: HashMap<String, ChatItem>,
     last_agent: Option<ChatItem>,
@@ -162,12 +163,153 @@ pub struct ClaudeInterpreter {
     reconciled_deliveries: HashSet<String>,
 }
 
+/// Keep rendered effects per transcript node, including invisible parents.
+/// Only a fork walks history; ordinary appends remain constant time. We keep
+/// capped Chat items rather than retaining raw tool output and image payloads.
+#[derive(Default)]
+struct Branch {
+    nodes: HashMap<String, BranchNode>,
+    leaf: Option<String>,
+}
+
+struct BranchNode {
+    parent: Option<String>,
+    items: Vec<ChatItem>,
+}
+
+impl Branch {
+    /// Select the new record's parent before interpreting its tool results.
+    /// Unknown parents occur in partial/older transcripts; without a known
+    /// ancestor they are not evidence that visible history was abandoned.
+    fn start(&mut self, uuid: &str, parent: Option<String>) -> Option<Vec<ChatEvent>> {
+        if self.nodes.contains_key(uuid) {
+            return None;
+        }
+        let parent = match parent {
+            Some(parent) if !self.nodes.contains_key(&parent) => self.leaf.clone(),
+            other => other,
+        };
+        let changed = self.leaf != parent;
+        let events = if changed {
+            let before = self.items();
+            self.leaf = parent.clone();
+            let after = self.items();
+            let after_ids: HashSet<&str> = after.iter().map(|i| i.id.as_str()).collect();
+            let mut events: Vec<ChatEvent> = before
+                .iter()
+                .filter(|i| !after_ids.contains(i.id.as_str()))
+                .map(|i| ChatEvent::Remove { id: i.id.clone() })
+                .collect();
+            let before: HashMap<&str, &ChatItem> =
+                before.iter().map(|i| (i.id.as_str(), i)).collect();
+            events.extend(after.into_iter().filter_map(|item| {
+                (before.get(item.id.as_str()).copied() != Some(&item))
+                    .then_some(ChatEvent::Item { item })
+            }));
+            Some(events)
+        } else {
+            None
+        };
+        self.nodes.insert(
+            uuid.to_owned(),
+            BranchNode {
+                parent,
+                items: Vec::new(),
+            },
+        );
+        // The caller restores state from the selected parent before recording
+        // the new node's effects. Its empty node projects to the same items.
+        self.leaf = Some(uuid.to_owned());
+        events
+    }
+
+    fn record(&mut self, uuid: &str, events: &[ChatEvent]) {
+        let node = self.nodes.get_mut(uuid).expect("started transcript node");
+        node.items
+            .extend(events.iter().filter_map(|event| match event {
+                ChatEvent::Item { item } => Some(item.clone()),
+                _ => None,
+            }));
+    }
+
+    fn items(&self) -> Vec<ChatItem> {
+        let mut path = Vec::new();
+        let mut next = self.leaf.as_ref();
+        while let Some(node) = next.and_then(|id| self.nodes.get(id)) {
+            path.push(node);
+            next = node.parent.as_ref();
+        }
+        let mut items: Vec<ChatItem> = Vec::new();
+        let mut index = HashMap::new();
+        for node in path.into_iter().rev() {
+            for item in &node.items {
+                let slot = *index.entry(&item.id).or_insert_with(|| {
+                    items.push(item.clone());
+                    items.len() - 1
+                });
+                items[slot] = item.clone();
+            }
+        }
+        items
+    }
+}
+
 impl Interpreter for ClaudeInterpreter {
+    fn cursor_tag(&self) -> &'static str {
+        "branch1."
+    }
+
     fn line(&mut self, line: &str) -> Vec<ChatEvent> {
         let Ok(record) = serde_json::from_str::<Value>(line) else {
             return Vec::new();
         };
-        if record["isSidechain"] == true || record["isMeta"] == true {
+        if record["isSidechain"] == true {
+            return Vec::new();
+        }
+        let mut events = Vec::new();
+        let uuid = record["uuid"].as_str().filter(|_| {
+            matches!(
+                record["type"].as_str(),
+                Some("user" | "assistant" | "system" | "attachment")
+            )
+        });
+        if let Some(uuid) = uuid {
+            let parent = if record["subtype"] == "compact_boundary" {
+                // Compaction starts a physical root, but keeps the earlier
+                // conversation through its logical parent.
+                record["logicalParentUuid"]
+                    .as_str()
+                    .or(self.branch.leaf.as_deref())
+            } else if record.get("parentUuid").is_some() {
+                record["parentUuid"].as_str()
+            } else {
+                self.branch.leaf.as_deref()
+            };
+            let parent = parent.map(str::to_owned);
+            if let Some(restored) = self.branch.start(uuid, parent) {
+                events = restored;
+                self.tools.clear();
+                self.last_agent = None;
+                for item in self.branch.items() {
+                    self.remember(&item);
+                    if matches!(item.body, ChatBody::Tool { .. }) {
+                        self.tools.insert(item.id.clone(), item);
+                    }
+                }
+            }
+        }
+        let produced = self.record(&record);
+        if let Some(uuid) = uuid {
+            self.branch.record(uuid, &produced);
+        }
+        events.extend(produced);
+        events
+    }
+}
+
+impl ClaudeInterpreter {
+    fn record(&mut self, record: &Value) -> Vec<ChatEvent> {
+        if record["isMeta"] == true {
             return Vec::new();
         }
         if record["type"] == "system" && record["subtype"] == "turn_duration" {
@@ -185,12 +327,12 @@ impl Interpreter for ClaudeInterpreter {
             }];
         }
         if record["type"] == "queue-operation" {
-            return self.queue_operation(&record);
+            return self.queue_operation(record);
         }
-        let usage = self.usage.record(&record);
+        let usage = self.usage.record(record);
         let items = match record["type"].as_str() {
-            Some("user") => self.user(&record),
-            Some("assistant") => self.assistant(&record),
+            Some("user") => self.user(record),
+            Some("assistant") => self.assistant(record),
             Some("attachment") if record["attachment"]["type"] == "queued_command" => {
                 let attachment = &record["attachment"];
                 let origin = attachment["origin"]["kind"].as_str();
@@ -202,17 +344,13 @@ impl Interpreter for ClaudeInterpreter {
                 {
                     Vec::new()
                 } else {
-                    self.user_content(&record, &attachment["prompt"])
+                    self.user_content(record, &attachment["prompt"])
                 }
             }
             _ => Vec::new(),
         };
         for item in &items {
-            match &item.body {
-                ChatBody::User { .. } | ChatBody::Error { .. } => self.last_agent = None,
-                ChatBody::Agent { .. } => self.last_agent = Some(item.clone()),
-                _ => {}
-            }
+            self.remember(item);
         }
         let mut events =
             if record["type"] == "attachment" && record["attachment"]["type"] == "queued_command" {
@@ -227,9 +365,15 @@ impl Interpreter for ClaudeInterpreter {
         events.extend(usage);
         events
     }
-}
 
-impl ClaudeInterpreter {
+    fn remember(&mut self, item: &ChatItem) {
+        match &item.body {
+            ChatBody::User { .. } | ChatBody::Error { .. } => self.last_agent = None,
+            ChatBody::Agent { .. } => self.last_agent = Some(item.clone()),
+            _ => {}
+        }
+    }
+
     fn queue_operation(&mut self, record: &Value) -> Vec<ChatEvent> {
         match record["operation"].as_str() {
             Some("enqueue") => {

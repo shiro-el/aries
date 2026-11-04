@@ -1582,6 +1582,17 @@ class HostsModel(
         }
     }
 
+    /** A confirmed fallback: never infer a picker index or send its acceptance key. */
+    internal fun rewindChat(entryId: String) {
+        val chat = (screen as? Screen.Chat)?.chat ?: return
+        if (!chat.canRewind || chat.rewindTarget(entryId) == null) return
+        openTerminal(chat.terminal)
+        val viewer = (screen as? Screen.Terminal)?.viewer ?: return
+        viewer.rewindPicker = true
+        viewer.press(io.github.shiroel.aries.core.TerminalKey.Escape)
+        viewer.press(io.github.shiroel.aries.core.TerminalKey.Escape)
+    }
+
     /** Shows [terminal] over [returnTo]: an Agent in the saved [agentView], any other Terminal as a Terminal. */
     private fun show(link: HostLink, terminal: TerminalInfo, returnTo: Screen) {
         if (terminal.agentStatus != null && agentView == AgentView.CHAT) {
