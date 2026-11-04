@@ -194,4 +194,37 @@ class ChatInterruptTest {
         compose.onNodeWithText(str(R.string.chat_interrupt_stopped)).assertDoesNotExist()
     }
 
+    // Catches losing focus when the pending Interrupt button disappears before the RPC replies.
+    @Test
+    fun completedInterruptFocusesItsResultAndLateStatusChangesReturnFocusToTheComposer() {
+        val core = FakeCore()
+        val conn = open(core)
+        conn.interruptHold = CompletableDeferred()
+        compose.onNodeWithContentDescription(str(R.string.chat_interrupt_confirm_button)).performClick()
+        compose.onNodeWithText(str(R.string.chat_interrupt_confirm_button)).performClick()
+        conn.interruptHold!!.complete(Unit)
+        compose.onNodeWithText(str(R.string.chat_interrupt_stopped)).assertIsFocused()
+        compose.onNodeWithText(str(R.string.chat_interrupt_stopped)).assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, androidx.compose.ui.semantics.LiveRegionMode.Polite),
+        )
+        screenshot("interrupt-result-focused")
+        core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertIsFocused()
+        compose.onNodeWithText(str(R.string.chat_interrupt_stopped)).assertDoesNotExist()
+    }
+
+    @Test
+    fun statusChangingBeforeTheInterruptReplyReturnsFocusWithoutRevivingADismissedNotice() {
+        val core = FakeCore()
+        val conn = open(core)
+        conn.interruptHold = CompletableDeferred()
+        compose.onNodeWithContentDescription(str(R.string.chat_interrupt_confirm_button)).performClick()
+        compose.onNodeWithText(str(R.string.chat_interrupt_confirm_button)).performClick()
+        core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
+        compose.waitForIdle()
+        conn.interruptHold!!.complete(Unit)
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertIsFocused()
+        compose.onNodeWithText(str(R.string.chat_interrupt_stopped)).assertDoesNotExist()
+    }
+
 }
