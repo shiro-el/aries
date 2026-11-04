@@ -58,12 +58,15 @@ fun ImageViewer(bytes: ByteArray, onDismiss: () -> Unit, name: String = "image",
 }
 
 /** Bound decode memory while retaining enough detail to read screenshots. */
-private fun decodeViewerPicture(bytes: ByteArray, name: String, mediaType: String?): ViewerPicture? = try {
-    if (mediaType == "image/svg+xml" || (mediaType == null && name.substringAfterLast('.', "").lowercase(Locale.ROOT) == "svg")) decodeViewerSvg(bytes)
-    else decodeViewerRaster(bytes)
+internal fun decodeImageThumbnail(bytes: ByteArray, name: String): Bitmap? =
+    decodeViewerPicture(bytes, name, null, 256)?.bitmap
+
+private fun decodeViewerPicture(bytes: ByteArray, name: String, mediaType: String?, maxPixels: Int = 4096): ViewerPicture? = try {
+    if (mediaType == "image/svg+xml" || (mediaType == null && name.substringAfterLast('.', "").lowercase(Locale.ROOT) == "svg")) decodeViewerSvg(bytes, maxPixels)
+    else decodeViewerRaster(bytes, maxPixels)
 } catch (_: Exception) { null }
 
-private fun decodeViewerSvg(bytes: ByteArray): ViewerPicture {
+private fun decodeViewerSvg(bytes: ByteArray, maxPixels: Int): ViewerPicture {
     // SVG stays local: no WebView, scripts or external resource resolver. Disable
     // the parser's optional entity expansion before parsing untrusted Host data.
     SVG.setInternalEntitiesEnabled(false)
@@ -71,21 +74,21 @@ private fun decodeViewerSvg(bytes: ByteArray): ViewerPicture {
     val box = svg.documentViewBox
     val width = svg.documentWidth.takeIf { it.isFinite() && it > 0f } ?: box?.width()?.takeIf { it > 0f } ?: 1024f
     val height = svg.documentHeight.takeIf { it.isFinite() && it > 0f } ?: box?.height()?.takeIf { it > 0f } ?: 1024f
-    val scale = minOf(1f, 4096f / maxOf(width, height))
-    val bitmap = Bitmap.createBitmap((width * scale).toInt().coerceIn(1, 4096),
-        (height * scale).toInt().coerceIn(1, 4096), Bitmap.Config.ARGB_8888)
+    val scale = minOf(1f, maxPixels.toFloat() / maxOf(width, height))
+    val bitmap = Bitmap.createBitmap((width * scale).toInt().coerceIn(1, maxPixels),
+        (height * scale).toInt().coerceIn(1, maxPixels), Bitmap.Config.ARGB_8888)
     svg.setDocumentWidth("100%")
     svg.setDocumentHeight("100%")
     svg.renderToCanvas(Canvas(bitmap))
     return ViewerPicture(bitmap, "image/svg+xml")
 }
 
-private fun decodeViewerRaster(bytes: ByteArray): ViewerPicture? {
+private fun decodeViewerRaster(bytes: ByteArray, maxPixels: Int): ViewerPicture? {
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
     if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
     var sample = 1
-    while (maxOf(bounds.outWidth, bounds.outHeight) / sample > 4096) sample *= 2
+    while (maxOf(bounds.outWidth, bounds.outHeight) / sample > maxPixels) sample *= 2
     val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size,
         BitmapFactory.Options().apply { inSampleSize = sample }) ?: return null
     return ViewerPicture(bitmap, bounds.outMimeType ?: "image/png")

@@ -957,6 +957,7 @@
     <string name="attachments_failed">Could not attach: %1$s</string>
     <string name="attachments_file_button">Attach files</string>
     <string name="attachments_camera_button">Take a photo</string>
+    <string name="attachments_remove_button">Remove attachment: %1$s</string>
     <string name="attachments_resize_label">Resize images to 2048 px</string>
 
     <!-- Camera access: shared by Chat capture and Host QR scanning. -->
