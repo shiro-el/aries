@@ -93,7 +93,7 @@ class WatchProgressPhoneTest {
             val progress = PushNotice("h1", "Host", PushContent.Progress("remote/t7", "Builder", 10uL, 2u, now.toULong(), false))
             PushService.show(context, progress)
             publish()
-            assertEquals(WatchProgress("h1", "remote/t7", "Builder", (now - 10) * 1000, 2, now * 1000), published.last())
+            assertEquals(WatchProgress("h1", "remote/t7", "Builder", (now - 10) * 1000, 2, now * 1000), published.last().copy(observedAtMs = 0))
             PushService.show(context, PushNotice("h1", "Host",
                 PushContent.Status("remote/t7", "Builder", null, true, AgentStatus.Done, (now + 1).toULong(), null, null, null)))
             // FCM can deliver ordinary Progress after high-priority Done, including after process restart.

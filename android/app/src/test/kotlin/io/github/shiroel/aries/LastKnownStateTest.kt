@@ -97,6 +97,7 @@ class LastKnownStateTest {
             listOf(entry("q1", ChatToolStatus.RUNNING),
                 entry("q2", ChatToolStatus.RUNNING)), ChatStatus.LIVE, null)
         // Both requests can be pending: Codex still presents q1 first.
+        core.pushChat(core.cachedChats.getValue(host.id to "t1"))
         TestListenableWorkerBuilder<LastKnownStateWorker>(context).build().doWork()
         val manager = context.getSystemService(NotificationManager::class.java)
         assertTrue(manager.activeNotifications.any { it.tag == "t1" })
@@ -118,6 +119,8 @@ class LastKnownStateTest {
             ask("q2", 2uL)
             core.cachedChats[host.id to "t1"] = ChatSnapshot(
                 listOf(entry("q1", ChatToolStatus.RUNNING), entry("q2", ChatToolStatus.RUNNING)), ChatStatus.LIVE, null)
+            // The live Host still owns q2 even though the local Chat is stale.
+            core.pushChat(ChatSnapshot(listOf(entry("q1", ChatToolStatus.DONE), entry("q2", ChatToolStatus.RUNNING)), ChatStatus.LIVE, null))
             TestListenableWorkerBuilder<LastKnownStateWorker>(context).build().doWork()
             assertTrue(manager.activeNotifications.any { it.tag == "t1" })
             core.terminals = core.terminals.map { it.copy(agentStatus = AgentStatus.Working) }
