@@ -333,7 +333,7 @@ pub(crate) async fn handshake(
     .map_err(|_| unreachable_err("SSH handshake timed out"))?
 }
 
-pub(super) fn unreachable_err(e: impl std::fmt::Display) -> CoreError {
+pub(crate) fn unreachable_err(e: impl std::fmt::Display) -> CoreError {
     CoreError::Unreachable {
         detail: e.to_string(),
     }
@@ -466,7 +466,7 @@ impl Ssh {
     }
 
     async fn stream_on(
-        mut sessions: Vec<Session>,
+        sessions: Vec<Session>,
         session: Session,
         command: &str,
         submitted: &mut bool,
@@ -498,15 +498,15 @@ impl Ssh {
                 _ => {}
             }
         };
-
-        sessions.push(session);
+        let session = Arc::new(session);
         let (reader, writer) = tokio::io::split(channel.into_stream());
         use tokio::io::AsyncReadExt;
         Ok(Stream {
             reader: Box::new(std::io::Cursor::new(prefix).chain(reader)),
             writer: Box::new(writer),
             // The jump sessions carry the Host's; keep them all alive.
-            guard: Box::new(Mutex::new(sessions)),
+            guard: Box::new((Mutex::new(sessions), session.clone())),
+            ssh: Some(session),
         })
     }
 }

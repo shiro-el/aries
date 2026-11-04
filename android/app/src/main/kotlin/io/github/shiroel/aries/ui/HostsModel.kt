@@ -650,6 +650,28 @@ class HostsModel(
         }
     }
 
+    /** Host-list task entry waits for connection and the first structure snapshot. */
+    var newTaskHostId by mutableStateOf<String?>(null)
+
+    fun newTask(host: Host) {
+        newTaskHostId = host.id
+        connect(host)
+    }
+
+    /** New tasks always open Chat, independently of the user's last view preference. */
+    internal fun openTaskChat(link: HostLink, terminal: TerminalInfo, draft: String) {
+        val origin = when (val current = screen) {
+            is Screen.Chat -> { current.chat.stop(); current.returnTo }
+            is Screen.Terminal -> {
+                viewing?.cancel()
+                viewing = null
+                (current.returnTo as? Screen.Chat)?.let { it.chat.stop(); it.returnTo } ?: current.returnTo
+            }
+            else -> current
+        }
+        chat(link, terminal, origin, draft)
+    }
+
     /** First-open trust and installation still use their existing, explicit UI. */
     private suspend fun initialConnectionProblem(host: Host, error: CoreException, restoringLocation: Boolean) {
         val connecting = screen as? Screen.Connecting ?: return
@@ -1559,6 +1581,7 @@ class HostsModel(
         (screen as? Screen.Terminal)?.viewer?.takeIf { it.link?.host?.id == hostId }
 
     fun back() {
+        newTaskHostId = null
         if (prompt is Prompt.ConfirmSavedLaunch) prompt = null
         closeQuickOpen()
         pendingQuickOpen = null

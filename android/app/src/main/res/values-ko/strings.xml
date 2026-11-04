@@ -8,6 +8,18 @@
   Error, Done, Idle. Everything else follows standard Android / One UI Korean.
 -->
 <resources>
+    <!-- Host localhost preview -->
+    <string name="preview_auto_refresh">Agent 변경 후 자동 새로고침</string>
+    <string name="preview_title">미리보기</string>
+    <string name="preview_open_port">미리보기 열기 · %1$d</string>
+    <string name="preview_address">Host · http://127.0.0.1:%1$d</string>
+    <string name="preview_reload">새로고침</string>
+    <string name="preview_mobile">모바일 보기</string>
+    <string name="preview_desktop">데스크톱 보기</string>
+    <string name="preview_close">미리보기 닫기</string>
+    <string name="preview_failed">미리보기를 열 수 없습니다. Host 연결과 개발 서버를 확인해 주세요.</string>
+    <string name="preview_retry">다시 시도</string>
+
     <!-- Action menus -->
     <string name="menu_switch">위치 선택</string>
     <string name="menu_current">현재</string>
@@ -684,6 +696,24 @@
     <string name="worktrees_bare">bare 저장소</string>
     <string name="worktrees_locked">잠김 · %1$s</string>
     <string name="worktrees_prunable">사용할 수 없음 · %1$s</string>
+
+    <!-- 폰에서 새 작업 -->
+    <string name="new_task_title">새 작업</string>
+    <string name="new_task_on_host">%1$s에서 새 작업</string>
+    <string name="new_task_prompt">첫 프롬프트</string>
+    <string name="new_task_start">Agent 시작</string>
+    <string name="new_task_from_issue">이 Issue로 Agent 시작</string>
+    <string name="new_task_issue_prompt">%1$s #%2$d 작업: %3$s\n%4$s\n\nIssue 요약:\n%5$s</string>
+    <string name="new_task_browse">폴더 탐색</string>
+    <string name="new_task_use_folder">이 폴더 선택</string>
+    <string name="new_task_options">실행 옵션</string>
+    <string name="new_task_waiting">Agent가 준비되기를 기다리는 중…</string>
+    <string name="new_task_not_ready">Agent가 아직 준비되지 않았습니다. 프롬프트는 보관됩니다. Terminal을 확인하거나 다시 기다려 주세요.</string>
+    <string name="new_task_delivery_unknown">전송 여부를 확인하지 못했습니다. 프롬프트는 보관됩니다. 다시 보내기 전에 Chat을 확인해 주세요.</string>
+    <string name="new_task_launch_unknown">시작 여부를 확인하지 못했습니다. 다시 시작하기 전에 Host의 Agent 목록을 확인해 주세요. 프롬프트는 보관됩니다.</string>
+    <string name="new_task_open_chat">Agent Chat 열기</string>
+    <string name="new_task_wait_again">Agent 준비 기다리기</string>
+    <string name="new_task_nested_host">이 machine을 Host로 추가하면 Agent를 시작할 수 있습니다.</string>
 
     <string name="launch_open_button">새 Terminal</string>
     <string name="launch_title">Terminal 시작</string>

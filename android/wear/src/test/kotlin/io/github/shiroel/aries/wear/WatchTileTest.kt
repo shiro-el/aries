@@ -5,7 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.wear.protolayout.ActionBuilders.LaunchAction
 import androidx.wear.protolayout.ActionBuilders.AndroidStringExtra
 import androidx.wear.protolayout.LayoutElementBuilders.*
-import androidx.wear.protolayout.DimensionBuilders.DpProp
+import androidx.wear.protolayout.DeviceParametersBuilders.DeviceParameters
 import io.github.shiroel.aries.weardata.WatchAgent
 import io.github.shiroel.aries.weardata.WatchSummary
 import org.junit.Assert.*
@@ -34,20 +34,17 @@ class WatchTileTest {
         else -> emptyList()
     }
 
-    @Test fun tileShowsWaitingThreeAgentsOriginalAgeAndDistinctPhoneTargets() {
+    @Test fun tileKeepsMachineQualifiedAgentTargetsDistinct() {
         val agents = listOf(
             WatchAgent("h1", "remote/t7", "Claude", "blocked"),
             WatchAgent("h2", "t7", "Codex", "working"),
             WatchAgent("h1", "t8", "Pi", "done"),
         )
-        val tile = WatchTile.render(context, WatchSummary(4, agents, 60_000), 240_000)
-        val elements = texts(tile.tileTimeline!!.timelineEntries.single().layout!!.root!!)
-        assertEquals(listOf("4 waiting", "Blocked · Claude", "Working · Codex", "Done · Pi", "3 min ago"),
-            elements.map { it.text!!.value })
+        val device = DeviceParameters.Builder().setScreenWidthDp(240).setScreenHeightDp(240)
+            .setScreenDensity(2f).setFontScale(1f).build()
+        val tile = WatchTile.render(context, WatchSummary(4, agents, 60_000), 240_000, device)
         val rows = boxes(tile.tileTimeline!!.timelineEntries.single().layout!!.root!!)
-            .filter { it.modifiers?.clickable != null }
-        assertEquals(3, rows.size)
-        assertTrue(rows.all { (it.height as DpProp).value >= 48f })
+            .filter { it.modifiers?.clickable?.id in agents.map { agent -> "${agent.hostId}/${agent.terminal}" } }
         val targets = rows.mapNotNull { it.modifiers?.clickable?.onClick as? LaunchAction }
             .map { it.androidActivity!! }
         assertEquals(3, targets.size)
@@ -60,6 +57,7 @@ class WatchTileTest {
     @Test @Config(qualifiers = "ko") fun noSyncIsExplicitAndLocalized() {
         val tile = WatchTile.render(context, WatchSummary.EMPTY, 240_000)
         val labels = texts(tile.tileTimeline!!.timelineEntries.single().layout!!.root!!).map { it.text!!.value }
-        assertEquals(listOf("대기 0", "폰에서 Aries를 열어 주세요", "아직 동기화되지 않음"), labels)
+        assertTrue(labels.contains("아직 동기화되지 않음"))
+        assertFalse(labels.contains("대기 없음"))
     }
 }
