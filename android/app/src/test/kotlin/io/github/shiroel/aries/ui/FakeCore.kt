@@ -242,7 +242,11 @@ class FakeCore : AriesCoreInterface {
         return storedStates[hostId]
     }
 
-    override fun lastKnownStates(): List<LastKnownState> = storedStates.values.toList()
+    var lastKnownStatesFailure: CoreException? = null
+    override fun lastKnownStates(): List<LastKnownState> {
+        lastKnownStatesFailure?.let { throw it }
+        return storedStates.values.toList()
+    }
 
     override fun watchLastKnownStates(): LastKnownStateWatch {
         val changes = Channel<Unit>(Channel.CONFLATED).also { stateChanges += it; it.trySend(Unit) }

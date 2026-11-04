@@ -50,6 +50,7 @@ class CallsModel(
     private val core: AriesCoreInterface,
     private val scope: CoroutineScope,
     private val keyWork: CoroutineContext = EmptyCoroutineContext,
+    private val onAnswered: (Host, String) -> Unit = { _, _ -> },
 ) {
     /** All Hosts' Calls, newest first. */
     var calls by mutableStateOf<List<CallEntry>>(emptyList())
@@ -134,6 +135,7 @@ class CallsModel(
 
     private val watches = mutableMapOf<String, Slot>()
     private val confirmedFinals = mutableSetOf<String>()
+    private val recalled = mutableSetOf<String>()
     private val liveHosts = mutableSetOf<String>()
     private val checkedAt = mutableMapOf<String, Long>()
     private val perHost = mutableMapOf<String, List<CallInfo>>()
@@ -235,6 +237,11 @@ class CallsModel(
     private fun publish() {
         calls = perHost.flatMap { (id, list) -> hosts[id]?.let { h -> list.map { CallEntry(h, it, id in liveHosts, checkedAt[id]) } }.orEmpty() }
             .sortedByDescending { it.call.atMs }
+        recalled.retainAll(calls.map { it.key }.toSet())
+        calls.filter { it.call.answer != null && recalled.add(it.key) }.forEach {
+            onAnswered(it.host, it.call.id)
+            if (banner?.key == it.key) banner = null
+        }
     }
 
     /** Core callbacks arrive on core threads; state changes happen on [scope]. */

@@ -44,11 +44,17 @@ class WatchInboxActivity : ComponentActivity() {
     private var now by mutableStateOf(System.currentTimeMillis())
     private var refreshing by mutableStateOf(false)
     private var notice by mutableStateOf<Int?>(null)
+    private var noticeExpiry: kotlinx.coroutines.Job? = null
     private var target by mutableStateOf<Pair<String, String>?>(null)
     private val preferences by lazy { getSharedPreferences("watch-summary", MODE_PRIVATE) }
     private val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
         runOnUiThread {
             val incoming = store.summary()
+            if (incoming.hostFetchedAtMs.any { (host, time) -> time > summary.fetchedAt(host) } ||
+                incoming.fetchedAtMs > summary.fetchedAtMs) {
+                notice = null
+                noticeExpiry?.cancel()
+            }
             // A local publication has no cached permission menu. Keep the user-requested
             // live detail in memory while its Host status/turn identity still matches.
             summary = incoming.copy(inbox = incoming.inbox.map { row ->
@@ -147,7 +153,11 @@ class WatchInboxActivity : ComponentActivity() {
                 if (!scope.coroutineContext[kotlinx.coroutines.Job]!!.isActive) throw cancelled
                 notice = R.string.wear_connect_phone
             } catch (_: Exception) { notice = R.string.wear_connect_phone }
-            finally { refreshing = false }
+            finally {
+                refreshing = false
+                noticeExpiry?.cancel()
+                noticeExpiry = scope.launch { delay(10_000); notice = null }
+            }
         }
     }
 

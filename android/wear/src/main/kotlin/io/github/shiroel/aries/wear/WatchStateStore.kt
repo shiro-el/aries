@@ -12,7 +12,7 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeoutOrNull
 
 /** Persist only the small summary and the DataItem's originating phone node. */
-class WatchStateStore(private val context: Context) {
+class WatchStateStore(private val context: Context, private val now: () -> Long = System::currentTimeMillis) {
     private val prefs = context.getSharedPreferences("watch-summary", Context.MODE_PRIVATE)
 
     fun summary(): WatchSummary = runCatching {
@@ -44,49 +44,68 @@ class WatchStateStore(private val context: Context) {
     }
 
     private val progressPrefs = context.getSharedPreferences("watch-progress", Context.MODE_PRIVATE)
-    private fun progress(): WatchProgress? = runCatching {
-        WatchProgress.fromBytes(Base64.decode(progressPrefs.getString("payload", null), Base64.NO_WRAP))
-    }.getOrNull()
+    private fun progresses(): List<Pair<String, WatchProgress>> = progressPrefs.all.mapNotNull { (key, value) ->
+        if (key != "payload" && !key.startsWith("payload:")) null else runCatching {
+            key to requireNotNull(WatchProgress.fromBytes(Base64.decode(value as String, Base64.NO_WRAP)))
+        }.getOrNull()
+    }
 
-    /** Latest single progress DataItem; completion tombstones reject delayed delivery after restart. */
-    fun acceptProgress(phone: String, bytes: ByteArray?): Boolean = synchronized(PROGRESS_LOCK) {
+    /** Completion tombstones and ordering belong to each Host + Terminal, across restarts. */
+    fun acceptProgress(phone: String, bytes: ByteArray?, path: String? = null): Boolean = synchronized(PROGRESS_LOCK) {
         val next = WatchProgress.fromBytes(bytes) ?: return false
         if (phone.isBlank()) return false
-        val previous = progress()
-        if (progressPrefs.getString("phone", null) == phone && previous != null &&
-            (next.atMs < previous.atMs || (next.atMs == previous.atMs && previous.cancelled && !next.cancelled))) return false
-        val saved = progressPrefs.edit().putString("phone", phone)
-            .putString("payload", Base64.encodeToString(bytes, Base64.NO_WRAP)).commit()
+        val key = "payload:${next.dataPath}"
+        val previous = progresses().firstOrNull { (_, p) -> p.hostId == next.hostId && p.terminal == next.terminal }
+        if (previous != null && progressPhone(previous.first) == phone &&
+            (next.atMs < previous.second.atMs ||
+                (next.atMs == previous.second.atMs && previous.second.cancelled && !next.cancelled))) return false
+        val editor = progressPrefs.edit().putString("phone:$key", phone)
+            .putString(key, Base64.encodeToString(bytes, Base64.NO_WRAP))
+        val source = path ?: next.dataPath
+        // The legacy mirror must not replace ownership of a per-Agent DataItem.
+        if (source != WatchProgress.DATA_PATH || progressPrefs.getString("path:$key", null) != next.dataPath)
+            editor.putString("path:$key", source)
+        if (previous?.first == "payload") editor.remove("payload").remove("phone")
+        val saved = editor.commit()
         if (saved) refreshProgress()
         saved
     }
 
-    fun clearProgress(phone: String) = synchronized(PROGRESS_LOCK) {
-        if (progressPrefs.getString("phone", null) != phone) return
-        val previous = progress()
-        if (previous != null) saveCancelled(previous)
-        WatchProgressNotifications.clear(context)
-    }
+    private fun progressPhone(key: String): String? = progressPrefs.getString(if (key == "payload") "phone" else "phone:$key", null)
 
-    /** Also restores an accepted activity after the user grants notification permission. */
-    fun refreshProgress() = synchronized(PROGRESS_LOCK) {
-        val current = progress() ?: return
-        val summary = summary()
-        if (!current.cancelled && progressPrefs.getString("phone", null) == phoneNode() && summary.fetchedAtMs > current.atMs) {
-            val agent = summary.inbox.find { it.hostId == current.hostId && it.terminal == current.terminal }
-            val completeList = summary.totalAgents <= summary.inbox.size
-            if ((agent != null && agent.status != "working") || (agent == null && completeList)) {
-                saveCancelled(current.copy(atMs = summary.fetchedAtMs))
-                WatchProgressNotifications.clear(context)
-                return
+    fun clearProgress(phone: String, path: String? = null) = synchronized(PROGRESS_LOCK) {
+        progresses().forEach { (key, previous) ->
+            val source = progressPrefs.getString("path:$key", if (key == "payload") WatchProgress.DATA_PATH else previous.dataPath)
+            if (progressPhone(key) == phone && (path == null || path == source)) {
+                saveCancelled(key, previous)
+                WatchProgressNotifications.clear(context, previous)
             }
         }
-        WatchProgressNotifications.show(context, current, summary)
     }
 
-    private fun saveCancelled(progress: WatchProgress) {
+    /** A newer pull for this Host retires completed Agents; stale progress expires even without a push. */
+    fun refreshProgress() = synchronized(PROGRESS_LOCK) {
+        val summary = summary()
+        progresses().forEach { (key, current) ->
+            val fetched = summary.fetchedAt(current.hostId)
+            val agent = summary.inbox.find { it.hostId == current.hostId && it.terminal == current.terminal }
+            val completeList = summary.totalAgents <= summary.inbox.size
+            val retired = !current.cancelled && progressPhone(key) == phoneNode() && fetched > current.atMs &&
+                ((agent != null && agent.status != "working") || (agent == null && completeList))
+            if (retired) {
+                saveCancelled(key, current.copy(atMs = fetched))
+                WatchProgressNotifications.clear(context, current)
+            } else {
+                val confirmed = if (agent?.status == "working" && progressPhone(key) == phoneNode()) maxOf(current.atMs, fetched) else current.atMs
+                WatchProgressNotifications.show(context, current, summary,
+                    (confirmed + WatchProgress.MAX_AGE_MS - now()).coerceAtLeast(0))
+            }
+        }
+    }
+
+    private fun saveCancelled(key: String, progress: WatchProgress) {
         val bytes = requireNotNull(progress.copy(cancelled = true).toRequest().data)
-        progressPrefs.edit().putString("payload", Base64.encodeToString(bytes, Base64.NO_WRAP)).commit()
+        progressPrefs.edit().putString(key, Base64.encodeToString(bytes, Base64.NO_WRAP)).commit()
     }
 
     companion object { private val PROGRESS_LOCK = Any() }
@@ -107,9 +126,9 @@ class WatchStateStore(private val context: Context) {
                 try {
                     items.forEach { item ->
                         item.uri.host?.let { phone ->
-                            when (item.uri.path) {
-                                WatchSummary.DATA_PATH -> accept(phone, item.data)
-                                WatchProgress.DATA_PATH -> acceptProgress(phone, item.data)
+                            when {
+                                item.uri.path == WatchSummary.DATA_PATH -> accept(phone, item.data)
+                                WatchProgress.isDataPath(item.uri.path) -> acceptProgress(phone, item.data, item.uri.path)
                             }
                         }
                     }

@@ -135,24 +135,6 @@ impl States {
             structure_fetched_at_ms: None,
         });
         match update {
-            Update::Snapshot(agents, structure, time, observed) => {
-                if observed >= order.agents && time >= state.fetched_at_ms {
-                    next_agents = observed;
-                    state.agents = agents
-                        .into_iter()
-                        .filter(|t| t.agent_status.is_some())
-                        .collect();
-                    state.fetched_at_ms = time;
-                }
-                if let Some(structure) = structure
-                    && observed >= order.structure
-                    && state.structure_fetched_at_ms.is_none_or(|t| time >= t)
-                {
-                    next_structure = observed;
-                    state.structure = Some(structure);
-                    state.structure_fetched_at_ms = Some(time);
-                }
-            }
             Update::Agents(agents, time, observed) => {
                 if observed < order.agents || time < state.fetched_at_ms {
                     return Ok(());
@@ -234,7 +216,6 @@ impl States {
 
 #[derive(Clone)]
 pub(crate) enum Update {
-    Snapshot(Vec<TerminalInfo>, Option<HostStructure>, u64, u64),
     Agents(Vec<TerminalInfo>, u64, u64),
     Structure(HostStructure, u64, u64),
 }
@@ -248,7 +229,7 @@ impl Update {
     }
     fn time(&self) -> u64 {
         match self {
-            Self::Agents(_, t, _) | Self::Structure(_, t, _) | Self::Snapshot(_, _, t, _) => *t,
+            Self::Agents(_, t, _) | Self::Structure(_, t, _) => *t,
         }
     }
 }
@@ -296,23 +277,25 @@ impl AriesCore {
         crate::on_runtime(async move {
             tokio::time::timeout(Duration::from_secs(30), async {
                 let connection = self.connect(host_id.clone()).await?;
-                let list = connection.fetch_terminals().await;
+                let list = connection.fetch_terminals().await.map(Update::agents);
                 // Layout failure must not discard a successful Agent pull.
                 let structure = if list.is_ok() {
                     crate::read_structure(&connection.client, &connection.names)
                         .await
                         .ok()
+                        .map(Update::structure)
                 } else {
                     None
                 };
                 connection.disconnect().await;
                 self.last_known
-                    .save_checked(
-                        host_id.clone(),
-                        connection.revision,
-                        Update::Snapshot(list?, structure, now(), observation()),
-                    )
+                    .save_checked(host_id.clone(), connection.revision, list?)
                     .await?;
+                if let Some(structure) = structure {
+                    self.last_known
+                        .save_checked(host_id.clone(), connection.revision, structure)
+                        .await?;
+                }
                 let states = self.last_known.clone();
                 tokio::task::spawn_blocking(move || states.read(&host_id))
                     .await

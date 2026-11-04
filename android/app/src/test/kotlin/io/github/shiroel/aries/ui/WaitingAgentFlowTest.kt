@@ -118,7 +118,7 @@ class WaitingAgentFlowTest {
         compose.onNodeWithTag("agent-row:h2:t9").assertExists()
     }
 
-    @Test fun nextStoredAgentOnAnotherHostKeepsBrowseAndReleasesItsOwnConnectionOnBack() {
+    @Test fun nextWaitingNeverOffersAStoredAgentFromADisconnectedHost() {
         val waiting = agent("remote/t1", "Remote question", AgentStatus.Blocked(null, null))
         val core = FakeCore().apply {
             addHost("home", Endpoint.Ssh("home.test", 22u, "me"))
@@ -133,17 +133,13 @@ class WaitingAgentFlowTest {
         val home = core.connectionsOf.getValue("h1")
         compose.onNodeWithText("Current").performClick()
         compose.onNodeWithTag("agent-actions").performClick()
-        compose.onNodeWithText(context.getString(R.string.agents_next_waiting, "Remote question", "work")).performClick()
+        compose.onNodeWithText(context.getString(R.string.agents_next_waiting, "Remote question", "work")).assertDoesNotExist()
         compose.runOnIdle {
-            assertEquals(AgentKey("h2", "remote/t1"), model().currentAgentKey)
+            assertNull(model().nextWaitingAgent)
+            assertEquals(AgentKey("h1", "t1"), model().currentAgentKey)
+            assertFalse(home.disconnected)
+            assertFalse(core.connectionsOf.containsKey("h2"))
             assertSame(browse, (model().screen as Screen.Terminal).returnTo)
-            assertFalse(home.disconnected)
-        }
-        compose.onNodeWithTag("console-back").performClick()
-        compose.runOnIdle {
-            assertSame(browse, model().screen)
-            assertTrue(core.connectionsOf.getValue("h2").disconnected)
-            assertFalse(home.disconnected)
         }
     }
 

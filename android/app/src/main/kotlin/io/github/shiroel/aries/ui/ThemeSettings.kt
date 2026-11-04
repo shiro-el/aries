@@ -7,9 +7,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
+enum class AppLayout { CONSOLE, THREAD, TASKS }
 
 /** Device appearance, available before the core or an SSH key has been opened. */
 class ThemeSettings(private val preferences: SharedPreferences) {
+    var layout by mutableStateOf(
+        AppLayout.entries.find { it.name == preferences.getString("layout", null) } ?: AppLayout.CONSOLE,
+    )
+        private set
     var mode by mutableStateOf(
         ThemeMode.entries.find { it.name == preferences.getString("mode", null) } ?: ThemeMode.SYSTEM,
     )
@@ -18,6 +23,11 @@ class ThemeSettings(private val preferences: SharedPreferences) {
         private set
 
     val accentArgb: Int get() = 0xFF000000.toInt() or accentHex.drop(1).toInt(16)
+
+    fun chooseLayout(value: AppLayout) {
+        preferences.edit().putString("layout", value.name).apply()
+        layout = value
+    }
 
     fun chooseMode(value: ThemeMode) {
         preferences.edit().putString("mode", value.name).apply()

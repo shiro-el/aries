@@ -25,11 +25,12 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 
 class QuestionChoiceReceiver : BroadcastReceiver() {
-    override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != ACTION) return
-        val notice = NotificationPayloads.open(context, intent.getStringExtra(EXTRA_NOTICE))?.let { QuestionNotice.fromJson(it) } ?: return
+    override fun onReceive(context: Context, intent: Intent) = synchronized(NotificationGroups) {
+        if (intent.action != ACTION) return@synchronized
+        val notice = NotificationPayloads.open(context, intent.getStringExtra(EXTRA_NOTICE))?.let { QuestionNotice.fromJson(it) } ?: return@synchronized
         val choice = intent.getIntExtra(EXTRA_CHOICE, -1)
-        if (notice.question.options.size !in 1..3 || choice !in notice.question.options.indices) return
+        if (notice.question.options.size !in 1..3 || choice !in notice.question.options.indices) return@synchronized
+        if (!QuestionNotifications.accepts(context, notice)) return@synchronized
         QuestionNotifications.post(context, notice, QuestionView.Sending(choice))
         try {
             QuestionReplyWorker.enqueue(context, notice, choice)
@@ -97,6 +98,10 @@ class QuestionReplyWorker(context: Context, params: WorkerParameters) : Coroutin
 object QuestionReplies {
     suspend fun answer(context: Context, core: AriesCoreInterface, notice: QuestionNotice, choice: Int, online: Boolean): QuestionView.Done {
         val context = AppLanguage.context(context)
+        // A notification/work request can survive an app upgrade. Older
+        // Always actions must also go through the phone card's confirmation.
+        if (notice.question.id.startsWith(PERMISSION_ID_PREFIX) && notice.question.options.getOrNull(choice) == "Allow always")
+            return QuestionView.Done(context.getString(R.string.question_notify_confirm_in_app))
         if (!online) return QuestionView.Done(context.getString(R.string.call_notify_no_network))
         return try {
             // The core bounds sign-in (15 s) and the Beacon result (30 s).

@@ -147,6 +147,7 @@ class HostsModel(
     private val http: HttpClient = HttpRelayClient(),
     private val onSavedLaunchesChanged: () -> Unit = {},
     private val locationStore: LastLocationStore? = null,
+    private val onCallAnswered: (Host, String) -> Unit = { _, _ -> },
 ) {
     internal val pairingReview = QrPairingReview()
     /** Current Host's settings models; a previous Host's pending work keeps its own state. */
@@ -191,7 +192,7 @@ class HostsModel(
     }
 
     /** Every Host's Calls for the inbox; see [resumeCalls]. */
-    val calls = CallsModel(core, scope, keyWork)
+    val calls = CallsModel(core, scope, keyWork, onCallAnswered)
     /** Chat cache retention and per-Host clearing (ticket 44). */
     val chatCache = ChatCacheModel(core, scope, keyWork)
     val diagnosticHistory = DiagnosticsModel(core, scope, keyWork)
@@ -220,6 +221,10 @@ class HostsModel(
     /** How an Agent opens: the view last picked with the Terminal/Chat toggle (Terminal by default). */
     var agentView by mutableStateOf(AgentView.TERMINAL)
         private set
+
+    // Settings overlays the route owner, so appearance changes never retire a connection or draft.
+    private var settingsReturnTo by mutableStateOf<Screen?>(null)
+    private val ownedScreen: Screen get() = settingsReturnTo ?: screen
 
     /** Settings subpages share the drawer destination and own all configuration. */
     var settingsHost by mutableStateOf<Host?>(null)
@@ -533,7 +538,7 @@ class HostsModel(
 
     /** The Chat that is open, or still running under the Terminal opened from it. */
     private val liveChat: ChatModel?
-        get() = (screen as? Screen.Chat ?: (screen as? Screen.Terminal)?.returnTo as? Screen.Chat)?.chat
+        get() = (ownedScreen as? Screen.Chat ?: (ownedScreen as? Screen.Terminal)?.returnTo as? Screen.Chat)?.chat
 
     private var started = false
     private var explicitSurfaceEntry = false
@@ -553,14 +558,14 @@ class HostsModel(
     /** Called after the activity resumes and installs its biometric authorizer. */
     fun start(target: PushTarget? = null) {
         if (started) {
-            target?.let { openPushedAgent(it.hostId, it.terminal, openChat = it.chat) }
+            target?.let(::openNotificationTarget)
             return
         }
         started = true
         val saved = locationStore?.load()
         if (target != null) {
             startupHostId = target.hostId
-            openPushedAgent(target.hostId, target.terminal, openChat = target.chat)
+            openNotificationTarget(target)
         } else if (!explicitSurfaceEntry && screen == Screen.Hosts) {
             hosts.find { it.id == saved?.hostId }?.let {
                 startupHostId = it.id
@@ -573,7 +578,7 @@ class HostsModel(
         }
     }
 
-    private fun lastLocation(): LastLocation? = when (val s = screen) {
+    private fun lastLocation(): LastLocation? = when (val s = ownedScreen) {
         Screen.Hosts, Screen.Settings -> LastLocation()
         is Screen.Agents -> LastLocation()
         is Screen.Browse -> LastLocation(s.browser.host.id, s.browser.openSpaceId, s.browser.tab?.id)
@@ -779,14 +784,15 @@ class HostsModel(
         screen = connecting
         status = scope.launch {
             link.keep { conn, _ ->
-                if (screen !== connecting) return@keep
+                if (ownedScreen !== connecting) return@keep
 
                 val browser = cachedBrowser ?: HostBrowser(host, ::userNavigation)
                 browser.layoutEditor = LayoutEditor(browser, scope)
                 browser.link = link
                 browser.savedLaunches = conn.savedLaunches()
                 open = conn to null
-                screen = Screen.Browse(browser)
+                val next = Screen.Browse(browser)
+                if (settingsReturnTo === connecting) settingsReturnTo = next else screen = next
                 loadHostSettings(host)
                 status = watchBrowse(link, browser, restore.takeIf { restoring }, savedLaunchId, confirmSavedLaunch)
             }
@@ -1243,6 +1249,7 @@ class HostsModel(
         guard {
             conversations.filterKeys { it.hostId == prompt.host.id }.values.forEach { it.stop() }
             core.removeHost(prompt.host.id)
+            if (settingsReturnTo != null) back()
             hostSettings.remove(prompt.host.id)
             conversations.keys.removeAll { it.hostId == prompt.host.id }
             hosts = core.hosts()
@@ -1690,11 +1697,24 @@ class HostsModel(
         openAgents(focus = null)
     }
 
+    private fun openNotificationTarget(target: PushTarget) {
+        if (target.agents) {
+            explicitSurfaceEntry = true
+            back()
+            openAgents(focus = null, selectedHosts = hosts.filter { it.id == target.hostId })
+        } else openPushedAgent(target.hostId, target.terminal, openChat = target.chat)
+    }
+
     /** Resolve QS taps from the latest persisted pull, including the whole machine address. */
     fun openTile() {
         explicitSurfaceEntry = true
-        val target = io.github.shiroel.aries.AgentSurfaces.attention(core)
-        if (target == null) openAgents() else openPushedAgent(target.hostId, target.terminal)
+        scope.launch {
+            val target = withContext(keyWork) {
+                try { io.github.shiroel.aries.AgentSurfaces.attention(core) }
+                catch (_: CoreException) { null }
+            }
+            if (target == null) openAgents() else openPushedAgent(target.hostId, target.terminal)
+        }
     }
 
     /** Every exported Activity entry uses this gate; only published capabilities bypass approval. */
@@ -1934,7 +1954,8 @@ class HostsModel(
 
     val nextWaitingAgent: AgentEntry?
         get() = currentAgentKey?.let { current -> drawerAgents.firstOrNull {
-            it.key != current && isWaiting(it.terminal.agentStatus)
+            it.key != current && quickOpenSources.any { source -> source.host.id == it.host.id && source.live } &&
+                isWaiting(it.terminal.agentStatus)
         } }
 
     /** Switch in place over the original list, using the same entry path as drawer and inbox. */
@@ -1983,10 +2004,13 @@ class HostsModel(
         }
     }
 
-    /** Settings is a drawer destination. */
+    /** Keep the route and its live owners while changing app or Host settings. */
     fun openSettings() {
-        back()
-        suppressLocationSave = false
+        userNavigation()
+        if (screen != Screen.Settings && screen !is Screen.JumpHosts) settingsReturnTo = screen
+        closeQuickOpen()
+        pendingQuickOpen = null
+        closeCallInbox()
         settingsHost = null
         settingsKeys = false
         recoveringKeys = false
@@ -2023,7 +2047,9 @@ class HostsModel(
             settingsKeys = false
             settingsDiagnostics = false
         } else {
-            back()
+            val origin = settingsReturnTo
+            settingsReturnTo = null
+            if (origin != null) screen = origin else back()
         }
     }
 
@@ -2160,9 +2186,12 @@ class HostsModel(
     }
 
     private fun terminalOn(hostId: String): TerminalViewer? =
-        (screen as? Screen.Terminal)?.viewer?.takeIf { it.link?.host?.id == hostId }
+        (ownedScreen as? Screen.Terminal)?.viewer?.takeIf { it.link?.host?.id == hostId }
 
     fun back() {
+        // Leaving Settings for a different destination releases its retained route normally.
+        settingsReturnTo?.let { screen = it }
+        settingsReturnTo = null
         val interruptedRestore = restoring
         userNavigation()
         // Cancelling a cold reconnect does not replace the last successfully viewed location.

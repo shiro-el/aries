@@ -11,15 +11,19 @@ import io.github.shiroel.aries.weardata.OpenWatchAgent
  * address, `machine/tN` included) on the Host [hostId]. Travels to
  * [MainActivity] as the notification's content intent.
  */
-data class PushTarget(val hostId: String, val terminal: String, val chat: Boolean = false) {
+data class PushTarget(val hostId: String, val terminal: String, val chat: Boolean = false, val agents: Boolean = false) {
     fun intent(context: Context): Intent = Intent(context, MainActivity::class.java)
         .setAction(ACTION)
         // Distinct data per Agent, so each notification keeps its own PendingIntent.
         .setData(Uri.Builder().scheme("aries-push").authority(hostId).appendPath(terminal)
-            .apply { if (chat) appendQueryParameter("view", "chat") }.build())
+            .apply {
+                if (chat) appendQueryParameter("view", "chat")
+                if (agents) appendQueryParameter("view", "agents")
+            }.build())
         .putExtra(EXTRA_HOST, hostId)
         .putExtra(EXTRA_TERMINAL, terminal)
         .putExtra(EXTRA_CHAT, chat)
+        .putExtra(EXTRA_AGENTS, agents)
         // Warm start: the running activity gets it in onNewIntent.
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
 
@@ -30,6 +34,7 @@ data class PushTarget(val hostId: String, val terminal: String, val chat: Boolea
 
     companion object {
         const val ACTION = "io.github.shiroel.aries.OPEN_AGENT_TERMINAL"
+        private const val EXTRA_AGENTS = "open_agents"
         private const val EXTRA_CHAT = "open_chat"
         private const val EXTRA_HOST = "host_id"
         private const val EXTRA_TERMINAL = "terminal"
@@ -42,7 +47,7 @@ data class PushTarget(val hostId: String, val terminal: String, val chat: Boolea
             if (intent.action != ACTION) return null
             val host = intent.getStringExtra(EXTRA_HOST) ?: return null
             val terminal = intent.getStringExtra(EXTRA_TERMINAL) ?: return null
-            return PushTarget(host, terminal, intent.getBooleanExtra(EXTRA_CHAT, false))
+            return PushTarget(host, terminal, intent.getBooleanExtra(EXTRA_CHAT, false), intent.getBooleanExtra(EXTRA_AGENTS, false))
         }
     }
 }
