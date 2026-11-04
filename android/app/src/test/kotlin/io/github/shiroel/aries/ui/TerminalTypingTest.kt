@@ -92,8 +92,10 @@ class TerminalTypingTest {
         compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
         compose.onNodeWithContentDescription(str(R.string.agent_switch_terminal_label)).performClick()
         compose.onNodeWithContentDescription(str(R.string.terminal_compose_button)).performClick()
+        compose.onNodeWithTag("terminal-composer").performTextReplacement("keep this command")
         compose.onNodeWithContentDescription("Input history").performClick()
         compose.onNodeWithText("from Chat\n한국어").performClick()
+        compose.onNodeWithTag("terminal-composer").assertTextEquals("keep this command\n\nfrom Chat\n한국어")
         compose.onNodeWithTag("terminal-composer").performTextReplacement("edited command")
         compose.runOnIdle { assertTrue(core.connection!!.views.all { it.sent.isEmpty() }) }
         compose.onNodeWithContentDescription(str(R.string.terminal_composer_send_button)).performClick()

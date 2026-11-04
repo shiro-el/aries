@@ -102,10 +102,21 @@ class ChatModel(
     val host: Host,
     terminal: TerminalInfo,
     /** The open Host's line: messages go through its live connection. */
-    val link: HostLink? = null,
+    link: HostLink? = null,
     /** Runs the calls that sign in to the Host (see [HostsModel]). */
     private val keyWork: CoroutineContext = EmptyCoroutineContext,
 ) {
+    var link by mutableStateOf(link)
+        private set
+
+    /** Reopening reuses drafts and pending operations; only the live SSH line changes. */
+    fun bind(link: HostLink, terminal: TerminalInfo) {
+        inputHistory.open = false
+        if (this.link !== link) clearNotices()
+        this.link = link
+        update(listOf(terminal))
+    }
+
     val inputHistory = InputHistoryModel(core, host.id, terminal.address)
     /** The Agent's Terminal, its Agent status kept live by [update]. */
     var terminal by mutableStateOf(terminal)
@@ -179,10 +190,30 @@ class ChatModel(
         questionText = questionText + (id to current.mapIndexed { i, value -> if (i == part) text else value })
         val selected = picks[id] ?: List(question.questions.size) { emptySet() }
         picks = picks + (id to selected.mapIndexed { i, value -> if (i == part) emptySet() else value })
+        clearNotices()
+        saveOutbox()
     }
 
     /** What the user is typing into the input. */
-    var input by mutableStateOf(TextFieldValue(""))
+    private var editableInput by mutableStateOf(TextFieldValue(""))
+    var input: TextFieldValue
+        get() = editableInput
+        set(value) {
+            val changed = value.text != editableInput.text
+            editableInput = value
+            if (changed) {
+                clearNotices()
+                saveOutbox()
+            }
+        }
+
+    fun appendDraft(text: String, separator: String = "\n\n") {
+        if (text.isEmpty()) return
+        val current = input
+        val suffix = (if (current.text.isEmpty()) "" else separator) + text
+        // External additions must not discard the IME's active composition.
+        input = current.copy(text = current.text + suffix)
+    }
     // External history/restoration/file edits use this String seam. The IME owns
     // text, selection and composition until it commits; even an equal-text
     // TextFieldValue replacement can end dictation and move the cursor.
@@ -218,11 +249,13 @@ class ChatModel(
         val address = terminal.address
         interrupting = true
         interruptNotice = null
+        val revision = noticeRevision
         scope.launch {
             try {
-                interruptNotice = interruptMessage(connection.interruptAgent(address))
+                val notice = interruptMessage(connection.interruptAgent(address))
+                if (noticeRevision == revision) interruptNotice = notice
             } catch (e: CoreException) {
-                interruptNotice = Message(R.string.chat_interrupt_failed, listOf(e.message ?: e.toString()))
+                if (noticeRevision == revision) interruptNotice = Message(R.string.chat_interrupt_failed, listOf(e.message ?: e.toString()))
             } finally {
                 interrupting = false
                 drainQueue()
@@ -231,11 +264,17 @@ class ChatModel(
     }
 
     var pendingShare by mutableStateOf<SharedContent?>(null)
-    var attachments by mutableStateOf<List<DraftAttachment>>(emptyList())
-        private set
+    private var draftAttachments by mutableStateOf<List<DraftAttachment>>(emptyList())
+    var attachments: List<DraftAttachment>
+        get() = draftAttachments
+        private set(value) {
+            draftAttachments = value
+            saveOutbox()
+        }
 
     fun removeAttachment(attachment: DraftAttachment) {
-        if (sending == null) attachments = attachments - attachment
+        clearNotices()
+        attachments = attachments - attachment
     }
     var uploading by mutableStateOf(false)
         private set
@@ -255,13 +294,13 @@ class ChatModel(
     /** Saves bytes and adds attachment chips to the current draft; never calls sendMessage. */
     fun attach(context: Context, content: SharedContent, cleanup: () -> Unit = {}): Boolean {
         val scope = scope ?: run { cleanup(); return false }
-        if (inputUnavailable || uploading || sending != null) { cleanup(); return false }
+        if (inputUnavailable || uploading) { cleanup(); return false }
         val link = link ?: run { attachmentFailed(CoreException.Closed()); cleanup(); return false }
         val resize = AttachmentSettings.from(context).resizeImages
-        attachmentError = null
+        clearNotices()
         uploading = true
         fun append(value: String) {
-            draft += (if (draft.isEmpty() || draft.last().isWhitespace()) "" else " ") + value
+            appendDraft(value, separator = if (draft.isEmpty() || draft.last().isWhitespace()) "" else " ")
         }
         content.text?.let(::append)
         uploadJob = scope.launch {
@@ -299,23 +338,38 @@ class ChatModel(
     private var connectionJob: Job? = null
     private var waitingConnection: HostConnection? = null
     private var stopped = false
-    private var stoppedMessageIds = emptySet<String>()
     private var terminalRevision = 0L
     private var recoveryLoaded = false
+    private var outboxEdits = 0
     private var recoveryFailed by mutableStateOf(false)
+    val terminalComposer = TerminalComposerState { saveOutbox() }
+
+    private var noticeRevision = 0L
+    private fun clearNotices() {
+        noticeRevision++
+        sendError = null
+        refused = false
+        interruptNotice = null
+        attachmentError = null
+    }
+
+    /** Callers commit once after moving text and attachments together between draft and queue. */
+    private inline fun changeOutbox(change: () -> Unit) {
+        outboxEdits++
+        try { change() } finally { outboxEdits-- }
+    }
 
     private fun saveOutbox(): Boolean {
+        if (!recoveryLoaded || outboxEdits > 0) return true
         if (recoveryFailed) return false
         return try {
-            val state = if (stopped) {
-                // A new ChatModel may already own the composer. Late replies update
-                // only messages this instance submitted, never its replacement's draft.
-                val current = core.chatOutbox(host.id, terminal.address)?.let(::decodeChatOutbox) ?: return true
-                val ours = queuedMessages.associateBy { it.id }
-                current.copy(messages = current.messages.mapNotNull {
-                    if (it.id in stoppedMessageIds) ours[it.id] else it
-                })
-            } else ChatOutboxState(draft, attachments, queuedMessages)
+            val state = ChatOutboxState(draft, attachments, queuedMessages,
+                terminalComposer.draft, terminalComposer.open, questionText, picks,
+                answers.mapValues { (_, answer) -> when (answer) {
+                    AnswerState.Sending -> "sending"
+                    AnswerState.Sent -> "sent"
+                    is AnswerState.Failed -> "failed"
+                } })
             core.saveChatOutbox(host.id, terminal.address, state.encode())
             true
         } catch (e: CoreException) {
@@ -326,20 +380,29 @@ class ChatModel(
 
     private fun restoreOutbox() {
         if (recoveryLoaded) return
-        recoveryLoaded = true
         try {
             val saved = core.chatOutbox(host.id, terminal.address)?.let(::decodeChatOutbox) ?: return
-            if (saved.draft != draft) draft = listOf(saved.draft, draft).filter { it.isNotEmpty() }.joinToString("\n\n")
-            attachments = saved.attachments + attachments
+            draft = saved.draft
+            attachments = saved.attachments
+            terminalComposer.draft = saved.terminalDraft
+            terminalComposer.open = saved.terminalComposerOpen
+            questionText = saved.questionText
+            picks = saved.picks
+            answers = saved.answers.mapValues { (_, state) ->
+                if (state == "sent") AnswerState.Sent
+                else AnswerState.Failed(Message(R.string.chat_queue_uncertain))
+            }
             saved.messages.asReversed().filter { it.phase == QueuedMessagePhase.Waiting }.forEach(::restoreMessage)
             queuedMessages = saved.messages.filter { it.phase != QueuedMessagePhase.Waiting }
                 .map { if (it.confirmed || it.phase == QueuedMessagePhase.Failed) it else it.copy(phase = QueuedMessagePhase.Uncertain, heldForTyping = false) }
-            saveOutbox()
         } catch (e: Exception) {
             // Leave an unreadable/newer journal intact. Never overwrite or dispatch it.
             recoveryFailed = true
             sendError = e.message
+        } finally {
+            recoveryLoaded = true
         }
+        saveOutbox()
     }
 
     private fun returnWaitingToDraft() {
@@ -378,18 +441,11 @@ class ChatModel(
     }
 
     private fun restoreUnsentMessage(message: QueuedChatMessage) {
-        if (stopped) {
-            // Persist a recoverable draft without modifying a newer screen's composer.
-            queuedMessages = queuedMessages.map {
-                if (it.id == message.id) it.copy(phase = QueuedMessagePhase.Waiting, heldForTyping = false) else it
-            }
-        } else {
-            queuedMessages = queuedMessages.filterNot { it.id == message.id }
-            restoreMessage(message)
-        }
+        queuedMessages = queuedMessages.filterNot { it.id == message.id }
+        restoreMessage(message)
     }
 
-    private fun restoreMessage(message: QueuedChatMessage) {
+    private fun restoreMessage(message: QueuedChatMessage) = changeOutbox {
         if (message.draft.isNotEmpty()) {
             // Cancellation/recovery inserts text outside the active IME range.
             // Keep composition and selection attached to the user's newer text.
@@ -450,12 +506,15 @@ class ChatModel(
         snapshot?.status == ChatStatus.ENDED || snapshot?.status == ChatStatus.NO_AGENT
     val showWorking: Boolean get() = terminal.agentStatus == AgentStatus.Working && terminalAvailable &&
         link?.state == LinkState.Up && snapshot?.status in setOf(ChatStatus.LIVE, ChatStatus.WAITING)
-    val canEdit: Boolean get() = !inputUnavailable && sending == null
+    val canEdit: Boolean get() = !inputUnavailable
 
     /** The Host's Terminals changed: follow this Agent's status. */
     fun update(terminals: List<TerminalInfo>) {
-        terminalPresent = terminals.any { it.address == terminal.address }
-        val now = terminals.find { it.address == terminal.address } ?: return
+        val now = terminals.find { it.address == terminal.address }
+        if (terminalPresent != (now != null) || (now != null &&
+            (terminal.agentStatus != now.agentStatus || terminal.state != now.state))) clearNotices()
+        terminalPresent = now != null
+        if (now == null) return
         terminal = now
         terminalRevision++
         if (now.agentStatus !is AgentStatus.Blocked) refused = false
@@ -486,18 +545,20 @@ class ChatModel(
         }
         val message = QueuedChatMessage(draft = draft, attachments = attachments, text = text,
             before = snapshot?.entries.orEmpty().map { it.id }.toSet())
-        queuedMessages = queuedMessages + message
-        draft = ""
-        attachments = emptyList()
-        sent = false
-        refused = false
-        sendError = null
+        changeOutbox {
+            queuedMessages = queuedMessages + message
+            draft = ""
+            attachments = emptyList()
+            sent = false
+            refused = false
+            sendError = null
+        }
         if (!saveOutbox()) {
             queuedMessages = queuedMessages.filterNot { it.id == message.id }
             restoreMessage(message)
             return
         }
-        if (terminal.agentStatus != AgentStatus.Working) dispatch(message)
+        if (terminal.agentStatus != AgentStatus.Working && sending == null) dispatch(message)
     }
 
     private fun dispatch(message: QueuedChatMessage) {
@@ -623,7 +684,8 @@ class ChatModel(
         }
     }
 
-    fun start(scope: CoroutineScope) {
+    fun start(scope: CoroutineScope, paused: Boolean = this.paused) {
+        this.paused = paused
         stopped = false
         restoreOutbox()
         this.scope = scope
@@ -632,6 +694,7 @@ class ChatModel(
             // ChatWatch has its own SSH line. A live transcript cannot prove
             // that the connection owning a phone-local queue survived.
             snapshotFlow { link?.state to link?.connection }.collect { (state, connection) ->
+                clearNotices()
                 if (queuedMessages.any { it.phase == QueuedMessagePhase.Waiting } &&
                     (state != LinkState.Up || connection !== waitingConnection)) returnWaitingToDraft()
             }
@@ -646,6 +709,7 @@ class ChatModel(
                     w = withContext(keyWork) { core.watchChat(host.id, terminal.address, snapshot?.cursor) }
                     break
                 } catch (e: CoreException) {
+                    clearNotices()
                     connectionError = e
                     returnWaitingToDraft()
                     // A cancelled key unlock is not evidence of a missing Beacon.
@@ -657,13 +721,16 @@ class ChatModel(
             }
             watch = w
             if (paused) w.pause()
-            val entries = LinkedHashMap<String, ChatEntry>()
+            val entries = LinkedHashMap<String, ChatEntry>().apply {
+                snapshot?.entries?.forEach { put(it.id, it) }
+            }
             while (true) {
                 try {
                     val update = w.nextUpdate()
                     if (update.reset) entries.clear()
                     update.upserts.forEach { entries[it.id] = it }
                     entries.keys.retainAll(update.order.toSet())
+                    if (snapshot?.status != update.status) clearNotices()
                     snapshot = ChatSnapshot(update.order.mapNotNull { entries[it] }, update.status, update.cursor, update.usage)
                     connectionError = null
                     if (update.status in setOf(ChatStatus.RECONNECTING, ChatStatus.ENDED, ChatStatus.NO_TERMINAL, ChatStatus.NO_AGENT)) {
@@ -672,6 +739,7 @@ class ChatModel(
                     reconcileQueue()
                     drainQueue()
                 } catch (e: CoreException) {
+                    clearNotices()
                     returnWaitingToDraft()
                     if (e is CoreException.Closed) return@launch
                     // The core pauses permanent failures until an explicit retry.
@@ -718,6 +786,8 @@ class ChatModel(
             else -> chosen + option
         }
         picks = picks + (id to current.mapIndexed { i, p -> if (i == part) next else p })
+        clearNotices()
+        saveOutbox()
     }
 
     /** Every part of question [id] has a pick. */
@@ -742,6 +812,8 @@ class ChatModel(
         // draft selection map. Keep their submitted choice visible too.
         picks = picks + (id to chosen.map { it.toSet() })
         answers = answers + (id to AnswerState.Sending)
+        clearNotices()
+        saveOutbox()
         scope.launch {
             val state = try {
                 withContext(keyWork) {
@@ -769,22 +841,26 @@ class ChatModel(
                 AnswerState.Failed(answerProblem(e))
             }
             answers = answers + (id to state)
+            saveOutbox()
         }
     }
 
     /** Network/foreground signals may wake transient failures, never permanent ones. */
     fun reconnect() {
+        clearNotices()
         if (connectionError?.retryableConnection() == false) return
         if (watch == null) scope?.let(::start) else watch?.reconnect()
     }
 
     fun retryNow() {
+        clearNotices()
         if (connectionError?.retryableConnection() == false) return
         if (watch == null) scope?.let(::start) else watch?.retryNow()
     }
 
     /** User action: keep the Agent/draft/cache and resume or recreate the watch. */
     fun retryConnection() {
+        clearNotices()
         connectionError = null
         if (watch == null || job?.isActive != true) {
             watch?.stop()
@@ -809,7 +885,6 @@ class ChatModel(
     fun stop() {
         handoffWaitingMessages()
         saveOutbox()
-        stoppedMessageIds = queuedMessages.map { it.id }.toSet()
         stopped = true
         connectionJob?.cancel()
         // Explicitly submitted input belongs to HostLink until its bounded handoff
@@ -819,6 +894,8 @@ class ChatModel(
         watch?.stop()
         watch = null
     }
+
+    init { restoreOutbox() }
 }
 
 sealed interface AnswerState {
