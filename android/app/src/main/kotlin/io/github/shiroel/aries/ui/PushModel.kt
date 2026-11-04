@@ -13,6 +13,11 @@ import io.github.shiroel.aries.core.PushPolicy
 import io.github.shiroel.aries.core.PushProgress
 import io.github.shiroel.aries.core.PushVerificationState
 import io.github.shiroel.aries.core.PushStep
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -66,10 +71,21 @@ class PushModel(
     /** Runs the calls that sign in to the Host (see [HostsModel]). */
     private val keyWork: CoroutineContext = EmptyCoroutineContext,
 ) {
+    var busy by mutableStateOf(false)
+        private set
     var host by mutableStateOf<Host?>(null)
         private set
     var ui by mutableStateOf<PushUi>(PushUi.Loading)
         private set
+
+    var testing by mutableStateOf(false)
+        private set
+    var confirmDisable by mutableStateOf(false)
+        private set
+    var failedSteps by mutableStateOf<List<Pair<PushStep, StepState>>>(emptyList())
+        private set
+    private var attemptId = 0
+    private var noticeJob: Job? = null
 
     var verificationState by mutableStateOf<PushVerificationState?>(null)
         private set
@@ -107,24 +123,42 @@ class PushModel(
         private set
 
     fun load(host: Host) {
+        if (busy || policyBusy) return
         this.host = host
+        failedSteps = emptyList()
         policy = null
         policyProblem = null
         problem = null
-        notice = null
+        clearNotice()
         changingRelay = false
         refresh()
         relayDraft = (ui as? PushUi.On)?.relayUrl ?: platform.relayUrl.orEmpty()
     }
 
+    private fun clearNotice() {
+        noticeJob?.cancel()
+        notice = null
+    }
+
+    private fun testSent() {
+        clearNotice()
+        notice = Message(R.string.push_test_sent)
+        noticeJob = scope.launch {
+            delay(5_000)
+            notice = null
+        }
+    }
+
     private fun refresh() {
         val host = host ?: return
         refreshVerification()
+        val previous = ui
         ui = try {
             core.pushPairing(host.id)?.let { PushUi.On(it.relayUrl) }
                 ?: PushUi.Off
         } catch (e: CoreException) {
-            PushUi.Off
+            problem = pushProblem(e)
+            previous
         }
         if (ui is PushUi.On && policy == null && policyProblem == null) loadPolicy()
     }
@@ -168,10 +202,11 @@ class PushModel(
 
     /** Shows the Relay URL field for a Host whose push is on. */
     fun changeRelay() {
+        if (busy) return
         val on = ui as? PushUi.On ?: return
         relayDraft = on.relayUrl
         problem = null
-        notice = null
+        clearNotice()
         changingRelay = true
     }
 
@@ -185,47 +220,57 @@ class PushModel(
      * the pairing to it (the core unpairs the old Relay once the new one works).
      */
     fun enable() {
+        if (busy) return
         val host = host ?: return
         val relay = relayDraft.trim()
         if (relay.isEmpty()) return
+        val previous = ui
         val before = (ui as? PushUi.On)?.relayUrl
+        val attempt = ++attemptId
         changingRelay = false
         problem = null
-        notice = null
+        clearNotice()
+        failedSteps = emptyList()
+        busy = true
         ui = PushUi.Enabling(emptyList())
         scope.launch {
-            if (!platform.allowNotifications()) {
-                problem = Message(R.string.push_permission_denied)
-                refresh()
-                return@launch
-            }
-            val token = try {
-                platform.deviceToken()
-            } catch (e: PushUnavailable) {
-                problem = Message(R.string.push_unavailable, listOf(e.message ?: ""))
-                refresh()
-                return@launch
-            }
-            val progress = object : PushProgress {
-                override fun onStep(step: PushStep) {
-                    scope.launch { advance(step) }
-                }
-            }
             try {
+                if (!platform.allowNotifications()) {
+                    problem = Message(R.string.push_permission_denied)
+                    return@launch
+                }
+                val token = platform.deviceToken()
+                val progress = object : PushProgress {
+                    override fun onStep(step: PushStep) {
+                        scope.launch { if (busy && attemptId == attempt) advance(step) }
+                    }
+                }
                 withContext(keyWork) { core.enablePush(host.id, relay, PushDevice("fcm", token), http, progress) }
-                notice = Message(R.string.push_test_sent)
-                refresh()
+                testSent()
+            } catch (e: CancellationException) {
+                problem = Message(R.string.push_cancelled)
+                throw e
             } catch (e: CoreException) {
                 problem = pushProblem(e)
-                // Paired but the test failed: push is on. Otherwise keep the
-                // steps on screen, the failed one marked.
-                finishSteps(StepState.Failed)
-                val now = runCatching { core.pushPairing(host.id) }.getOrNull()
-                if (now != null) refresh()
-                // A failed change keeps the old Relay: keep the typed URL open to fix.
-                if (before != null && now?.relayUrl == before) {
-                    relayDraft = relay
-                    changingRelay = true
+            } catch (e: Exception) {
+                problem = Message(R.string.push_unavailable, listOf(e.message.orEmpty()))
+            } finally {
+                if (problem != null) {
+                    failedSteps = (ui as? PushUi.Enabling)?.steps.orEmpty().map { (step, state) ->
+                        step to if (state == StepState.Running) StepState.Failed else state
+                    }
+                }
+                // Pairing is stored locally even if verification or SSH failed.
+                // Always leave progress, including permission/token errors and cancellation.
+                ui = previous
+                try {
+                    refresh()
+                    if (problem != null && before != null && (ui as? PushUi.On)?.relayUrl == before) {
+                        relayDraft = relay
+                        changingRelay = true
+                    }
+                } finally {
+                    busy = false
                 }
             }
         }
@@ -233,42 +278,64 @@ class PushModel(
 
     fun sendTest() {
         val host = host ?: return
+        if (busy || ui !is PushUi.On) return
+        busy = true
+        testing = true
+        failedSteps = emptyList()
         problem = null
-        notice = null
+        clearNotice()
         scope.launch {
             try {
-                withContext(keyWork) { core.sendTestPush(host.id) }
-                notice = Message(R.string.push_test_sent)
+                withTimeout(30_000) { withContext(keyWork) { core.sendTestPush(host.id) } }
+                testSent()
+            } catch (e: TimeoutCancellationException) {
+                problem = Message(R.string.push_test_timeout)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: CoreException) {
                 problem = pushProblem(e)
+            } catch (e: Exception) {
+                problem = Message(R.string.push_unavailable, listOf(e.message.orEmpty()))
+            } finally {
+                testing = false
+                busy = false
             }
         }
     }
 
+    fun askDisable() { if (!busy && ui is PushUi.On) confirmDisable = true }
+    fun cancelDisable() { confirmDisable = false }
+
     fun disable() {
         val host = host ?: return
+        if (!confirmDisable || busy) return
+        confirmDisable = false
+        busy = true
+        val previous = ui
+        failedSteps = emptyList()
         problem = null
-        notice = null
+        clearNotice()
         ui = PushUi.Working
         scope.launch {
             try {
                 val off = withContext(keyWork) { core.disablePush(host.id, http) }
                 if (!off.hostCleared) notice = Message(R.string.push_off_host_unreachable)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: CoreException) {
                 problem = pushProblem(e)
+            } catch (e: Exception) {
+                problem = Message(R.string.push_unavailable, listOf(e.message.orEmpty()))
+            } finally {
+                ui = previous
+                try { refresh() } finally { busy = false }
             }
-            refresh()
         }
     }
 
     private fun advance(step: PushStep) {
         val steps = (ui as? PushUi.Enabling)?.steps ?: return
         ui = PushUi.Enabling(steps.map { (s, st) -> s to if (st == StepState.Running) StepState.Done else st } + (step to StepState.Running))
-    }
-
-    private fun finishSteps(last: StepState) {
-        val steps = (ui as? PushUi.Enabling)?.steps ?: return
-        ui = PushUi.Enabling(steps.map { (s, st) -> s to if (st == StepState.Running) last else st })
     }
 }
 

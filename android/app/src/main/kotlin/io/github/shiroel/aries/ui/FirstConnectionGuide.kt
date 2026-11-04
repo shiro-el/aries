@@ -1,6 +1,5 @@
 package io.github.shiroel.aries.ui
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,10 +32,13 @@ internal fun FirstConnectionGuide(
         return
     }
     val browser = (model.screen as? Screen.Browse)?.browser
-    LaunchedEffect(browser, step) {
-        if (browser != null && step == 1) state.nextOnboardingStep()
+    LaunchedEffect(model.setupHostId, step) {
+        if (step == 1) model.setupHostId?.let(state::followHost)
     }
-    BackHandler(enabled = step == 0 || (step == 2 && browser != null)) { state.finishOnboarding() }
+    val guidedHost = state.guideHostId
+    LaunchedEffect(browser, guidedHost, step) {
+        if (browser != null && browser.host.id == guidedHost && step == 1) state.nextOnboardingStep()
+    }
     when {
         step == 0 -> Column(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
@@ -52,13 +54,9 @@ internal fun FirstConnectionGuide(
                 model.startAddingHost(HostAddMethod.MANUAL)
                 state.nextOnboardingStep()
             }, modifier = Modifier.testTag("onboarding-manual")) { Text(stringResource(R.string.onboarding_manual_button)) }
-            if (model.hosts.isNotEmpty()) TextButton(onClick = {
-                model.back()
-                state.nextOnboardingStep()
-            }) { Text(stringResource(R.string.onboarding_hosts_button)) }
             SkipGuide(state)
         }
-        step == 2 && browser != null && model.beacon.host?.id == browser.host.id -> {
+        step == 2 && browser != null && browser.host.id == guidedHost && model.beacon.host?.id == guidedHost -> {
             val scope = rememberCoroutineScope()
             var requesting by remember { mutableStateOf(false) }
             var allowed by remember { mutableStateOf<Boolean?>(null) }
@@ -79,20 +77,22 @@ internal fun FirstConnectionGuide(
                 allowed?.let {
                     AnnouncedText(stringResource(if (it) R.string.onboarding_permission_granted else R.string.onboarding_permission_denied))
                 }
-                PushSection(model.push, beaconInstalled = model.beacon.installed)
+                PushSection(model.push, beaconState = model.beacon.ui)
                 Text(stringResource(R.string.onboarding_start_task_hint), style = MaterialTheme.typography.bodySmall)
                 TextButton(state::finishOnboarding, Modifier.testTag("onboarding-finish")) {
                     Text(stringResource(R.string.onboarding_finish_button))
                 }
             }
         }
-        else -> Column(Modifier.fillMaxSize()) {
+        step == 1 && ((model.screen == Screen.Hosts && model.hostAddMethod != null) ||
+            (model.screen as? Screen.Connecting)?.host?.id?.let { it == guidedHost } == true) -> Column(Modifier.fillMaxSize()) {
             Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
                 Text(stringResource(R.string.onboarding_connect_body), style = MaterialTheme.typography.bodySmall)
                 SkipGuide(state)
             }
             Column(Modifier.weight(1f)) { content() }
         }
+        else -> content()
     }
 }
 

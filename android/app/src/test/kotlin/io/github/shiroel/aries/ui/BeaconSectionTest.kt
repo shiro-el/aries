@@ -5,8 +5,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onLast
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -24,9 +28,11 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /** Seam 3: the Beacon section of a connected Host against a fake core API. */
 @RunWith(RobolectricTestRunner::class)
+@Config(qualifiers = "h1200dp")
 class BeaconSectionTest {
     @get:Rule val compose = createComposeRule()
 
@@ -46,6 +52,14 @@ class BeaconSectionTest {
         }
         compose.openHostActions("h1")
         compose.waitForIdle()
+        compose.onNodeWithTag("host-actions:h1").performScrollToNode(hasText(str(R.string.beacon_title)))
+        expand()
+    }
+
+    private fun expand() {
+        if (compose.onAllNodesWithTag("beacon-advanced").fetchSemanticsNodes().isNotEmpty()) {
+            compose.onNodeWithTag("beacon-advanced").performScrollTo().performClick()
+        }
     }
 
     private fun click(res: Int) {
@@ -60,6 +74,7 @@ class BeaconSectionTest {
         compose.onNodeWithText(str(R.string.beacon_not_installed)).assertExists()
 
         click(R.string.beacon_install_button)
+        expand()
 
         compose.onNodeWithText(str(R.string.beacon_version, "0.1.0")).assertExists()
         compose.onNodeWithText(str(R.string.beacon_attached, "0.1.17")).assertExists()
@@ -101,7 +116,7 @@ class BeaconSectionTest {
         }
         connectTo(core)
         assertEquals("aries-call-human skill", str(R.string.beacon_skill_title))
-        compose.onAllNodesWithText(str(R.string.beacon_skill_ready)).assertCountEquals(2)
+        compose.onAllNodesWithText(str(R.string.beacon_skill_summary_ready)).assertCountEquals(1)
         compose.onAllNodesWithText(str(R.string.beacon_skill_foreign)).assertCountEquals(0)
         compose.onAllNodesWithText(str(R.string.beacon_skill_symlink)).assertCountEquals(0)
         compose.onAllNodesWithText("/home/me/.claude/skills/call-human").assertCountEquals(0)

@@ -72,6 +72,19 @@ class ReadAloudUiTest {
         compose.onNodeWithContentDescription(str(R.string.agent_switch_terminal_label)).performClick()
         compose.runOnIdle { assertTrue(engine.closed) }
     }
+
+    @Test fun oneTurnControlReadsTextOnBothSidesOfAToolWithoutReadingAnotherTurn() {
+        openChat()
+        core.pushChat(ChatSnapshot(listOf(
+            ChatEntry("reply", null, ChatEntryBody.Agent("Before the tool.")),
+            ChatEntry("tool", null, ChatEntryBody.Tool("Read", "file", "{}", ChatToolStatus.DONE, "tool output")),
+            ChatEntry("after", null, ChatEntryBody.Agent("After the tool.")),
+            ChatEntry("user", null, ChatEntryBody.User("Next question")),
+            ChatEntry("next", null, ChatEntryBody.Agent("Another turn.")),
+        ), ChatStatus.LIVE, null))
+        compose.onNodeWithTag("read-aloud:reply").performScrollTo().performClick()
+        assertEquals("Before the tool.\nAfter the tool.", engine.spoken.single())
+    }
     @Test
     @Config(qualifiers = "ko-rKR-h1200dp")
     fun settingsPersistVoiceAndSpeedAndPreviewStopsOnExit() {

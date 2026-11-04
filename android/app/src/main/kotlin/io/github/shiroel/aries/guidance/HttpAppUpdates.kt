@@ -5,7 +5,9 @@ import java.net.URI
 import java.net.URL
 import org.json.JSONObject
 
-const val DEFAULT_APP_UPDATE_URL = "http://100.117.188.97:8799/aries-debug.json"
+internal const val DEV_APP_UPDATE_URL = "http://100.117.188.97:8799/aries-debug.json"
+
+val DEFAULT_APP_UPDATE_URL = if (io.github.shiroel.aries.BuildConfig.ARIES_DEV_UPDATES) DEV_APP_UPDATE_URL else ""
 
 data class AppRelease(val versionCode: Long, val versionName: String, val apkUrl: String, val notes: String)
 

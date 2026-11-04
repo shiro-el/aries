@@ -40,10 +40,14 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.graphics.asAndroidBitmap
 
 /** Seam 3: inbox navigation, history and caller Chat, against the core API boundary. */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "h1200dp")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class CallHistoryTest {
     @get:Rule val compose = createComposeRule()
 
@@ -86,9 +90,161 @@ class CallHistoryTest {
         compose.waitForIdle()
     }
 
+    private fun screenshot(name: String) {
+        System.getenv("ARIES_CALL_RENDER_DIR")?.let { dir ->
+            java.io.File(dir).mkdirs()
+            java.io.File(dir, "$name.png").outputStream().use {
+                compose.onRoot().captureToImage().asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+            }
+        }
+    }
+
     private fun openCalls() {
-        compose.onNodeWithTag("console-inbox").performClick()
+        compose.openConsoleDrawer()
+        compose.onNodeWithTag("drawer-calls").performClick()
         compose.waitForIdle()
+    }
+
+    // Regression: an empty first Host must not hide a delayed second Host's waiting Call.
+    @Test
+    fun inboxWaitsForEveryHostsSnapshotBeforeClaimingThereAreNoWaitingCalls() {
+        val core = twoHosts()
+        val hold = CompletableDeferred<Unit>()
+        val api = object : AriesCoreInterface by core {
+            override suspend fun watchCalls(hostId: String, listener: io.github.shiroel.aries.core.CallListener): io.github.shiroel.aries.core.CallWatch {
+                if (hostId == "h2") hold.await()
+                return core.watchCalls(hostId, listener)
+            }
+        }
+        show(api)
+        openCalls()
+        compose.onNodeWithText(str(R.string.call_inbox_empty)).assertDoesNotExist()
+        screenshot("syncing")
+        hold.complete(Unit)
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.call_inbox_empty)).assertExists()
+    }
+
+    // Regression: closing a biometric Host's watch must retire stale Choice buttons and its badge.
+    @Test
+    fun stoppedBiometricFeedKeepsReadOnlyHistoryAndIgnoresLateCallbacks() {
+        val core = twoHosts().apply {
+            setKeyProtection(KeyProtection.BIOMETRIC)
+            callsOf["h1"] = listOf(call("h1", "c1", "Question", 1uL, choices = listOf("Yes")))
+        }
+        val restart = CompletableDeferred<Unit>()
+        var starts = 0
+        val api = object : AriesCoreInterface by core {
+            override suspend fun watchCalls(hostId: String, listener: io.github.shiroel.aries.core.CallListener): io.github.shiroel.aries.core.CallWatch {
+                if (hostId == "h1" && starts++ > 0) restart.await()
+                return core.watchCalls(hostId, listener)
+            }
+        }
+        show(api)
+        openCalls()
+        val old = core.callListeners.getValue("h1")
+        compose.onNodeWithContentDescription(str(R.string.call_answer_choice_label, "Question", "Yes")).assertExists()
+        compose.onNodeWithTag("call-inbox-scrim").performClick()
+        compose.onNodeWithTag("console-inbox-count", useUnmergedTree = true).assertDoesNotExist()
+        compose.runOnIdle { old.onCalls(core.callsOf.getValue("h1")) }
+        compose.onNodeWithTag("console-inbox-count", useUnmergedTree = true).assertDoesNotExist()
+        compose.runOnIdle {
+            assertEquals(1, model.calls.calls.size)
+            model.calls.reply(model.calls.calls.single(), 0)
+        }
+        assertTrue(core.replies.isEmpty())
+        openCalls()
+        compose.onNodeWithContentDescription(str(R.string.call_answer_choice_label, "Question", "Yes")).assertDoesNotExist()
+        screenshot("read-only-history")
+        restart.complete(Unit)
+    }
+
+    // Regression: a failed start must offer a working unlock action, retain the Host name, and disappear on removal.
+    @Test
+    fun failedFeedCanBeUnlockedAndItsProblemIsRemovedWithTheHost() {
+        val core = twoHosts()
+        var locked = true
+        val api = object : AriesCoreInterface by core {
+            override suspend fun watchCalls(hostId: String, listener: io.github.shiroel.aries.core.CallListener): io.github.shiroel.aries.core.CallWatch {
+                if (hostId == "h2" && locked) throw io.github.shiroel.aries.core.CoreException.KeyLocked()
+                return core.watchCalls(hostId, listener)
+            }
+        }
+        show(api)
+        openCalls()
+        compose.onNodeWithText(str(R.string.calls_feed_down, "server", "")).assertExists()
+        screenshot("unlock-feed")
+        locked = false
+        compose.onNodeWithTag("call-feed-retry:h2").performClick()
+        compose.onNodeWithText(str(R.string.calls_feed_down, "server", "")).assertDoesNotExist()
+        compose.runOnIdle {
+            core.callListeners.getValue("h2").onState(io.github.shiroel.aries.core.CallFeedState.Reconnecting("offline"))
+        }
+        compose.onNodeWithText(str(R.string.calls_feed_down, "server", "offline")).assertExists()
+        compose.runOnIdle {
+            model.remove(Prompt.ConfirmRemove(core.hosts().first { it.id == "h2" }))
+        }
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.calls_feed_down, "server", "offline")).assertDoesNotExist()
+        compose.runOnIdle { assertTrue(model.calls.problems.isEmpty()) }
+    }
+
+    // Regression: repeated taps during a slow sign-in must not restart or strand the caller's Chat.
+    @Test
+    fun openingTheSameCallTwiceUsesOneConnectionAndShowsProgress() {
+        val core = twoHosts().apply {
+            terminalsOf["h1"] = listOf(agent)
+            callsOf["h1"] = listOf(call("h1", "c1", "Question", 1uL))
+        }
+        val hold = CompletableDeferred<Unit>()
+        var connects = 0
+        val api = object : AriesCoreInterface by core {
+            override suspend fun connect(hostId: String): HostConnection {
+                connects++
+                hold.await()
+                return core.connect(hostId)
+            }
+        }
+        show(api)
+        openCalls()
+        compose.runOnIdle {
+            val entry = model.calls.calls.single()
+            model.openCallChat(entry)
+            model.openCallChat(entry)
+        }
+        compose.onNodeWithText(str(R.string.reconnecting)).assertExists()
+        screenshot("opening-chat")
+        assertEquals(1, connects)
+        hold.complete(Unit)
+        compose.waitForIdle()
+        compose.onNodeWithTag("call-inbox-panel").assertDoesNotExist()
+        compose.runOnIdle { assertTrue(model.screen is Screen.Chat) }
+        assertEquals(1, connects)
+    }
+
+    // Regression: a cancelled startup finishing late must not replace the new watch with a phantom key error.
+    @Test
+    fun lateFailureFromAStoppedStartupCannotBreakItsReplacementFeed() {
+        val core = twoHosts()
+        val hold = CompletableDeferred<Unit>()
+        var starts = 0
+        val api = object : AriesCoreInterface by core {
+            override suspend fun watchCalls(hostId: String, listener: io.github.shiroel.aries.core.CallListener): io.github.shiroel.aries.core.CallWatch {
+                if (hostId == "h2" && starts++ == 0) {
+                    hold.await()
+                    throw io.github.shiroel.aries.core.CoreException.KeyLocked()
+                }
+                return core.watchCalls(hostId, listener)
+            }
+        }
+        show(api)
+        openCalls()
+        compose.onNodeWithTag("call-inbox-scrim").performClick()
+        hold.complete(Unit)
+        compose.waitForIdle()
+        compose.runOnIdle { assertTrue(model.calls.problems.isEmpty()) }
+        core.sendCall(call("h2", "c1", "New question", 1uL, choices = listOf("Yes")))
+        compose.onNodeWithTag("console-inbox-count", useUnmergedTree = true).assertTextEquals("1")
     }
 
     @Test
@@ -110,7 +266,7 @@ class CallHistoryTest {
             core.callListeners.getValue("h1").onState(io.github.shiroel.aries.core.CallFeedState.Reconnecting("connection lost"))
         }
         compose.onNodeWithText(str(R.string.call_inbox_install_beacon, "home")).assertDoesNotExist()
-        compose.onNodeWithText(str(R.string.calls_feed_down, "h1", "connection lost")).assertExists()
+        compose.onNodeWithText(str(R.string.calls_feed_down, "home", "connection lost")).assertExists()
         compose.runOnIdle {
             core.callListeners.getValue("h2").onState(io.github.shiroel.aries.core.CallFeedState.BeaconNotInstalled(
                 "the Beacon is not installed on this Host",
@@ -144,7 +300,7 @@ class CallHistoryTest {
                 )
             }
             compose.onNodeWithText(install).assertDoesNotExist()
-            compose.onNodeWithText(str(R.string.calls_feed_down, "h1", detail)).assertExists()
+            compose.onNodeWithText(str(R.string.calls_feed_down, "home", detail)).assertExists()
         }
         compose.runOnIdle {
             core.callListeners.getValue("h1").onState(
@@ -162,11 +318,14 @@ class CallHistoryTest {
     fun helperChoicesStayInHistoryWithoutAnInboxCountOrHumanAnswerButtons() {
         val core = twoHosts().apply {
             callsOf["h1"] = listOf(call("h1", "child", "Helper report", 1uL, topLevel = false, choices = listOf("Continue")))
+            terminalsOf["h1"] = listOf(agent.copy(agentStatus = io.github.shiroel.aries.core.AgentStatus.Blocked(null, null)))
         }
         show(core)
         compose.onNodeWithTag("console-inbox-count", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithText("home").performClick()
         openCalls()
         compose.onNodeWithText("Helper report").assertExists()
+        screenshot("helper-call")
         compose.onNodeWithContentDescription(str(R.string.call_answer_choice_label, "Helper report", "Continue")).assertDoesNotExist()
     }
 
@@ -181,15 +340,15 @@ class CallHistoryTest {
         show(core)
         compose.onNodeWithText("home").performClick()
         openCalls()
-        compose.onNodeWithText(str(R.string.call_inbox_caller, "Review agent", "home")).assertExists()
+        compose.onNodeWithText(str(R.string.call_inbox_caller, "Review agent", "home"), substring = true).assertExists()
         // The same Terminal address on an unbrowsed Host must not borrow home's name.
-        compose.onNodeWithText(str(R.string.call_inbox_caller, "t3", "server")).assertExists()
+        compose.onNodeWithText(str(R.string.call_inbox_caller, "t3", "server"), substring = true).assertExists()
         core.push("h1", listOf(agent.copy(name = "Renamed agent", agentStatus = io.github.shiroel.aries.core.AgentStatus.Working)))
         compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.call_inbox_caller, "Renamed agent", "home")).assertExists()
+        compose.onNodeWithText(str(R.string.call_inbox_caller, "Renamed agent", "home"), substring = true).assertExists()
         core.push("h1", listOf(agent.copy(name = "", agentStatus = io.github.shiroel.aries.core.AgentStatus.Working)))
         compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.call_inbox_caller, "t3", "home")).assertExists()
+        compose.onNodeWithText(str(R.string.call_inbox_caller, "t3", "home"), substring = true).assertExists()
     }
 
     @Test
@@ -204,8 +363,8 @@ class CallHistoryTest {
         compose.openConsoleDrawer()
         compose.onNodeWithText(str(R.string.agents_button)).performClick()
         openCalls()
-        compose.onNodeWithText(str(R.string.call_inbox_caller, "Review agent", "home")).assertExists()
-        compose.onNodeWithText(str(R.string.call_inbox_caller, "Remote agent", "server")).assertExists()
+        compose.onNodeWithText(str(R.string.call_inbox_caller, "Review agent", "home"), substring = true).assertExists()
+        compose.onNodeWithText(str(R.string.call_inbox_caller, "Remote agent", "server"), substring = true).assertExists()
     }
 
     @Test
@@ -224,6 +383,7 @@ class CallHistoryTest {
         compose.onNodeWithTag("call-inbox-panel").assertExists()
         compose.onNodeWithTag("console-top-bar").assert(hasAnyDescendant(hasText("home")))
         compose.onNodeWithTag("call-c1").assertExists()
+        screenshot("waiting-and-unconfirmed")
         compose.onNodeWithTag("console-inbox").performClick()
         compose.onNodeWithTag("call-inbox-panel").assertDoesNotExist()
         compose.onNodeWithTag("console-top-bar").assert(hasAnyDescendant(hasText("home")))
@@ -287,12 +447,13 @@ class CallHistoryTest {
         compose.openConsoleDrawer()
         compose.onNodeWithTag("call-inbox-panel").assertDoesNotExist()
         compose.onNodeWithTag("settings-open").performClick()
+        compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         openCalls()
         compose.onNodeWithTag("console-drawer").assertIsNotDisplayed()
         compose.onNodeWithTag("call-inbox-panel").assertExists()
-        compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
+        compose.runOnIdle { back.onBackPressed() }
         compose.onNodeWithTag("call-inbox-panel").assertDoesNotExist()
-        compose.onNodeWithText("me@10.0.0.2:22").assertExists()
+        compose.onNodeWithText("me@10.0.0.2").assertExists()
     }
 
     @Test
@@ -394,7 +555,7 @@ class CallHistoryTest {
         show(delayed)
         openCalls()
         compose.onNodeWithContentDescription(str(R.string.call_open_chat_label, "t3", "Review ready")).performClick()
-        compose.onNodeWithTag("console-inbox").performClick()
+        compose.onNodeWithTag("call-inbox-scrim").performClick()
         openCalls()
         compose.runOnIdle { ready.complete(Unit) }
         compose.onNodeWithTag("call-inbox-panel").assertExists()

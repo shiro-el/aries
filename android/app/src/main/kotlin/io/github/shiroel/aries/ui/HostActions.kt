@@ -5,7 +5,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -119,18 +118,37 @@ internal fun HostContextTitle(browser: HostBrowser, modifier: Modifier = Modifie
                             if (editor.requireAvailable()) editor.ending = LayoutEndTarget.Space(space.id)
                         }, isSpace = true)
                 }
-                items(space.tabs, key = { "tab:${space.id}:${it.id}" }) { tab ->
-                    HostContextRow(tab.name, R.drawable.ic_panels, "host-context-tab:${space.id}:${tab.id}",
-                        space.id == browser.openSpaceId && tab.id == browser.tab?.id, enabled,
-                        onSelect = { browser.openSpace(space.id); browser.selectTab(tab); switch = false },
-                        onRename = {
-                            switch = false
-                            if (editor.requireAvailable()) editor.naming = LayoutNameForm(LayoutNameKind.RENAME_TAB,
-                                tab.id, if (tab.named) tab.name else "")
-                        }, onClose = {
-                            switch = false
-                            if (editor.requireAvailable()) editor.ending = LayoutEndTarget.Tab(tab.id)
-                        }, isSpace = false)
+                space.tabs.forEach { tab ->
+                    item(key = "tab:${space.id}:${tab.id}") {
+                        HostContextRow(tab.name, R.drawable.ic_panels, "host-context-tab:${space.id}:${tab.id}",
+                            space.id == browser.openSpaceId && tab.id == browser.tab?.id, enabled,
+                            onSelect = { browser.openSpace(space.id); browser.selectTab(tab); switch = false },
+                            onRename = {
+                                switch = false
+                                if (editor.requireAvailable()) editor.naming = LayoutNameForm(LayoutNameKind.RENAME_TAB,
+                                    tab.id, if (tab.named) tab.name else "")
+                            }, onClose = {
+                                switch = false
+                                if (editor.requireAvailable()) editor.ending = LayoutEndTarget.Tab(tab.id)
+                            }, isSpace = false)
+                    }
+                    tab.panes.forEachIndexed { index, pane ->
+                        if (pane.terminal == null && browser.findTerminal(pane.terminalAddress) == null) {
+                            // Index also disambiguates absent/reused Pane IDs in legacy documents.
+                            item(key = "gone:${space.id}:${tab.id}:$index:${pane.id}:${pane.terminalAddress}") {
+                                val target = LayoutEndTarget.Pane(space.id, tab.id, pane.id, pane.terminalAddress)
+                                Row(Modifier.fillMaxWidth().padding(start = 48.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(stringResource(R.string.pane_terminal_gone, pane.terminalAddress), Modifier.weight(1f),
+                                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    TextButton(enabled = enabled && editor.available && editor.endedPane(target) != null,
+                                        modifier = Modifier.testTag("host-context-close-pane:${space.id}:${tab.id}:$index"),
+                                        onClick = { switch = false; editor.ending = target }) {
+                                        Text(stringResource(R.string.layout_close_pane_button))
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
             if (browser.structure?.spaces.isNullOrEmpty()) item {

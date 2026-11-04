@@ -76,10 +76,15 @@ class PushSectionTest {
         compose.openHostActions("h1")
         compose.onNodeWithTag("host-actions:h1").performScrollToNode(hasText(str(R.string.push_title)))
         compose.waitForIdle()
+        compose.onNodeWithTag("push-advanced").performScrollTo().performClick()
         return model
     }
 
     private fun click(res: Int) {
+        if (res == R.string.beacon_remove_button) {
+            compose.onNodeWithTag("host-actions:h1").performScrollToNode(hasText(str(R.string.beacon_title)))
+            compose.onNodeWithTag("beacon-advanced").performScrollTo().performClick()
+        }
         compose.onNodeWithTag("host-actions:h1").performScrollToNode(hasText(str(res)))
         compose.onNodeWithText(str(res)).performScrollTo().performClick()
         compose.waitForIdle()
@@ -269,6 +274,11 @@ class PushSectionTest {
 
         core.pushDisableHostCleared = false
         click(R.string.push_disable_button)
+        assertTrue(core.pushPaired.isNotEmpty())
+        compose.onNodeWithText(str(R.string.cancel_button)).performClick()
+        assertTrue(core.pushPaired.isNotEmpty())
+        click(R.string.push_disable_button)
+        compose.onAllNodesWithTextLast(str(R.string.push_disable_button))
         assertTrue(core.pushPaired.isEmpty())
         shows(str(R.string.push_off_host_unreachable))
         shows(str(R.string.push_enable_button))

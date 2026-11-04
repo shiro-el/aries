@@ -57,7 +57,7 @@ class DrawerShellTest {
         compose.onNodeWithTag("settings-open").performClick()
         compose.onNodeWithText(context.getString(R.string.theme_title)).assertExists()
         compose.onNodeWithContentDescription(context.getString(R.string.back_button)).performClick()
-        compose.onNodeWithText("me@home.test:22").assertExists()
+        compose.onNodeWithText("me@home.test").assertExists()
     }
 
     @Test fun liveAgentTreeCountsWaitingAndOpensTheCorrectHostsTerminal() {
@@ -137,7 +137,7 @@ class DrawerShellTest {
         compose.onNodeWithTag("console-top-bar").assert(hasAnyDescendant(hasText("home")))
         compose.runOnIdle { org.junit.Assert.assertFalse(core.connection!!.disconnected) }
         compose.runOnIdle { back.onBackPressed() }
-        compose.onNodeWithText("me@home.test:22").assertExists()
+        compose.onNodeWithText("me@home.test").assertExists()
         compose.runOnIdle { org.junit.Assert.assertTrue(core.connection!!.disconnected) }
     }
 }

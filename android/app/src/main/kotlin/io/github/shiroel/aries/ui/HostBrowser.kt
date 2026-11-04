@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -271,19 +270,16 @@ private fun HostTreeList(
             }
         }
         agentTreeItems(agents, agentFolds, { onOpen(it.terminal) }, onPin, tag = "host-agent",
-            sectionNamespace = "all", actions = actions, current = current)
+            sectionNamespace = "all", actions = actions, current = current, showHost = false,
+            canPin = { browser.link?.state == LinkState.Up && browser.link?.connection != null && !browser.closed })
         if (plain.isNotEmpty()) {
             item {
                 TreeSectionRow(stringResource(R.string.terminals_plain_group, plain.size), 0, folds.contains(plainKey),
                     { folds.toggle(plainKey) }, Modifier.testTag("host-plain-terminals"))
             }
             if (!folds.contains(plainKey)) agentTreeItems(orderAgents(plain), agentFolds,
-                { onOpen(it.terminal) }, onPin, tag = "host-terminal", sections = false, actions = actions, current = current)
-        }
-        val missing = structure.spaces.flatMap { it.tabs }.flatMap { it.panes }.filter { it.terminal == null }
-        items(missing, key = { "gone:${it.id}" }) { pane ->
-            Text(stringResource(R.string.pane_terminal_gone, pane.terminalAddress), Modifier.padding(12.dp),
-                style = MaterialTheme.typography.bodySmall)
+                { onOpen(it.terminal) }, onPin, tag = "host-terminal", sections = false, actions = actions, current = current,
+                showHost = false, canPin = { browser.link?.state == LinkState.Up && browser.link?.connection != null && !browser.closed })
         }
         item { Column(Modifier.padding(horizontal = 12.dp)) { hostSections() } }
     }
