@@ -345,3 +345,40 @@ async fn host_changes_stop_call_watches_and_their_reconnects() {
         watch.stop();
     }
 }
+
+// Regression D24: heartbeats without Synced must time out on both initial and reconnect snapshots.
+#[tokio::test]
+async fn incomplete_snapshots_reconnect_even_while_heartbeats_arrive() {
+    use std::os::unix::fs::PermissionsExt;
+    let data = tempfile::tempdir().unwrap();
+    let beacon = data.path().join("beacon");
+    std::fs::write(
+        &beacon,
+        "#!/bin/sh\nwhile :; do echo '{\"type\":\"heartbeat\"}'; sleep 1; done\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&beacon, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let core = core_in(data.path());
+    let host = core
+        .add_host(
+            "slow".into(),
+            Endpoint::Local {
+                argv: vec!["unused".into()],
+                env: [("ARIES_BEACON".into(), beacon.to_string_lossy().into_owned())].into(),
+            },
+        )
+        .unwrap();
+    let rec = Arc::new(Recorder::default());
+    let watch = core.watch_calls(host.id, rec.clone()).await.unwrap();
+    for expected in 1..=2 {
+        wait_until("snapshot deadline and reconnect", || {
+            rec.states.lock().unwrap().len() >= expected
+        });
+        assert!(matches!(
+            rec.states.lock().unwrap().last(),
+            Some(CallFeedState::Reconnecting { .. })
+        ));
+        assert!(rec.lists.lock().unwrap().is_empty());
+    }
+    watch.stop();
+}
