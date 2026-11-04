@@ -369,6 +369,36 @@ class ChatModel(
         clearAttachmentNotice()
         attachments = attachments - attachment
     }
+    var capturedPhotos by mutableStateOf<List<CapturedPhoto>>(emptyList())
+        private set
+
+    /** Camera sources stay reachable until the uploaded path has a durable checkpoint. */
+    fun attachPhoto(context: Context, file: java.io.File): Boolean {
+        val photo = capturedPhotos.find { it.path == file.absolutePath }
+        if (photo == null) {
+            capturedPhotos = capturedPhotos + CapturedPhoto(file.absolutePath)
+            saveOutbox()
+        }
+        fun complete() {
+            file.delete()
+            capturedPhotos = capturedPhotos.filterNot { it.path == file.absolutePath }
+            saveOutbox()
+        }
+        if (photo?.uploadedPath != null) {
+            // Upload already succeeded: retry only the failed journal checkpoint.
+            saveOutbox { saved -> if (saved) complete() }
+            return true
+        }
+        return attach(context, SharedContent(listOf(android.net.Uri.fromFile(file))),
+            onUploaded = ::complete, cameraPath = file.absolutePath)
+    }
+
+    fun removeCapturedPhoto(photo: CapturedPhoto) {
+        capturedPhotos = capturedPhotos - photo
+        java.io.File(photo.path).delete()
+        saveOutbox()
+    }
+
     var uploading by mutableStateOf(false)
         private set
     var attachmentError by mutableStateOf<Message?>(null)
@@ -399,7 +429,8 @@ class ChatModel(
     }
 
     /** Saves bytes and adds attachment chips to the current draft; never calls sendMessage. */
-    fun attach(context: Context, content: SharedContent, onUploaded: () -> Unit = {}, cleanup: () -> Unit = {}): Boolean {
+    fun attach(context: Context, content: SharedContent, onUploaded: () -> Unit = {}, cleanup: () -> Unit = {},
+        cameraPath: String? = null): Boolean {
         val scope = scope ?: run { cleanup(); return false }
         if (inputUnavailable || uploading) { cleanup(); return false }
         val link = link ?: run { attachmentFailed(CoreException.Closed()); cleanup(); return false }
@@ -427,11 +458,18 @@ class ChatModel(
                         link.lost(connection)
                         throw e
                     }
+                    if (cameraPath != null) capturedPhotos = capturedPhotos.map {
+                        if (it.path == cameraPath) it.copy(uploadedPath = path) else it
+                    }
                     attachments = attachments + DraftAttachment(path, attachment.name, attachment.bytes.size,
                         attachment.bytes.takeIf { remoteMediaKind(attachment.name) == RemoteMediaKind.IMAGE })
                     uploadRemaining = uploadRemaining.drop(1)
                 }
-                onUploaded()
+                // An uploaded path is recoverable only after its encrypted journal
+                // checkpoint. In particular, camera callers may now delete the source.
+                val saved = kotlinx.coroutines.CompletableDeferred<Boolean>()
+                saveOutbox { saved.complete(it) }
+                if (saved.await()) onUploaded()
             } catch (e: TimeoutCancellationException) {
                 if (attachmentRevision == revision) attachmentFailed(CoreException.Closed())
             } catch (e: CancellationException) {
@@ -513,6 +551,9 @@ class ChatModel(
     private var journalScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var journalTimer: Job? = null
     private var journalWrite: Job? = null
+    private var journalFailureReason: String? = null
+    private var pendingEnqueues by mutableStateOf<Set<String>>(emptySet())
+    private var dispatchCheckpoint: QueuedChatMessage? = null
 
     private var interruptRevision = 0L
     private var attachmentRevision = 0L
@@ -544,19 +585,22 @@ class ChatModel(
     }
 
     /** Accept a snapshot; [afterSave] reports whether its durable write succeeded. */
-    private fun saveOutbox(debounce: Boolean = false, afterSave: ((Boolean) -> Unit)? = null): Boolean {
-        if (!recoveryLoaded || outboxEdits > 0) return true
-        if (recoveryFailed) return false
+    private fun saveOutbox(debounce: Boolean = false, afterSave: ((Boolean) -> Unit)? = null) {
+        if (!recoveryLoaded || outboxEdits > 0) { afterSave?.invoke(false); return }
+        if (recoveryFailed) { afterSave?.invoke(false); return }
         journalTimer?.cancel()
         // Snapshot on the owner dispatcher, encode/seal/write on IO. Never read
         // mutable composer state on the worker or cancel a write mid-checkpoint.
-        val state = ChatOutboxState(draft, attachments, queuedMessages,
+        val durableMessages = queuedMessages.map { message ->
+            dispatchCheckpoint?.takeIf { it.id == message.id } ?: message
+        }
+        val state = ChatOutboxState(draft, attachments, durableMessages,
             terminalComposer.draft, terminalComposer.open, questionText, picks,
             answers.mapValues { (_, answer) -> when (answer) {
                 AnswerState.Sending, AnswerState.Held -> "sending"
                 AnswerState.Sent, AnswerState.Unconfirmed -> "sent"
                 is AnswerState.Failed -> "failed"
-            } }, waitingReturned = waitingReturned)
+            } }, waitingReturned = waitingReturned, capturedPhotos = capturedPhotos)
         fun enqueue() {
             val previous = journalWrite
             journalWrite = journalScope.launch {
@@ -564,17 +608,19 @@ class ChatModel(
                 val saved = try {
                     withContext(journalWork) { core.saveChatOutbox(host.id, terminal.address, state.encode()) }
                     true
-                } catch (e: CoreException) {
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    journalFailureReason = e.message
                     journalError = Message(R.string.chat_drafts_save_failed)
                     false
                 }
-                if (saved) journalError = null
+                if (saved) { journalError = null; journalFailureReason = null }
                 afterSave?.invoke(saved)
             }
         }
         if (debounce) journalTimer = journalScope.launch { delay(300); enqueue() }
         else enqueue()
-        return true
     }
 
     private fun restoreOutbox() {
@@ -591,6 +637,7 @@ class ChatModel(
             val saved = core.chatOutbox(host.id, terminal.address)?.let(::decodeChatOutbox) ?: return
             draft = saved.draft
             attachments = saved.attachments
+            capturedPhotos = saved.capturedPhotos.filter { java.io.File(it.path).isFile }
             waitingReturned = saved.waitingReturned
             terminalComposer.draft = saved.terminalDraft
             terminalComposer.open = saved.terminalComposerOpen
@@ -615,7 +662,7 @@ class ChatModel(
         if (scope != null) saveOutbox()
     }
 
-    /** Explicitly discard only the saved Host journal, retaining the user's current input. */
+    /** Explicitly discard only this Terminal’s saved journal, retaining the user's current input. */
     fun discardSavedDrafts() {
         if (!recoveryFailed || discardingDrafts) return
         discardingDrafts = true
@@ -624,7 +671,7 @@ class ChatModel(
         journalWrite = journalScope.launch {
             previous?.join()
             try {
-                withContext(journalWork) { core.discardChatOutbox(host.id) }
+                withContext(journalWork) { core.saveChatOutbox(host.id, terminal.address, null) }
                 recoveryFailed = false
                 journalError = null
                 saveOutbox()
@@ -677,7 +724,7 @@ class ChatModel(
         val retry = message.copy(phase = QueuedMessagePhase.Waiting, confirmed = false, heldForTyping = false,
             error = null, before = snapshot?.entries.orEmpty().map { it.id }.toSet())
         queuedMessages = queuedMessages.map { if (it.id == id) retry else it }
-        if (!saveOutbox()) return
+        checkpointEnqueue(id)
     }
 
     private fun restoreMessage(message: QueuedChatMessage) = changeOutbox {
@@ -699,19 +746,26 @@ class ChatModel(
 
     /** HostsModel owns the scheduler; navigation never decides delivery eligibility. */
     private fun deliveryEligible(): Boolean = scope != null && !recoveryFailed && !stopped && !paused &&
-        transcriptReady && transcriptConnection === link?.connection && !interrupting && !inputUnavailable &&
+        pendingEnqueues.isEmpty() && transcriptReady && transcriptConnection === link?.connection && !interrupting && !inputUnavailable &&
         connectionError == null && link?.state == LinkState.Up && snapshot?.status == ChatStatus.LIVE &&
         terminal.agentStatus != AgentStatus.Working && terminal.agentStatus !is AgentStatus.Blocked
 
     /** Claim each newly observed user entry once, including identical consecutive sends. */
     private fun reconcileQueue() {
+        if (snapshot?.status == ChatStatus.LIVE && queuedMessages.any { it.needsRecoveryBaseline }) {
+            val baseline = snapshot?.entries.orEmpty().map { it.id }.toSet()
+            queuedMessages = queuedMessages.map {
+                if (it.needsRecoveryBaseline) it.copy(before = it.before + baseline, needsRecoveryBaseline = false) else it
+            }
+            saveOutbox()
+        }
         val users = snapshot?.entries.orEmpty().filter { it.body is ChatEntryBody.User }
         var remaining = queuedMessages.filterNot {
             it.confirmed && it.dispatchTurn?.let { turn -> terminal.turn > turn } == true
         }
         for (entry in users) {
             val index = remaining.indexOfFirst {
-                it.phase !in setOf(QueuedMessagePhase.Waiting, QueuedMessagePhase.Failed) && entry.id !in it.before &&
+                !it.needsRecoveryBaseline && it.phase !in setOf(QueuedMessagePhase.Waiting, QueuedMessagePhase.Failed) && entry.id !in it.before &&
                     it.matchesTranscript((entry.body as ChatEntryBody.User).text)
             }
             remaining = remaining.filterIndexed { i, message ->
@@ -777,7 +831,6 @@ class ChatModel(
         }
         val message = QueuedChatMessage(draft = draft, attachments = attachments, text = text,
             before = snapshot?.entries.orEmpty().map { it.id }.toSet())
-        val returnedBeforeSend = waitingReturned
         changeOutbox {
             queuedMessages = queuedMessages + message
             waitingReturned = false
@@ -787,31 +840,43 @@ class ChatModel(
             refused = false
             sendError = null
         }
-        if (!saveOutbox()) {
-            queuedMessages = queuedMessages.filterNot { it.id == message.id }
-            waitingReturned = returnedBeforeSend
-            restoreMessage(message)
-            return
-        }
+        checkpointEnqueue(message.id)
         readingSession.latestRequest++
+    }
+
+    private fun checkpointEnqueue(id: String) {
+        pendingEnqueues = pendingEnqueues + id
+        saveOutbox { saved ->
+            if (!saved) failJournalMessage(id)
+            pendingEnqueues = pendingEnqueues - id
+        }
+    }
+
+    private fun failJournalMessage(id: String) {
+        queuedMessages = queuedMessages.map {
+            if (it.id == id) it.copy(phase = QueuedMessagePhase.Failed, confirmed = false,
+                heldForTyping = false, error = journalFailureReason) else it
+        }
     }
 
     private fun dispatch(message: QueuedChatMessage) {
         val link = link ?: return
         val conn = link.connection ?: return
-        // Capture the current transcript immediately before this row's first attempt.
-        val dispatched = message.copy(phase = QueuedMessagePhase.Agent, dispatchTurn = terminal.turn,
-            before = snapshot?.entries.orEmpty().map { it.id }.toSet())
-        queuedMessages = queuedMessages.map { if (it.id == message.id) dispatched else it }
+        // Persist an ambiguous crash checkpoint, while the live row stays Waiting
+        // and cannot match transcript entries that arrive during storage IO.
+        dispatchCheckpoint = message.copy(phase = QueuedMessagePhase.Agent, dispatchTurn = terminal.turn,
+            needsRecoveryBaseline = true)
         sending = Sending.Sending
         saveOutbox { saved ->
+            dispatchCheckpoint = null
             // Status/navigation can change while IO is pending. An unattempted
             // row remains Waiting; it must not type on a stale or stopped line.
             if (!saved || stopped || paused || inputUnavailable || interrupting || !transcriptReady ||
                 delivery.confirmingStop || transcriptConnection !== conn || snapshot?.status != ChatStatus.LIVE || queuedMessages.none { it.id == message.id } ||
                 terminal.agentStatus == AgentStatus.Working || terminal.agentStatus is AgentStatus.Blocked ||
                 link.connection !== conn || link.state != LinkState.Up) {
-                queuedMessages = queuedMessages.map {
+                if (!saved) failJournalMessage(message.id)
+                else queuedMessages = queuedMessages.map {
                     if (it.id == message.id) message else it
                 }
                 sending = null
@@ -820,6 +885,11 @@ class ChatModel(
                     saveOutbox()
                 }
             } else {
+                // The baseline belongs to the actual send, after its durable
+                // checkpoint, not to the earlier enqueue or IO start.
+                val dispatched = message.copy(phase = QueuedMessagePhase.Agent, dispatchTurn = terminal.turn,
+                    before = snapshot?.entries.orEmpty().map { it.id }.toSet(), needsRecoveryBaseline = false)
+                queuedMessages = queuedMessages.map { if (it.id == message.id) dispatched else it }
                 link.finishBeforeDisconnect(conn) {
                     try {
                         delivery.attempted(dispatched.id, terminal)
@@ -1192,9 +1262,12 @@ class ChatModel(
     }
 
     internal fun recoverReply(message: QueuedChatMessage): Job? {
-        if (queuedMessages.none { it.id == message.id }) queuedMessages = queuedMessages + message
+        if (queuedMessages.none { it.id == message.id }) queuedMessages = queuedMessages +
+            if (message.needsRecoveryBaseline && snapshot?.status == ChatStatus.LIVE)
+                message.copy(before = snapshot?.entries.orEmpty().map { it.id }.toSet(), needsRecoveryBaseline = false)
+            else message
         if (stopped && link?.state == LinkState.Up) scope?.let(::start)
-        saveOutbox()
+        if (message.phase == QueuedMessagePhase.Waiting) checkpointEnqueue(message.id) else saveOutbox()
         return journalWrite
     }
 

@@ -275,11 +275,17 @@ class InlineNotificationTest {
         assertEquals("run tests", shown().actions.single { !it.remoteInputs.isNullOrEmpty() }.remoteInputs.single().choices.single())
         // This is an independent key-lock failure, after explicitly clearing
         // the previous ambiguous delivery that now correctly blocks the FIFO.
-        core.discardChatOutbox("h1")
-        PushService.show(context, status())
-        core.backgroundFailure = io.github.shiroel.aries.core.CoreException.KeyLocked()
-        work(target())
-        assertEquals(context.getString(R.string.notification_action_key_locked), text())
+        for (failure in listOf(io.github.shiroel.aries.core.CoreException.KeyLocked(),
+            io.github.shiroel.aries.core.CoreException.KeyInvalidated())) {
+            core.discardChatOutbox("h1")
+            PushService.show(context, status())
+            core.backgroundFailure = failure
+            work(target())
+            assertEquals(context.getString(R.string.notification_action_key_locked), text())
+            // D10: key failures happen before terminal.send and are safe to retry explicitly.
+            val restored = io.github.shiroel.aries.ui.decodeChatOutbox(core.chatOutbox("h1", "t1")!!)
+            assertEquals(io.github.shiroel.aries.ui.QueuedMessagePhase.Failed, restored.messages.single().phase)
+        }
     }
 
     @Test

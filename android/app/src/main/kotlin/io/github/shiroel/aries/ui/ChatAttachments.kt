@@ -27,6 +27,9 @@ import java.io.File
 /** Only image bytes are retained in the draft; the Host owns the uploaded file. */
 data class DraftAttachment(val path: String, val name: String, val size: Int, val image: ByteArray? = null)
 
+/** A phone camera source; an uploaded path permits a storage-only retry. */
+data class CapturedPhoto(val path: String, val uploadedPath: String? = null)
+
 internal data class ChatAttachments(val text: String, val paths: List<String>)
 
 // terminal.put in herdr-core 0.1.17 uses these ID symbols and sanitizes basenames.
@@ -59,9 +62,24 @@ internal fun chatAttachments(text: String): ChatAttachments {
 /** A horizontal strip keeps multiple attachments from consuming the entire composer. */
 @Composable
 internal fun DraftAttachments(chat: ChatModel) {
-    if (chat.attachments.isEmpty()) return
+    if (chat.attachments.isEmpty() && chat.capturedPhotos.isEmpty()) return
+    val context = LocalContext.current
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        chat.capturedPhotos.forEach { photo -> key(photo.path) {
+            val file = File(photo.path)
+            Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+                Row(Modifier.widthIn(max = 280.dp).padding(start = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(file.name, Modifier.weight(1f, fill = false).padding(8.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    TextButton(onClick = { chat.attachPhoto(context.applicationContext, file) }, enabled = !chat.uploading && chat.canEdit) {
+                        Text(stringResource(R.string.attachments_retry_photo_button))
+                    }
+                    IconButton(onClick = { chat.removeCapturedPhoto(photo) }, enabled = !chat.uploading) {
+                        Icon(painterResource(R.drawable.ic_x), stringResource(R.string.attachments_remove_button, file.name))
+                    }
+                }
+            }
+        } }
         chat.attachments.forEach { attachment -> key(attachment) {
             Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
                 Row(Modifier.widthIn(max = 280.dp).padding(start = 8.dp), verticalAlignment = Alignment.CenterVertically) {
