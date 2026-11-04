@@ -143,7 +143,7 @@ class PushService : FirebaseMessagingService() {
                 .setColor(ThemeSettings.from(context).accentArgb)
                 .setContentTitle(title)
                 .setContentText(body.plain)
-                .setAutoCancel(true)
+                .setAutoCancel(content !is PushContent.Status) // Status cards wait for the app lock.
             // One notification per Agent: its newer status replaces the older.
             if (content is PushContent.Status) {
                 val tag = content.terminal
@@ -157,13 +157,13 @@ class PushService : FirebaseMessagingService() {
                             .build())
                 }
                 // Persist protocol identities, independent of R8 class names or the notification body.
-                val phase = when (val status = content.status) {
-                    AgentStatus.Working -> "working"
-                    AgentStatus.Idle -> "idle"
-                    AgentStatus.Done -> "done"
-                    is AgentStatus.Blocked -> "blocked:${status.reason?.name}"
-                    is AgentStatus.Error -> "error"
-                }
+                val phase = NotificationGroups.phase(content.status)
+                builder.addExtras(android.os.Bundle().apply {
+                    putString(NotificationGroups.PHASE, phase)
+                    putLong(NotificationGroups.AT_MS, content.at.toLong() * 1000)
+                    putString(NotificationGroups.TURN, content.turn?.toString())
+                    putString(NotificationGroups.QUESTION, content.question?.id)
+                })
                 NotificationGroups.decorate(context, builder, notice.hostId, notice.hostName, tag, content.terminal,
                     generation = "${content.at}/${content.turn}/$phase/${content.question?.id}")
                 val status = content.status
@@ -233,7 +233,7 @@ class PushService : FirebaseMessagingService() {
                 .setStyle(Notification.BigTextStyle().bigText(big))
                 .setWhen(call.atMs.toLong())
                 .setShowWhen(true)
-                .setAutoCancel(true)
+                .setAutoCancel(false) // MainActivity retires the card after passing the app lock.
             NotificationGroups.decorate(context, builder, hostId, hostName, "call:${call.id}", call.terminal, generation = call.id)
             if (call.urgency == CallUrgency.EMERGENCY) builder.setCategory(Notification.CATEGORY_ALARM)
             return builder

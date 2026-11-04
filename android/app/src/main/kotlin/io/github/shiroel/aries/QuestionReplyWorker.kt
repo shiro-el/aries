@@ -58,11 +58,13 @@ class QuestionReplyWorker(context: Context, params: WorkerParameters) : Coroutin
         if (runAttemptCount > 0) {
             QuestionNotifications.post(applicationContext, notice, QuestionView.Done(
                 AppLanguage.context(applicationContext).getString(R.string.question_notify_unknown)))
+            LastKnownStates.requestRefresh(applicationContext, notice.hostId)
             return Result.success()
         }
         val core = (applicationContext as? HasCore)?.core ?: return Result.failure()
         val view = QuestionReplies.answer(applicationContext, core, notice, choice, CallReplyWorker.online(applicationContext))
         QuestionNotifications.post(applicationContext, notice, view)
+        LastKnownStates.requestRefresh(applicationContext, notice.hostId)
         // No offline queue or automatic retry: a lost answer result may already have pressed keys.
         return Result.success()
     }

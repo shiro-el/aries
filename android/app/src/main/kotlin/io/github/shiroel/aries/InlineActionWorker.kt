@@ -33,8 +33,21 @@ class InlineActionWorker(context: Context, params: WorkerParameters) : Coroutine
         val context = AppLanguage.context(applicationContext)
         val text = NotificationPayloads.open(applicationContext, inputData.getString(TEXT))?.takeIf { it.isNotBlank() }
         fun show(resource: Int) = InlineNotifications.update(context, target, context.getString(resource))
-        fun failed(resource: Int) = InlineNotifications.failed(context, target, context.getString(resource), text,
-            reply = action == InlineNotifications.REPLY)
+        suspend fun failed(resource: Int, uncertain: Boolean = runAttemptCount > 0) {
+            if (action == InlineNotifications.REPLY && text != null) {
+                (applicationContext as? HasCore)?.core?.let { core ->
+                    try {
+                        io.github.shiroel.aries.ui.ChatReplyRecovery.recoverFromWorker(core,
+                            io.github.shiroel.aries.ui.AgentKey(target.hostId, target.terminal),
+                            io.github.shiroel.aries.ui.ChatReplyRecovery.message(target.generation, text,
+                                context.getString(resource), uncertain = uncertain))
+                    } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+                    catch (_: Exception) { /* Keep the text on its private recovery card. */ }
+                }
+            }
+            InlineNotifications.failed(context, target, context.getString(resource), text,
+                reply = action == InlineNotifications.REPLY, persistDraft = false)
+        }
         val core = (applicationContext as? HasCore)?.core ?: run {
             failed(R.string.notification_action_failed)
             return@withContext Result.failure()
@@ -42,6 +55,7 @@ class InlineActionWorker(context: Context, params: WorkerParameters) : Coroutine
         // Never deliver a stale queued draft or repeat an interrupted send.
         if (runAttemptCount > 0 || System.currentTimeMillis() - inputData.getLong(CREATED, 0) > 60_000) {
             failed(R.string.notification_action_failed)
+            LastKnownStates.requestRefresh(applicationContext, target.hostId)
             return@withContext Result.success()
         }
         // The receiver validated and consumed this generation before persisting
@@ -73,13 +87,15 @@ class InlineActionWorker(context: Context, params: WorkerParameters) : Coroutine
                 }
             }
         } catch (_: TimeoutCancellationException) {
-            failed(R.string.notification_action_failed)
+            failed(R.string.notification_action_failed, uncertain = true)
         } catch (e: CoreException) {
             failed(when {
                 e is CoreException.KeyLocked || e is CoreException.KeyInvalidated -> R.string.notification_action_key_locked
                 e is CoreException.Rpc && e.kind == "no_agent" -> R.string.chat_input_agent_ended
                 else -> R.string.notification_action_failed
-            })
+            }, uncertain = e !is CoreException.Rpc || e.kind != "no_agent")
+        } finally {
+            LastKnownStates.requestRefresh(applicationContext, target.hostId)
         }
         Result.success()
     }
