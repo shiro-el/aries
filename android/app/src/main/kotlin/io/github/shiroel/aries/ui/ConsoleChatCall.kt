@@ -92,7 +92,7 @@ internal fun ConsoleChatChoice(
 
 /** Reads the same feed/reply state as the inbox, scoped to this Chat's Host and whole address. */
 @Composable
-internal fun ConsoleChatCall(entry: CallEntry, calls: CallsModel, announce: Boolean = false) {
+internal fun ConsoleChatCall(entry: CallEntry, calls: CallsModel, announce: Boolean = false, onOpenTerminal: (() -> Unit)? = null) {
     val call = entry.call
     if (announce) AnnounceChanges(Triple(call.answer, entry.key in calls.replying, calls.replyNotes[entry.key]), callReplyStatus(entry, calls))
     ConsoleChatCallSurface(modifier = Modifier.presentsCalls(setOf(entry.key))) {
@@ -106,6 +106,11 @@ internal fun ConsoleChatCall(entry: CallEntry, calls: CallsModel, announce: Bool
                 Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
         }
+        if (call.answer?.state == CallAnswerState.FAILED) Text(stringResource(R.string.call_reply_retry_guidance), style = MaterialTheme.typography.bodySmall)
+        if (call.answer?.state == CallAnswerState.UNCONFIRMED) {
+            Text(stringResource(R.string.call_reply_terminal_guidance), style = MaterialTheme.typography.bodySmall)
+            onOpenTerminal?.let { TextButton(onClick = it) { Text(stringResource(R.string.terminal_open_button)) } }
+        }
         when {
             entry.key in calls.replying -> Text(stringResource(R.string.call_answer_sending))
             entry.answerable -> call.choices.forEachIndexed { index, choice ->
@@ -117,7 +122,7 @@ internal fun ConsoleChatCall(entry: CallEntry, calls: CallsModel, announce: Bool
         calls.replyNotes[entry.key]?.let { replyNoteText(it, call.answer) }?.let { text ->
             Text(text, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
-        if (entry.key in calls.replyNotes) {
+        if (entry.key in calls.replyNotes && !entry.unresolvedAnswer) {
             TextButton(onClick = { calls.dismissReplyNote(entry.key) }) {
                 Text(stringResource(R.string.call_reply_dismiss))
             }

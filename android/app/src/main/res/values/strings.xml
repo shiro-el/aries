@@ -1183,6 +1183,9 @@
     <string name="call_urgency_check">Check</string>
     <string name="call_urgency_urgent">Urgent</string>
     <string name="call_urgency_emergency">Emergency</string>
+    <string name="call_reply_retry_guidance">Choose an answer below to try again.</string>
+    <string name="call_reply_terminal_guidance">Delivery is uncertain. Check Terminal before answering again.</string>
+    <string name="call_answer_elsewhere">Another device is answering: %1$s</string>
     <string name="call_answer_claimed">Answering: %1$s</string>
     <string name="call_answer_delivered">Answered: %1$s</string>
     <string name="call_answer_failed">Answer failed: %1$s</string>

@@ -839,7 +839,7 @@ async fn answer_result(stream: Stream) -> Result<(), CoreError> {
         } else {
             "no reply"
         };
-        return Err(refused(AnswerProblem::Failed, Some(why.into())));
+        return Err(refused(AnswerProblem::Unconfirmed, Some(why.into())));
     };
     decode_answer(reply)
 }
@@ -859,7 +859,8 @@ pub(crate) fn decode_answer(reply: AnswerReply) -> Result<(), CoreError> {
         AnswerOutcome::Unsupported => AnswerProblem::Unsupported,
         AnswerOutcome::NoBeacon => AnswerProblem::NoBeacon,
         AnswerOutcome::NoCore => AnswerProblem::NoCore,
-        AnswerOutcome::Failed | AnswerOutcome::Unknown => AnswerProblem::Failed,
+        AnswerOutcome::Failed => AnswerProblem::Failed,
+        AnswerOutcome::Unknown => AnswerProblem::Unconfirmed,
     };
     Err(refused(reason, reply.detail))
 }

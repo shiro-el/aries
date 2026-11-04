@@ -22,6 +22,53 @@ import org.robolectric.annotation.Config
 class ThreadWaitingTest {
     @get:Rule val compose = createComposeRule()
 
+    // D23: local results must not swap another Agent's Choice into the button just tapped.
+    @Test fun waitingSheetKeepsLocalResultsUntilNextButAdvancesForAnExternalAnswer() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val a = CallInfo("h1", "a", 1000uL, "t2", true, "First Call", "", CallUrgency.CHECK, listOf("Allow A"), null, true)
+        val b = a.copy(id = "b", atMs = 2000uL, terminal = "t3", title = "Second Call", choices = listOf("Allow B"))
+        val core = FakeCore().apply {
+            addHost("home", Endpoint.Ssh("home.test", 22u, "me")); ensureKey(); savedView = AgentView.CHAT
+            terminals = listOf("Current", "Agent A", "Agent B").mapIndexed { i, name ->
+                TerminalInfo("t${i + 1}", name, "", listOf("claude"), "/repo", "live", AgentStatus.Working)
+            }
+            callsOf["h1"] = listOf(a, b)
+        }
+        val settings = ThemeSettings(context.getSharedPreferences("waiting-results", Context.MODE_PRIVATE)).apply { chooseLayout(AppLayout.THREAD) }
+        compose.setContent {
+            val scope = rememberCoroutineScope()
+            val model = remember { HostsModel(core, scope) }
+            AriesApp(model, settings)
+        }
+        compose.onNodeWithText("home").performClick()
+        compose.onNodeWithText("Current").performClick()
+        compose.onNodeWithTag("thread-waiting-pill").performClick()
+        for (state in listOf(CallAnswerState.FAILED, CallAnswerState.UNCONFIRMED)) {
+            val at = if (state == CallAnswerState.FAILED) 3000uL else 5000uL
+            val answer = CallAnswer(0u, "Allow A", state, at, "Host result")
+            val hold = kotlinx.coroutines.CompletableDeferred<Unit>()
+            core.replyHold = hold
+            core.replyResult = CallReply(if (state == CallAnswerState.FAILED) CallReplyOutcome.FAILED else CallReplyOutcome.UNCONFIRMED, answer, "Host result")
+            compose.onNodeWithContentDescription(context.getString(R.string.call_answer_choice_label, a.title, "Allow A")).performClick()
+            compose.runOnIdle { core.callListeners.getValue("h1").onCalls(listOf(a.copy(answer = answer.copy(state = CallAnswerState.CLAIMED, atMs = at - 1u)), b)) }
+            compose.onNodeWithText("First Call").assertExists()
+            compose.onNodeWithText(context.getString(R.string.call_answer_sending)).assertExists()
+            compose.onNodeWithContentDescription(context.getString(R.string.call_answer_choice_label, b.title, "Allow B")).assertDoesNotExist()
+            hold.complete(Unit)
+            compose.waitForIdle()
+            compose.runOnIdle { core.callListeners.getValue("h1").onCalls(listOf(a.copy(answer = answer), b)) }
+            compose.onNodeWithText(context.getString(if (state == CallAnswerState.FAILED) R.string.call_answer_failed else R.string.call_answer_unconfirmed, "Allow A")).assertExists()
+            compose.onNodeWithContentDescription(context.getString(R.string.call_answer_choice_label, b.title, "Allow B")).assertDoesNotExist()
+        }
+        compose.onNodeWithContentDescription(context.getString(R.string.thread_next_waiting_button)).performClick()
+        compose.onNodeWithContentDescription(context.getString(R.string.call_answer_choice_label, b.title, "Allow B")).assertExists()
+        compose.runOnIdle {
+            core.callListeners.getValue("h1").onCalls(listOf(a.copy(answer = CallAnswer(0u, "Allow A", CallAnswerState.DELIVERED, 6000uL, null)),
+                b.copy(answer = CallAnswer(0u, "Allow B", CallAnswerState.DELIVERED, 6000uL, null))))
+        }
+        compose.onNodeWithText("Second Call").assertDoesNotExist()
+    }
+
     // D04: a failed list watch must remove cached Agents from live waiting and drawer priority sections.
     @Test fun failedHostListKeepsLastKnownAgentsOutOfLiveWaiting() {
         val context = ApplicationProvider.getApplicationContext<Context>()
@@ -178,6 +225,10 @@ class ThreadWaitingTest {
         compose.onNodeWithText("Current").performClick()
         compose.onNode(hasText(context.getString(R.string.thread_call_dismiss)) and
             hasAnyAncestor(hasTestTag("thread-call-panel"))).performClick()
+        // D48: acknowledging an informational Call also clears the inbox attention count.
+        compose.runOnIdle { model.openCallInbox() }
+        compose.onNodeWithText(context.getString(R.string.call_inbox_label, 0)).assertExists()
+        compose.runOnIdle { model.closeCallInbox() }
         compose.runOnIdle { model.openPushedAgent("h1", "t2", openChat = true) }
         compose.onNodeWithTag("thread-waiting-pill").assertDoesNotExist()
         compose.runOnIdle { model.openPushedAgent("h1", "t1", openChat = true) }
