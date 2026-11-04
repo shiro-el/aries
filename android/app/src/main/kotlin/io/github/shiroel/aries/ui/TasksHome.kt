@@ -203,11 +203,14 @@ internal fun TasksTaskRow(entry: AgentEntry, transcript: ChatSnapshot? = null, s
 @Composable
 private fun TasksCallRow(entry: CallEntry, callerName: String?, onOpen: () -> Unit) {
     val urgent = entry.call.urgency == CallUrgency.URGENT || entry.call.urgency == CallUrgency.EMERGENCY
-    TasksRow(entry.call.title, stringResource(if (urgent) R.string.tasks_urgent_call else R.string.console_chat_call_label),
+    TasksRow(entry.call.title, stringResource(when {
+        !entry.live -> R.string.tasks_call_checking
+        urgent -> R.string.tasks_urgent_call
+        else -> R.string.console_chat_call_label
+    }),
         tasksAttentionColor(), urgent, Modifier.testTag("task-call:${entry.key}").presentsCalls(setOf(entry.key)), onOpen,
         metadata = {
-            val context = listOfNotNull(entry.host.name, callerName ?: entry.call.terminal,
-                if (entry.live) null else stringResource(R.string.tasks_call_checking)).joinToString(" · ")
+            val context = listOfNotNull(entry.host.name, callerName ?: entry.call.terminal).joinToString(" · ")
             Text(context, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
             if (entry.live) AgentElapsedTime(entry.call.atMs) else entry.checkedAtMs?.let {

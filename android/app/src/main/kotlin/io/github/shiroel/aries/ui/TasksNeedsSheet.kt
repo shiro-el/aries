@@ -105,7 +105,8 @@ internal fun TasksNeedsSheet(model: HostsModel, board: AgentBoard, queue: TasksN
                     is TaskNeed.Call -> {
                         val entry = model.calls.calls.find { it.key == current.entry.key } ?: current.entry.copy(live = false)
                         val caller = entry.call.terminal?.let { board.find(AgentKey(entry.host.id, it)) }
-                        val resolved = !model.calls.isTaskWaiting(entry, caller)
+                        val resolved = entry.call.answer?.state == CallAnswerState.DELIVERED ||
+                            entry.call.answer == null && !model.calls.isTaskWaiting(entry, caller)
                         LaunchedEffect(resolved) { if (resolved) queue.resolve(current.key) }
                         ConsoleChatCall(entry, model.calls, announce = true)
                         if (entry.call.choices.isEmpty() && entry.call.answer == null) TextButton(onClick = {

@@ -413,6 +413,26 @@ class TasksHomeTest {
         compose.onNodeWithContentDescription(context.getString(R.string.call_answer_choice_label, "second", "Continue")).assertExists()
     }
 
+    // D27/294 integration: another device's CLAIMED receipt must not consume the sheet item before delivery.
+    @Test fun anotherDevicesClaimDoesNotAdvanceUntilDelivered() {
+        val first = call("first", "t1", CallUrgency.CHECK)
+        val second = call("second", "t2", CallUrgency.CHECK)
+        val core = FakeCore().apply {
+            addHost("home", Endpoint.Ssh("home.test", 22u, "me")); ensureKey()
+            callsOf["h1"] = listOf(first, second)
+        }
+        show(core)
+        compose.onNodeWithTag("tasks-filter-needs").performClick()
+        compose.runOnIdle { core.callListeners.getValue("h1").onCalls(listOf(first.copy(answer =
+            CallAnswer(0u, "Continue", CallAnswerState.CLAIMED, 2000uL, null)), second)) }
+        val nextChoice = context.getString(R.string.call_answer_choice_label, "second", "Continue")
+        compose.onNodeWithContentDescription(nextChoice).assertDoesNotExist()
+        compose.onNodeWithTag("tasks-needs-sheet").assertExists()
+        compose.runOnIdle { core.callListeners.getValue("h1").onCalls(listOf(first.copy(answer =
+            CallAnswer(0u, "Continue", CallAnswerState.DELIVERED, 2001uL, null)), second)) }
+        compose.onNodeWithContentDescription(nextChoice).assertExists()
+    }
+
     // Regression: inline start has no dialog visibility flag; it must still open the created Chat
     // without relaunching when the expanded editor is replaced by the full-screen form.
     @Test fun inlineDraftExpandsWithoutLossAndStartOpensTheCreatedChatOnce() {
