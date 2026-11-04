@@ -12,6 +12,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.performClick
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentStatus
@@ -24,6 +26,8 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /**
  * Seam 3: a Korean keyboard's composing, committing and deleting, driven
@@ -31,6 +35,7 @@ import org.robolectric.RobolectricTestRunner
  * sequences are the ones Gboard and Samsung Keyboard make (two-set layout).
  */
 @RunWith(RobolectricTestRunner::class)
+@Config(qualifiers = "h740dp") // The key bar is intentionally folded in short windows.
 class KoreanImeTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
@@ -151,6 +156,20 @@ class KoreanImeTest {
         ic.deleteSurroundingText(1, 0)
         ic.finishComposingText()
         assertEquals(listOf("text:하"), sent())
+    }
+
+    @Test
+    @Config(qualifiers = "h400dp")
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun aCompactKeyDialogSendsTheComposingSyllableBeforeItsArrowKey() {
+        // Regression: folding the key bar must leave special keys reachable without losing IME text.
+        val ic = focusInput()
+        ic.setComposingText("한", 1)
+        captureAttachmentScreenshot(compose, "compact-terminal-input")
+        compose.onNodeWithContentDescription(compose.activity.getString(R.string.terminal_keys_show_button)).performClick()
+        captureAttachmentScreenshot(compose, "compact-terminal-keys", compose.onNode(isDialog()))
+        compose.onNodeWithText(compose.activity.getString(R.string.key_left)).performClick()
+        assertEquals(listOf("text:한", "key:Left"), sent())
     }
 
     @Test

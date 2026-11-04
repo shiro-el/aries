@@ -95,11 +95,12 @@ class ChatAttachmentsTest {
     }
 }
 
-internal fun captureAttachmentScreenshot(compose: ComposeContentTestRule, name: String) {
+internal fun captureAttachmentScreenshot(compose: ComposeContentTestRule, name: String,
+    root: SemanticsNodeInteraction = compose.onRoot()) {
     System.getenv("ARIES_ATTACHMENTS_RENDER_DIR")?.let { directory ->
         File(directory).mkdirs()
         File(directory, "$name.png").outputStream().use {
-            compose.onRoot().captureToImage().asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it)
+            root.captureToImage().asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it)
         }
     }
 }

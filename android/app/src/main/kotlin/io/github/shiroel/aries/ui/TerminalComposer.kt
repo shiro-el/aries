@@ -10,9 +10,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
@@ -30,11 +36,21 @@ import io.github.shiroel.aries.core.TerminalKey
 /** Standard Android editing and OS paste, followed by one core paste operation. */
 @Composable
 internal fun TerminalComposer(viewer: TerminalViewer, compact: Boolean = false) {
+    var keys by remember(viewer) { mutableStateOf(false) }
+    if (keys) AlertDialog(
+        onDismissRequest = { keys = false },
+        title = { Text(stringResource(R.string.terminal_keys_show_button)) },
+        text = { TerminalKeyBar(viewer) },
+        confirmButton = { TextButton(onClick = { keys = false }) { Text(stringResource(R.string.ok_button)) } },
+    )
     val style = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace, fontSize = 14.sp)
     if (!viewer.composerOpen) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             TerminalInput(viewer, Modifier.weight(1f))
-            if (!compact && viewer.typing) TerminalKeyBarToggle(viewer)
+            if (viewer.typing) {
+                if (compact) ActionIcon(R.drawable.ic_chevron_up, R.string.terminal_keys_show_button, { keys = true })
+                else TerminalKeyBarToggle(viewer)
+            }
             ActionIcon(R.drawable.ic_square_pen, R.string.terminal_compose_button, viewer::openComposer)
         }
         return
@@ -72,6 +88,7 @@ internal fun TerminalComposer(viewer: TerminalViewer, compact: Boolean = false) 
                 },
             )
             if (compact) {
+                ActionIcon(R.drawable.ic_chevron_up, R.string.terminal_keys_show_button, { keys = true })
                 ActionIcon(R.drawable.ic_keyboard, R.string.terminal_direct_input_button, viewer::closeComposer)
                 ActionIcon(R.drawable.ic_send, R.string.terminal_composer_send_button, viewer::pasteDraft, enabled = viewer.canPasteDraft)
             }

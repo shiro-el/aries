@@ -25,10 +25,12 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.GraphicsMode
+import org.robolectric.annotation.Config
 
 /** System picker/camera results cross the same UI -> fake core seam as incoming shares. */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(qualifiers = "h740dp") // Normal phone portrait; short windows use the tools dialog.
 class AttachmentEntryPointsTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private fun str(id: Int) = compose.activity.getString(id)
@@ -58,9 +60,20 @@ class AttachmentEntryPointsTest {
         return core.connection!!
     }
 
-    @Test fun filePickerRejectsOversizeWithAnExplanationAndKeepsTheDraft() {
+    @Test fun filePickerRejectsOversizeWithAnExplanationAndKeepsTheDraft() = filePickerKeepsDraft()
+
+    // Regression: folding the toolbar must not disconnect the dialog's picker from its result handler.
+    @Test @Config(qualifiers = "h400dp")
+    fun compactToolsFilePickerRejectsOversizeAndKeepsTheDraft() = filePickerKeepsDraft(compact = true)
+
+    private fun filePickerKeepsDraft(compact: Boolean = false) {
         val connection = openChat()
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).performTextInput("keep this")
+        captureAttachmentScreenshot(compose, if (compact) "compact-composer" else "portrait-composer")
+        if (compact) {
+            compose.onNodeWithContentDescription(str(R.string.chat_input_tools_button)).performClick()
+            captureAttachmentScreenshot(compose, "compact-chat-tools", compose.onNode(isDialog()))
+        }
         compose.onNodeWithContentDescription(str(R.string.attachments_file_button)).performClick()
         compose.waitForIdle()
         val request = shadowOf(compose.activity).nextStartedActivityForResult
@@ -106,9 +119,12 @@ class AttachmentEntryPointsTest {
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("keep this")
     }
 
-    @Test fun cameraGetsAFullSizeOutputUriThenKeepsTheUploadedPhotoOutsideTheTextField() {
+    // Keep the existing camera flow on the folded toolbar; the picker covers portrait controls.
+    @Test @Config(qualifiers = "h400dp")
+    fun cameraGetsAFullSizeOutputUriThenKeepsTheUploadedPhotoOutsideTheTextField() {
         shadowOf(compose.activity.application).denyPermissions(Manifest.permission.CAMERA)
         val connection = openChat()
+        compose.onNodeWithContentDescription(str(R.string.chat_input_tools_button)).performClick()
         compose.onNodeWithContentDescription(str(R.string.attachments_camera_button)).performClick()
         compose.waitForIdle()
         val permission = shadowOf(compose.activity).nextStartedActivityForResult
@@ -120,8 +136,15 @@ class AttachmentEntryPointsTest {
                 arrayOf(Manifest.permission.CAMERA), intArrayOf(PackageManager.PERMISSION_GRANTED))
         }
         compose.waitForIdle()
-        val request = shadowOf(compose.activity).nextStartedActivityForResult
-        assertNotNull(compose.onRoot().printToString(), request)
+        // Permission completion can post the camera launch after Compose becomes idle.
+        val request = run {
+            var launched = shadowOf(compose.activity).nextStartedActivityForResult
+            compose.waitUntil(5_000) {
+                if (launched == null) launched = shadowOf(compose.activity).nextStartedActivityForResult
+                launched != null
+            }
+            checkNotNull(launched)
+        }
         assertEquals(MediaStore.ACTION_IMAGE_CAPTURE, request.intent.action)
         @Suppress("DEPRECATION")
         val uri = request.intent.getParcelableExtra<Uri>(MediaStore.EXTRA_OUTPUT)!!
@@ -143,8 +166,9 @@ class AttachmentEntryPointsTest {
         decoded.recycle()
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assert(SemanticsMatcher.expectValue(
             androidx.compose.ui.semantics.SemanticsProperties.EditableText, androidx.compose.ui.text.AnnotatedString("")))
-        captureAttachmentScreenshot(compose, "camera-draft")
         assertTrue(connection.typed.isEmpty())
+        compose.onNodeWithText(str(R.string.ok_button)).performClick()
+        captureAttachmentScreenshot(compose, "compact-camera-draft")
         compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
         compose.waitForIdle()
         assertEquals(listOf("t1" to "'/host/it'\"'\"'s file.jpg'"), connection.typed)
