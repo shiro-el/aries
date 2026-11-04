@@ -17,6 +17,7 @@ import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.core.CellRun
+import io.github.shiroel.aries.core.CursorPos
 import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.ScreenFrame
@@ -55,7 +56,7 @@ class ReconnectTest {
                     listOf(CellRun(0u, text.length.toUShort(), text, false, null, null, false, false, false, false, false, false)),
                 ),
             ),
-            null, null,
+            CursorPos(0u, 0u), null,
         ),
     )
 

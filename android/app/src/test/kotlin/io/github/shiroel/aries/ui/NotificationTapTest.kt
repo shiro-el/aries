@@ -30,9 +30,21 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+
+/** Keep production Activity visibility tracking while faking device-only key storage. */
+class NotificationTapApplication : io.github.shiroel.aries.AriesApplication(), io.github.shiroel.aries.HasNotificationVault {
+    override val core = FakeCore()
+    override val notificationVault = object : io.github.shiroel.aries.core.KeyVault {
+        override fun seal(plaintext: ByteArray, protection: io.github.shiroel.aries.core.KeyProtection) =
+            plaintext.map { (it.toInt() xor 0x55).toByte() }.toByteArray()
+        override fun open(sealed: ByteArray, protection: io.github.shiroel.aries.core.KeyProtection) = seal(sealed, protection)
+    }
+}
 
 /** Seam 3: tapping an Agent notification opens that Agent's Terminal, against a fake core. */
 @RunWith(RobolectricTestRunner::class)
+@Config(application = NotificationTapApplication::class)
 class NotificationTapTest {
     @get:Rule val compose = createComposeRule()
 

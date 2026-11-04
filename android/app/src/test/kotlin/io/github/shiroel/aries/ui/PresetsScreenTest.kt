@@ -7,6 +7,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isPopup
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertTextContains
@@ -64,7 +67,7 @@ class PresetsScreenTest {
 
     private fun openForm() {
         compose.onNodeWithContentDescription(str(R.string.hosts_actions_label)).performClick()
-        compose.onNodeWithText(str(R.string.launch_open_button)).performClick()
+        compose.onNode(hasText(str(R.string.launch_open_button)) and hasAnyAncestor(isPopup())).performClick()
     }
 
     private fun click(id: Int) = compose.onNodeWithText(str(id)).performClick()

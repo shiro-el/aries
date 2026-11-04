@@ -9,10 +9,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
@@ -27,14 +24,13 @@ import io.github.shiroel.aries.core.ChatToolDetails
 
 /** Raw input has its own disclosure, independent of the tool header. */
 @Composable
-internal fun ChatRawInput(input: String) {
-    var showRaw by remember { mutableStateOf(false) }
+internal fun ChatRawInput(input: String, expanded: Boolean, onToggle: () -> Unit) {
     val active = LocalChatSearch.current.active
     val searchExpanded = active?.field?.entryId == LocalChatSearchEntry.current && active?.field?.key == "tool-input"
-    val visible = showRaw || searchExpanded
+    val visible = expanded || searchExpanded
     val disclosureState = stringResource(if (visible) R.string.chat_details_expanded else R.string.chat_details_collapsed)
     TextButton(
-        onClick = { showRaw = !showRaw },
+        onClick = onToggle,
         modifier = Modifier.semantics { stateDescription = disclosureState },
     ) { Text(stringResource(R.string.chat_tool_raw_input)) }
     if (visible) {

@@ -59,11 +59,18 @@ class GithubScreenTest {
 
     @Test fun draftAndMarkdownPreviewSurviveNavigationAndFailedPost() {
         val conn = open()
+        fun assertRenderedDraft() {
+            // Markdown parses off the Compose thread before its merged text is ready.
+            compose.waitUntil(5_000) {
+                compose.onAllNodesWithText("draft markdown").fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNodeWithText("draft markdown").assertExists()
+        }
         compose.onNodeWithText("Issue title").performClick()
         compose.onNodeWithText("Issue body").assertExists()
         compose.onNodeWithTag("github-comment").performTextInput("**draft markdown**")
         compose.onNodeWithText(str(R.string.github_preview)).performClick()
-        compose.onNodeWithText("draft markdown").assertExists()
+        assertRenderedDraft()
         compose.runOnIdle { assertEquals(emptyList<Triple<GithubKind, UInt, String>>(), conn.githubComments) }
         compose.onNodeWithText(str(R.string.github_edit)).performClick()
         compose.onNodeWithTag("github-back").performClick()
@@ -79,7 +86,7 @@ class GithubScreenTest {
         compose.runOnIdle { conn.githubFailure = null }
         compose.onNodeWithText(str(R.string.github_send)).performClick()
         compose.onNodeWithText(str(R.string.github_sent)).assertExists()
-        compose.onNodeWithText("draft markdown").assertExists()
+        assertRenderedDraft()
         compose.onNodeWithTag("github-comment").assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
         compose.runOnIdle {
             assertEquals(listOf(Triple(GithubKind.ISSUE, 42u, "**draft markdown**"), Triple(GithubKind.ISSUE, 42u, "**draft markdown**")), conn.githubComments)

@@ -109,22 +109,24 @@ private fun AriesContent(
             }
         }
     }
-    Scaffold { padding ->
-        Box(Modifier.padding(padding).fillMaxSize()) {
-            FirstConnectionGuide(model, guidance, allowNotifications) {
-                ConsoleShell(model) {
-                    RemoteFilesAccess(model) {
-                        AdaptiveHostLayout(
-                            listScreen = model.listScreen,
-                            hasDetail = model.screen is Screen.Chat || model.screen is Screen.Terminal,
-                            listContent = { ScreenContent(model, settings, terminalDisplay, it) },
-                            detailContent = { ScreenContent(model, settings, terminalDisplay, model.screen) },
-                        )
+    NewTaskAccess(model) {
+        Scaffold { padding ->
+            Box(Modifier.padding(padding).fillMaxSize()) {
+                FirstConnectionGuide(model, guidance, allowNotifications) {
+                    ConsoleShell(model) {
+                        RemoteFilesAccess(model) {
+                            AdaptiveHostLayout(
+                                listScreen = model.listScreen,
+                                hasDetail = model.screen is Screen.Chat || model.screen is Screen.Terminal,
+                                listContent = { ScreenContent(model, settings, terminalDisplay, it) },
+                                detailContent = { ScreenContent(model, settings, terminalDisplay, model.screen) },
+                            )
+                        }
                     }
                 }
             }
+            model.prompt?.let { PromptDialog(it, model) }
         }
-        model.prompt?.let { PromptDialog(it, model) }
     }
 }
 

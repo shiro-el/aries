@@ -407,6 +407,7 @@ class HostsModel(
             when (error) {
                 is CoreException.HostKeyUnknown -> prompt = Prompt.TrustHostKey(host, error.fingerprint)
                 is CoreException.JumpHostKeyUnknown -> prompt = Prompt.TrustJumpHostKey(host, error.hop, error.address, error.fingerprint)
+                is CoreException.KeyInvalidated -> openKeyRecovery()
                 is CoreException.NoKey, is CoreException.KeyLocked -> openKeySettings()
                 else -> openHostSettings(host)
             }
@@ -913,8 +914,15 @@ class HostsModel(
     }
 
     fun dismiss() {
+        val cancelledHost = when (val current = prompt) {
+            is Prompt.TrustHostKey -> current.host.takeIf { current.then == AfterTrust.Connect }
+            is Prompt.TrustJumpHostKey -> current.host.takeIf { current.then == AfterTrust.Connect }
+            else -> null
+        }
         pendingQuickOpen = null
         prompt = null
+        // Initial trust belongs to the pending connection; cancelling abandons it.
+        if (cancelledHost != null && (screen as? Screen.Connecting)?.host?.id == cancelledHost.id) back()
     }
 
     /** The open Host's structure and live Agent status, on each line [HostLink] brings; cancelled on [back]. */

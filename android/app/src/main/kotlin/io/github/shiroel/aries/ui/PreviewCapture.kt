@@ -153,11 +153,12 @@ internal fun PreviewCaptureEditor(
                     label = { Text(stringResource(R.string.preview_capture_note)) }, maxLines = 3,
                     modifier = Modifier.fillMaxWidth())
                 if (failed) Text(stringResource(R.string.preview_capture_attach_failed), color = MaterialTheme.colorScheme.error)
+                val captureContext = stringResource(R.string.preview_capture_context, capture.url, mode)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     TextButton(onClick = onDismiss, enabled = !exporting) { Text(stringResource(R.string.cancel_button)) }
                     Button(enabled = !exporting, onClick = {
                         val annotations = marks.toList()
-                        val text = context.getString(R.string.preview_capture_context, capture.url, mode) +
+                        val text = captureContext +
                             note.trim().takeIf { it.isNotEmpty() }?.let { "\n\n$it" }.orEmpty()
                         exporting = true
                         failed = false

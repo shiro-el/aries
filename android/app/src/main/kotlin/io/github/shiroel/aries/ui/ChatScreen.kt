@@ -108,6 +108,9 @@ class ChatModel(
     /** Ids of tool entries the user expanded. */
     var expanded by mutableStateOf<Set<String>>(emptySet())
         private set
+    /** Disclosure state survives switching between following and history renderers. */
+    var rawInputsExpanded by mutableStateOf<Set<String>>(emptySet())
+        private set
 
     /** Options the user picked per open question: entry id -> picks per part. */
     var picks by mutableStateOf<Map<String, List<Set<Int>>>>(emptyMap())
@@ -388,6 +391,11 @@ class ChatModel(
 
     fun toggle(id: String) {
         expanded = if (id in expanded) expanded - id else expanded + id
+        if (id !in expanded) rawInputsExpanded = rawInputsExpanded - id
+    }
+
+    fun toggleRawInput(id: String) {
+        rawInputsExpanded = if (id in rawInputsExpanded) rawInputsExpanded - id else rawInputsExpanded + id
     }
 
     /**
@@ -914,7 +922,8 @@ private fun ChatEntryView(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        is ChatEntryBody.Tool -> ToolView(b, expanded, image, onToggle)
+        is ChatEntryBody.Tool -> ToolView(b, expanded, image, onToggle,
+            rawInputExpanded = entry.id in chat.rawInputsExpanded, onToggleRawInput = { chat.toggleRawInput(entry.id) })
         is ChatEntryBody.AgentError -> Column(
             Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.errorContainer).padding(8.dp),
         ) {
@@ -941,6 +950,8 @@ private fun ToolView(
     expanded: Boolean,
     image: (String) -> ByteArray?,
     onToggle: () -> Unit,
+    rawInputExpanded: Boolean,
+    onToggleRawInput: () -> Unit,
 ) {
     val open = LocalOpenRemoteFile.current
     // Relative tool paths refer to the cwd recorded with the call, which may
@@ -958,7 +969,7 @@ private fun ToolView(
         }
     }
     CompositionLocalProvider(LocalOpenRemoteFile provides toolOpen) {
-        ToolContent(tool, expanded, image, onToggle)
+        ToolContent(tool, expanded, image, onToggle, rawInputExpanded, onToggleRawInput)
     }
 }
 
@@ -968,6 +979,8 @@ private fun ToolContent(
     expanded: Boolean,
     image: (String) -> ByteArray?,
     onToggle: () -> Unit,
+    rawInputExpanded: Boolean,
+    onToggleRawInput: () -> Unit,
 ) {
     val label = stringResource(R.string.chat_tool_expand_label, tool.name)
     val failed = tool.status == ChatToolStatus.FAILED
@@ -1015,7 +1028,7 @@ private fun ToolContent(
             tool.images.forEach { ChatImageView(it, image) }
             if (expanded) {
                 tool.details?.let { ChatToolDetailsView(it) }
-                if (tool.input.isNotBlank()) ChatRawInput(tool.input)
+                if (tool.input.isNotBlank()) ChatRawInput(tool.input, rawInputExpanded, onToggleRawInput)
                 tool.output?.let {
                     Text(stringResource(R.string.chat_tool_output), style = MaterialTheme.typography.labelMedium)
                     ChatTextActions(it, onClick = onToggle) { modifier ->

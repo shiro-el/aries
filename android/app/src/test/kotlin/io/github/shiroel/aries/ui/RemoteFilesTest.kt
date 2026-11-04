@@ -185,6 +185,8 @@ class RemoteFilesTest {
             RemoteFilesScreen(conn, "box/t7", {}, initialLocation = FileLocation("/repo/src/Main.kt", 415u))
         } }
         fun lineCount(text: String): Int {
+            // The file switch loads and lays out the requested line asynchronously.
+            if (compose.onAllNodesWithText(text, useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) return 0
             val results = mutableListOf<TextLayoutResult>()
             compose.onNodeWithText(text, useUnmergedTree = true)
                 .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
