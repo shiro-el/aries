@@ -186,6 +186,29 @@ impl Store {
         self.write_atomic("keys.json", &bytes)
     }
 
+    /// Replace a key while keeping route references to its ID valid.
+    pub fn replace_key(
+        &self,
+        key: &SavedKey,
+        protection: KeyProtection,
+        sealed: &[u8],
+    ) -> Result<(), CoreError> {
+        let mut keys = self.read_keys()?;
+        let existing = keys
+            .iter_mut()
+            .find(|k| k.id == key.id)
+            .ok_or_else(|| CoreError::UnknownKey { id: key.id.clone() })?;
+        *existing = key.clone();
+        let (old_protection, old_sealed) = self.read_key_sealed(&key.id)?;
+        let bytes = serde_json::to_vec_pretty(&keys).map_err(storage)?;
+        self.write_key_sealed(&key.id, protection, sealed)?;
+        if let Err(error) = self.write_atomic("keys.json", &bytes) {
+            let _ = self.write_key_sealed(&key.id, old_protection, &old_sealed);
+            return Err(error);
+        }
+        Ok(())
+    }
+
     /// App settings; defaults if `settings.json` is missing or unreadable.
     pub fn read_settings(&self) -> Settings {
         std::fs::read(self.dir.join("settings.json"))

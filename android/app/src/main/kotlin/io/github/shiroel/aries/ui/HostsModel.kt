@@ -103,7 +103,7 @@ sealed interface Prompt {
     data class ConfirmRemove(val host: Host) : Prompt
 
     /** Something the user must read; [title] and [body] are resources. */
-    data class Problem(val title: Message, val body: Message) : Prompt
+    data class Problem(val title: Message, val body: Message, val recoverKey: Boolean = false) : Prompt
 }
 
 enum class AfterTrust { Connect, InstallKey }
@@ -473,6 +473,22 @@ class HostsModel(
 
     fun createKey() = guard {
         key = core.ensureKey()
+        keyProtection = core.keyProtection()
+        keys = core.keys()
+    }
+
+    var recoveringKeys by mutableStateOf(false)
+        private set
+
+    fun openKeyRecovery() {
+        dismiss()
+        openKeySettings()
+        recoveringKeys = true
+    }
+
+    suspend fun recoverKey(keyId: String, privateKey: String? = null, passphrase: String = "") {
+        withContext(keyWork) { core.recoverKey(keyId, privateKey, passphrase) }
+        key = core.publicKey()
         keyProtection = core.keyProtection()
         keys = core.keys()
     }
@@ -1360,6 +1376,7 @@ class HostsModel(
         back()
         settingsHost = null
         settingsKeys = false
+        recoveringKeys = false
         settingsDiagnostics = false
         screen = Screen.Settings
     }
@@ -1542,6 +1559,11 @@ fun problemFor(e: CoreException): Prompt.Problem {
         is CoreException.NoKey -> Prompt.Problem(failed, Message(R.string.connect_no_key))
         is CoreException.InvalidPrivateKey -> Prompt.Problem(
             Message(R.string.key_import_title), Message(R.string.key_import_invalid),
+        )
+        is CoreException.KeyInvalidated -> Prompt.Problem(
+            Message(R.string.key_locked_title),
+            Message(R.string.key_invalidated_body),
+            recoverKey = true,
         )
         is CoreException.KeyLocked -> Prompt.Problem(
             Message(R.string.key_locked_title),

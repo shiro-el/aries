@@ -152,7 +152,7 @@ object CallReplies {
     private fun notSent(context: Context, e: CoreException, choice: Int): CallView.Done = when (e) {
         is CoreException.Unreachable ->
             CallView.Done(context.getString(R.string.call_notify_unreachable), e.detail, retry = choice)
-        is CoreException.KeyLocked, is CoreException.BiometricUnavailable ->
+        is CoreException.KeyLocked, is CoreException.KeyInvalidated, is CoreException.BiometricUnavailable ->
             CallView.Done(context.getString(R.string.call_notify_key_locked), openApp = true)
         is CoreException.AuthRejected, is CoreException.JumpAuthRejected ->
             CallView.Done(context.getString(R.string.call_notify_key_rejected), openApp = true)
