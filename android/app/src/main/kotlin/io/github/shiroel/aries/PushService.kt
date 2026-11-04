@@ -22,6 +22,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import java.time.LocalTime
 
 /**
@@ -51,7 +52,8 @@ class PushService : FirebaseMessagingService() {
             Log.w(TAG, "push rejected")
             return
         }
-        LastKnownStates.requestRefresh(this, notice.hostId)
+        // FCM invokes this callback on its worker thread; persist the pull before returning.
+        runBlocking { LastKnownStates.requestRefresh(this@PushService, notice.hostId) }
         show(this, notice) { hostId ->
             try {
                 core.canAnswerInBackground(hostId)

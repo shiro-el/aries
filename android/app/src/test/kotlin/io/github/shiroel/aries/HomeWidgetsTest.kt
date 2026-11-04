@@ -80,6 +80,10 @@ class HomeWidgetsTest {
                 .apply(context, FrameLayout(context))
             view.findViewById<View>(R.id.widget_refresh).performClick()
             shadowOf(android.os.Looper.getMainLooper()).idle()
+            val receiver = shadowOf(context as android.app.Application).registeredReceivers
+                .map { it.broadcastReceiver }.filterIsInstance<HomeWidgetRefreshReceiver>().single()
+            // goAsync keeps this broadcast alive until its WorkManager transaction is persisted.
+            shadowOf(shadowOf(receiver).originalPendingResult).future.get(5, java.util.concurrent.TimeUnit.SECONDS)
             val requests = WorkManager.getInstance(context).getWorkInfosForUniqueWork("last-known-state:refresh:all").get()
             assertEquals(1, requests.size)
             assertEquals(androidx.work.NetworkType.CONNECTED, requests.single().constraints.requiredNetworkType)

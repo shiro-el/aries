@@ -117,7 +117,7 @@ class WatchPhoneTest {
         assertEquals("", hidden.conversationSummary)
     }
 
-    @Test fun refreshFromTheWatchSchedulesAPullWithoutAcknowledgingMalformedCommands() {
+    @Test fun refreshFromTheWatchSchedulesAPullWithoutAcknowledgingMalformedCommands() = runBlocking<Unit> {
         androidx.work.testing.WorkManagerTestInitHelper.initializeTestWorkManager(context)
         val controller = Robolectric.buildService(WatchPhoneService::class.java).create()
         val service = controller.get()
@@ -125,7 +125,9 @@ class WatchPhoneTest {
         val name = "last-known-state:refresh:all"
         assertTrue(service.onRequest("watch", WatchSummary.REFRESH_PATH, byteArrayOf(9))!!.result.isEmpty())
         assertTrue(manager.getWorkInfosForUniqueWork(name).get().isEmpty())
-        assertArrayEquals(byteArrayOf(1), service.onRequest("watch", WatchSummary.REFRESH_PATH, byteArrayOf())!!.result)
+        assertArrayEquals(byteArrayOf(1), kotlinx.coroutines.withTimeout(5_000) {
+            service.onRequest("watch", WatchSummary.REFRESH_PATH, byteArrayOf())!!.await()
+        })
         assertEquals(1, manager.getWorkInfosForUniqueWork(name).get().size)
         controller.destroy()
     }
