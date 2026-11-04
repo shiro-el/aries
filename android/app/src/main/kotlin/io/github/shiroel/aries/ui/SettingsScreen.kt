@@ -164,7 +164,6 @@ fun SettingsScreen(
             item(key = "terminal-display") {
                 SettingsField(R.string.terminal_display_title) { TerminalDisplaySection(terminalDisplay) }
             }
-            item { SettingsField { io.github.shiroel.aries.dictation.DictationSettings() } }
             item(key = "read-aloud") { SettingsField { io.github.shiroel.aries.speech.ReadAloudSettings(readAloud) } }
             item(key = "app-guidance") {
                 io.github.shiroel.aries.guidance.LocalAppGuidance.current?.let {

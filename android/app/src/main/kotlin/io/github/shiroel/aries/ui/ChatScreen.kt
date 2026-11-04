@@ -178,7 +178,7 @@ class ChatModel(
 
     /** What the user is typing into the input. */
     var input by mutableStateOf(TextFieldValue(""))
-    // Keep the String seam for attachments, dictation and existing callers.
+    // Keep the String seam for attachments and existing callers.
     var draft: String
         get() = input.text
         set(value) { input = TextFieldValue(value, TextRange(value.length)) }
@@ -304,7 +304,8 @@ class ChatModel(
         if (now.agentStatus !is AgentStatus.Blocked) refused = false
     }
 
-    val canSend: Boolean get() = connectionError == null && link != null && canEdit && !interrupting && !uploading && pendingShare == null &&
+    val canSend: Boolean get() = connectionError == null && link?.state == LinkState.Up &&
+        snapshot?.status != ChatStatus.RECONNECTING && canEdit && !interrupting && !uploading && pendingShare == null &&
         (draft.isNotBlank() || attachments.isNotEmpty())
 
     /**
@@ -819,12 +820,6 @@ private fun MessageInput(chat: ChatModel) {
     HorizontalDivider()
     ChatInterruptNotice(chat)
     DraftAttachments(chat)
-    io.github.shiroel.aries.dictation.DictationInput(
-        names = listOf(chat.host.name, displayName(chat.terminal), chat.terminal.cwd.orEmpty().trimEnd('/').substringAfterLast('/')),
-        lastResponse = chat.snapshot?.entries?.asReversed()?.firstNotNullOfOrNull { (it.body as? ChatEntryBody.Agent)?.text }.orEmpty(),
-        onTranscript = { text -> chat.draft = if (chat.draft.isBlank()) text else chat.draft + " " + text },
-        enabled = chat.canEdit,
-    )
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
         BasicTextField(
             value = chat.input,
