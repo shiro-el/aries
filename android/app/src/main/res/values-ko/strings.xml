@@ -687,6 +687,9 @@
     <string name="thread_permission_waiting">권한 요청 · 답을 기다려요</string>
     <string name="thread_previous_waiting">확인이 필요한 이전 대화</string>
     <string name="thread_next_waiting_button">확인이 필요한 다음 대화</string>
+    <string name="thread_status_no_beacon">Beacon이 필요해요</string>
+    <string name="thread_status_no_core">herdr-core에 연결할 수 없어요</string>
+    <string name="thread_status_no_terminal">Terminal이 종료됐어요</string>
     <string name="thread_question_waiting">질문 · 답을 기다려요</string>
     <string name="chat_agent_status_announcement">%1$s: %2$s</string>
     <string name="thread_chat_subtitle">%1$s · %2$s</string>

@@ -1,5 +1,6 @@
 package io.github.shiroel.aries.ui
 
+import android.content.SharedPreferences
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -59,6 +60,7 @@ class CallsModel(
     private val scope: CoroutineScope,
     private val keyWork: CoroutineContext = EmptyCoroutineContext,
     private val onAnswered: (Host, String, CallAnswerState) -> Unit = { _, _, _ -> },
+    private val preferences: SharedPreferences? = null,
 ) {
     /** All Hosts' Calls, newest first. */
     var calls by mutableStateOf<List<CallEntry>>(emptyList())
@@ -68,29 +70,43 @@ class CallsModel(
     var banner by mutableStateOf<CallEntry?>(null)
         private set
 
-    // Owned with the live model so navigating away or recreating the Activity cannot
-    // put an acknowledged informational Call back into Thread's waiting queue.
-    private var closedThreadCalls by mutableStateOf<Set<String>>(emptySet())
+    // Only informational Calls can be acknowledged. Keep IDs across process death.
+    private var closedThreadCalls by mutableStateOf(preferences?.getStringSet("closed_calls", emptySet())?.toSet().orEmpty())
+    // Hiding a Choice panel is not an acknowledgement of its unanswered Call.
+    private var hiddenThreadPanels by mutableStateOf<Set<String>>(emptySet())
+    // Acknowledging reply feedback (294) is separate from closing an unanswered panel.
+    private var acknowledgedReplyResults by mutableStateOf<Set<String>>(emptySet())
     internal var openedThreadCall by mutableStateOf<String?>(null)
         private set
 
+    private fun saveClosedThreadCalls(keys: Set<String>) {
+        if (keys == closedThreadCalls) return
+        closedThreadCalls = keys
+        preferences?.edit()?.putStringSet("closed_calls", keys)?.apply()
+    }
+
+    private fun acknowledged(key: String) = key in closedThreadCalls || key in acknowledgedReplyResults
+
     internal fun isThreadWaiting(entry: CallEntry): Boolean =
-        (entry.answerable || entry.needsAttention) && entry.key !in closedThreadCalls
+        (entry.answerable || entry.needsAttention) && !acknowledged(entry.key)
 
     internal fun isThreadPanelVisible(entry: CallEntry): Boolean =
-        entry.key == openedThreadCall || entry.key !in closedThreadCalls &&
+        entry.key == openedThreadCall || entry.key !in hiddenThreadPanels && !acknowledged(entry.key) &&
             (entry.answerable || entry.needsAttention || entry.key in replying || entry.key in replyNotes)
 
     internal fun openThreadCall(entry: CallEntry) {
         openedThreadCall = entry.key
+        hiddenThreadPanels = hiddenThreadPanels - entry.key
         if (entry.unresolvedAnswer) {
-            closedThreadCalls = closedThreadCalls - entry.key
+            acknowledgedReplyResults = acknowledgedReplyResults - entry.key
+            saveClosedThreadCalls(closedThreadCalls - entry.key)
             publish()
         }
     }
 
     internal fun closeThreadCall(entry: CallEntry) {
-        closedThreadCalls = closedThreadCalls + entry.key
+        hiddenThreadPanels = hiddenThreadPanels + entry.key
+        if (entry.call.choices.isEmpty()) saveClosedThreadCalls(closedThreadCalls + entry.key)
         if (openedThreadCall == entry.key) openedThreadCall = null
         if (banner?.key == entry.key) dismissBanner()
         publish()
@@ -102,7 +118,7 @@ class CallsModel(
 
     /** Last confirmed Calls stay in Tasks during a feed outage; only live rows accept input. */
     internal fun isTaskWaiting(entry: CallEntry, caller: AgentEntry? = null): Boolean =
-        (entry.live || entry.checkedAtMs != null) && entry.key !in closedThreadCalls &&
+        (entry.live || entry.checkedAtMs != null) && !acknowledged(entry.key) &&
             entry.copy(live = true).needsAttention &&
             // A later Host status proves progress even if that list subsequently goes stale.
             !(entry.call.answer == null && caller != null && (caller.terminal.statusMs ?: 0uL) > entry.call.atMs)
@@ -158,8 +174,10 @@ class CallsModel(
         replying = replying + key
         localReplies = localReplies + key
         replyNotes = replyNotes - key
-        if (key in closedThreadCalls) {
-            closedThreadCalls = closedThreadCalls - key
+        hiddenThreadPanels = hiddenThreadPanels - key
+        if (acknowledged(key)) {
+            acknowledgedReplyResults = acknowledgedReplyResults - key
+            saveClosedThreadCalls(closedThreadCalls - key)
             publish()
         }
         scope.launch {
@@ -217,7 +235,9 @@ class CallsModel(
     fun retainHosts(hosts: List<Host>) {
         this.hosts = hosts.associateBy { it.id }
         (watches.keys - this.hosts.keys).forEach { stop(it) }
-        closedThreadCalls = closedThreadCalls.filterTo(mutableSetOf()) { key -> this.hosts.keys.any { key.startsWith("$it/") } }
+        saveClosedThreadCalls(closedThreadCalls.filterTo(mutableSetOf()) { key -> this.hosts.keys.any { key.startsWith("$it/") } })
+        hiddenThreadPanels = hiddenThreadPanels.filterTo(mutableSetOf()) { key -> this.hosts.keys.any { key.startsWith("$it/") } }
+        acknowledgedReplyResults = acknowledgedReplyResults.filterTo(mutableSetOf()) { key -> this.hosts.keys.any { key.startsWith("$it/") } }
         if (openedThreadCall?.let { key -> this.hosts.keys.none { key.startsWith("$it/") } } == true) openedThreadCall = null
         perHost.keys.retainAll(this.hosts.keys)
         checkedAt.keys.retainAll(this.hosts.keys)
@@ -275,7 +295,10 @@ class CallsModel(
 
     fun dismissReplyNote(key: String) {
         replyNotes = replyNotes - key
-        calls.firstOrNull { it.key == key && it.unresolvedAnswer }?.let(::closeThreadCall)
+        calls.firstOrNull { it.key == key && it.unresolvedAnswer }?.let {
+            acknowledgedReplyResults = acknowledgedReplyResults + key
+            closeThreadCall(it)
+        }
     }
 
     fun dismissBanner() {
@@ -296,7 +319,7 @@ class CallsModel(
     }
 
     private fun publish() {
-        calls = perHost.flatMap { (id, list) -> hosts[id]?.let { h -> list.map { CallEntry(h, it, id in liveHosts, checkedAt[id], "$id/${it.id}" in closedThreadCalls) } }.orEmpty() }
+        calls = perHost.flatMap { (id, list) -> hosts[id]?.let { h -> list.map { CallEntry(h, it, id in liveHosts, checkedAt[id], acknowledged("$id/${it.id}")) } }.orEmpty() }
             .sortedByDescending { it.call.atMs }
         val keys = calls.map { it.key }.toSet()
         recalled.keys.retainAll(keys)

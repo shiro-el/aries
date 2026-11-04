@@ -24,7 +24,7 @@ private data class ThreadWaiting(val key: AgentKey, val name: String, val agent:
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun ThreadWaitingPill(model: HostsModel, chat: ChatModel) {
+internal fun ThreadWaitingPill(model: HostsModel, chat: ChatModel, showPill: Boolean = true) {
     val current = AgentKey(chat.host.id, chat.terminal.address)
     val otherAgents = model.drawerAgents.filter { it.key != current }
     val agents = otherAgents.filter { it.live && isWaiting(it.terminal.agentStatus) }
@@ -52,7 +52,7 @@ internal fun ThreadWaitingPill(model: HostsModel, chat: ChatModel) {
     }
     val waiting = if (held == null) pending else pending.map { if (it.key == held.key) held else it }
         .let { if (it.any { entry -> entry.key == held.key }) it else it + held }
-    if (pending.isNotEmpty()) {
+    if (showPill && pending.isNotEmpty()) {
         val urgent = waiting.first().call?.call?.urgency in setOf(CallUrgency.URGENT, CallUrgency.EMERGENCY)
         val text = if (waiting.size == 1) stringResource(if (urgent) R.string.thread_waiting_urgent_single else R.string.thread_waiting_single,
             waiting.first().name) else pluralStringResource(if (urgent) R.plurals.thread_waiting_urgent else R.plurals.thread_waiting,
@@ -90,7 +90,10 @@ internal fun ThreadWaitingPill(model: HostsModel, chat: ChatModel) {
                 }) { Text(stringResource(R.string.thread_open_conversation)) }
                 if (target.call != null) {
                     val live = model.calls.calls.firstOrNull { it.key == target.call.key } ?: target.call.copy(live = false)
-                    ThreadCallPanel(live, model.calls, onDismiss = { model.calls.closeThreadCall(live) }, announce = true, onOpenTerminal = {
+                    ThreadCallPanel(live, model.calls, onDismiss = {
+                        model.calls.closeThreadCall(live)
+                        sheet = false
+                    }, announce = true, onOpenTerminal = {
                         sheet = false
                         model.openCallTerminal(live)
                     })
