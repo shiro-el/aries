@@ -37,7 +37,7 @@ impl Transport for LocalProcess {
                 .envs(&self.env)
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
-                .stderr(Stdio::null())
+                .stderr(Stdio::piped())
                 .kill_on_drop(true)
                 .spawn()
                 .map_err(|e| CoreError::Unreachable {
@@ -45,10 +45,37 @@ impl Transport for LocalProcess {
                 })?;
             let stdin = child.stdin.take().expect("piped stdin");
             let stdout = child.stdout.take().expect("piped stdout");
+            let mut stderr = child.stderr.take().expect("piped stderr");
+            let (tx, rx) = tokio::sync::oneshot::channel();
+            let task = tokio::spawn(async move {
+                use tokio::io::AsyncReadExt;
+                let mut out = super::CommandExit::default();
+                let status = async {
+                    child
+                        .wait()
+                        .await
+                        .ok()
+                        .and_then(|s| s.code())
+                        .map(|s| s as u32)
+                };
+                let diagnostics = async {
+                    let mut bytes = [0; 4096];
+                    while let Ok(n) = stderr.read(&mut bytes).await {
+                        if n == 0 {
+                            break;
+                        }
+                        out.stderr(&bytes[..n]);
+                    }
+                };
+                let (status, _) = tokio::join!(status, diagnostics);
+                out.status = status;
+                let _ = tx.send(out);
+            });
             Ok(Stream {
                 reader: Box::new(stdout),
                 writer: Box::new(stdin),
-                guard: Box::new(std::sync::Mutex::new(child)),
+                guard: Box::new(super::CommandTask(task.abort_handle())),
+                command_exit: Some(rx),
                 ssh: None,
             })
         })
