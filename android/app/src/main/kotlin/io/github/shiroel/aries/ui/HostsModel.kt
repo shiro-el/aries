@@ -1420,6 +1420,9 @@ class HostsModel(
         return conversation(link, entry.terminal)
     }
 
+    /** A submitted sheet answer outlives the sheet, just like a submitted Chat message. */
+    internal fun startTaskQuestion(chat: ChatModel) { chat.start(scope, paused = screensPaused) }
+
     internal fun isViewedChat(chat: ChatModel) = liveChat === chat
 
     /** Read already available transcript facts; the task list never opens per-row SSH watches. */

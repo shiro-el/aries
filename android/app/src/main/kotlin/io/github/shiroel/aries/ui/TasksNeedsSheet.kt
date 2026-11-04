@@ -79,10 +79,9 @@ private fun TasksQuestion(model: HostsModel, board: AgentBoard, original: AgentE
     val link = board.links[entry.host.id]
     val connection = link?.connection
     val chat = remember(entry.key, entry.live, connection) { model.taskQuestion(board, entry.key) }
-    val scope = rememberCoroutineScope()
     val sharedWithDetail = chat != null && model.isViewedChat(chat)
     DisposableEffect(chat, sharedWithDetail) {
-        if (!sharedWithDetail) chat?.start(scope, paused = false)
+        if (!sharedWithDetail && chat != null) model.startTaskQuestion(chat)
         onDispose { if (chat != null && !sharedWithDetail && !model.isViewedChat(chat)) chat.stop() }
     }
     if (!sharedWithDetail) LifecycleStartEffect(chat) {

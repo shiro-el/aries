@@ -658,10 +658,12 @@ class FakeCore : AriesCoreInterface {
 
     /** Thrown by the next `answerQuestion` instead of answering. */
     var answerFailure: CoreException? = null
+    var foregroundAnswerHold: CompletableDeferred<Unit>? = null
 
     override suspend fun answerQuestion(hostId: String, terminal: String, questionId: String, picks: List<List<UInt>>) {
         signsIn("answerQuestion")
         answers += Triple(terminal, questionId, picks)
+        foregroundAnswerHold?.await()
         answerFailure?.let { answerFailure = null; throw it }
     }
 

@@ -4,9 +4,6 @@ import android.content.Context
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import java.io.File
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.Density
 import org.robolectric.annotation.GraphicsMode
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -15,6 +12,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.*
+import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -27,6 +25,9 @@ import org.robolectric.annotation.Config
 @Config(qualifiers = "h1200dp")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class TasksHomeTest {
+    init {
+        System.getenv("ARIES_TASKS_FONT")?.toFloatOrNull()?.let(org.robolectric.RuntimeEnvironment::setFontScale)
+    }
     @get:Rule val compose = createComposeRule()
     private val context = ApplicationProvider.getApplicationContext<Context>()
 
@@ -43,9 +44,7 @@ class TasksHomeTest {
         compose.setContent {
             val scope = rememberCoroutineScope()
             val model = remember { HostsModel(core, scope).apply { start() } }
-            val density = LocalDensity.current
-            CompositionLocalProvider(LocalDensity provides Density(density.density,
-                System.getenv("ARIES_TASKS_FONT")?.toFloat() ?: 1f)) { AriesApp(model, settings) }
+            AriesApp(model, settings)
         }
         compose.waitForIdle()
     }
@@ -138,6 +137,31 @@ class TasksHomeTest {
             assertEquals(1, core.connection!!.launched.size)
             assertEquals(listOf("t101" to "Fix the queue"), core.connection!!.typed)
         }
+    }
+
+    // Regression: dismissing the sheet during a submitted answer must not cancel it and
+    // leave the retained question permanently Sending when its sheet is reopened.
+    @Test fun dismissingAnInFlightAnswerKeepsItsModelOwnedDelivery() {
+        val hold = CompletableDeferred<Unit>()
+        val core = FakeCore().apply {
+            addHost("home", Endpoint.Ssh("home.test", 22u, "me"))
+            foregroundAnswerHold = hold
+            terminals = listOf(TerminalInfo("t1", "Question task", "", listOf("codex"), "/repo", "live",
+                AgentStatus.Blocked(BlockedReason.QUESTION, "Color?")))
+        }
+        show(core)
+        compose.onNodeWithTag("tasks-filter-needs").performClick()
+        val question = ChatEntry("q1", null, ChatEntryBody.Question("request_user_input", "Color?",
+            listOf(ChatQuestionPart("Color?", null, false, listOf(ChatQuestionOption("Blue", null)))), ChatToolStatus.RUNNING, null))
+        compose.runOnIdle { core.pushChat(ChatSnapshot(listOf(question), ChatStatus.LIVE, null)) }
+        compose.onNodeWithContentDescription(context.getString(R.string.chat_question_option_label, "Blue")).performClick()
+        compose.onNodeWithTag("tasks-needs-next").performClick()
+        compose.onNodeWithTag("tasks-needs-sheet").assertDoesNotExist()
+        compose.onNodeWithTag("tasks-filter-needs").performClick()
+        compose.onNodeWithTag("tasks-needs-sheet").assertExists()
+        compose.runOnIdle { hold.complete(Unit) }
+        compose.onNodeWithTag("tasks-needs-sheet").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(1, core.answers.size) }
     }
 
     @Test fun successfulRepliesAdvanceInUrgencyOrderAndCloseAfterTheLast() {
