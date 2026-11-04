@@ -307,7 +307,8 @@ class ChatModel(
         if (now.agentStatus !is AgentStatus.Blocked) refused = false
     }
 
-    val canSend: Boolean get() = connectionError == null && link != null && canEdit && !interrupting && !uploading && pendingShare == null &&
+    val canSend: Boolean get() = connectionError == null && link?.state == LinkState.Up &&
+        snapshot?.status != ChatStatus.RECONNECTING && canEdit && !interrupting && !uploading && pendingShare == null &&
         (draft.isNotBlank() || attachments.isNotEmpty())
 
     /**

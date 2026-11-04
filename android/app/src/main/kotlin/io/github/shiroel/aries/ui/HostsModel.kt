@@ -39,6 +39,7 @@ import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
@@ -56,13 +57,16 @@ import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 
+/** Bounded reuse for a short trip to another app; never a resident background connection. */
+const val SCREEN_CONNECTION_GRACE_MS = 120_000L
+
 /** A message for the user: a string resource and its format arguments. */
 data class Message(@StringRes val res: Int, val args: List<Any> = emptyList())
 
 sealed interface Screen {
     data object Hosts : Screen
     data object Settings : Screen
-    data class Connecting(val host: Host, val link: HostLink) : Screen
+    data class Connecting(val host: Host, val link: HostLink, val cachedBrowser: HostBrowser? = null) : Screen
 
     /** Editing the jump hosts on the way to [host] and the key for each hop. */
     data class JumpHosts(val host: Host, val jumps: List<JumpHost>, val hostKeyId: String?) : Screen
@@ -390,6 +394,7 @@ class HostsModel(
         }
     }
 
+    private var backgroundRelease: Job? = null
     private var screensPaused = false
     private val screensActive = MutableStateFlow(true)
     private val foregroundPulls = mutableSetOf<Job>()
@@ -430,16 +435,30 @@ class HostsModel(
         liveChat?.reconnect()
     }
 
-    /** Screen work releases its connections while notification workers keep their own ownership. */
-    fun backgrounded() {
+    /** Retain warm screen streams briefly; App Lock can request immediate release. */
+    fun backgrounded(retainConnections: Boolean = true) {
+        if (screensPaused && retainConnections) return
         screensPaused = true
         screensActive.value = false
         foregroundPulls.toList().forEach { it.cancel() }
+        links.forEach { it.suspendRetries() }
+        backgroundRelease?.cancel()
+        if (retainConnections) {
+            backgroundRelease = scope.launch {
+                delay(SCREEN_CONNECTION_GRACE_MS)
+                releaseScreenConnections()
+            }
+        } else releaseScreenConnections()
+    }
+
+    private fun releaseScreenConnections() {
         links.forEach { it.pause() }
         liveChat?.pause()
     }
 
     fun resumeScreens() {
+        backgroundRelease?.cancel()
+        backgroundRelease = null
         screensPaused = false
         screensActive.value = true
         links.forEach { it.resume() }
@@ -678,13 +697,21 @@ class HostsModel(
             scope.launch { initialConnectionProblem(host, error, restore != null) }
         }
         browseLink = link
-        val connecting = Screen.Connecting(host, link)
+        val stored = try { core.lastKnownState(host.id) } catch (_: CoreException) { null }
+        val cachedBrowser = stored?.structure?.let { structure ->
+            HostBrowser(host).also { browser ->
+                browser.link = link
+                browser.update(structure)
+                stored.agents.forEach(browser::replaceTerminal)
+            }
+        }
+        val connecting = Screen.Connecting(host, link, cachedBrowser)
         screen = connecting
         status = scope.launch {
             link.keep { conn, _ ->
                 if (screen !== connecting) return@keep
 
-                val browser = HostBrowser(host)
+                val browser = cachedBrowser ?: HostBrowser(host)
                 browser.layoutEditor = LayoutEditor(browser, scope)
                 browser.link = link
                 browser.savedLaunches = conn.savedLaunches()
