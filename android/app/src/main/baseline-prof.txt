@@ -1075,12 +1075,6 @@ PLio/github/shiroel/aries/core/uniffiCallbackInterfaceStructureListener$onClosed
 PLio/github/shiroel/aries/core/uniffiCallbackInterfaceStructureListener$onClosed;->callback$lambda$1(Lkotlin/Unit;)Lkotlin/Unit;
 PLio/github/shiroel/aries/core/uniffiCallbackInterfaceStructureListener$onClosed;->callback(JLcom/sun/jna/Pointer;Lio/github/shiroel/aries/core/UniffiRustCallStatus;)V
 PLio/github/shiroel/aries/core/uniffiCallbackInterfaceStructureListener$uniffiFree;->callback(J)V
-PLio/github/shiroel/aries/dictation/DictationInputKt;->DictationInput(Ljava/util/List;Ljava/lang/String;Lkotlin/jvm/functions/Function1;Lio/github/shiroel/aries/dictation/DictationStore;Lio/github/shiroel/aries/dictation/AudioRecorder;Lio/github/shiroel/aries/dictation/Transcriber;Lkotlin/jvm/functions/Function1;ZLandroidx/compose/runtime/Composer;II)V
-PLio/github/shiroel/aries/dictation/DictationStore;-><clinit>()V
-PLio/github/shiroel/aries/dictation/DictationStore;-><init>(Landroid/content/Context;Lio/github/shiroel/aries/core/KeyVault;)V
-PLio/github/shiroel/aries/dictation/DictationStore;-><init>(Landroid/content/Context;Lio/github/shiroel/aries/core/KeyVault;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
-PLio/github/shiroel/aries/dictation/DictationStore;->getHasKey()Z
-PLio/github/shiroel/aries/dictation/DictationStore;->readKey()Ljava/lang/String;
 PLio/github/shiroel/aries/guidance/AppGuidanceKt$$ExternalSyntheticLambda3;->invoke(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
 PLio/github/shiroel/aries/guidance/AppGuidanceKt$AppGuidance$4$1$1;->invoke()Ljava/lang/Object;
 PLio/github/shiroel/aries/guidance/AppGuidanceKt$AppGuidance$4$1$1;->invoke()V
