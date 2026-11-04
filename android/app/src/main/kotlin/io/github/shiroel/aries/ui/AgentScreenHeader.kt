@@ -53,6 +53,7 @@ internal fun AgentScreenHeader(
     val openFiles = LocalOpenFiles.current
     val quickOpen = LocalQuickOpen.current
     val openDrawer = LocalConsoleMenu.current
+    val openHosts = LocalTasksHosts.current.takeIf { LocalLayoutScreens.current === TasksScreens }
     ConsoleBar(Modifier.testTag("console-top-bar"), reportHeight = true) {
         val backLabel = stringResource(R.string.back_button)
         IconButton(onClick = onBack, modifier = Modifier.size(48.dp).testTag("console-back")) {
@@ -92,7 +93,10 @@ internal fun AgentScreenHeader(
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 AgentHeaderDetails(terminal, hostName)
                 MenuDivider()
-                openDrawer?.let { open ->
+                if (openHosts != null) {
+                    ActionMenuItem(stringResource(R.string.hosts_title), R.drawable.ic_menu,
+                        onClick = { menu = false; openHosts() })
+                } else openDrawer?.let { open ->
                     ActionMenuItem(stringResource(R.string.console_open_drawer), R.drawable.ic_menu,
                         onClick = { menu = false; open() })
                 }

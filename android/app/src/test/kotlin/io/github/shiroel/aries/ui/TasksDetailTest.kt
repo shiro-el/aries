@@ -52,7 +52,7 @@ class TasksDetailTest {
         lateinit var model: HostsModel
         compose.setContent {
             val scope = rememberCoroutineScope()
-            model = remember { HostsModel(core, scope).apply { start() } }
+            model = remember { HostsModel(core, scope).apply { start(layout = AppLayout.TASKS) } }
             AriesApp(model, settings)
         }
         compose.onNodeWithTag("task-row:h1:t1").performClick()
