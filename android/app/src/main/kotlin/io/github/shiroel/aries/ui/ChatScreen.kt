@@ -1050,6 +1050,13 @@ fun ChatScreen(
     val toolGroups = if (thread != null) threadToolGroups(transcript.contents) else emptyList()
     val answerQuestion = if (thread != null) threadAnswerQuestion(chat) else null
     val dialogs = remember(chat) { ChatDialogState() }
+    val tasks = LocalTasksDetail.current
+    val liveTaskQuestion = if (tasks != null) entries.firstOrNull {
+        it.body is ChatEntryBody.Question && chat.questionMode(it.id) == ChatModel.QuestionMode.Live && chat.answers[it.id] != AnswerState.Sent
+    } else null
+    LaunchedEffect(chat, liveTaskQuestion?.id) {
+        liveTaskQuestion?.let { dialogs.tasksRequest = TasksRequest.Question(it.id, it.body as ChatEntryBody.Question) }
+    }
     val horizontalScrolls = remember(chat) { ChatMarkdownScrolls() }
     SideEffect { horizontalScrolls.retain(rawEntries.mapTo(mutableSetOf()) { it.id }) }
     var searchOpen by rememberSaveable(chat) { mutableStateOf(false) }
@@ -1069,8 +1076,11 @@ fun ChatScreen(
                     thread != null && it.call.pushesByDefault && it.call.answer == null))
         }.sortedBy { it.call.atMs }
     }.orEmpty()
-    val scroll = rememberChatScrollState(chat, entries, agentCalls.map { "call:${it.key}" } + chat.queuedMessages.map { "queued:${it.id}" } +
-        if (chat.showWorking) listOf("working") else emptyList(), markdown, followEnabled = !searchOpen && !dialogs.isOpen)
+    val callKeys = agentCalls.map { "call:${it.key}" }
+    val toolUnreadKeys = toolGroups.flatMap { group -> group.entries.map { it.id to group.key } }.toMap()
+    val scroll = rememberChatScrollState(chat, entries, callKeys + chat.queuedMessages.map { "queued:${it.id}" } +
+        if (chat.showWorking) listOf("working") else emptyList(), markdown, followEnabled = !searchOpen && !dialogs.isOpen,
+        callKeys = callKeys, messageKeys = entries.map { toolUnreadKeys[it.id] ?: "transcript:${it.id}" }.distinct())
     val toggleTool = remember(chat, scroll) {
         { id: String -> scroll.readTool(); chat.toggle(id) }
     }
@@ -1097,6 +1107,7 @@ fun ChatScreen(
         LocalChatImageRevision provides chat.imageRevision,
         androidx.compose.ui.platform.LocalUriHandler provides rememberAgentUriHandler(preview, chat.link, chat.terminal.address)) {
         ChatDialogs(dialogs)
+        TasksRequestDialogs(dialogs, chat, calls)
         AgentViewport(
             header = {
                 if (thread != null) ThreadChatHeader(chat, onBack, onOpenTerminal, { searchOpen = true }, preview, snapshot?.usage)
@@ -1185,7 +1196,7 @@ fun ChatScreen(
                         }
                         items(agentCalls, key = { "call:${it.key}" }, contentType = { "call" }) { entry ->
                             if (calls != null) {
-                                if (LocalTasksDetail.current != null) TasksCallTrace(entry, calls) else ConsoleChatCall(entry, calls)
+                                if (LocalTasksDetail.current != null) TasksCallTrace(entry) else ConsoleChatCall(entry, calls)
                             }
                         }
                         queuedChatMessages(chat)
@@ -1257,7 +1268,7 @@ private fun chatHistoryContent(
     }
     items(agentCalls, key = { "call:${it.key}" }, contentType = { "call" }) { entry ->
         if (calls != null) {
-            if (LocalTasksDetail.current != null) TasksCallTrace(entry, calls) else ConsoleChatCall(entry, calls)
+            if (LocalTasksDetail.current != null) TasksCallTrace(entry) else ConsoleChatCall(entry, calls)
         }
     }
     queuedChatMessages(chat)
