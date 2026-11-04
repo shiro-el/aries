@@ -2,6 +2,9 @@ package io.github.shiroel.aries.ui
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.Intent
+import android.content.ActivityNotFoundException
+import android.widget.Toast
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -47,7 +50,7 @@ internal fun ChatTextActions(
     text: String,
     onClick: () -> Unit = {},
     /** Observe long presses before clickable spans consume their pointer input. */
-    interceptChildLongPress: Boolean = false,
+    interceptChildLongPress: Boolean = true,
     /** Disclosure headers stay quiet while preserving their long-press text actions. */
     showIndication: Boolean = true,
     content: @Composable (Modifier) -> Unit,
@@ -70,6 +73,33 @@ internal fun ChatTextActions(
             onLongClick = if (text.isEmpty()) null else { { menu = true } },
         ))
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            // Build the list only when requested; long transcripts stay cheap while streaming.
+            if (menu) chatWebUrls(text).map { it.second }.distinct().forEach { url ->
+                ActionMenuItem(
+                    label = stringResource(R.string.chat_link_copy, url), icon = R.drawable.ic_link,
+                    onClick = {
+                        context.getSystemService(ClipboardManager::class.java)
+                            .setPrimaryClip(ClipData.newPlainText(copyLabel, url))
+                        menu = false
+                    },
+                )
+                ActionMenuItem(
+                    label = stringResource(R.string.chat_link_share, url), icon = R.drawable.ic_share_2,
+                    onClick = {
+                        menu = false
+                        try {
+                            context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, url)
+                            }, null))
+                        } catch (_: ActivityNotFoundException) {
+                            Toast.makeText(context, R.string.chat_link_share_failed, Toast.LENGTH_SHORT).show()
+                        } catch (_: SecurityException) {
+                            Toast.makeText(context, R.string.chat_link_share_failed, Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                )
+            }
             ActionMenuItem(
                 label = copyLabel, icon = R.drawable.ic_copy,
                 onClick = {

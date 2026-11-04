@@ -577,6 +577,12 @@
     <string name="chat_code_label">Code</string>
     <string name="chat_code_copy_button">Copy code</string>
     <string name="chat_code_copied">Copied</string>
+    <!-- Chat links -->
+    <string name="chat_link_share_failed">Could not share the link.</string>
+    <string name="chat_link_copy">Copy link · %1$s</string>
+    <string name="chat_link_share">Share link · %1$s</string>
+    <string name="chat_link_open_failed">Could not open the link. Check that a browser is available.</string>
+
     <!-- Chat text selection and clipboard actions. -->
     <string name="chat_text_actions">Text actions</string>
     <string name="chat_copy_all">Copy all</string>

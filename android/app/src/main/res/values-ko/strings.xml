@@ -577,6 +577,12 @@
     <string name="chat_code_label">코드</string>
     <string name="chat_code_copy_button">코드 복사</string>
     <string name="chat_code_copied">복사됨</string>
+    <!-- Chat links -->
+    <string name="chat_link_share_failed">링크를 공유할 수 없습니다.</string>
+    <string name="chat_link_copy">링크 복사 · %1$s</string>
+    <string name="chat_link_share">링크 공유 · %1$s</string>
+    <string name="chat_link_open_failed">링크를 열 수 없습니다. 브라우저가 설치되어 있는지 확인하세요.</string>
+
     <!-- Chat text selection and clipboard actions. -->
     <string name="chat_text_actions">텍스트 메뉴</string>
     <string name="chat_copy_all">모두 복사</string>

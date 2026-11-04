@@ -40,7 +40,10 @@ class ChatFileLinksTest {
             action(results)
             layout = results.single()
         }
-        val links = layout!!.layoutInput.text.getLinkAnnotations(0, text.length)
+        val annotations = layout!!.layoutInput.text.getLinkAnnotations(0, text.length)
+        val links = annotations.filter { it.item is androidx.compose.ui.text.LinkAnnotation.Clickable }
+        assertEquals(listOf("https://example.com/a.kt:4"), annotations.filter { it.item is androidx.compose.ui.text.LinkAnnotation.Url }
+            .map { text.substring(it.start, it.end) })
         assertEquals(listOf("../lib/a.rs:7", "/etc/hosts", "README.md", "src/a file.kt:9"),
             links.map { text.substring(it.start, it.end) })
         for (link in links) node.performFirstLinkClick { it.start == link.start }
