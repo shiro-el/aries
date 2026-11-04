@@ -149,6 +149,7 @@ class FakeCore : AriesCoreInterface {
     private val terminalWatchers = mutableMapOf<String, MutableSet<Channel<List<TerminalInfo>>>>()
 
     var attachFailure: CoreException? = null
+    var attachHold: kotlinx.coroutines.CompletableDeferred<Unit>? = null
     val watchFailures = mutableMapOf<String, CoreException>()
     fun failTerminalWatch(hostId: String, error: CoreException) {
         terminalWatchers[hostId]?.toList()?.forEach { it.close(error) }
@@ -1101,6 +1102,7 @@ class FakeConnection(
     val views = mutableListOf<FakeTerminalView>()
 
     override suspend fun attachTerminal(address: String, options: AttachOptions): TerminalView {
+        core?.attachHold?.await()
         core?.attachFailure?.let { throw it }
         return FakeTerminalView(address, options).also { views += it }
     }

@@ -210,6 +210,134 @@ async fn edited_multiline_paste_is_one_bracketed_block_then_follows_mode_off() {
     assert_eq!(inputs(&agent, 2)[1], "keys 61 0d 62 0d 63");
 }
 
+// Regression: the first paste must wait for the mode at the end of a split
+// initial repaint, even when the caller has not pulled a screen frame yet.
+#[tokio::test]
+async fn first_paste_waits_for_the_complete_initial_modes() {
+    let hc = HcSession::start();
+    let agent = hc.run_fake_agent(
+        "initial-paste",
+        "run stty raw -echo; printf '\\033[?2004hbracket-ready'\nkeys 15\n",
+    );
+    // Establish that the program enabled paste mode before attaching.
+    let setup = connect(&hc).await;
+    let observer = setup
+        .conn
+        .attach_terminal(agent.address.clone(), observe_options())
+        .await
+        .unwrap();
+    until(&observer, &mut Screen::default(), "bracket-ready", |s| {
+        s.contains("bracket-ready")
+    })
+    .await;
+    observer.detach().await;
+
+    let data = tempfile::tempdir().unwrap();
+    let held = data.path().join("held");
+    let release = data.path().join("release");
+    // A transparent bridge delays the real snapshot immediately before its
+    // bracketed-paste mode, and splits the trailing mode marker across frames.
+    let bridge = r#"
+import os, struct, subprocess, sys, threading, time
+p = subprocess.Popen(sys.argv[3:], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+def exact(stream, n):
+    result = b''
+    while len(result) < n:
+        part = stream.read(n - len(result))
+        if not part: raise EOFError()
+        result += part
+    return result
+def output(channel, kind, data):
+    sys.stdout.buffer.write(struct.pack('<IBI', channel, kind, len(data)) + data)
+    sys.stdout.buffer.flush()
+def incoming():
+    try:
+        while True:
+            data = os.read(0, 65536)
+            if not data: break
+            p.stdin.write(data); p.stdin.flush()
+    finally:
+        p.terminate()
+try:
+    p.stdin.write(sys.stdin.buffer.readline()); p.stdin.flush()
+    sys.stdout.buffer.write(p.stdout.readline()); sys.stdout.buffer.flush()
+    threading.Thread(target=incoming, daemon=True).start()
+    delayed = False
+    while True:
+        channel, kind, n = struct.unpack('<IBI', exact(p.stdout, 9))
+        payload = exact(p.stdout, n)
+        at = payload.rfind(b'\x1b[?2004h')
+        if channel and kind == 0 and not delayed and at >= 0:
+            delayed = True
+            output(channel, kind, payload[:at])
+            open(sys.argv[1], 'w').close()
+            while not os.path.exists(sys.argv[2]): time.sleep(.005)
+            marker = payload.index(b'\x1b[?9001', at)
+            output(channel, kind, payload[at:marker + 7])
+            output(channel, kind, payload[marker + 7:])
+        else: output(channel, kind, payload)
+except (EOFError, BrokenPipeError):
+    pass
+finally:
+    p.terminate(); p.wait()
+"#;
+    let mut argv = vec![
+        "python3".into(),
+        "-c".into(),
+        bridge.into(),
+        held.to_string_lossy().into_owned(),
+        release.to_string_lossy().into_owned(),
+    ];
+    argv.extend(hc.connect_argv());
+    let core = core_in(data.path());
+    let host = core
+        .add_host(
+            "delayed".into(),
+            aries_core::Endpoint::Local {
+                argv,
+                env: hc.env().into_iter().collect(),
+            },
+        )
+        .unwrap();
+    let conn = core.connect(host.id).await.unwrap();
+    let view = conn
+        .attach_terminal(agent.address.clone(), typing(60, 15))
+        .await
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while !held.exists() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("bridge withheld the initial modes");
+    let mut paste = Box::pin(view.paste_text("a\nb".into()));
+    assert!(
+        tokio::time::timeout(Duration::from_millis(150), &mut paste)
+            .await
+            .is_err(),
+        "paste must wait for the initial snapshot's modes"
+    );
+    std::fs::write(release, []).unwrap();
+    tokio::time::timeout(Duration::from_secs(5), paste)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        inputs(&agent, 1),
+        vec!["keys 1b 5b 32 30 30 7e 61 0a 62 1b 5b 32 30 31 7e"]
+    );
+    view.detach().await;
+    conn.disconnect().await;
+}
+
+fn observe_options() -> AttachOptions {
+    AttachOptions {
+        observe: true,
+        ..typing(60, 15)
+    }
+}
+
 #[test]
 fn the_default_attach_mode_is_observe_and_the_choice_is_kept() {
     let data = tempfile::tempdir().unwrap();
