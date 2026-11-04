@@ -43,7 +43,8 @@ object NotificationGroups {
         val manager = context.getSystemService(NotificationManager::class.java)
         val visibility = NotificationVisibility.from(context)
         val foreground = visibility?.foreground == true
-        if (foreground && (notification.extras.getBoolean(NotificationVisibility.PASSIVE) ||
+        if (foreground && !notification.extras.getBoolean(InlineNotifications.ACTION_UPDATE) &&
+            (notification.extras.getBoolean(NotificationVisibility.PASSIVE) ||
                 visibility.isViewing(hostId, notification.extras.getString(NotificationVisibility.TERMINAL)))) {
             manager.cancel(tag, hostId.hashCode())
             refresh(context, manager, hostId, hostName, excludedTag = tag)
