@@ -93,7 +93,7 @@ internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit) {
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val screen = model.screen
-    CallAttentionEffect(model.calls.banner)
+    CallAttentionEffect(model.calls)
     SeenAgentEffect(
         screen,
         enabled = drawer.isClosed && drawer.targetValue == DrawerValue.Closed &&

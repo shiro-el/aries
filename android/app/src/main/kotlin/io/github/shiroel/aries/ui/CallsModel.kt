@@ -17,6 +17,8 @@ import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -59,6 +61,10 @@ class CallsModel(
     /** The newest Call that arrived while watching and asks for the user; `null` when dismissed. */
     var banner by mutableStateOf<CallEntry?>(null)
         private set
+
+    /** Fresh arrivals, without replay: a burst may replace the banner but still needs each haptic. */
+    private val attentionEvents = MutableSharedFlow<CallEntry>(extraBufferCapacity = 64)
+    internal val attention = attentionEvents.asSharedFlow()
 
     /** Watched Hosts still waiting for their first complete snapshot. */
     var syncingHosts by mutableStateOf<Set<String>>(emptySet())
@@ -272,7 +278,11 @@ class CallsModel(
                 val host = hosts[hostId]
                 if (!current || host == null) return@launch
                 // Helper Agents' and unconfirmed Calls are only recorded.
-                if (call.pushesByDefault && call.answer == null) banner = CallEntry(host, call)
+                if (call.pushesByDefault && call.answer == null) {
+                    val entry = CallEntry(host, call)
+                    banner = entry
+                    attentionEvents.emit(entry)
+                }
             }
         }
 

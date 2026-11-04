@@ -21,19 +21,20 @@ import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.CallUrgency
 
-/** Identity, rather than snapshots or recomposition, owns the foreground haptic. */
+/** Each fresh arrival owns its haptic; snapshots and recreated screens never replay it. */
 @Composable
-internal fun CallAttentionEffect(entry: CallEntry?) {
+internal fun CallAttentionEffect(calls: CallsModel) {
     val haptic = LocalHapticFeedback.current
-    LaunchedEffect(entry?.key) {
-        entry ?: return@LaunchedEffect
-        val feedback = when (entry.call.urgency) {
-            CallUrgency.RECORD -> return@LaunchedEffect
-            CallUrgency.CHECK -> HapticFeedbackType.Confirm
-            CallUrgency.URGENT -> HapticFeedbackType.LongPress
-            CallUrgency.EMERGENCY -> HapticFeedbackType.Reject
+    LaunchedEffect(calls) {
+        calls.attention.collect { entry ->
+            val feedback = when (entry.call.urgency) {
+                CallUrgency.RECORD -> return@collect
+                CallUrgency.CHECK -> HapticFeedbackType.Confirm
+                CallUrgency.URGENT -> HapticFeedbackType.LongPress
+                CallUrgency.EMERGENCY -> HapticFeedbackType.Reject
+            }
+            haptic.performHapticFeedback(feedback)
         }
-        haptic.performHapticFeedback(feedback)
     }
 }
 

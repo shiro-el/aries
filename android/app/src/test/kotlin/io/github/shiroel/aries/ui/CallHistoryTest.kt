@@ -466,6 +466,13 @@ class CallHistoryTest {
             assertEquals(index + 1, haptics.size)
         }
         assertEquals(3, haptics.toSet().size)
+        // Both arrivals precede the next frame; replacing the visible banner must not swallow a haptic.
+        compose.runOnIdle {
+            core.sendCall(call("h1", "burst-1", "First request", 4uL))
+            core.sendCall(call("h1", "burst-2", "Second request", 5uL))
+        }
+        compose.onNodeWithText("Second request").assertExists()
+        assertEquals(5, haptics.size)
         compose.runOnIdle {
             core.callListeners.getValue("h1").onCalls(core.callsOf.getValue("h1").map {
                 it.copy(answer = CallAnswer(0u, "Seen", CallAnswerState.DELIVERED, 10uL, null))
@@ -477,7 +484,7 @@ class CallHistoryTest {
                 answer = CallAnswer(0u, "Seen", CallAnswerState.DELIVERED, 21uL, null)))
         }
         compose.onNodeWithTag("call_banner").assertDoesNotExist()
-        assertEquals(3, haptics.size)
+        assertEquals(5, haptics.size)
     }
 
     @Test
