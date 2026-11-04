@@ -19,6 +19,7 @@ class SettingsNavigationRestorationTest {
     private val generation = mutableIntStateOf(0)
     private var saved: Bundle? = null
     private var target: PushTarget? = null
+    private var startupLayout = AppLayout.CONSOLE
     private lateinit var model: HostsModel
     private val terminal = TerminalInfo("box/t1", "agent", "", listOf("claude"), "/repo", "live", AgentStatus.Working)
     private val core = FakeCore().apply {
@@ -35,7 +36,7 @@ class SettingsNavigationRestorationTest {
             key(generation.intValue) {
                 val scope = rememberCoroutineScope()
                 model = remember { HostsModel(api, scope).also { it.restoreSettingsState(saved) } }
-                LaunchedEffect(model) { model.start(target) }
+                LaunchedEffect(model) { model.start(target, layout = startupLayout) }
             }
         }
         compose.waitForIdle()
@@ -175,7 +176,10 @@ class SettingsNavigationRestorationTest {
     // D124: process restoration must keep the Add Host method and the saved Host's authorization step.
     @Test fun addHostProgressSurvivesSavedStateRestoration() {
         show()
-        compose.runOnIdle { model.startAddingHost(HostAddMethod.QR) }
+        compose.runOnIdle {
+            model.startAddingHost(HostAddMethod.QR)
+            startupLayout = AppLayout.TASKS
+        }
         restart()
         compose.runOnIdle {
             assertEquals(HostAddMethod.QR, model.hostAddMethod)
