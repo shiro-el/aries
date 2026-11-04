@@ -92,7 +92,7 @@ internal fun ThreadWaitingPill(model: HostsModel, chat: ChatModel) {
                     val live = model.calls.calls.firstOrNull { it.key == target.call.key } ?: target.call.copy(live = false)
                     ThreadCallPanel(live, model.calls, onDismiss = { model.calls.closeThreadCall(live) }, announce = true, onOpenTerminal = {
                         sheet = false
-                        model.openPushedAgent(live.host.id, live.call.terminal!!)
+                        model.openCallTerminal(live)
                     })
                 } else if (target.agent != null) ThreadWaitingQuestion(model, target.agent)
             } else Text(stringResource(R.string.thread_waiting_empty), Modifier.padding(16.dp))

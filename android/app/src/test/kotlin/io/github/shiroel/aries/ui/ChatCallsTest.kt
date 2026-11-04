@@ -228,6 +228,16 @@ class ChatCallsTest {
         compose.onNodeWithText(str(R.string.call_answer_unconfirmed, "Wait")).assertExists()
         compose.onNodeWithText("reply detail").assertExists()
         compose.onNodeWithContentDescription(str(R.string.call_answer_choice_label, call.title, "Wait")).assertDoesNotExist()
+        // Explicit acknowledgement hides the warning without erasing the durable result or its recovery route.
+        compose.onNodeWithText(str(R.string.call_reply_dismiss)).performClick()
+        compose.onNodeWithText(call.title).assertDoesNotExist()
+        openInboxFromChat()
+        compose.onNodeWithText(str(R.string.call_answer_unconfirmed, "Wait")).assertExists()
+        compose.onNodeWithText(str(R.string.call_open_chat)).performClick()
+        compose.onNodeWithTag("call-inbox-panel").assertDoesNotExist()
+        compose.onNodeWithText(call.title).assertExists()
+        compose.onNodeWithText(str(R.string.call_answer_unconfirmed, "Wait")).assertExists()
+        assertEquals(1, core.replies.size)
     }
 
     @Test

@@ -372,7 +372,7 @@ internal fun ThreadChatInput(model: HostsModel, chat: ChatModel, activeCall: Cal
         ThreadConnectionGuidance(chat)
         if (activeCall != null && calls != null) ThreadCallPanel(activeCall, calls, chat, compact, onDismiss = {
             calls.closeThreadCall(activeCall)
-        }, maxHeight = panelHeight, onOpenTerminal = { model.openPushedAgent(chat.host.id, chat.terminal.address) })
+        }, maxHeight = panelHeight, onOpenTerminal = { model.openTerminal(chat.terminal) })
         else if (question != null) ThreadAnswerPanel(chat, question, panelHeight)
         else if (chat.link != null) ThreadComposer(chat, compact)
     }

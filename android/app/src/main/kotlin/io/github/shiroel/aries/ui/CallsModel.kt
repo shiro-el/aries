@@ -81,7 +81,13 @@ class CallsModel(
         entry.key == openedThreadCall || entry.key !in closedThreadCalls &&
             (entry.answerable || entry.needsAttention || entry.key in replying || entry.key in replyNotes)
 
-    internal fun openThreadCall(entry: CallEntry) { openedThreadCall = entry.key }
+    internal fun openThreadCall(entry: CallEntry) {
+        openedThreadCall = entry.key
+        if (entry.unresolvedAnswer) {
+            closedThreadCalls = closedThreadCalls - entry.key
+            publish()
+        }
+    }
 
     internal fun closeThreadCall(entry: CallEntry) {
         closedThreadCalls = closedThreadCalls + entry.key
@@ -145,6 +151,10 @@ class CallsModel(
         replying = replying + key
         localReplies = localReplies + key
         replyNotes = replyNotes - key
+        if (key in closedThreadCalls) {
+            closedThreadCalls = closedThreadCalls - key
+            publish()
+        }
         scope.launch {
             val note: ReplyNote? = try {
                 val r = withContext(keyWork) { core.replyCall(entry.host.id, entry.call.id, choice.toUInt()) }
@@ -258,6 +268,7 @@ class CallsModel(
 
     fun dismissReplyNote(key: String) {
         replyNotes = replyNotes - key
+        calls.firstOrNull { it.key == key && it.unresolvedAnswer }?.let(::closeThreadCall)
     }
 
     fun dismissBanner() {

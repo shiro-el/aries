@@ -122,7 +122,7 @@ internal fun ConsoleChatCall(entry: CallEntry, calls: CallsModel, announce: Bool
         calls.replyNotes[entry.key]?.let { replyNoteText(it, call.answer) }?.let { text ->
             Text(text, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
-        if (entry.key in calls.replyNotes && !entry.unresolvedAnswer) {
+        if (entry.key in calls.replyNotes || entry.unresolvedAnswer) {
             TextButton(onClick = { calls.dismissReplyNote(entry.key) }) {
                 Text(stringResource(R.string.call_reply_dismiss))
             }

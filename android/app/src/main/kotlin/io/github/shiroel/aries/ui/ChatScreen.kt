@@ -1247,7 +1247,8 @@ fun ChatScreen(
     val agentCalls = calls?.let { model ->
         model.calls.filter {
             it.host.id == chat.host.id && it.call.terminal == chat.terminal.address &&
-                (it.key in model.replying || it.live && (it.answerable || it.unresolvedAnswer || it.key in model.replyNotes ||
+                (it.key in model.replying || it.live && (thread != null || !it.acknowledged) &&
+                    (it.answerable || it.unresolvedAnswer || it.key in model.replyNotes ||
                     thread != null && it.call.pushesByDefault && it.call.answer == null))
         }.sortedBy { it.call.atMs }
     }.orEmpty()

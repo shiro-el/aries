@@ -69,6 +69,35 @@ class ThreadWaitingTest {
         compose.onNodeWithText("Second Call").assertDoesNotExist()
     }
 
+    // D22: checking uncertain delivery must open the calling Terminal, even with Chat as the default view.
+    @Test fun uncertainDeliveryOpensTheCallingTerminalWithoutChangingTheSavedView() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val core = FakeCore().apply {
+            addHost("home", Endpoint.Ssh("home.test", 22u, "me")); ensureKey(); savedView = AgentView.CHAT
+            terminals = listOf("Current", "Review").mapIndexed { i, name ->
+                TerminalInfo("t${i + 1}", name, "", listOf("claude"), "/repo", "live", AgentStatus.Working)
+            }
+            callsOf["h1"] = listOf(CallInfo("h1", "uncertain", 1000uL, "t2", true, "Check delivery", "", CallUrgency.CHECK,
+                listOf("Allow"), CallAnswer(0u, "Allow", CallAnswerState.UNCONFIRMED, 2000uL, null), true))
+        }
+        val settings = ThemeSettings(context.getSharedPreferences("waiting-terminal-recovery", Context.MODE_PRIVATE)).apply { chooseLayout(AppLayout.THREAD) }
+        lateinit var model: HostsModel
+        compose.setContent {
+            val scope = rememberCoroutineScope()
+            model = remember { HostsModel(core, scope) }
+            AriesApp(model, settings)
+        }
+        compose.onNodeWithText("home").performClick()
+        compose.onNodeWithText("Current").performClick()
+        compose.onNodeWithTag("thread-waiting-pill").performClick()
+        compose.onNodeWithText(context.getString(R.string.terminal_open_button)).performClick()
+        compose.waitUntil(5_000) { model.screen is Screen.Terminal }
+        compose.runOnIdle {
+            assertEquals("t2", (model.screen as Screen.Terminal).viewer.terminal.address)
+            assertEquals(AgentView.CHAT, core.agentView())
+        }
+    }
+
     // D04: a failed list watch must remove cached Agents from live waiting and drawer priority sections.
     @Test fun failedHostListKeepsLastKnownAgentsOutOfLiveWaiting() {
         val context = ApplicationProvider.getApplicationContext<Context>()
