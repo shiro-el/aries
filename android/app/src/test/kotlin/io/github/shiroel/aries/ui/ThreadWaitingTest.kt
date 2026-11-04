@@ -254,7 +254,9 @@ class ThreadWaitingTest {
             ChatEntryBody.User("Investigate the reconnect failure"))), ChatStatus.LIVE, null)) }
         compose.onNode(hasText("Investigate the reconnect failure") and hasAnyAncestor(isDialog())).assertExists()
         compose.onNodeWithText(context.getString(R.string.thread_open_conversation)).performClick()
-        compose.onNode(hasText("Investigate the reconnect failure") and hasClickAction()).assertExists()
+        compose.onNode(hasText("Investigate the reconnect failure") and SemanticsMatcher.expectValue(
+            androidx.compose.ui.semantics.SemanticsProperties.Role, androidx.compose.ui.semantics.Role.Button,
+        )).assertExists()
         compose.openConsoleDrawer()
         compose.onNodeWithTag("thread-agent:h1:t2").assertTextContains("Investigate the reconnect failure")
     }

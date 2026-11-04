@@ -2,6 +2,7 @@ package io.github.shiroel.aries.ui
 
 import android.content.Context
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -50,11 +51,12 @@ class ChatScrollTest {
     private val compositionGeneration = mutableStateOf(0)
     private val hostNumber = mutableStateOf(0)
     private val terminal = mutableStateOf(agent)
+    private lateinit var currentChat: ChatModel
     private fun entries(count: Int) = (1..count).map {
         ChatEntry("a$it", null, ChatEntryBody.Agent("Reply $it\nSecond line\nThird line"))
     }
 
-    private fun open() {
+    private fun open(connected: Boolean = false, thread: Boolean = false) {
         val hosts = listOf(
             core.addHost("home", Endpoint.Ssh("home.test", 22u, "me")),
             core.addHost("other", Endpoint.Ssh("other.test", 22u, "me")),
@@ -63,10 +65,18 @@ class ChatScrollTest {
         compose.setContent {
             key(generation.value, hostNumber.value, terminal.value.address) {
                 val scope = rememberCoroutineScope()
-                val chat = remember { ChatModel(core, hosts[hostNumber.value], terminal.value).also { it.start(scope) } }
+                val chat = remember {
+                    val host = hosts[hostNumber.value]
+                    val first = FakeConnection(emptyList(), io.github.shiroel.aries.core.HostStructure(emptyList(), emptyList(), null))
+                    val link = if (connected) HostLink(host, first, scope, { first }) else null
+                    ChatModel(core, host, terminal.value, link).also { currentChat = it; it.start(scope) }
+                }
                 val calls = remember { CallsModel(core, scope).also { it.watch(hosts, everyHost = true) } }
                 DisposableEffect(chat) { onDispose { chat.stop(); calls.stopAll() } }
-                key(compositionGeneration.value) { ChatScreen(chat, {}, calls = calls) }
+                val threadModel = remember { if (thread) HostsModel(core, scope) else null }
+                CompositionLocalProvider(LocalThreadChat provides threadModel) {
+                    key(compositionGeneration.value) { ChatScreen(chat, {}, calls = calls) }
+                }
             }
         }
         push(entries(30))
@@ -143,6 +153,46 @@ class ChatScrollTest {
         compose.onNodeWithContentDescription("Latest (2)").assertDoesNotExist()
         push(entries(33))
         assertReply(33)
+    }
+
+    // D42: data delivered during the Latest animation must retarget the jump and resume follow.
+    @Test fun latestKeepsFollowingWhenRowsArriveDuringItsAnimation() {
+        open()
+        readReply(6)
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithContentDescription("Latest").performClick()
+        compose.mainClock.advanceTimeByFrame()
+        push(entries(60))
+        compose.mainClock.advanceTimeBy(32)
+        push(entries(90))
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+
+        assertReply(90)
+        compose.onNodeWithContentDescription("Latest (60)").assertDoesNotExist()
+        push(entries(91))
+        assertReply(91)
+    }
+
+    // D43: a user-input scroll cancelling prepend correction must not kill unread/Latest for this visit.
+    @Test fun draggingDuringAPrependKeepsTheScrollObserverAlive() {
+        open()
+        readReply(16)
+        compose.onNodeWithTag("chat-transcript").performTouchInput {
+            down(center)
+            moveBy(androidx.compose.ui.geometry.Offset(0f, 100f))
+        }
+        val older = ChatEntry("older", null, ChatEntryBody.Agent("Earlier history"))
+        push(listOf(older) + entries(32))
+        compose.onNodeWithTag("chat-transcript").performTouchInput { up() }
+        compose.waitForIdle()
+        push(listOf(older) + entries(33))
+
+        awaitLatest("Latest (3)")
+        compose.onNodeWithContentDescription("Latest (3)").performClick()
+        assertReply(33)
+        push(listOf(older) + entries(34))
+        assertReply(34)
     }
 
     // Regression: reopening a read Chat must discard its old viewport/count and follow new output.
@@ -308,6 +358,40 @@ class ChatScrollTest {
         awaitLatest("Latest (2)")
         compose.onNodeWithContentDescription("Latest (2)").assertIsDisplayed().performClick()
         compose.onNodeWithText("Review?").assertIsDisplayed()
+    }
+
+    // D44: a status footer must neither add unread content nor hide Calls inserted before it.
+    @Test fun workingFooterDoesNotCountOrMaskNewCalls() {
+        terminal.value = agent.copy(agentStatus = AgentStatus.Done)
+        open(connected = true)
+        readReply(6)
+        compose.runOnIdle { currentChat.update(listOf(agent)) }
+        awaitLatest("Latest")
+        compose.onNodeWithContentDescription("Latest (1)").assertDoesNotExist()
+        compose.runOnIdle {
+            core.sendCall(CallInfo("h1", "call1", 1000uL, "t1", true, "Review?", "Ready.",
+                CallUrgency.CHECK, listOf("Yes", "Later"), null, true))
+        }
+        awaitLatest("Latest (1)")
+        push(entries(31))
+        awaitLatest("Latest (2)")
+        compose.onNodeWithContentDescription("Latest (2)").performClick()
+        compose.onNodeWithText("Review?").assertIsDisplayed()
+    }
+
+    // D74's unread portion: a growing Thread tool group is one unread activity, regardless of tool count.
+    @Test fun threadCountsEachToolGroupOnceAsItGrows() {
+        open(thread = true)
+        readReply(6)
+        fun tool(id: String) = ChatEntry(id, null, ChatEntryBody.Tool("Read", id, "{}",
+            io.github.shiroel.aries.core.ChatToolStatus.DONE, "Read successfully"))
+        push(entries(30) + tool("tool1") + tool("tool2"))
+        awaitLatest("Latest (1)")
+        push(entries(30) + tool("tool1") + tool("tool2") + tool("tool3"))
+        awaitLatest("Latest (1)")
+        push(entries(30) + tool("tool1") + tool("tool2") + tool("tool3") +
+            ChatEntry("after-tools", null, ChatEntryBody.Agent("Finished reading")) + tool("tool4"))
+        awaitLatest("Latest (3)")
     }
 
     @Test fun markdownBlocksShareOneMessageCountAndRestoreTheBlockBeingRead() {

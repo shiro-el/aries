@@ -45,14 +45,6 @@ private fun insertSkill(input: TextFieldValue, token: String): TextFieldValue {
 internal fun ChatCatalogControls(chat: ChatModel,
     composer: (@Composable (openTools: () -> Unit) -> Unit)? = null) {
     var showTools by rememberSaveable(chat) { mutableStateOf(false) }
-    val context = androidx.compose.ui.platform.LocalContext.current
-    // Shared content is consumed even while Thread's secondary input tools are folded.
-    LaunchedEffect(chat, chat.pendingShare, chat.inputUnavailable) {
-        chat.pendingShare?.takeUnless { chat.inputUnavailable }?.let {
-            chat.pendingShare = null
-            chat.attach(context.applicationContext, it)
-        }
-    }
     val connection = chat.link?.connection
     val process = chat.terminal.foreground
     val cwd = process?.cwd ?: chat.terminal.cwd
