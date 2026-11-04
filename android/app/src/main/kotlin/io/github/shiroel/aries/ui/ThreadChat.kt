@@ -198,8 +198,7 @@ private fun ThreadToolSummary(group: ThreadToolGroup, chat: ChatModel, scroll: C
 
 internal fun threadAnswerQuestion(chat: ChatModel): ChatEntry? = chat.snapshot?.entries.orEmpty().firstOrNull { entry ->
     val q = entry.body as? ChatEntryBody.Question
-    q?.status == ChatToolStatus.RUNNING && chat.questionMode(entry.id) in setOf(ChatModel.QuestionMode.Live,
-        ChatModel.QuestionMode.LivePending, ChatModel.QuestionMode.Reconnecting, ChatModel.QuestionMode.History)
+    q?.status == ChatToolStatus.RUNNING && chat.questionMode(entry.id) == ChatModel.QuestionMode.Live
 }
 
 @Composable
@@ -256,9 +255,12 @@ internal fun ThreadChatHeader(chat: ChatModel, onBack: () -> Unit, onTerminal: (
                     overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
                 Icon(painterResource(R.drawable.ic_chevron_down), null, Modifier.size(16.dp))
             }
-            val status = threadConnectionText(chat) ?: stringResource(R.string.thread_chat_subtitle,
-                chat.terminal.agentStatus?.let { stringResource(agentStatusLabel(it)) }.orEmpty(), chat.host.name)
-            Text(status, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall,
+            val status = if (chat.showInitialLoading) null else threadConnectionText(chat)
+            if (status != null) AnnouncedText(status, style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            else Text(stringResource(R.string.thread_chat_subtitle,
+                chat.terminal.agentStatus?.let { stringResource(agentStatusLabel(it)) }.orEmpty(), chat.host.name),
+                maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         LocalThreadChat.current?.let { ThreadNewTaskButton(it) }
@@ -273,7 +275,9 @@ internal fun ThreadChatHeader(chat: ChatModel, onBack: () -> Unit, onTerminal: (
                 openFiles?.let { DropdownMenuItem(text = { Text(stringResource(R.string.menu_open_files)) }, onClick = { menu = false; it() }) }
                 DropdownMenuItem(text = { Text(stringResource(R.string.github_button)) }, enabled = chat.link?.connection != null,
                     onClick = { menu = false; github?.open() })
-                DropdownMenuItem(text = { Text(stringResource(R.string.usage_title)) }, onClick = { menu = false; showUsage = true })
+                DropdownMenuItem(text = { Text(stringResource(R.string.usage_menu_label,
+                    stringResource(R.string.usage_title), contextRemaining(usage?.context))) },
+                    onClick = { menu = false; showUsage = true })
                 if (preview.ports.isNotEmpty()) DropdownMenuItem(text = { Text(stringResource(R.string.preview_title)) },
                     onClick = { menu = false; preview.selected = preview.ports.first() })
                 WatchAgentMenuItem(chat.terminal, chat.link) { chat.update(listOf(it)); menu = false }
@@ -284,23 +288,24 @@ internal fun ThreadChatHeader(chat: ChatModel, onBack: () -> Unit, onTerminal: (
 
 @Composable
 private fun threadConnectionText(chat: ChatModel): String? = when {
-    chat.link?.state == LinkState.Reconnecting || chat.snapshot?.status in setOf(ChatStatus.RECONNECTING, ChatStatus.NO_CORE, ChatStatus.CONNECTING) ->
-        stringResource(R.string.connect_host_reconnecting, chat.host.name)
-    chat.snapshot?.status == ChatStatus.NO_BEACON -> stringResource(R.string.chat_status_no_beacon)
-    chat.link?.state is LinkState.Down || chat.connectionError != null -> stringResource(R.string.agents_host_offline, chat.host.name)
-    else -> null
+    chat.link?.state is LinkState.Down -> stringResource(R.string.agents_host_offline, chat.host.name)
+    chat.link?.state == LinkState.Reconnecting -> statusText(ChatStatus.RECONNECTING)
+    chat.connectionError != null -> messageText(problemFor(chat.connectionError!!).body)
+    else -> statusText(chat.snapshot?.status ?: ChatStatus.CONNECTING)
 }
 
 @Composable
 internal fun ThreadConnectionGuidance(chat: ChatModel) {
+    // The body owns first load; subsequent status changes are announced in the header.
+    if (chat.showInitialLoading || chat.snapshot?.status == ChatStatus.NO_TERMINAL &&
+        chat.link?.state == LinkState.Up && chat.connectionError == null) return
     val text = threadConnectionText(chat) ?: return
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-        AnnouncedText(text, style = MaterialTheme.typography.bodySmall)
         val state = chat.link?.state as? LinkState.Down
         val error = chat.connectionError ?: state?.error ?: if (chat.snapshot?.status == ChatStatus.NO_BEACON) CoreException.BeaconNotInstalled() else null
         if (error != null) {
-            val problem = problemFor(error)
-            Text(messageText(problem.body), style = MaterialTheme.typography.bodySmall)
+            val detail = messageText(problemFor(error).body)
+            if (detail != text) AnnouncedText(detail, style = MaterialTheme.typography.bodySmall)
         }
         Row {
             TextButton(onClick = { chat.link?.retryNow(); chat.retryConnection() }) { Text(stringResource(R.string.connect_retry_button)) }
@@ -324,16 +329,13 @@ internal fun ThreadComposer(chat: ChatModel, compact: Boolean) {
 }
 
 @Composable
-internal fun ThreadChatInput(model: HostsModel, chat: ChatModel, agentCalls: List<CallEntry>, calls: CallsModel?,
-    question: ChatEntry?, compact: Boolean) {
-    var closedCalls by remember(chat) { mutableStateOf(emptySet<String>()) }
+internal fun ThreadChatInput(model: HostsModel, chat: ChatModel, activeCall: CallEntry?, calls: CallsModel?,
+    question: ChatEntry?, compact: Boolean, onDismissCall: (CallEntry) -> Unit) {
     Column(Modifier.fillMaxWidth()) {
         ThreadWaitingPill(model, chat)
         ThreadConnectionGuidance(chat)
-        val activeCall = agentCalls.sortedByDescending { it.call.urgency.ordinal }.firstOrNull { it.key !in closedCalls }
         if (activeCall != null && calls != null) ThreadCallPanel(activeCall, calls, chat, compact, onDismiss = {
-            closedCalls = closedCalls + activeCall.key
-            if (calls.banner?.key == activeCall.key) calls.dismissBanner()
+            onDismissCall(activeCall)
         })
         else if (question != null) ThreadAnswerPanel(chat, question)
         else if (chat.link != null) ThreadComposer(chat, compact)
