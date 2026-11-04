@@ -21,6 +21,7 @@
                 <data android:host="*" />
                 <data android:path="/aries/last-known-state" />
                 <data android:path="/aries/progress" />
+                <data android:pathPrefix="/aries/progress/" />
             </intent-filter>
         </service>
         <service android:name=".AgentsTileService" android:exported="true"

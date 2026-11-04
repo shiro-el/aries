@@ -4,7 +4,7 @@ import com.google.android.gms.wearable.DataMap
 import com.google.android.gms.wearable.PutDataMapRequest
 import com.google.android.gms.wearable.PutDataRequest
 
-/** One most recently updated Watched Agent. Times are Unix milliseconds, never device uptime. */
+/** One Watched Agent. Times are Unix milliseconds, never device uptime. */
 data class WatchProgress(
     val hostId: String,
     val terminal: String,
@@ -19,7 +19,10 @@ data class WatchProgress(
         require(name.length <= 128 && startedAtMs >= 0 && atMs >= startedAtMs && childAgents >= 0)
     }
 
-    fun toRequest(): PutDataRequest = PutDataMapRequest.create(DATA_PATH).apply {
+    val dataPath: String get() = DATA_PATH + "/" + java.security.MessageDigest.getInstance("SHA-256")
+        .digest("${hostId.length}:$hostId$terminal".toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+
+    fun toRequest(): PutDataRequest = PutDataMapRequest.create(dataPath).apply {
         dataMap.putInt("version", 1)
         dataMap.putString("host", hostId)
         dataMap.putString("terminal", terminal)
@@ -32,6 +35,8 @@ data class WatchProgress(
 
     companion object {
         const val DATA_PATH = "/aries/progress"
+        const val MAX_AGE_MS = 30 * 60_000L
+        fun isDataPath(path: String?) = path == DATA_PATH || path?.startsWith("$DATA_PATH/") == true
         fun fromBytes(bytes: ByteArray?): WatchProgress? = runCatching {
             require(bytes != null && bytes.size <= 4096)
             val map = DataMap.fromByteArray(bytes)

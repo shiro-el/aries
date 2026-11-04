@@ -581,7 +581,6 @@ fun TerminalScreen(
                     onAttachCapture = onPreviewCapture.takeIf { viewer.terminal.agentStatus != null })
             } else {
                 val look = viewer.look
-
                 val scope = rememberCoroutineScope()
                 Box(Modifier.fillMaxWidth().weight(1f)) {
                     TerminalCanvas(viewer, look, displaySettings, Modifier.fillMaxSize())
@@ -703,7 +702,6 @@ private fun TerminalCanvas(viewer: TerminalViewer, look: TerminalLook, settings:
                 delay(200)
                 viewer.phoneGrid = grid
             }
-
         }
         look.layout(baseCellW, baseCellH, widthPx, heightPx)
         if (WindowInsets.ime.getBottom(density) > 0) look.revealCursor()

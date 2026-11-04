@@ -58,10 +58,11 @@ fun WatchInbox(
     val selected = summary.inbox.firstOrNull { it.hostId == target?.first && it.terminal == target.second }
     BackHandler(selected != null) { onTarget(null) }
     WatchConsoleTheme {
+        val inboxScroll = rememberScalingLazyListState(initialCenterItemIndex = 0)
         val dismiss = rememberSwipeToDismissBoxState()
         SwipeToDismissBox(state = dismiss, onDismissed = { onTarget(null) }, hasBackground = selected != null) { background ->
             if (!background) key(selected?.hostId, selected?.terminal) {
-                val scroll = rememberScalingLazyListState(initialCenterItemIndex = 0)
+                val scroll = if (selected == null) inboxScroll else rememberScalingLazyListState(initialCenterItemIndex = 0)
                 Scaffold(timeText = { TimeText(modifier = Modifier.scrollAway(scroll)) }, positionIndicator = { PositionIndicator(scroll) }) {
                     ScalingLazyColumn(
                         modifier = Modifier.fillMaxSize(), state = scroll, autoCentering = null,
@@ -69,7 +70,7 @@ fun WatchInbox(
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         item { Heading(if (selected == null) stringResource(R.string.wear_inbox_title) else selected.name) }
-                        item { Caption(WatchTile.age(LocalContext.current, summary, now)) }
+                        item { Caption(WatchTile.age(LocalContext.current, selected?.let { summary.fetchedAt(it.hostId) } ?: summary.fetchedAtMs, now)) }
                         if (selected == null) {
                             if (summary.inbox.isEmpty()) item {
                                 Caption(stringResource(if (summary.fetchedAtMs == 0L) R.string.wear_open_phone else R.string.wear_no_agents))
@@ -79,7 +80,7 @@ fun WatchInbox(
                                 val rows = sections[attention].orEmpty()
                                 if (rows.isNotEmpty()) item { Heading(stringResource(if (attention) R.string.wear_inbox_attention else R.string.wear_inbox_agents), section = true) }
                                 rows.groupBy { it.hostId to it.project }.forEach { (_, agents) ->
-                                    item { GroupLabel(agents.first()) }
+                                    item { GroupLabel(agents.first(), summary, now) }
                                     agents.forEach { agent -> item(key = "${agent.hostId}/${agent.terminal}") {
                                         Chip(
                                             onClick = { onTarget(agent.hostId to agent.terminal) },
@@ -100,7 +101,7 @@ fun WatchInbox(
                             }
                             notice?.let { resource -> item { Caption(stringResource(resource)) } }
                         } else {
-                            item { GroupLabel(selected) }
+                            item { GroupLabel(selected, summary, now) }
                             item {
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                                     StatusIcon(selected.status)
@@ -125,9 +126,10 @@ fun WatchInbox(
 }
 
 @Composable
-private fun GroupLabel(agent: WatchAgent) {
+private fun GroupLabel(agent: WatchAgent, summary: WatchSummary, now: Long) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-        Text(agent.hostName.ifBlank { agent.hostId }, style = MaterialTheme.typography.caption1)
+        Text(stringResource(R.string.wear_row_age, agent.hostName.ifBlank { agent.hostId },
+            WatchTile.age(LocalContext.current, summary.fetchedAt(agent.hostId), now)), style = MaterialTheme.typography.caption1)
         if (agent.project.isNotBlank()) Text(agent.project, maxLines = 2, overflow = TextOverflow.Ellipsis,
             style = MaterialTheme.typography.caption2, color = Color(WatchConsole.MUTED))
     }

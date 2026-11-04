@@ -106,7 +106,7 @@ object WatchPhone {
         val byHost = states.associateBy { it.hostId }
         val known = hosts.mapNotNull { byHost[it.id] }
         val entries = hosts.flatMap { host ->
-            withAgentSpaces(agentFamily(host, byHost[host.id]?.agents.orEmpty()), byHost[host.id]?.structure)
+            withAgentSpaces(agentFamily(host, byHost[host.id]?.agents.orEmpty().filter { it.state == "live" }), byHost[host.id]?.structure)
         }
         val ordered = orderAgents(entries)
         fun row(entry: io.github.shiroel.aries.ui.AgentEntry): WatchAgent {
@@ -129,12 +129,13 @@ object WatchPhone {
                 })
         }
         return WatchSummary(
-            waiting = entries.count { it.terminal.parent == null && isWaiting(it.terminal.agentStatus) },
-            agents = ordered.take(3).map(::row),
+            waiting = entries.count { isWaiting(it.terminal.agentStatus) },
+            agents = ordered.filter { isWaiting(it.terminal.agentStatus) }.take(3).map(::row),
             inbox = ordered.sortedBy { if (it.terminal.agentStatus is AgentStatus.Blocked) 0 else 1 }
                 .take(WatchSummary.MAX_INBOX_AGENTS).map(::row),
             totalAgents = entries.size,
-            fetchedAtMs = known.minOfOrNull { it.fetchedAtMs.toLong().coerceAtLeast(0) } ?: 0,
+            fetchedAtMs = known.maxOfOrNull { it.fetchedAtMs.toLong().coerceAtLeast(0) } ?: 0,
+            hostFetchedAtMs = hosts.associate { it.id to (byHost[it.id]?.fetchedAtMs?.toLong()?.coerceAtLeast(0) ?: 0L) },
         )
     }
 }

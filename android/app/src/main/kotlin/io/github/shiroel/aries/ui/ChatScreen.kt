@@ -1076,7 +1076,6 @@ fun ChatScreen(
             },
         ) { compact ->
             if (!compact) PreviewChips(preview)
-
             if (preview.selected != null) {
                 LocalhostPreviewBrowser(preview, chat.link, Modifier.weight(1f).fillMaxWidth(),
                     change = chat.terminal.turn to rawEntries.mapNotNull { (it.body as? ChatEntryBody.Tool)?.diff },

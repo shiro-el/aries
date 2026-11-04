@@ -22,7 +22,7 @@ class AgentTileTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val core get() = (context as FakeCoreApp).core
 
-    @Test fun tileShowsWaitingCountAndConservativeAgeWithoutConnecting() {
+    @Test fun tileShowsWaitingCountAndConservativeAgeWithoutConnecting() = kotlinx.coroutines.runBlocking {
         val host = core.addHost("dev", Endpoint.Ssh("box", 22u, "me"))
         val other = core.addHost("other", Endpoint.Ssh("other", 22u, "me"))
         val blocked = TerminalInfo("box/t7", "agent", "", emptyList(), null, "live",
@@ -34,6 +34,11 @@ class AgentTileTest {
         assertEquals("Aries · Waiting 1", service.qsTile.label.toString())
         assertEquals("3 min ago", service.qsTile.subtitle.toString())
         assertEquals(Tile.STATE_ACTIVE, service.qsTile.state)
+        core.lastKnownStatesFailure = CoreException.Storage("unreadable state")
+        service.refreshTile(nowMs = 300_000L)
+        assertEquals("Aries · Waiting 1", service.qsTile.label.toString())
+        assertEquals("3 min ago", service.qsTile.subtitle.toString())
+        core.lastKnownStatesFailure = null
         assertEquals(PushTarget(host.id, "box/t7"), AgentSurfaces.attention(core))
         assertNull(core.connection)
         assertTrue(core.snapshotsRequested.isEmpty())

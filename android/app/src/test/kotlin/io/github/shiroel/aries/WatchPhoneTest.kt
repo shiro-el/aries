@@ -72,7 +72,7 @@ class WatchPhoneTest {
         statusMs = if (status is AgentStatus.Error) 180_000u else 60_000u,
     )
 
-    @Test fun phoneUsesSharedFamilyPriorityAndPinsKeepsOnlyThreeAndDoesNotRefreshAge() {
+    @Test fun tileRowsShowOnlyWaitingAgentsIncludingChildrenAndRetainEachHostsAge() {
         val core = FakeCore()
         val a = core.addHost("one", Endpoint.Ssh("one", 22u, "me"))
         val b = core.addHost("two", Endpoint.Ssh("two", 22u, "me"))
@@ -86,10 +86,11 @@ class WatchPhoneTest {
             LastKnownState(b.id, listOf(agent("remote/t7", AgentStatus.Error("oops"))), 180_000u),
         )
         val summary = WatchPhone.summary(core.hosts(), states)
-        assertEquals(1, summary.waiting)
-        assertEquals(60_000L, summary.fetchedAtMs)
-        assertEquals(listOf("t3", "remote/t7", "t1"), summary.agents.map { it.terminal })
-        assertEquals(listOf(a.id, b.id, a.id), summary.agents.map { it.hostId })
+        assertEquals(2, summary.waiting)
+        assertEquals(180_000L, summary.fetchedAtMs)
+        assertEquals(mapOf(a.id to 60_000L, b.id to 180_000L), summary.hostFetchedAtMs)
+        assertEquals(listOf("remote/t7", "t2"), summary.agents.map { it.terminal })
+        assertEquals(listOf(b.id, a.id), summary.agents.map { it.hostId })
         assertEquals(0L, WatchPhone.summary(emptyList(), states).fetchedAtMs)
     }
 
