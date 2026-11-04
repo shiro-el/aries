@@ -5,6 +5,8 @@ import android.content.ClipboardManager
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -50,6 +52,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
@@ -73,10 +77,8 @@ fun AriesApp(
     terminalDisplay: TerminalDisplaySettings = rememberTerminalDisplaySettings(),
 ) {
     AriesTheme(settings) {
-        NewTaskAccess(model) {
-            if (guidance == null) AriesContent(model, settings, terminalDisplay)
-            else io.github.shiroel.aries.guidance.AppGuidance(guidance, allowNotifications) { AriesContent(model, settings, terminalDisplay) }
-        }
+        if (guidance == null) AriesContent(model, settings, terminalDisplay)
+        else io.github.shiroel.aries.guidance.AppGuidance(guidance) { AriesContent(model, settings, terminalDisplay, guidance, allowNotifications) }
     }
 }
 
@@ -87,8 +89,12 @@ private fun rememberThemeSettings(): ThemeSettings {
 }
 
 @Composable
-private fun AriesContent(model: HostsModel, settings: ThemeSettings, terminalDisplay: TerminalDisplaySettings) {
-    val activity = LocalContext.current as? android.app.Activity
+private fun AriesContent(
+    model: HostsModel, settings: ThemeSettings, terminalDisplay: TerminalDisplaySettings,
+    guidance: io.github.shiroel.aries.guidance.AppGuidanceState? = null,
+    allowNotifications: suspend () -> Boolean = { false },
+) {
+    val activity = androidx.activity.compose.LocalActivity.current
     // Screen connections and the Call banner follow the visible lifecycle.
     LifecycleStartEffect(model) {
         model.resumeScreens()
@@ -103,14 +109,16 @@ private fun AriesContent(model: HostsModel, settings: ThemeSettings, terminalDis
     }
     Scaffold { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
-            ConsoleShell(model) {
-                RemoteFilesAccess(model) {
-                    AdaptiveHostLayout(
-                        listScreen = model.listScreen,
-                        hasDetail = model.screen is Screen.Chat || model.screen is Screen.Terminal,
-                        listContent = { ScreenContent(model, settings, terminalDisplay, it) },
-                        detailContent = { ScreenContent(model, settings, terminalDisplay, model.screen) },
-                    )
+            FirstConnectionGuide(model, guidance, allowNotifications) {
+                ConsoleShell(model) {
+                    RemoteFilesAccess(model) {
+                        AdaptiveHostLayout(
+                            listScreen = model.listScreen,
+                            hasDetail = model.screen is Screen.Chat || model.screen is Screen.Terminal,
+                            listContent = { ScreenContent(model, settings, terminalDisplay, it) },
+                            detailContent = { ScreenContent(model, settings, terminalDisplay, model.screen) },
+                        )
+                    }
                 }
             }
         }
@@ -129,7 +137,15 @@ private fun ScreenContent(model: HostsModel, settings: ThemeSettings, terminalDi
                 hostEditor = { host -> if (host.endpoint is Endpoint.Ssh) HostEditSection(model, host) },
             )
         }
-        is Screen.Connecting -> ConnectionNotice(s.link)
+        is Screen.Connecting -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+            ConnectionNotice(s.link)
+            if ((s.link.state as? LinkState.Down)?.error is io.github.shiroel.aries.core.CoreException.AuthRejected &&
+                s.host.endpoint is Endpoint.Ssh) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    HostKeyAuthorization(model, s.host)
+                }
+            }
+        }
         is Screen.Browse -> {
             BrowseScreen(
                 s.browser,
@@ -148,7 +164,7 @@ private fun ScreenContent(model: HostsModel, settings: ThemeSettings, terminalDi
                         TextButton(
                             onClick = { model.openHostSettings(s.browser.host) },
                             modifier = Modifier.testTag("browse-host-settings:${s.browser.host.id}"),
-                        ) { Text(stringResource(R.string.settings_beacon_missing), maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                        ) { Text(stringResource(R.string.settings_beacon_missing), maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis) }
                     }
                 },
             )
@@ -178,6 +194,8 @@ private fun ScreenContent(model: HostsModel, settings: ThemeSettings, terminalDi
                     onOpen = { model.selectListedAgent(s.board, it) },
                     current = model.currentAgentKey,
                     onPin = { entry, pinned -> model.pin(s.board, entry, pinned) },
+                    onAddHost = { model.startAddingHost() },
+                    onOpenHosts = model::back,
                 )
             }
         }
@@ -195,18 +213,22 @@ private fun ScreenContent(model: HostsModel, settings: ThemeSettings, terminalDi
 
 @Composable
 private fun HostListScreen(model: HostsModel) {
-    var adding by rememberSaveable { mutableStateOf(false) }
+    val adding = model.hostAddMethod != null
     LazyColumn(Modifier.fillMaxSize()) {
         if (model.hosts.isEmpty()) item { Text(stringResource(R.string.hosts_empty), Modifier.padding(12.dp), fontSize = 12.sp) }
         items(model.hosts, key = { it.id }) { host -> ConsoleHostRow(model, host) }
         item(key = "add") {
+            val expansion = stringResource(if (adding) R.string.tree_expanded else R.string.tree_collapsed)
             Text(
                 stringResource(if (adding) R.string.console_add_close else R.string.console_add_host),
-                Modifier.fillMaxWidth().testTag("hosts-add-toggle").clickable { adding = !adding }.padding(12.dp),
+                Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("hosts-add-toggle")
+                    .semantics { stateDescription = expansion }.clickable(role = Role.Button) {
+                    if (adding) model.closeAddingHost() else model.startAddingHost()
+                }.padding(12.dp),
                 fontSize = 14.sp, color = MaterialTheme.colorScheme.primary,
             )
             if (adding) Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (model.key == null) MissingKeySettingsLink(model) else AddHostForm(model)
+                HostConnectionForm(model)
             }
         }
     }
@@ -215,15 +237,16 @@ private fun HostListScreen(model: HostsModel) {
 @Composable
 private fun ConsoleHostRow(model: HostsModel, host: Host) {
     val color = if (host.endpoint is Endpoint.Local) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
-    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.width(3.dp).height(48.dp).background(color))
-        Column(Modifier.weight(1f).clickable { model.openHost(host) }.padding(horizontal = 12.dp, vertical = 6.dp)) {
-            Text(host.name, fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    val connectLabel = stringResource(R.string.hosts_connect_button)
+    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.width(3.dp).fillMaxHeight().background(color))
+        Column(Modifier.weight(1f).heightIn(min = 48.dp).clickable(onClickLabel = connectLabel, role = Role.Button) { model.openHost(host) }.padding(horizontal = 12.dp, vertical = 6.dp)) {
+            Text(host.name, fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
             val where = when (val endpoint = host.endpoint) {
                 is Endpoint.Ssh -> stringResource(R.string.host_ssh_address, endpoint.user, endpoint.address, endpoint.port.toInt())
                 is Endpoint.Local -> stringResource(R.string.host_local_address)
             }
-            Text(where, fontSize = 12.sp, lineHeight = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(where, fontSize = 12.sp, lineHeight = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
         }
         WaitingSummary(model.quickOpenSources.filter { it.host.id == host.id },
             model.drawerAgents.filter { it.host.id == host.id }, Modifier.testTag("host-waiting:${host.id}"),
@@ -240,13 +263,18 @@ private fun ConsoleHostRow(model: HostsModel, host: Host) {
             })
         val moreLabel = stringResource(R.string.console_host_menu, host.name)
         Box(
-            Modifier.size(48.dp).testTag("host-menu:${host.id}").clickable { model.openHostSettings(host) }
+            Modifier.size(48.dp).testTag("host-menu:${host.id}").clickable(role = Role.Button) { model.openHostSettings(host) }
                 .semantics { contentDescription = moreLabel },
             contentAlignment = Alignment.Center,
-        ) { Text(stringResource(R.string.console_more), fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        ) { Text(stringResource(R.string.console_more), Modifier.clearAndSetSemantics {}, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
-    if (model.missingKeyHostId == host.id && model.key == null) {
-        Column(Modifier.padding(12.dp)) { MissingKeySettingsLink(model) }
+    if (model.missingKeyHostId == host.id) {
+        Column(Modifier.padding(12.dp)) {
+            if (model.key == null) ConnectionKeySetup(model)
+            else TextButton(onClick = { model.connect(host) }, modifier = Modifier.testTag("missing-key-connect")) {
+                Text(stringResource(R.string.onboarding_continue_button))
+            }
+        }
     }
     HorizontalDivider()
 }
@@ -259,6 +287,14 @@ internal fun KeySection(model: HostsModel) {
         ConsoleButton(onClick = model::createKey) { Text(stringResource(R.string.key_create_button)) }
         return
     }
+    PublicKeyDetails(model)
+    TextButton(onClick = model::openKeyRecovery) { Text(stringResource(R.string.key_recover_button)) }
+    BiometricToggle(model.keyProtection == KeyProtection.BIOMETRIC, model::requireBiometric)
+}
+
+@Composable
+private fun PublicKeyDetails(model: HostsModel) {
+    val key = model.key ?: return
     val context = LocalContext.current
     val clipLabel = stringResource(R.string.key_clip_label)
     Text(stringResource(R.string.key_title), style = MaterialTheme.typography.titleMedium)
@@ -269,8 +305,6 @@ internal fun KeySection(model: HostsModel) {
             ?.setPrimaryClip(ClipData.newPlainText(clipLabel, key.openssh))
     }) { Text(stringResource(R.string.key_copy_button)) }
     ConsoleButton(onClick = model::showKeyQr) { Text(stringResource(R.string.key_qr_button)) }
-    TextButton(onClick = model::openKeyRecovery) { Text(stringResource(R.string.key_recover_button)) }
-    BiometricToggle(model.keyProtection == KeyProtection.BIOMETRIC, model::requireBiometric)
 }
 
 @Composable
@@ -296,11 +330,39 @@ internal fun OptionToggle(label: Int, on: Boolean, onChange: (Boolean) -> Unit) 
 }
 
 @Composable
-internal fun MissingKeySettingsLink(model: HostsModel) {
-    Text(stringResource(R.string.key_missing), style = MaterialTheme.typography.bodySmall)
-    TextButton(onClick = model::openKeySettings, modifier = Modifier.testTag("missing-key-settings")) {
-        Text(stringResource(R.string.settings_keys_open))
+internal fun ConnectionKeySetup(model: HostsModel) {
+    Text(stringResource(R.string.onboarding_key_body), style = MaterialTheme.typography.bodySmall)
+    KeySection(model)
+    KeyImportButton(model)
+}
+
+@Composable
+private fun HostConnectionForm(model: HostsModel) {
+    val method = model.hostAddMethod ?: return
+    ConsoleSegments(HostAddMethod.entries, method, model::startAddingHost,
+        label = { stringResource(if (it == HostAddMethod.QR) R.string.onboarding_qr_button else R.string.onboarding_manual_button) })
+    when {
+        model.key == null -> ConnectionKeySetup(model)
+        model.addedHost != null -> {
+            val host = model.addedHost!!
+            HostKeyAuthorization(model, host)
+            TextButton(onClick = { model.connect(host) }, modifier = Modifier.testTag("host-setup-connect")) {
+                Text(stringResource(R.string.onboarding_continue_button))
+            }
+        }
+        method == HostAddMethod.QR -> {
+            Text(stringResource(R.string.onboarding_qr_body), style = MaterialTheme.typography.bodySmall)
+            QrHostPairing(model, onPaired = model::connect)
+        }
+        else -> AddHostForm(model)
     }
+}
+
+@Composable
+private fun HostKeyAuthorization(model: HostsModel, host: Host) {
+    Text(stringResource(R.string.onboarding_manual_key_body))
+    KeySection(model)
+    TextButton(onClick = { model.askPassword(host) }) { Text(stringResource(R.string.host_install_key_button)) }
 }
 
 @Composable
@@ -310,7 +372,9 @@ private fun AddHostForm(model: HostsModel) {
     var port by rememberSaveable { mutableStateOf("22") }
     var user by rememberSaveable { mutableStateOf("") }
     val portNumber = port.toIntOrNull()?.takeIf { it in 1..65535 }
-    QrHostPairing(model)
+    val guided = io.github.shiroel.aries.guidance.LocalAppGuidance.current?.onboardingStep != null
+    Text(stringResource(R.string.onboarding_manual_key_body), style = MaterialTheme.typography.bodySmall)
+    PublicKeyDetails(model)
     Text(stringResource(R.string.host_add_title), style = MaterialTheme.typography.titleMedium)
     OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.host_add_name)) }, singleLine = true)
     OutlinedTextField(address, { address = it }, label = { Text(stringResource(R.string.host_add_address)) }, singleLine = true)
@@ -324,7 +388,8 @@ private fun AddHostForm(model: HostsModel) {
     ConsoleButton(
         enabled = validHostInput(model.hosts, null, name, address, portNumber, user),
         onClick = {
-            model.addHost(name, address, portNumber ?: 22, user)
+            model.addHost(name, address, portNumber ?: 22, user,
+                connectAfterAdd = guided)
             name = ""; address = ""; port = "22"; user = ""
         },
     ) { Text(stringResource(R.string.host_add_button)) }
@@ -398,7 +463,7 @@ private fun PromptDialog(prompt: Prompt, model: HostsModel) {
         is Prompt.Problem -> AlertDialog(
             onDismissRequest = model::dismiss,
             title = { Text(text(prompt.title)) },
-            text = { Text(text(prompt.body)) },
+            text = { AnnouncedText(text(prompt.body)) },
             confirmButton = {
                 TextButton(onClick = { if (prompt.recoverKey) model.openKeyRecovery() else model.dismiss() }) {
                     Text(stringResource(if (prompt.recoverKey) R.string.key_recover_button else R.string.ok_button))

@@ -1,19 +1,38 @@
 <resources>
+    <!-- Watch interrupt -->
+    <string name="wear_interrupt_confirm_body">%1$s을(를) 중단할까요? 폰에서 아직 작업 중인지 확인해요.</string>
+    <string name="wear_interrupt_confirm">중단 확인</string>
+    <string name="wear_interrupt_cancel">취소</string>
+    <string name="wear_interrupt_pending">중단 중…</string>
+    <string name="wear_interrupt_stopped">Agent를 중단했어요</string>
+    <string name="wear_interrupt_exited">Agent가 종료됐어요</string>
+    <string name="wear_interrupt_still_working">Agent가 아직 작업 중이에요. 폰에서 확인해 주세요.</string>
+    <string name="wear_interrupt_not_working">더 이상 작업 중이 아니어서 중단 키를 보내지 않았어요.</string>
+    <string name="wear_interrupt_open_phone">폰에서 Host의 잠금을 풀어 주세요.</string>
+    <string name="wear_interrupt_busy">다른 중단 요청을 처리 중이에요.</string>
+    <string name="wear_interrupt_unknown">중단 결과를 확인하지 못했어요. 다시 시도하기 전에 폰에서 확인해 주세요.</string>
+
+    <!-- Watched Agent Ongoing Activity -->
+    <string name="wear_progress_channel">Agent 진행 상황</string>
+    <string name="wear_progress_status">#name# · #time# 경과 · 하위 Agent #children#개</string>
+    <string name="wear_progress_body">작업 중 · 하위 Agent %1$d개</string>
+
     <!-- Watch Inbox -->
-    <string name="wear_inbox_title">Inbox</string>
-    <string name="wear_inbox_attention">응답 필요</string>
-    <string name="wear_inbox_agents">Agent</string>
+    <string name="wear_inbox_title">INBOX</string>
+    <string name="wear_inbox_attention">대기</string>
+    <string name="wear_inbox_agents">AGENT</string>
     <string name="wear_inbox_refresh">새로고침</string>
     <string name="wear_inbox_refreshing">새로고침 요청 중…</string>
     <string name="wear_inbox_requested">폰에 새로고침을 요청했어요</string>
     <string name="wear_inbox_request">요청</string>
-    <string name="wear_inbox_summary">마지막 응답</string>
+    <string name="wear_inbox_summary">응답</string>
     <string name="wear_inbox_no_request">대기 중인 요청 없음</string>
     <string name="wear_inbox_no_summary">폰에서 Chat을 열어 응답을 동기화해 주세요</string>
     <string name="wear_inbox_hidden">폰의 미리보기 설정에 따라 본문이 숨겨졌어요</string>
     <string name="wear_inbox_answer">답하기</string>
     <string name="wear_inbox_stop">중단</string>
     <string name="wear_inbox_watch">지켜보기</string>
+    <string name="wear_inbox_open_phone">폰에서 열기</string>
     <string name="wear_inbox_back">뒤로</string>
     <string name="wear_inbox_more">Agent %1$d개를 표시해요. 전체 목록은 폰에서 확인해 주세요.</string>
 
@@ -25,6 +44,7 @@
     <string name="wear_tile_working">작업 중 · %1$d (상위 Agent)</string>
     <string name="wear_tile_stale">오래된 정보 · %1$s</string>
     <string name="wear_tile_open">열기</string>
+    <string name="wear_code_question">ASK</string>
     <string name="wear_code_blocked">BLK</string>
     <string name="wear_code_error">ERR</string>
     <string name="wear_code_working">RUN</string>

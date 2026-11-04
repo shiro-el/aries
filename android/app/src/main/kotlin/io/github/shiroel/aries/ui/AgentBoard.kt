@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -124,13 +125,20 @@ fun AgentsScreen(
     onPin: (AgentEntry, Boolean) -> Unit,
     showHeader: Boolean = true,
     current: AgentKey? = null,
+    onAddHost: (() -> Unit)? = null,
+    onOpenHosts: (() -> Unit)? = null,
 ) {
     val folds = rememberTreeFolds("agents")
     Column(Modifier.fillMaxSize()) {
         if (showHeader) ConsoleTopBar(stringResource(R.string.agents_title), onMenu = {}, onBack = onBack,
             showMark = false, inbox = {})
         LazyColumn(Modifier.weight(1f)) {
-            if (board.hosts.isEmpty()) item { Text(stringResource(R.string.agents_no_hosts)) }
+            if (board.hosts.isEmpty()) item {
+                Text(stringResource(R.string.agents_no_hosts))
+                onAddHost?.let { add ->
+                    TextButton(onClick = add) { Text(stringResource(R.string.console_add_host)) }
+                }
+            }
             if (board.loadingHosts.isNotEmpty()) item {
                 Row(
                     Modifier.padding(12.dp),
@@ -145,7 +153,12 @@ fun AgentsScreen(
                 board.links[host.id]?.let { ConnectionNotice(it) }
             }
             val agents = board.agents
-            if (board.isEmpty) item { Text(stringResource(R.string.agents_empty)) }
+            if (board.isEmpty) item {
+                Text(stringResource(R.string.agents_empty))
+                onOpenHosts?.let { open ->
+                    TextButton(onClick = open) { Text(stringResource(R.string.agents_empty_hosts_button)) }
+                }
+            }
             agentTreeItems(agents, folds, onOpen, onPin, current = current)
         }
     }

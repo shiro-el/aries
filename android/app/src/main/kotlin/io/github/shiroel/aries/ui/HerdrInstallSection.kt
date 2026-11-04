@@ -56,7 +56,7 @@ fun HerdrInstallSection(model: HerdrInstallModel, connect: () -> Unit) {
             TextButton(onClick = model::refresh) { Text(stringResource(R.string.herdr_install_refresh)) }
         }
         model.problem?.let {
-            Text(stringResource(it.res, *it.args.toTypedArray()), color = MaterialTheme.colorScheme.error)
+            AnnouncedText(stringResource(it.res, *it.args.toTypedArray()), color = MaterialTheme.colorScheme.error)
         }
         if (model.output.isNotBlank()) {
             SelectionContainer { Text(model.output, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(4.dp)) }
