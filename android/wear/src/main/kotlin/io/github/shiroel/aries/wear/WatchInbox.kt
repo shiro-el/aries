@@ -62,7 +62,7 @@ fun WatchInbox(
         val inboxScroll = rememberScalingLazyListState(initialCenterItemIndex = 0)
         val dismiss = rememberSwipeToDismissBoxState()
         SwipeToDismissBox(state = dismiss, onDismissed = { onTarget(null) }, hasBackground = selected != null) { background ->
-            if (!background) key(selected?.hostId, selected?.terminal) {
+            if (!background) key(selected?.hostId, selected?.terminal, selected?.stateToken, selected?.requestId) {
                 val scroll = if (selected == null) inboxScroll else rememberScalingLazyListState(initialCenterItemIndex = 0)
                 Scaffold(timeText = { TimeText(modifier = Modifier.scrollAway(scroll)) }, positionIndicator = { PositionIndicator(scroll) }) {
                     ScalingLazyColumn(

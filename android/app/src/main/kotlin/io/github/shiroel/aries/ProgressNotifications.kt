@@ -21,7 +21,12 @@ internal object ProgressNotifications {
     private fun stamps(context: Context) = context.getSharedPreferences("progress_completed", Context.MODE_PRIVATE)
 
     /** Persist completion watermarks: normal FCM can arrive after high-priority Done. */
-    fun acceptStatus(context: Context, host: String, terminal: String, at: ULong): Boolean {
+    internal fun statusMillis(at: ULong, atMs: ULong?): Long =
+        atMs?.coerceAtMost(Long.MAX_VALUE.toULong())?.toLong()
+            ?: (at.coerceAtMost((Long.MAX_VALUE / 1000).toULong()).toLong() * 1000)
+
+    fun acceptStatus(context: Context, host: String, terminal: String, at: ULong, atMs: ULong? = null): Boolean {
+        if (statusMillis(at, atMs) < stamps(context).getLong("status:${stampKey(host, terminal)}", 0)) return false
         val old = stamps(context).getLong(stampKey(host, terminal), 0).toULong()
         if (at < old) return false
         val manager = context.getSystemService(NotificationManager::class.java)
@@ -29,15 +34,18 @@ internal object ProgressNotifications {
         return progress == null || at >= (progress.notification.extras.getLong(NotificationGroups.AT_MS, progress.notification.`when`) / 1000).toULong()
     }
 
-    fun completed(context: Context, host: String, terminal: String, at: ULong) {
+    fun completed(context: Context, host: String, terminal: String, at: ULong, atMs: ULong? = null) {
         val prefs = stamps(context)
         val key = stampKey(host, terminal)
         val old = prefs.getLong(key, 0).toULong()
+        val millis = statusMillis(at, atMs)
+        val preciseKey = "status:$key"
+        if (millis >= prefs.getLong(preciseKey, 0)) prefs.edit().putLong(preciseKey, millis).apply()
         if (at >= old) prefs.edit().putLong(key, at.toLong()).apply()
         WatchProgressPhone.completed(context, host, terminal, at)
     }
 
-    fun post(context: Context, notice: PushNotice, p: PushContent.Progress) = synchronized(NotificationGroups) {
+    fun post(context: Context, notice: PushNotice, p: PushContent.Progress): Unit = synchronized(NotificationGroups) {
         val manager = context.getSystemService(NotificationManager::class.java)
         if (p.at <= stamps(context).getLong(stampKey(notice.hostId, p.terminal), 0).toULong()) return
         val existing = manager.activeNotifications.find { it.id == notice.hostId.hashCode() && it.tag == p.terminal }
@@ -64,7 +72,7 @@ internal object ProgressNotifications {
             .setContentText(if (p.childAgents == 0u) context.getString(R.string.push_progress_elapsed, (p.elapsedSecs / 60uL).toLong())
                 else context.getString(R.string.push_progress_body, (p.elapsedSecs / 60uL).toLong(), p.childAgents.toLong()))
             .addExtras(Bundle().apply { putLong(NotificationGroups.AT_MS, p.at.toLong() * 1000) })
-            .setWhen((p.at - p.elapsedSecs.coerceAtMost(p.at)).toLong() * 1000)
+            .setWhen(System.currentTimeMillis() - statusMillis(p.elapsedSecs, null))
             .setUsesChronometer(true)
             .setTimeoutAfter(io.github.shiroel.aries.weardata.WatchProgress.MAX_AGE_MS)
             .setOngoing(true)

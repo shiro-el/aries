@@ -76,14 +76,16 @@ object LastKnownStates {
     /** Failures keep the old value and its original fetchedAtMs, so its age stays honest. */
     suspend fun refreshInBackground(core: AriesCoreInterface, hostId: String? = null) = withContext(Dispatchers.IO) {
         val ids = hostId?.let(::listOf) ?: core.hosts().map { it.id }
+        val refreshed = mutableListOf<LastKnownState>()
         for (id in ids) {
             try {
                 // Includes every jump key and excludes missing keys. Never prompt from work.
-                if (core.canAnswerInBackground(id)) core.snapshot(id)
+                if (core.canAnswerInBackground(id)) refreshed += core.snapshot(id)
             } catch (_: CoreException) {
                 // Offline, deleted, untrusted or locked: another Host can still refresh.
             }
         }
+        refreshed
     }
 
     internal fun hostId(params: WorkerParameters): String? = params.inputData.getString(HOST_ID)
@@ -93,9 +95,10 @@ object LastKnownStates {
 class LastKnownStateWorker(context: Context, private val params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val core = (applicationContext as? HasCore)?.core ?: return Result.failure()
-        LastKnownStates.refreshInBackground(core, LastKnownStates.hostId(params))
+        val refreshed = LastKnownStates.refreshInBackground(core, LastKnownStates.hostId(params))
         try {
-            NotificationGroups.reconcile(applicationContext, core, core.lastKnownStates())
+            val questions = NotificationGroups.refreshQuestions(applicationContext, core, refreshed)
+            NotificationGroups.reconcile(applicationContext, core, core.lastKnownStates(), questions)
         } catch (_: CoreException) {
             // Unreadable storage cannot prove that a card is stale. Keep existing surfaces.
         }

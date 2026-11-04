@@ -3,6 +3,8 @@ package io.github.shiroel.aries
 import io.github.shiroel.aries.core.CallAnswerState
 import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.core.AriesCoreInterface
+import io.github.shiroel.aries.core.ChatEntry
+import io.github.shiroel.aries.core.ChatStatus
 import io.github.shiroel.aries.core.ChatEntryBody
 import io.github.shiroel.aries.core.ChatToolStatus
 import io.github.shiroel.aries.core.LastKnownState
@@ -45,7 +47,15 @@ object NotificationGroups {
     /** Persist identities even while snoozed or dismissed; absence from the shade is not freshness. */
     private fun remember(context: Context, hostId: String, tag: String, generation: String, hidden: Boolean,
         updated: Boolean = false, notification: Notification? = null) {
-        val saved = record(context, hostId, tag)?.takeIf { it.optString("generation") == generation } ?: JSONObject()
+        val previous = record(context, hostId, tag)
+        val saved = previous?.takeIf { it.optString("generation") == generation } ?: JSONObject()
+        val retired = previous?.optJSONObject("retired") ?: JSONObject()
+        if (previous != null && previous.optString("generation") != generation)
+            retired.put(previous.optString("generation"), System.currentTimeMillis())
+        val cutoff = System.currentTimeMillis() - RETENTION_MS
+        retired.keys().asSequence().toList().filter { retired.optLong(it) < cutoff }.forEach(retired::remove)
+        retired.keys().asSequence().toList().sortedByDescending { retired.optLong(it) }.drop(64).forEach(retired::remove)
+        saved.put("retired", retired)
         if (!saved.has("postedAt")) saved.put("postedAt", System.currentTimeMillis())
         saved.put("generation", generation).put("hidden", hidden).put("updated", updated)
             .put("recordedAt", System.currentTimeMillis())
@@ -66,21 +76,67 @@ object NotificationGroups {
         null -> "none"
     }
 
-    /** Local storage observations only. Never opens another Host connection or Chat watch. */
-    internal suspend fun reconcile(context: Context, core: AriesCoreInterface, states: List<LastKnownState>) {
-        val byHost = states.associateBy { it.hostId }
-        // Read encrypted Chat outside the notification monitor. Only a cache containing
-        // this request can prove it ended; an older or absent cache cannot retract it.
-        val questions = synchronized(this) {
-            records(context).all.mapNotNull { (key, value) ->
-                val identity = org.json.JSONArray(key)
-                val saved = JSONObject(value as String)
-                if (saved.optBoolean("hidden") || saved.optString("question").isEmpty()) null
-                else Triple(identity.getString(0), identity.getString(1), saved.optString("question"))
+    private data class QuestionCard(val host: String, val terminal: String, val id: String, val generation: String) {
+        val identity get() = Triple(host, terminal, id)
+    }
+    internal data class QuestionObservation(val generation: String, val entries: List<ChatEntry>)
+
+    private fun questionCards(context: Context) = synchronized(this) {
+        records(context).all.mapNotNull { (key, value) ->
+            val identity = org.json.JSONArray(key)
+            val saved = JSONObject(value as String)
+            if (saved.optBoolean("hidden") || saved.optBoolean("recalled") || saved.optBoolean("resolved") || saved.optString("question").isEmpty()) null
+            else QuestionCard(identity.getString(0), identity.getString(1), saved.optString("question"), saved.optString("generation"))
+        }
+    }
+
+    /** Only the background pull worker calls this bounded, one-shot revalidation.
+     * Storage observers continue to use local Chat and never start a connection. */
+    internal suspend fun refreshQuestions(context: Context, core: AriesCoreInterface, refreshed: List<LastKnownState>): Map<Pair<String, String>, QuestionObservation> {
+        val result = mutableMapOf<Pair<String, String>, QuestionObservation>()
+        val states = refreshed.associateBy { it.hostId }
+        val requests = questionCards(context).filter { card ->
+            states[card.host]?.agents?.any { it.address == card.terminal && it.state == "live" && it.agentStatus is AgentStatus.Blocked } == true
+        }
+        for ((host, cards) in requests.groupBy { it.host }) {
+            try {
+                if (!core.canAnswerInBackground(host)) continue
+                kotlinx.coroutines.withTimeoutOrNull(30_000) {
+                    val connection = core.connect(host)
+                    try {
+                        for (card in cards) {
+                            try {
+                                val snapshot = connection.readChat(card.terminal)
+                                if (snapshot.status in listOf(ChatStatus.LIVE, ChatStatus.ENDED))
+                                    result[host to card.terminal] = QuestionObservation(card.generation, snapshot.entries)
+                            } catch (_: io.github.shiroel.aries.core.CoreException) {
+                                // Failure is not evidence that a request ended.
+                            }
+                        }
+                    } finally {
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                            try { connection.disconnect() } finally { connection.close() }
+                        }
+                    }
+                }
+            } catch (_: io.github.shiroel.aries.core.CoreException) {
+                // The next scheduled pull can retry this Host.
             }
         }
-        val ended = questions.filter { (host, terminal, id) ->
-            val entries = try { core.cachedChat(host, terminal)?.entries.orEmpty() }
+        return result
+    }
+
+    /** Local observations only. A worker may also supply the live question evidence it just read. */
+    internal suspend fun reconcile(context: Context, core: AriesCoreInterface, states: List<LastKnownState>,
+        freshQuestions: Map<Pair<String, String>, QuestionObservation> = emptyMap()) {
+        val byHost = states.associateBy { it.hostId }
+        // Read encrypted Chat outside the notification monitor. A generation guards
+        // against a newer push arriving while the worker's live read is in flight.
+        val questions = questionCards(context)
+        val ended = questions.filter { card ->
+            val (host, terminal, id) = card
+            val fresh = freshQuestions[host to terminal]?.takeIf { it.generation == card.generation }
+            val entries = fresh?.entries ?: try { core.cachedChat(host, terminal)?.entries.orEmpty() }
             catch (_: io.github.shiroel.aries.core.CoreException) { emptyList() }
             val index = entries.indexOfFirst { it.id == id }
             val pending = entries.drop(entries.indexOfLast { (it.body as? ChatEntryBody.User)?.queued == false } + 1)
@@ -95,9 +151,10 @@ object NotificationGroups {
             val lastUser = entries.indexOfLast { (it.body as? ChatEntryBody.User)?.queued == false }
             // A stale cache may still put q1 ahead of a newly pushed q2. Only
             // a final result or progress *after* this request proves retirement.
-            index >= 0 && ((entries[index].body as? ChatEntryBody.Question)?.status != ChatToolStatus.RUNNING ||
+            if (fresh != null) current?.id != id
+            else index >= 0 && ((entries[index].body as? ChatEntryBody.Question)?.status != ChatToolStatus.RUNNING ||
                 lastUser > index || (current != null && entries.indexOfFirst { it.id == current.id } > index))
-        }.toSet()
+        }.map { it.identity }.toSet()
         synchronized(this) {
             val manager = context.getSystemService(NotificationManager::class.java)
             val editor = records(context).edit()
@@ -117,7 +174,7 @@ object NotificationGroups {
                             .put("phase", parts[2]).put("question", parts[3].takeUnless { it == "null" })
                     }
                 }
-                val changed = state != null && saved.has("phase") && state.fetchedAtMs >= maxOf(saved.optLong("at"), saved.optLong("postedAt")).toULong() &&
+                val changed = state != null && saved.has("phase") && state.fetchedAtMs >= saved.optLong("postedAt").toULong() &&
                     (terminal == null || terminal.state != "live" || phase(terminal.agentStatus) != saved.optString("phase") ||
                         saved.optString("turn").toULongOrNull()?.let { it != terminal.turn } == true ||
                         Triple(host, tag, saved.optString("question")) in ended)
@@ -177,6 +234,20 @@ object NotificationGroups {
         refresh(context, manager, hostId, hostName)
     }
 
+    /** Reconsider passive cards when the unlocked UI can actually replace them. */
+    @Synchronized
+    internal fun foregrounded(context: Context) {
+        val manager = context.getSystemService(NotificationManager::class.java)
+        records(context).all.forEach { (key, _) ->
+            val identity = org.json.JSONArray(key)
+            val host = identity.getString(0)
+            val tag = identity.getString(1)
+            val card = manager.activeNotifications.find { it.id == host.hashCode() && it.tag == tag }?.notification
+            if (card?.extras?.getBoolean(NotificationVisibility.PASSIVE) == true &&
+                !card.extras.getBoolean(InlineNotifications.ACTION_UPDATE)) viewing(context, PushTarget(host, tag))
+        }
+    }
+
     /** Looking at an Agent retires its status card and any snoozed copy, without answering Calls. */
     @Synchronized
     fun viewing(context: Context, target: PushTarget) {
@@ -223,7 +294,7 @@ object NotificationGroups {
         val generation = notification.extras.getString(GENERATION) ?: return
         val previous = record(context, hostId, tag)
         val update = notification.extras.getBoolean(InlineNotifications.ACTION_UPDATE)
-        if (previous?.optBoolean("resolved") == true ||
+        if (previous?.optBoolean("resolved") == true || previous?.optJSONObject("retired")?.has(generation) == true ||
             (previous?.optString("generation") == generation &&
                 (previous.optBoolean("hidden") || (!update && previous.optBoolean("updated"))))) return
         remember(context, hostId, tag, generation, hidden = false, updated = update, notification = notification)

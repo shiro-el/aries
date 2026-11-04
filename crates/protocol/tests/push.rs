@@ -172,6 +172,7 @@ fn status_details_round_trip_and_old_readers_ignore_them() {
         top_level: true,
         status: AgentStatus::Done,
         at: 42,
+        at_ms: Some(42_123),
         turn: Some(5),
         question: Some(PushQuestion {
             id: "ask-1".into(),
