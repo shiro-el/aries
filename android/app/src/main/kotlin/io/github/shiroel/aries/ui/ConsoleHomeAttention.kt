@@ -16,7 +16,7 @@ import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.CallUrgency
 
 internal val CallEntry.needsUrgentAttention: Boolean
-    get() = live && call.topLevel && call.terminal != null && call.answer == null &&
+    get() = needsAttention &&
         call.urgency in listOf(CallUrgency.URGENT, CallUrgency.EMERGENCY)
 
 /** The Host tree is local; this compact strip keeps other Hosts' urgent Calls in sight. */

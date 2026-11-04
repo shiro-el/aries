@@ -129,7 +129,14 @@ internal fun ConsoleShell(
     var measuredHeaderHeight by remember { mutableIntStateOf(0) }
     val terminalHeaderHeight = measuredHeaderHeight.toFloat().takeIf { it > 0 } ?: with(density) { ConsoleBarHeight.toPx() }
     val swipeThreshold = with(density) { 48.dp.toPx() }
-    LaunchedEffect(screen) { drawer.close(); model.closeCallInbox() }
+    var observedNavigation by remember(model) { mutableLongStateOf(model.overlayNavigationVersion) }
+    LaunchedEffect(model.overlayNavigationVersion) {
+        if (observedNavigation != model.overlayNavigationVersion) {
+            observedNavigation = model.overlayNavigationVersion
+            drawer.close()
+            model.closeCallInbox()
+        }
+    }
     LaunchedEffect(model.callInboxOpen) { if (model.callInboxOpen) drawer.close() }
     val navigate: (() -> Unit) -> Unit = { action ->
         scope.launch { drawer.close(); action() }
@@ -211,16 +218,21 @@ internal val LocalConsoleMenu = compositionLocalOf<(() -> Unit)?> { null }
 @Composable
 internal fun ConsoleScreenHeader(model: HostsModel, screen: Screen, onMenu: () -> Unit) {
     if (screen is Screen.Terminal || screen is Screen.Chat) return
+    val browser = when (screen) {
+        is Screen.Browse -> screen.browser
+        is Screen.Connecting -> screen.cachedBrowser
+        else -> null
+    }
     ConsoleTopBar(consoleTitle(screen), onMenu = onMenu, reportHeight = true,
         onBack = if (screen == Screen.Settings || screen is Screen.JumpHosts) model::settingsBack
-            else if (screen is Screen.Connecting) model::back else null,
+            else if (screen is Screen.Connecting && browser == null) model::back else null,
         actions = {
             if (screen is Screen.Agents) AgentActions(screen.board)
-            if (screen is Screen.Browse) HostActions(screen.browser,
-                onRunSaved = { model.runSaved(screen.browser, it) }) { model.newTerminal(screen.browser) }
+            if (browser != null) HostActions(browser,
+                onRunSaved = { model.runSaved(browser, it) }) { model.newTerminal(browser) }
         }, showNavigationActions = screen != Screen.Settings && screen !is Screen.JumpHosts,
         titleContent = {
-            if (screen is Screen.Browse) HostContextTitle(screen.browser, Modifier.weight(1f))
+            if (browser != null) HostContextTitle(browser, Modifier.weight(1f))
             else ConsoleTitle(consoleTitle(screen), Modifier.weight(1f))
         })
 }

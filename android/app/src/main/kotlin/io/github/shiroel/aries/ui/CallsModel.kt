@@ -26,6 +26,10 @@ import kotlinx.coroutines.withContext
 data class CallEntry(val host: Host, val call: CallInfo, val live: Boolean = true, val checkedAtMs: Long? = null) {
     val key get() = "${host.id}/${call.id}"
 
+    /** Shared attention eligibility; recorded history remains available in the inbox. */
+    val needsAttention get() = live && call.topLevel && call.terminal != null && call.answer == null &&
+        call.urgency != io.github.shiroel.aries.core.CallUrgency.RECORD
+
     /** It can still be answered with a Choice from here. */
     val answerable get() = live && call.topLevel && call.terminal != null && call.answer == null && call.choices.isNotEmpty()
 }
@@ -149,13 +153,14 @@ class CallsModel(
 
     /**
      * Watches each of [hosts] not watched yet. With [everyHost] false, Hosts
-     * that would need a biometric unlock are left out. Calls of Hosts no
+     * that would need a biometric unlock are left out, except [retainedHostIds]
+     * already opened explicitly in Chat. Calls of Hosts no
      * longer in [hosts] are dropped.
      */
-    fun watch(hosts: List<Host>, everyHost: Boolean) {
+    fun watch(hosts: List<Host>, everyHost: Boolean, retainedHostIds: Set<String> = emptySet()) {
         retainHosts(hosts)
         for (host in hosts) {
-            val allowed = everyHost || backgroundAllowed(host.id)
+            val allowed = everyHost || host.id in retainedHostIds || backgroundAllowed(host.id)
             if (!allowed) { stop(host.id); continue }
             if (host.id !in watches) start(host)
         }
