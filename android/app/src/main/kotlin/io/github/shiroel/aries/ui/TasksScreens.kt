@@ -64,12 +64,10 @@ internal val LocalTasksHosts = staticCompositionLocalOf<() -> Unit> { {} }
 @Composable
 private fun TasksShell(model: HostsModel, content: @Composable () -> Unit) {
     // Keep the adaptive layout and its saved list state at one composition location.
-    LaunchedEffect(model, model.started) {
-        if (model.started && model.screen == Screen.Hosts && model.hostAddMethod == null) model.openAgents()
-    }
     CompositionLocalProvider(LocalTasksHosts provides model::showHosts) {
         ConsoleShell(model, content,
-            onHome = model::openAgents, isHome = { it is Screen.Agents })
+            onHome = model::openAgents, isHome = { it is Screen.Agents },
+            onHostBack = model::showHosts, drawerEnabled = false)
     }
 }
 

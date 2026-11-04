@@ -102,6 +102,120 @@ fn texts(s: &ChatSnapshot) -> Vec<String> {
         .collect()
 }
 
+// D99: delayed reset replay must never expose a truncated conversation to a reader.
+#[tokio::test]
+async fn reset_replay_is_published_only_when_caught_up() {
+    let env = Env::new();
+    let initial = env.file(
+        "initial",
+        concat!(
+            r#"{"v":1,"type":"reset","agent":"claude-code","session":"s"}"#,
+            "\n",
+            r#"{"v":1,"type":"item","item":{"id":"old","kind":"agent","text":"already read"}}"#,
+            "\n",
+            r#"{"v":1,"type":"state","state":"live"}"#,
+            "\n",
+        ),
+    );
+    let reset = env.file(
+        "reset",
+        concat!(
+            r#"{"v":1,"type":"reset","agent":"claude-code","session":"s"}"#,
+            "\n",
+            r#"{"v":1,"type":"item","item":{"id":"old","kind":"agent","text":"already read"}}"#,
+            "\n",
+        ),
+    );
+    let tail = env.file(
+        "tail",
+        concat!(
+            r#"{"v":1,"type":"item","item":{"id":"new","kind":"agent","text":"fresh output"}}"#,
+            "\n",
+            r#"{"v":1,"type":"state","state":"live"}"#,
+            "\n",
+        ),
+    );
+    let replay = env.dir.path().join("replay");
+    let finish = env.dir.path().join("finish");
+    let host = env.fake_beacon(&format!(
+        "cat {initial}; while [ ! -f {} ]; do sleep 0.01; done; cat {reset}; while [ ! -f {} ]; do sleep 0.01; done; cat {tail}; sleep 30",
+        replay.display(), finish.display(),
+    ));
+    let watch = env.watch(&host);
+    wait_for(&watch, "initial history", |s| s.status == ChatStatus::Live).await;
+    std::fs::write(replay, "").unwrap();
+    let partial = tokio::time::timeout(Duration::from_millis(300), watch.next()).await;
+    std::fs::write(finish, "").unwrap();
+    let snapshot = wait_for(&watch, "completed replay", |s| s.entries.len() == 2).await;
+    watch.stop();
+    assert!(
+        partial.is_err(),
+        "a partial reset escaped before the caught-up state: {partial:?}"
+    );
+    assert_eq!(
+        texts(&snapshot),
+        ["agent: already read", "agent: fresh output"]
+    );
+}
+
+// D99: cancelling an incomplete replay must reconnect from the last complete cursor.
+#[tokio::test]
+async fn reconnect_during_replay_keeps_the_complete_conversation_and_cursor() {
+    let env = Env::new();
+    let initial = env.file("initial", concat!(
+        r#"{"v":1,"type":"reset","agent":"claude-code","session":"s"}"#, "\n",
+        r#"{"v":1,"type":"item","item":{"id":"old","kind":"agent","text":"already read"},"cursor":"cc:s:20"}"#, "\n",
+        r#"{"v":1,"type":"state","state":"live"}"#, "\n",
+    ));
+    let partial = env.file("partial", concat!(
+        r#"{"v":1,"type":"reset","agent":"claude-code","session":"s"}"#, "\n",
+        r#"{"v":1,"type":"item","item":{"id":"ghost","kind":"agent","text":"partial replay"},"cursor":"cc:s:10"}"#, "\n",
+    ));
+    let tail = env.file("tail", concat!(
+        r#"{"v":1,"type":"item","item":{"id":"new","kind":"agent","text":"fresh output"},"cursor":"cc:s:30"}"#, "\n",
+        r#"{"v":1,"type":"state","state":"live"}"#, "\n",
+    ));
+    let trigger = env.dir.path().join("trigger");
+    let ready = env.dir.path().join("ready");
+    let args = env.dir.path().join("args");
+    let host = env.fake_beacon(&format!(
+        "echo \"$*\" >> {args}; if [ \"$(wc -l < {args})\" -eq 1 ]; then cat {initial}; while [ ! -f {trigger} ]; do sleep 0.01; done; cat {partial}; touch {ready}; else cat {tail}; fi; sleep 30",
+        args = args.display(), trigger = trigger.display(), ready = ready.display(),
+    ));
+    let watch = env.watch(&host);
+    wait_for(&watch, "initial conversation", |s| {
+        s.status == ChatStatus::Live
+    })
+    .await;
+    std::fs::write(trigger, "").unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while !ready.exists() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    // Give the reader a chance to consume the partial write before cancellation.
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    watch.reconnect();
+    let snapshot = wait_for(&watch, "resumed conversation", |s| {
+        s.cursor.as_deref() == Some("cc:s:30")
+    })
+    .await;
+    watch.stop();
+    assert_eq!(
+        texts(&snapshot),
+        ["agent: already read", "agent: fresh output"]
+    );
+    assert_eq!(
+        std::fs::read_to_string(args)
+            .unwrap()
+            .lines()
+            .collect::<Vec<_>>(),
+        ["chat t1 --follow", "chat t1 --follow --cursor cc:s:20"]
+    );
+}
+
 // Regression: Retry must not skip history when its cursor outlives the durable cache.
 #[tokio::test]
 async fn a_recreated_watch_without_a_cached_snapshot_requests_full_history() {
@@ -176,6 +290,7 @@ async fn reconnects_with_the_cursor_and_shows_nothing_twice() {
             r#"{"v":1,"type":"reset","agent":"claude-code","session":"s"}"#, "\n",
             r#"{"v":1,"type":"item","item":{"id":"u1","kind":"user","text":"run it"}}"#, "\n",
             r#"{"v":1,"type":"item","item":{"id":"t1","kind":"tool","name":"Bash","status":"running"},"cursor":"cc:s:20"}"#, "\n",
+            r#"{"v":1,"type":"state","state":"live"}"#, "\n",
         ),
     );
     // After the cursor: the tool finishes (same id) and a reply follows.
