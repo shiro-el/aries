@@ -221,6 +221,7 @@ class ChatModel(
     enum class Sending { Sending, Held }
 
     private var watch: ChatWatch? = null
+    private var paused = false
     private var job: Job? = null
     private var scope: CoroutineScope? = null
 
@@ -297,6 +298,7 @@ class ChatModel(
                 return@launch
             }
             watch = w
+            if (paused) w.pause()
             try {
                 while (true) snapshot = w.next()
             } catch (e: CoreException) {
@@ -398,6 +400,17 @@ class ChatModel(
     /** The app is back in front: retry a waiting reconnect now. */
     fun retryNow() {
         watch?.retryNow()
+    }
+
+    fun pause() {
+        paused = true
+        watch?.pause()
+    }
+
+    fun resume() {
+        if (!paused) return
+        paused = false
+        watch?.resume()
     }
 
     fun stop() {

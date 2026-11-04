@@ -159,6 +159,58 @@ class ReconnectTest {
     }
 
     @Test
+    fun backgroundingDetachesAndStopsReconnectUntilTheScreenResumes() {
+        val core = FakeCore().apply { terminals = listOf(build) }
+        val first = openBuild(core)
+        val old = core.connection!!
+        compose.runOnIdle {
+            (model.screen as Screen.Terminal).viewer.draft = "unfinished command"
+            model.backgrounded()
+        }
+        compose.waitForIdle()
+        assertTrue(first.detached)
+        assertTrue(old.disconnected)
+        compose.runOnIdle { model.networkChanged() }
+        compose.waitForIdle()
+        assertTrue(core.connection === old)
+        screenShows("before")
+
+        compose.runOnIdle { model.foregrounded() }
+        compose.waitForIdle()
+        assertNotSame(old, core.connection)
+        assertTrue(core.connection!!.views.single().options.resumed)
+        assertEquals("unfinished command", (model.screen as Screen.Terminal).viewer.draft)
+    }
+
+    @Test
+    fun backgroundingChatPausesItsWatchAndKeepsTheDraftAndCursorOnResume() {
+        val core = FakeCore().apply { terminals = listOf(agent) }
+        core.addHost("home", Endpoint.Ssh("10.0.0.2", 22u, "me"))
+        start(core)
+        compose.onNodeWithText("home").performClick()
+        compose.onNodeWithText("claude").performClick()
+        compose.onNodeWithContentDescription(str(R.string.agent_switch_chat_label)).performClick()
+        compose.waitForIdle()
+        val chat = (model.screen as Screen.Chat).chat
+        core.pushChat(io.github.shiroel.aries.core.ChatSnapshot(emptyList(), io.github.shiroel.aries.core.ChatStatus.LIVE, "cursor-1"))
+        compose.waitForIdle()
+        compose.runOnIdle {
+            chat.draft = "unfinished question"
+            model.backgrounded()
+            model.networkChanged()
+        }
+        compose.waitForIdle()
+        assertTrue(core.chatPaused)
+        assertEquals(0, core.chatReconnects)
+        compose.runOnIdle { model.foregrounded() }
+        compose.waitForIdle()
+        assertFalse(core.chatPaused)
+        assertTrue(chat === (model.screen as Screen.Chat).chat)
+        assertEquals("unfinished question", chat.draft)
+        assertEquals("cursor-1", chat.snapshot?.cursor)
+    }
+
+    @Test
     fun aReconnectThatNeedsTheUserStopsAndSaysWhy() {
         val core = FakeCore().apply { terminals = listOf(build) }
         val first = openBuild(core)
