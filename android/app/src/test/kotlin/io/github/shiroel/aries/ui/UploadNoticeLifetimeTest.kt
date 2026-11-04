@@ -115,7 +115,7 @@ class UploadNoticeLifetimeTest {
         assertTrue("The unuploaded camera source must remain", photo.exists())
         if (leaveHost) assertFalse("Navigation must not disconnect an in-flight upload", connection.disconnected)
         connection.uploadHold!!.complete(Unit)
-        compose.waitUntil(5_000) { chat.attachments.size == 1 && !chat.uploading }
+        compose.waitUntil(5_000) { compose.runOnIdle { chat.attachments.size == 1 && !chat.uploading } }
         compose.waitForIdle()
         assertFalse(chat.uploading)
         assertEquals(listOf("t1"), connection.uploads.map { it.first })
