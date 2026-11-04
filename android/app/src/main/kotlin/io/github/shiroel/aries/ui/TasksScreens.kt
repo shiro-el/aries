@@ -26,6 +26,11 @@ import io.github.shiroel.aries.R
 /** Tasks presentation reuses the shared navigation and operation owners. */
 internal object TasksScreens : LayoutScreens() {
     @Composable override fun Shell(model: HostsModel, content: @Composable () -> Unit) = TasksShell(model, content)
+    @Composable override fun Header(model: HostsModel, screen: Screen) {
+        // TasksShell owns the home header; detail panes still need navigation.
+        if (model.screen !is Screen.Agents && model.screen != Screen.Hosts &&
+            screen !is Screen.Chat && screen !is Screen.Terminal) TasksSecondaryHeader(model, screen)
+    }
     @Composable override fun Agents(model: HostsModel, board: AgentBoard) = TasksHome(model, board)
     @Composable override fun Hosts(model: HostsModel) = HostListScreen(model, tasks = true)
     @Composable override fun Home(model: HostsModel, browser: HostBrowser) =
@@ -106,7 +111,6 @@ private fun TasksShell(model: HostsModel, content: @Composable () -> Unit) {
                 else if (hostsOpen) { hostsOpen = false; model.openAgents() }
                 else { hostsOpen = true; model.back() }
             }
-        } else if (screen is Screen.Chat || screen is Screen.Terminal) ConsoleShell(model, content)
-        else ConsoleShell(model, content, secondaryHeader = { TasksSecondaryHeader(model) })
+        } else ConsoleShell(model, content)
     }
 }

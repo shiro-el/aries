@@ -49,7 +49,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** Fixed seven-column rows, independent of whether the IME is showing. */
+/** Seven-column rows; the screen collapses this optional bar in compact height. */
 @Composable
 internal fun TerminalKeyBar(viewer: TerminalViewer) {
     BoxWithConstraints(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant)) {

@@ -1,6 +1,8 @@
 package io.github.shiroel.aries.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.systemGestureExclusion
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -48,7 +50,7 @@ fun ConsoleTopBar(
         ConsoleTitle(title, Modifier.weight(1f))
     },
 ) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("console-top-bar"), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("console-top-bar"), verticalAlignment = Alignment.CenterVertically) {
         val navigationLabel = stringResource(if (onBack == null) R.string.console_open_drawer else R.string.back_button)
         Box(
             Modifier.size(48.dp).testTag(if (onBack == null) "console-menu" else "console-back")
@@ -89,8 +91,7 @@ private fun ConsoleMark() {
 
 /** Modal drawer owns navigation only; entering a destination goes through model cleanup. */
 @Composable
-internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit,
-    secondaryHeader: (@Composable () -> Unit)? = null) {
+internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit) {
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val screen = model.screen
@@ -124,7 +125,11 @@ internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit,
             }
         },
     ) {
-        CompositionLocalProvider(LocalQuickOpen provides {
+        val openDrawer: () -> Unit = {
+            model.closeCallInbox()
+            scope.launch { drawer.open() }
+        }
+        CompositionLocalProvider(LocalConsoleMenu provides openDrawer, LocalQuickOpen provides {
             scope.launch { drawer.close(); model.openQuickOpen() }
         }, LocalCallInbox provides CallInboxAction(model.calls, model.callInboxOpen) {
             scope.launch {
@@ -132,13 +137,15 @@ internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit,
                 if (model.callInboxOpen) model.closeCallInbox() else model.openCallInbox()
             }
         }, LocalNextWaitingAgent provides model.nextWaitingAgent?.let { NextWaitingAction(it, model::openNextWaitingAgent) }) {
-            Box(Modifier.fillMaxSize().pointerInput(screen, drawer.isClosed, model.callInboxOpen, model.quickOpenVisible) {
+            BoxWithConstraints(Modifier.fillMaxSize().systemGestureExclusion { coordinates ->
+                Rect(0f, 0f, edgeWidth, minOf(coordinates.size.height.toFloat(), terminalHeaderHeight))
+            }.pointerInput(screen, drawer.isClosed, model.callInboxOpen, model.quickOpenVisible) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     // Observe at the parent so normal edge taps still reach header buttons.
-                    // Terminal owns all canvas gestures; only its header edge opens navigation.
+                    // Reserve only the header edge, leaving list and canvas gestures alone.
                     if (!drawer.isClosed || model.callInboxOpen || model.quickOpenVisible ||
-                        down.position.x > edgeWidth || (screen is Screen.Terminal && down.position.y > terminalHeaderHeight)) return@awaitEachGesture
+                        down.position.x > edgeWidth || down.position.y > terminalHeaderHeight) return@awaitEachGesture
                     var distance = 0f
                     val drag = awaitHorizontalTouchSlopOrCancellation(down.id) { change, over ->
                         if (over > 0) { change.consume(); distance = over }
@@ -152,28 +159,12 @@ internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit,
                 }
             }) {
                 val inboxVisible = model.callInboxOpen && drawer.isClosed && drawer.targetValue == DrawerValue.Closed
+                val compactHeight = maxHeight < 480.dp || WindowInsets.ime.getBottom(density) > 0
                 Column(Modifier.fillMaxSize().semantics { if (inboxVisible) hideFromAccessibility() }) {
-                    if (!inboxVisible) model.calls.banner?.let { entry ->
+                    if (!inboxVisible && !compactHeight) model.calls.banner?.let { entry ->
                         CallAttentionBanner(entry, model.callCallerName(entry), model::openCallInbox, model.calls::dismissBanner)
                     }
-                    // Agent screens supply their own ConsoleTopBar in ticket 05.
-                    val agentHeader = screen is Screen.Terminal || screen is Screen.Chat
-                    if (!agentHeader && secondaryHeader != null) secondaryHeader()
-                    else if (!agentHeader) {
-                        ConsoleTopBar(consoleTitle(screen), onMenu = {
-                            model.closeCallInbox()
-                            scope.launch { drawer.open() }
-                        }, onBack = consoleBack(model), actions = {
-                            if (screen is Screen.Agents) AgentActions(screen.board)
-                            if (screen is Screen.Browse) HostActions(screen.browser, onRunSaved = { model.runSaved(screen.browser, it) }) { model.newTerminal(screen.browser) }
-                        }, showNavigationActions = screen != Screen.Settings && screen !is Screen.JumpHosts, titleContent = {
-                            if (screen is Screen.Browse) HostContextTitle(screen.browser, Modifier.weight(1f))
-                            else ConsoleTitle(consoleTitle(screen), Modifier.weight(1f))
-                        })
-                    }
-                    Box(Modifier.weight(1f)) {
-                        content()
-                    }
+                    Box(Modifier.weight(1f)) { content() }
                 }
                 if (inboxVisible) CallInboxOverlay(model)
             }
@@ -186,6 +177,26 @@ internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit,
         else if (model.callInboxOpen) model.closeCallInbox()
         else consoleBack(model)?.invoke() ?: model.back()
     }
+}
+
+/** Pane headers stay with their list, including while an Agent occupies detail. */
+internal val LocalConsoleMenu = compositionLocalOf<(() -> Unit)?> { null }
+
+@Composable
+internal fun ConsoleScreenHeader(model: HostsModel, screen: Screen, onMenu: () -> Unit) {
+    if (screen is Screen.Terminal || screen is Screen.Chat) return
+    ConsoleTopBar(consoleTitle(screen), onMenu = onMenu,
+        onBack = if (screen == Screen.Settings || screen is Screen.JumpHosts) model::settingsBack
+            else if (screen is Screen.Connecting) model::back else null,
+        actions = {
+            if (screen is Screen.Agents) AgentActions(screen.board)
+            if (screen is Screen.Browse) HostActions(screen.browser,
+                onRunSaved = { model.runSaved(screen.browser, it) }) { model.newTerminal(screen.browser) }
+        }, showNavigationActions = screen != Screen.Settings && screen !is Screen.JumpHosts,
+        titleContent = {
+            if (screen is Screen.Browse) HostContextTitle(screen.browser, Modifier.weight(1f))
+            else ConsoleTitle(consoleTitle(screen), Modifier.weight(1f))
+        })
 }
 
 @Composable

@@ -89,11 +89,15 @@ class DrawerShellTest {
         compose.openConsoleDrawer()
         compose.onNodeWithText(context.getString(R.string.agents_button)).performClick()
         compose.openConsoleDrawer()
-        compose.onNodeWithText(context.getString(R.string.console_agents_waiting, 1)).assertExists()
+        compose.onNode(hasText(context.getString(R.string.agents_button)) and
+            hasText(context.getString(R.string.console_agents_waiting, 1)) and
+            hasAnyAncestor(hasTestTag("console-drawer"))).assertExists()
         compose.onNodeWithTag("drawer-agent:h1:t1").assertExists()
         compose.onNodeWithTag("drawer-agent:h2:t1").assertExists()
         core.push("h1", listOf(agent("home-agent", AgentStatus.Error("also waiting"))))
-        compose.onNodeWithText(context.getString(R.string.console_agents_waiting, 2)).assertExists()
+        compose.onNode(hasText(context.getString(R.string.agents_button)) and
+            hasText(context.getString(R.string.console_agents_waiting, 2)) and
+            hasAnyAncestor(hasTestTag("console-drawer"))).assertExists()
         compose.onNode(hasTestTag("agent-pin:h2:t1") and hasAnyAncestor(hasTestTag("console-drawer"))).performClick()
         compose.waitForIdle()
         org.junit.Assert.assertEquals(listOf("h2 t1 pinned=true"), core.labelWrites)

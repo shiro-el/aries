@@ -117,7 +117,9 @@ private fun AriesContent(
                     RemoteFilesAccess(model) {
                         AdaptiveHostLayout(
                             listScreen = model.listScreen,
-                            hasDetail = model.screen is Screen.Chat || model.screen is Screen.Terminal,
+                            hasDetail = model.screen != model.listScreen,
+                            listHeader = { LocalLayoutScreens.current.Header(model, it) },
+                            detailHeader = { LocalLayoutScreens.current.Header(model, model.screen) },
                             listContent = { LocalLayoutScreens.current.Screen(model, settings, terminalDisplay, it) },
                             detailContent = { LocalLayoutScreens.current.Screen(model, settings, terminalDisplay, model.screen) },
                         )
@@ -358,7 +360,7 @@ private fun PromptDialog(prompt: Prompt, model: HostsModel) {
             onDismissRequest = model::dismiss,
             title = { Text(stringResource(R.string.key_qr_title)) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     val description = stringResource(R.string.key_qr_description)
                     QrCode(prompt.qr, Modifier.testTag("key_qr").semantics { contentDescription = description })
                     Text(stringResource(R.string.key_fingerprint, prompt.key.fingerprint), style = MaterialTheme.typography.bodySmall)
@@ -431,7 +433,7 @@ private fun PasswordDialog(prompt: Prompt.Password, model: HostsModel) {
         onDismissRequest = model::dismiss,
         title = { Text(stringResource(R.string.key_install_title, prompt.host.name)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     password, { password = it },
                     label = { Text(stringResource(R.string.key_install_password)) },

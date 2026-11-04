@@ -20,8 +20,7 @@ import io.github.shiroel.aries.core.*
 
 /** Presentation only: shared shell still owns overlay, navigation and connection lifetimes. */
 @Composable
-internal fun TasksSecondaryHeader(model: HostsModel) {
-    val screen = model.screen
+internal fun TasksSecondaryHeader(model: HostsModel, screen: Screen) {
     val hosts = LocalTasksHosts.current
     val back = if (screen == Screen.Settings || screen is Screen.JumpHosts) model::settingsBack else hosts
     Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("tasks-secondary-header"),
@@ -39,6 +38,7 @@ internal fun TasksSecondaryHeader(model: HostsModel) {
                 })
                 is Screen.Connecting -> screen.host.name
                 is Screen.JumpHosts -> stringResource(R.string.jumps_title, screen.host.name)
+                is Screen.Agents -> stringResource(R.string.tasks_home)
                 else -> stringResource(R.string.hosts_title)
             }
             Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge,
