@@ -965,6 +965,7 @@
     <string name="tasks_host_view">Host별 보기</string>
     <string name="tasks_offline">오프라인</string>
     <string name="tasks_reconnecting">재연결 중…</string>
+    <string name="tasks_call_checking">Call 확인 중…</string>
     <string name="tasks_host_connected">연결됨</string>
     <string name="tasks_host_not_connected">연결 안 함</string>
     <string name="tasks_needs_position">확인 필요 %1$d건 중 %2$d번째</string>
