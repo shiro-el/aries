@@ -169,6 +169,24 @@ class ChatQueuedMessageTest {
         }
     }
 
+    @Test fun aQueuedMessageCanStillBeCancelledAfterReadingOlderHistory() {
+        val core = FakeCore()
+        val connection = open(core)
+        core.pushChat(ChatSnapshot((1..30).map {
+            ChatEntry("a$it", null, ChatEntryBody.Agent("Reply $it\nSecond line\nThird line"))
+        }, ChatStatus.LIVE, null))
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Reply 30\nSecond line\nThird line").fetchSemanticsNodes().isNotEmpty() }
+        send("keep this queued message")
+        compose.onNodeWithText("keep this queued message").assertIsDisplayed()
+        compose.onNodeWithTag("chat-transcript").performScrollToIndex(0)
+        compose.waitUntil(5_000) { compose.onAllNodesWithContentDescription(str(R.string.chat_latest_button)).fetchSemanticsNodes().isNotEmpty() }
+        // The history provider must include the same pending row and cancel action.
+        compose.onNodeWithTag("chat-transcript").performScrollToNode(hasText("keep this queued message"))
+        compose.onNodeWithContentDescription("Cancel queued message").performClick()
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("keep this queued message")
+        assertEquals(0, connection.calls.count { it == "sendMessage" })
+    }
+
     private fun screenshot(name: String) {
         System.getenv("ARIES_QUEUE_RENDER_DIR")?.let { directory ->
             File(directory).mkdirs()

@@ -858,15 +858,11 @@ fun ChatScreen(
                         items(agentCalls, key = { "call:${it.key}" }, contentType = { "call" }) { entry ->
                             if (calls != null) ConsoleChatCall(entry, calls)
                         }
+                        queuedChatMessages(chat)
                     }
                     LazyColumn(
                         transcriptModifier, state = scroll.list, contentPadding = transcriptPadding,
-                        content = {
-                            if (scroll.following) followingContent() else historyContent()
-                            items(chat.queuedMessages, key = { "queued:${it.id}" }, contentType = { "queued" }) {
-                                QueuedMessageBubble(it, chat)
-                            }
-                        },
+                        content = if (scroll.following) followingContent else historyContent,
                     )
                     if (!searchOpen && !scroll.following && (entries.isNotEmpty() || agentCalls.isNotEmpty() || chat.queuedMessages.isNotEmpty())) {
                         LatestButton(
@@ -931,6 +927,11 @@ private fun chatHistoryContent(
     items(agentCalls, key = { "call:${it.key}" }, contentType = { "call" }) { entry ->
         if (calls != null) ConsoleChatCall(entry, calls)
     }
+    queuedChatMessages(chat)
+}
+
+private fun LazyListScope.queuedChatMessages(chat: ChatModel) {
+    items(chat.queuedMessages, key = { "queued:${it.id}" }, contentType = { "queued" }) { QueuedMessageBubble(it, chat) }
 }
 
 @Composable
