@@ -164,7 +164,7 @@ class AgentsAcrossHostsTest {
         val core = twoHosts().apply { failFor["h2"] = CoreException.Unreachable("timed out") }
         openAgents(core)
 
-        compose.onNodeWithText(str(R.string.agents_host_unavailable, "server")).assertExists()
+        compose.onNodeWithText(str(R.string.connect_host_status, "server")).assertExists()
         compose.onNodeWithText("claude").assertExists()
         compose.onNodeWithText("pi").assertDoesNotExist()
     }

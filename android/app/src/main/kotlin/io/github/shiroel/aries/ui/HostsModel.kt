@@ -36,6 +36,7 @@ import io.github.shiroel.aries.core.TerminalUpdate
 import io.github.shiroel.aries.core.KeyProtection
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -44,12 +45,15 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.dropWhile
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 
 /** A message for the user: a string resource and its format arguments. */
@@ -58,7 +62,7 @@ data class Message(@StringRes val res: Int, val args: List<Any> = emptyList())
 sealed interface Screen {
     data object Hosts : Screen
     data object Settings : Screen
-    data class Connecting(val host: Host) : Screen
+    data class Connecting(val host: Host, val link: HostLink) : Screen
 
     /** Editing the jump hosts on the way to [host] and the key for each hop. */
     data class JumpHosts(val host: Host, val jumps: List<JumpHost>, val hostKeyId: String?) : Screen
@@ -345,11 +349,29 @@ class HostsModel(
         }
     }
 
-    private fun link(host: Host, conn: HostConnection) = HostLink(
+    private var screensPaused = false
+    private val screensActive = MutableStateFlow(true)
+    private val foregroundPulls = mutableSetOf<Job>()
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private suspend fun connectScreen(hostId: String): HostConnection = screensActive.transformLatest { active ->
+        if (active) emit(withContext(keyWork) { core.connect(hostId) })
+    }.first()
+
+    private fun link(host: Host, conn: HostConnection?, onDown: (CoreException) -> Unit = {}) = HostLink(
         host, conn, scope,
-        connect = { withContext(keyWork) { core.connect(host.id) } },
-        onDown = { prompt = it },
-    )
+        connect = { connectScreen(host.id) },
+        onDown = onDown,
+        onSettings = { error ->
+            when (error) {
+                is CoreException.HostKeyUnknown -> prompt = Prompt.TrustHostKey(host, error.fingerprint)
+                is CoreException.JumpHostKeyUnknown -> prompt = Prompt.TrustJumpHostKey(host, error.hop, error.address, error.fingerprint)
+                is CoreException.NoKey, is CoreException.KeyLocked -> openKeySettings()
+                else -> openHostSettings(host)
+            }
+        },
+    ).also { if (screensPaused) it.pause() }
+
 
     /** Every line the screens use now: the open Host's and the Agent list's. */
     private val links: List<HostLink> get() = listOfNotNull(browseLink, callLink) + agentLinks.values
@@ -361,12 +383,29 @@ class HostsModel(
      * own line, see `ChatWatch`) through [ChatModel.reconnect].
      */
     fun networkChanged() {
+        if (screensPaused) return
         links.forEach { it.networkChanged() }
         liveChat?.reconnect()
     }
 
-    /** The app is back in the foreground: reconnect any line that died meanwhile. */
+    /** Screen work releases its connections while notification workers keep their own ownership. */
+    fun backgrounded() {
+        screensPaused = true
+        screensActive.value = false
+        foregroundPulls.toList().forEach { it.cancel() }
+        links.forEach { it.pause() }
+        liveChat?.pause()
+    }
+
+    fun resumeScreens() {
+        screensPaused = false
+        screensActive.value = true
+        links.forEach { it.resume() }
+        liveChat?.resume()
+    }
+
     fun foregrounded() {
+        resumeScreens()
         links.forEach { it.check() }
         liveChat?.retryNow()
         val startupHost = startupHostId
@@ -374,13 +413,14 @@ class HostsModel(
         // Live connections publish their lists in the core. Other Hosts
         // get a short pull while the foreground biometric prompt is available.
         // Startup already opens its target, including a biometric prompt if needed.
-        hosts.filter { host -> host.id != startupHost && links.none { it.host.id == host.id && it.connection != null } }
+        hosts.filter { host -> host.id != startupHost && links.none { it.host.id == host.id } }
             .forEach { refreshLastKnownState(it.id) }
     }
 
     /** Foreground refresh, including biometric Hosts; surfaces use WorkManager instead. */
     fun refreshLastKnownState(hostId: String) {
-        scope.launch {
+        if (screensPaused) return
+        val pull = scope.launch {
             try {
                 val connection = links.firstOrNull { it.host.id == hostId }?.connection
                 withContext(keyWork) {
@@ -390,6 +430,8 @@ class HostsModel(
                 // Keep the previous value and its age on a failed pull.
             }
         }
+        foregroundPulls += pull
+        pull.invokeOnCompletion { foregroundPulls -= pull }
     }
 
     /** The Chat that is open, or still running under the Terminal opened from it. */
@@ -586,55 +628,81 @@ class HostsModel(
     private fun connect(host: Host, restore: LastLocation?, savedLaunchId: String? = null, confirmSavedLaunch: Boolean = true) {
         restoring = restore != null
         missingKeyHostId = null
-        val connecting = Screen.Connecting(host)
+        val link = link(host, null) { error ->
+            scope.launch { initialConnectionProblem(host, error, restore != null) }
+        }
+        browseLink = link
+        val connecting = Screen.Connecting(host, link)
         screen = connecting
-        scope.launch {
-            try {
-                val conn = withContext(keyWork) { core.connect(host.id) }
-                if (screen !== connecting) {
-                    conn.disconnect()
-                    return@launch
-                }
+        status = scope.launch {
+            link.keep { conn, _ ->
+                if (screen !== connecting) return@keep
+
                 val browser = HostBrowser(host)
                 browser.layoutEditor = LayoutEditor(browser, scope)
-                val link = link(host, conn)
                 browser.link = link
-                browseLink = link
                 browser.savedLaunches = conn.savedLaunches()
                 open = conn to null
                 screen = Screen.Browse(browser)
                 loadHostSettings(host)
                 status = watchBrowse(link, browser, restore, savedLaunchId, confirmSavedLaunch)
-            } catch (e: CoreException) {
-                if (screen !== connecting) return@launch
-                restoring = false
-                screen = Screen.Hosts
-                // The system unlock prompt already handled cancellation during startup.
-                if (restore != null && e is CoreException.KeyLocked) return@launch
-                if (e is CoreException.NoKey && key == null) {
-                    missingKeyHostId = host.id
-                    return@launch
-                }
-                // A missing/old core cannot open Browse. Offer the installer in
-                // Host settings, which uses SSH directly and still asks approval.
-                val canNeedCore = e is CoreException.Protocol ||
-                    (e is CoreException.Incompatible && e.reason is Incompatibility.CoreTooOld)
-                val needsCore = host.endpoint is Endpoint.Ssh && canNeedCore && try {
-                    when (val state = withContext(keyWork) { core.herdrCoreStatus(host.id) }) {
-                        HerdrCoreState.Missing -> true
-                        is HerdrCoreState.Installed -> state.needsUpdate
-                    }
-                } catch (_: CoreException) { false }
-                if (needsCore) {
-                    openHostSettings(host)
-                    return@launch
-                }
-                prompt = when (e) {
-                    is CoreException.HostKeyUnknown -> Prompt.TrustHostKey(host, e.fingerprint)
-                    is CoreException.JumpHostKeyUnknown -> Prompt.TrustJumpHostKey(host, e.hop, e.address, e.fingerprint)
-                    else -> problemFor(e)
-                }
             }
+        }
+    }
+
+    /** Host-list task entry waits for connection and the first structure snapshot. */
+    var newTaskHostId by mutableStateOf<String?>(null)
+
+    fun newTask(host: Host) {
+        newTaskHostId = host.id
+        connect(host)
+    }
+
+    /** New tasks always open Chat, independently of the user's last view preference. */
+    internal fun openTaskChat(link: HostLink, terminal: TerminalInfo, draft: String) {
+        val origin = when (val current = screen) {
+            is Screen.Chat -> { current.chat.stop(); current.returnTo }
+            is Screen.Terminal -> {
+                viewing?.cancel()
+                viewing = null
+                (current.returnTo as? Screen.Chat)?.let { it.chat.stop(); it.returnTo } ?: current.returnTo
+            }
+            else -> current
+        }
+        chat(link, terminal, origin, draft)
+    }
+
+    /** First-open trust and installation still use their existing, explicit UI. */
+    private suspend fun initialConnectionProblem(host: Host, error: CoreException, restoringLocation: Boolean) {
+        val connecting = screen as? Screen.Connecting ?: return
+        if (connecting.host.id != host.id || (connecting.link.state as? LinkState.Down)?.error !== error) return
+        // Cancelling startup biometric authorization returns to the Host list.
+        if (restoringLocation && error is CoreException.KeyLocked) {
+            back()
+            return
+        }
+        if (error is CoreException.NoKey && key == null) {
+            back()
+            missingKeyHostId = host.id
+            return
+        }
+        val canNeedCore = error is CoreException.Protocol ||
+            (error is CoreException.Incompatible && error.reason is Incompatibility.CoreTooOld)
+        val needsCore = host.endpoint is Endpoint.Ssh && canNeedCore && try {
+            when (val state = withContext(keyWork) { core.herdrCoreStatus(host.id) }) {
+                HerdrCoreState.Missing -> true
+                is HerdrCoreState.Installed -> state.needsUpdate
+            }
+        } catch (_: CoreException) { false }
+        if (screen !== connecting) return
+        if (needsCore) {
+            openHostSettings(host)
+            return
+        }
+        when (error) {
+            is CoreException.HostKeyUnknown -> prompt = Prompt.TrustHostKey(host, error.fingerprint)
+            is CoreException.JumpHostKeyUnknown -> prompt = Prompt.TrustJumpHostKey(host, error.hop, error.address, error.fingerprint)
+            else -> Unit // The shared notice owns errors and recovery actions.
         }
     }
 
@@ -716,7 +784,14 @@ class HostsModel(
         }
         val host = hosts.find { it.id == prompt.host.id } ?: return
         when (prompt.then) {
-            AfterTrust.Connect -> connect(host)
+            AfterTrust.Connect -> {
+                val waiting = links.firstOrNull { it.host.id == host.id && it.state is LinkState.Down }
+                val chat = liveChat?.takeIf { it.host.id == host.id && it.connectionError != null }
+                if (waiting != null || chat != null) {
+                    waiting?.retryNow()
+                    chat?.retryConnection()
+                } else connect(host)
+            }
             // The password was not kept, so ask for it again.
             AfterTrust.InstallKey -> askPassword(host)
         }
@@ -762,7 +837,14 @@ class HostsModel(
         }
         val host = hosts.find { it.id == prompt.host.id } ?: return
         when (prompt.then) {
-            AfterTrust.Connect -> connect(host)
+            AfterTrust.Connect -> {
+                val waiting = links.firstOrNull { it.host.id == host.id && it.state is LinkState.Down }
+                val chat = liveChat?.takeIf { it.host.id == host.id && it.connectionError != null }
+                if (waiting != null || chat != null) {
+                    waiting?.retryNow()
+                    chat?.retryConnection()
+                } else connect(host)
+            }
             AfterTrust.InstallKey -> askPassword(host)
         }
     }
@@ -912,6 +994,7 @@ class HostsModel(
         val host = link?.host ?: return
         val chat = ChatModel(core, host, terminal, link, keyWork).also { it.draft = draft }
         screen = Screen.Chat(chat, returnTo)
+        if (screensPaused) chat.pause()
         chat.start(scope)
     }
 
@@ -1090,7 +1173,7 @@ class HostsModel(
             viewer.searcher = null
             viewer.searchNavigator = null
             localChanges.close()
-            withContext(NonCancellable) { view.detach() }
+            withContext(NonCancellable) { withTimeoutOrNull(2_000L) { view.detach() } }
             view.close()
         }
     }
@@ -1193,13 +1276,8 @@ class HostsModel(
         hosts.forEach { host ->
             var focusing = focus?.takeIf { it.hostId == host.id }
             agentJobs += scope.launch {
-                val conn = try {
-                    withContext(keyWork) { core.connect(host.id) }
-                } catch (e: CoreException) {
-                    board.fail(host.id, problemFor(e).body)
-                    return@launch
-                }
-                val link = link(host, conn)
+                val link = link(host, null)
+
                 agentLinks[host.id] = link
                 board.links[host.id] = link
                 try {
@@ -1451,7 +1529,7 @@ class HostsModel(
         scope.launch {
             var pending: HostLink? = null
             try {
-                val link = link(entry.host, withContext(keyWork) { core.connect(entry.host.id) })
+                val link = link(entry.host, connectScreen(entry.host.id))
                 pending = link
                 if (!current()) return@launch
                 val terminal = link.keep { conn, _ -> conn.terminals() }
@@ -1503,6 +1581,7 @@ class HostsModel(
         (screen as? Screen.Terminal)?.viewer?.takeIf { it.link?.host?.id == hostId }
 
     fun back() {
+        newTaskHostId = null
         if (prompt is Prompt.ConfirmSavedLaunch) prompt = null
         closeQuickOpen()
         pendingQuickOpen = null
@@ -1592,7 +1671,10 @@ fun problemFor(e: CoreException): Prompt.Problem {
             Message(R.string.key_biometric_unavailable_title),
             Message(R.string.key_biometric_unavailable_body),
         )
+        is CoreException.BeaconNotInstalled -> Prompt.Problem(failed, Message(R.string.chat_status_no_beacon))
         is CoreException.Unreachable -> Prompt.Problem(failed, Message(R.string.connect_unreachable, listOf(e.detail)))
+        is CoreException.Rpc -> Prompt.Problem(failed,
+            Message(if (e.kind == "permission_denied") R.string.connect_permission_denied else R.string.connect_other, listOf(e.detail)))
         is CoreException.Protocol -> Prompt.Problem(failed, Message(R.string.connect_protocol, listOf(e.detail)))
         else -> Prompt.Problem(failed, Message(R.string.connect_other, listOf(e.message ?: "")))
     }

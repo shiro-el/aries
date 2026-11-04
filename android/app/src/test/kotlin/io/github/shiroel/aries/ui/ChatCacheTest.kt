@@ -116,7 +116,7 @@ class ChatCacheTest {
         core.pushChat(cached)
         compose.waitUntil(5000) { compose.onAllNodesWithText("read me offline").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("read me offline").assertExists()
-        compose.onNodeWithText(str(R.string.chat_status_reconnecting)).assertExists()
+        compose.onNodeWithText(str(R.string.reconnecting)).assertExists()
     }
 
     @Test

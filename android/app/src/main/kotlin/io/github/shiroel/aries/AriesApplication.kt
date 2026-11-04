@@ -13,7 +13,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
-class AriesApplication : Application(), HasCore, Configuration.Provider {
+open class AriesApplication : Application(), HasCore, Configuration.Provider {
     internal val notificationVisibility = NotificationVisibility()
 
     override val workManagerConfiguration: Configuration

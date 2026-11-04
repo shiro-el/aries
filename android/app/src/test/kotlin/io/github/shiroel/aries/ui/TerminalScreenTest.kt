@@ -141,6 +141,6 @@ class TerminalScreenTest {
         core.failWith = io.github.shiroel.aries.core.CoreException.AuthRejected()
         core.connection!!.views.single().end()
         compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.terminal_connection_closed)).assertExists()
+        compose.onNodeWithText(str(R.string.connect_auth_rejected)).assertExists()
     }
 }

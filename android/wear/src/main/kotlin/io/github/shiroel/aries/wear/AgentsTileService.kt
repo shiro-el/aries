@@ -20,7 +20,7 @@ class AgentsTileService : TileService() {
             val job = scope.launch {
                 val store = WatchStateStore(this@AgentsTileService)
                 store.hydrate(this@AgentsTileService)
-                result.set(WatchTile.render(this@AgentsTileService, store.summary(), System.currentTimeMillis()))
+                result.set(WatchTile.render(this@AgentsTileService, store.summary(), System.currentTimeMillis(), requestParams.deviceConfiguration))
             }
             result.addCancellationListener({ job.cancel() }, mainExecutor)
             "Aries Tile"
@@ -28,7 +28,7 @@ class AgentsTileService : TileService() {
 
     override fun onTileResourcesRequest(requestParams: RequestBuilders.ResourcesRequest): ListenableFuture<ResourceBuilders.Resources> =
         CallbackToFutureAdapter.getFuture { result ->
-            result.set(ResourceBuilders.Resources.Builder().setVersion("1").build())
+            result.set(WatchTile.resources())
             "Aries Tile resources"
         }
 

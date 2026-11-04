@@ -1,6 +1,8 @@
 package io.github.shiroel.aries.wear
 
 import android.app.Activity
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.Gravity
 import android.widget.TextView
@@ -32,23 +34,26 @@ class OpenOnPhoneActivity : Activity() {
         setContentView(label)
         val host = intent.getStringExtra("host")
         val terminal = intent.getStringExtra("terminal")
-        if (host.isNullOrBlank() || terminal.isNullOrBlank()) {
-            label.text = message(R.string.wear_open_phone)
-            return
-        }
         scope.launch {
             try {
                 withTimeout(10_000) {
                     store.hydrate(this@OpenOnPhoneActivity)
                     label.text = message(R.string.wear_opening_phone)
                     val phone = requireNotNull(store.phoneNode())
-                    val command = OpenWatchAgent(host, terminal)
-                    // RPC acknowledges that the phone still knows this Host/Agent.
-                    val reply = Wearable.getMessageClient(this@OpenOnPhoneActivity)
-                        .sendRequest(phone, WatchSummary.OPEN_PATH, command.toBytes()).await()
-                    check(OpenWatchAgent.fromBytes(reply) == command)
+                    val remoteIntent = if (!host.isNullOrBlank() && !terminal.isNullOrBlank()) {
+                        val command = OpenWatchAgent(host, terminal)
+                        // RPC acknowledges that the phone still knows this Host/Agent.
+                        val reply = Wearable.getMessageClient(this@OpenOnPhoneActivity)
+                            .sendRequest(phone, WatchSummary.OPEN_PATH, command.toBytes()).await()
+                        check(OpenWatchAgent.fromBytes(reply) == command)
+                        command.remoteIntent(packageName)
+                    } else {
+                        // The existing phone deep-link filter opens its default screen without an Agent.
+                        Intent(Intent.ACTION_VIEW, Uri.parse("aries-watch://agent"))
+                            .addCategory(Intent.CATEGORY_BROWSABLE).setPackage(packageName)
+                    }
                     val future = RemoteActivityHelper(this@OpenOnPhoneActivity)
-                        .startRemoteActivity(command.remoteIntent(packageName), phone)
+                        .startRemoteActivity(remoteIntent, phone)
                     // RemoteActivityHelper returns a ListenableFuture, not a Play services Task.
                     kotlinx.coroutines.suspendCancellableCoroutine<Unit> { continuation ->
                         future.addListener({

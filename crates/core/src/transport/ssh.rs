@@ -81,6 +81,7 @@ impl client::Handler for Checker {
 enum HopFailure {
     Check(HostKeyCheck),
     AuthRejected,
+    Denied(String),
     Unreachable(String),
 }
 
@@ -95,6 +96,10 @@ impl HopFailure {
     fn into_error(self, role: Role, address: &str) -> CoreError {
         let address = address.to_owned();
         match (role, self) {
+            (_, HopFailure::Denied(detail)) => CoreError::Rpc {
+                kind: "permission_denied".into(),
+                detail: format!("{address}: {detail}"),
+            },
             (Role::Host, HopFailure::Check(HostKeyCheck::Unknown { fingerprint })) => {
                 CoreError::HostKeyUnknown { fingerprint }
             }
@@ -131,7 +136,47 @@ impl HopFailure {
     }
 }
 
-pub(crate) type Session = client::Handle<Checker>;
+/// Owns the SSH pump as well as its command channels. russh's Handle does
+/// not disconnect on drop; explicitly retire it when an opening future or
+/// the final stream is dropped, including cancellation during authentication.
+pub(crate) struct Session {
+    handle: Option<client::Handle<Checker>>,
+    _socket: Option<SocketOwner>,
+}
+
+/// Closing the transport locally also stops a russh pump stalled in I/O;
+/// merely queuing an SSH disconnect cannot guarantee that.
+struct SocketOwner(std::net::TcpStream);
+impl Drop for SocketOwner {
+    fn drop(&mut self) {
+        let _ = self.0.shutdown(std::net::Shutdown::Both);
+    }
+}
+
+impl std::ops::Deref for Session {
+    type Target = client::Handle<Checker>;
+    fn deref(&self) -> &Self::Target {
+        self.handle.as_ref().expect("SSH session")
+    }
+}
+impl std::ops::DerefMut for Session {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.handle.as_mut().expect("SSH session")
+    }
+}
+impl Drop for Session {
+    fn drop(&mut self) {
+        if let Some(session) = self.handle.take() {
+            crate::runtime().spawn(async move {
+                let _ = tokio::time::timeout(
+                    Duration::from_secs(2),
+                    session.disconnect(russh::Disconnect::ByApplication, "", ""),
+                )
+                .await;
+            });
+        }
+    }
+}
 
 fn client_config() -> Arc<client::Config> {
     Arc::new(client::Config {
@@ -158,13 +203,27 @@ async fn handshake_hop(
         trusted,
         outcome: outcome.clone(),
     };
-    let unreachable = |e: russh::Error| HopFailure::Unreachable(e.to_string());
+    let unreachable = |e: russh::Error| {
+        if matches!(
+            e,
+            russh::Error::ChannelOpenFailure(russh::ChannelOpenFailure::AdministrativelyProhibited)
+        ) {
+            HopFailure::Denied(e.to_string())
+        } else {
+            HopFailure::Unreachable(e.to_string())
+        }
+    };
+    let mut socket = None;
+
     let connected = match via {
         None => {
-            tokio::time::timeout(
-                CONNECT_TIMEOUT,
-                client::connect(config, (address, port), checker),
-            )
+            tokio::time::timeout(CONNECT_TIMEOUT, async {
+                let tcp = tokio::net::TcpStream::connect((address, port)).await?;
+                tcp.set_nodelay(true)?;
+                let tcp = tcp.into_std()?;
+                socket = Some(SocketOwner(tcp.try_clone()?));
+                client::connect_stream(config, tokio::net::TcpStream::from_std(tcp)?, checker).await
+            })
             .await
         }
         Some(prev) => {
@@ -180,12 +239,17 @@ async fn handshake_hop(
         }
     }
     .map_err(|_| HopFailure::Unreachable("timed out".into()))?;
-    connected.map_err(|e| match outcome.lock().expect("outcome lock").take() {
-        Some(check @ (HostKeyCheck::Unknown { .. } | HostKeyCheck::Changed { .. })) => {
-            HopFailure::Check(check)
-        }
-        _ => unreachable(e),
-    })
+    connected
+        .map(|session| Session {
+            handle: Some(session),
+            _socket: socket.take(),
+        })
+        .map_err(|e| match outcome.lock().expect("outcome lock").take() {
+            Some(check @ (HostKeyCheck::Unknown { .. } | HostKeyCheck::Changed { .. })) => {
+                HopFailure::Check(check)
+            }
+            _ => unreachable(e),
+        })
 }
 
 /// Opens a session to one hop, like [`handshake_hop`], and signs in with `key`.
@@ -257,17 +321,37 @@ pub(crate) async fn handshake(
     port: u16,
     trusted: Option<String>,
 ) -> Result<(Vec<Session>, Session), CoreError> {
-    let config = client_config();
-    let sessions = through_jumps(&config, jumps).await?;
-    let session = handshake_hop(config, sessions.last(), address, port, trusted)
-        .await
-        .map_err(|f| f.into_error(Role::Host, address))?;
-    Ok((sessions, session))
+    tokio::time::timeout(CONNECT_TIMEOUT, async {
+        let config = client_config();
+        let sessions = through_jumps(&config, jumps).await?;
+        let session = handshake_hop(config, sessions.last(), address, port, trusted)
+            .await
+            .map_err(|f| f.into_error(Role::Host, address))?;
+        Ok((sessions, session))
+    })
+    .await
+    .map_err(|_| unreachable_err("SSH handshake timed out"))?
 }
 
-pub(super) fn unreachable_err(e: impl std::fmt::Display) -> CoreError {
+pub(crate) fn unreachable_err(e: impl std::fmt::Display) -> CoreError {
     CoreError::Unreachable {
         detail: e.to_string(),
+    }
+}
+
+/// A reachable SSH peer may forbid command channels or forwarding. Preserve
+/// that denial across UniFFI using the existing typed RPC error contract.
+fn ssh_error(error: russh::Error) -> CoreError {
+    if matches!(
+        error,
+        russh::Error::ChannelOpenFailure(russh::ChannelOpenFailure::AdministrativelyProhibited)
+    ) {
+        CoreError::Rpc {
+            kind: "permission_denied".into(),
+            detail: error.to_string(),
+        }
+    } else {
+        unreachable_err(error)
     }
 }
 
@@ -289,7 +373,7 @@ impl Ssh {
     /// Connects through the jump hosts, checks every Host key and signs in
     /// with each hop's key. Returns the jump sessions, which carry the
     /// Host's and must outlive it, and the Host session.
-    async fn session(&self) -> Result<(Vec<Session>, Session), CoreError> {
+    async fn session_unbounded(&self) -> Result<(Vec<Session>, Session), CoreError> {
         let config = client_config();
         let jumps = through_jumps(&config, &self.jumps).await?;
         let session = reach(
@@ -306,19 +390,28 @@ impl Ssh {
         Ok((jumps, session))
     }
 
+    async fn session(&self) -> Result<(Vec<Session>, Session), CoreError> {
+        tokio::time::timeout(CONNECT_TIMEOUT, self.session_unbounded())
+            .await
+            .map_err(|_| unreachable_err("SSH sign-in timed out"))?
+    }
+
     /// Runs `command` on the Host (no PTY), feeds it `stdin` then EOF, and
     /// collects its output.
     pub async fn exec(&self, command: &str, stdin: &[u8]) -> Result<ExecOutput, CoreError> {
-        let (_jumps, session) = self.session().await?;
-        let mut channel = session
-            .channel_open_session()
+        tokio::time::timeout(Duration::from_secs(60), self.exec_unbounded(command, stdin))
             .await
-            .map_err(unreachable_err)?;
-        channel.exec(true, command).await.map_err(unreachable_err)?;
+            .map_err(|_| crate::error::protocol("SSH command timed out; its result is unknown"))?
+    }
+
+    async fn exec_unbounded(&self, command: &str, stdin: &[u8]) -> Result<ExecOutput, CoreError> {
+        let (_jumps, session) = self.session().await?;
+        let mut channel = session.channel_open_session().await.map_err(ssh_error)?;
+        channel.exec(true, command).await.map_err(ssh_error)?;
         if !stdin.is_empty() {
-            channel.data(stdin).await.map_err(unreachable_err)?;
+            channel.data(stdin).await.map_err(ssh_error)?;
         }
-        channel.eof().await.map_err(unreachable_err)?;
+        channel.eof().await.map_err(ssh_error)?;
         let mut out = ExecOutput {
             status: None,
             stdout: Vec::new(),
@@ -343,47 +436,77 @@ impl Ssh {
     /// Runs `command` on the Host (no PTY) and streams its stdio. Dropping
     /// the stream closes the channel.
     pub async fn exec_stream(&self, command: &str) -> Result<Stream, CoreError> {
-        let (sessions, session) = self.session().await?;
-        Self::stream_on(sessions, session, command).await
+        self.exec_stream_within(command, CONNECT_TIMEOUT).await
     }
 
-    /// [`Ssh::exec_stream`], but connecting and signing in to every hop
-    /// must finish within `sign_in` in total. Running out of time is
-    /// `Unreachable`; the command has not been sent by then.
+    /// One budget covers all hops, authentication, channel opening and exec
+    /// submission. After submission a timeout must not imply safe replay.
     pub async fn exec_stream_within(
         &self,
         command: &str,
         sign_in: Duration,
     ) -> Result<Stream, CoreError> {
-        let (sessions, session) = tokio::time::timeout(sign_in, self.session())
-            .await
-            .map_err(|_| CoreError::Unreachable {
-                detail: format!(
+        let mut submitted = false;
+        tokio::time::timeout(sign_in, async {
+            let (sessions, session) = self.session_unbounded().await?;
+            Self::stream_on(sessions, session, command, &mut submitted).await
+        })
+        .await
+        .map_err(|_| {
+            if submitted {
+                crate::error::protocol("SSH exec timed out; its result is unknown")
+            } else {
+                unreachable_err(format!(
                     "{}: no answer within {} s",
                     self.address,
                     sign_in.as_secs_f32()
-                ),
-            })??;
-        Self::stream_on(sessions, session, command).await
+                ))
+            }
+        })?
     }
 
     async fn stream_on(
-        mut sessions: Vec<Session>,
+        sessions: Vec<Session>,
         session: Session,
         command: &str,
+        submitted: &mut bool,
     ) -> Result<Stream, CoreError> {
-        let channel = session
-            .channel_open_session()
+        let mut channel = session.channel_open_session().await.map_err(ssh_error)?;
+        *submitted = true;
+        channel
+            .exec(true, command)
             .await
-            .map_err(unreachable_err)?;
-        channel.exec(true, command).await.map_err(unreachable_err)?;
-        sessions.push(session);
+            .map_err(|e| crate::error::protocol(format!("SSH exec result is unknown: {e}")))?;
+        // russh's exec() only enqueues the request. Wait for the Host's
+        // acknowledgement under the same opening deadline. Some Hosts send
+        // stdout first; that also proves execution, and must be replayed.
+        let prefix = loop {
+            match channel.wait().await {
+                Some(russh::ChannelMsg::Success) => break Vec::new(),
+                Some(russh::ChannelMsg::Data { data }) => break data.to_vec(),
+                Some(russh::ChannelMsg::Failure) => {
+                    return Err(CoreError::Rpc {
+                        kind: "permission_denied".into(),
+                        detail: "SSH exec was refused".into(),
+                    });
+                }
+                Some(russh::ChannelMsg::Close) | None => {
+                    return Err(crate::error::protocol(
+                        "SSH exec ended before acknowledgement; its result is unknown",
+                    ));
+                }
+                _ => {}
+            }
+        };
+        let session = Arc::new(session);
         let (reader, writer) = tokio::io::split(channel.into_stream());
+        use tokio::io::AsyncReadExt;
         Ok(Stream {
-            reader: Box::new(reader),
+            reader: Box::new(std::io::Cursor::new(prefix).chain(reader)),
             writer: Box::new(writer),
             // The jump sessions carry the Host's; keep them all alive.
-            guard: Box::new(Mutex::new(sessions)),
+            guard: Box::new((Mutex::new(sessions), session.clone())),
+            ssh: Some(session),
         })
     }
 }
