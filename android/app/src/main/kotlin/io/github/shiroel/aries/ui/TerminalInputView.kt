@@ -20,11 +20,12 @@ import io.github.shiroel.aries.core.TerminalKey
  */
 @SuppressLint("ViewConstructor")
 class TerminalInputView(context: Context, viewer: TerminalViewer) : View(context) {
+    private val interruptKeyboard: () -> Unit = ::resetKeyboard
     var viewer: TerminalViewer = viewer
         set(value) {
-            if (field !== value) field.onCompositionInterrupted = null
+            if (field !== value && field.onCompositionInterrupted === interruptKeyboard) field.onCompositionInterrupted = null
             field = value
-            value.onCompositionInterrupted = ::resetKeyboard
+            value.onCompositionInterrupted = interruptKeyboard
         }
 
     init {
@@ -32,7 +33,17 @@ class TerminalInputView(context: Context, viewer: TerminalViewer) : View(context
         isFocusableInTouchMode = true
         setOnClickListener { showKeyboard() }
         setOnFocusChangeListener { _, focused -> if (focused) this.viewer.startTyping() }
-        viewer.onCompositionInterrupted = ::resetKeyboard
+        viewer.onCompositionInterrupted = interruptKeyboard
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        viewer.onCompositionInterrupted = interruptKeyboard
+    }
+
+    override fun onDetachedFromWindow() {
+        if (viewer.onCompositionInterrupted === interruptKeyboard) viewer.onCompositionInterrupted = null
+        super.onDetachedFromWindow()
     }
 
     fun showKeyboard() {
