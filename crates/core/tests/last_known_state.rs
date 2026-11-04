@@ -333,6 +333,44 @@ async fn failed_local_storage_does_not_close_live_host_reads_or_watches() {
     })
     .await
     .unwrap();
+    struct Structures(tokio::sync::mpsc::UnboundedSender<Option<aries_core::HostStructure>>);
+    impl aries_core::StructureListener for Structures {
+        fn on_structure(&self, structure: aries_core::HostStructure) {
+            let _ = self.0.send(Some(structure));
+        }
+        fn on_closed(&self) {
+            let _ = self.0.send(None);
+        }
+    }
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+    let structure_watch = conn
+        .watch_structure(std::sync::Arc::new(Structures(tx)))
+        .await
+        .unwrap();
+    assert!(rx.recv().await.unwrap().is_some());
+    hc.set_doc(
+        "herdr-app",
+        serde_json::json!({"spaces":[{"id":"s1","name":"Still live","tabs":[]}]}),
+    );
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            let structure = rx
+                .recv()
+                .await
+                .expect("structure stream")
+                .expect("local storage must not close the stream");
+            if structure
+                .spaces
+                .first()
+                .is_some_and(|s| s.name == "Still live")
+            {
+                break;
+            }
+        }
+    })
+    .await
+    .unwrap();
+    structure_watch.stop();
     // The same connection still accepts RPCs after a failed persistence attempt.
     assert_eq!(
         conn.terminals().await.unwrap()[0].agent_status,

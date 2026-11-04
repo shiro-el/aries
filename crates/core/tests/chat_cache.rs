@@ -958,3 +958,71 @@ async fn an_active_watch_recovers_its_history_when_the_cached_base_is_cleared() 
         ]
     );
 }
+
+/// Import fixture: the previous release's single encrypted JSON row. Encryption
+/// here creates the old on-disk input; assertions use only the public cache API.
+#[tokio::test]
+async fn a_legacy_blob_migrates_without_losing_history_cursor_or_retention() {
+    use ring::{aead, hkdf};
+    let env = Env::new();
+    let core = env.core();
+    let host = env.host(&core, "legacy");
+    env.cache_first(&core, "legacy", &host).await;
+    drop(core);
+    let db = rusqlite::Connection::open(env.data().join("chat-cache.sqlite")).unwrap();
+    let id: Vec<u8> = db
+        .query_row("SELECT chat FROM chats", [], |r| r.get(0))
+        .unwrap();
+    let master = common::TestVault
+        .open(
+            std::fs::read(env.data().join("chat-cache.key")).unwrap(),
+            KeyProtection::Plain,
+        )
+        .unwrap();
+    let prk = hkdf::Salt::new(hkdf::HKDF_SHA256, b"aries chat cache v1").extract(&master);
+    let key: aead::UnboundKey = prk
+        .expand(&[b"seal"], &aead::CHACHA20_POLY1305)
+        .unwrap()
+        .into();
+    let nonce = [7; aead::NONCE_LEN];
+    let aad = [host.as_bytes(), &[0], id.as_slice()].concat();
+    let mut plain = br#"{"items":[{"id":"u1","kind":"user","text":"the secret word is aubergine"},{"id":"t1","kind":"tool","name":"Bash","status":"running"}],"cursor":"cc:s:20"}"#.to_vec();
+    aead::LessSafeKey::new(key)
+        .seal_in_place_append_tag(
+            aead::Nonce::assume_unique_for_key(nonce),
+            aead::Aad::from(aad),
+            &mut plain,
+        )
+        .unwrap();
+    let data = [nonce.as_slice(), plain.as_slice()].concat();
+    db.execute("DELETE FROM chat_items", []).unwrap();
+    db.execute(
+        "UPDATE chats SET data=?1, updated=updated - 29 * 86400",
+        [data],
+    )
+    .unwrap();
+    drop(db);
+
+    let core = env.core();
+    let migrated = core
+        .cached_chat(host.clone(), "t1".into())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        texts(&migrated),
+        ["user: the secret word is aubergine", "tool Bash Running"]
+    );
+    assert_eq!(migrated.cursor.as_deref(), Some("cc:s:20"));
+    // The same migrated records survive a second process launch too.
+    drop(core);
+    let core = env.core();
+    let restored = core
+        .cached_chat(host.clone(), "t1".into())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(restored.entries, migrated.entries);
+    core.shift_clock(2 * DAY);
+    assert!(core.cached_chat(host, "t1".into()).await.unwrap().is_none());
+}

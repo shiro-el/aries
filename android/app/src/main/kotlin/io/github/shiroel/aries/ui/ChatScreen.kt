@@ -375,7 +375,6 @@ class ChatModel(
                     connectionError = e
                     snapshot = snapshot?.copy(status = ChatStatus.RECONNECTING)
                 }
-
             }
         }
     }
