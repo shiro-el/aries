@@ -186,6 +186,19 @@ class ThreadShellTest {
         }
     }
 
+    // Regression D35: the Calls waiting-Agent link in Thread must reach a conversation
+    // instead of navigating to the layout's empty Agent home.
+    @Test fun callInboxWaitingLinkOpensTheWaitingConversation() {
+        core.terminals = listOf(terminal, terminal.copy(address = "box/t2", title = "Needs review",
+            agentStatus = AgentStatus.Blocked(BlockedReason.QUESTION, "Pick a scope")))
+        show()
+        compose.waitUntil { model.drawerAgents.any { it.terminal.address == "box/t2" } }
+        compose.runOnIdle { model.openCallInbox() }
+        compose.onNodeWithTag("call-inbox-waiting-agents").performClick()
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals("box/t2", (model.screen as? Screen.Chat)?.chat?.terminal?.address) }
+    }
+
     // D55: the first fresh list must not replace an inline draft typed during cold startup.
     @Test fun typingAtHomeCancelsDelayedStartupRestoration() {
         val firstList = CompletableDeferred<Unit>()

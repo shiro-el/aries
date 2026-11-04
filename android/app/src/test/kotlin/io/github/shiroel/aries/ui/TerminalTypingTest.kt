@@ -30,6 +30,8 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.core.AttachMode
+import io.github.shiroel.aries.core.ChatSnapshot
+import io.github.shiroel.aries.core.ChatStatus
 import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.ScreenFrame
 import io.github.shiroel.aries.core.TerminalInfo
@@ -62,8 +64,8 @@ class TerminalTypingTest {
 
     private val agent = TerminalInfo("t1", "claude", "", listOf("claude"), "/repo", "live", AgentStatus.Working, false, 0uL)
 
-    private fun open(core: FakeCore) {
-        core.terminals = listOf(agent)
+    private fun open(core: FakeCore, terminal: TerminalInfo = agent) {
+        core.terminals = listOf(terminal)
         core.addHost("home", Endpoint.Ssh("10.0.0.2", 22u, "me"))
         val prefs = compose.activity.getSharedPreferences("terminal-typing-test", android.content.Context.MODE_PRIVATE)
         prefs.edit().clear().commit()
@@ -111,9 +113,12 @@ class TerminalTypingTest {
     @Test
     fun composerHistoryRestoresTheDraftWithoutSendingAndIsSharedWithChat() {
         val core = FakeCore()
-        open(core)
+        // History records delivered input; a Working Agent keeps Chat input queued.
+        open(core, agent.copy(agentStatus = AgentStatus.Idle))
         val host = core.hosts().single()
         compose.onNodeWithContentDescription(str(R.string.agent_switch_chat_label)).performClick()
+        core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, null))
+        compose.waitForIdle()
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).performTextReplacement("from Chat\n한국어")
         compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
         compose.onNodeWithContentDescription(str(R.string.agent_switch_terminal_label)).performClick()

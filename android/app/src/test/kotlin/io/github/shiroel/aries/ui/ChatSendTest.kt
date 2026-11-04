@@ -104,6 +104,7 @@ class ChatSendTest {
         assertEquals(listOf("t1" to "previous input"), conn.typed)
         input.performTextReplacement("edited input")
         compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
+        compose.waitUntil(5_000) { conn.typed.size == 2 }
         assertEquals(listOf("t1" to "previous input", "t1" to "edited input"), conn.typed)
     }
 
@@ -119,6 +120,7 @@ class ChatSendTest {
         assertEquals(listOf("t1" to "first\n한국어"), conn.typed)
         input.performTextReplacement("edited message")
         compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
+        compose.waitUntil(5_000) { conn.typed.size == 2 }
         assertEquals(listOf("t1" to "first\n한국어", "t1" to "edited message"), conn.typed)
         compose.onNodeWithContentDescription("Input history").performClick()
         compose.onNodeWithText("Clear history").performClick()

@@ -171,7 +171,7 @@ class ChatInterruptTest {
         assertEquals(listOf("t1", "t1"), conn.interrupted)
     }
     @Test
-    fun editingReconnectingAndStatusChangesDismissInterruptNoticesIncludingLateReplies() {
+    fun editingDismissesInterruptButLinkAndStatusChangesPreserveOperationNotices() {
         val core = FakeCore()
         val conn = open(core)
         val chat = compose.runOnIdle { (model.screen as Screen.Chat).chat }
@@ -183,20 +183,68 @@ class ChatInterruptTest {
         compose.runOnIdle { chat.interrupt() }
         compose.waitForIdle()
         compose.onNodeWithText(str(R.string.chat_interrupt_stopped)).assertExists()
-        compose.runOnIdle { chat.reconnect() }
-        compose.onNodeWithText(str(R.string.chat_interrupt_stopped)).assertDoesNotExist()
+        compose.runOnIdle {
+            chat.attachmentFailed(java.io.IOException())
+            chat.reconnect()
+        }
+        compose.onNodeWithText(str(R.string.chat_interrupt_stopped)).assertExists()
+        compose.onNodeWithText(str(R.string.attachments_read_failed)).assertExists()
         conn.interruptHold = CompletableDeferred()
         compose.runOnIdle { chat.interrupt() }
         core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
         compose.waitForIdle()
         conn.interruptHold!!.complete(Unit)
         compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.chat_interrupt_stopped)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.chat_interrupt_stopped)).assertExists()
+        compose.onNodeWithText(str(R.string.attachments_read_failed)).assertExists()
+        compose.runOnIdle { chat.link!!.lost(conn) }
+        compose.waitForIdle()
+        core.pushChat(ChatSnapshot(emptyList(), ChatStatus.RECONNECTING, null))
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.chat_interrupt_stopped)).assertExists()
+        compose.onNodeWithText(str(R.string.attachments_read_failed)).assertExists()
+    }
+
+    // D21 also covers automatic draft restoration when the Agent ends.
+    @Test fun returningQueuedTextWhenTheAgentEndsKeepsAttachmentFailure() {
+        val core = FakeCore()
+        open(core)
+        core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        val chat = compose.runOnIdle { (model.screen as Screen.Chat).chat }
+        compose.runOnIdle {
+            chat.draft = "queued instruction"
+            chat.send()
+        }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            chat.attachmentFailed(java.io.IOException())
+        }
+        core.pushChat(ChatSnapshot(emptyList(), ChatStatus.NO_AGENT, null))
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("queued instruction")
+        compose.onNodeWithText(str(R.string.attachments_read_failed)).assertExists()
+    }
+
+    @Test fun delayedInterruptFailureSurvivesLinkAndStatusChanges() {
+        val core = FakeCore()
+        val conn = open(core)
+        val chat = compose.runOnIdle { (model.screen as Screen.Chat).chat }
+        conn.interruptHold = CompletableDeferred()
+        conn.interruptFailWith = CoreException.Closed()
+        compose.runOnIdle { chat.interrupt() }
+        compose.runOnIdle { chat.link!!.lost(conn) }
+        core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
+        core.pushChat(ChatSnapshot(emptyList(), ChatStatus.RECONNECTING, null))
+        compose.waitForIdle()
+        conn.interruptHold!!.complete(Unit)
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.chat_interrupt_failed, str(R.string.error_connection)), substring = true).assertExists()
     }
 
     // Catches losing focus when the pending Interrupt button disappears before the RPC replies.
     @Test
-    fun completedInterruptFocusesItsResultAndLateStatusChangesReturnFocusToTheComposer() {
+    fun completedInterruptKeepsItsFocusedResultAcrossLateStatusChanges() {
         val core = FakeCore()
         val conn = open(core)
         conn.interruptHold = CompletableDeferred()
@@ -209,12 +257,11 @@ class ChatInterruptTest {
         )
         screenshot("interrupt-result-focused")
         core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
-        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertIsFocused()
-        compose.onNodeWithText(str(R.string.chat_interrupt_stopped)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.chat_interrupt_stopped)).assertIsFocused()
     }
 
     @Test
-    fun statusChangingBeforeTheInterruptReplyReturnsFocusWithoutRevivingADismissedNotice() {
+    fun statusChangingBeforeTheInterruptReplyStillShowsAndFocusesTheResult() {
         val core = FakeCore()
         val conn = open(core)
         conn.interruptHold = CompletableDeferred()
@@ -223,8 +270,7 @@ class ChatInterruptTest {
         core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
         compose.waitForIdle()
         conn.interruptHold!!.complete(Unit)
-        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertIsFocused()
-        compose.onNodeWithText(str(R.string.chat_interrupt_stopped)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.chat_interrupt_stopped)).assertIsFocused()
     }
 
 }
