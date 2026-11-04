@@ -154,8 +154,16 @@ class PushService : FirebaseMessagingService() {
                             .setContentText(context.getString(R.string.agent_status_done))
                             .build())
                 }
+                // Persist protocol identities, independent of R8 class names or the notification body.
+                val phase = when (val status = content.status) {
+                    AgentStatus.Working -> "working"
+                    AgentStatus.Idle -> "idle"
+                    AgentStatus.Done -> "done"
+                    is AgentStatus.Blocked -> "blocked:${status.reason?.name}"
+                    is AgentStatus.Error -> "error"
+                }
                 NotificationGroups.decorate(context, builder, notice.hostId, notice.hostName, tag, content.terminal,
-                    generation = "${content.at}/${content.turn}/${content.status.javaClass.simpleName}/${(content.status as? AgentStatus.Blocked)?.reason}/${content.question?.id}")
+                    generation = "${content.at}/${content.turn}/$phase/${content.question?.id}")
                 val status = content.status
                 if (status == AgentStatus.Done || status is AgentStatus.Error) {
                     InlineNotifications.add(context, builder, notice.hostId, notice.hostName, content.terminal, tag,
