@@ -236,7 +236,20 @@ async fn quick_open_structure_survives_relaunch_and_live_renames() {
         json!({"spaces": [{"id": "s1", "name": "Renamed", "folder": "/repo", "tabs": []}]}),
     );
     let conn = core.connect(host.id.clone()).await.unwrap();
+    let changes = core.watch_last_known_states();
+    changes.next().await.unwrap();
     conn.structure().await.unwrap();
+    loop {
+        let states = changes.next().await.unwrap();
+        if states[0]
+            .structure
+            .as_ref()
+            .is_some_and(|s| s.spaces[0].name == "Renamed")
+        {
+            break;
+        }
+    }
+    changes.stop();
     // Terminal status refreshes must keep the last structure.
     conn.terminals().await.unwrap();
     assert_eq!(
@@ -273,4 +286,58 @@ fn quick_open_reads_agent_only_state_from_previous_versions() {
     assert_eq!(state.fetched_at_ms, 1234);
     assert!(state.structure.is_none());
     assert!(state.structure_fetched_at_ms.is_none());
+}
+
+#[tokio::test]
+async fn failed_local_storage_does_not_close_live_host_reads_or_watches() {
+    use std::time::Duration;
+    let hc = HcSession::start();
+    let agent = hc.run_fake_agent("writer", "status working\nwait\nstatus done\nwait\n");
+    wait_state(&hc, &agent.address, "working");
+    let data = tempfile::tempdir().unwrap();
+    let core = core_in(data.path());
+    let host = core.add_host("dev".into(), local_endpoint(&hc)).unwrap();
+    let conn = core.connect(host.id.clone()).await.unwrap();
+    let dir = data.path().join("hosts").join(&host.id);
+    std::fs::create_dir_all(dir.join("last-known-state.json")).unwrap(); // deterministic write failure, including as root
+    assert_eq!(conn.terminals().await.unwrap().len(), 1);
+    conn.structure().await.unwrap();
+    let watch = conn.watch_terminals().await.unwrap();
+    assert_eq!(
+        watch.next().await.unwrap()[0].agent_status,
+        Some(AgentStatus::Working)
+    );
+    hc.hc(&["send", &agent.address, "finish"]);
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            let list = watch.next().await.unwrap();
+            if list[0].agent_status == Some(AgentStatus::Done) {
+                break;
+            }
+        }
+    })
+    .await
+    .unwrap();
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while core
+            .diagnostics(
+                Some(aries_core::DiagnosticSource::Storage),
+                Some(host.id.clone()),
+                true,
+            )
+            .unwrap()
+            .is_empty()
+        {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    // The same connection still accepts RPCs after a failed persistence attempt.
+    assert_eq!(
+        conn.terminals().await.unwrap()[0].agent_status,
+        Some(AgentStatus::Done)
+    );
+    watch.stop();
+    conn.disconnect().await;
 }

@@ -603,6 +603,10 @@ class FakeCore : AriesCoreInterface {
         chatsOpened += hostId to terminal
         failChatWith?.let { throw it }
         return object : ChatWatch(NoHandle) {
+            override suspend fun nextUpdate(): io.github.shiroel.aries.core.ChatUpdate {
+                val snapshot = next()
+                return io.github.shiroel.aries.core.ChatUpdate(true, snapshot.entries.map { it.id }, snapshot.entries, snapshot.status, snapshot.cursor)
+            }
             override suspend fun next(): ChatSnapshot = chat.receive()
 
             override fun reconnect() {

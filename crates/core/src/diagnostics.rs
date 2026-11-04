@@ -15,6 +15,7 @@ pub enum DiagnosticSource {
     Beacon,
     Relay,
     Push,
+    Storage,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, uniffi::Enum)]
@@ -32,6 +33,7 @@ pub enum DiagnosticEvent {
     PushVerification,
     RelayRequest,
     PushReceive,
+    LastKnownState,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, uniffi::Enum)]

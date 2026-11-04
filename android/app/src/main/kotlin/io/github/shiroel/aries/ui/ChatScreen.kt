@@ -346,7 +346,14 @@ class ChatModel(
             }
             watch = w
             try {
-                while (true) snapshot = w.next()
+                val entries = LinkedHashMap<String, ChatEntry>()
+                while (true) {
+                    val update = w.nextUpdate()
+                    if (update.reset) entries.clear()
+                    update.upserts.forEach { entries[it.id] = it }
+                    entries.keys.retainAll(update.order.toSet())
+                    snapshot = ChatSnapshot(update.order.mapNotNull { entries[it] }, update.status, update.cursor)
+                }
             } catch (e: CoreException) {
                 // Final status reached or stopped: keep the last snapshot.
             }
