@@ -227,7 +227,7 @@ fun BrowseScreen(
         browser.structure?.problem?.let { Notice(problemText(it)) }
         when {
             browser.structure == null -> Text(stringResource(R.string.connecting, browser.host.name))
-            else -> HostTreeList(browser, browser.structure!!, hostSections, onOpen, onPin)
+            else -> HostTreeList(browser, browser.structure!!, hostSections, onOpen, onPin, onNewTerminal)
         }
     }
 }
@@ -241,7 +241,7 @@ private fun problemText(p: StructureProblem): String = when (p) {
 
 @Composable
 private fun Notice(text: String) {
-    Text(
+    AnnouncedText(
         text,
         Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
         color = MaterialTheme.colorScheme.error,
@@ -256,6 +256,7 @@ private fun HostTreeList(
     hostSections: @Composable () -> Unit,
     onOpen: (TerminalInfo) -> Unit,
     onPin: (AgentEntry, Boolean) -> Unit,
+    onNewTerminal: (() -> Unit)?,
 ) {
     val folds = rememberTreeFolds("host:${browser.host.id}")
     val agentFolds = rememberTreeFolds("agents")
@@ -277,7 +278,14 @@ private fun HostTreeList(
         browser.layoutEditor?.let { EndTerminalButton(it, entry.terminal, close) }
     }
     LazyColumn {
-        if (browser.terminals.isEmpty()) item { Text(stringResource(R.string.terminals_empty)) }
+        if (browser.terminals.isEmpty()) item {
+            Text(stringResource(R.string.terminals_empty))
+            onNewTerminal?.let { launch ->
+                TextButton(onClick = launch, enabled = browser.link?.state == LinkState.Up && !browser.closed) {
+                    Text(stringResource(R.string.launch_open_button))
+                }
+            }
+        }
         agentTreeItems(agents, agentFolds, { onOpen(it.terminal) }, onPin, tag = "host-agent",
             sectionNamespace = "all", actions = actions)
         if (plain.isNotEmpty()) {

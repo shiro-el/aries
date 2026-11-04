@@ -1,6 +1,7 @@
 package io.github.shiroel.aries.ui
 
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Button
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -14,5 +15,10 @@ internal fun ConsoleButton(
     enabled: Boolean = true,
     content: @Composable RowScope.() -> Unit,
 ) {
-    Button(onClick = onClick, modifier = modifier, enabled = enabled, shape = RectangleShape, content = content)
+    val accent = LocalAccentColor.current
+    Button(
+        onClick = onClick, modifier = modifier, enabled = enabled, shape = RectangleShape,
+        colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = onAccent(accent)),
+        content = content,
+    )
 }

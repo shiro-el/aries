@@ -33,7 +33,7 @@ internal fun KeyRecoverySection(model: HostsModel) {
     val clipLabel = stringResource(R.string.key_clip_label)
     Text(stringResource(R.string.key_recover_title), style = MaterialTheme.typography.titleMedium)
     Text(stringResource(R.string.key_recover_body))
-    problem?.let { Text(stringResource(it.res, *it.args.toTypedArray()), color = MaterialTheme.colorScheme.error) }
+    problem?.let { AnnouncedText(stringResource(it.res, *it.args.toTypedArray()), color = MaterialTheme.colorScheme.error) }
     model.keys.forEach { key ->
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             HorizontalDivider()
