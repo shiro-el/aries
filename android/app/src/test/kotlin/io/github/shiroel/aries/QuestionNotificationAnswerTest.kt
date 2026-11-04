@@ -120,6 +120,21 @@ class QuestionNotificationAnswerTest {
     }
 
     @Test
+    fun aPermissionNotificationPreservesThePromptAndChoiceForAColdWorker() = runBlocking {
+        val question = PushQuestion("permission:current", "Allow Write to /repo/file?", listOf("Allow", "Allow always", "Deny"))
+        val push = push(question)
+        val status = push.content as PushContent.Status
+        PushService.show(context, push.copy(content = status.copy(status = AgentStatus.Blocked(BlockedReason.PERMISSION, null)))) { true }
+        assertEquals(listOf("Allow", "Allow always", "Deny"), buttons())
+        val notice = QuestionNotice.fromJson(shadowOf(shown().actions[2].actionIntent).savedIntent
+            .getStringExtra(QuestionChoiceReceiver.EXTRA_NOTICE)!!)!!
+        assertEquals(ListenableWorker.Result.success(), TestListenableWorkerBuilder<QuestionReplyWorker>(context)
+            .setInputData(QuestionReplyWorker.input(notice, 2)).build().doWork())
+        assertEquals(listOf(Triple("remote/t3", "permission:current", listOf(listOf(2u)))), core.backgroundAnswers)
+        assertTrue(buttons().isEmpty())
+    }
+
+    @Test
     fun tappingAnOptionShowsSendingAndQueuesOnlyOneAnswer() {
         val hold = CompletableDeferred<Unit>()
         core.answerHold = hold

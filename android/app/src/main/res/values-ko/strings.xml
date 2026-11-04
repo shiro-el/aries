@@ -566,6 +566,12 @@
     <string name="image_viewer_exporting">이미지 준비 중…</string>
     <string name="chat_diff_more">%1$d줄 더 있음</string>
     <string name="chat_diff_truncated">diff가 너무 커서 나머지는 표시하지 않아요.</string>
+    <!-- Permission requests -->
+    <string name="chat_permission_label">권한 요청</string>
+    <string name="chat_permission_allow">허용</string>
+    <string name="chat_permission_allow_always">항상 허용</string>
+    <string name="chat_permission_deny">거부</string>
+
     <string name="chat_question_label">질문</string>
     <string name="chat_question_option_label">답변: %1$s</string>
     <string name="chat_question_text_label">질문에 직접 답하기: %1$s</string>

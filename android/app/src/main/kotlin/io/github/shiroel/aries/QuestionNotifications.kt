@@ -48,14 +48,20 @@ object QuestionNotifications {
     fun decorate(context: Context, notice: PushNotice, status: PushContent.Status, builder: Notification.Builder,
         canAnswerInBackground: (String) -> Boolean) {
         val blocked = status.status as? AgentStatus.Blocked ?: return
-        if (blocked.reason != BlockedReason.QUESTION) return
         val question = status.question
+        val permission = blocked.reason == BlockedReason.PERMISSION
+        if (permission) {
+            // Older/arbitrary permission statuses keep their original notification.
+            if (question?.id?.startsWith(PERMISSION_ID_PREFIX) != true ||
+                question.options !in listOf(listOf("Allow", "Deny"), listOf("Allow", "Allow always", "Deny"))) return
+        } else if (blocked.reason != BlockedReason.QUESTION) return
         if (question != null && question.options.size in 1..3 && canAnswerInBackground(notice.hostId)) {
             val q = QuestionNotice(notice.hostId, notice.hostName, status.terminal, question)
             // Preserves the question identity through Sending/Done and guards against a late worker
             // replacing a newer status notification for this Terminal.
             builder.addExtras(android.os.Bundle().apply { putString(QUESTION_ID, question.id) })
             question.options.forEachIndexed { choice, label ->
+                val label = if (permission) permissionChoiceResource(label)?.let(context::getString) ?: label else label
                 builder.addAction(Notification.Action.Builder(null, label, choiceIntent(context, q, choice)).build())
             }
             builder.setStyle(Notification.BigTextStyle().bigText(question.text))
@@ -79,7 +85,7 @@ object QuestionNotifications {
             val builder = Notification.Builder.recoverBuilder(context, previous)
                 .setOnlyAlertOnce(true)
             val line = when (view) {
-                is QuestionView.Sending -> context.getString(R.string.call_notify_sending, notice.question.options[view.choice])
+                is QuestionView.Sending -> context.getString(R.string.call_notify_sending, notice.choiceLabel(context, view.choice))
                 is QuestionView.Done -> view.line
             }
             builder.setContentText(line)
@@ -104,4 +110,9 @@ object QuestionNotifications {
             .putExtra(QuestionChoiceReceiver.EXTRA_CHOICE, choice)
         return PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }
+}
+
+internal fun QuestionNotice.choiceLabel(context: Context, choice: Int): String {
+    val label = question.options[choice]
+    return if (question.id.startsWith(PERMISSION_ID_PREFIX)) permissionChoiceResource(label)?.let(context::getString) ?: label else label
 }

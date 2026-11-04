@@ -140,6 +140,18 @@ pub struct CoreLookup {
 }
 
 impl TerminalLookup for CoreLookup {
+    fn screen(&mut self, terminal: &str) -> Result<String, String> {
+        if self.link.is_none() {
+            self.link = Some(CoreLink::connect()?);
+        }
+        let result = self
+            .link
+            .as_mut()
+            .unwrap()
+            .call("terminal.read", json!({"terminal": terminal, "lines": 0}))?;
+        Ok(result["text"].as_str().unwrap_or_default().to_owned())
+    }
+
     fn get(&mut self, terminal: &str) -> Result<Option<TerminalFacts>, String> {
         for attempt in 0..2 {
             if self.link.is_none() {
@@ -163,18 +175,6 @@ impl TerminalLookup for CoreLookup {
 }
 
 impl TerminalInput for CoreLookup {
-    fn screen(&mut self, terminal: &str) -> Result<String, String> {
-        if self.link.is_none() {
-            self.link = Some(CoreLink::connect()?);
-        }
-        let result = self
-            .link
-            .as_mut()
-            .unwrap()
-            .call("terminal.read", json!({"terminal": terminal, "lines": 0}))?;
-        Ok(result["text"].as_str().unwrap_or_default().to_owned())
-    }
-
     /// Literal UTF-8 DATA on an attach stream: no paste wrapper or submit.
     /// The channel-0 round trip drains the write before the next action.
     fn text(&mut self, terminal: &str, text: &str) -> Result<(), String> {
