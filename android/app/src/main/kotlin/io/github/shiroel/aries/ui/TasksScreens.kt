@@ -23,6 +23,10 @@ import io.github.shiroel.aries.R
 /** Tasks owns its home and creation presentation; detail screens remain independently reusable. */
 internal object TasksScreens : LayoutScreens() {
     @Composable override fun Shell(model: HostsModel, content: @Composable () -> Unit) = TasksShell(model, content)
+    @Composable override fun Header(model: HostsModel, screen: Screen) {
+        // TasksShell owns the home header; detail panes still need navigation.
+        if (model.screen !is Screen.Agents && model.screen != Screen.Hosts) super.Header(model, screen)
+    }
     @Composable override fun Agents(model: HostsModel, board: AgentBoard) = TasksHome(model, board)
     @Composable override fun NewTask(task: NewTask, onStart: () -> Unit, onOpenChat: () -> Unit, onDismiss: () -> Unit) =
         NewTaskDialog(task, onStart, onOpenChat, onDismiss, fullScreen = true)

@@ -21,39 +21,42 @@ internal fun AdaptiveHostLayout(
     listScreen: Screen?,
     hasDetail: Boolean,
     listContent: @Composable (Screen) -> Unit,
+    listHeader: @Composable (Screen) -> Unit = {},
+    detailHeader: @Composable () -> Unit = {},
     detailContent: @Composable () -> Unit,
 ) {
     val savedLists = rememberSaveableStateHolder()
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val sizeClass = WindowSizeClass.BREAKPOINTS_V1.computeWindowSizeClass(maxWidth.value, maxHeight.value)
-        val wide = listScreen != null && sizeClass.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_MEDIUM_LOWER_BOUND)
+        val wide = listScreen != null &&
+            sizeClass.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_MEDIUM_LOWER_BOUND) &&
+            sizeClass.isHeightAtLeastBreakpoint(WindowSizeClass.HEIGHT_DP_MEDIUM_LOWER_BOUND)
         val listWidth = (maxWidth * .36f).coerceIn(240.dp, 360.dp)
         Row(Modifier.fillMaxSize()) {
             if (listScreen != null && (wide || !hasDetail)) {
                 val width = if (wide) Modifier.width(listWidth) else Modifier.weight(1f)
                 Column(width.fillMaxHeight().testTag("adaptive-list-pane")) {
-                    if (wide && hasDetail) {
-                        val title = when (listScreen) {
-                            is Screen.Browse -> listScreen.browser.host.name
-                            is Screen.Agents -> stringResource(R.string.agents_title)
-                            else -> stringResource(R.string.hosts_title)
-                        }
-                        Text(title, Modifier.padding(12.dp), style = MaterialTheme.typography.titleSmall)
-                    }
                     val key = when (listScreen) {
                         is Screen.Browse -> "host:${listScreen.browser.host.id}"
                         is Screen.Agents -> "agents"
                         else -> "hosts"
                     }
-                    savedLists.SaveableStateProvider(key) { listContent(listScreen) }
+                    savedLists.SaveableStateProvider(key) {
+                        listHeader(listScreen)
+                        Box(Modifier.weight(1f)) { listContent(listScreen) }
+                    }
                 }
             }
             if (wide) VerticalDivider()
             // Keep detail at one composition location across the compact/medium breakpoint.
             if (listScreen == null || hasDetail || wide) {
                 Box(Modifier.weight(1f).fillMaxHeight().testTag("adaptive-detail-pane")) {
-                    if (listScreen == null || hasDetail) detailContent()
-                    else Text(
+                    if (listScreen == null || hasDetail) {
+                        Column(Modifier.widthIn(max = 960.dp).fillMaxSize().align(Alignment.TopCenter)) {
+                            detailHeader()
+                            Box(Modifier.weight(1f)) { detailContent() }
+                        }
+                    } else Text(
                         stringResource(R.string.adaptive_choose_detail),
                         Modifier.align(Alignment.Center).padding(24.dp),
                         style = MaterialTheme.typography.bodyMedium,
