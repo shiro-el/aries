@@ -1101,8 +1101,7 @@ class HostsModel(
         val chat = conversation(line, terminal)
         if (draft.isNotEmpty()) chat.appendDraft(draft)
         screen = Screen.Chat(chat, returnTo)
-        if (screensPaused) chat.pause()
-        chat.start(scope)
+        chat.start(scope, paused = screensPaused)
     }
 
     /**

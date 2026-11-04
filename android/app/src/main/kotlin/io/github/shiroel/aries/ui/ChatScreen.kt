@@ -675,7 +675,8 @@ class ChatModel(
         }
     }
 
-    fun start(scope: CoroutineScope) {
+    fun start(scope: CoroutineScope, paused: Boolean = this.paused) {
+        this.paused = paused
         stopped = false
         restoreOutbox()
         this.scope = scope

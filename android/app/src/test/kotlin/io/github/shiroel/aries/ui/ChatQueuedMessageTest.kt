@@ -381,6 +381,22 @@ class ChatQueuedMessageTest {
         assertEquals(emptyList<Pair<String, String>>(), connection.typed)
     }
 
+    @Test fun reopeningADraftAfterBackgroundReleaseStartsAFreshTranscriptWatch() {
+        val core = FakeCore()
+        open(core)
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).performTextInput("saved before lock")
+        compose.runOnIdle {
+            hosts.backgrounded(retainConnections = false)
+            hosts.back()
+            hosts.resumeScreens()
+        }
+        compose.onNodeWithText("home").performClick()
+        compose.onNodeWithText("claude").performClick()
+        core.pushChat(ChatSnapshot(listOf(ChatEntry("resumed", null, ChatEntryBody.Agent("Reply after unlocking"))), ChatStatus.LIVE, null))
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Reply after unlocking").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("saved before lock")
+    }
+
     private fun screenshot(name: String) {
         System.getenv("ARIES_QUEUE_RENDER_DIR")?.let { directory ->
             File(directory).mkdirs()
