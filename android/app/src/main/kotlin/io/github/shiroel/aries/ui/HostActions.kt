@@ -22,6 +22,7 @@ private enum class HostMenuPage { ACTIONS, CONTEXT, EDIT }
 /** Frequent actions stay at the root; layout maintenance has its own short page. */
 @Composable
 internal fun HostActions(browser: HostBrowser, onNewTerminal: (() -> Unit)? = null) {
+    val startTask = LocalStartTask.current
     val editor = rememberLayoutEditor(browser)
     var menu by remember(browser) { mutableStateOf(false) }
     var page by remember(browser) { mutableStateOf(HostMenuPage.ACTIONS) }
@@ -57,6 +58,11 @@ internal fun HostActions(browser: HostBrowser, onNewTerminal: (() -> Unit)? = nu
                     }
                 }
                 HostMenuPage.ACTIONS -> {
+                    startTask?.let { start ->
+                        ActionMenuItem(stringResource(R.string.new_task_title), R.drawable.ic_plus,
+                            enabled = enabled, onClick = { menu = false; start(null) })
+                    }
+
                     onNewTerminal?.let { launch ->
                         ActionMenuItem(stringResource(R.string.launch_open_button), R.drawable.ic_terminal_view,
                             enabled = enabled, onClick = { menu = false; launch() })

@@ -6,6 +6,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.material3.LinearProgressIndicator
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -100,6 +101,9 @@ class ChatModel(
     var terminal by mutableStateOf(terminal)
         private set
     var snapshot by mutableStateOf<ChatSnapshot?>(null)
+        private set
+    /** Typed failures survive initial watch creation and later SSH reconnects. */
+    var connectionError by mutableStateOf<CoreException?>(null)
         private set
     /** Ids of tool entries the user expanded. */
     var expanded by mutableStateOf<Set<String>>(emptySet())
@@ -278,7 +282,7 @@ class ChatModel(
         if (now.agentStatus !is AgentStatus.Blocked) refused = false
     }
 
-    val canSend: Boolean get() = link != null && canEdit && !interrupting && !uploading && pendingShare == null &&
+    val canSend: Boolean get() = connectionError == null && link != null && canEdit && !interrupting && !uploading && pendingShare == null &&
         (draft.isNotBlank() || attachments.isNotEmpty())
 
     /**
@@ -336,21 +340,37 @@ class ChatModel(
 
     fun start(scope: CoroutineScope) {
         this.scope = scope
+        job?.cancel()
         job = scope.launch {
-            val w = try {
-                withContext(keyWork) { core.watchChat(host.id, terminal.address, null) }
-            } catch (e: CoreException) {
-                // Still show what the cache holds (ticket 44).
-                val cached = try { core.cachedChat(host.id, terminal.address) } catch (e: CoreException) { null }
-                snapshot = ChatSnapshot(cached?.entries.orEmpty(), ChatStatus.NO_BEACON, cached?.cursor)
-                return@launch
+            var attempt = 0
+            var w: ChatWatch
+            while (true) {
+                if (paused) return@launch
+                try {
+                    w = withContext(keyWork) { core.watchChat(host.id, terminal.address, snapshot?.cursor) }
+                    break
+                } catch (e: CoreException) {
+                    connectionError = e
+                    // A cancelled key unlock is not evidence of a missing Beacon.
+                    val cached = snapshot ?: try { core.cachedChat(host.id, terminal.address) } catch (_: CoreException) { null }
+                    snapshot = ChatSnapshot(cached?.entries.orEmpty(), ChatStatus.RECONNECTING, cached?.cursor)
+                    if (!e.retryableConnection()) return@launch
+                    delay(RETRY_DELAYS_MS[minOf(attempt++, RETRY_DELAYS_MS.lastIndex)])
+                }
             }
             watch = w
             if (paused) w.pause()
-            try {
-                while (true) snapshot = w.next()
-            } catch (e: CoreException) {
-                // Final status reached or stopped: keep the last snapshot.
+            while (true) {
+                try {
+                    snapshot = w.next()
+                    connectionError = null
+                } catch (e: CoreException) {
+                    if (e is CoreException.Closed) return@launch
+                    // The core pauses permanent failures until an explicit retry.
+                    connectionError = e
+                    snapshot = snapshot?.copy(status = ChatStatus.RECONNECTING)
+                }
+
             }
         }
     }
@@ -440,25 +460,37 @@ class ChatModel(
         }
     }
 
-    /** The network changed: replace the Chat's line now; it resumes after its cursor. */
+    /** Network/foreground signals may wake transient failures, never permanent ones. */
     fun reconnect() {
-        watch?.reconnect()
+        if (connectionError?.retryableConnection() == false) return
+        if (watch == null) scope?.let(::start) else watch?.reconnect()
     }
 
-    /** The app is back in front: retry a waiting reconnect now. */
     fun retryNow() {
-        watch?.retryNow()
+        if (connectionError?.retryableConnection() == false) return
+        if (watch == null) scope?.let(::start) else watch?.retryNow()
+    }
+
+    /** User action: keep the Agent/draft/cache and resume or recreate the watch. */
+    fun retryConnection() {
+        connectionError = null
+        if (watch == null || job?.isActive != true) {
+            watch?.stop()
+            watch = null
+            scope?.let(::start)
+        } else watch?.reconnect()
     }
 
     fun pause() {
         paused = true
-        watch?.pause()
+        if (watch == null) job?.cancel() else watch?.pause()
     }
 
     fun resume() {
         if (!paused) return
         paused = false
-        watch?.resume()
+        if (watch == null && connectionError?.retryableConnection() != false) scope?.let(::start)
+        else watch?.resume()
     }
 
     fun stop() {
@@ -547,7 +579,21 @@ fun ChatScreen(
                 onMove = { selected = navigateChatSearch(matches, active, it) },
                 onClose = ::closeSearch,
             )
-            statusText(snapshot?.status ?: ChatStatus.CONNECTING)?.let { ChatNotice(it) }
+            val chatLink = chat.link
+            val reconnecting = snapshot?.status == ChatStatus.RECONNECTING
+            val chatProblem = chat.connectionError ?: if (snapshot?.status == ChatStatus.NO_BEACON) CoreException.BeaconNotInstalled() else null
+            chatLink?.let { link ->
+                val state = when {
+                    link.state != LinkState.Up -> link.state
+                    chatProblem != null && !chatProblem.retryableConnection() -> LinkState.Down(chatProblem)
+                    reconnecting -> LinkState.Reconnecting
+                    else -> LinkState.Up
+                }
+                ConnectionNotice(link, state) { link.retryNow(); chat.retryConnection() }
+            }
+            if (chatLink == null || (chatLink.state == LinkState.Up && !reconnecting && chatProblem == null)) {
+                statusText(snapshot?.status ?: ChatStatus.CONNECTING)?.let { ChatNotice(it) }
+            }
             if (snapshot != null && entries.isEmpty() && snapshot.status == ChatStatus.LIVE) {
                 Text(stringResource(R.string.chat_empty))
             }
