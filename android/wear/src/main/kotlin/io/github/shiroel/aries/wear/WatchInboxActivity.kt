@@ -5,6 +5,10 @@ import android.content.SharedPreferences
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.layout.Column
+import io.github.shiroel.aries.weardata.WatchCommand
+import io.github.shiroel.aries.weardata.OpenWatchAgent
 import androidx.activity.result.contract.ActivityResultContracts
 import android.Manifest
 import android.content.pm.PackageManager
@@ -43,7 +47,16 @@ class WatchInboxActivity : ComponentActivity() {
     private var target by mutableStateOf<Pair<String, String>?>(null)
     private val preferences by lazy { getSharedPreferences("watch-summary", MODE_PRIVATE) }
     private val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
-        runOnUiThread { summary = store.summary() }
+        runOnUiThread {
+            val incoming = store.summary()
+            // A local publication has no cached permission menu. Keep the user-requested
+            // live detail in memory while its Host status/turn identity still matches.
+            summary = incoming.copy(inbox = incoming.inbox.map { row ->
+                val live = summary.inbox.firstOrNull { it.hostId == row.hostId && it.terminal == row.terminal }
+                if (!row.contentHidden && row.requestKind == "permission" && row.stateToken.isNotBlank() &&
+                    live?.stateToken == row.stateToken && live.requestId.isNotBlank()) live else row
+            })
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -59,7 +72,30 @@ class WatchInboxActivity : ComponentActivity() {
         preferences.registerOnSharedPreferenceChangeListener(listener)
         setContent {
             CompositionLocalProvider(LocalContext provides summary.localizedContext(this)) {
-                WatchInbox(summary, now, target, { target = it }, refreshing, notice, ::refresh, ::openPhone)
+                LaunchedEffect(target) {
+                    val selected = summary.inbox.firstOrNull { it.hostId == target?.first && it.terminal == target?.second }
+                    if (selected != null && !selected.contentHidden) {
+                        try {
+                            val detail = withTimeout(15_000) {
+                                store.hydrate(this@WatchInboxActivity)
+                                val phone = requireNotNull(store.phoneNode())
+                                val reply = Wearable.getMessageClient(this@WatchInboxActivity).sendRequest(phone,
+                                    WatchCommand.DETAILS_PATH, OpenWatchAgent(selected.hostId, selected.terminal).toBytes()).await()
+                                WatchCommand.fromBytes(reply)?.agent
+                            }
+                            if (detail != null) summary = summary.copy(inbox = summary.inbox.map {
+                                if (it.hostId == detail.hostId && it.terminal == detail.terminal) detail else it
+                            })
+                        } catch (cancelled: CancellationException) {
+                            if (cancelled !is kotlinx.coroutines.TimeoutCancellationException) throw cancelled
+                        } catch (_: Exception) { /* Cached detail and phone handoff remain available. */ }
+                    }
+                }
+                WatchInbox(summary, now, target, { target = it }, refreshing, notice, ::refresh, ::openPhone,
+                    detailActions = { agent -> Column {
+                        WatchAnswerActions(agent, ::openPhone)
+                        WatchDetailActionPlaceholders(agent)
+                    } })
             }
         }
         scope.launch {
@@ -88,7 +124,8 @@ class WatchInboxActivity : ComponentActivity() {
 
     private fun openPhone(agent: WatchAgent) {
         startActivity(Intent(this, OpenOnPhoneActivity::class.java)
-            .putExtra("host", agent.hostId).putExtra("terminal", agent.terminal))
+            .putExtra("host", agent.hostId).putExtra("terminal", agent.terminal)
+            .putExtra("chat", agent.status in listOf("blocked", "done", "error")))
     }
 
     private fun refresh() {

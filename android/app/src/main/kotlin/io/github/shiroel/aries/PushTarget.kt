@@ -38,7 +38,7 @@ data class PushTarget(val hostId: String, val terminal: String, val chat: Boolea
         fun from(intent: Intent?): PushTarget? {
             if (intent == null) return null
             if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return null
-            OpenWatchAgent.fromIntent(intent)?.let { return PushTarget(it.hostId, it.terminal) }
+            OpenWatchAgent.fromIntent(intent)?.let { return PushTarget(it.hostId, it.terminal, it.chat) }
             if (intent.action != ACTION) return null
             val host = intent.getStringExtra(EXTRA_HOST) ?: return null
             val terminal = intent.getStringExtra(EXTRA_TERMINAL) ?: return null
