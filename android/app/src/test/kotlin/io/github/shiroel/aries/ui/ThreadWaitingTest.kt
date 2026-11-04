@@ -26,6 +26,42 @@ import org.robolectric.annotation.Config
 class ThreadWaitingTest {
     @get:Rule val compose = createComposeRule()
 
+    // D103: a question's status-only receipt must survive automatic Thread target replacement.
+    @Test fun waitingQuestionSpeaksConfirmationBeforeItsTargetDisappears() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val waiting = TerminalInfo("t2", "Question target", "", listOf("codex"), "/repo", "live",
+            AgentStatus.Blocked(BlockedReason.QUESTION, null), statusMs = 100uL)
+        val fake = FakeCore().apply {
+            addHost("home", Endpoint.Ssh("home.test", 22u, "me")); ensureKey(); savedView = AgentView.CHAT
+            terminals = listOf(waiting.copy(address = "t1", name = "Current", agentStatus = AgentStatus.Working), waiting,
+                waiting.copy(address = "t3", name = "Next target", agentStatus = AgentStatus.Error("Check build"), statusMs = 200uL))
+        }
+        val preview = FakeCore()
+        val core = object : AriesCoreInterface by fake {
+            override fun watchChat(hostId: String, terminal: String, cursor: String?): ChatWatch =
+                if (terminal == "t2") preview.watchChat(hostId, terminal, cursor) else fake.watchChat(hostId, terminal, cursor)
+        }
+        val settings = ThemeSettings(context.getSharedPreferences("thread-question-receipt", Context.MODE_PRIVATE)).apply {
+            chooseLayout(AppLayout.THREAD)
+        }
+        compose.setContent {
+            val scope = rememberCoroutineScope()
+            val model = remember { HostsModel(core, scope) }
+            AriesApp(model, settings)
+        }
+        compose.onNodeWithText("home").performClick()
+        compose.onNodeWithText("Current").performClick()
+        compose.onNodeWithTag("thread-waiting-pill").performClick()
+        compose.runOnIdle { preview.pushChat(ChatSnapshot(listOf(ChatEntry("q", null,
+            ChatEntryBody.Question("request_user_input", "Continue?", listOf(ChatQuestionPart("Continue?", null, false,
+                listOf(ChatQuestionOption("Continue", null)))), ChatToolStatus.RUNNING, null))), ChatStatus.LIVE, null)) }
+        compose.onNodeWithContentDescription(context.getString(R.string.chat_question_option_label, "Continue")).performClick()
+        val announcements = recordAccessibilityAnnouncements(compose)
+        compose.runOnIdle { fake.push(fake.terminals.map { if (it.address == "t2") it.copy(agentStatus = AgentStatus.Working) else it }) }
+        assertQueueHeading("Next target")
+        compose.runOnIdle { assertEquals(1, announcements.count { it == context.getString(R.string.chat_question_sent) }) }
+    }
+
     // D23: local results must not swap another Agent's Choice into the button just tapped.
     @Test fun waitingSheetKeepsLocalResultsUntilNextButAdvancesForAnExternalAnswer() {
         val context = ApplicationProvider.getApplicationContext<Context>()
@@ -47,6 +83,7 @@ class ThreadWaitingTest {
         compose.onNodeWithText("home").performClick()
         compose.onNodeWithText("Current").performClick()
         compose.onNodeWithTag("thread-waiting-pill").performClick()
+        val announcements = recordAccessibilityAnnouncements(compose)
         for (state in listOf(CallAnswerState.FAILED, CallAnswerState.UNCONFIRMED)) {
             val at = if (state == CallAnswerState.FAILED) 3000uL else 5000uL
             val answer = CallAnswer(0u, "Allow A", state, at, "Host result")
@@ -71,6 +108,10 @@ class ThreadWaitingTest {
                 b.copy(answer = CallAnswer(0u, "Allow B", CallAnswerState.DELIVERED, 6000uL, null))))
         }
         compose.onNodeWithText("Second Call").assertDoesNotExist()
+        // D103: the selected result must survive automatic target removal, without replay on navigation.
+        compose.runOnIdle { assertEquals(1, announcements.count {
+            it == context.getString(R.string.call_answer_delivered, "Allow B")
+        }) }
     }
 
     // D22: checking uncertain delivery must open the calling Terminal, even with Chat as the default view.

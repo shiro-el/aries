@@ -550,6 +550,58 @@ class TasksHomeTest {
         compose.runOnIdle { assertEquals(1, core.answers.size) }
     }
 
+    // D103: status-only confirmation must not drop the last question result as its sheet closes.
+    @Test fun questionReceiptsSurviveAdvancementAndStatusOnlyFinalConfirmation() {
+        val first = TerminalInfo("t1", "First question", "", listOf("codex"), "/repo", "live",
+            AgentStatus.Blocked(BlockedReason.QUESTION, null), statusMs = 200uL)
+        val second = first.copy(address = "t2", name = "Final question", statusMs = 100uL)
+        val core = FakeCore().apply {
+            addHost("home", Endpoint.Ssh("home.test", 22u, "me"))
+            terminals = listOf(first, second)
+        }
+        fun question(id: String) = ChatEntry(id, null, ChatEntryBody.Question("request_user_input", id,
+            listOf(ChatQuestionPart(id, null, false, listOf(ChatQuestionOption("Continue", null)))), ChatToolStatus.RUNNING, null))
+        show(core)
+        compose.onNodeWithTag("tasks-filter-needs").performClick()
+        val one = question("question-one")
+        compose.runOnIdle { core.pushChat(ChatSnapshot(listOf(one), ChatStatus.LIVE, null)) }
+        compose.onNodeWithContentDescription(context.getString(R.string.chat_question_option_label, "Continue")).performClick()
+        val announcements = recordAccessibilityAnnouncements(compose)
+        compose.runOnIdle { core.pushChat(ChatSnapshot(listOf(one.copy(body =
+            (one.body as ChatEntryBody.Question).copy(status = ChatToolStatus.DONE))), ChatStatus.LIVE, null)) }
+        compose.onNode(hasText("Final question") and hasAnyAncestor(hasTestTag("tasks-needs-sheet"))).assertExists()
+        val result = context.getString(R.string.chat_question_sent)
+        compose.runOnIdle { assertEquals(1, announcements.count { it == result }) }
+        compose.runOnIdle { core.pushChat(ChatSnapshot(listOf(question("question-two")), ChatStatus.LIVE, null)) }
+        compose.onNodeWithContentDescription(context.getString(R.string.chat_question_option_label, "Continue")).performClick()
+        compose.runOnIdle { core.push(listOf(first, second.copy(agentStatus = AgentStatus.Working))) }
+        compose.onNodeWithTag("tasks-needs-sheet").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(2, announcements.count { it == result }) }
+    }
+
+    // D103/D105: a delayed receipt must be spoken once before advancing, including the final dismissal.
+    @Test fun queueSpeaksEachDeliveredReceiptOnceAcrossAdvancementAndDismissal() {
+        val hold = CompletableDeferred<Unit>()
+        val core = FakeCore().apply {
+            addHost("home", Endpoint.Ssh("home.test", 22u, "me"))
+            callsOf["h1"] = listOf(call("regular", "t1", CallUrgency.CHECK), call("urgent", "t2", CallUrgency.URGENT))
+            replyHold = hold
+            replyResult = CallReply(CallReplyOutcome.DELIVERED,
+                CallAnswer(0u, "Continue", CallAnswerState.DELIVERED, 2000uL, null), null)
+        }
+        show(core)
+        compose.onNodeWithTag("tasks-filter-needs").performClick()
+        val announcements = recordAccessibilityAnnouncements(compose)
+        compose.onNodeWithContentDescription(context.getString(R.string.call_answer_choice_label, "urgent", "Continue")).performClick()
+        compose.runOnIdle { hold.complete(Unit) }
+        compose.onNodeWithContentDescription(context.getString(R.string.call_answer_choice_label, "regular", "Continue")).assertExists()
+        val result = context.getString(R.string.call_answer_delivered, "Continue")
+        compose.runOnIdle { assertEquals(1, announcements.count { it == result }) }
+        compose.onNodeWithContentDescription(context.getString(R.string.call_answer_choice_label, "regular", "Continue")).performClick()
+        compose.onNodeWithTag("tasks-needs-sheet").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(2, announcements.count { it == result }) }
+    }
+
     @Test fun successfulRepliesAdvanceInUrgencyOrderAndCloseAfterTheLast() {
         val core = FakeCore().apply {
             addHost("home", Endpoint.Ssh("home.test", 22u, "me"))

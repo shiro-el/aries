@@ -45,6 +45,20 @@ class TasksRequestLifetimeTest {
         compose.waitForIdle()
     }
 
+    // D105: the screen and its request overlay must emit a single transcript receipt.
+    @Test fun requestOverlaySpeaksTranscriptConfirmationOnlyOnce() {
+        open(AgentStatus.Blocked(BlockedReason.QUESTION, null))
+        val question = ChatEntry("request", null, ChatEntryBody.Question("request_user_input", "Choose",
+            listOf(ChatQuestionPart("Continue?", null, false, listOf(ChatQuestionOption("Continue", null)))), ChatToolStatus.RUNNING, null))
+        push(base + question)
+        val announcements = recordAccessibilityAnnouncements(compose)
+        compose.onNodeWithContentDescription("Answer Continue").performClick()
+        push(base + question.copy(body = (question.body as ChatEntryBody.Question).copy(status = ChatToolStatus.DONE)))
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        compose.runOnIdle { org.junit.Assert.assertEquals(1,
+            announcements.count { it == context.getString(io.github.shiroel.aries.R.string.chat_question_sent) }) }
+    }
+
     // D53: a second live request arriving behind an open sheet must open when that sheet closes.
     @Test fun nextLiveQuestionOpensAfterDismissingThePreviousRequest() {
         open(AgentStatus.Blocked(BlockedReason.QUESTION, null))

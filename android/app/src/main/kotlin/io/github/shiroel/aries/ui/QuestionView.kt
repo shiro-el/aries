@@ -103,7 +103,7 @@ internal fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question
                     val label = if (permission) permissionChoiceResource(option.label)?.let { stringResource(it) } ?: option.label else option.label
                     ConsoleChatChoice(i + 1, label, option.description,
                         stringResource(R.string.chat_question_option_label, label),
-                        enabled = enabled, multi = question.multi, selected = chat.picks[id]?.getOrNull(part)?.contains(i) == true,
+                        enabled = enabled, multi = question.multi, sendsImmediately = q.questions.size == 1 && !question.multi, selected = chat.picks[id]?.getOrNull(part)?.contains(i) == true,
                         onClick = {
                             if (permission && option.label == "Allow always") confirmingAlways = true
                             else chat.pick(id, q, part, i)
@@ -218,22 +218,33 @@ internal fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question
 
 /** Observe reply state outside lazy transcript rows, including transcript-confirmed completion. */
 @Composable
-internal fun QuestionAnnouncements(chat: ChatModel, id: String? = null) {
+internal fun QuestionAnnouncements(chat: ChatModel, id: String? = null, queueCompletion: Boolean = false) {
     val questions = chat.snapshot?.entries.orEmpty().filter { it.body is ChatEntryBody.Question && (id == null || id == it.id) }
     val states = questions.associate { it.id to (chat.answers[it.id] to (it.body as ChatEntryBody.Question).status) }
     var previous by remember(chat, id) { mutableStateOf(states) }
+    val status = chat.terminal.agentStatus
+    var previousStatus by remember(chat, id) { mutableStateOf(status) }
+    var completedQuestions by remember(chat, id) { mutableStateOf(
+        questions.filter { (it.body as ChatEntryBody.Question).status == ChatToolStatus.DONE }.map { it.id }.toSet()) }
+    val statusConfirmed = queueCompletion && isWaiting(previousStatus) && status != null && !isWaiting(status)
     val changed = questions.lastOrNull { it.id in previous && previous[it.id] != states[it.id] }
+        ?: questions.lastOrNull { statusConfirmed && it.id in previous }
+    val completed = changed?.takeIf { statusConfirmed || (it.body as ChatEntryBody.Question).status == ChatToolStatus.DONE }
     val state = changed?.let { chat.answers[it.id] }
     val message = when {
         changed == null -> null
+        completed != null -> if (completed.id !in completedQuestions) stringResource(R.string.chat_question_sent) else null
         state is AnswerState.Failed -> messageText(state.why)
         state == AnswerState.Sending -> stringResource(R.string.chat_question_sending)
         state == AnswerState.Held -> stringResource(R.string.chat_send_held)
         state == AnswerState.Unconfirmed -> stringResource(R.string.chat_queue_uncertain)
-        (changed.body as ChatEntryBody.Question).status == ChatToolStatus.DONE -> stringResource(R.string.chat_question_sent)
         state == AnswerState.Sent -> stringResource(R.string.chat_question_waiting)
         else -> null
     }
-    AnnounceChanges(states, message)
-    androidx.compose.runtime.SideEffect { previous = states }
+    AnnounceChanges(states to if (queueCompletion) status else null, message)
+    androidx.compose.runtime.SideEffect {
+        previous = states
+        previousStatus = status
+        if (completed != null) completedQuestions = completedQuestions + completed.id
+    }
 }

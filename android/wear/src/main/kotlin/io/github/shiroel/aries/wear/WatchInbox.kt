@@ -16,9 +16,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -59,6 +62,8 @@ fun WatchInbox(
     val selected = summary.inbox.firstOrNull { it.hostId == target?.first && it.terminal == target.second }
     BackHandler(selected != null) { onTarget(null) }
     WatchConsoleTheme {
+        val nameLines = if (LocalDensity.current.fontScale >= 1.3f) Int.MAX_VALUE else 1
+        val context = LocalContext.current
         val inboxScroll = rememberScalingLazyListState(initialCenterItemIndex = 0)
         val dismiss = rememberSwipeToDismissBoxState()
         SwipeToDismissBox(state = dismiss, onDismissed = { onTarget(null) }, hasBackground = selected != null) { background ->
@@ -85,11 +90,14 @@ fun WatchInbox(
                                     agents.forEach { agent -> item(key = "${agent.hostId}/${agent.terminal}") {
                                         Chip(
                                             onClick = { onTarget(agent.hostId to agent.terminal) },
-                                            label = { Text(agent.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                            label = { Text(agent.name, maxLines = nameLines, overflow = TextOverflow.Ellipsis) },
                                             secondaryLabel = { StatusCode(agent) },
                                             icon = { StatusIcon(agent.status) },
                                             shape = WatchConsoleShape,
-                                            colors = ChipDefaults.secondaryChipColors(), modifier = Modifier.fillMaxWidth(),
+                                            colors = ChipDefaults.secondaryChipColors(), modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) {
+                                                contentDescription = agent.name
+                                                stateDescription = WatchConsole.status(context, agent.status)
+                                            },
                                         )
                                     } }
                                 }
@@ -141,7 +149,7 @@ private fun GroupLabel(agent: WatchAgent, summary: WatchSummary, now: Long) {
 private fun Heading(text: String, section: Boolean = false) {
     Text(text, textAlign = TextAlign.Center, color = Color(WatchConsole.SAFFRON),
         style = if (section) MaterialTheme.typography.caption1 else MaterialTheme.typography.title3,
-        modifier = Modifier.fillMaxWidth())
+        modifier = Modifier.fillMaxWidth().semantics { heading() })
 }
 
 @Composable
@@ -170,7 +178,7 @@ private fun StatusCode(agent: WatchAgent) {
     val context = LocalContext.current
     val description = WatchConsole.status(context, agent.status)
     Text(WatchConsole.code(context, agent.status, agent.requestKind), color = Color(WatchConsole.color(agent.status)),
-        modifier = Modifier.semantics { contentDescription = description })
+        modifier = Modifier.semantics { stateDescription = description })
 }
 
 @Composable

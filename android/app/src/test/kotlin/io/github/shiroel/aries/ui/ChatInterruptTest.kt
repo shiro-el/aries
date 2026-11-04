@@ -56,6 +56,17 @@ class ChatInterruptTest {
         return core.connection!!
     }
 
+    // D102: lint cannot detect the invisible, keyboard-focusable result slot before Message.
+    @Test fun absentInterruptNoticeDoesNotAddAnEmptyFocusStop() {
+        open(FakeCore())
+        compose.onAllNodes(SemanticsMatcher("empty focus stop") { node ->
+            node.config.contains(SemanticsProperties.Focused) &&
+                node.config.getOrElse(SemanticsProperties.Text) { emptyList() }.let { texts ->
+                    texts.isNotEmpty() && texts.all { it.text.isEmpty() }
+                }
+        }, useUnmergedTree = true).assertCountEquals(0)
+    }
+
     @Test
     fun workingComposerKeepsStopAvailableAlongsideDraftSubmission() {
         val conn = open(FakeCore())
