@@ -79,7 +79,7 @@ sealed interface CallView {
      * [retry] is the Choice a "Try again" button sends again, when trying
      * again is safe and may help; [openApp] adds "Open app".
      */
-    data class Done(val line: String, val detail: String? = null, val retry: Int? = null, val openApp: Boolean = false) : CallView
+    data class Done(val line: String, val detail: String? = null, val retry: Int? = null, val openApp: Boolean = false, val pending: Boolean = false) : CallView
 }
 
 /** Posts a Call's notification in each [CallView]; all views share one notification per Call. */
@@ -134,6 +134,7 @@ object CallNotifications {
             is CallView.Sending -> status(context.getString(R.string.call_notify_sending, call.choices.getOrElse(view.choice) { "" }))
             is CallView.Done -> {
                 status(view.line, view.detail)
+                builder.setOngoing(view.pending)
                 view.retry?.let { builder.addAction(action(context.getString(R.string.call_notify_try_again), choiceIntent(context, notice, it, token))) }
                 if (view.openApp) builder.addAction(action(context.getString(R.string.call_notify_open_app), openApp(context, notice)))
             }

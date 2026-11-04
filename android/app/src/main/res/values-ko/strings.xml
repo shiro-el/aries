@@ -1194,6 +1194,9 @@
     <string name="call_urgency_check">검토</string>
     <string name="call_urgency_urgent">긴급</string>
     <string name="call_urgency_emergency">비상</string>
+    <string name="call_reply_retry_guidance">아래 선택지를 눌러 다시 답할 수 있어요.</string>
+    <string name="call_reply_terminal_guidance">전달 여부가 확실하지 않아요. 다시 답하기 전에 Terminal에서 확인하세요.</string>
+    <string name="call_answer_elsewhere">다른 기기에서 답하는 중: %1$s</string>
     <string name="call_answer_claimed">답하는 중: %1$s</string>
     <string name="call_answer_delivered">답함: %1$s</string>
     <string name="call_answer_failed">답하지 못함: %1$s</string>

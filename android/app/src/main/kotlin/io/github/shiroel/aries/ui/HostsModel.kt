@@ -2629,7 +2629,8 @@ class HostsModel(
     }
 
     /** Resolve against exactly one Host. Pending trust retries this same action on this same link. */
-    private fun openAgentTarget(host: Host, address: String, openChat: Boolean = false, callKey: String? = null) {
+    private fun openAgentTarget(host: Host, address: String, openChat: Boolean = false, callKey: String? = null,
+        forceTerminal: Boolean = false) {
         val fromInbox = callKey != null
         if (fromInbox) navigationIntent() else userNavigation()
         restoreSettingsBase()
@@ -2714,7 +2715,8 @@ class HostsModel(
                 if (existing == null) ownCallLink(target)
                 adopted = true
                 val shared = pendingShare
-                if (shared != null && terminal.agentStatus != null) {
+                if (forceTerminal) observe(target, terminal, screen)
+                else if (shared != null && terminal.agentStatus != null) {
                     chat(target, terminal, screen)
                     (screen as Screen.Chat).chat.pendingShare = shared
                     cancelShare()
@@ -2724,7 +2726,7 @@ class HostsModel(
                 if (current()) prompt = problemFor(e).let { problem ->
                     if (e is CoreException.KeyLocked) problem.copy(unlock = {
                         prompt = null
-                        openAgentTarget(host, address, openChat, callKey)
+                        openAgentTarget(host, address, openChat, callKey, forceTerminal)
                     }) else problem
                 }
             } finally {
@@ -2740,10 +2742,17 @@ class HostsModel(
         }
     }
 
+    /** Checks Call delivery in its Terminal without changing the saved Agent view. */
+    internal fun openCallTerminal(entry: CallEntry) {
+        val address = entry.call.terminal ?: return
+        openAgentTarget(entry.host, address, forceTerminal = true)
+    }
+
     /** Opens the caller in Chat without changing the saved Agent view. */
     fun openCallChat(entry: CallEntry) {
         val address = entry.call.terminal ?: return
         if (!callInboxOpen || openingCall == entry.key) return
+        calls.openThreadCall(entry)
         if (currentAgentKey == AgentKey(entry.host.id, address) && screen is Screen.Chat) {
             closeCallInbox()
             return
