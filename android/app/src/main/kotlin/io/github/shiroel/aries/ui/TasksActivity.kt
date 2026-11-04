@@ -72,41 +72,49 @@ internal fun TasksPlan(entries: List<ChatEntry>) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TasksQuestionTrace(entry: ChatEntry, chat: ChatModel, body: ChatEntryBody.Question) {
-    var open by remember(entry.id) { mutableStateOf(false) }
+    val dialogs = LocalChatDialogs.current
     val live = chat.questionMode(entry.id) == ChatModel.QuestionMode.Live && chat.answers[entry.id] != AnswerState.Sent
-    LaunchedEffect(entry.id, live) { if (live) open = true }
-    TextButton(onClick = { open = true }, modifier = Modifier.fillMaxWidth().testTag("tasks-question:${entry.id}")) {
+    TextButton(onClick = { dialogs?.tasksRequest = TasksRequest.Question(entry.id, body) }, modifier = Modifier.fillMaxWidth().testTag("tasks-question:${entry.id}")) {
         Column(Modifier.fillMaxWidth().padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(body.title, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
             Text(stringResource(if (live) R.string.tasks_answer_needed else R.string.tasks_view_request), style = MaterialTheme.typography.labelSmall)
         }
     }
-    if (open) ModalBottomSheet(onDismissRequest = { open = false },
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-            QuestionView(chat, entry.id, body)
-        }
-    }
+}
+
+/** The screen owns the request, so lazy-row replacement cannot dismiss its sheet. */
+internal sealed interface TasksRequest {
+    data class Question(val id: String, val body: ChatEntryBody.Question) : TasksRequest
+    data class Call(val entry: CallEntry) : TasksRequest
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun TasksCallTrace(entry: CallEntry, calls: CallsModel) {
-    var open by remember(entry.key) { mutableStateOf(false) }
-    TextButton(onClick = { open = true }, modifier = Modifier.fillMaxWidth().testTag("tasks-call:${entry.key}")
+internal fun TasksRequestDialogs(dialogs: ChatDialogState, chat: ChatModel, calls: CallsModel?) {
+    val request = dialogs.tasksRequest ?: return
+    ModalBottomSheet(onDismissRequest = { dialogs.tasksRequest = null },
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
+            when (request) {
+                is TasksRequest.Question -> QuestionView(chat, request.id,
+                    chat.snapshot?.entries?.find { it.id == request.id }?.body as? ChatEntryBody.Question ?: request.body)
+                is TasksRequest.Call -> if (calls != null) ConsoleChatCall(
+                    calls.calls.find { it.key == request.entry.key } ?: request.entry.copy(live = false), calls)
+            }
+        }
+    }
+}
+
+@Composable
+internal fun TasksCallTrace(entry: CallEntry) {
+    val dialogs = LocalChatDialogs.current
+    TextButton(onClick = { dialogs?.tasksRequest = TasksRequest.Call(entry) }, modifier = Modifier.fillMaxWidth().testTag("tasks-call:${entry.key}")
         .presentsCalls(setOf(entry.key))) {
         Column(Modifier.fillMaxWidth().padding(8.dp)) {
             Text(entry.call.title, color = tasksAttentionColor())
             Text(stringResource(R.string.console_chat_call_label), style = MaterialTheme.typography.labelSmall)
-        }
-    }
-    if (open) ModalBottomSheet(onDismissRequest = { open = false },
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-            ConsoleChatCall(entry, calls)
         }
     }
 }

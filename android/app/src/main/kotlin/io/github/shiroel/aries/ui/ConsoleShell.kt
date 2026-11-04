@@ -142,7 +142,7 @@ internal fun ConsoleShell(
     }
     LaunchedEffect(model.callInboxOpen) { if (model.callInboxOpen) drawer.close() }
     val navigate: (() -> Unit) -> Unit = { action ->
-        scope.launch { drawer.close(); action() }
+        scope.launch { try { drawer.close() } finally { action() } }
     }
     ModalNavigationDrawer(
         drawerState = drawer,
@@ -167,12 +167,9 @@ internal fun ConsoleShell(
         }
         CompositionLocalProvider(LocalCallAttentionEnabled provides (drawer.isClosed && drawer.targetValue == DrawerValue.Closed),
             LocalConsoleHeaderMeasured provides { measuredHeaderHeight = it }, LocalConsoleMenu provides openDrawer, LocalQuickOpen provides {
-            scope.launch { drawer.close(); model.openQuickOpen() }
+            navigate(model::openQuickOpen)
         }, LocalCallInbox provides CallInboxAction(model.calls, model.callInboxOpen) {
-            scope.launch {
-                drawer.close()
-                if (model.callInboxOpen) model.closeCallInbox() else model.openCallInbox()
-            }
+            navigate { if (model.callInboxOpen) model.closeCallInbox() else model.openCallInbox() }
         }, LocalNextWaitingAgent provides model.nextWaitingAgent?.let { NextWaitingAction(it, model::openNextWaitingAgent) }) {
             Box(Modifier.fillMaxSize().systemGestureExclusion { coordinates ->
                 Rect(0f, 0f, edgeWidth, minOf(coordinates.size.height.toFloat(), terminalHeaderHeight))
@@ -295,7 +292,8 @@ private fun ConsoleDrawer(model: HostsModel, navigate: (() -> Unit) -> Unit) {
             item(key = "host:${host.id}") {
                 DrawerRow(host.name, hostId == host.id, Modifier.testTag("drawer-host:${host.id}"), onClick = { navigate { model.openHost(host) } })
             }
-            val hostAgents = agents.filter { it.host.id == host.id }
+            // The home board stays live behind Browse; selecting a Host scopes only this tree.
+            val hostAgents = agents.filter { it.host.id == host.id && (hostId == null || hostId == host.id) }
             agentTreeItems(hostAgents, folds,
                 onOpen = { entry -> navigate { model.openDrawerAgent(entry) } },
                 onPin = model::pin, tag = "drawer-agent", current = currentAgent, sectionNamespace = host.id,
