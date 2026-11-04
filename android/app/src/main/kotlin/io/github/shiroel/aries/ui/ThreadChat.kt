@@ -154,7 +154,7 @@ private fun ThreadUserRow(row: ChatTranscriptRow, chat: ChatModel, latest: Boole
     }) else null) {
         when (content) {
             is ChatTranscriptContent.Header -> {
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(12.dp))
                 ChatAttachmentCards(content.attachments, chat)
             }
             is ChatTranscriptContent.Markdown -> ChatMarkdownItem(content.source, content.block, content.index, content.thinking)
@@ -171,8 +171,10 @@ internal fun ThreadUserBubble(top: Boolean = true, bottom: Boolean = true,
     delivery: (@Composable () -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
     Column(Modifier.fillMaxWidth().padding(start = 40.dp, end = 16.dp,
         top = if (top) 16.dp else 0.dp, bottom = if (bottom) 12.dp else 0.dp), horizontalAlignment = Alignment.End) {
-        val shape = RoundedCornerShape(topStart = if (top) 16.dp else 0.dp, topEnd = if (top) 16.dp else 0.dp,
-            bottomStart = if (bottom) 16.dp else 0.dp, bottomEnd = if (bottom) 16.dp else 0.dp)
+        // Header/footer segments must be at least the radius tall so lazy-row
+        // clipping keeps the same corners as the one-piece outbox bubble.
+        val shape = RoundedCornerShape(topStart = if (top) 12.dp else 0.dp, topEnd = if (top) 12.dp else 0.dp,
+            bottomStart = if (bottom) 12.dp else 0.dp, bottomEnd = if (bottom) 12.dp else 0.dp)
         Column(Modifier.fillMaxWidth().clip(shape).background(MaterialTheme.colorScheme.surfaceContainerHighest), content = content)
         if (delivery != null) Column(Modifier.padding(top = 4.dp), horizontalAlignment = Alignment.End) { delivery() }
     }

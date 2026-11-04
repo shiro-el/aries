@@ -134,7 +134,7 @@ internal fun QueuedMessageBubble(message: QueuedChatMessage, chat: ChatModel) {
     if (thread) {
         ThreadUserBubble(delivery = delivery) {
             // Match a transcript paragraph's header, block and footer spacing.
-            Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp)) { body() }
+            Column(Modifier.padding(16.dp)) { body() }
         }
     } else Surface(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
