@@ -84,10 +84,10 @@ class AttachmentEntryPointsTest {
         val request = shadowOf(compose.activity).nextStartedActivityForResult
         val ready = CompletableDeferred<Unit>()
         reconnectGate = ready
-        compose.runOnIdle {
-            model.backgrounded()
-            model.resumeScreens()
-        }
+        compose.runOnIdle { model.backgrounded() }
+        // A long picker visit outlasts the warm connection grace period.
+        compose.mainClock.advanceTimeBy(120_100)
+        compose.runOnIdle { model.resumeScreens() }
         val chat = (model.screen as Screen.Chat).chat
         val uri = Uri.parse("content://documents/returned-file")
         shadowOf(compose.activity.contentResolver).registerInputStream(uri, ByteArrayInputStream(byteArrayOf(4, 2)))
