@@ -202,16 +202,18 @@ class ThreadWaitingTest {
             terminals = listOf(
                 TerminalInfo("t1", "Current", "", listOf("claude"), "/repo", "live", AgentStatus.Working),
                 TerminalInfo("t2", "Build failure", "", listOf("claude"), "/repo", "live", AgentStatus.Error("Build failed"), statusMs = 100uL),
-                TerminalInfo("t3", "Next request", "", listOf("codex"), "/repo", "live", AgentStatus.Blocked(BlockedReason.QUESTION, "Color?"), statusMs = 200uL))
+                TerminalInfo("t3", "Next request", "", listOf("codex"), "/repo", "live", AgentStatus.Blocked(BlockedReason.QUESTION, "Color?"), statusMs = 200uL),
+                TerminalInfo("t4", "Chosen request", "", listOf("claude"), "/repo", "live", AgentStatus.Error("Check this one"), statusMs = 300uL))
         }
         val settings = ThemeSettings(context.getSharedPreferences("thread-error-test", Context.MODE_PRIVATE)).apply {
             chooseLayout(AppLayout.THREAD)
         }
+        val generation = mutableIntStateOf(0)
         lateinit var model: HostsModel
         compose.setContent {
             val scope = rememberCoroutineScope()
             model = remember { HostsModel(core, scope) }
-            AriesApp(model, settings)
+            key(generation.intValue) { AriesApp(model, settings) }
         }
         compose.onNodeWithText("home").performClick()
         compose.onNodeWithText("Current").performClick()
@@ -219,8 +221,13 @@ class ThreadWaitingTest {
         assertQueueHeading("Build failure")
         compose.runOnIdle { core.push(core.terminals.map { if (it.address == "t2") it.copy(agentStatus = AgentStatus.Working) else it }) }
         assertQueueHeading("Next request")
+        compose.onNodeWithContentDescription(context.getString(R.string.thread_next_waiting_button)).performClick()
+        assertQueueHeading("Chosen request")
+        // D101: the same selected need must remain open after Activity composition recreation.
+        compose.runOnIdle { generation.intValue++ }
+        assertQueueHeading("Chosen request")
         compose.onNodeWithText(context.getString(R.string.thread_open_conversation)).performClick()
-        compose.runOnIdle { assertEquals("t3", (model.screen as Screen.Chat).chat.terminal.address) }
+        compose.runOnIdle { assertEquals("t4", (model.screen as Screen.Chat).chat.terminal.address) }
     }
 
     // Regression D68: the first transcript fetched by a waiting preview must update

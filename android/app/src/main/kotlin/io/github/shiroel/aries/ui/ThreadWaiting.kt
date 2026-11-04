@@ -39,8 +39,8 @@ internal fun ThreadWaitingPill(model: HostsModel, chat: ChatModel) {
         .sortedWith(compareByDescending<ThreadWaiting> { it.call?.call?.urgency?.ordinal ?: -1 }
             .thenBy { it.call?.call?.atMs?.toLong() ?: it.agent?.terminal?.statusMs?.toLong() ?: Long.MAX_VALUE })
         .distinctBy { it.key }
-    var sheet by remember(chat) { mutableStateOf(false) }
-    var selected by remember(chat) { mutableStateOf<AgentKey?>(null) }
+    var sheet by chat::waitingSheetOpen
+    var selected by chat::waitingSheetTarget
     if (waiting.isNotEmpty()) {
         val urgent = waiting.first().call?.call?.urgency in setOf(CallUrgency.URGENT, CallUrgency.EMERGENCY)
         val text = if (waiting.size == 1) stringResource(if (urgent) R.string.thread_waiting_urgent_single else R.string.thread_waiting_single,

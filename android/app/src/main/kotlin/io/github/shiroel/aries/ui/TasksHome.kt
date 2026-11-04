@@ -47,7 +47,7 @@ internal fun TasksHome(model: HostsModel, board: AgentBoard) {
     }
     var filter by rememberSaveable { mutableStateOf(TasksFilter.ALL) }
     var grouped by rememberSaveable { mutableStateOf(false) }
-    var queue by remember { mutableStateOf<TasksNeedsQueue?>(null) }
+    var queue by board::needsQueue
     val agents = board.agents
     val needs = taskNeeds(agents, model.calls.calls, model::taskTranscript)
     val calls = needs.filterIsInstance<TaskNeed.Call>().map { it.entry }

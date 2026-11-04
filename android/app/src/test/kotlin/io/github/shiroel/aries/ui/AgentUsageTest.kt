@@ -41,7 +41,8 @@ class AgentUsageTest {
 
     /** Regression: removing the fixed usage row must retain a working route to its sheet. */
     @Test fun moreMenuOpensTheUsageSheet() {
-        compose.setContent { MaterialTheme {
+        val restoration = androidx.compose.ui.test.junit4.StateRestorationTester(compose)
+        restoration.setContent { MaterialTheme {
             AgentScreenHeader(TerminalInfo("t1", "codex", "", listOf("codex"), "/repo", "live", AgentStatus.Working),
                 "home", {}, AgentView.CHAT, {})
         } }
@@ -50,6 +51,9 @@ class AgentUsageTest {
         compose.onNodeWithText(str(R.string.usage_title), substring = true).performClick()
         compose.onNodeWithTag("agent-usage-sheet").assertExists()
         compose.onNodeWithText(str(R.string.usage_limits_unavailable)).assertIsDisplayed()
+        // D101: usage remains open on the same Agent after saved-state restoration.
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNodeWithTag("agent-usage-sheet").assertExists()
     }
 
     @Test fun unknown_and_measured_zero_remain_distinct_as_readings_change() {
