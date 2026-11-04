@@ -98,7 +98,8 @@ object InlineNotifications {
     internal fun failed(context: Context, target: InlineTarget, line: String, text: String? = null,
         reply: Boolean = false) = synchronized(NotificationGroups) {
         val original = current(context, target)?.clone()?.apply { actions = null }
-        if (original == null && text == null) return@synchronized
+        if (original == null && (text == null || context.getSystemService(android.app.NotificationManager::class.java)
+                .activeNotifications.none { it.id == target.hostId.hashCode() && it.tag == target.tag })) return@synchronized
         val retry = target.copy(tag = if (original == null) "inline-recovery:${target.generation}" else target.tag,
             generation = UUID.randomUUID().toString())
         // recoverBuilder merges inherited extras over addExtras on build. Change the
@@ -134,10 +135,11 @@ object InlineNotifications {
         NotificationGroups.post(context, retry.hostId, retry.hostName, retry.tag, builder.build())
     }
 
-    internal fun dismiss(context: Context, target: InlineTarget) = synchronized(NotificationGroups) {
-        if (current(context, target) == null) return@synchronized
+    internal fun dismiss(context: Context, target: InlineTarget, snoozed: Boolean = false) = synchronized(NotificationGroups) {
+        val notification = current(context, target) ?: return@synchronized
         NotificationGroups.dismissed(context, Intent().putExtra("host", target.hostId)
-            .putExtra("hostName", target.hostName).putExtra("tag", target.tag))
+            .putExtra("hostName", target.hostName).putExtra("tag", target.tag)
+            .putExtra(NotificationGroups.GENERATION, notification.extras.getString(NotificationGroups.GENERATION)), snoozed)
     }
 
     internal fun snooze(context: Context, target: InlineTarget, notification: Notification) {
@@ -150,7 +152,7 @@ object InlineNotifications {
         context.getSystemService(android.app.AlarmManager::class.java).setWindow(
             android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP,
             android.os.SystemClock.elapsedRealtime() + 3_600_000, 15 * 60_000L, operation)
-        dismiss(context, target)
+        dismiss(context, target, snoozed = true)
     }
 
     private fun pending(context: Context, target: InlineTarget, action: String, mutable: Boolean = false): PendingIntent {
@@ -180,7 +182,8 @@ class InlineActionReceiver : BroadcastReceiver() {
             val manager = context.getSystemService(android.app.NotificationManager::class.java)
             // A reminder must not replace a newer card for the same Terminal/Call.
             synchronized(NotificationGroups) {
-                if (manager.activeNotifications.none { it.id == target.hostId.hashCode() && it.tag == target.tag }) {
+                if (NotificationGroups.canRestore(context, target.hostId, target.tag, notification) &&
+                    manager.activeNotifications.none { it.id == target.hostId.hashCode() && it.tag == target.tag }) {
                     NotificationGroups.post(context, target.hostId, target.hostName, target.tag, notification)
                 }
             }

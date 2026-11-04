@@ -31,30 +31,45 @@ import io.github.shiroel.aries.core.ChatEntryBody
 import io.github.shiroel.aries.core.Endpoint
 import io.github.shiroel.aries.core.PreviewForward
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayInputStream
 
-/** Local to the Agent screen: switching views drops its WebView and forward. */
+/** Owned by the Agent screen model; the WebView and tunnel remain composition-local. */
 @Stable
 internal class LocalhostPreview {
     var ports by mutableStateOf<List<UShort>>(emptyList())
-    var selected by mutableStateOf<UShort?>(null)
+    private var selectedPort by mutableStateOf<UShort?>(null)
+    var selected: UShort?
+        get() = selectedPort
+        set(value) {
+            if (value != selectedPort) capture = null
+            selectedPort = value
+        }
     var desktop by mutableStateOf(false)
     var autoRefresh by mutableStateOf(false)
+    // Pixels and annotations stay in memory, never in saved-instance-state Bundles.
+    var capture by mutableStateOf<PreviewCapture?>(null)
 }
 
 @Composable
-internal fun rememberLocalhostPreview(link: HostLink?, output: String, address: String): LocalhostPreview {
-    val preview = remember(link, address) { LocalhostPreview() }
+internal fun rememberLocalhostPreview(
+    link: HostLink?, output: String, address: String,
+    preview: LocalhostPreview = remember(link, address) { LocalhostPreview() },
+): LocalhostPreview {
     val enabled = link?.host?.endpoint is Endpoint.Ssh && !address.contains('/')
     val connection = link?.connections?.collectAsState()?.value
     LaunchedEffect(preview, enabled, connection, output) {
         if (enabled && connection != null && output.isNotEmpty()) {
-            preview.ports = (connection.previewPorts(output) + preview.ports).distinct().take(24)
+            delay(200)
+            val ports = withContext(Dispatchers.Default) { connection.previewPorts(output) }
+            preview.ports = (ports + preview.ports).distinct().take(24)
         }
     }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -72,10 +87,34 @@ internal fun rememberLocalhostPreview(link: HostLink?, output: String, address: 
     return preview
 }
 
+/** Sample live output at most four times a second, including under continuous output. */
+@Composable
+@OptIn(FlowPreview::class)
+internal fun rememberTerminalLocalhostPreview(viewer: TerminalViewer): LocalhostPreview {
+    val link = viewer.link
+    val address = viewer.terminal.address
+    val preview = rememberLocalhostPreview(link, "", address, viewer.preview)
+    val connection = link?.connections?.collectAsState()?.value
+    LaunchedEffect(preview, viewer, connection) {
+        if (link?.host?.endpoint !is Endpoint.Ssh || address.contains('/') || connection == null) return@LaunchedEffect
+        snapshotFlow { viewer.version }.sample(250).collect {
+            // Snapshot row references on Main; build text and call the synchronous
+            // core parser on Default. Never build screen text as a composition key.
+            val snapshot = viewer.snapshot()
+            val ports = withContext(Dispatchers.Default) { connection.previewPorts(snapshot.text()) }
+            preview.ports = (ports + preview.ports).distinct().take(24)
+        }
+    }
+    return preview
+}
+
 /** Parse changed entries independently; never concatenate or rescan the transcript per token. */
 @Composable
-internal fun rememberChatLocalhostPreview(link: HostLink?, entries: List<ChatEntry>, address: String): LocalhostPreview {
-    val preview = rememberLocalhostPreview(link, "", address)
+internal fun rememberChatLocalhostPreview(
+    link: HostLink?, entries: List<ChatEntry>, address: String,
+    state: LocalhostPreview = remember(link, address) { LocalhostPreview() },
+): LocalhostPreview {
+    val preview = rememberLocalhostPreview(link, "", address, state)
     val parsed = remember(preview) { mutableMapOf<String, String>() }
     val connection = link?.connections?.collectAsState()?.value
     val latestEntries by rememberUpdatedState(entries)
@@ -135,7 +174,7 @@ internal fun LocalhostPreviewBrowser(
     var forward by remember(port, connection) { mutableStateOf<PreviewForward?>(null) }
     var failed by remember(port, connection) { mutableStateOf(false) }
     var retry by remember { mutableIntStateOf(0) }
-    var capture by remember(port) { mutableStateOf<PreviewCapture?>(null) }
+    var capture by preview::capture
     var captureFailed by remember(port) { mutableStateOf(false) }
     var origin by remember(port) { mutableStateOf<String?>(null) }
     LaunchedEffect(lifecycle, port, connection, retry) {

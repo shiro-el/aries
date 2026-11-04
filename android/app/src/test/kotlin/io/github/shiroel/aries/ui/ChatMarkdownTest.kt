@@ -154,10 +154,14 @@ class ChatMarkdownTest {
         val scroller = compose.onNodeWithText("val answer", substring = true).onParent()
         scroller.performTouchInput { swipeLeft() }
         assertTrue("wide code scrolls horizontally", scroller.fetchSemanticsNode().config[SemanticsProperties.HorizontalScrollAxisRange].value() > 0f)
+        // Regression: reparsing a streamed code block must keep its horizontal reading position.
+        core.pushChat(ChatSnapshot(listOf(entry("a1", ChatEntryBody.Agent("```kotlin\n${code}println(\"next token\")\n```"))), ChatStatus.LIVE, "next"))
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("next token", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue("streamed code keeps its horizontal offset", scroller.fetchSemanticsNode().config[SemanticsProperties.HorizontalScrollAxisRange].value() > 0f)
         val copy = compose.onNodeWithText(str(R.string.chat_code_copy_button))
         copy.performScrollTo().performClick()
         val clipboard = context.getSystemService(ClipboardManager::class.java)
-        assertEquals(code, clipboard.primaryClip?.getItemAt(0)?.text?.toString())
+        assertEquals(code + "println(\"next token\")\n", clipboard.primaryClip?.getItemAt(0)?.text?.toString())
         compose.onNodeWithText(str(R.string.chat_code_copied)).assertExists()
     }
 
@@ -177,8 +181,8 @@ class ChatMarkdownTest {
             core.pushChat(ChatSnapshot(listOf(entry("link", body)), ChatStatus.LIVE, null))
             if (body is ChatEntryBody.Tool) {
                 val expand = str(R.string.chat_tool_expand_label, body.name)
-                compose.waitUntil(5_000) { compose.onAllNodesWithContentDescription(expand).fetchSemanticsNodes().isNotEmpty() }
-                compose.onNodeWithContentDescription(expand).performClick()
+                compose.waitUntil(5_000) { compose.onAllNodes(hasToolAction(expand)).fetchSemanticsNodes().isNotEmpty() }
+                compose.onNode(hasToolAction(expand)).performClick()
             }
             compose.waitUntil(5_000) { compose.onAllNodesWithText(displayed).fetchSemanticsNodes().isNotEmpty() }
             val node = compose.onNodeWithText(displayed)

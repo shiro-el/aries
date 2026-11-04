@@ -34,11 +34,12 @@ import kotlinx.coroutines.withTimeout
  * to [CallReplyWorker] (prototype 01).
  */
 class ChoiceReceiver : BroadcastReceiver() {
-    override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != ACTION) return
-        val notice = NotificationPayloads.open(context, intent.getStringExtra(EXTRA_NOTICE))?.let { CallNotice.fromJson(it) } ?: return
+    override fun onReceive(context: Context, intent: Intent) = synchronized(NotificationGroups) {
+        if (intent.action != ACTION) return@synchronized
+        val notice = NotificationPayloads.open(context, intent.getStringExtra(EXTRA_NOTICE))?.let { CallNotice.fromJson(it) } ?: return@synchronized
         val choice = intent.getIntExtra(EXTRA_CHOICE, -1)
-        if (choice !in notice.call.choices.indices) return
+        if (choice !in notice.call.choices.indices) return@synchronized
+        if (!CallNotifications.accepts(context, notice, intent.getStringExtra(CallNotifications.CHOICE_TOKEN))) return@synchronized
         CallNotifications.post(context, notice, CallView.Sending(choice))
         try {
             CallReplyWorker.enqueue(context, notice, choice)
@@ -104,7 +105,7 @@ class CallReplyWorker(context: Context, params: WorkerParameters) : CoroutineWor
                 .setInputData(input(context, notice, choice))
                 .build()
             WorkManager.getInstance(context)
-                .enqueueUniqueWork("call-reply:${notice.hostId}/${notice.call.id}", ExistingWorkPolicy.KEEP, request)
+                .enqueueUniqueWork("call-reply:${notice.hostId}/${notice.call.id}", ExistingWorkPolicy.APPEND_OR_REPLACE, request)
         }
 
         internal fun input(context: Context, notice: CallNotice, choice: Int) =

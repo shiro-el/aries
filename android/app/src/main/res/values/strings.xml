@@ -672,6 +672,7 @@
     <string name="chat_cache_failed">The Chat cache could not be changed.</string>
     <string name="chat_image">Image</string>
     <string name="chat_image_loading">Loading image…</string>
+    <string name="chat_image_unavailable">Image unavailable. Reconnect to load it.</string>
     <string name="chat_image_unreadable">This image cannot be shown.</string>
     <string name="chat_image_too_large">Image too large to show (%1$s MB)</string>
 
@@ -693,16 +694,21 @@
     <string name="chat_permission_label">Permission request</string>
     <string name="chat_permission_allow">Allow</string>
     <string name="chat_permission_allow_always">Allow always</string>
+    <string name="chat_permission_always_title">Always allow this request?</string>
     <string name="chat_permission_deny">Deny</string>
 
     <string name="chat_question_label">Question</string>
     <string name="chat_question_option_label">Answer %1$s</string>
     <string name="chat_question_text_label">Write an answer to %1$s</string>
     <string name="chat_question_text_hint">Write your own answer</string>
+    <string name="chat_question_asking_now">The Agent is asking now. Try the question choices again.</string>
+    <string name="chat_question_live_pending">Waiting for the Agent to finish asking…</string>
+    <string name="chat_question_reconnecting">Reconnecting · choices return when live</string>
     <string name="chat_question_queued">Queued question</string>
     <string name="chat_question_history">Past question</string>
     <string name="chat_question_send">Send answer</string>
     <string name="chat_question_sending">Sending…</string>
+    <string name="chat_question_waiting">Sent · waiting for the Agent to respond</string>
     <string name="chat_question_sent">Answered</string>
     <string name="chat_question_cancelled">Cancelled</string>
     <string name="chat_question_expired">Expired</string>
@@ -710,6 +716,7 @@
     <string name="chat_question_notes">Notes</string>
     <!-- Notification question answers -->
     <string name="question_notify_open_app">Answer in app</string>
+    <string name="question_notify_confirm_in_app">Confirm “Allow always” in the app.</string>
     <string name="question_notify_sent">Sent “%1$s”</string>
     <string name="question_notify_unknown">The answer may have been sent. Check the Chat before answering again.</string>
 
@@ -1043,6 +1050,7 @@
     <string name="agent_watch_label">Watch progress</string>
     <string name="agent_watch_error">Could not update watching: %1$s</string>
     <string name="push_progress_channel">Watched Agent progress</string>
+    <string name="push_progress_elapsed">%1$d min elapsed</string>
     <string name="push_progress_body">%1$d min elapsed · %2$d subagents</string>
 
     <string name="push_test_title">Push works for %1$s</string>
@@ -1057,6 +1065,7 @@
     <string name="push_call_channel_emergency">Emergency Calls</string>
     <string name="push_no_firebase">this build has no Firebase configuration</string>
     <!-- Inline notification actions -->
+    <string name="notification_updates_channel">Reply results</string>
     <string name="notification_reply_button">Reply</string>
     <string name="notification_reply_hint">Message the Agent</string>
     <string name="notification_seen_button">Seen</string>
@@ -1141,6 +1150,11 @@
     <string name="diagnostics_http">%1$s · HTTP %2$d</string>
     <string name="diagnostics_entry">%1$s · %2$s\n%3$s · %4$s · %5$s</string>
 
+    <!-- App layout / appearance -->
+    <string name="layout_title">App layout</string>
+    <string name="layout_console">Console</string>
+    <string name="layout_thread">Thread</string>
+    <string name="layout_tasks">Tasks</string>
     <string name="theme_title">Theme</string>
     <string name="theme_system">System</string>
     <string name="theme_light">Light</string>

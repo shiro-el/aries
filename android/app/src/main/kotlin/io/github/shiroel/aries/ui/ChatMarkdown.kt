@@ -25,6 +25,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -53,6 +57,8 @@ import io.github.shiroel.aries.core.ChatEntry
 import io.github.shiroel.aries.core.ChatEntryBody
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.withContext
 import org.commonmark.ext.gfm.tables.TableBlock
 import org.commonmark.ext.gfm.tables.TableCell
@@ -66,6 +72,8 @@ internal data class ChatMarkdownDocument(
     val source: String,
     val blocks: List<ChatMarkdownBlock>,
     val attachments: ChatAttachments? = null,
+    /** Entry whose body completed parsing; live input may already be ahead. */
+    val entry: ChatEntry? = null,
 ) {
     val displaySource: String get() = attachments?.text ?: source
 
@@ -81,7 +89,7 @@ internal sealed interface ChatMarkdownBlock {
         val quoted: Boolean = false,
         val continuation: Boolean = false,
     ) : ChatMarkdownBlock
-    data class Cells(val cells: List<MarkdownCell>, val scroll: ScrollState) : ChatMarkdownBlock
+    data class Cells(val cells: List<MarkdownCell>, val scrollKey: Int) : ChatMarkdownBlock
     data class Diagram(val code: MarkdownCode, val fallback: List<ChatMarkdownBlock>) : ChatMarkdownBlock
     data class CodeHeader(val code: MarkdownCode) : ChatMarkdownBlock
     data class CodeLines(val code: MarkdownCode, val text: AnnotatedString) : ChatMarkdownBlock
@@ -90,8 +98,7 @@ internal sealed interface ChatMarkdownBlock {
 
 internal data class MarkdownCell(val text: AnnotatedString, val header: Boolean, val alignment: TableCell.Alignment?)
 
-internal class MarkdownCode(val source: String, val language: String) {
-    val scroll = ScrollState(0)
+internal class MarkdownCode(val source: String, val language: String, val scrollKey: Int = 0) {
     // Equal widths keep every lazy chunk on the same horizontal offset, including short chunks.
     val columns = source.lineSequence().maxOfOrNull { line ->
         line.fold(0) { column, char -> column + when { char == '\t' -> 8 - column % 8; char.code >= 0x1100 -> 2; else -> 1 } }
@@ -108,27 +115,41 @@ internal fun ChatEntryBody.markdownSource(): String? = when (this) {
     else -> null
 }
 
-/** Cache only the current transcript, reuse unchanged messages, and cancel work when Chat leaves. */
+/** Finish each parse, then take the newest pending snapshot. Only leaving Chat cancels it. */
 @Composable
 internal fun rememberChatMarkdown(entries: List<ChatEntry>): State<Map<String, ChatMarkdownDocument>> {
-    val sources = remember(entries) {
-        entries.mapNotNull { entry ->
-            entry.body.markdownSource()?.let { Triple(entry.id, it, entry.body is ChatEntryBody.User) }
-        }
-    }
-    return produceState(emptyMap(), sources) {
-        val previous = value
-        value = withContext(Dispatchers.Default) {
-            sources.associate { (id, source, user) ->
-                ensureActive()
-                id to (previous[id]?.takeIf { it.source == source && (it.attachments != null) == user }
-                    ?: if (user) {
+    val latest by rememberUpdatedState(entries)
+    return produceState(emptyMap()) {
+        snapshotFlow { latest }.conflate().collect { snapshot ->
+            val previous = value
+            value = withContext(Dispatchers.Default) {
+                snapshot.mapNotNull { entry ->
+                    val source = entry.body.markdownSource() ?: return@mapNotNull null
+                    ensureActive()
+                    val cached = previous[entry.id]
+                    val document = if (cached?.matches(entry.body) == true) cached else if (entry.body is ChatEntryBody.User) {
                         val attachments = chatAttachments(source)
                         parseChatMarkdown(attachments.text).copy(source = source, attachments = attachments)
-                    } else parseChatMarkdown(source))
+                    } else parseChatMarkdown(source)
+                    entry.id to if (document.entry == entry) document else document.copy(entry = entry)
+                }.toMap()
             }
         }
     }
+}
+
+/** Horizontal reading positions belong to stable message/block keys, never parser results. */
+internal class ChatMarkdownScrolls {
+    private val positions = mutableMapOf<Pair<String, Int>, ScrollState>()
+    fun get(entry: String, block: Int): ScrollState = positions.getOrPut(entry to block) { ScrollState(0) }
+    fun retain(entries: Set<String>) { positions.keys.retainAll { it.first in entries } }
+}
+internal val LocalChatMarkdownScrolls = staticCompositionLocalOf<ChatMarkdownScrolls?> { null }
+
+@Composable
+private fun markdownScroll(key: Int): ScrollState {
+    val shared = LocalChatMarkdownScrolls.current
+    return if (shared == null) rememberScrollState() else shared.get(LocalChatSearchEntry.current, key)
 }
 
 internal fun LazyListScope.chatMarkdownItems(id: String, document: ChatMarkdownDocument?, thinking: Boolean = false) {
@@ -192,7 +213,7 @@ private fun ChatMarkdownBlockView(block: ChatMarkdownBlock, actions: Modifier, s
                 style = if (thinking) style.copy(fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant) else style,
             )
         }
-        is ChatMarkdownBlock.Cells -> Row(Modifier.padding(horizontal = 16.dp).horizontalScroll(block.scroll)) {
+        is ChatMarkdownBlock.Cells -> Row(Modifier.padding(horizontal = 16.dp).horizontalScroll(markdownScroll(block.scrollKey))) {
             block.cells.forEachIndexed { index, cell ->
                 val open = LocalOpenRemoteFile.current
                 val color = MaterialTheme.colorScheme.primary
@@ -244,7 +265,7 @@ private fun ChatMarkdownBlockView(block: ChatMarkdownBlock, actions: Modifier, s
                 }.toAnnotatedString()
             }
             val width = with(LocalDensity.current) { (9.sp * block.code.columns.coerceAtLeast(1)).toDp() } + 24.dp
-            Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp).background(palette.surfaceVariant).horizontalScroll(block.code.scroll)) {
+            Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp).background(palette.surfaceVariant).horizontalScroll(markdownScroll(block.code.scrollKey))) {
                 SearchableChatText(
                     highlighted, searchKey,
                     Modifier.width(width).padding(horizontal = 12.dp).then(actions),
@@ -263,7 +284,7 @@ internal fun parseChatMarkdown(source: String, codeLanguage: String? = null): Ch
     fun code(source: String, info: String, closed: Boolean = false) {
         val chunks = mutableListOf<ChatMarkdownBlock>()
         val language = info.trim().takeWhile { !it.isWhitespace() }
-        val group = MarkdownCode(source, language)
+        val group = MarkdownCode(source, language, blocks.size)
         val highlighted = highlightChatCode(source, language)
         chunks += ChatMarkdownBlock.CodeHeader(group)
         var start = 0
@@ -316,11 +337,11 @@ internal fun parseChatMarkdown(source: String, codeLanguage: String? = null): Ch
             }
             is BlockQuote -> node.children().forEach { visit(it, depth, true) }
             is TableBlock -> {
-                val scroll = ScrollState(0)
+                val scrollKey = blocks.size
                 node.children().flatMap { it.children() }.filterIsInstance<TableRow>().forEach { row ->
                     blocks += ChatMarkdownBlock.Cells(row.children().filterIsInstance<TableCell>().map { cell ->
                         MarkdownCell(buildAnnotatedString { appendInlines(cell) }, cell.isHeader, cell.alignment)
-                    }.toList(), scroll)
+                    }.toList(), scrollKey)
                 }
             }
             is ThematicBreak -> blocks += ChatMarkdownBlock.Rule

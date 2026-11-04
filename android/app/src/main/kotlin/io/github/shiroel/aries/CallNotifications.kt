@@ -86,12 +86,25 @@ sealed interface CallView {
 object CallNotifications {
     /** Android shows at most three buttons on a notification. */
     private const val MAX_BUTTONS = 3
+    internal const val CHOICE_TOKEN = "aries.call.choice_token"
+
+    /** Consume the visible action before enqueueing; a late duplicate cannot restart Sending. */
+    internal fun accepts(context: Context, notice: CallNotice, token: String?): Boolean =
+        token != null && context.getSystemService(NotificationManager::class.java).activeNotifications.any {
+            it.id == notice.hostId.hashCode() && it.tag == notice.tag && it.notification.extras.getString(CHOICE_TOKEN) == token
+        }
+
 
     fun fitsAsButtons(call: PushContent.Call) = call.choices.size in 1..MAX_BUTTONS
 
-    fun post(context: Context, notice: CallNotice, view: CallView) {
+    fun post(context: Context, notice: CallNotice, view: CallView) = synchronized(NotificationGroups) {
         val manager = context.getSystemService(NotificationManager::class.java)
-        NotificationGroups.post(context, notice.hostId, notice.hostName, notice.tag, build(context, manager, notice, view))
+        val update = view is CallView.Sending || view is CallView.Done
+        val current = manager.activeNotifications.find { it.id == notice.hostId.hashCode() && it.tag == notice.tag }
+        if (update && current == null) return@synchronized
+        val notification = build(context, manager, notice, view)
+        if (update) notification.extras.putBoolean(InlineNotifications.ACTION_UPDATE, true)
+        NotificationGroups.post(context, notice.hostId, notice.hostName, notice.tag, notification)
     }
 
     fun build(context: Context, manager: NotificationManager, notice: CallNotice, view: CallView): Notification {
@@ -108,16 +121,20 @@ object CallNotifications {
                 display.expanded, if (detail == null) "" else "\n",
                 NotificationMarkdown.render(detail.orEmpty()).expanded)))
         }
+        val token = java.util.UUID.randomUUID().toString()
+        if (view == CallView.Choices || (view is CallView.Done && view.retry != null)) {
+            builder.addExtras(android.os.Bundle().apply { putString(CHOICE_TOKEN, token) })
+        }
         when (view) {
             CallView.Plain -> InlineNotifications.add(context, builder, notice.hostId, notice.hostName, call.terminal, notice.tag, reply = true)
             CallView.Choices -> call.choices.forEachIndexed { i, choice ->
-                builder.addAction(action(NotificationMarkdown.render(choice).plain, choiceIntent(context, notice, i)))
+                builder.addAction(action(NotificationMarkdown.render(choice).plain, choiceIntent(context, notice, i, token)))
             }
             CallView.OpenApp -> builder.addAction(action(context.getString(R.string.call_notify_open_app), openApp(context, notice)))
             is CallView.Sending -> status(context.getString(R.string.call_notify_sending, call.choices.getOrElse(view.choice) { "" }))
             is CallView.Done -> {
                 status(view.line, view.detail)
-                view.retry?.let { builder.addAction(action(context.getString(R.string.call_notify_try_again), choiceIntent(context, notice, it))) }
+                view.retry?.let { builder.addAction(action(context.getString(R.string.call_notify_try_again), choiceIntent(context, notice, it, token))) }
                 if (view.openApp) builder.addAction(action(context.getString(R.string.call_notify_open_app), openApp(context, notice)))
             }
         }
@@ -127,22 +144,23 @@ object CallNotifications {
     private fun action(title: String, intent: PendingIntent) = Notification.Action.Builder(null, title, intent).build()
 
     private fun openApp(context: Context, notice: CallNotice) =
-        PushTarget(notice.hostId, notice.call.terminal).pendingIntent(context)
+        NotificationGroups.openApp(context, notice.hostId, notice.hostName, notice.tag, notice.call.terminal, generation = notice.call.id)
 
     /**
      * Goes to [ChoiceReceiver]. No `setAuthenticationRequired`: a Choice
      * answers from the lock screen without unlocking (prototype 01).
      */
-    private fun choiceIntent(context: Context, notice: CallNotice, choice: Int): PendingIntent {
+    private fun choiceIntent(context: Context, notice: CallNotice, choice: Int, token: String): PendingIntent {
         val intent = Intent(context, ChoiceReceiver::class.java)
             .setAction(ChoiceReceiver.ACTION)
             // Distinct data per Call and Choice, so each button keeps its own PendingIntent.
             .setData(
                 Uri.Builder().scheme("aries-call").authority(notice.hostId)
-                    .appendPath(notice.call.id).appendPath(choice.toString()).build(),
+                    .appendPath(notice.call.id).appendPath(choice.toString()).appendPath(token).build(),
             )
             .putExtra(ChoiceReceiver.EXTRA_NOTICE, NotificationPayloads.seal(context, notice.toJson()))
             .putExtra(ChoiceReceiver.EXTRA_CHOICE, choice)
+            .putExtra(CHOICE_TOKEN, token)
         return PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }
 }

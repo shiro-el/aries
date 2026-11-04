@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Checkbox
@@ -14,6 +16,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
@@ -39,7 +45,8 @@ internal fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question
     val mode = chat.questionMode(id)
     val state = chat.answers[id]
     val cancelled = q.status == ChatToolStatus.FAILED
-    val answered = !cancelled && (q.status == ChatToolStatus.DONE || state == AnswerState.Sent)
+    val submitted = state == AnswerState.Sent || state == AnswerState.Unconfirmed
+    val answered = !cancelled && (q.status == ChatToolStatus.DONE || submitted)
     val entries = chat.snapshot?.entries.orEmpty()
     val expired = !answered && !cancelled && mode == ChatModel.QuestionMode.ReadOnly &&
         (chat.snapshot?.status == ChatStatus.ENDED || chat.terminal.state != "live" ||
@@ -47,8 +54,10 @@ internal fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question
                 val body = it.body
                 body is ChatEntryBody.Question || (body is ChatEntryBody.User && !body.queued)
             })
-    val open = !answered && !cancelled && (mode == ChatModel.QuestionMode.Live || mode == ChatModel.QuestionMode.History)
-    val enabled = state != AnswerState.Sending
+    val open = !answered && !cancelled && mode in setOf(ChatModel.QuestionMode.Live,
+        ChatModel.QuestionMode.History, ChatModel.QuestionMode.LivePending, ChatModel.QuestionMode.Reconnecting)
+    val enabled = state != AnswerState.Sending && state != AnswerState.Held && mode in setOf(ChatModel.QuestionMode.Live, ChatModel.QuestionMode.History)
+    var confirmingAlways by remember(id, q) { mutableStateOf(false) }
     val recorded = questionAnswers(q)
     val colors = MaterialTheme.colorScheme
     val accent = when {
@@ -59,8 +68,11 @@ internal fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question
     }
     val label = when {
         cancelled -> R.string.chat_question_cancelled
-        answered -> R.string.chat_question_sent
+        q.status == ChatToolStatus.DONE -> R.string.chat_question_sent
+        submitted -> R.string.chat_question_waiting
         expired -> R.string.chat_question_expired
+        mode == ChatModel.QuestionMode.LivePending -> R.string.chat_question_live_pending
+        mode == ChatModel.QuestionMode.Reconnecting -> R.string.chat_question_reconnecting
         mode == ChatModel.QuestionMode.Queued -> R.string.chat_question_queued
         mode == ChatModel.QuestionMode.History -> R.string.chat_question_history
         permission -> R.string.chat_permission_label
@@ -86,7 +98,10 @@ internal fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question
                     ConsoleChatChoice(i + 1, label, option.description,
                         stringResource(R.string.chat_question_option_label, label),
                         enabled = enabled, multi = question.multi, selected = chat.picks[id]?.getOrNull(part)?.contains(i) == true,
-                        onClick = { chat.pick(id, q, part, i) })
+                        onClick = {
+                            if (permission && option.label == "Allow always") confirmingAlways = true
+                            else chat.pick(id, q, part, i)
+                        })
                 }
                 if (!permission) {
                     val inputLabel = stringResource(R.string.chat_question_text_label, question.text)
@@ -102,7 +117,7 @@ internal fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question
             } else if (answered) {
                 // The transcript is authoritative. Until its update arrives,
                 // keep the successful phone submission visible in place.
-                val answer = recorded[part] ?: if (state == AnswerState.Sent) ChatQuestionAnswer(
+                val answer = recorded[part] ?: if (submitted) ChatQuestionAnswer(
                     chat.picks[id]?.getOrNull(part).orEmpty().sorted().map(Int::toUInt),
                     chat.questionText[id]?.getOrNull(part)?.takeIf(String::isNotBlank), null,
                 ) else null
@@ -120,7 +135,7 @@ internal fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question
                             val label = if (permission) permissionChoiceResource(option.label)?.let { stringResource(it) } ?: option.label else option.label
                             SearchableChatText(label, "question:$part:option:$i",
                                 style = if (selected) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall,
-                                color = if (selected) colors.onPrimaryContainer else colors.onSurfaceVariant.copy(alpha = .65f))
+                                color = if (selected) colors.onPrimaryContainer else colors.onSurfaceVariant)
                         }
                         if (question.multi) Checkbox(selected, onCheckedChange = null, modifier = Modifier.size(24.dp))
                         else RadioButton(selected, onClick = null, modifier = Modifier.size(24.dp))
@@ -145,9 +160,34 @@ internal fun QuestionView(chat: ChatModel, id: String, q: ChatEntryBody.Question
             }
         }
         when {
+            state == AnswerState.Held -> AnnouncedText(stringResource(R.string.chat_send_held), style = MaterialTheme.typography.bodySmall)
             state == AnswerState.Sending -> AnnouncedText(stringResource(R.string.chat_question_sending), style = MaterialTheme.typography.bodySmall)
             state is AnswerState.Failed -> AnnouncedText(stringResource(state.why.res, *state.why.args.toTypedArray()),
                 style = MaterialTheme.typography.bodySmall, color = colors.error)
         }
+    }
+    if (confirmingAlways && open && enabled) {
+        val alwaysPart = q.questions.indexOfFirst { part -> part.options.any { it.label == "Allow always" } }
+        val part = q.questions.getOrNull(alwaysPart)
+        val alwaysOption = part?.options?.indexOfFirst { it.label == "Allow always" } ?: -1
+        if (part != null && alwaysOption >= 0) AlertDialog(
+            onDismissRequest = { confirmingAlways = false },
+            title = { Text(stringResource(R.string.chat_permission_always_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(part.text)
+                    part.options[alwaysOption].description?.let { Text(it) }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmingAlways = false
+                    chat.pick(id, q, alwaysPart, alwaysOption)
+                }) { Text(stringResource(R.string.chat_permission_allow_always)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmingAlways = false }) { Text(stringResource(R.string.cancel_button)) }
+            },
+        )
     }
 }

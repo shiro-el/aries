@@ -70,7 +70,7 @@ fun SettingsScreen(
     }
     val host = model.settingsHost?.let { selected -> model.hosts.find { it.id == selected.id } }
     if (host != null) {
-        HostSettingsScreen(model, host, hostEditor)
+        LocalLayoutScreens.current.HostDetail(model, host, hostEditor)
         return
     }
     if (model.settingsKeys) {
@@ -117,6 +117,11 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.primary,
                 )
                 HorizontalDivider()
+            }
+            item(key = "app-layout") {
+                SettingsField(R.string.layout_title) {
+                    LayoutSetting(settings)
+                }
             }
             item {
                 SettingsField(R.string.theme_title) {
@@ -179,9 +184,28 @@ fun SettingsScreen(
     }
 }
 
+/** Keep the three names readable with the same enlarged-text threshold as Agent rows. */
+@Composable
+private fun LayoutSetting(settings: ThemeSettings) {
+    val label: @Composable (AppLayout) -> String = { stringResource(when (it) {
+        AppLayout.CONSOLE -> R.string.layout_console
+        AppLayout.THREAD -> R.string.layout_thread
+        AppLayout.TASKS -> R.string.layout_tasks
+    }) }
+    if (androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.3f) {
+        Column(Modifier.fillMaxWidth().selectableGroup()) {
+            AppLayout.entries.forEach { layout ->
+                ConsoleChoice(settings.layout == layout, { settings.chooseLayout(layout) }, Modifier.fillMaxWidth()) {
+                    Text(label(layout), style = MaterialTheme.typography.labelLarge)
+                }
+            }
+        }
+    } else ConsoleSegments(AppLayout.entries, settings.layout, settings::chooseLayout, label = label)
+}
+
 /** Host configuration stays reachable even when a herdr-core Browse connection fails. */
 @Composable
-private fun HostSettingsScreen(model: HostsModel, host: Host, hostEditor: @Composable (Host) -> Unit) {
+internal fun HostSettingsScreen(model: HostsModel, host: Host, hostEditor: @Composable (Host) -> Unit) {
     LazyColumn(Modifier.fillMaxSize().testTag("host-actions:${host.id}")) {
         item {
             SettingsField {
@@ -212,7 +236,8 @@ private fun HostSettingsScreen(model: HostsModel, host: Host, hostEditor: @Compo
 
 @Composable
 private fun SettingsField(title: Int? = null, content: @Composable () -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    val tokens = LocalLayoutTokens.current
+    Column(Modifier.fillMaxWidth().padding(tokens.contentPadding), verticalArrangement = Arrangement.spacedBy(tokens.itemSpacing)) {
         title?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
         content()
     }

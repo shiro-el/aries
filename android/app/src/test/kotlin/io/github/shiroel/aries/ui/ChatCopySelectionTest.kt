@@ -132,7 +132,7 @@ class ChatCopySelectionTest {
         val input = "{\n  \"command\": \"printf hello\"\n}"
         val result = "hello\n  오류: 자세한 내용\n"
         show(ChatEntryBody.Tool("Bash", "printf hello", input, ChatToolStatus.FAILED, result))
-        val tool = compose.onNodeWithContentDescription(str(R.string.chat_tool_expand_label, "Bash"))
+        val tool = compose.onNode(hasToolAction(str(R.string.chat_tool_expand_label, "Bash")))
         tool.performTouchInput { longClick() }
         compose.onNodeWithText(str(R.string.chat_copy_all)).performClick()
         assertEquals(result, clipboard())
@@ -158,7 +158,7 @@ class ChatCopySelectionTest {
         for (output in listOf(null, result)) {
             show(ChatEntryBody.Tool("Bash", "cat log.txt", input,
                 if (output == null) ChatToolStatus.RUNNING else ChatToolStatus.DONE, output))
-            compose.onNodeWithContentDescription(str(R.string.chat_tool_expand_label, "Bash"))
+            compose.onNode(hasToolAction(str(R.string.chat_tool_expand_label, "Bash")))
                 .performTouchInput { longClick() }
             compose.onNodeWithText(str(R.string.chat_copy_all)).performClick()
             assertEquals(output ?: input, clipboard())
@@ -255,6 +255,26 @@ class ChatCopySelectionTest {
         compose.onNode(hasText(str(R.string.back_button)) and hasAnyAncestor(isDialog())).performClick()
         compose.onNode(isDialog()).assertDoesNotExist()
         compose.onNodeWithText("alpha beta gamma delta").assertExists()
+    }
+
+    // Regression: disposing the originating lazy row must not discard an open selection.
+    @Test
+    fun selectionSurvivesRemovalOfItsTranscriptRow() {
+        open()
+        show(ChatEntryBody.Agent("Keep this selection"))
+        compose.onNodeWithText("Keep this selection").performTouchInput { longClick() }
+        compose.onNodeWithText(str(R.string.chat_select_text)).performClick()
+        core.pushChat(ChatSnapshot(listOf(ChatEntry("replacement", null, ChatEntryBody.Agent("New transcript"))), ChatStatus.LIVE, "new"))
+        compose.waitForIdle()
+        compose.onNode(hasText("Keep this selection") and hasAnyAncestor(isDialog()), useUnmergedTree = true).assertExists()
+        val shot = java.io.File("/tmp/aries-mvp-run/lanes/231-shots/selection.png")
+        shot.parentFile?.mkdirs()
+        shot.outputStream().use { output ->
+            compose.onNode(isDialog()).captureToImage().asAndroidBitmap()
+                .compress(android.graphics.Bitmap.CompressFormat.PNG, 100, output)
+        }
+        compose.onNode(hasText(str(R.string.back_button)) and hasAnyAncestor(isDialog())).performClick()
+        compose.onNodeWithText("New transcript").assertExists()
     }
 }
 

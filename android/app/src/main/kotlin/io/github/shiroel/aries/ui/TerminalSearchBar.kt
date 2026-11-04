@@ -18,6 +18,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
@@ -35,9 +36,9 @@ import kotlinx.coroutines.launch
 /** Android editing stays in this field; only the core's search API sees it. */
 @Composable
 internal fun TerminalSearchBar(viewer: TerminalViewer, open: Boolean, onClose: () -> Unit) {
-    var query by remember(viewer) { mutableStateOf("") }
-    var caseSensitive by remember(viewer) { mutableStateOf(false) }
-    var regex by remember(viewer) { mutableStateOf(false) }
+    var query by rememberSaveable(viewer) { mutableStateOf("") }
+    var caseSensitive by rememberSaveable(viewer) { mutableStateOf(false) }
+    var regex by rememberSaveable(viewer) { mutableStateOf(false) }
     var invalid by remember(viewer) { mutableStateOf(false) }
     var busy by remember(viewer) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()

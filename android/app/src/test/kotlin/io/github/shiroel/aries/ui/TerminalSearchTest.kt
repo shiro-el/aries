@@ -161,6 +161,8 @@ class TerminalSearchTest {
         compose.waitUntil(5_000) { old.closed }
         assertFalse(old.searchedAfterClose)
         compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(300) // The first typing grid waits for the phone layout to settle.
+        compose.waitForIdle()
         val fresh = core.connection!!.views.single()
         compose.waitUntil(5_000) { fresh.searches.any { it.first == "error" } }
         assertTrue(old.detached)

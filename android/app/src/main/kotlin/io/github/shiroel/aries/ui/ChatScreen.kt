@@ -33,19 +33,27 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.structuralEqualityPolicy
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -53,6 +61,7 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -88,6 +97,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
@@ -106,6 +117,9 @@ class ChatModel(
     /** Runs the calls that sign in to the Host (see [HostsModel]). */
     private val keyWork: CoroutineContext = EmptyCoroutineContext,
 ) {
+    internal val files = RemoteFilesPanel()
+    internal val preview = LocalhostPreview()
+    internal var selectedSearchMatch by mutableStateOf<ChatSearchMatch?>(null)
     var link by mutableStateOf(link)
         private set
 
@@ -122,6 +136,9 @@ class ChatModel(
     var terminal by mutableStateOf(terminal)
         private set
     var snapshot by mutableStateOf<ChatSnapshot?>(null)
+        private set
+    /** Image rows retry missing bytes when their watch or its delivery generation changes. */
+    var imageRevision by mutableIntStateOf(0)
         private set
     /** Typed failures survive initial watch creation and later SSH reconnects. */
     var connectionError by mutableStateOf<CoreException?>(null)
@@ -161,7 +178,7 @@ class ChatModel(
     var questionText by mutableStateOf<Map<String, List<String>>>(emptyMap())
         private set
 
-    enum class QuestionMode { Live, Queued, History, ReadOnly }
+    enum class QuestionMode { Live, LivePending, Reconnecting, Queued, History, ReadOnly }
 
     /**
      * Transcript Running means unresolved, not necessarily a live menu.
@@ -175,13 +192,21 @@ class ChatModel(
     fun questionMode(id: String): QuestionMode {
         if (inputUnavailable) return QuestionMode.ReadOnly
         val snap = snapshot ?: return QuestionMode.ReadOnly
-        if (snap.status != ChatStatus.LIVE) return QuestionMode.ReadOnly
         val entries = snap.entries
         val pending = entries.drop(entries.indexOfLast { (it.body as? ChatEntryBody.User)?.queued == false } + 1)
             .filter { (it.body as? ChatEntryBody.Question)?.status == ChatToolStatus.RUNNING }
+        if (snap.status != ChatStatus.LIVE || (link != null && link?.state != LinkState.Up)) {
+            return if (pending.any { it.id == id } &&
+                (snap.status in setOf(ChatStatus.CONNECTING, ChatStatus.RECONNECTING, ChatStatus.NO_CORE) ||
+                    (snap.status == ChatStatus.LIVE && link?.state != LinkState.Up)))
+                QuestionMode.Reconnecting else QuestionMode.ReadOnly
+        }
         val blocked = terminal.agentStatus as? AgentStatus.Blocked
         val permission = (entries.find { it.id == id }?.body as? ChatEntryBody.Question)?.name == PERMISSION_TOOL
         if (permission) {
+            if (terminal.agentStatus == AgentStatus.Working &&
+                pending.lastOrNull { (it.body as? ChatEntryBody.Question)?.name == PERMISSION_TOOL }?.id == id)
+                return QuestionMode.LivePending
             return if (terminal.state == "live" && blocked?.reason == BlockedReason.PERMISSION &&
                 pending.lastOrNull { (it.body as? ChatEntryBody.Question)?.name == PERMISSION_TOOL }?.id == id)
                 QuestionMode.Live else QuestionMode.ReadOnly
@@ -194,6 +219,16 @@ class ChatModel(
             return if (codex && questions.any { it.id == id }) QuestionMode.Queued else QuestionMode.ReadOnly
         }
         if (blocked != null || terminal.state != "live") return QuestionMode.ReadOnly
+        if (terminal.agentStatus == AgentStatus.Working) {
+            val questions = pending.filter { (it.body as? ChatEntryBody.Question)?.name != PERMISSION_TOOL }
+            val codex = (questions.firstOrNull()?.body as? ChatEntryBody.Question)?.name == "request_user_input"
+            val current = if (codex) questions.firstOrNull() else questions.lastOrNull()
+            return when {
+                current?.id == id -> QuestionMode.LivePending
+                codex && questions.any { it.id == id } -> QuestionMode.Queued
+                else -> QuestionMode.ReadOnly
+            }
+        }
         val latestIndex = entries.indexOfLast { it.body is ChatEntryBody.Question }
         if (latestIndex < entries.indexOfLast { (it.body as? ChatEntryBody.User)?.queued == false }) return QuestionMode.ReadOnly
         val latest = entries.getOrNull(latestIndex)
@@ -202,7 +237,7 @@ class ChatModel(
     }
 
     fun writeAnswer(id: String, question: ChatEntryBody.Question, part: Int, text: String) {
-        if (answers[id] == AnswerState.Sending || answers[id] == AnswerState.Sent) return
+        if (answers[id] == AnswerState.Sending || answers[id] == AnswerState.Held || answers[id] == AnswerState.Sent || answers[id] == AnswerState.Unconfirmed) return
         val current = questionText[id] ?: List(question.questions.size) { "" }
         questionText = questionText + (id to current.mapIndexed { i, value -> if (i == part) text else value })
         val selected = picks[id] ?: List(question.questions.size) { emptySet() }
@@ -383,8 +418,8 @@ class ChatModel(
             val state = ChatOutboxState(draft, attachments, queuedMessages,
                 terminalComposer.draft, terminalComposer.open, questionText, picks,
                 answers.mapValues { (_, answer) -> when (answer) {
-                    AnswerState.Sending -> "sending"
-                    AnswerState.Sent -> "sent"
+                    AnswerState.Sending, AnswerState.Held -> "sending"
+                    AnswerState.Sent, AnswerState.Unconfirmed -> "sent"
                     is AnswerState.Failed -> "failed"
                 } })
             core.saveChatOutbox(host.id, terminal.address, state.encode())
@@ -406,7 +441,7 @@ class ChatModel(
             questionText = saved.questionText
             picks = saved.picks
             answers = saved.answers.mapValues { (_, state) ->
-                if (state == "sent") AnswerState.Sent
+                if (state == "sent") AnswerState.Unconfirmed
                 else AnswerState.Failed(Message(R.string.chat_queue_uncertain))
             }
             saved.messages.asReversed().filter { it.phase == QueuedMessagePhase.Waiting }.forEach(::restoreMessage)
@@ -737,6 +772,7 @@ class ChatModel(
                 }
             }
             watch = w
+            imageRevision++
             if (paused) w.pause()
             val entries = LinkedHashMap<String, ChatEntry>().apply {
                 snapshot?.entries?.forEach { put(it.id, it) }
@@ -744,6 +780,7 @@ class ChatModel(
             while (true) {
                 try {
                     val update = w.nextUpdate()
+                    if (update.reset || snapshot?.status != update.status) imageRevision++
                     if (update.reset) entries.clear()
                     update.upserts.forEach { entries[it.id] = it }
                     entries.keys.retainAll(update.order.toSet())
@@ -785,7 +822,7 @@ class ChatModel(
      * own TUI; otherwise the pick is toggled until [send].
      */
     fun pick(id: String, question: ChatEntryBody.Question, part: Int, option: Int) {
-        if (answers[id] == AnswerState.Sending || answers[id] == AnswerState.Sent) return
+        if (answers[id] == AnswerState.Sending || answers[id] == AnswerState.Held || answers[id] == AnswerState.Sent || answers[id] == AnswerState.Unconfirmed) return
         val mode = questionMode(id)
         if (mode != QuestionMode.Live && mode != QuestionMode.History) return
         val text = questionText[id] ?: List(question.questions.size) { "" }
@@ -821,7 +858,7 @@ class ChatModel(
 
     private fun answer(id: String, question: ChatEntryBody.Question, chosen: List<List<Int>>) {
         val scope = scope ?: return
-        if (answers[id] == AnswerState.Sending || answers[id] == AnswerState.Sent) return
+        if (answers[id] == AnswerState.Sending || answers[id] == AnswerState.Held || answers[id] == AnswerState.Sent || answers[id] == AnswerState.Unconfirmed) return
         val mode = questionMode(id)
         if (mode != QuestionMode.Live && mode != QuestionMode.History) return
         val texts = question.questions.indices.map { questionText[id]?.getOrNull(it)?.takeIf(String::isNotBlank) }
@@ -840,7 +877,14 @@ class ChatModel(
                             texts[i] ?: chosen[i].joinToString(", ") { part.options[it].label }
                         }
                         val text = if (parts.size == 1) parts[0] else parts.mapIndexed { i, part -> "${question.questions[i].text}: $part" }.joinToString("\n")
-                        when (val outcome = connection.sendMessage(terminal.address, text, HeldListener())) {
+                        when (val outcome = connection.sendMessage(terminal.address, text, object : SendListener {
+                            override fun onHeld() {
+                                if (answers[id] == AnswerState.Sending) {
+                                    answers = answers + (id to AnswerState.Held)
+                                    saveOutbox()
+                                }
+                            }
+                        })) {
                             SendOutcome.Sent -> {}
                             is SendOutcome.Blocked -> {
                                 terminal = terminal.copy(agentStatus = AgentStatus.Blocked(outcome.reason, outcome.message))
@@ -855,10 +899,22 @@ class ChatModel(
                 }
                 AnswerState.Sent
             } catch (e: CoreException) {
-                AnswerState.Failed(answerProblem(e))
+                AnswerState.Failed(if (mode == QuestionMode.History && e is CoreException.AnswerRefused &&
+                    e.reason == AnswerProblem.GONE &&
+                    (terminal.agentStatus as? AgentStatus.Blocked)?.reason == BlockedReason.QUESTION)
+                    Message(R.string.chat_question_asking_now) else answerProblem(e))
             }
             answers = answers + (id to state)
             saveOutbox()
+            if (state == AnswerState.Sent) {
+                // Key delivery is only a receipt. Keep duplicate-send protection,
+                // but expose the Terminal if the same live question does not advance.
+                delay(3_000L)
+                if (answers[id] == AnswerState.Sent) {
+                    answers = answers + (id to AnswerState.Unconfirmed)
+                    saveOutbox()
+                }
+            }
         }
     }
 
@@ -917,8 +973,11 @@ class ChatModel(
 
 sealed interface AnswerState {
     data object Sending : AnswerState
+    data object Held : AnswerState
     /** The keys reached the Agent; the Chat shows the result when it has it. */
     data object Sent : AnswerState
+    /** No transcript acknowledgement after the grace period; never resend automatically. */
+    data object Unconfirmed : AnswerState
     data class Failed(val why: Message) : AnswerState
 }
 
@@ -951,7 +1010,7 @@ fun ChatScreen(
     }
     val snapshot = chat.snapshot
     val rawEntries = snapshot?.entries.orEmpty()
-    val preview = rememberChatLocalhostPreview(chat.link, rawEntries, chat.terminal.address)
+    val preview = rememberChatLocalhostPreview(chat.link, rawEntries, chat.terminal.address, chat.preview)
     val markdownState = rememberChatMarkdown(rawEntries)
     val markdown by markdownState
     val rendered = remember(chat) { ChatRenderedEntries() }
@@ -960,9 +1019,14 @@ fun ChatScreen(
     }
     val entries by entriesState
     val transcript = remember(chat, entriesState, markdownState) { ChatTranscript(entriesState, markdownState) }
-    var searchOpen by remember(chat) { mutableStateOf(false) }
-    var query by remember(chat) { mutableStateOf("") }
-    var selected by remember(chat) { mutableStateOf<ChatSearchMatch?>(null) }
+    val dialogs = remember(chat) { ChatDialogState() }
+    val horizontalScrolls = remember(chat) { ChatMarkdownScrolls() }
+    SideEffect { horizontalScrolls.retain(rawEntries.mapTo(mutableSetOf()) { it.id }) }
+    var searchOpen by rememberSaveable(chat) { mutableStateOf(false) }
+    var query by rememberSaveable(chat) { mutableStateOf("") }
+    var selected by chat::selectedSearchMatch
+    var searchRequest by rememberSaveable(chat) { mutableIntStateOf(0) }
+    val searchNavigation = remember(query, searchRequest) { ChatSearchNavigation() }
     val matches by rememberChatSearch(entries, markdown, query)
     val selectedIndex = selectedChatSearchIndex(matches, selected)
     val active = matches.getOrNull(selectedIndex)
@@ -975,22 +1039,30 @@ fun ChatScreen(
         }.sortedBy { it.call.atMs }
     }.orEmpty()
     val scroll = rememberChatScrollState(chat, entries, agentCalls.map { "call:${it.key}" } + chat.queuedMessages.map { "queued:${it.id}" } +
-        if (chat.showWorking) listOf("working") else emptyList(), markdown, followEnabled = !searchOpen)
+        if (chat.showWorking) listOf("working") else emptyList(), markdown, followEnabled = !searchOpen && !dialogs.isOpen)
     val toggleTool = remember(chat, scroll) {
         { id: String -> scroll.readTool(); chat.toggle(id) }
     }
-    LaunchedEffect(active) {
-        if (active != null) {
-            val body = entries.find { it.id == active.field.entryId }?.body
-            if (body is ChatEntryBody.Tool && active.field.entryId !in chat.expanded) chat.toggle(active.field.entryId)
-            scroll.following = false
-            scroll.list.scrollToItem(active.field.itemIndex)
-        }
+    val currentActive by rememberUpdatedState(active)
+    val currentEntries by rememberUpdatedState(entries)
+    LaunchedEffect(query, searchRequest) {
+        if (query.isEmpty()) return@LaunchedEffect
+        val target = snapshotFlow { currentActive }.filterNotNull().first()
+        searchNavigation.target = target
+        selected = target
+        val body = currentEntries.find { it.id == target.field.entryId }?.body
+        if (body is ChatEntryBody.Tool && target.field.entryId !in chat.expanded) chat.toggle(target.field.entryId)
+        scroll.following = false
+        scroll.list.scrollToItem(target.field.itemIndex)
     }
     val searchRanges = remember(matches) { matches.flatMap { it.ranges }.groupBy { it.field.entryId to it.field.key } }
-    val searchDecoration = remember(searchRanges, active) { ChatSearchDecoration(searchRanges, active) }
-    CompositionLocalProvider(LocalChatSearch provides searchDecoration,
+    val searchDecoration = remember(searchRanges, active, searchNavigation) { ChatSearchDecoration(searchRanges, active, searchNavigation) }
+    CompositionLocalProvider(
+        LocalChatSearch provides searchDecoration, LocalChatDialogs provides dialogs,
+        LocalChatMarkdownScrolls provides horizontalScrolls,
+        LocalChatImageRevision provides chat.imageRevision,
         androidx.compose.ui.platform.LocalUriHandler provides rememberAgentUriHandler(preview, chat.link, chat.terminal.address)) {
+        ChatDialogs(dialogs)
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))) {
             AgentScreenHeader(chat.terminal, chat.host.name, onBack, AgentView.CHAT, onView,
                 preview = preview, usage = snapshot?.usage, link = chat.link, onTerminalUpdate = { chat.update(listOf(it)) }, onSearch = { searchOpen = true })
@@ -1007,7 +1079,7 @@ fun ChatScreen(
             } else {
                 ChatSearchBar(searchOpen, query, selectedIndex + 1, matches.size,
                     onQuery = { query = it; selected = null },
-                    onMove = { selected = navigateChatSearch(matches, active, it) },
+                    onMove = { selected = navigateChatSearch(matches, active, it); searchRequest++ },
                     onClose = ::closeSearch,
                 )
                 val chatLink = chat.link
@@ -1110,7 +1182,8 @@ fun ChatScreen(
                     // A question the Chat shows open is answered with its own buttons;
                     // the Terminal notice is for what the Chat cannot answer.
                     val answerable = entries.any { e ->
-                        e.body is ChatEntryBody.Question && chat.questionMode(e.id) == ChatModel.QuestionMode.Live
+                        e.body is ChatEntryBody.Question && chat.questionMode(e.id) == ChatModel.QuestionMode.Live &&
+                            chat.answers[e.id] != AnswerState.Unconfirmed
                     }
                     if (!answerable || chat.refused) BlockedNotice(it, refused = chat.refused, onOpenTerminal)
                 }
@@ -1227,14 +1300,32 @@ private fun MessageInput(chat: ChatModel) {
         fontSize = 14.sp,
         lineHeight = 20.sp,
     )
+    val inputFocus = remember(chat) { FocusRequester() }
+    val noticeFocus = remember(chat) { FocusRequester() }
+    var returningFromInterrupt by remember(chat) { mutableStateOf(false) }
+    var noticeHadFocus by remember(chat) { mutableStateOf(false) }
+    LaunchedEffect(chat.interrupting, chat.interruptNotice, returningFromInterrupt) {
+        if (returningFromInterrupt && !chat.interrupting) {
+            if (chat.interruptNotice != null) noticeFocus.requestFocus()
+            else {
+                if (chat.canEdit) inputFocus.requestFocus()
+                returningFromInterrupt = false
+            }
+        }
+    }
     HorizontalDivider()
-    ChatInterruptNotice(chat)
+    ChatInterruptNotice(chat, Modifier.focusRequester(noticeFocus).onFocusChanged {
+        // Follow a removed result back to the composer, but do not pull focus
+        // back after the user has deliberately moved elsewhere.
+        if (noticeHadFocus && !it.isFocused && chat.interruptNotice != null && !chat.interrupting) returningFromInterrupt = false
+        noticeHadFocus = it.isFocused
+    }.focusable())
     DraftAttachments(chat)
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
         BasicTextField(
             value = chat.input,
             onValueChange = { chat.input = it },
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f).focusRequester(inputFocus)
                 .heightIn(min = 48.dp)
                 .semantics { contentDescription = inputLabel },
             textStyle = inputStyle.copy(color = MaterialTheme.colorScheme.onSurface),
@@ -1254,7 +1345,7 @@ private fun MessageInput(chat: ChatModel) {
         val showInterrupt = chat.draft.isEmpty() && chat.attachments.isEmpty() &&
             ((chat.terminalAvailable && chat.terminal.agentStatus == AgentStatus.Working) || chat.interrupting)
         if (showInterrupt) {
-            ChatInterruptButton(chat)
+            ChatInterruptButton(chat, onConfirmed = { returningFromInterrupt = true })
         } else {
             TextButton(
                 onClick = chat::send,
@@ -1435,11 +1526,11 @@ private fun ToolContent(
         annotateChatFileLinks(chatToolPathText(tool.title, tool.details?.path), open, color)
     }
     Column(Modifier.fillMaxWidth()) {
-        ChatTextActions(tool.output?.takeIf { it.isNotEmpty() } ?: tool.input, onClick = onToggle,
+        ChatTextActions(tool.output?.takeIf { it.isNotEmpty() } ?: tool.input, onClick = onToggle, onClickLabel = label,
             showIndication = false) { actions ->
             Row(
                 Modifier.fillMaxWidth().heightIn(min = 36.dp).then(actions)
-                    .semantics { contentDescription = label; stateDescription = disclosure },
+                    .semantics { stateDescription = "$disclosure, $status" },
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -1457,7 +1548,7 @@ private fun ToolContent(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
-                    status, style = MaterialTheme.typography.labelSmall,
+                    status, modifier = Modifier.clearAndSetSemantics {}, style = MaterialTheme.typography.labelSmall,
                     color = when (tool.status) {
                         ChatToolStatus.FAILED -> MaterialTheme.colorScheme.error
                         ChatToolStatus.RUNNING -> MaterialTheme.colorScheme.primary

@@ -54,9 +54,10 @@ class QuestionNotificationAnswerTest {
         core.ensureKey()
     }
 
+    private var pushedAt = 0uL
     private fun push(question: PushQuestion? = PushQuestion("q1", "Which color?", listOf("Red", "Blue", "Green"))) =
         PushNotice(hostId, "box", PushContent.Status("remote/t3", "Agent", null, true,
-            AgentStatus.Blocked(BlockedReason.QUESTION, "Which color?"), 1uL, null, question, null))
+            AgentStatus.Blocked(BlockedReason.QUESTION, "Which color?"), ++pushedAt, null, question, null))
 
     private fun shown(): Notification = manager.activeNotifications.single { it.tag == "remote/t3" }.notification
     private fun buttons() = shown().actions.orEmpty().map { it.title.toString() }
@@ -118,6 +119,21 @@ class QuestionNotificationAnswerTest {
         val status = push.content as PushContent.Status
         PushService.show(context, push.copy(content = status.copy(status = AgentStatus.Blocked(BlockedReason.PERMISSION, "Allow?")))) { true }
         assertTrue(buttons().isEmpty())
+    }
+
+    // Regression: a persisted worker from an older notification may still hold
+    // an Always choice even after new notifications route it to the phone.
+    @Test
+    fun aPersistedAlwaysGrantRequiresPhoneConfirmationInsteadOfBackgroundInput() = runBlocking {
+        val question = PushQuestion("permission:current", "Allow Write?", listOf("Allow", "Allow always", "Deny"))
+        val notice = QuestionNotice(hostId, "box", "remote/t3", question)
+        val push = push(question)
+        PushService.show(context, push.copy(content = (push.content as PushContent.Status).copy(
+            status = AgentStatus.Blocked(BlockedReason.PERMISSION, null)))) { true }
+        assertEquals(ListenableWorker.Result.success(), TestListenableWorkerBuilder<QuestionReplyWorker>(context)
+            .setRunAttemptCount(0).setInputData(QuestionReplyWorker.input(context, notice, 1)).build().doWork())
+        assertTrue(core.backgroundAnswers.isEmpty())
+        assertEquals(listOf(str(R.string.question_notify_open_app)), buttons())
     }
 
     @Test

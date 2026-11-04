@@ -149,7 +149,7 @@ class TerminalScrollZoomCopyTest {
 
         // Zooming is the phone's business: still the one observing view, the desktop's grid.
         assertTrue(view.options.observe)
-        compose.onNodeWithText(str(R.string.terminal_observing, "t2", COLS, 2)).assertExists()
+        compose.onNodeWithText(str(R.string.terminal_accessibility_summary, COLS, 2), substring = true).assertExists()
         assertTrue("no scrolling from a pinch", view.scrolls.isEmpty())
     }
 
