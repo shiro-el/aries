@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.licensee)
+    alias(libs.plugins.kotlin.compose)
 }
 android {
     namespace = "io.github.shiroel.aries.wear"
@@ -10,6 +11,7 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+    buildFeatures { compose = true }
     testOptions { unitTests.isIncludeAndroidResources = true }
 }
 kotlin { jvmToolchain(21) }
@@ -23,6 +25,10 @@ licensee {
 }
 dependencies {
     implementation(project(":wear-data"))
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.activity.compose)
+    implementation("androidx.wear.compose:compose-material:1.7.1")
+    implementation("androidx.wear.compose:compose-foundation:1.7.1")
     implementation(libs.wear.tiles)
     implementation(libs.wear.protolayout)
     implementation(libs.wear.protolayout.material3)

@@ -46,6 +46,7 @@ impl Chat {
                         .map(|(i, item)| (item.id.clone(), i))
                         .collect();
                 }
+                ChatEvent::Usage { .. } => {}
                 other => panic!("interpreter emitted {other:?}"),
             }
         }
