@@ -28,7 +28,7 @@ class HostPairingTest {
     private val details = HostPairingDetails("dev.tailnet", 2222u, "dev", "SHA256:host-pin", 9999999999u)
     private var visible by mutableStateOf(true)
 
-    private fun show(core: FakeCore) {
+    private fun show(core: io.github.shiroel.aries.core.AriesCoreInterface) {
         compose.setContent {
             val scope = rememberCoroutineScope()
             val model = remember { HostsModel(core, scope) }
@@ -57,6 +57,32 @@ class HostPairingTest {
         assertEquals("My development Host", core.hosts().single().name)
         assertEquals(1, core.pairingRequests.size)
         compose.onNodeWithTag("host-pair-confirm").assertDoesNotExist()
+    }
+
+    // Regression D91: a one-use pairing failure must reach the recreated review instead of leaving a disabled unexplained form.
+    @Test fun recreatedReviewKeepsPairingProgressAndShowsItsDelayedFailure() {
+        val fake = FakeCore().apply { ensureKey(); pairingDetails = details }
+        val reply = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var requests = 0
+        val core = object : io.github.shiroel.aries.core.AriesCoreInterface by fake {
+            override suspend fun pairHostQr(name: String, qr: String): io.github.shiroel.aries.core.Host {
+                requests++
+                reply.await()
+                throw CoreException.PairingRefused()
+            }
+        }
+        show(core)
+        compose.onNodeWithTag("host-pair-scan").performClick()
+        compose.onNodeWithTag("host-pair-confirm").performClick()
+        compose.runOnIdle { visible = false }
+        compose.runOnIdle { visible = true }
+        compose.onNodeWithText(str(R.string.host_pair_busy)).assertExists()
+        compose.onNodeWithTag("host-pair-confirm").assertIsNotEnabled()
+        compose.runOnIdle { reply.complete(Unit) }
+        compose.onNodeWithText(str(R.string.host_pair_refused)).assertExists()
+        compose.onNodeWithTag("host-pair-scan").assertIsEnabled()
+        assertEquals(1, requests)
+        assertTrue(fake.hosts().isEmpty())
     }
 
     @Test fun expiredScanHasAnErrorAndCannotRegister() {

@@ -939,6 +939,8 @@
     <string name="new_task_nested_host">Add this computer as a Host to start an Agent there.</string>
 
     <string name="launch_starting">Starting Terminal…</string>
+    <string name="launch_stop_tracking_button">Stop tracking this launch</string>
+    <string name="launch_stop_tracking_body">After checking the Host, you can stop tracking this launch to create something new. The Terminal may still be running. This does not launch again or send the prompt.</string>
     <string name="launch_unknown_title">Check before launching again</string>
     <string name="launch_unknown_body">The Host may already have started this Terminal. Check its Terminal list before launching again; another launch could duplicate the task.</string>
     <string name="launch_review_button">Review another launch…</string>

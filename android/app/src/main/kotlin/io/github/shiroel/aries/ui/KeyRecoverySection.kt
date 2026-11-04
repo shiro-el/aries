@@ -17,20 +17,17 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
-import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Endpoint
-import kotlinx.coroutines.launch
 
 /** Key IDs stay stable, including on jump routes. Re-registration is always explicit. */
 @Composable
 internal fun KeyRecoverySection(model: HostsModel) {
-    var generatingId by rememberSaveable { mutableStateOf<String?>(null) }
+    var generatingId by model::generatingKeyId
     var importingId by rememberSaveable { mutableStateOf<String?>(null) }
     val generating = model.keys.find { it.id == generatingId }
     val importing = model.keys.find { it.id == importingId }
-    var busy by remember { mutableStateOf(false) }
-    var problem by remember { mutableStateOf<Message?>(null) }
-    val scope = rememberCoroutineScope()
+    val busy = model.recoveringKeyId != null
+    val problem = model.keyRecoveryProblem
     val context = LocalContext.current
     val clipLabel = stringResource(R.string.key_clip_label)
     Text(stringResource(R.string.key_recover_title), style = MaterialTheme.typography.titleMedium)
@@ -67,18 +64,7 @@ internal fun KeyRecoverySection(model: HostsModel) {
             text = { Text(stringResource(R.string.key_recover_replace_body)) },
             confirmButton = {
                 TextButton(enabled = !busy, onClick = {
-                    busy = true
-                    problem = null
-                    scope.launch {
-                        try {
-                            model.recoverKey(key.id)
-                        } catch (e: CoreException) {
-                            problem = problemFor(e).body
-                        } finally {
-                            generatingId = null
-                            busy = false
-                        }
-                    }
+                    model.confirmKeyRecovery()
                 }) { Text(stringResource(R.string.key_recover_replace_button)) }
             },
             dismissButton = {
