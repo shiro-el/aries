@@ -101,7 +101,7 @@ internal fun HostContextTitle(browser: HostBrowser, modifier: Modifier = Modifie
         LazyColumn(Modifier.fillMaxWidth().testTag("host-context-sheet"), contentPadding = PaddingValues(bottom = 24.dp)) {
             item {
                 HostSheetHeading(label)
-                Text(stringResource(R.string.host_context_edit_hint), Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                Text(stringResource(R.string.host_context_edit_hint), Modifier.padding(horizontal = LocalLayoutTokens.current.contentPadding, vertical = 8.dp),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             browser.structure?.spaces.orEmpty().forEach { space ->
@@ -152,7 +152,7 @@ internal fun HostContextTitle(browser: HostBrowser, modifier: Modifier = Modifie
                 }
             }
             if (browser.structure?.spaces.isNullOrEmpty()) item {
-                Text(stringResource(R.string.host_context_empty), Modifier.padding(24.dp), style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.host_context_empty), Modifier.padding(LocalLayoutTokens.current.contentPadding), style = MaterialTheme.typography.bodyMedium)
             }
         }
     }
@@ -166,13 +166,13 @@ private fun HostContextRow(
     var menu by remember(tag) { mutableStateOf(false) }
     val actionsLabel = stringResource(R.string.layout_actions_button)
     Box(Modifier.padding(start = if (isSpace) 0.dp else 24.dp)) {
-        Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag(tag).semantics { selected = current }
+        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag(tag).semantics { selected = current }
             .combinedClickable(enabled = enabled, role = Role.Button, onClick = onSelect,
                 onLongClickLabel = actionsLabel, onLongClick = { menu = true })
-            .padding(horizontal = 24.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            .padding(horizontal = LocalLayoutTokens.current.contentPadding, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             MenuIcon(icon)
-            Text(name, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge,
+            Text(name, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium,
                 maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
             if (current) Text(stringResource(R.string.menu_current), style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary)
@@ -188,7 +188,7 @@ private fun HostContextRow(
 
 @Composable
 internal fun HostSheetHeading(title: String) {
-    Text(title, Modifier.padding(horizontal = 24.dp, vertical = 8.dp), style = MaterialTheme.typography.titleLarge)
+    Text(title, Modifier.padding(horizontal = LocalLayoutTokens.current.contentPadding, vertical = 8.dp), style = MaterialTheme.typography.titleMedium)
 }
 
 @Composable
@@ -197,12 +197,12 @@ internal fun HostSheetAction(
     modifier: Modifier = Modifier, onClick: () -> Unit,
 ) {
     val color = MaterialTheme.colorScheme.onSurface
-    Row(modifier.fillMaxWidth().heightIn(min = 64.dp).clickable(enabled = enabled, role = Role.Button, onClick = onClick)
-        .padding(horizontal = 24.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+    Row(modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+        .padding(horizontal = LocalLayoutTokens.current.contentPadding, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Icon(androidx.compose.ui.res.painterResource(icon), null, Modifier.size(24.dp), tint = color.copy(alpha = if (enabled) 1f else .38f))
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge, color = color.copy(alpha = if (enabled) 1f else .38f))
+            Text(title, style = MaterialTheme.typography.bodyMedium, color = color.copy(alpha = if (enabled) 1f else .38f))
             Text(detail, style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (enabled) 1f else .38f))
         }

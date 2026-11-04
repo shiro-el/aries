@@ -297,7 +297,7 @@ private fun ConsoleDrawer(model: HostsModel, navigate: (() -> Unit) -> Unit) {
             agentTreeItems(hostAgents, folds,
                 onOpen = { entry -> navigate { model.openDrawerAgent(entry) } },
                 onPin = model::pin, tag = "drawer-agent", current = currentAgent, sectionNamespace = host.id,
-                showHost = false, canPin = model::canPin)
+                sections = false, showHost = false, canPin = model::canPin)
         }
         item {
             DrawerRow(stringResource(R.string.console_all_hosts), current == Screen.Hosts, Modifier.testTag("drawer-hosts"), onClick = { navigate(model::back) })

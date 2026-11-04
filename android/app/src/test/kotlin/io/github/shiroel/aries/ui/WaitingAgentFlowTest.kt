@@ -155,7 +155,7 @@ class WaitingAgentFlowTest {
         }
         val model = show(core)
         compose.onNodeWithTag("host-waiting:h1").assert(hasText(context.getString(R.string.console_agents_waiting, 1)))
-        compose.onNodeWithTag("host-waiting:h2").assert(hasText(context.getString(R.string.agents_waiting_unknown)))
+        compose.onNodeWithTag("host-waiting:h2").assertDoesNotExist()
         screenshot("home-counts")
         compose.openConsoleDrawer()
         compose.onNodeWithText(context.getString(R.string.agents_waiting_partial, 1)).assertExists()
@@ -168,7 +168,8 @@ class WaitingAgentFlowTest {
         compose.openConsoleDrawer()
         compose.onNode(hasText(context.getString(R.string.agents_button)) and hasText(context.getString(R.string.console_agents_waiting, 1))).assertExists()
         compose.onNodeWithTag("drawer-agent:h1:t2").assertDoesNotExist()
-        compose.onNodeWithTag("drawer-agent:h2:t3").assertExists()
+        // Selecting a Host scopes the drawer tree; the summary still counts all Hosts.
+        compose.onNodeWithTag("drawer-agent:h2:t3").assertDoesNotExist()
     }
 
     @Test fun edgeSwipeOpensTheDrawerWithoutTakingTerminalCanvasGestures() {

@@ -80,19 +80,20 @@ internal fun ConsoleTerminalRow(
 ) {
     val status = terminal.agentStatus
     val waiting = live && isWaiting(status)
-    val lastSeen = if (!live) agentLastSeen(lastUpdatedMs) else null
+    val now = System.currentTimeMillis()
+    val lastSeen = if (!live && lastUpdatedMs != null && lastUpdatedMs > 0 && lastUpdatedMs <= now) agentLastSeen(lastUpdatedMs) else null
+    val showAge = live && status != null && terminal.statusMs?.let { it > 0uL && it <= now.toULong() } == true
     val location = stringResource(R.string.terminal_subtitle, host, terminal.address)
     val spokenName = stringResource(R.string.console_agent_accessibility, displayName(terminal), location)
     val description = lastSeen ?: status?.let { stringResource(agentStatusLabel(it)) } ?: terminal.state
     val cwd = terminal.currentCwd ?: terminal.address
     val path = compactAgentPath(cwd)
     val folder = if (showHost) stringResource(R.string.console_agent_location, host, path) else path
-    val sub = listOfNotNull(lastSeen, spaceName, tabName,
-        if (waiting) statusMessage(status)?.takeIf { it.isNotBlank() } ?: description else folder).joinToString(" · ")
+    val sub = if (waiting) listOfNotNull(statusMessage(status)?.takeIf { it.isNotBlank() } ?: description, spaceName, tabName)
+        .joinToString(" · ") else listOfNotNull(lastSeen, spaceName, tabName, folder).joinToString(" · ")
     val density = androidx.compose.ui.platform.LocalDensity.current
     val largeText = density.fontScale > 1.3f
     val program = terminal.currentProgram?.takeUnless { it.lowercase() in setOf("claude", "codex") }
-    val ageWidth = (56 * density.fontScale).dp
     val titleHeight = with(density) { MaterialTheme.typography.bodyMedium.lineHeight.toDp() }
     val actionsLabel = stringResource(R.string.terminals_actions_label)
     val interactions = remember { MutableInteractionSource() }
@@ -130,15 +131,19 @@ internal fun ConsoleTerminalRow(
                     ProgramMark(terminal, Modifier.size(16.dp))
                 }
                 Column(Modifier.weight(1f)) {
-                    Text(displayName(terminal), style = MaterialTheme.typography.bodyMedium,
-                        maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(displayName(terminal), Modifier.weight(1f, fill = false), style = MaterialTheme.typography.bodyMedium,
+                            maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
+                        if (terminal.pinned) Icon(painterResource(R.drawable.agent_pin), null,
+                            Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                     if (largeText) {
                         Text(sub, style = MaterialTheme.typography.bodySmall,
                             color = if (waiting) statusColor(AgentStatus.Blocked(null, null)) else MaterialTheme.colorScheme.onSurfaceVariant)
                         if (live && program != null) Text(program, Modifier.testTag("terminal-kind:${terminal.address}"),
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Box(Modifier.testTag("terminal-age:${terminal.address}")) {
-                            if (live && status != null) AgentElapsedTime(terminal.statusMs)
+                        if (showAge) Box(Modifier.testTag("terminal-age:${terminal.address}")) {
+                            AgentElapsedTime(terminal.statusMs)
                         }
                     } else Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(sub, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
@@ -149,8 +154,8 @@ internal fun ConsoleTerminalRow(
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
                         }
-                        if (live) Box(Modifier.width(ageWidth).testTag("terminal-age:${terminal.address}"), contentAlignment = Alignment.CenterEnd) {
-                            if (live && status != null) AgentElapsedTime(terminal.statusMs)
+                        if (showAge) Box(Modifier.testTag("terminal-age:${terminal.address}"), contentAlignment = Alignment.CenterEnd) {
+                            AgentElapsedTime(terminal.statusMs)
                         }
                     }
                 }
