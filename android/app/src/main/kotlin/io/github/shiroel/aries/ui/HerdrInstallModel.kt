@@ -15,6 +15,9 @@ import io.github.shiroel.aries.core.Host
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -25,6 +28,21 @@ class HerdrInstallModel(
     private val fetcher: BeaconFetcher,
     private val keyWork: CoroutineContext = EmptyCoroutineContext,
 ) {
+    private var operation: Job? = null
+    private var revision = 0
+
+    fun invalidate() {
+        revision++
+        operation?.cancel()
+        operation = null
+        host = null
+        state = null
+        busy = false
+        confirm = false
+        step = null
+        output = ""
+        problem = null
+    }
     val minimumCoreVersion: String get() = core.minimumCoreVersion()
 
     var host by mutableStateOf<Host?>(null)
@@ -43,6 +61,7 @@ class HerdrInstallModel(
         private set
 
     fun load(host: Host) {
+        if (this.host?.let { it.id != host.id || it.endpoint != host.endpoint } == true) invalidate()
         if (busy) return
         this.host = host
         if (host.endpoint !is Endpoint.Ssh) return
@@ -56,13 +75,16 @@ class HerdrInstallModel(
         problem = null
         step = null
         output = ""
-        scope.launch {
+        val request = revision
+        operation = scope.launch {
             try {
-                state = withContext(keyWork) { core.herdrCoreStatus(host.id) }
+                val result = withContext(keyWork) { core.herdrCoreStatus(host.id) }
+                currentCoroutineContext().ensureActive()
+                if (request == revision) state = result
             } catch (e: CoreException) {
-                problem = error(e)
+                if (request == revision) problem = error(e)
             } finally {
-                busy = false
+                if (request == revision) busy = false
             }
         }
     }
@@ -79,13 +101,14 @@ class HerdrInstallModel(
         problem = null
         output = ""
         step = HerdrInstallStep.DETECT
-        scope.launch {
+        val request = revision
+        operation = scope.launch {
             try {
-                state = withContext(keyWork) {
+                val result = withContext(keyWork) {
                     core.installHerdrCore(host.id, fetcher, object : HerdrInstallListener {
                         override fun progress(step: HerdrInstallStep, output: String) {
                             scope.launch {
-                                if (busy) {
+                                if (request == revision && busy) {
                                     this@HerdrInstallModel.step = step
                                     if (output.isNotBlank()) this@HerdrInstallModel.output =
                                         (this@HerdrInstallModel.output + output + "\n").takeLast(16_384)
@@ -94,11 +117,15 @@ class HerdrInstallModel(
                         }
                     })
                 }
-                step = HerdrInstallStep.DONE
+                currentCoroutineContext().ensureActive()
+                if (request == revision) {
+                    state = result
+                    step = HerdrInstallStep.DONE
+                }
             } catch (e: CoreException) {
-                problem = error(e)
+                if (request == revision) problem = error(e)
             } finally {
-                busy = false
+                if (request == revision) busy = false
             }
         }
     }

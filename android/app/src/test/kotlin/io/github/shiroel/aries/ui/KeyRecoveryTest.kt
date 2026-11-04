@@ -1,6 +1,11 @@
 package io.github.shiroel.aries.ui
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.*
+import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.CoroutineDispatcher
+import io.github.shiroel.aries.core.AriesCoreInterface
+import io.github.shiroel.aries.core.KeyInfo
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.*
@@ -24,6 +29,39 @@ class KeyRecoveryTest {
     @get:Rule val compose = createComposeRule()
     private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
     private fun str(id: Int) = context.getString(id)
+
+    // Regression D89: recreating confirmation during dispatched vault work must not enable another replacement.
+    @Test fun recreatedConfirmationKeepsReplacementBusyAndClosesAfterOneWrite() {
+        val pending = ArrayDeque<Runnable>()
+        val keyWork = object : CoroutineDispatcher() {
+            override fun dispatch(context: CoroutineContext, block: Runnable) { pending.addLast(block) }
+        }
+        val fake = FakeCore().apply { ensureKey() }
+        var replacements = 0
+        val core = object : AriesCoreInterface by fake {
+            override fun recoverKey(keyId: String, privateKey: String?, passphrase: String): KeyInfo {
+                replacements++
+                return fake.recoverKey(keyId, privateKey, passphrase)
+            }
+        }
+        var visible by mutableStateOf(true)
+        compose.setContent {
+            val scope = rememberCoroutineScope()
+            val model = remember { HostsModel(core, scope, keyWork = keyWork) }
+            val saved = androidx.compose.runtime.saveable.rememberSaveableStateHolder()
+            if (visible) saved.SaveableStateProvider("recovery") { MaterialTheme { KeyRecoverySection(model) } }
+        }
+        compose.onNodeWithTag("key-recover-generate-default").performClick()
+        compose.onNodeWithText(str(R.string.key_recover_replace_button)).performClick()
+        compose.runOnIdle { visible = false }
+        compose.runOnIdle { visible = true }
+        compose.onNodeWithText(str(R.string.key_recover_replace_button)).assertIsNotEnabled()
+        compose.runOnIdle { while (pending.isNotEmpty()) pending.removeFirst().run() }
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.key_recover_replace_button)).assertDoesNotExist()
+        assertEquals(1, replacements)
+        compose.onNodeWithText("SHA256:recovered", substring = true).assertExists()
+    }
 
     @Test fun invalidatedConnectionCanReplaceAKeyAndRegisterItOnTheExistingHost() {
         val core = FakeCore().apply {
