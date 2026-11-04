@@ -163,7 +163,7 @@ internal fun ConsoleShell(
                 if (model.callInboxOpen) model.closeCallInbox() else model.openCallInbox()
             }
         }, LocalNextWaitingAgent provides model.nextWaitingAgent?.let { NextWaitingAction(it, model::openNextWaitingAgent) }) {
-            BoxWithConstraints(Modifier.fillMaxSize().systemGestureExclusion { coordinates ->
+            Box(Modifier.fillMaxSize().systemGestureExclusion { coordinates ->
                 Rect(0f, 0f, edgeWidth, minOf(coordinates.size.height.toFloat(), terminalHeaderHeight))
             }.pointerInput(screen, drawer.isClosed, model.callInboxOpen, model.quickOpenVisible, terminalHeaderHeight) {
                 awaitEachGesture {
