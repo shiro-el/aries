@@ -2,6 +2,7 @@ package io.github.shiroel.aries.ui
 
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.hasContentDescription
@@ -81,13 +82,13 @@ class ChatCallsTest {
         ).assertCountEquals(0)
     }
 
-    // D32: Console must not direct the user to Terminal when its Call card already offers an answer.
-    @Test fun anAnswerableCallReplacesTheTerminalFallbackForABlockedAgent() {
+    // D128: answering a Call does not resolve the independent permission prompt in Terminal.
+    @Test fun anAnswerableCallKeepsTheTerminalFallbackForABlockedAgent() {
         val core = core()
         openChat(core)
         core.pushChat(io.github.shiroel.aries.core.ChatSnapshot(emptyList(), io.github.shiroel.aries.core.ChatStatus.LIVE, null))
         core.push(listOf(agent.copy(agentStatus = AgentStatus.Blocked(io.github.shiroel.aries.core.BlockedReason.PERMISSION, null))))
-        compose.onNodeWithText(str(R.string.chat_blocked_permission)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.chat_blocked_permission)).assertIsDisplayed()
         chooseWait()
         compose.waitForIdle()
         assertEquals(listOf(Triple("h1", call.id, 1u)), core.replies)

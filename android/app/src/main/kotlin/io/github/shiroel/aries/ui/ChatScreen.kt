@@ -1376,6 +1376,7 @@ fun ChatScreen(
                 val loading = snapshot == null || snapshot.status in setOf(ChatStatus.CONNECTING, ChatStatus.RECONNECTING, ChatStatus.NO_CORE)
                 val firstLoading = chat.firstLoading
                 val chatProblem = chat.connectionError ?: if (snapshot?.status == ChatStatus.NO_BEACON) CoreException.BeaconNotInstalled() else null
+                if (thread != null) ThreadConnectionGuidance(chat)
                 if (thread == null) chatLink?.let { link ->
                     val state = when {
                         link.state != LinkState.Up -> link.state
@@ -1426,8 +1427,7 @@ fun ChatScreen(
                     // A stable row provider preserves image/diagram compositions when
                     // a follower starts reading history or returns to the bottom.
                     if (chat.showInitialLoading || !scroll.positioned && entries.isNotEmpty()) {
-                        val loadingText = if (thread != null) statusText(snapshot?.status ?: ChatStatus.LIVE) else null
-                        ScreenLoading(loadingText ?: stringResource(R.string.chat_loading), onRetry = {
+                        ScreenLoading(stringResource(R.string.chat_loading), onRetry = {
                             chat.link?.retryNow()
                             chat.retryConnection()
                         })
@@ -1453,9 +1453,8 @@ fun ChatScreen(
                         e.body is ChatEntryBody.Question && chat.questionMode(e.id) == ChatModel.QuestionMode.Live &&
                             chat.answers[e.id] != AnswerState.Unconfirmed
                     } && (thread != null || !chat.refused)
-                    val answerableCall = calls != null && if (thread != null) activeThreadCall?.answerable == true
-                        else agentCalls.any { call -> call.answerable }
-                    if (!answerableQuestion && !answerableCall) BlockedNotice(it, refused = chat.refused, onOpenTerminal)
+                    // A Call asks for attention independently of the Agent's prompt.
+                    if (!answerableQuestion) BlockedNotice(it, refused = chat.refused, onOpenTerminal)
                 }
                 AnnouncedText(chat.sendError?.let { stringResource(R.string.chat_send_failed, messageText(it)) }, color = MaterialTheme.colorScheme.error)
                 if (chat.uploading) {
@@ -1468,11 +1467,16 @@ fun ChatScreen(
                 AnnouncedText(chat.attachmentNotice?.let { messageText(it) })
                 AnnouncedText(chat.attachmentError?.let { messageText(it) }, color = MaterialTheme.colorScheme.error)
                 if (chat.inputUnavailable) {
-                    ConsoleChatCallSurface {
-                        if (thread == null || snapshot?.status != ChatStatus.NO_TERMINAL ||
-                            chat.link?.state != LinkState.Up || chat.connectionError != null) {
-                            Text(stringResource(if (chat.terminalAvailable) R.string.chat_input_agent_ended else R.string.chat_status_no_terminal))
+                    if (thread != null) {
+                        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                            Text(stringResource(if (chat.terminalAvailable) R.string.chat_input_agent_ended else R.string.chat_status_no_terminal),
+                                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            TextButton(onClick = if (chat.terminalAvailable) onOpenTerminal else onBack) {
+                                Text(stringResource(if (chat.terminalAvailable) R.string.terminal_open_button else R.string.back_button))
+                            }
                         }
+                    } else ConsoleChatCallSurface {
+                        Text(stringResource(if (chat.terminalAvailable) R.string.chat_input_agent_ended else R.string.chat_status_no_terminal))
                         ConsoleButton(onClick = if (chat.terminalAvailable) onOpenTerminal else onBack) {
                             Text(stringResource(if (chat.terminalAvailable) R.string.terminal_open_button else R.string.back_button))
                         }
