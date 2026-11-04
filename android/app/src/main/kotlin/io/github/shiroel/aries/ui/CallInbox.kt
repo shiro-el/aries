@@ -20,6 +20,8 @@ import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentStatus
 
@@ -65,13 +67,15 @@ internal fun ConsoleInboxAction() {
 internal fun CallInboxOverlay(model: HostsModel, modifier: Modifier = Modifier) {
     val title = stringResource(R.string.calls_title)
     val close = stringResource(R.string.call_inbox_close)
+    val tasks = LocalLayoutTokens.current == tokensFor(AppLayout.TASKS)
     BoxWithConstraints(modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize().testTag("call-inbox-scrim")
             .background(MaterialTheme.colorScheme.scrim.copy(alpha = .45f))
             .semantics { contentDescription = close }
             .clickable(role = Role.Button, onClick = model::closeCallInbox))
         Column(Modifier.fillMaxWidth().heightIn(max = maxHeight * .7f)
-            .background(MaterialTheme.colorScheme.surface).testTag("call-inbox-panel")
+            .then(if (tasks) Modifier.align(Alignment.BottomCenter).clip(RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp)) else Modifier)
+            .background(if (tasks) MaterialTheme.colorScheme.surfaceContainer else MaterialTheme.colorScheme.surface).testTag("call-inbox-panel")
             .semantics { paneTitle = title }) {
             Row(Modifier.fillMaxWidth().padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 AnnouncedText(stringResource(R.string.call_inbox_label, model.calls.calls.count { it.answerable }),

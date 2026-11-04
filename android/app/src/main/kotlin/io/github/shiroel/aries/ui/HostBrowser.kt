@@ -206,6 +206,7 @@ fun BrowseScreen(
     hostSections: @Composable () -> Unit = {},
     showHeader: Boolean = true,
     current: AgentKey? = null,
+    terminalList: (@Composable () -> Unit)? = null,
 ) {
     val editor = rememberLayoutEditor(browser)
     Column(Modifier.fillMaxSize()) {
@@ -228,7 +229,8 @@ fun BrowseScreen(
             browser.structure == null -> if (browser.watchError == null && (line == null || line == LinkState.Up)) {
                 ScreenLoading(stringResource(R.string.hosts_loading), onRetry = { browser.link?.networkChanged() })
             }
-            else -> HostTreeList(browser, browser.structure!!, hostSections, onOpen, onPin, onNewTerminal, current)
+            else -> if (terminalList != null) terminalList()
+                else HostTreeList(browser, browser.structure!!, hostSections, onOpen, onPin, onNewTerminal, current)
         }
     }
 }
