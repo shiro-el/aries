@@ -71,7 +71,6 @@ class QuickOpenScreenTest {
         }
         start(core)
         compose.onNodeWithText("home").performClick()
-        compose.onNodeWithContentDescription(str(R.string.hosts_actions_label)).performClick()
         compose.onNodeWithTag("host-layout-context").performClick()
         compose.onNodeWithTag("host-context-tab:s1:tab1").performClick()
         compose.onNodeWithTag("quick-open-button").performClick()

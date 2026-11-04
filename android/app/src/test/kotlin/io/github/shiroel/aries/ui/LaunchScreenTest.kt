@@ -77,11 +77,10 @@ class LaunchScreenTest {
     fun launchesIntoTheTabShownAndOpensTheNewTerminal() {
         val core = FakeCore().apply { structure = desktop }
         open(core)
-        compose.onNodeWithContentDescription(str(R.string.hosts_actions_label)).performClick()
         compose.onNodeWithTag("host-layout-context").performClick()
         compose.onNodeWithTag("host-context-tab:s1:tab2").performClick()
 
-        compose.onNodeWithContentDescription(str(R.string.hosts_actions_label)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.host_create_title)).performClick()
         compose.onNodeWithText(str(R.string.launch_open_button)).performClick()
         compose.onNodeWithText(str(R.string.launch_button)).assertIsNotEnabled()
         command("my-tool --flag")
@@ -102,14 +101,14 @@ class LaunchScreenTest {
     fun picksAnotherSpaceAndTab() {
         val core = FakeCore().apply { structure = desktop }
         open(core)
-        compose.onNodeWithContentDescription(str(R.string.hosts_actions_label)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.host_create_title)).performClick()
         compose.onNodeWithText(str(R.string.launch_open_button)).performClick()
         compose.onNodeWithTag("launch_space:s2").performClick()
         compose.onNodeWithTag("launch_tab:tab3").performClick()
         command("htop")
         run()
         assertEquals(LaunchRequest("htop", null, "s2", "tab3"), core.connection!!.launched.last())
-        compose.onNodeWithContentDescription(str(R.string.hosts_actions_label)).performClick()
+        compose.onNodeWithTag("host-layout-context").assertExists()
         compose.onNodeWithText("notes · todo").assertExists()
         compose.onNodeWithText("htop").assertExists()
     }
@@ -119,7 +118,7 @@ class LaunchScreenTest {
         val core = FakeCore().apply { structure = desktop }
         open(core)
         core.connection!!.recentCwds = listOf("/srv/app", "/tmp")
-        compose.onNodeWithContentDescription(str(R.string.hosts_actions_label)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.host_create_title)).performClick()
         compose.onNodeWithText(str(R.string.launch_open_button)).performClick()
         compose.onNodeWithText("/tmp").performClick()
         compose.onNodeWithText(str(R.string.launch_space_none)).performClick()
@@ -138,7 +137,7 @@ class LaunchScreenTest {
         open(core)
         core.connection!!.launchFailWith =
             CoreException.Rpc("spawn_failed", "cannot start \"nope\": No such file or directory (os error 2)")
-        compose.onNodeWithContentDescription(str(R.string.hosts_actions_label)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.host_create_title)).performClick()
         compose.onNodeWithText(str(R.string.launch_open_button)).performClick()
         command("nope")
         run()
