@@ -43,8 +43,7 @@ internal fun CallInboxPanel(
     onInstallBeacon: (Host) -> Unit,
     onFeedSettings: (Host) -> Unit,
     openingCall: String? = null,
-    blockedAgents: Int = 0,
-    onWaitingAgents: () -> Unit = {},
+    waitingAgents: @Composable () -> Unit = {},
 ) {
     CallReplyAnnouncements(model)
     val waiting = model.calls.filter { it.answerable }.let { calls ->
@@ -88,11 +87,7 @@ internal fun CallInboxPanel(
                 }
             }
         }
-        if (blockedAgents > 0) item {
-            TextButton(onClick = onWaitingAgents, modifier = Modifier.testTag("call-inbox-waiting-agents")) {
-                Text(stringResource(R.string.call_inbox_blocked, blockedAgents))
-            }
-        }
+        item { waitingAgents() }
         if (model.syncingHosts.isNotEmpty()) item {
             Text(pluralStringResource(R.plurals.call_inbox_syncing, model.syncingHosts.size, model.syncingHosts.size), Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
         }

@@ -64,7 +64,7 @@ internal fun AgentScreenHeader(
             if (tasks == null) terminal.agentStatus?.let { AgentStatusMark(it, modifier = Modifier.size(20.dp)) }
             Text(title, Modifier.weight(1f, fill = false), fontFamily = if (tasks == null) FontFamily.Monospace else FontFamily.Default,
                 fontSize = if (tasks == null) 14.sp else 16.sp, fontWeight = if (tasks == null) FontWeight.Medium else FontWeight.SemiBold,
-                maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
+                maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (terminal.watched) {
                 val label = stringResource(R.string.agent_watch_label)
                 Canvas(Modifier.size(12.dp).semantics { contentDescription = label }) {

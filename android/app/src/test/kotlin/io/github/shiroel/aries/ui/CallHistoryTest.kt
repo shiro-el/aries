@@ -113,8 +113,7 @@ class CallHistoryTest {
     }
 
     private fun openCalls() {
-        compose.openConsoleDrawer()
-        compose.onNodeWithTag("drawer-calls").performClick()
+        compose.onNodeWithTag("console-inbox").performClick()
         compose.waitForIdle()
     }
 

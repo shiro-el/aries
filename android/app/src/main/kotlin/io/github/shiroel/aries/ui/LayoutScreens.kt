@@ -57,7 +57,14 @@ internal open class LayoutScreens {
 
     @Composable open fun Header(model: HostsModel, screen: Screen) {
         ConsoleScreenHeader(model, screen, LocalConsoleMenu.current ?: {})
-        if (screen == model.screen && screen !is Screen.Chat && screen !is Screen.Terminal) CallAttentionSlot()
+        if (screen == model.screen && screen !is Screen.Chat && screen !is Screen.Terminal) {
+            val strip = when (screen) {
+                Screen.Hosts -> consoleUrgentCalls(model.calls.calls)
+                is Screen.Browse -> consoleUrgentCalls(model.calls.calls, screen.browser.host.id)
+                else -> emptyList()
+            }
+            CallAttentionSlot(presentedKeys = strip.map { it.key }.toSet())
+        }
     }
 
     @Composable fun Screen(model: HostsModel, settings: ThemeSettings, display: TerminalDisplaySettings, screen: Screen) {

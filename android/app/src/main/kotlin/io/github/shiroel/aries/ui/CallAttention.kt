@@ -67,6 +67,7 @@ internal fun Modifier.presentsCalls(keys: Set<String>): Modifier {
 internal fun CallAttentionSlot(
     compact: Boolean = LocalConfiguration.current.screenHeightDp < 480 || WindowInsets.ime.getBottom(LocalDensity.current) > 0,
     onOpen: ((CallEntry) -> Unit)? = null,
+    presentedKeys: Set<String> = emptySet(),
 ) {
     val state = LocalCallAttention.current ?: return
     val model = state.model
@@ -74,7 +75,8 @@ internal fun CallAttentionSlot(
     if (surface != state.dialogs.lastOrNull()) return
     if (!LocalCallAttentionEnabled.current || model.callInboxOpen || model.quickOpenVisible) return
     val entry = model.calls.banner ?: return
-    if (state.presentations.values.any { it.surface == surface && entry.key in it.keys }) return
+    // Always-visible strips declare their entries before layout so arrival cannot flash a banner.
+    if (entry.key in presentedKeys || state.presentations.values.any { it.surface == surface && entry.key in it.keys }) return
     CallAttentionBanner(entry, model.callCallerName(entry), onOpen = { onOpen?.invoke(entry) ?: model.openCallInbox() },
         onDismiss = model.calls::dismissBanner, compact = compact)
 }

@@ -15,7 +15,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.sp
@@ -104,7 +103,7 @@ internal fun ConsoleTerminalRow(
         hovered -> MaterialTheme.colorScheme.surfaceContainerHigh
         else -> androidx.compose.ui.graphics.Color.Transparent
     }
-    val rowModifier = modifier.alpha(if (live) 1f else 0.55f).fillMaxWidth().clip(RoundedCornerShape(LocalLayoutTokens.current.cornerRadius)).background(background)
+    val rowModifier = modifier.fillMaxWidth().clip(RoundedCornerShape(LocalLayoutTokens.current.cornerRadius)).background(background)
         .hoverable(interactions).combinedClickable(role = Role.Button, onClick = onOpen, onLongClick = onLongClick, onLongClickLabel = actionsLabel)
         .semantics {
             contentDescription = spokenName
@@ -135,6 +134,7 @@ internal fun ConsoleTerminalRow(
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(displayName(terminal), Modifier.weight(1f, fill = false), style = MaterialTheme.typography.bodyMedium,
+                            color = if (live) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
                         if (terminal.pinned) Icon(painterResource(R.drawable.agent_pin), null,
                             Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)

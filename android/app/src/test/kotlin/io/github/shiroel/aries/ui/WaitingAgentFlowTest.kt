@@ -96,7 +96,7 @@ class WaitingAgentFlowTest {
             assertFalse(core.connectionsOf.getValue("h1").disconnected)
         }
         screenshot("terminal-next")
-        compose.onNodeWithTag("console-inbox").assertDoesNotExist()
+        compose.onNodeWithTag("console-inbox").assertIsDisplayed()
         compose.onNodeWithTag("agent-actions").performClick()
         compose.onNodeWithTag("agent-inbox-menu").performClick()
         compose.onNodeWithTag("call-inbox-panel").assertIsDisplayed()
@@ -106,7 +106,7 @@ class WaitingAgentFlowTest {
         compose.onNodeWithText(context.getString(R.string.agents_next_waiting, "Newer error", "home")).performClick()
         compose.runOnIdle { assertEquals(AgentKey("h1", "remote/t1"), model().currentAgentKey) }
         compose.onNodeWithContentDescription(context.getString(R.string.agent_switch_chat_label)).performClick()
-        compose.onNodeWithTag("console-inbox").assertDoesNotExist()
+        compose.onNodeWithTag("console-inbox").assertIsDisplayed()
         compose.onNodeWithTag("agent-actions").performClick()
         compose.onNodeWithTag("agent-inbox-menu").performClick()
         compose.onNodeWithTag("call-inbox-panel").assertIsDisplayed()
@@ -154,22 +154,52 @@ class WaitingAgentFlowTest {
             terminalsOf["h2"] = listOf(agent("t3", "Error", AgentStatus.Error(null)))
         }
         val model = show(core)
-        compose.onNodeWithTag("host-waiting:h1").assert(hasText(context.getString(R.string.console_agents_waiting, 1)))
+        compose.onNodeWithTag("host-waiting:h1").assert(hasText(context.getString(R.string.agents_waiting_stored, 1)))
         compose.onNodeWithTag("host-waiting:h2").assertDoesNotExist()
         screenshot("home-counts")
         compose.openConsoleDrawer()
-        compose.onNodeWithText(context.getString(R.string.agents_waiting_partial, 1)).assertExists()
-        compose.onNode(hasText(context.getString(R.string.surfaces_age_minutes, 2)) and hasAnyAncestor(hasTestTag("console-drawer"))).assertExists()
+        compose.onNode(hasText(context.getString(R.string.agents_waiting_stored, 1)) and hasAnyAncestor(hasTestTag("console-drawer"))).assertExists()
+        compose.onNode(hasText(context.getString(R.string.agents_button)) and hasText(context.getString(R.string.agents_last_seen, context.getString(R.string.surfaces_age_minutes, 2)))).assertExists()
         compose.runOnIdle { runBlocking { core.snapshot("h2") } }
         compose.waitUntil { model().drawerAgents.any { it.host.id == "h2" } }
-        compose.onNodeWithText(context.getString(R.string.console_agents_waiting, 2)).assertExists()
+        compose.onNodeWithText(context.getString(R.string.agents_waiting_stored, 2)).assertExists()
         screenshot("drawer-counts")
         compose.onNodeWithTag("drawer-host:h1").performClick()
         compose.openConsoleDrawer()
-        compose.onNode(hasText(context.getString(R.string.agents_button)) and hasText(context.getString(R.string.console_agents_waiting, 1))).assertExists()
+        compose.onNode(hasText(context.getString(R.string.agents_button)) and hasText(context.getString(R.string.agents_waiting_stored, 1))).assertExists()
         compose.onNodeWithTag("drawer-agent:h1:t2").assertDoesNotExist()
-        // Selecting a Host scopes the drawer tree; the summary still counts all Hosts.
-        compose.onNodeWithTag("drawer-agent:h2:t3").assertDoesNotExist()
+        // Browsing home must leave work’s waiting Agent reachable in the same drawer.
+        compose.onNodeWithTag("drawer-agent:h2:t3").assertIsDisplayed()
+    }
+
+    // D49: Host and inbox summaries must distinguish stored Blocked/Error from live attention.
+    @Test fun hostAndInboxKeepStoredWaitingSeparateFromLiveAttention() {
+        val core = FakeCore().apply {
+            addHost("home", Endpoint.Ssh("home.test", 22u, "me"))
+            addHost("work", Endpoint.Ssh("work.test", 22u, "me"))
+            storedStates["h1"] = LastKnownState("h1", listOf(
+                agent("t1", "Old question", AgentStatus.Blocked(null, null)),
+                agent("t2", "Old error", AgentStatus.Error(null)),
+            ), System.currentTimeMillis().toULong() - 120_000uL)
+            terminalsOf["h2"] = listOf(agent("t3", "Current error", AgentStatus.Error(null)))
+        }
+        val model = show(core)
+        val stored = context.getString(R.string.agents_waiting_stored, 2)
+        fun assertMuted(node: SemanticsNodeInteraction) {
+            val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+            node.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            assertEquals(tokensFor(AppLayout.CONSOLE).light.muted, layouts.single().layoutInput.style.color)
+        }
+        assertMuted(compose.onNode(hasText(stored) and hasAnyAncestor(hasTestTag("host-waiting:h1")), useUnmergedTree = true))
+        compose.onNodeWithText(context.getString(R.string.console_agents_waiting, 2)).assertDoesNotExist()
+        compose.onNodeWithTag("console-inbox").performClick()
+        assertMuted(compose.onNode(hasText(stored) and hasAnyAncestor(hasTestTag("call-inbox-panel")), useUnmergedTree = true))
+        compose.onNodeWithTag("call-inbox-scrim").performClick()
+        compose.onNodeWithText("work").performClick()
+        compose.onNodeWithTag("console-inbox").performClick()
+        compose.onNode(hasText(context.getString(R.string.console_agents_waiting, 1)) and hasAnyAncestor(hasTestTag("call-inbox-panel"))).assertExists()
+        assertMuted(compose.onNode(hasText(stored) and hasAnyAncestor(hasTestTag("call-inbox-panel")), useUnmergedTree = true))
+        compose.onNodeWithText(context.getString(R.string.console_agents_waiting, 3)).assertDoesNotExist()
     }
 
     @Test fun edgeSwipeOpensTheDrawerWithoutTakingTerminalCanvasGestures() {

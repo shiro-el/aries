@@ -294,16 +294,14 @@ private fun ConsoleDrawer(model: HostsModel, navigate: (() -> Unit) -> Unit) {
             ) {
                 WaitingSummary(model.quickOpenSources, agents)
             }
-            DrawerRow(stringResource(R.string.calls_title), model.callInboxOpen, Modifier.testTag("drawer-calls"),
-                onClick = { navigate(model::openCallInbox) })
             Text(stringResource(R.string.hosts_title), Modifier.padding(horizontal = 12.dp, vertical = 8.dp).semantics { heading() }, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         model.hosts.forEach { host ->
             item(key = "host:${host.id}") {
                 DrawerRow(host.name, hostId == host.id, Modifier.testTag("drawer-host:${host.id}"), onClick = { navigate { model.openHost(host) } })
             }
-            // The home board stays live behind Browse; selecting a Host scopes only this tree.
-            val hostAgents = agents.filter { it.host.id == host.id && (hostId == null || hostId == host.id) }
+            // Navigation highlights the current Host without hiding other Hosts’ Agents.
+            val hostAgents = agents.filter { it.host.id == host.id }
             agentTreeItems(hostAgents, folds,
                 onOpen = { entry -> navigate { model.openDrawerAgent(entry) } },
                 onPin = model::pin, tag = "drawer-agent", current = currentAgent, sectionNamespace = host.id,
