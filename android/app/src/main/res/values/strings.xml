@@ -1143,6 +1143,11 @@
     <string name="diagnostics_http">%1$s · HTTP %2$d</string>
     <string name="diagnostics_entry">%1$s · %2$s\n%3$s · %4$s · %5$s</string>
 
+    <!-- App layout / appearance -->
+    <string name="layout_title">App layout</string>
+    <string name="layout_console">Console</string>
+    <string name="layout_thread">Thread</string>
+    <string name="layout_tasks">Tasks</string>
     <string name="theme_title">Theme</string>
     <string name="theme_system">System</string>
     <string name="theme_light">Light</string>

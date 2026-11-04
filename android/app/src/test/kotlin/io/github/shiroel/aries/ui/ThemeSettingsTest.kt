@@ -32,14 +32,26 @@ class ThemeSettingsTest {
         val preferences = context.getSharedPreferences("theme-test", Context.MODE_PRIVATE)
         preferences.edit().clear().commit()
         val settings = ThemeSettings(preferences)
+        assertEquals(AppLayout.CONSOLE, settings.layout)
         assertEquals(ThemeMode.SYSTEM, settings.mode)
         assertEquals("#F4B73A", settings.accentHex)
 
         settings.chooseMode(ThemeMode.DARK)
         assertTrue(settings.setAccent("#3a9fd8"))
 
-        val restored = ThemeSettings(preferences)
-        assertEquals(ThemeMode.DARK, restored.mode)
-        assertEquals("#3A9FD8", restored.accentHex)
+        // Regression: persisting a layout must not overwrite mode/accent (or vice versa).
+        for (layout in AppLayout.entries) {
+            settings.chooseLayout(layout)
+            val restored = ThemeSettings(preferences)
+            assertEquals(layout, restored.layout)
+            assertEquals(ThemeMode.DARK, restored.mode)
+            assertEquals("#3A9FD8", restored.accentHex)
+        }
+        settings.chooseLayout(AppLayout.THREAD)
+        settings.chooseMode(ThemeMode.LIGHT)
+        settings.setAccent("#E0668F")
+        assertEquals(AppLayout.THREAD, ThemeSettings(preferences).layout)
+        preferences.edit().putString("layout", "removed-layout").commit()
+        assertEquals(AppLayout.CONSOLE, ThemeSettings(preferences).layout)
     }
 }
