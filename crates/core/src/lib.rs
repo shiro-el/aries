@@ -543,6 +543,15 @@ impl AriesCore {
             .save(terminal, content)
     }
 
+    /// Explicit recovery action: discard this Host's saved drafts without decoding them.
+    pub fn discard_chat_outbox(&self, host_id: String) -> Result<(), CoreError> {
+        let hosts = self.hosts.lock().expect("hosts lock");
+        if !hosts.iter().any(|host| host.id == host_id) {
+            return Err(CoreError::UnknownHost { id: host_id });
+        }
+        chat_outbox::ChatOutbox::new(self.store.host_dir(&host_id), self.vault.as_ref()).discard()
+    }
+
     /// Composer inputs on this phone, newest first. Never contacts the Host.
     pub fn input_history(
         &self,
