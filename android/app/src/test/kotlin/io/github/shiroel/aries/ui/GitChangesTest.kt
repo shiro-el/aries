@@ -46,6 +46,19 @@ class GitChangesTest {
         return core to model
     }
 
+    /** Regression: typed RPC failures with empty details must explain recovery instead of field dumps. */
+    @Test fun permissionFailureWithEmptyDetailCanBeRecoveredByRefresh() {
+        val (core, _) = openAgent()
+        compose.runOnIdle { core.connection!!.gitDiffFailure = CoreException.Rpc("permission_denied", "") }
+        compose.onNodeWithTag("agent-actions").performClick()
+        compose.onNodeWithTag("files-open").performClick()
+        compose.onNodeWithText("x").performClick()
+        compose.onNodeWithText("Could not read Git changes: Access was denied. Check permissions on the Host, then retry.").assertExists()
+        compose.runOnIdle { core.connection!!.gitDiffFailure = null }
+        compose.onNodeWithContentDescription(str(R.string.files_refresh_button)).performClick()
+        compose.onNodeWithText("+hello").assertExists()
+    }
+
     @Test fun selectedDiffIsAppendedToChatDraftWithoutSending() {
         val (core, model) = openAgent()
         compose.onNodeWithTag("agent-actions").performClick()

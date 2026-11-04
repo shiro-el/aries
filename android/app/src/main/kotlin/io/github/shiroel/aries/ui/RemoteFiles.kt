@@ -99,7 +99,7 @@ fun RemoteFilesScreen(
     var loadedRevision by remember(connection, address) { mutableIntStateOf(-1) }
     val requestedRevision = retry
     val changesLoaded = loadedRevision == requestedRevision
-    var gitError by remember(connection, address) { mutableStateOf<String?>(null) }
+    var gitError by remember(connection, address) { mutableStateOf<Message?>(null) }
     var fullFile by navigation::fullFile
     val changedFile = changes?.let { git -> git.files.find { gitFilePath(git.cwd, it.path) == file?.let { path -> java.nio.file.Paths.get(path).normalize().toString() } } }
     var preview by navigation::preview
@@ -146,7 +146,7 @@ fun RemoteFilesScreen(
         gitError = null
         try { changes = connection.gitChanges(address) }
         catch (e: CancellationException) { throw e }
-        catch (e: Exception) { changes = null; gitError = e.message ?: e.toString() }
+        catch (e: Exception) { changes = null; gitError = errorMessage(e) }
         finally { loadedRevision = requestedRevision }
     }
     fun backToFolder() { file = null }
@@ -202,7 +202,7 @@ fun RemoteFilesScreen(
                 LazyColumn(Modifier.weight(1f).testTag("files-tree"), state = view.scroll) {
                     item {
                         if (!changesLoaded) Text(stringResource(R.string.files_loading))
-                        gitError?.let { Text(stringResource(R.string.git_error, it), color = MaterialTheme.colorScheme.error) }
+                        gitError?.let { Text(stringResource(R.string.git_error, messageText(it)), color = MaterialTheme.colorScheme.error) }
                         when {
                             changes?.notRepository == true -> Text(stringResource(R.string.git_not_repository))
                             changes?.files?.isEmpty() == true && changes?.truncated == false -> Text(stringResource(R.string.git_clean))

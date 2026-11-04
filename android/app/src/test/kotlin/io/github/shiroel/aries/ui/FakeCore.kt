@@ -69,6 +69,7 @@ val inKeyWork = ThreadLocal<Boolean>()
 
 /** In-memory stand-in for the Rust core, for UI tests. */
 class FakeCore : AriesCoreInterface {
+    override fun minimumCoreVersion(): String = "0.1.17"
     var diagnosticEntries = emptyList<io.github.shiroel.aries.core.DiagnosticEntry>()
     override fun diagnostics(source: io.github.shiroel.aries.core.DiagnosticSource?, hostId: String?, failuresOnly: Boolean) =
         diagnosticEntries.filter { (source == null || it.source == source) &&
@@ -658,10 +659,12 @@ class FakeCore : AriesCoreInterface {
 
     /** Thrown by the next `answerQuestion` instead of answering. */
     var answerFailure: CoreException? = null
+    var foregroundAnswerHold: CompletableDeferred<Unit>? = null
 
     override suspend fun answerQuestion(hostId: String, terminal: String, questionId: String, picks: List<List<UInt>>) {
         signsIn("answerQuestion")
         answers += Triple(terminal, questionId, picks)
+        foregroundAnswerHold?.await()
         answerFailure?.let { answerFailure = null; throw it }
     }
 
@@ -896,7 +899,11 @@ class FakeConnection(
     var gitFiles = io.github.shiroel.aries.core.GitChanges("/repo", emptyList(), false, false)
     var gitPatch = io.github.shiroel.aries.core.GitDiff(emptyList(), false, false)
     override suspend fun gitChanges(address: String) = gitFiles
-    override suspend fun gitDiff(address: String, cwd: String, path: String, kind: io.github.shiroel.aries.core.GitDiffKind) = gitPatch
+    var gitDiffFailure: CoreException? = null
+    override suspend fun gitDiff(address: String, cwd: String, path: String, kind: io.github.shiroel.aries.core.GitDiffKind): io.github.shiroel.aries.core.GitDiff {
+        gitDiffFailure?.let { throw it }
+        return gitPatch
+    }
     val edits = mutableListOf<io.github.shiroel.aries.core.LayoutEdit>()
     var editFailure: CoreException? = null
     override suspend fun editLayout(edit: io.github.shiroel.aries.core.LayoutEdit): String {
@@ -942,6 +949,20 @@ class FakeConnection(
         calls += "terminals"
         if (dead) throw CoreException.Closed()
         return core?.let { it.terminalsOf[hostId] ?: it.terminals } ?: list
+    }
+
+    override suspend fun readChat(terminal: String): ChatSnapshot {
+        val watch = requireNotNull(core).watchChat(hostId, terminal, null)
+        try {
+            while (true) {
+                val snapshot = watch.next()
+                if (snapshot.status !in listOf(io.github.shiroel.aries.core.ChatStatus.CONNECTING, io.github.shiroel.aries.core.ChatStatus.RECONNECTING)) return snapshot
+            }
+        } finally { watch.stop(); watch.close() }
+    }
+
+    override suspend fun answerQuestion(terminal: String, questionId: String, picks: List<List<UInt>>) {
+        requireNotNull(core).answerQuestionBackground(hostId, terminal, questionId, picks)
     }
 
     override suspend fun watchTerminals(): TerminalWatch =

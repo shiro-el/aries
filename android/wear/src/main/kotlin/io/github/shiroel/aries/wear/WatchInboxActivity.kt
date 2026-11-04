@@ -7,8 +7,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.layout.Column
-import io.github.shiroel.aries.weardata.WatchCommand
-import io.github.shiroel.aries.weardata.OpenWatchAgent
 import androidx.activity.result.contract.ActivityResultContracts
 import android.Manifest
 import android.content.pm.PackageManager
@@ -40,7 +38,9 @@ class WatchInboxActivity : ComponentActivity() {
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
         store.refreshProgress()
     }
-    private var summary by mutableStateOf(WatchSummary.EMPTY)
+    private var stopped by mutableStateOf<Pair<WatchAgent, io.github.shiroel.aries.weardata.WatchInterruptResult>?>(null)
+    private val details by lazy { WatchDetailSession(scope, ::request) { agent, result -> stopped = agent to result } }
+    private val summary get() = details.summary
     private var now by mutableStateOf(System.currentTimeMillis())
     private var refreshing by mutableStateOf(false)
     private var notice by mutableStateOf<Int?>(null)
@@ -55,13 +55,7 @@ class WatchInboxActivity : ComponentActivity() {
                 notice = null
                 noticeExpiry?.cancel()
             }
-            // A local publication has no cached permission menu. Keep the user-requested
-            // live detail in memory while its Host status/turn identity still matches.
-            summary = incoming.copy(inbox = incoming.inbox.map { row ->
-                val live = summary.inbox.firstOrNull { it.hostId == row.hostId && it.terminal == row.terminal }
-                if (!row.contentHidden && row.requestKind == "permission" && row.stateToken.isNotBlank() &&
-                    live?.stateToken == row.stateToken && live.requestId.isNotBlank()) live else row
-            })
+            details.merge(incoming)
         }
     }
 
@@ -71,37 +65,23 @@ class WatchInboxActivity : ComponentActivity() {
             !shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)) {
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
-        summary = store.summary()
+        details.merge(store.summary())
         target = if (savedInstanceState != null) savedInstanceState.let { state ->
             state.getString("host")?.let { it to state.getString("terminal").orEmpty() }
         } else targetFrom(intent)
         preferences.registerOnSharedPreferenceChangeListener(listener)
         setContent {
             CompositionLocalProvider(LocalContext provides summary.localizedContext(this)) {
-                LaunchedEffect(target) {
-                    val selected = summary.inbox.firstOrNull { it.hostId == target?.first && it.terminal == target?.second }
-                    if (selected != null && !selected.contentHidden) {
-                        try {
-                            val detail = withTimeout(15_000) {
-                                store.hydrate(this@WatchInboxActivity)
-                                val phone = requireNotNull(store.phoneNode())
-                                val reply = Wearable.getMessageClient(this@WatchInboxActivity).sendRequest(phone,
-                                    WatchCommand.DETAILS_PATH, OpenWatchAgent(selected.hostId, selected.terminal).toBytes()).await()
-                                WatchCommand.fromBytes(reply)?.agent
-                            }
-                            if (detail != null) summary = summary.copy(inbox = summary.inbox.map {
-                                if (it.hostId == detail.hostId && it.terminal == detail.terminal) detail else it
-                            })
-                        } catch (cancelled: CancellationException) {
-                            if (cancelled !is kotlinx.coroutines.TimeoutCancellationException) throw cancelled
-                        } catch (_: Exception) { /* Cached detail and phone handoff remain available. */ }
-                    }
+                val selected = summary.inbox.firstOrNull { it.hostId == target?.first && it.terminal == target?.second }
+                LaunchedEffect(target, selected?.stateToken, selected?.contentHidden) {
+                    selected?.let { details.load(it) }
                 }
                 WatchInbox(summary, now, target, { target = it }, refreshing, notice, ::refresh, ::openPhone,
                     detailActions = { agent -> Column {
-                        WatchAnswerActions(agent, ::openPhone)
-                        WatchDetailActionPlaceholders(agent)
-                    } })
+                        WatchAnswerActions(agent, details)
+                        WatchInterruptAction(agent, details)
+                    } }, onDetailRefresh = { agent -> details.recover(agent); refresh() })
+                stopped?.let { (agent, result) -> WatchStopResult(agent, result) { stopped = null } }
             }
         }
         scope.launch {
@@ -111,7 +91,7 @@ class WatchInboxActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        scope.launch { store.hydrate(this@WatchInboxActivity); summary = store.summary() }
+        scope.launch { store.hydrate(this@WatchInboxActivity); details.merge(store.summary()) }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -132,6 +112,12 @@ class WatchInboxActivity : ComponentActivity() {
         startActivity(Intent(this, OpenOnPhoneActivity::class.java)
             .putExtra("host", agent.hostId).putExtra("terminal", agent.terminal)
             .putExtra("chat", agent.status in listOf("blocked", "done", "error")))
+    }
+
+    private suspend fun request(path: String, payload: ByteArray): ByteArray {
+        store.hydrate(this)
+        val phone = requireNotNull(store.phoneNode())
+        return Wearable.getMessageClient(this).sendRequest(phone, path, payload).await()
     }
 
     private fun refresh() {

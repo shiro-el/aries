@@ -28,6 +28,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
 object WatchPhone {
+    // Application lifetime: listener services can be destroyed while a watch RPC is awaiting SSH.
+    internal val requests = CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
     private val languageChanges = MutableStateFlow(0L)
     fun languageChanged() { languageChanges.update { it + 1 } }
 

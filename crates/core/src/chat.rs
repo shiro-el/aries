@@ -754,6 +754,10 @@ fn quote(s: &str) -> String {
 /// The Host-side command. `ARIES_BEACON` overrides the installed path (for
 /// development); without a Beacon it prints a `no_beacon` state line.
 pub(crate) fn command(terminal: &str, cursor: Option<&str>) -> String {
+    snapshot_command(terminal, cursor, true)
+}
+
+pub(crate) fn snapshot_command(terminal: &str, cursor: Option<&str>, follow: bool) -> String {
     let no_beacon = ChatLine::new(ChatEvent::State {
         state: ChatState::NoBeacon,
     })
@@ -761,8 +765,9 @@ pub(crate) fn command(terminal: &str, cursor: Option<&str>) -> String {
     let cursor = cursor
         .map(|c| format!(" --cursor {}", quote(c)))
         .unwrap_or_default();
+    let follow = if follow { " --follow" } else { "" };
     let script = format!(
-        r#"b="${{ARIES_BEACON:-$HOME/.local/bin/aries-beacon}}"; if [ -x "$b" ]; then exec "$b" chat {} --follow{cursor}; else printf '%s\n' {}; fi"#,
+        r#"b="${{ARIES_BEACON:-$HOME/.local/bin/aries-beacon}}"; if [ -x "$b" ]; then exec "$b" chat {}{follow}{cursor}; else printf '%s\n' {}; fi"#,
         quote(terminal),
         quote(&no_beacon),
     );
@@ -835,6 +840,14 @@ async fn answer_result(stream: Stream) -> Result<(), CoreError> {
             "no reply"
         };
         return Err(refused(AnswerProblem::Failed, Some(why.into())));
+    };
+    decode_answer(reply)
+}
+
+pub(crate) fn decode_answer(reply: AnswerReply) -> Result<(), CoreError> {
+    let refused = |reason, detail: Option<String>| CoreError::AnswerRefused {
+        reason,
+        detail: detail.unwrap_or_default(),
     };
     let reason = match reply.outcome {
         AnswerOutcome::Sent => return Ok(()),

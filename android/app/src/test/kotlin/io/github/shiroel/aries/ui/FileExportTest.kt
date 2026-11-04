@@ -36,7 +36,7 @@ import org.robolectric.annotation.Config
 @Config(qualifiers = "h1200dp")
 class FileExportTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
-    private fun str(id: Int) = compose.activity.getString(id)
+    private fun str(id: Int) = if (id == R.string.files_export_too_large) compose.activity.getString(id, EXPORT_LIMIT / (1024 * 1024)) else compose.activity.getString(id)
 
     @Before fun clearExportsFromPreviousTests() {
         File(compose.activity.cacheDir, "file-exports").deleteRecursively()
@@ -131,7 +131,7 @@ class FileExportTest {
         openFile(conn)
         val provider = chooseFolder()
         compose.waitUntil(5_000) {
-            compose.onAllNodesWithText(compose.activity.getString(R.string.files_export_progress, 2L, 4L)).fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithText(compose.activity.getString(R.string.files_export_progress, "2 B", "4 B")).fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithContentDescription(str(R.string.files_actions_label)).performClick()
         compose.onNodeWithText(str(R.string.files_share_button)).assertIsNotEnabled()

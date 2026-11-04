@@ -18,6 +18,7 @@ import java.io.IOException
 import java.util.Locale
 
 const val MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024
+internal const val ATTACHMENT_IMAGE_SIDE = 2048
 
 data class PreparedAttachment(val name: String, val bytes: ByteArray)
 
@@ -39,10 +40,10 @@ fun prepareAttachment(context: Context, uri: Uri, resizeImages: Boolean): Prepar
         val bitmap = ImageDecoder.decodeBitmap(ImageDecoder.createSource(resolver, uri)) { decoder, info, _ ->
             decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
             val longest = maxOf(info.size.width, info.size.height)
-            if (longest > 2048) {
+            if (longest > ATTACHMENT_IMAGE_SIDE) {
                 decoder.setTargetSize(
-                    maxOf(1, (info.size.width.toLong() * 2048 / longest).toInt()),
-                    maxOf(1, (info.size.height.toLong() * 2048 / longest).toInt()),
+                    maxOf(1, (info.size.width.toLong() * ATTACHMENT_IMAGE_SIDE / longest).toInt()),
+                    maxOf(1, (info.size.height.toLong() * ATTACHMENT_IMAGE_SIDE / longest).toInt()),
                 )
             }
         }

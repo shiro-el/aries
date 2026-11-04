@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import org.junit.Assert.assertTrue
 import org.robolectric.Shadows.shadowOf
 import io.github.shiroel.aries.core.AgentStatus
+import io.github.shiroel.aries.core.CallUrgency
 import io.github.shiroel.aries.core.PushContent
 import io.github.shiroel.aries.core.PushNotice
 import org.junit.Assert.assertEquals
@@ -22,6 +23,40 @@ import org.robolectric.annotation.Config
 class ForegroundNotificationTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val manager = context.getSystemService(NotificationManager::class.java)
+
+    // Regression: a resumed screen, even the caller's, must not silence urgent Calls; reply updates must stay silent.
+    @Test
+    @Config(application = InlineCoreApp::class)
+    fun urgentCallsStillAlertWhileViewingTheirCallerButOrdinaryCallsAndReplyUpdatesStayQuiet() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup()
+        try {
+            NotificationVisibility.from(context)!!.viewing(activity.get(), PushTarget("h1", "t1"))
+            for ((id, urgency, channel) in listOf(
+                Triple("check", CallUrgency.CHECK, "foreground_attention"),
+                Triple("urgent", CallUrgency.URGENT, "calls_urgent"),
+                Triple("emergency", CallUrgency.EMERGENCY, "calls_emergency"),
+            )) {
+                val call = PushContent.Call(id, "t1", true, "Review", "Please check", urgency, emptyList(), 1uL)
+                PushService.show(context, PushNotice("h1", "box", call))
+                if (urgency == CallUrgency.CHECK) {
+                    assertTrue(manager.activeNotifications.none { it.tag == "call:$id" })
+                } else {
+                    val card = manager.activeNotifications.single { it.tag == "call:$id" }.notification
+                    assertEquals(channel, card.channelId)
+                    assertEquals(NotificationManager.IMPORTANCE_HIGH, manager.getNotificationChannel(card.channelId).importance)
+                    assertEquals(android.app.Notification.GROUP_ALERT_ALL, card.groupAlertBehavior)
+                    CallNotifications.post(context, CallNotice("h1", "box", call), CallView.Done("Delivered"))
+                    assertEquals("notification_updates", manager.activeNotifications.single { it.tag == "call:$id" }.notification.channelId)
+                }
+            }
+            NotificationVisibility.from(context)!!.viewing(activity.get(), null)
+            PushService.show(context, PushNotice("h1", "box",
+                PushContent.Call("other", "t2", true, "Review", "Please check", CallUrgency.CHECK, emptyList(), 1uL)))
+            assertEquals("foreground_attention", manager.activeNotifications.single { it.tag == "call:other" }.notification.channelId)
+        } finally {
+            activity.pause().stop().destroy()
+        }
+    }
 
     @Test
     fun completionAndProgressStayInAppWhileResumedAndResumeNotifyingAfterPause() {

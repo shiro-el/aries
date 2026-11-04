@@ -72,9 +72,7 @@ object HomeWidgets {
             context.getString(R.string.widget_no_saved_state)
         } else {
             val fetched = known.minOf { it.fetchedAtMs }
-            val now = nowMillis.coerceAtLeast(0).toULong()
-            val minutes = (if (now > fetched) now - fetched else 0uL) / 60_000uL
-            context.getString(R.string.widget_age_minutes, minutes.toLong())
+            io.github.shiroel.aries.ui.relativeAge(context, fetched, nowMillis)
         }
         val agents = orderAgents(hosts.flatMap { host -> agentFamily(host, byHost[host.id]?.agents.orEmpty()) })
         return RemoteViews(context.packageName, if (expanded) R.layout.widget_agents else R.layout.widget_waiting).apply {

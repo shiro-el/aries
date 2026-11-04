@@ -237,12 +237,16 @@ private fun BiometricToggle(required: Boolean, onChange: (Boolean) -> Unit) {
 }
 
 @Composable
-internal fun OptionToggle(label: Int, on: Boolean, onChange: (Boolean) -> Unit) {
+internal fun OptionToggle(label: Int, on: Boolean, onChange: (Boolean) -> Unit) =
+    OptionToggle(stringResource(label), on, onChange)
+
+@Composable
+internal fun OptionToggle(label: String, on: Boolean, onChange: (Boolean) -> Unit) {
     Row(
         Modifier.fillMaxWidth().toggleable(value = on, role = Role.Switch, onValueChange = onChange),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(stringResource(label), Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
         Switch(checked = on, onCheckedChange = null)
     }
 }
@@ -438,4 +442,4 @@ private fun QrCode(qr: QrMatrix, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun text(m: Message): String = stringResource(m.res, *m.args.toTypedArray())
+private fun text(m: Message): String = messageText(m)
