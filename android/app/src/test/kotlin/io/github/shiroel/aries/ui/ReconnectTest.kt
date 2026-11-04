@@ -4,7 +4,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasProgressBarRangeInfo
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -100,7 +101,7 @@ class ReconnectTest {
     }
 
     private fun screenShows(text: String) =
-        compose.onNode(hasContentDescription(text, substring = true)).assertExists()
+        compose.onNode(hasTestTag("terminal-screen") and hasText(text, substring = true)).assertExists()
 
     @Test
     @Config(qualifiers = "h1200dp")

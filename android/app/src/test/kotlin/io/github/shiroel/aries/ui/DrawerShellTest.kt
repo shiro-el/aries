@@ -26,6 +26,9 @@ import io.github.shiroel.aries.core.AriesCoreInterface
 import io.github.shiroel.aries.core.HostConnection
 import io.github.shiroel.aries.core.TerminalInfo
 import kotlinx.coroutines.CompletableDeferred
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -53,11 +56,21 @@ class DrawerShellTest {
         compose.onNodeWithTag("console-menu").performClick()
         compose.onNodeWithTag("drawer-host:h1").performClick()
         compose.onNodeWithTag("console-top-bar").assert(hasAnyDescendant(hasText("home")))
+        val connection = core.connection!!
         compose.onNodeWithTag("console-menu").performClick()
         compose.onNodeWithTag("settings-open").performClick()
         compose.onNodeWithText(context.getString(R.string.theme_title)).assertExists()
         compose.onNodeWithContentDescription(context.getString(R.string.back_button)).performClick()
+        // Settings returns to the retained Host; Hosts is a separate drawer destination.
+        compose.onNodeWithTag("console-top-bar").assert(hasAnyDescendant(hasText("home")))
+        compose.runOnIdle {
+            assertSame(connection, core.connection)
+            assertFalse(connection.disconnected)
+        }
+        compose.openConsoleDrawer()
+        compose.onNodeWithTag("drawer-hosts").performClick()
         compose.onNodeWithText("me@home.test").assertExists()
+        compose.runOnIdle { assertTrue(connection.disconnected) }
     }
 
     @Test fun liveAgentTreeCountsWaitingAndOpensTheCorrectHostsTerminal() {
