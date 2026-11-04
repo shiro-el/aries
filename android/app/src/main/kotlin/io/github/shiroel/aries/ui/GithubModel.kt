@@ -56,6 +56,8 @@ internal class GithubConversationModel(
     private val number: UInt,
     private val finishWrite: (HostConnection, suspend () -> Unit) -> Job,
 ) {
+    var tab by mutableStateOf(GithubPrTab.Conversation)
+    var resourceRefresh: Int? = null
     var detail by mutableStateOf<GithubDetail?>(null)
     var readError by mutableStateOf<Int?>(null)
     var refreshing by mutableStateOf(false)

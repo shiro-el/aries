@@ -36,10 +36,14 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /** Context is frozen with the pixels, even if the page refreshes behind the editor. */
-internal data class PreviewCapture(val bitmap: Bitmap, val url: String, val desktop: Boolean)
+internal data class PreviewCapture(val bitmap: Bitmap, val url: String, val desktop: Boolean) {
+    var tool by mutableStateOf(PreviewMarkTool.Pen)
+    var marks by mutableStateOf<List<PreviewMark>>(emptyList())
+    var note by mutableStateOf("")
+}
 
-private enum class PreviewMarkTool { Pen, Rectangle }
-private data class PreviewMark(val tool: PreviewMarkTool, val points: List<Offset>)
+internal enum class PreviewMarkTool { Pen, Rectangle }
+internal data class PreviewMark(val tool: PreviewMarkTool, val points: List<Offset>)
 
 /** Use the same bitmap coordinates and renderer for the editor and the uploaded image. */
 private fun drawPreviewMarks(canvas: AndroidCanvas, marks: List<PreviewMark>, width: Int) {
@@ -82,10 +86,10 @@ internal fun PreviewCaptureEditor(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var tool by remember(capture) { mutableStateOf(PreviewMarkTool.Pen) }
-    var marks by remember(capture) { mutableStateOf<List<PreviewMark>>(emptyList()) }
+    var tool by capture::tool
+    var marks by capture::marks
     var current by remember(capture) { mutableStateOf<PreviewMark?>(null) }
-    var note by remember(capture) { mutableStateOf("") }
+    var note by capture::note
     var exporting by remember(capture) { mutableStateOf(false) }
     var failed by remember(capture) { mutableStateOf(false) }
     val mode = stringResource(if (capture.desktop) R.string.preview_desktop else R.string.preview_mobile)

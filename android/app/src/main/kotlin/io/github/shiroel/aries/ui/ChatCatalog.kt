@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -48,8 +49,8 @@ internal fun ChatCatalogControls(chat: ChatModel) {
     var loading by remember(chat) { mutableStateOf(false) }
     var failed by remember(chat) { mutableStateOf(false) }
     var revision by remember(chat) { mutableIntStateOf(0) }
-    var showSkills by remember(chat) { mutableStateOf(false) }
-    var query by remember(chat) { mutableStateOf("") }
+    var showSkills by rememberSaveable(chat) { mutableStateOf(false) }
+    var query by rememberSaveable(chat) { mutableStateOf("") }
     val enabled = chat.canEdit
     val input = chat.input
     val prefix = input.text.take(input.selection.start)
