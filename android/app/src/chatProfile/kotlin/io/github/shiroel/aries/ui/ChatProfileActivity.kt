@@ -30,9 +30,11 @@ import kotlinx.coroutines.launch
 @OptIn(InternalComposeTracingApi::class)
 class ChatProfileActivity : ComponentActivity() {
     private val updates = Channel<ChatSnapshot>(Channel.UNLIMITED)
-    private val history = (0 until 300).map { index ->
+    private val history by lazy { (0 until 300).map { index ->
         val body = when (index % 10) {
-            0 -> ChatEntryBody.User("Please review change $index and explain the result.")
+            0 -> ChatEntryBody.User("Please review change $index and explain the result." +
+                "\n\nCheck `src/change$index.kt`, preserve the existing behavior, and explain the tests before editing."
+                    .repeat(intent.getIntExtra("prompt-repeats", 0).coerceIn(0, 1000)))
             1 -> ChatEntryBody.Thinking("Considering the constraints for change $index.\n\n" + "Check the existing behavior before editing. ".repeat(12))
             2 -> ChatEntryBody.Tool("Read", "/repo/src/change$index.kt", "{\"path\":\"src/change$index.kt\"}", ChatToolStatus.DONE, "Read the file successfully.")
             3 -> ChatEntryBody.Agent("## Change $index\n\n" + "A paragraph with **emphasis**, `code`, and a [link](https://example.org). ".repeat(20) + "\n\n```kotlin\n" + (1..24).joinToString("\n") { "val result$it = $it + 1 // result" } + "\n```")
@@ -41,7 +43,7 @@ class ChatProfileActivity : ComponentActivity() {
             else -> ChatEntryBody.Agent("### Response $index\n\n" + "The implementation keeps the previous content while streaming. ".repeat(16) + "\n\n- First detail\n- Second detail\n\n| Item | Result |\n| --- | --- |\n| Change | Complete |")
         }
         ChatEntry("entry-$index", null, body)
-    }
+    } }
     private val tail = ChatEntry("stream", null, ChatEntryBody.Agent("Streaming response"))
     // UniFFI decodes a complete snapshot each time, including new wrappers for old entries.
     private fun freshHistory() = history.map { entry ->
@@ -77,22 +79,29 @@ class ChatProfileActivity : ComponentActivity() {
     } as AriesCoreInterface
     private lateinit var chat: ChatModel
     private var streaming: Job? = null
+    private var emittedUpdates = 0
     private val tracer = ChatCompositionTrace()
     private val commands = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.getStringExtra("command")) {
                 "reset" -> {
                     tracer.reset()
+                    emittedUpdates = 0
                     if (intent.getBooleanExtra("stream", false)) streaming = lifecycleScope.launch {
                         repeat(200) { step ->
                             val text = "Streaming response\n\n" + (0..step).joinToString(" ") { "token$it" }
                             updates.send(ChatSnapshot(freshHistory() + tail.copy(body = ChatEntryBody.Agent(text)), ChatStatus.LIVE, "$step"))
+                            emittedUpdates++
                             delay(100)
                         }
                     }
                     Log.i("ChatProfile", "READY")
                 }
-                "dump" -> { streaming?.cancel(); tracer.dump() }
+                "dump" -> {
+                    streaming?.cancel()
+                    Log.i("ChatProfile", "UPDATES count=$emittedUpdates cursor=${chat.snapshot?.cursor}")
+                    tracer.dump()
+                }
             }
         }
     }

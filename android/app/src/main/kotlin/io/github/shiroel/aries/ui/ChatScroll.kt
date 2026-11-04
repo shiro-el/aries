@@ -121,7 +121,7 @@ internal fun rememberChatScrollState(
             lastViewport = currentViewport
             val ready = rows.all { entry ->
                 val text = entry.body.markdownSource()
-                text == null || documents[entry.id]?.source == text
+                text == null || documents[entry.id]?.matches(entry.body) == true
             }
             // Never replace a saved block anchor with an incomplete parse.
             if (!ready) return@collect
