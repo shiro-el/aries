@@ -26,10 +26,6 @@ import kotlinx.coroutines.withContext
 data class CallEntry(val host: Host, val call: CallInfo, val live: Boolean = true, val checkedAtMs: Long? = null) {
     val key get() = "${host.id}/${call.id}"
 
-    /** Shared attention eligibility; recorded history remains available in the inbox. */
-    val needsAttention get() = live && call.topLevel && call.terminal != null && call.answer == null &&
-        call.urgency != io.github.shiroel.aries.core.CallUrgency.RECORD
-
     /** It can still be answered with a Choice from here. */
     val answerable get() = live && call.topLevel && call.terminal != null && call.answer == null && call.choices.isNotEmpty()
 
