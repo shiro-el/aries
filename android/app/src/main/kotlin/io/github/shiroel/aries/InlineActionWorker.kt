@@ -30,32 +30,40 @@ class InlineActionWorker(context: Context, params: WorkerParameters) : Coroutine
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val target = inputData.getString(TARGET)?.let(InlineTarget::fromJson) ?: return@withContext Result.failure()
         val action = inputData.getString(ACTION)
-        val core = (applicationContext as? HasCore)?.core ?: return@withContext Result.failure()
         val context = AppLanguage.context(applicationContext)
+        val text = NotificationPayloads.open(applicationContext, inputData.getString(TEXT))?.takeIf { it.isNotBlank() }
         fun show(resource: Int) = InlineNotifications.update(context, target, context.getString(resource))
+        fun failed(resource: Int) = InlineNotifications.failed(context, target, context.getString(resource), text,
+            reply = action == InlineNotifications.REPLY)
+        val core = (applicationContext as? HasCore)?.core ?: run {
+            failed(R.string.notification_action_failed)
+            return@withContext Result.failure()
+        }
         // Never deliver a stale queued draft or repeat an interrupted send.
         if (runAttemptCount > 0 || System.currentTimeMillis() - inputData.getLong(CREATED, 0) > 60_000) {
-            show(R.string.notification_action_failed)
+            failed(R.string.notification_action_failed)
             return@withContext Result.success()
         }
-        if (InlineNotifications.current(context, target) == null) return@withContext Result.success()
+        // The receiver validated and consumed this generation before persisting
+        // its unique work. Dismissing/replacing a card does not revoke that tap.
+        // Card generation checks belong only to result updates.
         if (!CallReplyWorker.online(context)) {
-            show(R.string.notification_action_offline)
+            failed(R.string.notification_action_offline)
             return@withContext Result.success()
         }
         try {
             withTimeout(90_000) {
                 when (action) {
                     InlineNotifications.REPLY -> {
-                        val text = NotificationPayloads.open(applicationContext, inputData.getString(TEXT))?.takeIf { it.isNotBlank() }
                         if (text == null) {
-                            show(R.string.notification_action_failed)
+                            failed(R.string.notification_action_failed)
                             return@withTimeout
                         }
                         val outcome = core.sendMessageBackground(target.hostId, target.terminal, text, object : SendListener {
                             override fun onHeld() { show(R.string.chat_send_held) }
                         })
-                        show(if (outcome == SendOutcome.Sent) R.string.notification_message_sent else R.string.chat_send_refused)
+                        if (outcome == SendOutcome.Sent) show(R.string.notification_message_sent)
+                        else failed(R.string.chat_send_refused)
                     }
                     InlineNotifications.SEEN -> {
                         val turn = target.turn ?: return@withTimeout
@@ -65,9 +73,9 @@ class InlineActionWorker(context: Context, params: WorkerParameters) : Coroutine
                 }
             }
         } catch (_: TimeoutCancellationException) {
-            show(R.string.notification_action_failed)
+            failed(R.string.notification_action_failed)
         } catch (e: CoreException) {
-            show(when {
+            failed(when {
                 e is CoreException.KeyLocked || e is CoreException.KeyInvalidated -> R.string.notification_action_key_locked
                 e is CoreException.Rpc && e.kind == "no_agent" -> R.string.chat_input_agent_ended
                 else -> R.string.notification_action_failed

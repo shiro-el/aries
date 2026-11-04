@@ -51,6 +51,13 @@ class QuestionReplyWorker(context: Context, params: WorkerParameters) : Coroutin
         val notice = NotificationPayloads.open(applicationContext, inputData.getString(KEY_NOTICE))?.let { QuestionNotice.fromJson(it) } ?: return Result.failure()
         val choice = inputData.getInt(KEY_CHOICE, -1)
         if (notice.question.options.size !in 1..3 || choice !in notice.question.options.indices) return Result.failure()
+        // WorkManager persists the attempt count before starting work. A
+        // restarted attempt may follow delivered input and a lost reply.
+        if (runAttemptCount > 0) {
+            QuestionNotifications.post(applicationContext, notice, QuestionView.Done(
+                AppLanguage.context(applicationContext).getString(R.string.question_notify_unknown)))
+            return Result.success()
+        }
         val core = (applicationContext as? HasCore)?.core ?: return Result.failure()
         val view = QuestionReplies.answer(applicationContext, core, notice, choice, CallReplyWorker.online(applicationContext))
         QuestionNotifications.post(applicationContext, notice, view)

@@ -7,6 +7,10 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.isPopup
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.input.key.Key
 import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentStatus
@@ -50,12 +54,19 @@ class AgentConsoleScreenTest {
         compose.onNodeWithText("home").performClick()
         compose.onNodeWithText("claude").performClick()
         compose.onNodeWithTag("console-top-bar").assertExists()
+        compose.onNodeWithTag("agent-actions").performClick()
+        compose.onNodeWithText(context.getString(R.string.agent_details_host, "home")).assertExists()
         compose.onNodeWithText("/repo").assertExists()
         core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle, cwd = "/updated")))
         compose.waitForIdle()
         compose.onNodeWithText(str(R.string.agent_status_idle)).assertExists()
         compose.onNodeWithText("/updated").assertExists()
+        compose.onNode(isPopup()).performKeyInput { pressKey(Key.Back) }
         compose.onNodeWithContentDescription(str(R.string.agent_switch_chat_label)).performClick()
+        compose.onNodeWithTag("console-top-bar").assertExists()
+        compose.onNodeWithTag("agent-actions").performClick()
+        compose.onNodeWithText(context.getString(R.string.agent_details_host, "home")).assertExists()
+        compose.onNodeWithText(str(R.string.agent_status_idle)).assertExists()
         compose.onNodeWithText("/updated").assertExists()
     }
 

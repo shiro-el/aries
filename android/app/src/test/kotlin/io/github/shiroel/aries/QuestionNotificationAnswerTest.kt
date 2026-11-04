@@ -71,6 +71,7 @@ class QuestionNotificationAnswerTest {
     private fun runWorker(choice: Int = 1): ListenableWorker.Result = runBlocking {
         val notice = notice()
         TestListenableWorkerBuilder<QuestionReplyWorker>(context)
+            .setRunAttemptCount(0)
             .setInputData(QuestionReplyWorker.input(context, notice, choice)).build().doWork()
     }
 
@@ -129,6 +130,7 @@ class QuestionNotificationAnswerTest {
         val notice = QuestionNotice.fromJson(NotificationPayloads.open(context, shadowOf(shown().actions[2].actionIntent).savedIntent
             .getStringExtra(QuestionChoiceReceiver.EXTRA_NOTICE))!!)!!
         assertEquals(ListenableWorker.Result.success(), TestListenableWorkerBuilder<QuestionReplyWorker>(context)
+            .setRunAttemptCount(0)
             .setInputData(QuestionReplyWorker.input(context, notice, 2)).build().doWork())
         assertEquals(listOf(Triple("remote/t3", "permission:current", listOf(listOf(2u)))), core.backgroundAnswers)
         assertTrue(buttons().isEmpty())
@@ -161,6 +163,19 @@ class QuestionNotificationAnswerTest {
         assertEquals(listOf(Triple("remote/t3", "q1", listOf(listOf(1u)))), core.backgroundAnswers)
         assertEquals(str(R.string.question_notify_sent, "Blue"), text())
         assertTrue(buttons().isEmpty())
+    }
+
+    // A WorkManager restart may follow delivery but precede completion storage.
+    // The normal worker test cannot detect a second dispatch on that restart.
+    @Test
+    fun aRestartedWorkerReportsUncertaintyWithoutDispatchingAgain() = runBlocking {
+        val notice = notice()
+        val worker = TestListenableWorkerBuilder<QuestionReplyWorker>(context)
+            .setInputData(QuestionReplyWorker.input(context, notice, 1))
+            .setRunAttemptCount(1).build()
+        assertEquals(ListenableWorker.Result.success(), worker.doWork())
+        assertTrue(core.backgroundAnswers.isEmpty())
+        assertEquals(str(R.string.question_notify_unknown), text())
     }
 
     @Test
