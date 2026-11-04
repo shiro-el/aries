@@ -42,11 +42,13 @@ private class WorktreeForm(val cwd: String, val spaceId: String?) {
 /** Uses the phone's focused Terminal, never the desktop's current Space.
  * Nested-machine folders must not accidentally be executed on the Host. */
 @Composable
-internal fun WorktreeControls(browser: HostBrowser, unplaced: TerminalInfo? = null, asMenuItem: Boolean = false) {
+internal fun WorktreeControls(browser: HostBrowser, unplaced: TerminalInfo? = null, asMenuItem: Boolean = false,
+    action: (@Composable (enabled: Boolean, onOpen: () -> Unit) -> Unit)? = null,
+) {
     val scope = rememberCoroutineScope()
     var form by remember(browser) { mutableStateOf<WorktreeForm?>(null) }
     val space = browser.openSpace
-    if (space == null && unplaced == null) return
+    if (space == null && unplaced == null && action == null) return
     val tab = browser.tab
     val pane = tab?.panes?.find { it.id == browser.focusedPane(tab) } ?: tab?.panes?.firstOrNull()
     val terminal = unplaced ?: pane?.terminal?.let(browser::current)
@@ -75,7 +77,8 @@ internal fun WorktreeControls(browser: HostBrowser, unplaced: TerminalInfo? = nu
     }
     val enabled = cwd != null && connection != null && !browser.closed
     val label = stringResource(R.string.worktrees_button)
-    if (asMenuItem) ActionMenuItem(label, R.drawable.ic_folder,
+    if (action != null) action(enabled, ::openWorktrees)
+    else if (asMenuItem) ActionMenuItem(label, R.drawable.ic_folder,
         modifier = Modifier.semantics { contentDescription = label }, enabled = enabled, onClick = ::openWorktrees)
     else ActionIcon(R.drawable.ic_folder, R.string.worktrees_button, enabled = enabled, onClick = ::openWorktrees)
     form?.let { target ->
