@@ -462,7 +462,8 @@ class ReconnectTest {
         compose.mainClock.advanceTimeBy(120_100)
         compose.waitForIdle()
         assertTrue(core.chatPaused)
-        assertEquals(listOf("t1" to "queued before backgrounding"), connection.typed)
+        assertTrue(connection.typed.isEmpty())
+        assertEquals(listOf("queued before backgrounding"), chat.queuedMessages.map { it.text })
         assertEquals(0, core.chatReconnects)
         compose.runOnIdle { screenLifecycle.currentState = Lifecycle.State.RESUMED }
         compose.waitForIdle()

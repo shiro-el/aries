@@ -84,6 +84,18 @@ class ChatCallsTest {
         ).assertCountEquals(0)
     }
 
+    // D32: Console must not direct the user to Terminal when its Call card already offers an answer.
+    @Test fun anAnswerableCallReplacesTheTerminalFallbackForABlockedAgent() {
+        val core = core()
+        openChat(core)
+        core.pushChat(io.github.shiroel.aries.core.ChatSnapshot(emptyList(), io.github.shiroel.aries.core.ChatStatus.LIVE, null))
+        core.push(listOf(agent.copy(agentStatus = AgentStatus.Blocked(io.github.shiroel.aries.core.BlockedReason.PERMISSION, null))))
+        compose.onNodeWithText(str(R.string.chat_blocked_permission)).assertDoesNotExist()
+        chooseWait()
+        compose.waitForIdle()
+        assertEquals(listOf(Triple("h1", call.id, 1u)), core.replies)
+    }
+
     @Test
     fun chatOmitsPastCallsButInboxKeepsTheirHistory() {
         val past = CallAnswerState.entries.mapIndexed { index, state ->
