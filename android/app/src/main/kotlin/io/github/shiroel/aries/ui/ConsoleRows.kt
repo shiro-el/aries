@@ -155,7 +155,7 @@ internal fun ConsoleTerminalRow(
                     }
                 }
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.padding(end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 trailing()
                 if (status != null) AgentStatusMark(status, live = live)
             }
@@ -177,9 +177,9 @@ private fun compactAgentPath(path: String): String {
 
 /** A plain Terminal has a prompt, with no Agent-status accessibility label. */
 @Composable
-private fun TerminalMark() {
+private fun TerminalMark(modifier: Modifier = Modifier.size(24.dp)) {
     val color = MaterialTheme.colorScheme.onSurfaceVariant
-    Canvas(Modifier.size(24.dp).padding(4.dp)) {
+    Canvas(modifier.padding(2.dp)) {
         val u = size.width / 16f
         drawLine(color, Offset(3*u, 4*u), Offset(7*u, 8*u), 1.75f*u, StrokeCap.Square)
         drawLine(color, Offset(7*u, 8*u), Offset(3*u, 12*u), 1.75f*u, StrokeCap.Square)
@@ -198,7 +198,7 @@ private fun ProgramMark(terminal: TerminalInfo, modifier: Modifier) {
     if (icon != null) Icon(painterResource(icon), contentDescription = null, modifier = modifier,
         tint = if (icon == R.drawable.program_codex) MaterialTheme.colorScheme.onSurface
             else androidx.compose.ui.graphics.Color.Unspecified)
-    else Box(modifier, contentAlignment = Alignment.Center) { TerminalMark() }
+    else Box(modifier, contentAlignment = Alignment.Center) { TerminalMark(Modifier.fillMaxSize()) }
 }
 
 @Composable
@@ -217,5 +217,5 @@ internal fun agentLastSeen(updatedAt: Long?): String {
         }
     }
     return if (updatedAt == null) stringResource(R.string.agents_last_seen_unknown)
-        else stringResource(R.string.agents_last_seen, ((now - updatedAt).coerceAtLeast(0) / 60_000).toInt())
+        else stringResource(R.string.agents_last_seen, relativeAge(androidx.compose.ui.platform.LocalContext.current, updatedAt.coerceAtLeast(0).toULong(), now))
 }

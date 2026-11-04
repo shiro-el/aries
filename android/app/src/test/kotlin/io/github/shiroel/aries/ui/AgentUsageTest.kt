@@ -67,7 +67,7 @@ class AgentUsageTest {
         screenshot("unavailable", "agent-usage-sheet")
         compose.runOnIdle {
             reading.value = AgentUsage(ContextUsage(50000uL, 200000uL, "2026-11-04T10:00:00Z"), listOf(
-                UsageLimit("primary", 300uL, 0u, 1793790000uL, "2026-11-04T10:00:00Z"),
+                UsageLimit("primary", 300uL, 0u, java.time.Instant.now().plusSeconds(86400).epochSecond.toULong(), "2026-11-04T10:00:00Z"),
             ))
         }
         compose.onNodeWithText(str(R.string.usage_used, "0")).assertIsDisplayed()
@@ -82,6 +82,26 @@ class AgentUsageTest {
         compose.onNodeWithText(str(R.string.usage_title), substring = true).performClick()
         compose.onNodeWithText(str(R.string.usage_limits_unavailable)).assertIsDisplayed()
     }
+    /** Regression: an expired quota reading must stop looking like the current limit usage. */
+    @Test fun expiredLimitsKeepTheirLastReadingAndContextShowsItsAge() {
+        val now = java.time.Instant.now()
+        val limit = UsageLimit("primary", 300uL, 9800u, now.plusSeconds(86400).epochSecond.toULong(), now.toString())
+        val reading = mutableStateOf(AgentUsage(
+            ContextUsage(50000uL, 200000uL, now.minusSeconds(172800).toString()), listOf(limit)))
+        compose.setContent { MaterialTheme {
+            Column {
+                androidx.compose.material3.Text(contextRemaining(reading.value.context))
+                AgentUsageSheet(reading.value) {}
+            }
+        } }
+        compose.onNodeWithText("Context: 75% left · 2 d ago").assertExists()
+        compose.onNodeWithText("98% used").assertExists()
+        compose.runOnIdle { reading.value = reading.value.copy(limits = listOf(limit.copy(resetsAt = now.minusSeconds(60).epochSecond.toULong()))) }
+        compose.onNodeWithText("Reset · last reading 98% used").assertIsDisplayed()
+        compose.onNodeWithText("98% used").assertDoesNotExist()
+        screenshot("expired-limits", "agent-usage-sheet")
+    }
+
     private fun screenshot(name: String, tag: String) {
         System.getenv("ARIES_USAGE_RENDER_DIR")?.let { directory ->
             File(directory).mkdirs()

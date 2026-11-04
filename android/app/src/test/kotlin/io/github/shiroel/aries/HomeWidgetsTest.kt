@@ -47,8 +47,8 @@ class HomeWidgetsTest {
         )
         val view = HomeWidgets.render(context, listOf(first, second), states, expanded = false, nowMillis = now)
             .apply(context, FrameLayout(context))
-        assertEquals("2 need you", view.findViewById<TextView>(R.id.widget_count).text.toString())
-        assertEquals("3m ago", view.findViewById<TextView>(R.id.widget_age).text.toString())
+        assertEquals("Needs you · 2", view.findViewById<TextView>(R.id.widget_count).text.toString())
+        assertEquals("3 min ago", view.findViewById<TextView>(R.id.widget_age).text.toString())
         assertEquals("Refresh", view.findViewById<android.view.View>(R.id.widget_refresh).contentDescription)
     }
 
@@ -65,7 +65,7 @@ class HomeWidgetsTest {
         assertTrue(texts.contains("Error · Desktop · 4m"))
         assertTrue(texts.contains("Blocked · Laptop · 5m"))
         assertTrue(texts.contains("Done · Laptop · 5m"))
-        assertTrue(texts.contains("3m ago"))
+        assertTrue(texts.contains("3 min ago"))
         val expected = listOf(PushTarget(second.id, "machine/t7"), PushTarget(first.id, "approve"), PushTarget(first.id, "done"))
         listOf("remote", "approve", "done").zip(expected).forEach { (name, target) ->
             (textViews(view).single { it.text.toString() == name }.parent as View).performClick()
@@ -100,11 +100,11 @@ class HomeWidgetsTest {
             while (listOf(78, 79).any { manager.getViewFor(it)?.findViewById<TextView>(R.id.widget_count)?.text?.toString() != expected }) delay(10)
         }
         try {
-            awaitCount("1 need you")
+            awaitCount("Needs you · 1")
             assertTrue(core.snapshotsRequested.isEmpty())
             core.terminals = listOf(agent("working", AgentStatus.Working))
             core.snapshot(first.id)
-            awaitCount("0 need you")
+            awaitCount("Needs you · 0")
             // Robolectric applies RemoteViews directly on the publishing thread;
             // wait for the rows too, rather than observing its in-progress apply.
             withTimeout(5_000) {
@@ -122,11 +122,11 @@ class HomeWidgetsTest {
             fun rendered(states: List<LastKnownState>) = HomeWidgets.render(context, listOf(first), states, expanded, now)
                 .apply(context, FrameLayout(context))
             val unknown = rendered(emptyList())
-            assertEquals("— need you", unknown.findViewById<TextView>(R.id.widget_count).text.toString())
+            assertEquals("Needs you · —", unknown.findViewById<TextView>(R.id.widget_count).text.toString())
             assertEquals("Awaiting Host state", unknown.findViewById<TextView>(R.id.widget_age).text.toString())
             val empty = rendered(listOf(LastKnownState(first.id, emptyList(), 600_001uL)))
-            assertEquals("0 need you", empty.findViewById<TextView>(R.id.widget_count).text.toString())
-            assertEquals("0m ago", empty.findViewById<TextView>(R.id.widget_age).text.toString())
+            assertEquals("Needs you · 0", empty.findViewById<TextView>(R.id.widget_count).text.toString())
+            assertEquals("just now", empty.findViewById<TextView>(R.id.widget_age).text.toString())
             if (expanded) assertEquals(View.VISIBLE, empty.findViewById<View>(R.id.widget_empty).visibility)
         }
     }

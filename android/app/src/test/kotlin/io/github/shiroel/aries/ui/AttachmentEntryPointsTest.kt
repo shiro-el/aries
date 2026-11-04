@@ -70,7 +70,7 @@ class AttachmentEntryPointsTest {
         shadowOf(compose.activity.contentResolver).registerInputStream(uri, ByteArrayInputStream(ByteArray(8 * 1024 * 1024 + 1)))
         compose.runOnIdle { shadowOf(compose.activity).receiveResult(request.intent, Activity.RESULT_OK, Intent().setData(uri)) }
         compose.waitUntil(5_000) {
-            compose.onAllNodesWithText(str(R.string.attachments_too_large)).fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithText(compose.activity.getString(R.string.attachments_too_large, MAX_ATTACHMENT_BYTES / (1024 * 1024))).fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("keep this")
         assertTrue(connection.uploads.isEmpty())

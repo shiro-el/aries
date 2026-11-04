@@ -618,7 +618,7 @@ class RemoteFilesTest {
             }
         }
         compose.setContent { MaterialTheme { RemoteFilesScreen(conn, "t1", {}, initialLocation = FileLocation("/repo/large.txt")) } }
-        compose.onNodeWithText(str(R.string.files_large_warning)).assertExists()
+        compose.onNodeWithText(context.getString(R.string.files_large_warning, LARGE_FILE_BYTES / (1024 * 1024))).assertExists()
         assertEquals(0, reads)
         compose.onNodeWithText(str(R.string.files_large_open)).performClick()
         compose.onNodeWithText("large source").assertExists()

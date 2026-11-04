@@ -153,7 +153,7 @@ class ChatInterruptTest {
         compose.onNodeWithContentDescription(str(R.string.chat_interrupt_confirm_button)).performClick()
         compose.onNodeWithText(str(R.string.chat_interrupt_confirm_button)).performClick()
         compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.chat_interrupt_failed, ""), substring = true).assertExists()
+        compose.onNodeWithText(str(R.string.chat_interrupt_failed, str(R.string.error_connection)), substring = true).assertExists()
         assertEquals(listOf("t1"), conn.interrupted)
         conn.interruptFailWith = null
         conn.interruptOutcome = InterruptOutcome.STILL_WORKING

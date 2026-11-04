@@ -34,7 +34,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private const val MAX_PRIVATE_KEY_BYTES = 64 * 1024
+internal const val MAX_PRIVATE_KEY_BYTES = 64 * 1024
 
 @Composable
 fun KeyImportButton(model: HostsModel) {
@@ -77,7 +77,7 @@ fun KeyImportDialog(model: HostsModel, replacementKeyId: String? = null, onDismi
                     throw e
                 } catch (_: Exception) {
                     privateKey = ""
-                    problem = Message(R.string.key_import_file_error)
+                    problem = Message(R.string.key_import_file_error, listOf(MAX_PRIVATE_KEY_BYTES / 1024))
                 } finally {
                     busy = false
                 }
@@ -111,7 +111,7 @@ fun KeyImportDialog(model: HostsModel, replacementKeyId: String? = null, onDismi
                         } else {
                             // A rejected paste must not leave an older masked key ready to import.
                             privateKey = ""
-                            problem = Message(R.string.key_import_too_large)
+                            problem = Message(R.string.key_import_too_large, listOf(MAX_PRIVATE_KEY_BYTES / 1024))
                         }
                     },
                     enabled = !busy, minLines = 3, maxLines = 5,

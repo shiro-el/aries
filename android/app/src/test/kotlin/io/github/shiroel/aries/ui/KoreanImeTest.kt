@@ -64,7 +64,15 @@ class KoreanImeTest {
 
     private fun sent(): List<String> {
         compose.waitForIdle()
-        return core.connection!!.views.last().sent
+        // The first IME input starts typing. Its writes queue until the phone's
+        // grid settles and the observer is replaced by a writable attachment.
+        compose.mainClock.advanceTimeUntil(timeoutMillis = 1_000) {
+            core.connection!!.views.last().options.observe == false
+        }
+        compose.waitForIdle()
+        val views = core.connection!!.views
+        assertTrue("IME input must never be sent through the observer", views.first().sent.isEmpty())
+        return views.last().sent
     }
 
     @Test

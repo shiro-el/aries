@@ -134,7 +134,7 @@ class PushSectionTest {
 
         showsStep(R.string.push_step_register, R.string.push_step_done_description)
         showsStep(R.string.push_step_pair, R.string.push_step_failed_description)
-        shows(str(R.string.push_failed, str(R.string.push_step_pair), "relay said no"))
+        shows(str(R.string.push_failed, str(R.string.push_step_pair), str(R.string.error_retry)))
         assertTrue(core.pushPaired.isEmpty())
 
         core.pushFailAt = null
@@ -150,7 +150,7 @@ class PushSectionTest {
         click(R.string.push_enable_button)
 
         shows(str(R.string.push_on_body, RELAY))
-        shows(str(R.string.push_failed, str(R.string.push_step_test), "relay said no"))
+        shows(str(R.string.push_failed, str(R.string.push_step_test), str(R.string.error_retry)))
     }
 
     @Test
@@ -233,7 +233,7 @@ class PushSectionTest {
 
         assertEquals(RELAY, core.pushPaired.values.single())
         shows(str(R.string.push_on_body, RELAY))
-        shows(str(R.string.push_failed, str(R.string.push_step_register), "relay said no"))
+        shows(str(R.string.push_failed, str(R.string.push_step_register), str(R.string.error_retry)))
         // The typed URL stays, to fix and try again.
         compose.onNodeWithTag(RELAY_FIELD).performScrollTo().assertTextContains(MINE)
 
@@ -342,7 +342,7 @@ class PushSectionTest {
         click(R.string.push_policy_done)
 
         option(R.string.push_policy_done).assertIsOff()
-        shows(str(R.string.push_policy_failed, "disk full"))
+        shows(str(R.string.push_policy_failed, str(R.string.error_retry)))
         assertEquals(null, core.pushPolicies[host.id])
     }
 
@@ -352,7 +352,7 @@ class PushSectionTest {
         connectTo(core)
         click(R.string.push_enable_button)
 
-        shows(str(R.string.push_policy_failed, "no answer"))
+        shows(str(R.string.push_policy_failed, str(R.string.error_retry)))
         compose.onNodeWithText(str(R.string.push_policy_done)).assertDoesNotExist()
 
         core.pushPolicyFailure = null

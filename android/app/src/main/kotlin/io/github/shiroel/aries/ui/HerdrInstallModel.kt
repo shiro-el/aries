@@ -25,6 +25,8 @@ class HerdrInstallModel(
     private val fetcher: BeaconFetcher,
     private val keyWork: CoroutineContext = EmptyCoroutineContext,
 ) {
+    val minimumCoreVersion: String get() = core.minimumCoreVersion()
+
     var host by mutableStateOf<Host?>(null)
         private set
     var state by mutableStateOf<HerdrCoreState?>(null)

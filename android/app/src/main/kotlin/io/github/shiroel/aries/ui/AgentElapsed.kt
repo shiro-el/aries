@@ -55,3 +55,14 @@ internal fun AgentElapsedTime(
         maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
         modifier = Modifier.semantics { contentDescription = label })
 }
+
+/** The same timestamp buckets are used by every phone surface, including future clock skew. */
+internal fun relativeAge(context: android.content.Context, timestampMs: ULong, nowMillis: Long = System.currentTimeMillis()): String {
+    val duration = checkNotNull(agentDuration(timestampMs, nowMillis))
+    return when (duration.unit) {
+        AgentTimeUnit.LessThanMinute -> context.getString(R.string.surfaces_age_just_now)
+        AgentTimeUnit.Minute -> context.getString(R.string.surfaces_age_minutes, duration.value)
+        AgentTimeUnit.Hour -> context.getString(R.string.surfaces_age_hours, duration.value)
+        AgentTimeUnit.Day -> context.getString(R.string.surfaces_age_days, duration.value)
+    }
+}

@@ -2266,7 +2266,7 @@ fun problemFor(e: CoreException): Prompt.Problem {
         is CoreException.Incompatible -> when (val r = e.reason) {
             is Incompatibility.AppTooOld -> Prompt.Problem(
                 Message(R.string.incompatible_title),
-                Message(R.string.incompatible_app_too_old, listOf(r.hostGeneration.toInt())),
+                Message(R.string.incompatible_app_too_old),
             )
             is Incompatibility.CoreTooOld -> Prompt.Problem(
                 Message(R.string.incompatible_title),
@@ -2289,7 +2289,7 @@ fun problemFor(e: CoreException): Prompt.Problem {
         )
         is CoreException.KeyInstallFailed -> Prompt.Problem(
             Message(R.string.key_install_failed_title),
-            Message(R.string.key_install_write_failed, listOf(e.detail)),
+            Message(R.string.key_install_write_failed),
         )
         is CoreException.InvalidHost -> Prompt.Problem(
             Message(R.string.host_edit_title), Message(R.string.host_edit_invalid_body),
@@ -2313,11 +2313,7 @@ fun problemFor(e: CoreException): Prompt.Problem {
             Message(R.string.key_biometric_unavailable_body),
         )
         is CoreException.BeaconNotInstalled -> Prompt.Problem(failed, Message(R.string.chat_status_no_beacon))
-        is CoreException.Unreachable -> Prompt.Problem(failed, Message(R.string.connect_unreachable, listOf(e.detail)))
-        is CoreException.Rpc -> Prompt.Problem(failed,
-            Message(if (e.kind == "permission_denied") R.string.connect_permission_denied else R.string.connect_other, listOf(e.detail)))
-        is CoreException.Protocol -> Prompt.Problem(failed, Message(R.string.connect_protocol, listOf(e.detail)))
-        else -> Prompt.Problem(failed, Message(R.string.connect_other, listOf(e.message ?: "")))
+        else -> Prompt.Problem(Message(R.string.error_failed_title), errorMessage(e))
     }
 }
 
