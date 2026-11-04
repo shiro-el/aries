@@ -20,6 +20,7 @@ internal fun AgentViewport(
         val compact = maxHeight < 480.dp || WindowInsets.ime.getBottom(LocalDensity.current) > 0
         Column(Modifier.widthIn(max = 960.dp).fillMaxSize().align(Alignment.TopCenter)) {
             header()
+            CallAttentionSlot(compact)
             // Measure input outside the weighted body so notices and pickers
             // cannot consume its height, even when the transcript has no room.
             Column(Modifier.weight(1f).clipToBounds()) { content(compact) }

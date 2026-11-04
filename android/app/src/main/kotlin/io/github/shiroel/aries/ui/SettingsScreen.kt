@@ -109,7 +109,7 @@ fun SettingsScreen(
             item(key = "app-language") { SettingsField { AppLanguageSetting() } }
             item(key = "app-layout") {
                 SettingsField(R.string.layout_title) {
-                    LayoutSetting(settings)
+                    LayoutSetting(model, settings)
                 }
             }
             item {
@@ -197,7 +197,11 @@ fun SettingsScreen(
 
 /** Keep the three names readable with the same enlarged-text threshold as Agent rows. */
 @Composable
-private fun LayoutSetting(settings: ThemeSettings) {
+private fun LayoutSetting(model: HostsModel, settings: ThemeSettings) {
+    val choose: (AppLayout) -> Unit = { next ->
+        model.homeLayoutChanged(settings.layout, next)
+        settings.chooseLayout(next)
+    }
     val label: @Composable (AppLayout) -> String = { stringResource(when (it) {
         AppLayout.CONSOLE -> R.string.layout_console
         AppLayout.THREAD -> R.string.layout_thread
@@ -206,12 +210,12 @@ private fun LayoutSetting(settings: ThemeSettings) {
     if (androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.3f) {
         Column(Modifier.fillMaxWidth().selectableGroup()) {
             AppLayout.entries.forEach { layout ->
-                ConsoleChoice(settings.layout == layout, { settings.chooseLayout(layout) }, Modifier.fillMaxWidth()) {
+                ConsoleChoice(settings.layout == layout, { choose(layout) }, Modifier.fillMaxWidth()) {
                     Text(label(layout), style = MaterialTheme.typography.labelLarge)
                 }
             }
         }
-    } else ConsoleSegments(AppLayout.entries, settings.layout, settings::chooseLayout, label = label)
+    } else ConsoleSegments(AppLayout.entries, settings.layout, choose, label = label)
 }
 
 /** Host configuration stays reachable even when a herdr-core Browse connection fails. */

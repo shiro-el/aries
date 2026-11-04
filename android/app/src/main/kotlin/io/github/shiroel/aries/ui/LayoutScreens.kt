@@ -44,6 +44,7 @@ internal open class LayoutScreens {
 
     @Composable open fun Header(model: HostsModel, screen: Screen) {
         ConsoleScreenHeader(model, screen, LocalConsoleMenu.current ?: {})
+        if (screen == model.screen && screen !is Screen.Chat && screen !is Screen.Terminal) CallAttentionSlot()
     }
 
     @Composable fun Screen(model: HostsModel, settings: ThemeSettings, display: TerminalDisplaySettings, screen: Screen) {

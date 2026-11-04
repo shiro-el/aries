@@ -205,26 +205,24 @@ class ChatInterruptTest {
         compose.onNodeWithText(str(R.string.attachments_read_failed)).assertExists()
     }
 
-    // D21 also covers automatic draft restoration when a local queue loses its line.
-    @Test fun returningQueuedTextAfterLinkLossKeepsOperationFeedback() {
+    // D21 also covers automatic draft restoration when the Agent ends.
+    @Test fun returningQueuedTextWhenTheAgentEndsKeepsAttachmentFailure() {
         val core = FakeCore()
-        val conn = open(core)
+        open(core)
         core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, null))
         compose.waitForIdle()
         val chat = compose.runOnIdle { (model.screen as Screen.Chat).chat }
         compose.runOnIdle {
             chat.draft = "queued instruction"
             chat.send()
-            chat.interrupt()
         }
         compose.waitForIdle()
         compose.runOnIdle {
             chat.attachmentFailed(java.io.IOException())
-            chat.link!!.lost(conn)
         }
+        core.pushChat(ChatSnapshot(emptyList(), ChatStatus.NO_AGENT, null))
         compose.waitForIdle()
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("queued instruction")
-        compose.onNodeWithText(str(R.string.chat_interrupt_stopped)).assertExists()
         compose.onNodeWithText(str(R.string.attachments_read_failed)).assertExists()
     }
 

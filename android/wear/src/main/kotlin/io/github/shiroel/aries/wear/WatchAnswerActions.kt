@@ -43,8 +43,9 @@ import kotlinx.coroutines.launch
 internal fun WatchAnswerActions(agent: WatchAgent, session: WatchDetailSession) {
     val view = LocalView.current
     val replyLabel = stringResource(R.string.wear_answer_reply)
-    val sending = session.answer(agent).pending
-    val result = session.answer(agent).result
+    val answer = session.answer(agent)
+    val sending = answer.pending
+    val result = answer.result
     val check = session.check(agent)
     var draft by remember(agent.hostId, agent.terminal, agent.stateToken) { mutableStateOf("") }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { response ->
@@ -99,7 +100,7 @@ internal fun WatchAnswerActions(agent: WatchAgent, session: WatchDetailSession) 
             check == WatchDetailSession.DetailCheck.PHONE -> stringResource(R.string.wear_answer_phone)
             else -> ""
         }
-        // Keep one live node as progress becomes an outcome, even if the request changes.
+        // Keep one live node for progress; outcomes belong to this request token only.
         Text(message, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
             color = Color(if (result in listOf(WatchResult.FAILED, WatchResult.UNKNOWN, WatchResult.CHANGED)) WatchConsole.ERROR else WatchConsole.SAFFRON))
         if (check == WatchDetailSession.DetailCheck.FAILED || result == WatchResult.FAILED)

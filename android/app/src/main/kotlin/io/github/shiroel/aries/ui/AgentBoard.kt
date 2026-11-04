@@ -2,6 +2,12 @@ package io.github.shiroel.aries.ui
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
@@ -97,6 +103,15 @@ class AgentBoard(val hosts: List<Host>) {
         structures[hostId] = structure
     }
 
+    /** Stored data stays visibly stale until the first fresh Terminal list replaces it. */
+    internal fun seed(state: io.github.shiroel.aries.core.LastKnownState) {
+        if (hosts.none { it.id == state.hostId }) return
+        lists[state.hostId] = state.agents
+        state.structure?.let { structures[state.hostId] = it }
+        updatedAt[state.hostId] = state.fetchedAtMs.toLong()
+        refreshing[state.hostId] = true
+    }
+
     /** Latest layout for retaining an Agent's navigation ancestors on the phone. */
     fun structureOf(hostId: String): HostStructure? = structures[hostId]
 
@@ -137,6 +152,19 @@ class AgentBoard(val hosts: List<Host>) {
         closed[hostId] = true
     }
 
+}
+
+/** Notification entry may intentionally connect just one Host; make that scope explicit. */
+@Composable
+internal fun AgentHomeScope(model: HostsModel, board: AgentBoard) {
+    val host = board.hosts.singleOrNull()?.takeIf { board.hosts != model.hosts } ?: return
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(stringResource(R.string.agents_host_scope, host.name), Modifier.weight(1f),
+            maxLines = accessibleNameLines(), overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        TextButton(onClick = model::openAgents, modifier = Modifier.testTag("agents-show-all")) {
+            Text(stringResource(R.string.agents_show_all))
+        }
+    }
 }
 
 @Composable

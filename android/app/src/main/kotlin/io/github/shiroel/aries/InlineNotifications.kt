@@ -116,7 +116,8 @@ object InlineNotifications {
             context.getSystemService(android.app.NotificationManager::class.java).createNotificationChannel(
                 android.app.NotificationChannel(channel, context.getString(R.string.call_notify_channel_sending),
                     android.app.NotificationManager.IMPORTANCE_LOW))
-            val title = context.getString(R.string.push_status_title, target.terminal, target.hostName)
+            val title = context.getString(R.string.push_status_title,
+                NotificationAgentName.resolve(context, target.hostId, target.terminal), target.hostName)
             NotificationGroups.decorate(context, Notification.Builder(context, channel)
                 .setSmallIcon(R.drawable.ic_stat_aries).setContentTitle(title)
                 .setVisibility(Notification.VISIBILITY_PRIVATE)
