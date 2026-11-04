@@ -63,6 +63,9 @@ pub enum CoreError {
     /// was not used.
     #[error("the SSH key needs a biometric unlock")]
     KeyLocked,
+    /// The wrapping key was permanently invalidated; private keys need replacement.
+    #[error("the SSH key is permanently locked and must be recovered")]
+    KeyInvalidated,
     /// A biometric-protected key cannot be made on this phone (no secure
     /// lock screen or no enrolled biometric).
     #[error("biometric unlock is not available: {detail}")]
@@ -173,6 +176,8 @@ pub enum VaultError {
     /// The key needs user authentication that did not happen.
     #[error("the key needs user authentication")]
     Locked,
+    #[error("the wrapping key is permanently invalidated")]
+    Invalidated,
     /// The requested protection cannot be set up on this device.
     #[error("biometric unavailable: {detail}")]
     BiometricUnavailable { detail: String },
@@ -189,6 +194,7 @@ impl From<VaultError> for CoreError {
         match e {
             VaultError::Failed { detail } => Self::Vault { detail },
             VaultError::Locked => Self::KeyLocked,
+            VaultError::Invalidated => Self::KeyInvalidated,
             VaultError::BiometricUnavailable { detail } => Self::BiometricUnavailable { detail },
         }
     }

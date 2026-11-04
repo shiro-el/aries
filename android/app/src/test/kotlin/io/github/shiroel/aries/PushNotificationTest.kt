@@ -13,6 +13,7 @@ import io.github.shiroel.aries.ui.ThemeSettings
 import android.content.Intent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.robolectric.annotation.Config
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -20,6 +21,7 @@ import org.robolectric.Shadows.shadowOf
 
 /** What an opened Agent status push shows. */
 @RunWith(RobolectricTestRunner::class)
+@Config(application = FakeCoreApp::class)
 class PushNotificationTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val manager = context.getSystemService(NotificationManager::class.java)

@@ -195,13 +195,61 @@ fn details(c: &Change, lookup: &mut CoreLookup, agents: &[Box<dyn Agent>]) -> De
             ..
         }
     );
-    if !asking && c.status != AgentStatus::Done {
+    let permission = matches!(
+        c.status,
+        AgentStatus::Blocked {
+            reason: Some(BlockedReason::Permission),
+            ..
+        }
+    );
+    if !asking && !permission && c.status != AgentStatus::Done {
         return out;
     }
     let Some((agent, located)) = agents.iter().find_map(|a| a.locate(&facts).map(|l| (a, l)))
     else {
         return out;
     };
+    if permission {
+        // Agents can report Blocked just before drawing the menu. Give that
+        // render a short bounded window, checking the current turn/status on
+        // every read so a later request cannot inherit this notification.
+        for attempt in 0..20 {
+            let Ok(Some(current)) = lookup.get(&c.terminal) else {
+                break;
+            };
+            if current.turn != facts.turn || current.status != facts.status {
+                break;
+            }
+            if let Ok(screen) = lookup.screen(&c.terminal)
+                && let Some(p) =
+                    chat::permission::detect(agent.name(), &located.session, &current, &screen)
+                && let ChatBody::Tool {
+                    question: Some(q), ..
+                } = p.item.body
+            {
+                let q = &q.questions[0];
+                out.question = Some(PushQuestion {
+                    id: p.item.id,
+                    // Keep persistent approval scope visible beside short buttons.
+                    text: std::iter::once(q.text.clone())
+                        .chain(
+                            q.options
+                                .iter()
+                                .filter(|o| o.label == "Allow always")
+                                .filter_map(|o| o.description.clone()),
+                        )
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                    options: q.options.iter().map(|o| o.label.clone()).collect(),
+                });
+                break;
+            }
+            if attempt < 19 {
+                std::thread::sleep(Duration::from_millis(50));
+            }
+        }
+        return out;
+    }
     let Ok(Some(items)) = chat::answer::transcript(agent.as_ref(), &located) else {
         return out;
     };

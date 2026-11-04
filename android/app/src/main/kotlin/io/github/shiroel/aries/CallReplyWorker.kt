@@ -36,11 +36,16 @@ import kotlinx.coroutines.withTimeout
 class ChoiceReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != ACTION) return
-        val notice = intent.getStringExtra(EXTRA_NOTICE)?.let { CallNotice.fromJson(it) } ?: return
+        val notice = NotificationPayloads.open(context, intent.getStringExtra(EXTRA_NOTICE))?.let { CallNotice.fromJson(it) } ?: return
         val choice = intent.getIntExtra(EXTRA_CHOICE, -1)
         if (choice !in notice.call.choices.indices) return
         CallNotifications.post(context, notice, CallView.Sending(choice))
-        CallReplyWorker.enqueue(context, notice, choice)
+        try {
+            CallReplyWorker.enqueue(context, notice, choice)
+        } catch (_: Exception) {
+            CallNotifications.post(context, notice, CallView.Done(
+                AppLanguage.context(context).getString(R.string.notification_action_failed), openApp = true))
+        }
     }
 
     companion object {
@@ -60,7 +65,7 @@ class ChoiceReceiver : BroadcastReceiver() {
  */
 class CallReplyWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
-        val notice = inputData.getString(KEY_NOTICE)?.let { CallNotice.fromJson(it) } ?: return Result.failure()
+        val notice = NotificationPayloads.open(applicationContext, inputData.getString(KEY_NOTICE))?.let { CallNotice.fromJson(it) } ?: return Result.failure()
         val choice = inputData.getInt(KEY_CHOICE, -1)
         val core = (applicationContext as? HasCore)?.core ?: return Result.failure()
         val view = CallReplies.answer(applicationContext, core, notice, choice, online(applicationContext))
@@ -96,14 +101,14 @@ class CallReplyWorker(context: Context, params: WorkerParameters) : CoroutineWor
         fun enqueue(context: Context, notice: CallNotice, choice: Int) {
             val request = OneTimeWorkRequestBuilder<CallReplyWorker>()
                 .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
-                .setInputData(input(notice, choice))
+                .setInputData(input(context, notice, choice))
                 .build()
             WorkManager.getInstance(context)
                 .enqueueUniqueWork("call-reply:${notice.hostId}/${notice.call.id}", ExistingWorkPolicy.KEEP, request)
         }
 
-        internal fun input(notice: CallNotice, choice: Int) =
-            workDataOf(KEY_NOTICE to notice.toJson(), KEY_CHOICE to choice)
+        internal fun input(context: Context, notice: CallNotice, choice: Int) =
+            workDataOf(KEY_NOTICE to NotificationPayloads.seal(context, notice.toJson()), KEY_CHOICE to choice)
 
         fun online(context: Context): Boolean {
             val cm = context.getSystemService(ConnectivityManager::class.java) ?: return false
@@ -152,7 +157,7 @@ object CallReplies {
     private fun notSent(context: Context, e: CoreException, choice: Int): CallView.Done = when (e) {
         is CoreException.Unreachable ->
             CallView.Done(context.getString(R.string.call_notify_unreachable), e.detail, retry = choice)
-        is CoreException.KeyLocked, is CoreException.BiometricUnavailable ->
+        is CoreException.KeyLocked, is CoreException.KeyInvalidated, is CoreException.BiometricUnavailable ->
             CallView.Done(context.getString(R.string.call_notify_key_locked), openApp = true)
         is CoreException.AuthRejected, is CoreException.JumpAuthRejected ->
             CallView.Done(context.getString(R.string.call_notify_key_rejected), openApp = true)

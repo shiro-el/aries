@@ -28,6 +28,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -38,7 +39,12 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowNetworkCapabilities
 
 /** The app with a fake core, as the worker finds it. */
-class FakeCoreApp : Application(), HasCore {
+class FakeCoreApp : Application(), HasCore, HasNotificationVault {
+    override val notificationVault = object : io.github.shiroel.aries.core.KeyVault {
+        override fun seal(plaintext: ByteArray, protection: KeyProtection) =
+            plaintext.map { (it.toInt() xor 0x55).toByte() }.toByteArray()
+        override fun open(sealed: ByteArray, protection: KeyProtection) = seal(sealed, protection)
+    }
     override val core = FakeCore()
 }
 
@@ -83,9 +89,21 @@ class CallNotificationAnswerTest {
     /** Runs the worker as WorkManager would after [ChoiceReceiver]. */
     private fun runWorker(choice: Int): ListenableWorker.Result = runBlocking {
         TestListenableWorkerBuilder<CallReplyWorker>(context)
-            .setInputData(CallReplyWorker.input(notice(), choice))
+            .setInputData(CallReplyWorker.input(context, notice(), choice))
             .build()
             .doWork()
+    }
+
+    @Test
+    fun callBodiesAndChoicesAreSealedInWorkAndPendingIntents() {
+        showWithBackgroundKey()
+        val input = CallReplyWorker.input(context, notice(), 0).toByteArray().toString(Charsets.ISO_8859_1)
+        val extra = shadowOf(shown().actions.first().actionIntent).savedIntent
+            .getStringExtra(ChoiceReceiver.EXTRA_NOTICE)!!
+        for (secret in listOf("Tests pass.", "Merge")) {
+            assertFalse(input.contains(secret))
+            assertFalse(extra.contains(secret))
+        }
     }
 
     @Test
