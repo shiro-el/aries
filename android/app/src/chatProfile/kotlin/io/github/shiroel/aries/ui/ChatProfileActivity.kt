@@ -70,7 +70,7 @@ class ChatProfileActivity : ComponentActivity() {
         override suspend fun nextUpdate(): ChatUpdate {
             val snapshot = updates.receive()
             val upserts = snapshot.entries.filter { previous[it.id] != it }
-            val update = ChatUpdate(previous.isEmpty(), snapshot.entries.map { it.id }, upserts, snapshot.status, snapshot.cursor)
+            val update = ChatUpdate(usage = snapshot.usage, reset = previous.isEmpty(), order = snapshot.entries.map { it.id }, upserts = upserts, status = snapshot.status, cursor = snapshot.cursor)
             previous = snapshot.entries.associateBy { it.id }
             return update
         }

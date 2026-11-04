@@ -151,6 +151,7 @@ fn proc_start(pid: u32) -> Option<String> {
 /// line can resend the whole call with its output.
 #[derive(Default)]
 pub struct ClaudeInterpreter {
+    usage: super::usage::ClaudeUsage,
     tools: HashMap<String, ChatItem>,
     last_agent: Option<ChatItem>,
     /// Queue entries have no UUID; replay order gives each occurrence its own ID.
@@ -186,6 +187,7 @@ impl Interpreter for ClaudeInterpreter {
         if record["type"] == "queue-operation" {
             return self.queue_operation(&record);
         }
+        let usage = self.usage.record(&record);
         let items = match record["type"].as_str() {
             Some("user") => self.user(&record),
             Some("assistant") => self.assistant(&record),
@@ -222,6 +224,7 @@ impl Interpreter for ClaudeInterpreter {
                 Vec::new()
             };
         events.extend(items.into_iter().map(|item| ChatEvent::Item { item }));
+        events.extend(usage);
         events
     }
 }

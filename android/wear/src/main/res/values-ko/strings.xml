@@ -1,4 +1,22 @@
 <resources>
+    <!-- Watch Inbox -->
+    <string name="wear_inbox_title">Inbox</string>
+    <string name="wear_inbox_attention">응답 필요</string>
+    <string name="wear_inbox_agents">Agent</string>
+    <string name="wear_inbox_refresh">새로고침</string>
+    <string name="wear_inbox_refreshing">새로고침 요청 중…</string>
+    <string name="wear_inbox_requested">폰에 새로고침을 요청했어요</string>
+    <string name="wear_inbox_request">요청</string>
+    <string name="wear_inbox_summary">마지막 응답</string>
+    <string name="wear_inbox_no_request">대기 중인 요청 없음</string>
+    <string name="wear_inbox_no_summary">폰에서 Chat을 열어 응답을 동기화해 주세요</string>
+    <string name="wear_inbox_hidden">폰의 미리보기 설정에 따라 본문이 숨겨졌어요</string>
+    <string name="wear_inbox_answer">답하기</string>
+    <string name="wear_inbox_stop">중단</string>
+    <string name="wear_inbox_watch">지켜보기</string>
+    <string name="wear_inbox_back">뒤로</string>
+    <string name="wear_inbox_more">Agent %1$d개를 표시해요. 전체 목록은 폰에서 확인해 주세요.</string>
+
     <!-- Console Tile and complication types -->
     <string name="wear_complication_agent_description">%1$s · %2$s</string>
     <string name="wear_tile_waiting">ARIES · 대기 %1$d</string>

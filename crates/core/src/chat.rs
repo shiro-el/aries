@@ -283,6 +283,8 @@ pub struct ChatSnapshot {
     pub status: ChatStatus,
     /// Resume point of what `entries` covers.
     pub cursor: Option<String>,
+    #[uniffi(default = None)]
+    pub usage: Option<crate::AgentUsage>,
 }
 
 /// Changes since this watch's previous delivery. `order` is authoritative:
@@ -290,6 +292,8 @@ pub struct ChatSnapshot {
 /// Computing against the last delivery preserves changes across skipped publishes.
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct ChatUpdate {
+    #[uniffi(default = None)]
+    pub usage: Option<crate::AgentUsage>,
     pub reset: bool,
     pub order: Vec<String>,
     pub upserts: Vec<ChatEntry>,
@@ -300,6 +304,7 @@ pub struct ChatUpdate {
 /// Applies Chat lines to entries (upsert by id; `reset` clears).
 #[derive(Debug)]
 pub(crate) struct ChatModel {
+    usage: Option<aries_protocol::chat::AgentUsage>,
     entries: Vec<Arc<ChatEntry>>,
     /// The Beacon's items behind `entries`, same order (what the cache keeps).
     items: Vec<Arc<ChatItem>>,
@@ -320,6 +325,7 @@ pub(crate) type Images = Arc<std::sync::Mutex<HashMap<String, Arc<Vec<u8>>>>>;
 impl ChatModel {
     pub fn new(cursor: Option<String>) -> Self {
         Self {
+            usage: None,
             entries: Vec::new(),
             items: Vec::new(),
             positions: Vec::new(),
@@ -340,6 +346,7 @@ impl ChatModel {
     /// Shows a cached Chat (its images included) and resumes after its cursor.
     pub fn seed(&mut self, chat: CachedChat) {
         self.cursor = chat.cursor;
+        self.usage = chat.usage;
         for (i, item) in chat.items.into_iter().enumerate() {
             let position = chat.positions.get(i).copied().unwrap_or(i as u64);
             self.next_position = position;
@@ -368,6 +375,7 @@ impl ChatModel {
     fn take_changes(&mut self) -> CacheChanges {
         let mut changes = std::mem::take(&mut self.pending);
         changes.cursor = self.cursor.clone();
+        changes.usage = self.usage.clone();
         changes.baseline = self
             .positions
             .iter()
@@ -452,6 +460,7 @@ impl ChatModel {
 
     pub fn snapshot(&self) -> ChatSnapshot {
         ChatSnapshot {
+            usage: self.usage.clone().map(Into::into),
             entries: self.entries.iter().map(|e| e.as_ref().clone()).collect(),
             status: self.status,
             cursor: self.cursor.clone(),
@@ -460,6 +469,7 @@ impl ChatModel {
 
     fn shared_snapshot(&self) -> SharedSnapshot {
         SharedSnapshot {
+            usage: self.usage.clone().map(Into::into),
             generation: self.generation,
             entries: self.entries.clone(),
             status: self.status,
@@ -483,6 +493,7 @@ impl ChatModel {
     pub fn apply(&mut self, line: ChatLine) {
         match line.event {
             ChatEvent::Reset { .. } => {
+                self.usage = None;
                 self.generation = self.generation.wrapping_add(1);
                 self.entries.clear();
                 self.items.clear();
@@ -496,6 +507,10 @@ impl ChatModel {
                 self.changed = true;
                 self.cursor = None;
                 self.images().clear();
+            }
+            ChatEvent::Usage { usage } => {
+                self.changed |= self.usage.as_ref() != Some(&usage);
+                self.usage = Some(usage);
             }
             ChatEvent::Item { item } => self.upsert(item),
             ChatEvent::Remove { id } => {
@@ -844,6 +859,7 @@ const SILENCE: Duration = Duration::from_secs(45);
 /// safely because the published value still contains the complete current model.
 #[derive(Clone)]
 struct SharedSnapshot {
+    usage: Option<crate::AgentUsage>,
     generation: u64,
     entries: Vec<Arc<ChatEntry>>,
     status: ChatStatus,
@@ -853,6 +869,7 @@ struct SharedSnapshot {
 impl SharedSnapshot {
     fn snapshot(&self) -> ChatSnapshot {
         ChatSnapshot {
+            usage: self.usage.clone(),
             entries: self.entries.iter().map(|e| e.as_ref().clone()).collect(),
             status: self.status,
             cursor: self.cursor.clone(),
@@ -1166,6 +1183,7 @@ impl ChatWatch {
                 .map(|e| e.as_ref().clone())
                 .collect();
             let update = ChatUpdate {
+                usage: snapshot.usage.clone(),
                 reset,
                 order: snapshot.entries.iter().map(|e| e.id.clone()).collect(),
                 upserts,

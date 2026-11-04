@@ -1,0 +1,5 @@
+{"type":"assistant","uuid":"a","timestamp":"2026-11-04T10:00:00Z","message":{"model":"claude-fixture","content":[{"type":"text","text":"Done"}],"usage":{"input_tokens":1000,"cache_read_input_tokens":30000,"cache_creation_input_tokens":9000,"output_tokens":100}}}
+{"type":"result","timestamp":"2026-11-04T10:00:01Z","modelUsage":{"claude-fixture":{"contextWindow":200000,"inputTokens":900000,"outputTokens":90000}}}
+{"type":"rate_limit_event","timestamp":"2026-11-04T10:00:02Z","rate_limit_info":{"rateLimitType":"five_hour","utilization":0.4,"resetsAt":1793790000}}
+{"type":"rate_limit_event","timestamp":"2026-11-04T10:00:03Z","rate_limit_info":{"rateLimitType":"five_hour","resetsAt":1793790000}}
+{"type":"system","subtype":"compact_boundary","timestamp":"2026-11-04T10:01:00Z"}

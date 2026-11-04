@@ -608,7 +608,7 @@ class FakeCore : AriesCoreInterface {
         return object : ChatWatch(NoHandle) {
             override suspend fun nextUpdate(): io.github.shiroel.aries.core.ChatUpdate {
                 val snapshot = next()
-                return io.github.shiroel.aries.core.ChatUpdate(true, snapshot.entries.map { it.id }, snapshot.entries, snapshot.status, snapshot.cursor)
+                return io.github.shiroel.aries.core.ChatUpdate(usage = snapshot.usage, reset = true, order = snapshot.entries.map { it.id }, upserts = snapshot.entries, status = snapshot.status, cursor = snapshot.cursor)
             }
             override suspend fun next(): ChatSnapshot = chat.receive()
 

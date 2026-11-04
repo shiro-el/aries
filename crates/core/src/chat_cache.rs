@@ -65,6 +65,8 @@ CREATE TABLE IF NOT EXISTS removed_hosts (digest BLOB PRIMARY KEY) WITHOUT ROWID
 /// A cached Chat: the Beacon's items in order and the cursor after them.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct CachedChat {
+    #[serde(default)]
+    pub usage: Option<aries_protocol::chat::AgentUsage>,
     pub items: Vec<ChatItem>,
     pub cursor: Option<String>,
     #[serde(skip)]
@@ -74,6 +76,7 @@ pub(crate) struct CachedChat {
 /// Pending changes coalesce by ID, never by dropping an intermediate delta.
 #[derive(Default, Debug)]
 pub(crate) struct CacheChanges {
+    pub usage: Option<aries_protocol::chat::AgentUsage>,
     pub reset: bool,
     pub items: HashMap<String, Option<(u64, Arc<ChatItem>)>>,
     pub cursor: Option<String>,
@@ -89,6 +92,7 @@ impl CacheChanges {
         }
         self.items.extend(newer.items);
         self.cursor = newer.cursor;
+        self.usage = newer.usage;
         self.baseline = newer.baseline;
     }
 }
@@ -250,6 +254,7 @@ impl ChatCache {
                     reset: true,
                     items: cached.items.drain(..).enumerate().map(|(i, item)| (item.id.clone(), Some((i as u64, Arc::new(item))))).collect(),
                     cursor: cached.cursor.clone(),
+                    usage: cached.usage.clone(),
                     ..Default::default()
                 };
                 let updated: i64 = o.conn.query_row("SELECT updated FROM chats WHERE host=?1 AND chat=?2", params![host, chat], |r| r.get(0)).map_err(storage)?;
@@ -353,6 +358,7 @@ fn apply_changes(
                 .map(|(p, item)| (item.id.clone(), Some((*p, item.clone()))))
                 .collect(),
             cursor: changes.cursor.clone(),
+            usage: changes.usage.clone(),
             ..Default::default()
         };
         &recovered
@@ -367,6 +373,7 @@ fn apply_changes(
         .map_err(storage)?;
     }
     let metadata = CachedChat {
+        usage: changes.usage.clone(),
         items: vec![],
         cursor: changes.cursor.clone(),
         positions: vec![],
