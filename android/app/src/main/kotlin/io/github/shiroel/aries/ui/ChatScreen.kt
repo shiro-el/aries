@@ -995,7 +995,12 @@ class ChatModel(
         watch = null
     }
 
-    init { restoreOutbox() }
+    internal fun recoverReply(message: QueuedChatMessage) {
+        if (queuedMessages.none { it.id == message.id }) queuedMessages = queuedMessages + message
+        saveOutbox()
+    }
+
+    init { ChatReplyRecovery.register(core, AgentKey(host.id, terminal.address), this, ::restoreOutbox) }
 }
 
 sealed interface AnswerState {

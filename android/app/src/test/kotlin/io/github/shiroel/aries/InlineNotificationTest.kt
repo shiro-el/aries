@@ -33,6 +33,7 @@ import org.robolectric.shadows.ShadowNetworkCapabilities
 class InlineNotificationTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val manager = context.getSystemService(NotificationManager::class.java)
+    @org.junit.Before fun initializeWorkManager() { WorkManagerTestInitHelper.initializeTestWorkManager(context) }
     private var pushedAt = 0uL
     private fun status(status: AgentStatus = AgentStatus.Done, turn: ULong? = 7uL) =
         PushNotice("h1", "box", PushContent.Status("t1", "agent", null, true, status, ++pushedAt, turn, null, "All tests passed."))
@@ -302,6 +303,40 @@ class InlineNotificationTest {
         assertEquals("run tests", recovery.actions.single { !it.remoteInputs.isNullOrEmpty() }.remoteInputs.single().choices.single())
         assertFalse(recovery.publicVersion.extras.toString().contains("run tests"))
         assertEquals(PushTarget("h1", "t1"), PushTarget.from(shadowOf(recovery.contentIntent).savedIntent))
+    }
+
+    // Regression D98: opening the Agent while a shade reply is held must not lose
+    // failed text, overwrite the active draft, or automatically retry it after recreation.
+    @Test fun aFailedReplyAfterOpeningTheAgentBelongsToItsLiveAndRestoredOutbox() = runBlocking {
+        online()
+        val host = core.addHost("box", io.github.shiroel.aries.core.Endpoint.Ssh("box", 22u, "me"))
+        val terminal = io.github.shiroel.aries.core.TerminalInfo("t1", "Agent", "", emptyList(), null, "live", AgentStatus.Done)
+        val owner = io.github.shiroel.aries.ui.ChatModel(core, host, terminal)
+        owner.draft = "a different draft"
+        PushService.show(context, status())
+        val accepted = target()
+        val hold = CompletableDeferred<Unit>()
+        core.backgroundHold = hold
+        core.backgroundFailure = io.github.shiroel.aries.core.CoreException.Unreachable("connection lost")
+        val result = async(Dispatchers.Default) { work(accepted) }
+        withTimeout(5_000) {
+            while (text() != context.getString(R.string.chat_send_held)) delay(10)
+        }
+        NotificationGroups.viewing(context, PushTarget(host.id, "t1"))
+        assertTrue(manager.activeNotifications.isEmpty())
+        hold.complete(Unit)
+        withTimeout(5_000) {
+            while (!result.isCompleted) { shadowOf(Looper.getMainLooper()).idle(); delay(10) }
+        }
+        result.await()
+        assertEquals("a different draft", owner.draft)
+        assertEquals("run tests", owner.queuedMessages.single().draft)
+        assertEquals(io.github.shiroel.aries.ui.QueuedMessagePhase.Uncertain, owner.queuedMessages.single().phase)
+        owner.draft = "edited after failure"
+        val restored = io.github.shiroel.aries.ui.ChatModel(core, host, terminal)
+        assertEquals("edited after failure", restored.draft)
+        assertEquals("run tests", restored.queuedMessages.single().draft)
+        assertEquals(1, core.backgroundMessages.size)
     }
 
     @Test

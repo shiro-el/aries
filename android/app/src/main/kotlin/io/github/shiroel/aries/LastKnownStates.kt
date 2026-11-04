@@ -94,6 +94,7 @@ class LastKnownStateWorker(context: Context, private val params: WorkerParameter
     override suspend fun doWork(): Result {
         val core = (applicationContext as? HasCore)?.core ?: return Result.failure()
         LastKnownStates.refreshInBackground(core, LastKnownStates.hostId(params))
+        NotificationGroups.reconcile(applicationContext, core, core.lastKnownStates())
         HomeWidgets.update(applicationContext, core)
         return Result.success()
     }

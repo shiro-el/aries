@@ -10,6 +10,8 @@ import androidx.work.WorkerParameters
 import com.google.android.gms.wearable.Wearable
 import com.google.android.gms.wearable.PutDataRequest
 import io.github.shiroel.aries.core.PushContent
+import io.github.shiroel.aries.core.LastKnownState
+import io.github.shiroel.aries.core.AgentStatus
 import io.github.shiroel.aries.weardata.WatchProgress
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.tasks.await
@@ -26,6 +28,8 @@ internal object WatchProgressPhone {
 
     @Synchronized fun progress(context: Context, host: String, progress: PushContent.Progress) {
         val at = millis(progress.at)
+        val path = WatchProgress(host, progress.terminal, "", 0, 0, at).dataPath
+        if (at <= prefs(context).getLong("completed:$path", -1)) return
         val previous = all(context).find { it.hostId == host && it.terminal == progress.terminal }
         if (previous != null && (at < previous.atMs ||
             (at == previous.atMs && previous.cancelled && previous.hostId == host && previous.terminal == progress.terminal))) return
@@ -37,7 +41,21 @@ internal object WatchProgressPhone {
     @Synchronized fun completed(context: Context, host: String, terminal: String, at: ULong) {
         val previous = all(context).find { it.hostId == host && it.terminal == terminal } ?: return
         if (previous.hostId != host || previous.terminal != terminal || millis(at) < previous.atMs) return
+        prefs(context).edit().putLong("completed:${previous.dataPath}", millis(at)).commit()
         save(context, previous.copy(atMs = millis(at), cancelled = true))
+    }
+
+    @Synchronized fun reconcile(context: Context, states: List<LastKnownState>) {
+        val byHost = states.associateBy { it.hostId }
+        all(context).filterNot { it.cancelled }.forEach { progress ->
+            val state = byHost[progress.hostId]
+            val terminal = state?.agents?.find { it.address == progress.terminal }
+            if ((state != null && state.fetchedAtMs >= progress.atMs.toULong() &&
+                    (terminal == null || terminal.state != "live" || terminal.agentStatus != AgentStatus.Working)) ||
+                System.currentTimeMillis() - progress.atMs >= WatchProgress.MAX_AGE_MS) {
+                completed(context, progress.hostId, progress.terminal, (progress.atMs / 1000).toULong())
+            }
+        }
     }
 
     private fun save(context: Context, progress: WatchProgress) {
@@ -50,6 +68,17 @@ internal object WatchProgressPhone {
         }
         editor.remove("payload").putString("payload:${progress.dataPath}", Base64.encodeToString(bytes, Base64.NO_WRAP))
         if (editor.commit()) enqueue(context)
+    }
+
+    /** Drop acknowledged payloads, retaining a small replay watermark rather than a DataItem. */
+    @Synchronized fun acknowledged(context: Context, progress: WatchProgress) {
+        if (!progress.cancelled || all(context).none { it == progress }) return
+        val editor = prefs(context).edit().remove("payload:${progress.dataPath}")
+        val cutoff = System.currentTimeMillis() - 7 * 24 * 60 * 60_000L
+        prefs(context).all.forEach { (key, value) ->
+            if (key.startsWith("completed:") && value is Long && value < cutoff) editor.remove(key)
+        }
+        editor.commit()
     }
 
     fun enqueue(context: Context) {
@@ -65,20 +94,34 @@ internal object WatchProgressPhone {
 class WatchProgressWorker @JvmOverloads constructor(
     context: Context,
     params: WorkerParameters,
+    private val delete: suspend (String) -> Unit = { path ->
+        // This phone owns its items; never delete another paired phone's matching path.
+        val node = Wearable.getNodeClient(context).localNode.await().id
+        Wearable.getDataClient(context).deleteDataItems(android.net.Uri.Builder()
+            .scheme("wear").authority(node).path(path).build()).await()
+        Unit
+    },
     private val publish: suspend (PutDataRequest) -> Unit = { request ->
         Wearable.getDataClient(context).putDataItem(request).await()
         Unit
     },
 ) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
+        WatchProgressPhone.reconcile(applicationContext, emptyList())
         val progress = WatchProgressPhone.all(applicationContext)
+        if (progress.isEmpty()) return Result.success()
         return try {
             // GMS retains the DataItem while disconnected and delivers it when the watch returns.
-            progress.forEach { publish(it.toRequest()) }
-            // Older watches still subscribe to the single-record path.
-            progress.maxByOrNull { it.atMs }?.let { latest ->
-                publish(PutDataRequest.create(WatchProgress.DATA_PATH).setData(requireNotNull(latest.toRequest().data)).setUrgent())
+            progress.forEach {
+                publish(it.toRequest())
+                if (it.cancelled) delete(it.dataPath)
             }
+            // Older watches still subscribe to the single-record path.
+            val latest = progress.filterNot { it.cancelled }.maxByOrNull { it.atMs }
+            if (latest == null) delete(WatchProgress.DATA_PATH)
+            else publish(PutDataRequest.create(WatchProgress.DATA_PATH).setData(requireNotNull(latest.toRequest().data)).setUrgent())
+            // Only forget after both the per-Agent and legacy DataItems were cleaned up.
+            progress.filter { it.cancelled }.forEach { WatchProgressPhone.acknowledged(applicationContext, it) }
             Result.success()
         } catch (cancelled: CancellationException) {
             throw cancelled

@@ -71,6 +71,7 @@ class CallReplyWorker(context: Context, params: WorkerParameters) : CoroutineWor
         val core = (applicationContext as? HasCore)?.core ?: return Result.failure()
         val view = CallReplies.answer(applicationContext, core, notice, choice, online(applicationContext))
         CallNotifications.post(applicationContext, notice, view)
+        LastKnownStates.requestRefresh(applicationContext, notice.hostId)
         return Result.success()
     }
 

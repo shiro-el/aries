@@ -96,10 +96,20 @@ object InlineNotifications {
      * Never replace a newer push: if the original vanished, give the recovery its own tag.
      */
     internal fun failed(context: Context, target: InlineTarget, line: String, text: String? = null,
-        reply: Boolean = false) = synchronized(NotificationGroups) {
+        reply: Boolean = false, persistDraft: Boolean = true) = synchronized(NotificationGroups) {
+        if (persistDraft && text != null) {
+            try {
+                (context.applicationContext as? HasCore)?.core?.let { core ->
+                    io.github.shiroel.aries.ui.ChatReplyRecovery.recover(core,
+                        io.github.shiroel.aries.ui.AgentKey(target.hostId, target.terminal),
+                        io.github.shiroel.aries.ui.ChatReplyRecovery.message(target.generation, text, line, uncertain = false))
+                }
+            } catch (_: Exception) {
+                // An unreadable journal is never replaced. The private recovery card still keeps the text.
+            }
+        }
         val original = current(context, target)?.clone()?.apply { actions = null }
-        if (original == null && (text == null || context.getSystemService(android.app.NotificationManager::class.java)
-                .activeNotifications.none { it.id == target.hostId.hashCode() && it.tag == target.tag })) return@synchronized
+        if (original == null && text == null) return@synchronized
         val retry = target.copy(tag = if (original == null) "inline-recovery:${target.generation}" else target.tag,
             generation = UUID.randomUUID().toString())
         // recoverBuilder merges inherited extras over addExtras on build. Change the
