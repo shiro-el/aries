@@ -6,6 +6,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.test.core.app.ApplicationProvider
+import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.*
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.assertEquals
@@ -22,7 +24,9 @@ import java.io.File
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ChatDeliveryStatusTest {
     @get:Rule val compose = createComposeRule()
+    private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
     private val agent = TerminalInfo("t1", "claude", "", listOf("claude"), "/repo", "live", AgentStatus.Idle)
+    private fun str(id: Int) = context.getString(id)
 
     private fun open(core: FakeCore, live: Boolean = true): FakeConnection {
         core.terminals = listOf(agent)
@@ -70,7 +74,7 @@ class ChatDeliveryStatusTest {
         val connection = open(core)
         connection.sendFailWith = CoreException.Closed()
         send("try this instruction")
-        compose.onNodeWithText("Delivery unconfirmed · check the conversation before resending").assertExists()
+        compose.onNodeWithText(str(R.string.chat_queue_uncertain)).assertExists()
         compose.onNodeWithText("Retry").assertExists()
         screenshot("failed")
         compose.onNodeWithText("Retry").performClick()
