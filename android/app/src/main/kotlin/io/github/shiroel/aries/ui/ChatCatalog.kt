@@ -84,7 +84,7 @@ internal fun ChatCatalogControls(chat: ChatModel) {
         else emptyList()
     if (completing) {
         Text(stringResource(R.string.chat_commands_title), Modifier.padding(horizontal = 16.dp))
-        CatalogStatus(loading, failed)
+        CatalogStatus(loading, failed) { revision++ }
         if (!loading && !failed && matches.isEmpty()) Text(stringResource(R.string.chat_catalog_empty), Modifier.padding(horizontal = 16.dp))
         LazyColumn(Modifier.fillMaxWidth().heightIn(max = 180.dp)) {
             items(matches, key = { it.token }) { entry ->
@@ -114,7 +114,7 @@ internal fun ChatCatalogControls(chat: ChatModel) {
                     val searchLabel = stringResource(R.string.chat_skills_search)
                     OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().semantics { contentDescription = searchLabel },
                         label = { Text(searchLabel) }, singleLine = true)
-                    CatalogStatus(loading, failed)
+                    CatalogStatus(loading, failed) { revision++ }
                     val skills = catalog?.skills.orEmpty().filter { entry ->
                         listOf(entry.name, entry.description).any { it.contains(query.trim(), ignoreCase = true) }
                     }
@@ -136,9 +136,12 @@ internal fun ChatCatalogControls(chat: ChatModel) {
 }
 
 @Composable
-private fun CatalogStatus(loading: Boolean, failed: Boolean) {
+private fun CatalogStatus(loading: Boolean, failed: Boolean, onRetry: () -> Unit) {
     if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-    if (failed) Text(stringResource(R.string.chat_catalog_failed), color = MaterialTheme.colorScheme.error)
+    if (failed) Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(stringResource(R.string.chat_catalog_failed), Modifier.weight(1f), color = MaterialTheme.colorScheme.error)
+        TextButton(onClick = onRetry, enabled = !loading) { Text(stringResource(R.string.connect_retry_button)) }
+    }
 }
 
 @Composable

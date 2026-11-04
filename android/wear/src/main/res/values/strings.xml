@@ -64,6 +64,14 @@
     <string name="wear_code_idle">IDLE</string>
     <string name="wear_complication_agent">%1$s %2$s · %3$s</string>
 
+    <!-- Per-Host freshness -->
+    <string name="wear_age_hours">%1$d hr ago</string>
+    <string name="wear_age_days">%1$d days ago</string>
+    <string name="wear_age_hours_compact">%1$dh ago</string>
+    <string name="wear_age_days_compact">%1$dd ago</string>
+    <string name="wear_hosts_stale">%1$d Hosts stale</string>
+    <string name="wear_row_age">%1$s · %2$s</string>
+
     <!-- Companion state surfaces -->
     <string name="app_name" translatable="false">Aries</string>
     <string name="wear_waiting_label">Waiting</string>

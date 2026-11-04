@@ -1,6 +1,5 @@
 package io.github.shiroel.aries.ui
 
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -18,6 +17,7 @@ import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "h1200dp")
+@org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
 class ChatQuestionTest {
     @get:Rule val compose = createComposeRule()
     private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
@@ -33,12 +33,25 @@ class ChatQuestionTest {
         compose.setContent {
             val scope = rememberCoroutineScope()
             val model = remember { HostsModel(core, scope) }
-            MaterialTheme { AriesApp(model) }
+            val theme = remember { ThemeSettings.from(context).apply {
+                chooseMode(if (System.getenv("ARIES_QUESTION_DARK") == "1") ThemeMode.DARK else ThemeMode.LIGHT)
+            } }
+            AriesTheme(theme) { AriesApp(model) }
         }
         compose.onNodeWithText("home").performClick()
         compose.waitForIdle()
         compose.onNodeWithText("claude").performClick()
         compose.waitForIdle()
+    }
+
+    private fun screenshot(name: String, dialog: Boolean = false) {
+        System.getenv("ARIES_QUESTION_RENDER_DIR")?.let { directory ->
+            java.io.File(directory).mkdirs()
+            java.io.File(directory, "$name.png").outputStream().use {
+                val node = if (dialog) compose.onNode(isDialog()) else compose.onRoot()
+                node.captureToImage().asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+            }
+        }
     }
 
     @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
@@ -57,11 +70,44 @@ class ChatQuestionTest {
                 compose.onRoot().captureToImage().asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
             }
         }
+        screenshot("permission")
         compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Deny")).performClick()
         compose.waitForIdle()
         assertEquals("permission:current", core.answers.single().second)
         assertEquals(listOf(listOf(2u)), core.answers.single().third)
         assertTrue(core.connection!!.typed.isEmpty())
+    }
+
+    // Regression: a scroll mis-tap on Allow always must not send a persistent
+    // permission until explicitly confirmed, and cancellation must send nothing.
+    @Test fun onlyAlwaysAllowRequiresConfirmationAndCancelSendsNothing() {
+        val core = FakeCore()
+        open(core, AgentStatus.Blocked(BlockedReason.PERMISSION, null))
+        fun permission(id: String) = ChatEntry(id, null, ChatEntryBody.Question("permission", "Allow Write?",
+            listOf(ChatQuestionPart("Create /repo/file.txt?", null, false, listOf(
+                ChatQuestionOption("Allow", null), ChatQuestionOption("Allow always", "Allow all edits in /repo during this session"),
+                ChatQuestionOption("Deny", null)))), ChatToolStatus.RUNNING, null))
+        core.pushChat(ChatSnapshot(listOf(permission("permission:1")), ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        val always = compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Allow always"))
+        always.performClick()
+        compose.waitForIdle()
+        assertTrue(core.answers.isEmpty())
+        compose.onNode(isDialog()).assertExists()
+        screenshot("always-confirm", dialog = true)
+        compose.onNodeWithText(str(R.string.cancel_button)).performClick()
+        assertTrue(core.answers.isEmpty())
+        always.performClick()
+        compose.onNode(hasText(str(R.string.chat_permission_allow_always)) and hasAnyAncestor(isDialog())).performClick()
+        compose.waitForIdle()
+        assertEquals(listOf(listOf(1u)), core.answers.single().third)
+        core.pushChat(ChatSnapshot(listOf(permission("permission:2")), ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Allow")).performClick()
+        compose.waitForIdle()
+        assertEquals(listOf(listOf(0u)), core.answers.last().third)
+        assertEquals(2, core.answers.size)
+        compose.onNode(isDialog()).assertDoesNotExist()
     }
 
     @Test fun freeTextUsesTheQuestionApiAndCannotBeSentTwice() {
@@ -84,6 +130,71 @@ class ChatQuestionTest {
         compose.onNodeWithText(str(R.string.chat_question_send)).assertDoesNotExist()
         compose.onNodeWithText("보라색").assertExists()
         assertEquals(1, core.textAnswers.size)
+    }
+
+    // Regression: a successful key write can leave the same menu Blocked;
+    // the local receipt must eventually offer a Terminal escape without resending.
+    @Test fun anUnchangedQuestionAfterSendingOffersTerminalRecovery() {
+        val core = FakeCore()
+        open(core)
+        core.pushChat(ChatSnapshot(listOf(question("q1")), ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue")).performClick()
+        compose.waitForIdle()
+        screenshot("sent-waiting")
+        compose.mainClock.advanceTimeBy(4_000)
+        screenshot("sent-still-blocked")
+        compose.onNodeWithText(str(R.string.terminal_open_button)).assertExists()
+        assertEquals(1, core.answers.size)
+    }
+
+    // Regression: transcript and structure watches can arrive in either order;
+    // a fresh RUNNING menu must never send through the historical-message path.
+    @Test fun aFreshQuestionWaitsForBlockedAndKeepsDisabledChoicesWhileReconnecting() {
+        val core = FakeCore()
+        open(core, AgentStatus.Working)
+        val snapshot = ChatSnapshot(listOf(question("q1")), ChatStatus.LIVE, null)
+        core.pushChat(snapshot)
+        compose.waitForIdle()
+        val blue = compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue"))
+        blue.assertIsNotEnabled().performClick()
+        screenshot("live-pending")
+        assertTrue(core.connection!!.typed.isEmpty())
+        assertTrue(core.answers.isEmpty())
+        core.push(core.terminals.map { it.copy(agentStatus = AgentStatus.Blocked(BlockedReason.QUESTION, null)) })
+        compose.waitForIdle()
+        blue.assertIsEnabled()
+        core.pushChat(snapshot.copy(status = ChatStatus.RECONNECTING))
+        compose.waitForIdle()
+        blue.assertIsNotEnabled()
+        screenshot("reconnecting")
+        core.pushChat(snapshot)
+        compose.waitForIdle()
+        blue.assertIsEnabled().performClick()
+        compose.waitForIdle()
+        assertEquals(listOf(Triple("t1", "q1", listOf(listOf(1u)))), core.answers)
+        assertTrue(core.connection!!.typed.isEmpty())
+    }
+
+    // Regression: historical answers use terminal.send and may be Held before
+    // any bytes are written; the card must explain why it has not completed.
+    @Test fun aHeldHistoryAnswerExplainsTheWaitAndCannotBeSubmittedAgain() {
+        val core = FakeCore()
+        open(core, AgentStatus.Idle)
+        val hold = kotlinx.coroutines.CompletableDeferred<Unit>()
+        core.connection!!.sendHold = hold
+        core.pushChat(ChatSnapshot(listOf(question("q1")), ChatStatus.LIVE, null))
+        compose.waitForIdle()
+        val blue = compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue"))
+        blue.performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.chat_send_held)).assertExists()
+        screenshot("held")
+        blue.assertIsNotEnabled().performClick()
+        assertTrue(core.connection!!.typed.isEmpty())
+        hold.complete(Unit)
+        compose.waitForIdle()
+        assertEquals(listOf("t1" to "Blue"), core.connection!!.typed)
     }
 
     @Test fun queuedCodexRequestsAdvanceAfterTheFirstGetsAResult() {
@@ -149,6 +260,7 @@ class ChatQuestionTest {
         compose.onNode(hasText("Chat") and isSelected()).assertExists()
         compose.onNode(hasText("Calls") and isSelected()).assertExists()
         compose.onNodeWithText("Purple").assertExists()
+        screenshot("recorded-answer")
         compose.onNodeWithText(str(R.string.chat_question_send)).assertDoesNotExist()
         assertTrue(core.answers.isEmpty())
     }

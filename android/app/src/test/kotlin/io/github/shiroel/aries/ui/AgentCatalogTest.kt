@@ -3,6 +3,7 @@ package io.github.shiroel.aries.ui
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.*
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
@@ -15,6 +16,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "h1200dp")
@@ -78,6 +80,27 @@ class AgentCatalogTest {
         compose.onNodeWithText("/testing").assertExists()
         compose.onNodeWithText(str(R.string.chat_catalog_failed)).assertDoesNotExist()
         assertEquals(listOf(false, false), connection.catalogRequests)
+        assertTrue(connection.typed.isEmpty())
+    }
+
+    // Regression: a failed completion must recover immediately without closing the picker or waiting five minutes.
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun failedCompletionCanRetryInPlaceWithoutChangingTheDraft() {
+        open(fail = true)
+        val input = compose.onNodeWithContentDescription(str(R.string.chat_input_label))
+        input.performTextInput("/rev")
+        compose.onNodeWithText(str(R.string.chat_catalog_failed)).assertExists()
+        val screenshot = java.io.File("/tmp/aries-mvp-run/lanes/231-shots/catalog-retry.png")
+        screenshot.parentFile?.mkdirs()
+        screenshot.outputStream().use { out ->
+            compose.onRoot().captureToImage().asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+        }
+        compose.runOnIdle { connection.catalogFailure = null }
+        compose.onNodeWithText(str(R.string.connect_retry_button)).performClick()
+        compose.onNodeWithText("/review").assertExists()
+        input.assertTextEquals("/rev")
+        compose.onNodeWithText(str(R.string.chat_catalog_failed)).assertDoesNotExist()
         assertTrue(connection.typed.isEmpty())
     }
 

@@ -11,7 +11,7 @@ internal object WearNotificationBridge {
         // Rebuild on every post: recovered Sending/Done cards must not retain old Choices.
         val wearable = Notification.WearableExtender(notification)
             .clearActions()
-            // Keep Snooze on the phone; do not filter by a localized title (a Choice may match it).
+            // Keep Snooze and persistent permission grants on the phone. A Choice may share their localized title.
             .addActions(notification.actions.orEmpty().filterNot { it.extras.getBoolean(PHONE_ONLY) })
         // A recovered builder can merge its inherited extras back over an empty
         // extension. Encode on a fresh builder, then replace the extension on a
