@@ -75,7 +75,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         network = NetworkWatch(this) {
-            if (!app.appLock.locked) model?.networkChanged()
+            model?.networkChanged()
         }.also { it.start() }
     }
 

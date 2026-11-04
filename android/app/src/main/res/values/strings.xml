@@ -543,6 +543,7 @@
     <string name="agents_last_known_group">Last-known · %1$d</string>
     <string name="agents_last_seen">Last seen %1$s</string>
     <string name="agents_last_seen_unknown">Last seen: unknown</string>
+    <string name="agent_opening">Opening %1$s…</string>
     <string name="agents_title">Agents</string>
     <string name="agents_empty">No Agents are running on your Hosts.</string>
     <string name="agents_no_hosts">Add a Host first.</string>
