@@ -120,7 +120,7 @@ class TasksHomeTest {
         show(core)
         compose.onNodeWithTag("tasks-new-task").performClick()
         val inCard = hasAnyAncestor(hasTestTag("tasks-new-card"))
-        compose.onNode(hasText(context.getString(R.string.connect_host_reconnecting, "home")) and inCard).assertExists()
+        compose.onNode(hasText(context.getString(R.string.reconnecting)) and inCard).assertExists()
         compose.onNodeWithText(context.getString(R.string.agents_empty_hosts_button)).assertDoesNotExist()
         compose.runOnIdle { gate.complete(Unit) }
         compose.onNodeWithTag("tasks-new-prompt").performTextInput("Keep my draft")
@@ -129,7 +129,7 @@ class TasksHomeTest {
             val link = (model.screen as Screen.Agents).board.links.getValue("h1")
             link.lost(link.connection!!)
         }
-        compose.onNode(hasText(context.getString(R.string.connect_host_reconnecting, "home")) and inCard).assertExists()
+        compose.onNode(hasText(context.getString(R.string.reconnecting)) and inCard).assertExists()
         compose.runOnIdle { fake.failWith = CoreException.AuthRejected(); gate.complete(Unit) }
         compose.onNode(hasText(context.getString(R.string.connect_retry_button)) and inCard).performClick()
         compose.runOnIdle { fake.failWith = null }

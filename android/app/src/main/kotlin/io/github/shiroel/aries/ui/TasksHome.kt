@@ -239,13 +239,14 @@ private fun TasksRow(title: String, label: String, accent: Color, urgent: Boolea
 @Composable
 internal fun TasksHostConnection(host: Host, link: HostLink?, loading: Boolean = false,
     lastUpdatedMs: Long? = null, error: CoreException? = (link?.state as? LinkState.Down)?.error,
-    unavailable: Message? = null) {
+    unavailable: Message? = null, showHost: Boolean = true,
+    modifier: Modifier = Modifier.padding(horizontal = 16.dp)) {
     val connecting = loading || link?.state == LinkState.Reconnecting
     val problem = error?.let(::problemFor)
     val reason = unavailable?.let { messageText(it) } ?: problem?.let { messageText(it.body) }
-    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag("tasks-host-connection:${host.id}"),
+    Row(modifier.fillMaxWidth().testTag("tasks-host-connection:${host.id}"),
         verticalAlignment = Alignment.CenterVertically) {
-        val label = listOfNotNull(host.name,
+        val label = listOfNotNull(host.name.takeIf { showHost },
             stringResource(if (connecting) R.string.reconnecting else R.string.tasks_offline),
             lastUpdatedMs?.let { agentLastSeen(it) }).joinToString(" · ")
         Text(label, Modifier.weight(1f).semantics { reason?.let { stateDescription = it } },

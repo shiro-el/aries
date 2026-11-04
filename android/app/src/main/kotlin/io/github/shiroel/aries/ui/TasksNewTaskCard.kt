@@ -90,7 +90,7 @@ internal fun TasksNewTaskCard(model: HostsModel, board: AgentBoard) {
                         }
                     }
                 }
-                if (host != null && link?.state != LinkState.Up) TasksHostConnection(host, link)
+                if (host != null && link?.state != LinkState.Up) TasksHostConnection(host, link, showHost = false, modifier = Modifier)
                 if (task != null) {
                     OutlinedTextField(task.input, { task.input = it }, enabled = !task.form.busy && !task.sent,
                         placeholder = { Text(stringResource(R.string.tasks_prompt_hint)) }, minLines = 1, maxLines = 4,
