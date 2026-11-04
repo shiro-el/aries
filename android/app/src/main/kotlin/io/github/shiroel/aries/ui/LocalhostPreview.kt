@@ -72,7 +72,7 @@ internal fun rememberLocalhostPreview(link: HostLink?, output: String, address: 
 @Composable
 internal fun rememberChatLocalhostPreview(link: HostLink?, entries: List<ChatEntry>, address: String): LocalhostPreview {
     val preview = rememberLocalhostPreview(link, "", address)
-    val parsed = remember(link) { mutableMapOf<String, String>() }
+    val parsed = remember(preview) { mutableMapOf<String, String>() }
     val connection = link?.connection
     val latestEntries by rememberUpdatedState(entries)
     LaunchedEffect(preview, connection, address) {
@@ -240,6 +240,7 @@ private fun RestrictedPreviewWebView(origin: String, desktop: Boolean, modifier:
             currentView?.stopLoading()
         }
     }
+    // Native WebView drawing must stay below the preview title and close button.
     Box(modifier.clipToBounds().background(MaterialTheme.colorScheme.surfaceVariant)) {
         AndroidView(modifier = Modifier.fillMaxSize().clipToBounds(), factory = {
             WebView(it).apply {
