@@ -129,7 +129,7 @@ class ReconnectTest {
         compose.runOnIdle { model.openPushedAgent(home.id, agent.address) }
         compose.waitForIdle()
         assertTrue("another Host must not open a modal", model.prompt == null)
-        compose.runOnIdle { model.networkChanged(); model.foregrounded() }
+        compose.runOnIdle { model.networkChanged(); model.backgrounded(); model.foregrounded() }
         compose.mainClock.advanceTimeBy(35_000)
         compose.waitForIdle()
         failedHosts.forEach { host ->
@@ -168,7 +168,7 @@ class ReconnectTest {
         compose.runOnIdle { model.openPushedAgent(home.id, agent.address, openChat = true) }
         compose.waitForIdle()
         assertTrue(model.screen is Screen.Chat)
-        compose.runOnIdle { model.networkChanged(); model.foregrounded() }
+        compose.runOnIdle { model.networkChanged(); model.backgrounded(); model.foregrounded() }
         compose.waitForIdle()
         assertEquals("unlock cancellation must not prompt repeatedly", 1, core.chatsOpened.size)
         core.failChatWith = null

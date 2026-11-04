@@ -271,6 +271,8 @@ async fn a_denied_ssh_channel_preserves_its_permission_error() {
     let error = next_error().await;
     assert!(matches!(error, CoreError::Rpc { ref kind, .. } if kind == "permission_denied"));
     let paused = attempts.load(std::sync::atomic::Ordering::SeqCst);
+    watch.pause();
+    watch.resume(); // Foregrounding must not undo a permanent-error pause.
     tokio::time::sleep(std::time::Duration::from_millis(150)).await;
     assert_eq!(
         attempts.load(std::sync::atomic::Ordering::SeqCst),
