@@ -443,7 +443,7 @@ impl Ssh {
         command: &str,
         submitted: &mut bool,
     ) -> Result<Stream, CoreError> {
-        let channel = session
+        let mut channel = session
             .channel_open_session()
             .await
             .map_err(unreachable_err)?;
@@ -452,10 +452,29 @@ impl Ssh {
             .exec(true, command)
             .await
             .map_err(|e| crate::error::protocol(format!("SSH exec result is unknown: {e}")))?;
+        // russh's exec() only enqueues the request. Wait for the Host's
+        // acknowledgement under the same opening deadline. Some Hosts send
+        // stdout first; that also proves execution, and must be replayed.
+        let prefix = loop {
+            match channel.wait().await {
+                Some(russh::ChannelMsg::Success) => break Vec::new(),
+                Some(russh::ChannelMsg::Data { data }) => break data.to_vec(),
+                Some(russh::ChannelMsg::Failure) => {
+                    return Err(unreachable_err("SSH exec was refused"));
+                }
+                Some(russh::ChannelMsg::Close) | None => {
+                    return Err(crate::error::protocol(
+                        "SSH exec ended before acknowledgement; its result is unknown",
+                    ));
+                }
+                _ => {}
+            }
+        };
         sessions.push(session);
         let (reader, writer) = tokio::io::split(channel.into_stream());
+        use tokio::io::AsyncReadExt;
         Ok(Stream {
-            reader: Box::new(reader),
+            reader: Box::new(std::io::Cursor::new(prefix).chain(reader)),
             writer: Box::new(writer),
             // The jump sessions carry the Host's; keep them all alive.
             guard: Box::new(Mutex::new(sessions)),
