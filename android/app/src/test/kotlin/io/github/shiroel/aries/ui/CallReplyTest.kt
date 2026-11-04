@@ -167,7 +167,7 @@ class CallReplyTest {
         compose.waitForIdle()
         compose.onNodeWithText(str(R.string.call_answer_failed, "Merge")).assertExists()
         compose.onNodeWithText("Terminal t3 is gone").assertExists()
-        choice("Wait").assertDoesNotExist()
+        choice("Wait").assertExists()
     }
 
     @Test

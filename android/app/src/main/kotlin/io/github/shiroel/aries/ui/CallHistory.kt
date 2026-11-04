@@ -53,7 +53,7 @@ internal fun CallInboxPanel(
         else calls
     }
     val other = model.calls.filter { !it.answerable && it.call.answer == null }
-    val past = model.calls.filter { it.call.answer != null }
+    val past = model.calls.filter { !it.answerable && it.call.answer != null }
     LazyColumn(modifier.fillMaxWidth().testTag("call-inbox-list")) {
         items(model.problems.toList(), key = { "problem-${it.first}" }) { (hostId, detail) ->
             val host = model.problemHost(hostId) ?: return@items
