@@ -39,12 +39,15 @@ internal fun QrHostPairing(model: HostsModel, scanQr: (((String) -> Unit) -> Uni
     }
     val launcher = rememberLauncherForActivityResult(ScanContract()) { result -> result.contents?.let(scanned) }
     val prompt = stringResource(R.string.host_pair_scan_prompt)
+    val scan = rememberCameraAccess {
+        launcher.launch(ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE).setPrompt(prompt).setBeepEnabled(false).setOrientationLocked(false))
+    }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         TextButton(
             enabled = !busy, modifier = Modifier.testTag("host-pair-scan"),
             onClick = {
                 if (scanQr != null) scanQr(scanned)
-                else launcher.launch(ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE).setPrompt(prompt).setBeepEnabled(false).setOrientationLocked(false))
+                else scan()
             },
         ) { Text(stringResource(R.string.host_pair_scan_button)) }
         details?.let { offer ->
