@@ -1,5 +1,14 @@
 <resources>
     <!-- Watch answers and system voice replies -->
+    <string name="wear_detail_checking">Checking request…</string>
+    <string name="wear_detail_failed">Could not check this request. Try again or open your phone.</string>
+    <string name="wear_detail_try_again">Try again</string>
+    <string name="wear_answer_allow">Allow</string>
+    <string name="wear_answer_confirm_allow">Allow this request?</string>
+    <string name="wear_open_missing">This Agent is no longer available on your phone.</string>
+    <string name="wear_open_failed">Could not open Aries on your phone. Try again.</string>
+    <string name="wear_open_close">Back</string>
+
     <string name="wear_answer_hold_allow">Hold to allow</string>
     <string name="wear_answer_deny">Deny</string>
     <string name="wear_answer_phone">Confirm on phone</string>
@@ -38,12 +47,8 @@
     <string name="wear_inbox_requested">Refresh requested on phone</string>
     <string name="wear_inbox_request">REQUEST</string>
     <string name="wear_inbox_summary">RESPONSE</string>
-    <string name="wear_inbox_no_request">No pending request</string>
-    <string name="wear_inbox_no_summary">Open Chat on your phone to sync a response</string>
     <string name="wear_inbox_hidden">Details are hidden by your phone preview settings</string>
-    <string name="wear_inbox_answer">ANSWER</string>
     <string name="wear_inbox_stop">STOP</string>
-    <string name="wear_inbox_watch">WATCH</string>
     <string name="wear_inbox_open_phone">OPEN ON PHONE</string>
     <string name="wear_inbox_back">BACK</string>
     <string name="wear_inbox_more">Showing the first %1$d. Open your phone for all Agents.</string>

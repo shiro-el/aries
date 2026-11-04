@@ -12,6 +12,7 @@ mod calls;
 mod chat;
 mod chat_cache;
 mod chat_outbox;
+mod connected_chat;
 mod diagnostics;
 mod error;
 mod files;

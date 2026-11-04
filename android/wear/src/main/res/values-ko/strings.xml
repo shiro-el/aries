@@ -1,5 +1,14 @@
 <resources>
     <!-- Watch answers and system voice replies -->
+    <string name="wear_detail_checking">요청 확인 중…</string>
+    <string name="wear_detail_failed">요청을 확인하지 못했어요. 다시 시도하거나 폰에서 열어 주세요.</string>
+    <string name="wear_detail_try_again">다시 시도</string>
+    <string name="wear_answer_allow">허용</string>
+    <string name="wear_answer_confirm_allow">이 요청을 허용할까요?</string>
+    <string name="wear_open_missing">폰에서 이 Agent를 더 이상 찾을 수 없어요.</string>
+    <string name="wear_open_failed">폰에서 Aries를 열지 못했어요. 다시 시도해 주세요.</string>
+    <string name="wear_open_close">뒤로</string>
+
     <string name="wear_answer_hold_allow">길게 눌러 허용</string>
     <string name="wear_answer_deny">거부</string>
     <string name="wear_answer_phone">폰에서 확인</string>
@@ -38,12 +47,8 @@
     <string name="wear_inbox_requested">폰에 새로고침을 요청했어요</string>
     <string name="wear_inbox_request">요청</string>
     <string name="wear_inbox_summary">응답</string>
-    <string name="wear_inbox_no_request">대기 중인 요청 없음</string>
-    <string name="wear_inbox_no_summary">폰에서 Chat을 열어 응답을 동기화해 주세요</string>
     <string name="wear_inbox_hidden">폰의 미리보기 설정에 따라 본문이 숨겨졌어요</string>
-    <string name="wear_inbox_answer">답하기</string>
     <string name="wear_inbox_stop">중단</string>
-    <string name="wear_inbox_watch">지켜보기</string>
     <string name="wear_inbox_open_phone">폰에서 열기</string>
     <string name="wear_inbox_back">뒤로</string>
     <string name="wear_inbox_more">Agent %1$d개를 표시해요. 전체 목록은 폰에서 확인해 주세요.</string>

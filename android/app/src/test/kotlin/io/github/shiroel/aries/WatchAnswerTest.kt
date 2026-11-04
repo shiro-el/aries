@@ -121,15 +121,36 @@ class WatchAnswerTest {
         assertTrue(core.backgroundAnswers.isEmpty())
     }
 
-    @Test fun doneReplyUsesTheBackgroundSendPathButNeverQueuesAReplyAfterTheAgentStartsWorking() = runBlocking {
+    @Test fun doneReplyReusesItsCheckedConnectionAndNeverQueuesAfterTheAgentStartsWorking() = runBlocking {
         val core = FakeCore().apply { ensureKey() }
         val host = core.addHost("Host", Endpoint.Ssh("host", 22u, "me"))
         core.terminalsOf[host.id] = listOf(terminal(AgentStatus.Done))
         val row = WatchPhone.summary(core.hosts(), listOf(core.snapshot(host.id))).inbox.single()
         assertEquals(WatchResult.SENT, WatchActions.execute(context, core, WatchCommand(row, text = "Run the tests")))
+        assertEquals(listOf("remote/t7" to "Run the tests"), core.connection!!.typed)
+        assertTrue(core.connection!!.disconnected)
         core.terminalsOf[host.id] = listOf(terminal(AgentStatus.Working))
         assertEquals(WatchResult.CHANGED, WatchActions.execute(context, core, WatchCommand(row, text = "Stale reply")))
-        assertEquals(listOf(Triple(host.id, "remote/t7", "Run the tests")), core.backgroundMessages)
+        assertTrue(core.backgroundMessages.isEmpty())
+        assertEquals(2, core.connectAttempts.size)
+    }
+
+    // Catches listener destruction cancelling an already accepted slow answer;
+    // existing synchronous action tests and lint never destroy the listener mid-RPC.
+    @Test fun acceptedAnswerSurvivesListenerDestructionWhileWaitingForTheHost() = runBlocking {
+        val core = (context as FakeCoreApp).core.apply { ensureKey() }
+        val host = core.addHost("Host", Endpoint.Ssh("host", 22u, "me"))
+        core.terminalsOf[host.id] = listOf(terminal(AgentStatus.Blocked(BlockedReason.QUESTION, "Choose")))
+        val row = WatchPhone.summary(core.hosts(), listOf(core.snapshot(host.id))).inbox.single().copy(requestId = "q1")
+        val controller = org.robolectric.Robolectric.buildService(WatchPhoneService::class.java).create()
+        val response = controller.get().onRequest("watch", WatchCommand.ANSWER_PATH, WatchCommand(row, choice = 0).toBytes())!!
+        kotlinx.coroutines.withTimeout(5_000) { while (core.chatsOpened.isEmpty()) kotlinx.coroutines.delay(10) }
+        controller.destroy()
+        core.pushChat(ChatSnapshot(listOf(question("q1")), ChatStatus.LIVE, null))
+        assertEquals(WatchResult.SENT, kotlinx.coroutines.withTimeout(5_000) { response.await().let(WatchResult::fromBytes) })
+        assertEquals(1, core.connectAttempts.size)
+        assertTrue(core.connection!!.disconnected)
+        assertEquals(1, core.backgroundAnswers.size)
     }
 
 }
