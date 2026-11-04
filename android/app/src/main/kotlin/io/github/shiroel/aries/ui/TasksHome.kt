@@ -25,7 +25,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -256,8 +255,7 @@ internal fun TasksHostConnection(host: Host, link: HostLink?, loading: Boolean =
     unavailable: Message? = null, showHost: Boolean = true,
     modifier: Modifier = Modifier.padding(horizontal = 16.dp)) {
     val connecting = loading || link?.state == LinkState.Reconnecting
-    val problem = error?.let(::problemFor)
-    val reason = unavailable?.let { messageText(it) } ?: problem?.let { messageText(it.body) }
+    val reason = (unavailable ?: error?.let(::compactConnectionReason))?.let { messageText(it) }
     Row(modifier.fillMaxWidth().testTag("tasks-host-connection:${host.id}"),
         verticalAlignment = Alignment.CenterVertically) {
         val label = listOfNotNull(host.name.takeIf { showHost },
@@ -267,9 +265,14 @@ internal fun TasksHostConnection(host: Host, link: HostLink?, loading: Boolean =
                 else -> R.string.tasks_offline
             }),
             lastUpdatedMs?.let { agentLastSeen(it) }).joinToString(" · ")
-        Text(label, Modifier.weight(1f).semantics { reason?.let { stateDescription = it } },
-            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
+        Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
+            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
+            reason?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
         if (link != null) {
             TextButton(onClick = link::retryNow) { Text(stringResource(if (error is CoreException.KeyLocked) R.string.key_unlock_button else R.string.connect_retry_button)) }
             if (error != null) IconButton(onClick = { link.settings(error) }) {

@@ -44,4 +44,21 @@ class ThreadToolGroupsTest {
         assertEquals(listOf("5", "6"), group.modifiedFiles.values.map { it.id })
         assertEquals(7, group.entries.size)
     }
+    // D84: failed/running edits (even with a diff) must not claim a successful modification.
+    @Test fun modifiedFilesOnlyIncludeSuccessfulEditsAcrossStreamingUpdates() {
+        fun edit(id: String, status: ChatToolStatus) = ChatEntry(id, null,
+            ChatEntryBody.Tool("Edit", "$id.kt", "{}", status, null,
+                diff = io.github.shiroel.aries.core.ChatDiff("$id.kt", emptyList(), false),
+                details = ChatToolDetails(cwd = "/repo", path = "$id.kt")))
+        val grouping = ThreadToolGrouping()
+        fun update(entries: List<ChatEntry>) = grouping.update(
+            ChatTranscript(mutableStateOf(entries), mutableStateOf(emptyMap())).contents).single()
+        val failed = edit("failed", ChatToolStatus.FAILED)
+        val running = edit("running", ChatToolStatus.RUNNING)
+        val done = edit("done", ChatToolStatus.DONE)
+        assertEquals(listOf("/repo/done.kt"), update(listOf(failed, running, done)).modifiedFiles.keys.toList())
+        assertEquals(listOf("/repo/running.kt", "/repo/done.kt"),
+            update(listOf(failed, edit("running", ChatToolStatus.DONE), done)).modifiedFiles.keys.toList())
+    }
+
 }

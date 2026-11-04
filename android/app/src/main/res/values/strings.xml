@@ -660,6 +660,8 @@
     <string name="thread_urgent_call">Urgent Call</string>
 
     <string name="thread_tools_summary">%1$s · %2$s</string>
+    <string name="thread_tools_more_files">+%1$d</string>
+    <string name="thread_tools_more_files_label">Show all modified files (%1$d more)</string>
     <string name="thread_tools_separator">", "</string>
     <string name="thread_tool_running">%1$s · %2$s</string>
     <string name="thread_waiting_single">Needs you · %1$s ›</string>
@@ -1098,12 +1100,17 @@
     <string name="connect_action_needed">Automatic retries paused. Check Host settings, then try again.</string>
     <string name="connect_permission_denied">The Host denied access: %1$s</string>
     <string name="connect_failed_title">Could not connect</string>
+    <string name="connect_auth_rejected_short">SSH key rejected</string>
+    <string name="connect_jump_auth_rejected_short">Jump host SSH key rejected</string>
+    <string name="connect_protocol_short">Unreadable Host response</string>
     <string name="connect_auth_rejected">The Host did not accept this phone\'s SSH key. Add the public key to ~/.ssh/authorized_keys on the Host.</string>
     <string name="connect_no_key">Create an SSH key first.</string>
     <string name="connect_unreachable">Could not reach the Host: %1$s</string>
     <string name="connect_protocol">The Host did not speak the herdr-core protocol: %1$s</string>
     <string name="connect_other">%1$s</string>
     <string name="error_failed_title">Could not complete the action</string>
+    <string name="error_no_agent">There is no Agent in this Terminal. Choose another destination for this message.</string>
+    <string name="error_status_mismatch">The Agent\'s status changed before sending. Check its latest status, then retry.</string>
     <string name="error_retry">The action failed. Retry, or reconnect to the Host if this continues.</string>
     <string name="error_permission">Access was denied. Check permissions on the Host, then retry.</string>
     <string name="error_missing">This item is no longer available. Refresh the list and choose it again.</string>

@@ -660,6 +660,8 @@
     <string name="thread_urgent_call">긴급 Call</string>
 
     <string name="thread_tools_summary">%1$s · %2$s</string>
+    <string name="thread_tools_more_files">+%1$d</string>
+    <string name="thread_tools_more_files_label">수정한 파일 %1$d개 더 보기</string>
     <string name="thread_tools_separator">", "</string>
     <string name="thread_tool_running">%1$s · %2$s</string>
     <string name="thread_waiting_single">확인 필요 · %1$s ›</string>
@@ -1095,12 +1097,17 @@
     <string name="connect_action_needed">자동 재시도를 멈췄어요. Host 설정을 확인한 뒤 다시 시도해 주세요.</string>
     <string name="connect_permission_denied">Host가 접근을 거부했어요: %1$s</string>
     <string name="connect_failed_title">연결할 수 없음</string>
+    <string name="connect_auth_rejected_short">SSH 키가 거부됐어요</string>
+    <string name="connect_jump_auth_rejected_short">경유 Host의 SSH 키가 거부됐어요</string>
+    <string name="connect_protocol_short">Host 응답을 읽을 수 없어요</string>
     <string name="connect_auth_rejected">Host가 이 휴대폰의 SSH 키를 거부했어요. Host의 ~/.ssh/authorized_keys에 공개 키를 추가해 주세요.</string>
     <string name="connect_no_key">먼저 SSH 키를 만들어 주세요.</string>
     <string name="connect_unreachable">Host에 연결할 수 없어요: %1$s</string>
     <string name="connect_protocol">Host가 herdr-core 프로토콜로 응답하지 않았어요: %1$s</string>
     <string name="connect_other">%1$s</string>
     <string name="error_failed_title">작업을 마치지 못했어요</string>
+    <string name="error_no_agent">이 Terminal에 Agent가 없어요. 메시지를 보낼 다른 대상을 선택하세요.</string>
+    <string name="error_status_mismatch">메시지를 보내기 전에 Agent 상태가 바뀌었어요. 최신 상태를 확인한 뒤 다시 시도하세요.</string>
     <string name="error_retry">작업을 마치지 못했어요. 다시 시도하고, 계속되면 Host에 다시 연결해 주세요.</string>
     <string name="error_permission">접근 권한이 없어요. Host의 권한을 확인한 뒤 다시 시도해 주세요.</string>
     <string name="error_missing">더 이상 사용할 수 없는 항목이에요. 목록을 새로고침한 뒤 다시 선택해 주세요.</string>

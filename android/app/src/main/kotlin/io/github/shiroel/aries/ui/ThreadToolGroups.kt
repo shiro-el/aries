@@ -2,6 +2,7 @@ package io.github.shiroel.aries.ui
 
 import io.github.shiroel.aries.core.ChatEntry
 import io.github.shiroel.aries.core.ChatEntryBody
+import io.github.shiroel.aries.core.ChatToolStatus
 
 internal data class ThreadToolGroup(val entries: List<ChatEntry>, val key: String = "thread-tools:${entries.first().id}") {
     val tools: List<ChatEntry> = entries.filter { it.body is ChatEntryBody.Tool }
@@ -25,7 +26,7 @@ internal data class ThreadToolGroup(val entries: List<ChatEntry>, val key: Strin
     val modifiedFiles: Map<String, ChatEntry> = buildMap {
         this@ThreadToolGroup.tools.forEach { entry ->
             val tool = entry.body as ChatEntryBody.Tool
-            if (tool.diff != null || tool.name.lowercase(java.util.Locale.ROOT) in setOf("edit", "write", "multiedit", "write_file", "apply_patch")) {
+            if (tool.status == ChatToolStatus.DONE && (tool.diff != null || tool.name.lowercase(java.util.Locale.ROOT) in setOf("edit", "write", "multiedit", "write_file", "apply_patch"))) {
                 tool.filePath()?.let { put(it, entry) }
             }
         }
