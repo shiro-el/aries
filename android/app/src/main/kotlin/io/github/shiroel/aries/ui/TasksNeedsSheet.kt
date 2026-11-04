@@ -87,7 +87,7 @@ internal fun TasksNeedsSheet(model: HostsModel, board: AgentBoard, queue: TasksN
                         if (entry.call.terminal != null) TextButton(onClick = {
                             onDismiss()
                             model.openPushedAgent(entry.host.id, entry.call.terminal!!, openChat = true)
-                        }) { Text(stringResource(R.string.call_open_chat)) }
+                        }) { Text(stringResource(R.string.tasks_open_task)) }
                     }
                     is TaskNeed.Agent -> TasksQuestion(model, board, current, queue, onAnswered = { queue.resolve(current.key) }, onDismiss = onDismiss)
                 }
@@ -138,7 +138,7 @@ private fun TasksQuestion(model: HostsModel, board: AgentBoard, need: TaskNeed.A
         link?.state == LinkState.Reconnecting -> Text(stringResource(R.string.tasks_reconnecting), Modifier.padding(16.dp))
         !entry.live -> Text(stringResource(R.string.tasks_offline), Modifier.padding(16.dp))
         entry.terminal.agentStatus is AgentStatus.Error -> {
-            Text(stringResource(R.string.agents_waiting_error), Modifier.padding(16.dp))
+            Text(stringResource(R.string.tasks_needs_error), Modifier.padding(16.dp))
             statusMessage(entry.terminal.agentStatus)?.takeIf { it.isNotBlank() }?.let {
                 Text(it, Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.error)
             }
@@ -150,6 +150,6 @@ private fun TasksQuestion(model: HostsModel, board: AgentBoard, need: TaskNeed.A
         }
     }
     TextButton(onClick = { onDismiss(); model.openAgent(board, entry, openChat = true) }, enabled = entry.live) {
-        Text(stringResource(R.string.call_open_chat))
+        Text(stringResource(R.string.tasks_open_task))
     }
 }

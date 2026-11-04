@@ -35,6 +35,14 @@ import kotlinx.coroutines.launch
 internal val LocalThreadChat = staticCompositionLocalOf<HostsModel?> { null }
 
 internal object ThreadScreens : LayoutScreens() {
+    override val newTaskTitle = R.string.new_task_conversation_title
+    override val messageInputLabel = R.string.chat_message_input_label
+    override val messageReceivedLabel = R.string.chat_message_received
+    override val messageQueuedLabel = R.string.chat_message_queued
+    override val startTaskLabel = R.string.thread_start_conversation
+    override val openTaskLabel = R.string.new_task_open_conversation
+    override val defaultViewLabel = R.string.settings_conversation_view
+    override val chatViewLabel = R.string.thread_view_conversation
     override val usesListPane = false
     @Composable override fun Shell(model: HostsModel, content: @Composable () -> Unit) = ThreadShell(model, content)
     @Composable override fun Header(model: HostsModel, screen: Screen) = ThreadSecondaryHeader(model, screen)
@@ -149,7 +157,7 @@ private fun ThreadUserRow(row: ChatTranscriptRow, chat: ChatModel, latest: Boole
         chat.snapshot?.entries?.find { it.id == row.entryId }?.body as? ChatEntryBody.User
     }
     ThreadUserBubble(top, bottom, delivery = if (bottom && (latest || user?.queued == true)) ({
-        Text(stringResource(if (user?.queued == true) R.string.chat_queue_agent else R.string.chat_delivery_received),
+        Text(stringResource(if (user?.queued == true) LocalLayoutScreens.current.messageQueuedLabel else LocalLayoutScreens.current.messageReceivedLabel),
             style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }) else null) {
         when (content) {

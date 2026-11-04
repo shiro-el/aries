@@ -112,7 +112,7 @@ class TerminalScrollZoomCopyTest {
         // The core answers with the older lines.
         view.push(frame(listOf(listOf(run(0, "older output"))), scrolled = back.toInt()))
         compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.terminal_scrolled_back, back.toInt())).assertExists()
+        compose.onNodeWithText(context.resources.getQuantityString(R.plurals.terminal_scrolled_back, back.toInt(), back.toInt())).assertExists()
 
         val beforeLatest = view.scrolls.size
         compose.onNodeWithContentDescription(str(R.string.terminal_back_to_live)).performClick()

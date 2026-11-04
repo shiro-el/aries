@@ -135,7 +135,7 @@ fun SettingsScreen(
                 }
             }
             item {
-                SettingsField(R.string.settings_agent_view) {
+                SettingsField(LocalLayoutScreens.current.defaultViewLabel) {
                     AgentViewToggle(model.agentView, model::setDefaultAgentView)
                 }
             }
@@ -217,6 +217,11 @@ private fun LayoutSetting(model: HostsModel, settings: ThemeSettings) {
             }
         }
     } else ConsoleSegments(AppLayout.entries, settings.layout, choose, label = label)
+    Text(stringResource(when (settings.layout) {
+        AppLayout.CONSOLE -> R.string.layout_console_description
+        AppLayout.THREAD -> R.string.layout_thread_description
+        AppLayout.TASKS -> R.string.layout_tasks_description
+    }), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 /** Host configuration stays reachable even when a herdr-core Browse connection fails. */

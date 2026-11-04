@@ -39,6 +39,14 @@ private object ConsoleScreens : LayoutScreens()
 
 /** Console defaults are reusable individually, without duplicating model or navigation logic. */
 internal open class LayoutScreens {
+    open val messageInputLabel = R.string.chat_input_label
+    open val messageReceivedLabel = R.string.chat_delivery_received
+    open val messageQueuedLabel = R.string.chat_queue_agent
+    open val startTaskLabel = R.string.new_task_start
+    open val newTaskTitle = R.string.new_task_title
+    open val openTaskLabel = R.string.new_task_open_chat
+    open val defaultViewLabel = R.string.settings_agent_view
+    open val chatViewLabel = R.string.agent_view_chat
     open val usesListPane: Boolean = true
     @Composable open fun Shell(model: HostsModel, content: @Composable () -> Unit) = ConsoleShell(model, content)
 

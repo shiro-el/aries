@@ -70,13 +70,9 @@ internal fun CompactHostFailure(link: HostLink, error: CoreException, stopped: B
     val problem = problemFor(error)
     val explanation = if (error is CoreException.HostKeyChanged ||
         error is CoreException.JumpHostKeyChanged) problem.title else problem.body
-    val reason = if (stopped) when (error) {
-        is CoreException.Protocol -> error.detail
-        is CoreException.Rpc -> error.detail
-        else -> stringResource(explanation.res, *explanation.args.toTypedArray())
-    } else stringResource(explanation.res, *explanation.args.toTypedArray())
+    val reason = stringResource(explanation.res, *explanation.args.toTypedArray())
     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-        val label = if (stopped) stringResource(R.string.agents_watch_stopped, link.host.name, reason)
+        val label = if (stopped) stringResource(R.string.agents_watch_stopped, link.host.name)
             else stringResource(R.string.agents_host_offline, link.host.name)
         Text(label, Modifier.weight(1f).semantics { if (!stopped) stateDescription = reason },
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

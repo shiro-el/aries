@@ -60,7 +60,7 @@ class AdaptiveLayoutTest {
         compose.runOnIdle { width = 411.dp }
         compose.onNodeWithTag("host-terminal:h1:t1").assertDoesNotExist()
         compose.onNodeWithTag("terminal-composer").assertTextEquals("unsent\n한국어 draft")
-        compose.onNodeWithText(context.getString(R.string.terminal_scrolled_back, 42)).assertExists()
+        compose.onNodeWithText(context.resources.getQuantityString(R.plurals.terminal_scrolled_back, 42, 42)).assertExists()
         compose.runOnIdle { width = 900.dp; height = 360.dp }
         compose.onNodeWithTag("host-terminal:h1:t1").assertDoesNotExist()
         compose.onNodeWithTag("terminal-composer").assertTextEquals("unsent\n한국어 draft")
@@ -68,7 +68,7 @@ class AdaptiveLayoutTest {
         compose.onNodeWithTag("host-terminal:h1:t1").assertIsSelected()
         compose.onNodeWithTag("terminal-composer").assertTextEquals("unsent\n한국어 draft")
         view.push(TerminalUpdate.Screen(ScreenFrame(80u, 24u, true, emptyList(), null, null, 43u, 501u)))
-        compose.onNodeWithText(context.getString(R.string.terminal_scrolled_back, 43)).assertExists()
+        compose.onNodeWithText(context.resources.getQuantityString(R.plurals.terminal_scrolled_back, 43, 43)).assertExists()
         compose.runOnIdle {
             assertSame(terminal, model.screen)
             assertEquals(listOf("h1"), core.connectAttempts)

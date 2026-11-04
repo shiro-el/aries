@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -64,7 +65,7 @@ fun DiffView(diff: ChatDiff, expanded: Boolean) {
         )
         if (total > limit) {
             Text(
-                stringResource(R.string.chat_diff_more, total - limit),
+                pluralStringResource(R.plurals.chat_diff_more, total - limit, total - limit),
                 style = MaterialTheme.typography.labelSmall,
                 color = header,
             )

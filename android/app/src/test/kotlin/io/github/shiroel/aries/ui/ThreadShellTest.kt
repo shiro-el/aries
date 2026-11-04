@@ -56,9 +56,9 @@ class ThreadShellTest {
         core.watchFailures["h1"] = CoreException.Protocol("List subscription refused")
         show()
         compose.onNodeWithText(context.getString(R.string.thread_home_empty_title)).assertDoesNotExist()
-        compose.onNodeWithText("List subscription refused", substring = true).assertIsDisplayed()
+        compose.onNodeWithText(context.getString(R.string.agents_watch_stopped, "Development"), substring = true).assertIsDisplayed()
         compose.onNodeWithTag("console-menu").performClick()
-        compose.onNode(hasText("List subscription refused", substring = true) and
+        compose.onNode(hasText(context.getString(R.string.agents_watch_stopped, "Development"), substring = true) and
             hasAnyAncestor(hasTestTag("thread-drawer"))).assertIsDisplayed()
         val firstList = CompletableDeferred<Unit>()
         compose.runOnIdle {
@@ -80,7 +80,7 @@ class ThreadShellTest {
         compose.onNodeWithTag("thread-hosts").performClick()
         compose.onNodeWithTag("console-back").performClick()
         compose.runOnIdle { core.failTerminalWatch("h1", CoreException.Protocol("List stream interrupted")) }
-        compose.onNodeWithText("List stream interrupted", substring = true).assertIsDisplayed()
+        compose.onNodeWithText(context.getString(R.string.agents_watch_stopped, "Development"), substring = true).assertIsDisplayed()
         compose.onNodeWithText(context.getString(R.string.connect_retry_button)).performClick()
         compose.onNodeWithText(context.getString(R.string.thread_home_empty_title)).assertIsDisplayed()
     }
@@ -105,7 +105,7 @@ class ThreadShellTest {
         }
         compose.waitUntil { core.connection!!.typed.isNotEmpty() }
         compose.runOnIdle { assertEquals(listOf("t101" to "Send after returning"), core.connection!!.typed) }
-        compose.onNodeWithContentDescription(context.getString(R.string.chat_input_label)).assertExists()
+        compose.onNodeWithContentDescription(context.getString(R.string.chat_message_input_label)).assertExists()
     }
 
     // D64: a Host selected from the inline composer must return a visible editable draft after connecting.

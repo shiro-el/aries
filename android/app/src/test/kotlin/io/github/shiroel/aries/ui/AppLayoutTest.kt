@@ -71,7 +71,7 @@ class AppLayoutTest {
                 assertFalse("Settings must keep the Chat stream", core.chatStopped)
                 assertEquals(listOf("h1" to "t1"), core.chatsOpened)
             }
-            compose.onNodeWithContentDescription(context.getString(R.string.chat_input_label)).assertTextEquals("keep my draft")
+            compose.onNodeWithContentDescription(context.getString(if (layout == AppLayout.CONSOLE) R.string.chat_input_label else R.string.chat_message_input_label)).assertTextEquals("keep my draft")
         }
     }
 }

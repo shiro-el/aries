@@ -202,8 +202,7 @@ private fun RelayField(model: PushModel) {
         label = { Text(stringResource(R.string.push_relay_label)) },
         placeholder = { Text(stringResource(R.string.push_relay_placeholder)) },
         singleLine = true,
-        isError = model.relayDraft.isBlank(),
-        supportingText = if (model.relayDraft.isBlank()) ({ Text(stringResource(R.string.push_relay_placeholder)) }) else null,
+        supportingText = if (model.relayDraft.isBlank()) ({ Text(stringResource(R.string.push_relay_required)) }) else null,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false),
     )
 }

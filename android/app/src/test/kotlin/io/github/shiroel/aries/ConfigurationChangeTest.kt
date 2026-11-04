@@ -113,7 +113,7 @@ class ConfigurationChangeTest {
             val connection = app.fake.connection!!
             val view = connection.views.single()
             view.push(TerminalUpdate.Screen(ScreenFrame(80u, 24u, true, emptyList(), null, null, 42u, 500u)))
-            compose.onNodeWithText(app.getString(R.string.terminal_scrolled_back, 42)).assertExists()
+            compose.onNodeWithText(app.resources.getQuantityString(R.plurals.terminal_scrolled_back, 42, 42)).assertExists()
             compose.onNodeWithContentDescription(app.getString(R.string.terminal_compose_button)).performClick()
             compose.onNodeWithTag("terminal-composer").performTextReplacement("unsent\n한국어 draft")
 
@@ -124,11 +124,11 @@ class ConfigurationChangeTest {
             assertSame(connection, app.fake.connection)
             assertFalse(connection.disconnected)
             assertFalse(view.detached)
-            compose.onNodeWithText(app.getString(R.string.terminal_scrolled_back, 42)).assertExists()
+            compose.onNodeWithText(app.resources.getQuantityString(R.plurals.terminal_scrolled_back, 42, 42)).assertExists()
             compose.onNodeWithTag("terminal-composer").assertTextEquals("unsent\n한국어 draft")
             // A live stream still works after recreation; keeping a frozen old screen is insufficient.
             view.push(TerminalUpdate.Screen(ScreenFrame(80u, 24u, true, emptyList(), null, null, 43u, 501u)))
-            compose.onNodeWithText(app.getString(R.string.terminal_scrolled_back, 43)).assertExists()
+            compose.onNodeWithText(app.resources.getQuantityString(R.plurals.terminal_scrolled_back, 43, 43)).assertExists()
             assertTrue(view.sent.isEmpty())
         } finally {
             activity.pause().stop().destroy()

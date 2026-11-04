@@ -49,11 +49,11 @@ class ThreadChatStatusComposerTest {
         val core = FakeCore()
         open(core)
         compose.runOnIdle { core.rememberInput("h1", "t1", "Previous instruction") }
-        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).performTextInput("Keep this draft")
+        compose.onNodeWithContentDescription(str(R.string.chat_message_input_label)).performTextInput("Keep this draft")
         compose.onNodeWithContentDescription(str(R.string.chat_input_tools_button)).performClick()
         compose.onNode(hasText(str(R.string.input_history_title)) or hasContentDescription(str(R.string.input_history_title))).performClick()
         compose.onNodeWithText("Previous instruction").performClick()
-        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextContains("Keep this draft\n\nPrevious instruction")
+        compose.onNodeWithContentDescription(str(R.string.chat_message_input_label)).assertTextContains("Keep this draft\n\nPrevious instruction")
         compose.onNodeWithText(str(R.string.chat_input_tools_button)).assertDoesNotExist()
     }
 
@@ -62,25 +62,25 @@ class ThreadChatStatusComposerTest {
         val core = FakeCore()
         val connection = open(core)
         core.pushChat(ChatSnapshot(listOf(question), ChatStatus.LIVE, null))
-        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertIsDisplayed()
+        compose.onNodeWithContentDescription(str(R.string.chat_message_input_label)).assertIsDisplayed()
         compose.onNodeWithContentDescription(str(R.string.chat_interrupt_confirm_button)).assertIsEnabled()
         compose.onNodeWithTag("thread-answer-panel").assertDoesNotExist()
 
         core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
-        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).performTextInput("Next instruction")
+        compose.onNodeWithContentDescription(str(R.string.chat_message_input_label)).performTextInput("Next instruction")
         compose.onNodeWithContentDescription(str(R.string.chat_send_button)).performClick()
         compose.waitForIdle()
         assertEquals(listOf("t1" to "Next instruction"), connection.typed)
 
         core.push(listOf(agent))
         core.pushChat(ChatSnapshot(listOf(question), ChatStatus.RECONNECTING, null))
-        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertIsDisplayed()
+        compose.onNodeWithContentDescription(str(R.string.chat_message_input_label)).assertIsDisplayed()
         compose.onNodeWithContentDescription(str(R.string.chat_interrupt_confirm_button)).assertIsEnabled()
 
         core.pushChat(ChatSnapshot(listOf(question), ChatStatus.LIVE, null))
         core.push(listOf(agent.copy(agentStatus = AgentStatus.Blocked(BlockedReason.QUESTION, null))))
         compose.onNodeWithTag("thread-answer-panel").assertIsDisplayed()
-        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertDoesNotExist()
+        compose.onNodeWithContentDescription(str(R.string.chat_message_input_label)).assertDoesNotExist()
     }
 
     // D06: a failed/delayed ChatWatch must not gate an interrupt on the independent, live Host connection.

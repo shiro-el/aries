@@ -16,10 +16,10 @@
     <string name="wear_answer_send">보내기</string>
     <string name="wear_answer_discard">취소</string>
     <string name="wear_answer_sending">보내는 중…</string>
-    <string name="wear_answer_sent">보냈습니다</string>
-    <string name="wear_answer_changed">Host에서 변경되었습니다. 새로고침 후 답하세요.</string>
-    <string name="wear_answer_failed">보내지 못했습니다. 폰을 확인하세요.</string>
-    <string name="wear_answer_unknown">전송 결과를 알 수 없습니다. 다시 시도하기 전에 폰을 확인하세요.</string>
+    <string name="wear_answer_sent">보냈어요</string>
+    <string name="wear_answer_changed">Host에서 바뀌었어요. 새로고침한 뒤 답해 주세요.</string>
+    <string name="wear_answer_failed">보내지 못했어요. 폰을 확인해 주세요.</string>
+    <string name="wear_answer_unknown">전송 결과를 알 수 없어요. 다시 시도하기 전에 폰을 확인해 주세요.</string>
     <!-- Watch interrupt -->
     <string name="wear_interrupt_confirm_body">%1$s을(를) 중단할까요? 폰에서 아직 작업 중인지 확인해요.</string>
     <string name="wear_interrupt_confirm">중단 확인</string>
@@ -40,7 +40,7 @@
 
     <!-- Watch Inbox -->
     <string name="wear_inbox_title">INBOX</string>
-    <string name="wear_inbox_attention">대기</string>
+    <string name="wear_inbox_attention">확인 필요</string>
     <string name="wear_inbox_agents">AGENT</string>
     <string name="wear_inbox_refresh">새로고침</string>
     <string name="wear_inbox_refreshing">새로고침 요청 중…</string>
@@ -55,8 +55,8 @@
 
     <!-- Console Tile and complication types -->
     <string name="wear_complication_agent_description">%1$s · %2$s</string>
-    <string name="wear_tile_waiting">ARIES · 대기 %1$d</string>
-    <string name="wear_tile_all_clear">대기 없음</string>
+    <string name="wear_tile_waiting">ARIES · 확인 필요 %1$d</string>
+    <string name="wear_tile_all_clear">확인할 내용 없음</string>
     <string name="wear_tile_unknown">ARIES · --</string>
     <string name="wear_tile_working">작업 중 · %1$d (상위 Agent)</string>
     <string name="wear_tile_stale">오래된 정보 · %1$s</string>
@@ -78,7 +78,7 @@
     <string name="wear_row_age">%1$s · %2$s</string>
 
     <!-- Companion state surfaces -->
-    <string name="wear_waiting_label">대기</string>
+    <string name="wear_waiting_label">확인 필요</string>
     <string name="wear_age_minutes">%1$d분 전</string>
     <string name="wear_age_compact">%1$d분 전</string>
     <string name="wear_not_synced">아직 동기화되지 않음</string>
@@ -92,5 +92,5 @@
     <string name="wear_status_idle">Idle</string>
     <string name="wear_connect_phone">폰을 연결하고 다시 시도해 주세요</string>
     <string name="wear_opening_phone">폰에서 여는 중</string>
-    <string name="wear_complication_description">대기 %1$d · %2$s</string>
+    <string name="wear_complication_description">확인 필요 %1$d · %2$s</string>
 </resources>
