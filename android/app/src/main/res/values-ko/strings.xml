@@ -13,6 +13,7 @@
 
     <!-- Host localhost preview -->
     <string name="preview_auto_refresh">Agent 변경 후 자동 새로고침</string>
+    <string name="preview_no_servers">이 Host에서 실행 중인 개발 서버를 찾지 못했습니다.</string>
     <string name="preview_title">미리보기</string>
     <string name="preview_open_port">미리보기 열기 · %1$d</string>
     <string name="preview_address">localhost:%1$d 미리보기</string>

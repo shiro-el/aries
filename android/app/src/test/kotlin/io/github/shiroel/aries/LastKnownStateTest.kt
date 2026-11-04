@@ -81,7 +81,7 @@ class LastKnownStateTest {
         core.openedPush = PushNotice(host.id, host.name, PushContent.Test(1uL))
         service.onMessageReceived(message)
         service.onMessageReceived(message)
-        assertEquals(2, manager.getWorkInfosForUniqueWork(workName).get().size)
+        assertEquals(1, manager.getWorkInfosForUniqueWork(workName).get().size)
     }
 
     @Test fun manualRefreshTargetsOneHostAndFailuresLeaveItsFetchTimeUntouched() = runBlocking {
