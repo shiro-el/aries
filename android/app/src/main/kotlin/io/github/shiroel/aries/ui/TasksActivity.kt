@@ -10,6 +10,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -74,13 +76,17 @@ internal fun TasksPlan(chat: ChatModel) {
                     TaskPlanStatus.IN_PROGRESS -> progressLabel
                     TaskPlanStatus.PENDING -> R.string.tasks_plan_pending
                 })
-                if (item.status == TaskPlanStatus.IN_PROGRESS && working) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                val status = Modifier.semantics { stateDescription = description }
+                if (item.status == TaskPlanStatus.IN_PROGRESS && working) CircularProgressIndicator(status.size(16.dp), strokeWidth = 2.dp)
                 else if (item.status == TaskPlanStatus.IN_PROGRESS) Icon(painterResource(R.drawable.ic_circle_dot),
-                    contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                else Checkbox(checked = item.status == TaskPlanStatus.COMPLETED, onCheckedChange = null, modifier = Modifier.size(20.dp))
+                    contentDescription = null, modifier = status.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                else Checkbox(checked = item.status == TaskPlanStatus.COMPLETED, onCheckedChange = null, modifier = status.size(20.dp))
                 Text(item.text, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                Text(description, style = MaterialTheme.typography.labelSmall,
-                    color = if (item.status == TaskPlanStatus.IN_PROGRESS) tasksAttentionColor() else MaterialTheme.colorScheme.onSurfaceVariant)
+                if (item.status == TaskPlanStatus.IN_PROGRESS && !working) {
+                    Text(description, style = MaterialTheme.typography.labelSmall,
+                        color = if (progressLabel == R.string.tasks_plan_error) MaterialTheme.colorScheme.error
+                            else MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
     }
