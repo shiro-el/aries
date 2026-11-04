@@ -98,7 +98,7 @@ internal fun ChatCatalogControls(chat: ChatModel) {
     }
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
         AttachmentControls(chat)
-        InputHistoryButton(chat.inputHistory, enabled = enabled) { chat.draft = it }
+        InputHistoryButton(chat.inputHistory, enabled = enabled, onSelect = chat::appendDraft)
         ActionIcon(R.drawable.ic_library, R.string.chat_skills_button,
             { query = ""; showSkills = true }, enabled = enabled)
     }
