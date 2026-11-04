@@ -192,6 +192,7 @@ class MainActivity : AppCompatActivity() {
     private fun resumeUnlockedUi() {
         if (!resumed || app.appLock.locked) return
         app.appLock.applyPrivacy(window)
+        NotificationGroups.foregrounded(this)
         app.vault.authorizer = BiometricUnlock(this)
         refreshLaunchShortcuts()
         resumeModel()

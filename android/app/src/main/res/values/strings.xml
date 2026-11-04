@@ -12,6 +12,7 @@
     <string name="preview_auto_refresh">Auto refresh after Agent updates</string>
     <string name="preview_searching">Finding development servers…</string>
     <string name="preview_no_servers">No development servers detected on this Host.</string>
+    <string name="preview_discovery_failed">Could not check for development servers on this Host. Try again.</string>
     <string name="preview_title">Preview</string>
     <string name="preview_open_port">Open preview · %1$d</string>
     <string name="preview_address">localhost:%1$d preview</string>

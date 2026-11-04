@@ -22,6 +22,46 @@ class TasksSecondaryTest {
     @get:Rule val compose = createComposeRule()
     private val context = ApplicationProvider.getApplicationContext<Context>()
 
+    // D51/D52: reopening Host tools after cd must browse the new folder and
+    // resolve GitHub again, even though the Terminal address has not changed.
+    @Test fun reopenedHostToolsFollowForegroundFolderAndResolveTheNewRepository() {
+        val terminal = TerminalInfo("t1", "Build", "", listOf("sh"), "/launch", "live",
+            foreground = ForegroundInfo(42u, "sh", listOf("sh"), "/current"))
+        val conn = FakeConnection(listOf(terminal), HostStructure(emptyList(), listOf(terminal), null))
+        val host = Host("h1", "home", Endpoint.Ssh("home.test", 22u, "me"), null)
+        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main)
+        val browser = HostBrowser(host).apply {
+            link = HostLink(host, conn, scope, { conn })
+            updateTerminals(listOf(terminal))
+        }
+        compose.setContent {
+            androidx.compose.material3.MaterialTheme { TasksHostContent(remember { HostsModel(FakeCore(), scope) }, browser) }
+        }
+        compose.onNodeWithTag("tasks-host-files").assertTextContains("/current")
+        compose.onNodeWithTag("tasks-host-github").assertTextContains("/current")
+        compose.onNodeWithTag("tasks-host-files").performClick()
+        compose.runOnIdle { assertEquals(listOf("t1" to "/current"), conn.fileListings) }
+        compose.onNodeWithContentDescription(context.getString(R.string.files_close_button)).performClick()
+        compose.onNodeWithTag("tasks-host-github").performClick()
+        compose.onNodeWithText("octo/project").assertExists()
+        compose.onNodeWithTag("github-back").performClick()
+        compose.runOnIdle {
+            browser.updateTerminals(listOf(terminal.copy(foreground = terminal.foreground!!.copy(cwd = "/new"))))
+            conn.githubRepo = GithubRepository("/new", null, "octo/new-project", "github.com")
+        }
+        compose.onNodeWithTag("tasks-host-github").assertTextContains("/new").performClick()
+        compose.onNodeWithText("octo/new-project").assertExists()
+        compose.onNodeWithText("octo/project").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(2, conn.githubRepoReads) }
+        compose.onNodeWithTag("github-back").performClick()
+        compose.onNodeWithTag("tasks-host-files").performClick()
+        compose.runOnIdle {
+            assertEquals("t1" to "/new", conn.fileListings.last())
+            assertFalse(browser.link!!.github("t1").shown)
+        }
+        scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
+    }
+
     // D52: Activity recreation must keep the pinned Terminal, open file and expanded folder.
     @Test fun hostFilesKeepTheirPinnedTargetAndLocationAcrossRecreation() {
         val terminal = TerminalInfo("t1", "Build", "", listOf("sh"), "/repo", "live")
