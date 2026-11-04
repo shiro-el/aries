@@ -62,7 +62,7 @@ internal fun LazyListScope.agentTreeItems(
                         tabName = entry.tabName,
                         showHost = showHost,
                         compact = compact,
-                        selected = current == entry.key,
+                        selected = current == entry.key, queuedCount = LocalChatQueueCounts.current(entry.key),
                         live = entry.live, lastUpdatedMs = entry.lastUpdatedMs,
                         onLongClick = if (actions != null || entry.terminal.agentStatus != null) ({ menu = true }) else null,
                         trailing = {

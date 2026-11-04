@@ -6,6 +6,7 @@ import io.github.shiroel.aries.core.*
 import io.github.shiroel.aries.ui.FakeCore
 import io.github.shiroel.aries.weardata.WatchCommand
 import io.github.shiroel.aries.weardata.WatchResult
+import io.github.shiroel.aries.ui.encode
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
 import org.junit.Assert.*
@@ -133,6 +134,22 @@ class WatchAnswerTest {
         assertEquals(WatchResult.CHANGED, WatchActions.execute(context, core, WatchCommand(row, text = "Stale reply")))
         assertTrue(core.backgroundMessages.isEmpty())
         assertEquals(2, core.connectAttempts.size)
+    }
+
+    // D06: the watch's own SSH connection cannot bypass the phone's unresolved FIFO.
+    @Test fun aWatchReplyWaitsBehindThePhoneOutbox() = runBlocking {
+        val core = FakeCore().apply { ensureKey() }
+        val host = core.addHost("Host", Endpoint.Ssh("host", 22u, "me"))
+        core.terminalsOf[host.id] = listOf(terminal(AgentStatus.Done))
+        val row = WatchPhone.summary(core.hosts(), listOf(core.snapshot(host.id))).inbox.single()
+        val old = io.github.shiroel.aries.ui.QueuedChatMessage(draft = "old", text = "old", attachments = emptyList(),
+            before = emptySet(), phase = io.github.shiroel.aries.ui.QueuedMessagePhase.Uncertain)
+        core.saveChatOutbox(host.id, row.terminal,
+            io.github.shiroel.aries.ui.ChatOutboxState("", emptyList(), listOf(old)).encode())
+        assertEquals(WatchResult.PHONE, WatchActions.execute(context, core, WatchCommand(row, text = "new")))
+        assertTrue(core.connection!!.typed.isEmpty())
+        val saved = io.github.shiroel.aries.ui.decodeChatOutbox(core.chatOutbox(host.id, row.terminal)!!)
+        assertEquals(listOf("old", "new"), saved.messages.map { it.text })
     }
 
     // Catches listener destruction cancelling an already accepted slow answer;

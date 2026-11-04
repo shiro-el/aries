@@ -9,11 +9,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -52,31 +47,28 @@ internal fun ChatInterruptProgress() {
 /** Shares the composer's send slot; confirmation still rechecks live eligibility. */
 @Composable
 internal fun ChatInterruptButton(chat: ChatModel, onConfirmed: () -> Unit = {}) {
-    var confirming by remember(chat) { mutableStateOf(false) }
-    LaunchedEffect(chat.canInterrupt) {
-        if (!chat.canInterrupt) confirming = false
-    }
+    val confirming = chat.delivery.confirmingStop
     val label = stringResource(R.string.chat_interrupt_confirm_button)
     IconButton(
-        onClick = { confirming = true },
+        onClick = { chat.confirmInterrupt(true) },
         enabled = chat.canInterrupt,
         modifier = Modifier.size(48.dp).semantics { contentDescription = label },
     ) {
         if (chat.interrupting) ChatInterruptProgress()
         else Icon(painterResource(R.drawable.ic_square), contentDescription = null, modifier = Modifier.size(20.dp))
     }
-    if (confirming && chat.canInterrupt) {
+    if (confirming) {
         AlertDialog(
-            onDismissRequest = { confirming = false },
+            onDismissRequest = { chat.confirmInterrupt(false) },
             title = { Text(stringResource(R.string.chat_interrupt_title)) },
             text = { Text(stringResource(R.string.chat_interrupt_body, displayName(chat.terminal))) },
             confirmButton = {
-                TextButton(onClick = { confirming = false; onConfirmed(); chat.interrupt() }) {
+                TextButton(onClick = { onConfirmed(); chat.interrupt() }) {
                     Text(stringResource(R.string.chat_interrupt_confirm_button))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { confirming = false }) { Text(stringResource(R.string.cancel_button)) }
+                TextButton(onClick = { chat.confirmInterrupt(false) }) { Text(stringResource(R.string.cancel_button)) }
             },
         )
     }
