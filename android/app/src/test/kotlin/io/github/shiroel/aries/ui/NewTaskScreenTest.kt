@@ -5,6 +5,9 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import java.io.File
 import org.robolectric.annotation.GraphicsMode
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.*
@@ -29,11 +32,13 @@ class NewTaskScreenTest {
     private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
     private fun str(id: Int) = context.getString(id)
 
+    private lateinit var model: HostsModel
+
     private fun open(core: FakeCore) {
         core.addHost("home", Endpoint.Ssh("10.0.0.2", 22u, "me"))
         compose.setContent {
             val scope = rememberCoroutineScope()
-            val model = remember { HostsModel(core, scope) }
+            model = remember { HostsModel(core, scope) }
             MaterialTheme { AriesApp(model) }
         }
     }
@@ -47,6 +52,78 @@ class NewTaskScreenTest {
         }
     }
 
+    // Regression: replacing the Activity's composition while readiness is delayed must not
+    // cancel the first prompt or permit a second launch; lint and existing happy paths miss this.
+    @Test fun replacingTheCompositionWhileWaitingKeepsTheTaskAndSendsItsPromptOnce() {
+        val core = FakeCore()
+        core.addHost("home", Endpoint.Ssh("10.0.0.2", 22u, "me"))
+        var showing by mutableStateOf(true)
+        compose.setContent {
+            val scope = rememberCoroutineScope()
+            val model = remember { HostsModel(core, scope) }
+            if (showing) AriesApp(model)
+        }
+        compose.onNodeWithTag("host-new-task").performClick()
+        compose.onNodeWithTag("launch_cwd").performTextReplacement("/repo")
+        compose.onNodeWithTag("new-task-prompt").performScrollTo().performTextInput("Survive rotation")
+        compose.onNodeWithText(str(R.string.new_task_start)).performClick()
+        compose.waitForIdle()
+        val conn = core.connection!!
+        compose.runOnIdle { showing = false }
+        compose.waitForIdle()
+        compose.runOnIdle { showing = true }
+        compose.onNodeWithTag("new-task-prompt").performScrollTo().assertTextContains("Survive rotation")
+        compose.runOnIdle {
+            core.push(core.terminals.map { it.copy(agentStatus = AgentStatus.Idle) })
+        }
+        compose.waitUntil { conn.typed.isNotEmpty() }
+        compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertExists()
+        assertEquals(listOf("t101" to "Survive rotation"), conn.typed)
+        assertEquals(1, conn.launched.size)
+    }
+
+    // Regression: dismissing a slow readiness wait and reopening through a different
+    // entry must keep the launched Terminal and prompt, rather than spawn another Agent.
+    @Test fun dismissingReadinessResumesTheSameTaskFromTheHostMenu() {
+        val core = FakeCore()
+        open(core)
+        compose.onNodeWithTag("host-new-task").performClick()
+        compose.onNodeWithTag("new-task-prompt").performScrollTo().performTextInput("Keep the draft")
+        compose.onNodeWithText(str(R.string.new_task_start)).performClick()
+        compose.waitForIdle()
+        screenshot("waiting-task")
+        compose.onNodeWithText(str(R.string.cancel_button)).assertIsEnabled().performClick()
+        compose.onNodeWithContentDescription(str(R.string.host_create_title)).performClick()
+        compose.onNodeWithText(str(R.string.new_task_title)).performClick()
+        compose.onNodeWithTag("new-task-prompt").performScrollTo().assertTextContains("Keep the draft")
+        compose.onNodeWithText(str(R.string.new_task_wait_again)).performClick()
+        compose.runOnIdle { core.push(core.terminals.map { it.copy(agentStatus = AgentStatus.Idle) }) }
+        compose.waitUntil { core.connection!!.typed.isNotEmpty() }
+        assertEquals(1, core.connection!!.launched.size)
+        assertEquals(listOf("t101" to "Keep the draft"), core.connection!!.typed)
+    }
+
+    // Regression: App Lock releases the SSH line during readiness; the resumed read
+    // must use the new connection and send the retained prompt without replaying launch.
+    @Test fun readinessReconnectsAfterImmediateBackgroundReleaseWithoutRelaunching() {
+        val core = FakeCore()
+        open(core)
+        compose.onNodeWithTag("host-new-task").performClick()
+        compose.onNodeWithTag("new-task-prompt").performScrollTo().performTextInput("After unlock")
+        compose.onNodeWithText(str(R.string.new_task_start)).performClick()
+        compose.waitForIdle()
+        val original = core.connection!!
+        compose.runOnIdle { model.backgrounded(retainConnections = false) }
+        compose.waitForIdle()
+        compose.runOnIdle { model.resumeScreens() }
+        compose.waitUntil { core.connectAttempts.size == 2 }
+        compose.runOnIdle { core.push(core.terminals.map { it.copy(agentStatus = AgentStatus.Idle) }) }
+        compose.waitUntil { core.connection!!.typed.isNotEmpty() }
+        assertEquals(listOf("t101" to "After unlock"), core.connection!!.typed)
+        assertEquals(1, original.launched.size)
+        assertEquals(emptyList<LaunchRequest>(), core.connection!!.launched)
+    }
+
     @Test fun waitsForReadyThenSendsExactlyOnceAndOpensChat() {
         val core = FakeCore().apply {
             savedLaunches += SavedLaunch("saved-codex", "Codex task",
@@ -56,7 +133,7 @@ class NewTaskScreenTest {
         open(core)
         compose.onNodeWithTag("host-new-task").performClick()
         compose.onNodeWithTag("new-task-prompt").performScrollTo().performTextInput("Fix the login race")
-        compose.onNodeWithText(str(R.string.new_task_start)).assertIsNotEnabled()
+        compose.onNodeWithText(str(R.string.new_task_start)).assertIsEnabled()
         compose.onNodeWithText(str(R.string.launch_saved)).performClick()
         compose.onNodeWithTag("new-task-saved:saved-codex").performClick()
         compose.onNodeWithText(str(R.string.new_task_browse)).performClick()
@@ -91,7 +168,7 @@ class NewTaskScreenTest {
         val core = FakeCore()
         open(core)
         compose.onNodeWithTag("host-new-task").performClick()
-        compose.onNodeWithTag("launch_cwd").performTextInput("/repo")
+        compose.onNodeWithTag("launch_cwd").performTextReplacement("/repo")
         compose.onNodeWithTag("new-task-prompt").performScrollTo().performTextInput("Keep this task")
         compose.onNodeWithText(str(R.string.new_task_start)).performClick()
         compose.waitForIdle()

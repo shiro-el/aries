@@ -16,6 +16,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -83,6 +84,8 @@ class LaunchForm(
         private set
     var busy by mutableStateOf(false)
     var error by mutableStateOf<Message?>(null)
+    var launchUnknown by mutableStateOf(false)
+    var removedLaunch by mutableStateOf<SavedLaunch?>(null)
 
     val spaces: List<SpaceInfo> get() = structure.spaces
     val space: SpaceInfo? get() = structure.spaces.find { it.id == spaceId }
@@ -96,7 +99,7 @@ class LaunchForm(
         tabId = id
     }
 
-    val canLaunch: Boolean get() = (preset != null || command.isNotBlank()) && !busy
+    val canLaunch: Boolean get() = (preset != null || command.isNotBlank()) && !busy && !launchUnknown
 
     val canSave: Boolean get() = canLaunch && name.isNotBlank()
 
@@ -162,8 +165,22 @@ fun LaunchDialog(
     onSave: () -> Unit = {},
     onDelete: (SavedLaunch) -> Unit = {},
     onPin: ((SavedLaunch) -> Unit)? = null,
+    onUndoDelete: () -> Unit = {},
+    onLaunchAgain: () -> Unit = {},
+    connected: Boolean = true,
 ) {
+    var confirmAgain by remember(form) { mutableStateOf(false) }
+    if (confirmAgain) AlertDialog(
+        onDismissRequest = { confirmAgain = false },
+        title = { Text(stringResource(R.string.launch_unknown_title)) },
+        text = { Text(stringResource(R.string.launch_unknown_body)) },
+        confirmButton = { TextButton(onClick = { confirmAgain = false; onLaunchAgain() }) {
+            Text(stringResource(R.string.launch_again_button))
+        } },
+        dismissButton = { TextButton(onClick = { confirmAgain = false }) { Text(stringResource(R.string.cancel_button)) } },
+    )
     AlertDialog(
+        modifier = Modifier.testTag("launch-dialog"),
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.launch_title)) },
         text = {
@@ -171,13 +188,25 @@ fun LaunchDialog(
                 Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                if (form.busy) {
+                    Text(stringResource(R.string.launch_starting))
+                    androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
+                }
+                if (form.launchUnknown && !form.busy) {
+                    Text(stringResource(R.string.launch_unknown_body), color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = { confirmAgain = true }, enabled = connected) { Text(stringResource(R.string.launch_review_button)) }
+                }
+                form.removedLaunch?.let { removed ->
+                    Text(stringResource(R.string.launch_removed, removed.name))
+                    TextButton(onClick = onUndoDelete, enabled = !form.busy) { Text(stringResource(R.string.launch_undo_button)) }
+                }
                 if (form.saved.isNotEmpty()) {
                     Text(stringResource(R.string.launch_saved), style = MaterialTheme.typography.labelLarge)
                     for (s in form.saved) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(s.name, Modifier.weight(1f))
                             ActionIcon(R.drawable.ic_square_pen, R.string.launch_saved_edit,
-                                { form.edit(s) }, modifier = Modifier.testTag("saved_edit:" + s.id))
+                                { form.edit(s) }, enabled = !form.busy && !form.launchUnknown, modifier = Modifier.testTag("saved_edit:" + s.id))
                             ActionIcon(R.drawable.ic_x, R.string.launch_saved_delete,
                                 { onDelete(s) }, enabled = !form.busy, modifier = Modifier.testTag("saved_delete:" + s.id))
                             onPin?.let { pin ->
@@ -190,7 +219,7 @@ fun LaunchDialog(
                     item(key = "custom") {
                         ConsoleChoice(
                             selected = form.preset == null,
-                            onClick = { form.preset = null },
+                            onClick = { form.preset = null }, enabled = !form.busy && !form.launchUnknown,
                             label = { Text(stringResource(R.string.preset_custom)) },
                         )
                     }
@@ -198,14 +227,14 @@ fun LaunchDialog(
                         ConsoleChoice(
                             modifier = Modifier.testTag("preset:" + p.name),
                             selected = form.preset == p,
-                            onClick = { form.preset = p },
+                            onClick = { form.preset = p }, enabled = !form.busy && !form.launchUnknown,
                             label = { Text(stringResource(p.label)) },
                         )
                     }
                 }
-                form.preset?.let { preset -> LaunchOptions(form, preset) }
+                form.preset?.let { preset -> LaunchOptions(form, preset, enabled = !form.busy && !form.launchUnknown) }
                 OutlinedTextField(
-                    form.command, { form.command = it },
+                    form.command, { form.command = it }, enabled = !form.busy && !form.launchUnknown,
                     modifier = Modifier.testTag("launch_command"),
                     label = {
                         Text(stringResource(if (form.preset == null) R.string.launch_command else R.string.launch_preset_args))
@@ -213,7 +242,7 @@ fun LaunchDialog(
                     singleLine = true,
                 )
                 OutlinedTextField(
-                    form.cwd, { form.cwd = it },
+                    form.cwd, { form.cwd = it }, enabled = !form.busy && !form.launchUnknown,
                     label = { Text(stringResource(R.string.launch_cwd)) },
                     placeholder = { Text(stringResource(R.string.launch_cwd_default)) },
                     singleLine = true,
@@ -223,13 +252,13 @@ fun LaunchDialog(
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (folder != null) {
                             item(key = "folder") {
-                                ConsoleChoice(selected = form.cwd == folder, onClick = { form.cwd = folder }) {
+                                ConsoleChoice(enabled = !form.busy && !form.launchUnknown, selected = form.cwd == folder, onClick = { form.cwd = folder }) {
                                     Text(stringResource(R.string.launch_cwd_space_folder, folder))
                                 }
                             }
                         }
                         items(form.recentCwds.filter { it != folder }, key = { "recent:$it" }) { dir ->
-                            ConsoleChoice(selected = form.cwd == dir, onClick = { form.cwd = dir }) { Text(dir) }
+                            ConsoleChoice(enabled = !form.busy && !form.launchUnknown, selected = form.cwd == dir, onClick = { form.cwd = dir }) { Text(dir) }
                         }
                     }
                 }
@@ -238,7 +267,7 @@ fun LaunchDialog(
                     item(key = "none") {
                         ConsoleChoice(
                             selected = form.spaceId == null,
-                            onClick = { form.selectSpace(null) },
+                            onClick = { form.selectSpace(null) }, enabled = !form.busy && !form.launchUnknown,
                             label = { Text(stringResource(R.string.launch_space_none)) },
                         )
                     }
@@ -246,7 +275,7 @@ fun LaunchDialog(
                         ConsoleChoice(
                             modifier = Modifier.testTag("launch_space:" + s.id),
                             selected = s.id == form.spaceId,
-                            onClick = { form.selectSpace(s.id) },
+                            onClick = { form.selectSpace(s.id) }, enabled = !form.busy && !form.launchUnknown,
                             label = { Text(s.name) },
                         )
                     }
@@ -259,14 +288,14 @@ fun LaunchDialog(
                             ConsoleChoice(
                                 modifier = Modifier.testTag("launch_tab:" + t.id),
                                 selected = t.id == form.tabId,
-                                onClick = { form.selectTab(t.id) },
+                                onClick = { form.selectTab(t.id) }, enabled = !form.busy && !form.launchUnknown,
                                 label = { Text(t.name) },
                             )
                         }
                     }
                 }
                 OutlinedTextField(
-                    form.name, { form.name = it },
+                    form.name, { form.name = it }, enabled = !form.busy,
                     modifier = Modifier.testTag("launch_name"),
                     label = { Text(stringResource(R.string.launch_save_name)) },
                     singleLine = true,
@@ -284,7 +313,7 @@ fun LaunchDialog(
             }
         },
         confirmButton = {
-            TextButton(enabled = form.canLaunch, onClick = onLaunch) { Text(stringResource(R.string.launch_button)) }
+            TextButton(enabled = form.canLaunch && connected, onClick = onLaunch) { Text(stringResource(R.string.launch_button)) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel_button)) } },
     )

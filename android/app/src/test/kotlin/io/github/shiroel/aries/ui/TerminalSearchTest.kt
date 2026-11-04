@@ -15,6 +15,7 @@ import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.*
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -26,16 +27,18 @@ import org.robolectric.RobolectricTestRunner
 class TerminalSearchTest {
     @get:Rule val compose = createComposeRule()
     private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+    private lateinit var core: FakeCore
+    private lateinit var model: HostsModel
     private fun str(id: Int, vararg args: Any) = context.getString(id, *args)
 
     private fun open(): FakeTerminalView {
-        val core = FakeCore().apply {
+        core = FakeCore().apply {
             terminals = listOf(TerminalInfo("t1", "build", "", listOf("make"), "/repo", "live", null, false, 0uL))
         }
         core.addHost("home", Endpoint.Ssh("10.0.0.2", 22u, "me"))
         compose.setContent {
             val scope = rememberCoroutineScope()
-            val model = remember { HostsModel(core, scope) }
+            model = remember { HostsModel(core, scope) }
             MaterialTheme { AriesApp(model) }
         }
         compose.onNodeWithText("home").performClick()
@@ -119,5 +122,48 @@ class TerminalSearchTest {
         compose.onNodeWithContentDescription(str(R.string.back_button)).performClick()
         compose.waitForIdle()
         assertTrue(view.detached)
+    }
+
+    @Test
+    fun reconnectWaitsForAnInFlightSearchAndKeepsInputForTheNewConnection() {
+        val old = open()
+        val started = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        old.duringSearch = { query ->
+            if (query == "error") {
+                started.countDown()
+                check(release.await(10, java.util.concurrent.TimeUnit.SECONDS))
+            }
+        }
+        try {
+            compose.onNodeWithTag("agent-actions").performClick()
+            compose.onNodeWithContentDescription(str(R.string.terminal_search_button)).performClick()
+            compose.onNodeWithTag("terminal-search-query").performTextInput("error")
+            compose.waitUntil(5_000) { started.count == 0L }
+            core.failWith = CoreException.Unreachable("offline")
+            compose.runOnIdle { model.networkChanged() }
+            compose.waitForIdle()
+            assertFalse("an in-flight search still owns the old view", old.closed)
+            core.failWith = null
+            compose.runOnIdle { model.networkChanged() }
+            compose.waitForIdle()
+            // Reconnection can finish while the old local search is still winding down.
+            // These keys belong to the replacement line and must survive that cleanup.
+            compose.runOnIdle {
+                (model.screen as Screen.Terminal).viewer.let {
+                    it.startTyping()
+                    it.type("fresh after reconnect")
+                }
+            }
+        } finally {
+            release.countDown()
+        }
+        compose.waitUntil(5_000) { old.closed }
+        assertFalse(old.searchedAfterClose)
+        compose.waitForIdle()
+        val fresh = core.connection!!.views.single()
+        compose.waitUntil(5_000) { fresh.searches.any { it.first == "error" } }
+        assertTrue(old.detached)
+        assertEquals(listOf("text:fresh after reconnect"), fresh.sent)
     }
 }

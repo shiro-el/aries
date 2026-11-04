@@ -58,6 +58,7 @@ import io.github.shiroel.aries.core.AgentView
 import io.github.shiroel.aries.core.CellRun
 import io.github.shiroel.aries.core.CursorPos
 import io.github.shiroel.aries.core.KeyMods
+import io.github.shiroel.aries.core.HostConnection
 import io.github.shiroel.aries.core.TerminalKey
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.Job
@@ -124,8 +125,8 @@ class TerminalViewer(terminal: TerminalInfo) {
 
     var search by mutableStateOf<TerminalSearch?>(null)
         private set
-    var searcher by mutableStateOf<((String, Boolean, Boolean) -> Unit)?>(null)
-    var searchNavigator: ((Boolean) -> Unit)? = null
+    var searcher by mutableStateOf<(suspend (String, Boolean, Boolean) -> Unit)?>(null)
+    var searchNavigator: (suspend (Boolean) -> Unit)? = null
 
     private var liveScroll: Job? = null
 
@@ -184,17 +185,19 @@ class TerminalViewer(terminal: TerminalInfo) {
 
     fun exited(e: TerminalExit) {
         exit = e
+        discardInput()
     }
 
     fun markClosed() {
         closed = true
+        discardInput()
     }
 
     fun line(row: Int): ScreenLine? = lines.getOrNull(row)
 
     /**
      * Typing mode: attached as an ordinary viewer whose grid is the phone's
-     * ([phoneGrid]). Starts on input focus ([startTyping]) or right away
+     * ([phoneGrid]). Starts on an input tap or key ([startTyping]) or right away
      * when the default attach mode is input.
      */
     var typing by mutableStateOf(false)
@@ -225,6 +228,13 @@ class TerminalViewer(terminal: TerminalInfo) {
     var composerOpen by mutableStateOf(false)
         private set
 
+    private var pendingPaste: TerminalInput.Paste? = null
+    private var pasteConnection: HostConnection? = null
+    var pasteSending by mutableStateOf(false)
+        private set
+    var pasteUncertain by mutableStateOf(false)
+        private set
+
     fun openComposer() {
         interruptComposition()
         composerOpen = true
@@ -234,14 +244,39 @@ class TerminalViewer(terminal: TerminalInfo) {
         composerOpen = false
     }
 
+    val canInput: Boolean
+        get() = exit == null && !closed && terminal.state == "live" &&
+            (link == null || (link?.state == LinkState.Up && link?.connection != null))
+
+    internal val inputUnavailableReason: Int?
+        get() = when {
+            exit != null || terminal.state != "live" -> R.string.terminal_input_ended
+            !canInput -> R.string.terminal_input_offline
+            else -> null
+        }
+
     val canPasteDraft: Boolean
-        get() = draft.isNotEmpty() && exit == null && !closed
+        get() = draft.isNotEmpty() && canInput && !pasteSending
 
     fun pasteDraft() {
         if (!canPasteDraft) return
         startTyping()
-        send(TerminalInput.Paste(draft))
-        draft = ""
+        val paste = TerminalInput.Paste(draft)
+        pendingPaste = paste
+        pasteConnection = link?.connection
+        pasteSending = true
+        pasteUncertain = false
+        send(paste)
+    }
+
+    internal fun pasteFinished(paste: TerminalInput.Paste, delivered: Boolean) {
+        if (pendingPaste !== paste) return
+        pendingPaste = null
+        pasteConnection = null
+        pasteSending = false
+        pasteUncertain = !delivered
+        // A user may have edited or restored another draft while this send was pending.
+        if (delivered && draft == paste.text) draft = ""
     }
 
     var keyBarVisible by mutableStateOf(true)
@@ -255,27 +290,63 @@ class TerminalViewer(terminal: TerminalInfo) {
         }
     }
 
-    /** Ctrl from the key bar, active until toggled off or the key bar is hidden. */
+    /** Ctrl from the key bar, consumed by the next key. */
     var ctrl by mutableStateOf(false)
         private set
 
-    /** Alt from the key bar, active until toggled off or the key bar is hidden. */
+    /** Alt from the key bar, consumed by the next key. */
     var alt by mutableStateOf(false)
         private set
 
     /** What was typed, in order, until the model sends it. */
-    internal val inputs = Channel<TerminalInput>(Channel.UNLIMITED)
+    internal val inputs = Channel<PendingTerminalInput>(Channel.UNLIMITED)
+
+    /** A lost attachment must not leave a composition or commands for its replacement. */
+    internal fun discardInput(connection: HostConnection? = null) {
+        val keep = mutableListOf<PendingTerminalInput>()
+        while (true) {
+            val pending = inputs.tryReceive().getOrNull() ?: break
+            if (connection != null && pending.connection !== connection) keep += pending
+        }
+        keep.forEach { inputs.trySend(it) }
+        if (connection == null || pasteConnection === connection) {
+            pendingPaste?.let { pasteFinished(it, delivered = false) }
+        }
+        if (connection == null || inputConnection === connection) resetInputState()
+    }
+
+    private var inputConnection: HostConnection? = null
+
+    private fun resetInputState() {
+        echoed = ""
+        composing = ""
+        ctrl = false
+        alt = false
+        onCompositionInterrupted?.invoke()
+    }
+
+    private fun readyForInput(): Boolean {
+        if (!canInput) return false
+        if (inputConnection !== link?.connection) {
+            resetInputState()
+            inputConnection = link?.connection
+        }
+        return true
+    }
 
     fun startTyping() {
+        if (!readyForInput()) return
         typing = true
     }
 
     fun toggleCtrl() {
+        if (!readyForInput()) return
         interruptComposition()
         ctrl = !ctrl
     }
 
     fun toggleAlt() {
+        if (!readyForInput()) return
         interruptComposition()
         alt = !alt
     }
@@ -287,6 +358,7 @@ class TerminalViewer(terminal: TerminalInfo) {
      * until the keyboard moves on, as it can still change (한 + ㅏ -> 하나).
      */
     fun compose(text: String) {
+        if (!readyForInput()) return
         val last = if (text.isEmpty()) 0 else text.codePointBefore(text.length)
         // A syllable already sent and unchanged (하나 -> 하) stays sent.
         val held = if (isHangul(last) && !echoed.startsWith(text)) Character.charCount(last) else 0
@@ -296,16 +368,20 @@ class TerminalViewer(terminal: TerminalInfo) {
 
     /** The keyboard committed [text] in place of what it was composing. */
     fun commit(text: String) {
+        if (!readyForInput()) return
         retype(text)
         echoed = ""
         composing = ""
     }
 
     /** The keyboard finished composing: what it composed stays as is. */
-    fun finishComposing() = commit(echoed + composing)
+    fun finishComposing() {
+        if (readyForInput()) commit(echoed + composing)
+    }
 
     /** Deletes the last [count] characters being composed; false when nothing is. */
     fun deleteComposing(count: Int): Boolean {
+        if (!readyForInput()) return false
         val text = echoed + composing
         if (text.isEmpty()) return false
         var end = text.length
@@ -320,20 +396,23 @@ class TerminalViewer(terminal: TerminalInfo) {
         while (same < echoed.length && same < target.length && echoed.codePointAt(same) == target.codePointAt(same)) {
             same += Character.charCount(echoed.codePointAt(same))
         }
-        repeat(echoed.codePointCount(same, echoed.length)) { pressNow(TerminalKey.Backspace, NoMods) }
+        // IME corrections are editing already echoed text, not the user's next modified key.
+        repeat(echoed.codePointCount(same, echoed.length)) { send(TerminalInput.Key(TerminalKey.Backspace, NoMods)) }
         typeNow(target.substring(same))
         echoed = target
     }
 
     /** Typing that is not the keyboard's composing ends the composition first, keeping its text. */
     private fun interruptComposition() {
+        if (!readyForInput()) return
         if (echoed.isEmpty() && composing.isEmpty()) return
         finishComposing()
         onCompositionInterrupted?.invoke()
     }
 
-    /** Types [text]; a newline is Enter. Key-bar modifiers apply to every character. */
+    /** Types [text]; a newline is Enter. Key-bar modifiers apply to the next character only. */
     fun type(text: String) {
+        if (!readyForInput()) return
         interruptComposition()
         typeNow(text)
     }
@@ -360,18 +439,23 @@ class TerminalViewer(terminal: TerminalInfo) {
 
     /** Presses [key] with active key-bar modifiers and extra [mods]. */
     fun press(key: TerminalKey, mods: KeyMods = NoMods) {
+        if (!readyForInput()) return
         interruptComposition()
         pressNow(key, mods)
     }
 
     private fun pressNow(key: TerminalKey, mods: KeyMods) {
-        send(TerminalInput.Key(key, mods.copy(ctrl = mods.ctrl || ctrl, alt = mods.alt || alt)))
+        val modified = mods.copy(ctrl = mods.ctrl || ctrl, alt = mods.alt || alt)
+        ctrl = false
+        alt = false
+        send(TerminalInput.Key(key, modified))
     }
 
     /** Typing while scrolled back returns to the live screen, as terminals do. */
     private fun send(input: TerminalInput) {
+        if (!canInput) return
         if (scrolled != 0) scrollToLive()
-        inputs.trySend(input)
+        inputs.trySend(PendingTerminalInput(link?.connection, input))
     }
 
     /** A bounded excerpt; never build the whole screen merely to focus its Canvas. */
@@ -414,6 +498,9 @@ sealed interface TerminalInput {
     data class Paste(val text: String) : TerminalInput
     data class Key(val key: TerminalKey, val mods: KeyMods) : TerminalInput
 }
+
+/** Input belongs to the line on which it was typed, including before the typing attach. */
+internal data class PendingTerminalInput(val connection: HostConnection?, val input: TerminalInput)
 
 private val TerminalBackground = Color(0xFF101214)
 private val TerminalForeground = Color(0xFFD8DADC)
@@ -490,12 +577,14 @@ internal fun TerminalInput(viewer: TerminalViewer, modifier: Modifier = Modifier
     ) {
         AndroidView(
             factory = { TerminalInputView(it, viewer) },
-            update = { it.viewer = viewer },
+            update = { it.viewer = viewer; it.updateAvailability() },
             modifier = Modifier.matchParentSize(),
         )
         val composing = viewer.composing
+        val unavailable = viewer.inputUnavailableReason
         Text(
             when {
+                unavailable != null -> stringResource(unavailable)
                 composing.isNotEmpty() -> composing
                 viewer.typing -> stringResource(R.string.terminal_input_typing)
                 else -> stringResource(R.string.terminal_input_hint)
