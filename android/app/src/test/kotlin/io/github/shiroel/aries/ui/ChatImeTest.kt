@@ -24,6 +24,7 @@ class ChatImeTest {
     @get:Rule val compose = createComposeRule()
     private val core = FakeCore()
     private val terminal = TerminalInfo("t1", "claude", "", listOf("claude"), "/repo", "live", AgentStatus.Working)
+    private val connection = FakeConnection(listOf(terminal), HostStructure(emptyList(), emptyList(), null))
     private lateinit var chat: ChatModel
     private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
     private val input get() = compose.onNodeWithContentDescription(context.getString(R.string.chat_input_label))
@@ -33,7 +34,6 @@ class ChatImeTest {
         compose.setContent {
             val scope = rememberCoroutineScope()
             val link = remember {
-                val connection = FakeConnection(listOf(terminal), HostStructure(emptyList(), emptyList(), null))
                 HostLink(host, connection, scope, { connection })
             }
             chat = remember { ChatModel(core, host, terminal, link).also { it.start(scope) } }
@@ -54,5 +54,35 @@ class ChatImeTest {
         compose.waitUntil { chat.snapshot?.cursor == "c:1" }
         input.assertTextEquals("고쳐 주세요").assertIsFocused().assertIsEnabled()
         compose.runOnIdle { assertEquals(composing, chat.input) }
+    }
+
+    @Test fun externalDraftReplacementCannotOverwriteAnActiveImeComposition() {
+        open()
+        val composing = TextFieldValue("고쳐 주세요", TextRange(3), TextRange(0, 6))
+        compose.runOnIdle { chat.input = composing }
+        compose.runOnIdle { chat.draft = "an older saved draft" }
+        input.assertTextEquals("고쳐 주세요").assertIsFocused()
+        compose.runOnIdle {
+            assertEquals(composing, chat.input)
+            // The keyboard commits its final recognition before another external edit.
+            chat.input = TextFieldValue("고쳐 주세요!", TextRange(7))
+            chat.draft = "an older saved draft"
+        }
+        input.assertTextEquals("an older saved draft")
+        compose.runOnIdle { assertEquals(TextRange(20), chat.input.selection) }
+    }
+
+    @Test fun explicitSendCommitsVoiceTextAndClearsTheDraft() {
+        open()
+        compose.runOnIdle {
+            chat.update(listOf(terminal.copy(agentStatus = AgentStatus.Idle)))
+            chat.input = TextFieldValue("고쳐 주세요", TextRange(6), TextRange(0, 6))
+        }
+        compose.onNodeWithText(context.getString(R.string.chat_send_button)).performClick()
+        compose.runOnIdle {
+            assertEquals(listOf("t1" to "고쳐 주세요"), connection.typed)
+            assertEquals(TextFieldValue(""), chat.input)
+        }
+        input.assertIsFocused()
     }
 }
