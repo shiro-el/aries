@@ -134,12 +134,15 @@ class ChatQueuedMessageTest {
 
     @Test fun reconnectDoesNotRetryEitherUnsentOrUnconfirmedMessages() {
         val core = FakeCore()
-        val connection = open(core)
+        val originalConnection = open(core)
         send("check delivery")
-        core.pushChat(ChatSnapshot(emptyList(), ChatStatus.RECONNECTING, null))
+        // The sending line and the Chat watch have separate SSH connections.
+        // Losing only HostLink must not replay a local queue on its replacement.
+        compose.runOnIdle { (hosts.screen as Screen.Chat).chat.link!!.lost(originalConnection) }
+        compose.waitUntil(5_000) { core.connection !== originalConnection }
         compose.waitForIdle()
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("check delivery")
-        core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, null))
+        val connection = core.connection!!
         core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
         compose.waitForIdle()
         assertEquals(0, connection.calls.count { it == "sendMessage" })

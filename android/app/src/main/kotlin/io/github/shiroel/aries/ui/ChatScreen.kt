@@ -40,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.structuralEqualityPolicy
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -72,12 +73,14 @@ import io.github.shiroel.aries.core.ChatToolStatus
 import io.github.shiroel.aries.core.ChatWatch
 import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.Host
+import io.github.shiroel.aries.core.HostConnection
 import io.github.shiroel.aries.core.SendListener
 import io.github.shiroel.aries.core.SendOutcome
 import io.github.shiroel.aries.core.TerminalInfo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
@@ -281,6 +284,8 @@ class ChatModel(
     var queuedMessages by mutableStateOf<List<QueuedChatMessage>>(emptyList())
         private set
     private var sendJob: Job? = null
+    private var connectionJob: Job? = null
+    private var waitingConnection: HostConnection? = null
     private var stopped = false
     private var terminalRevision = 0L
     private var recoveryLoaded = false
@@ -335,6 +340,10 @@ class ChatModel(
 
     /** No retry is safe once terminal.send has started, even if its reply is lost. */
     private fun drainQueue() {
+        if (!stopped && queuedMessages.any { it.phase == QueuedMessagePhase.Waiting } && link?.connection !== waitingConnection) {
+            returnWaitingToDraft()
+            return
+        }
         if (stopped || paused || sending != null || interrupting || inputUnavailable ||
             connectionError != null || link?.state != LinkState.Up || snapshot?.status != ChatStatus.LIVE ||
             terminal.agentStatus == AgentStatus.Working || terminal.agentStatus is AgentStatus.Blocked) return
@@ -391,10 +400,16 @@ class ChatModel(
     /** Working Agents keep a cancellable FIFO on the phone until they finish. */
     fun send() {
         if (scope == null || !canSend) return
-        if (link?.connection == null) {
+        val connection = link?.connection
+        if (connection == null) {
             sendError = CoreException.Closed().message
             return
         }
+        if (queuedMessages.any { it.phase == QueuedMessagePhase.Waiting } && connection !== waitingConnection) {
+            returnWaitingToDraft()
+            return
+        }
+        waitingConnection = connection
         val text = attachments.fold(draft) { message, attachment ->
             message + (if (message.isEmpty() || message.last().isWhitespace()) "" else " ") + shellQuote(attachment.path)
         }
@@ -486,6 +501,15 @@ class ChatModel(
         stopped = false
         restoreOutbox()
         this.scope = scope
+        connectionJob?.cancel()
+        connectionJob = scope.launch {
+            // ChatWatch has its own SSH line. A live transcript cannot prove
+            // that the connection owning a phone-local queue survived.
+            snapshotFlow { link?.state to link?.connection }.collect { (state, connection) ->
+                if (queuedMessages.any { it.phase == QueuedMessagePhase.Waiting } &&
+                    (state != LinkState.Up || connection !== waitingConnection)) returnWaitingToDraft()
+            }
+        }
         job?.cancel()
         job = scope.launch {
             var attempt = 0
@@ -661,6 +685,7 @@ class ChatModel(
             if (it.phase == QueuedMessagePhase.Agent && !it.confirmed) it.copy(phase = QueuedMessagePhase.Uncertain) else it
         }
         saveOutbox()
+        connectionJob?.cancel()
         sendJob?.cancel()
         uploadJob?.cancel()
         job?.cancel()
