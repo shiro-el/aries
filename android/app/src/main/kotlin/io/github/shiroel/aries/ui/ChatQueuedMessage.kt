@@ -76,62 +76,74 @@ internal fun QueuedMessageBubble(message: QueuedChatMessage, chat: ChatModel) {
         } },
         dismissButton = { TextButton(onClick = { confirmRetry = false }) { Text(stringResource(R.string.cancel_button)) } },
     )
-    Surface(
+    val thread = LocalThreadChat.current != null
+    val delivery: @Composable () -> Unit = {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(painterResource(when {
+                message.confirmed -> R.drawable.ic_check
+                message.phase == QueuedMessagePhase.Uncertain || message.phase == QueuedMessagePhase.Failed -> R.drawable.ic_circle_dot
+                else -> R.drawable.ic_send
+            }), contentDescription = null, modifier = Modifier.padding(end = 8.dp).size(16.dp))
+            Text(
+                stringResource(if (message.heldForTyping) R.string.chat_send_held else when (message.phase) {
+                    QueuedMessagePhase.Waiting -> R.string.chat_queue_waiting
+                    QueuedMessagePhase.Agent -> if (message.confirmed) R.string.chat_delivery_entered else R.string.chat_sending
+                    QueuedMessagePhase.Uncertain -> R.string.chat_queue_uncertain
+                    QueuedMessagePhase.Failed -> R.string.chat_delivery_failed
+                }),
+                Modifier.weight(1f).padding(vertical = if (thread) 4.dp else 12.dp),
+                style = if (thread) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium,
+            )
+            if (message.confirmed) {
+                IconButton(onClick = { chat.dismissEnteredMessage(message.id) }) {
+                    Icon(painterResource(R.drawable.ic_x), stringResource(R.string.chat_delivery_dismiss_button))
+                }
+            } else if (message.phase == QueuedMessagePhase.Waiting) {
+                IconButton(onClick = { chat.cancelQueuedMessage(message.id) }) {
+                    Icon(painterResource(R.drawable.ic_x), stringResource(R.string.chat_queue_cancel_button))
+                }
+            }
+        }
+        message.error?.takeIf { it.isNotBlank() }?.let {
+            Text(if (message.phase == QueuedMessagePhase.Uncertain) it else stringResource(R.string.chat_send_failed, it), color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall)
+        }
+        if (message.phase == QueuedMessagePhase.Uncertain || message.phase == QueuedMessagePhase.Failed) {
+            Row {
+                TextButton(onClick = {
+                    if (message.phase == QueuedMessagePhase.Uncertain) confirmRetry = true else chat.retryMessage(message.id)
+                }, enabled = chat.canRetryMessage) { Text(stringResource(R.string.chat_delivery_retry_button)) }
+                TextButton(onClick = { chat.restoreFailedMessage(message.id) }) {
+                    Text(stringResource(R.string.chat_delivery_restore_button))
+                }
+            }
+        }
+    }
+    val body: @Composable () -> Unit = {
+        if (message.draft.isNotEmpty()) Text(message.draft, style = MaterialTheme.typography.bodyLarge)
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            message.attachments.forEach { attachment ->
+                Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.surfaceVariant,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+                    Text(attachment.name, Modifier.padding(8.dp), style = MaterialTheme.typography.labelLarge,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+    }
+    if (thread) {
+        ThreadUserBubble(delivery = delivery) {
+            // Match a transcript paragraph's header, block and footer spacing.
+            Column(Modifier.padding(16.dp)) { body() }
+        }
+    } else Surface(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
     ) {
         Column(Modifier.padding(start = 12.dp, end = 4.dp, bottom = 12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(painterResource(when {
-                    message.confirmed -> R.drawable.ic_check
-                    message.phase == QueuedMessagePhase.Uncertain || message.phase == QueuedMessagePhase.Failed -> R.drawable.ic_circle_dot
-                    else -> R.drawable.ic_send
-                }), contentDescription = null, modifier = Modifier.padding(end = 8.dp).size(16.dp))
-                Text(
-                    stringResource(if (message.heldForTyping) R.string.chat_send_held else when (message.phase) {
-                        QueuedMessagePhase.Waiting -> R.string.chat_queue_waiting
-                        QueuedMessagePhase.Agent -> if (message.confirmed) R.string.chat_delivery_entered else R.string.chat_sending
-                        QueuedMessagePhase.Uncertain -> R.string.chat_queue_uncertain
-                        QueuedMessagePhase.Failed -> R.string.chat_delivery_failed
-                    }),
-                    Modifier.weight(1f).padding(vertical = 12.dp),
-                    style = MaterialTheme.typography.labelMedium,
-                )
-                if (message.confirmed) {
-                    IconButton(onClick = { chat.dismissEnteredMessage(message.id) }) {
-                        Icon(painterResource(R.drawable.ic_x), stringResource(R.string.chat_delivery_dismiss_button))
-                    }
-                } else if (message.phase == QueuedMessagePhase.Waiting) {
-                    IconButton(onClick = { chat.cancelQueuedMessage(message.id) }) {
-                        Icon(painterResource(R.drawable.ic_x), stringResource(R.string.chat_queue_cancel_button))
-                    }
-                }
-            }
-            message.error?.takeIf { it.isNotBlank() }?.let {
-                Text(if (message.phase == QueuedMessagePhase.Uncertain) it else stringResource(R.string.chat_send_failed, it), color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall)
-            }
-            if (message.phase == QueuedMessagePhase.Uncertain || message.phase == QueuedMessagePhase.Failed) {
-                Row {
-                    TextButton(onClick = {
-                        if (message.phase == QueuedMessagePhase.Uncertain) confirmRetry = true else chat.retryMessage(message.id)
-                    }, enabled = chat.canRetryMessage) { Text(stringResource(R.string.chat_delivery_retry_button)) }
-                    TextButton(onClick = { chat.restoreFailedMessage(message.id) }) {
-                        Text(stringResource(R.string.chat_delivery_restore_button))
-                    }
-                }
-            }
-            if (message.draft.isNotEmpty()) Text(message.draft, style = MaterialTheme.typography.bodyLarge)
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                message.attachments.forEach { attachment ->
-                    Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.surfaceVariant,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
-                        Text(attachment.name, Modifier.padding(8.dp), style = MaterialTheme.typography.labelLarge,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                }
-            }
+            delivery()
+            body()
         }
     }
 }

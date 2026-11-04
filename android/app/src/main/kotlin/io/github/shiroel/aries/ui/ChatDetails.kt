@@ -16,6 +16,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
@@ -27,6 +28,8 @@ import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.ChatResponseCompletion
 import io.github.shiroel.aries.core.ChatResponseMetadata
 import io.github.shiroel.aries.core.ChatToolDetails
+
+internal val LocalChatResponseMetadata = staticCompositionLocalOf<ChatResponseMetadata?> { null }
 
 /** Keep the disclosure header outside the bounded, independently scrollable details. */
 @Composable
@@ -86,7 +89,8 @@ private fun Detail(@StringRes label: Int, value: String, filePath: Boolean = fal
 
 /** Recorded details are opt-in; interruptions and errors remain visible. */
 @Composable
-internal fun ChatResponseMetadataView(metadata: ChatResponseMetadata, expanded: Boolean, onToggle: () -> Unit) {
+internal fun ChatResponseMetadataView(metadata: ChatResponseMetadata, expanded: Boolean,
+    showDisclosure: Boolean = true, onToggle: () -> Unit) {
     val completion = metadata.completion?.let {
         when (it) {
             ChatResponseCompletion.COMPLETE -> R.string.chat_response_complete
@@ -101,7 +105,7 @@ internal fun ChatResponseMetadataView(metadata: ChatResponseMetadata, expanded: 
                     color = MaterialTheme.colorScheme.error)
             }
             val state = stringResource(if (expanded) R.string.chat_details_expanded else R.string.chat_details_collapsed)
-            TextButton(onClick = onToggle, modifier = Modifier.semantics { stateDescription = state }) {
+            if (showDisclosure) TextButton(onClick = onToggle, modifier = Modifier.semantics { stateDescription = state }) {
                 Text(stringResource(R.string.chat_response_details_button), style = MaterialTheme.typography.labelSmall)
             }
         }
@@ -110,7 +114,7 @@ internal fun ChatResponseMetadataView(metadata: ChatResponseMetadata, expanded: 
 }
 
 @Composable
-private fun ChatResponseMetadataDetails(metadata: ChatResponseMetadata) {
+internal fun ChatResponseMetadataDetails(metadata: ChatResponseMetadata, multiline: Boolean = false) {
     val locale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
     val parts = buildList {
         metadata.model?.let { add(stringResource(R.string.chat_response_model, it)) }
@@ -131,9 +135,9 @@ private fun ChatResponseMetadataDetails(metadata: ChatResponseMetadata) {
     }
     if (parts.isNotEmpty()) {
         Text(
-            parts.joinToString(" · "),
-            Modifier.horizontalScroll(rememberScrollState()),
-            maxLines = 1,
+            parts.joinToString(if (multiline) "\n" else " · "),
+            if (multiline) Modifier else Modifier.horizontalScroll(rememberScrollState()),
+            maxLines = if (multiline) Int.MAX_VALUE else 1,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
