@@ -558,25 +558,27 @@ class RemoteFilesTest {
         compose.setContent { androidx.compose.runtime.key(generation) {
             MaterialTheme { RemoteFilesScreen(conn, "t1", {}, initialLocation = FileLocation("/a.kt")) }
         } }
-        fun layout(): TextLayoutResult {
+        fun layout(): TextLayoutResult? {
+            // Highlighting runs off the UI thread, including after reopening the viewer.
+            if (compose.onAllNodesWithText(line).fetchSemanticsNodes().isEmpty()) return null
             val results = mutableListOf<TextLayoutResult>()
             compose.onNodeWithText(line).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
             return results.single()
         }
-        assertEquals(1, layout().lineCount)
+        compose.waitUntil(5000) { layout()?.lineCount == 1 }
         compose.onNodeWithContentDescription(str(R.string.files_wrap_lines)).assertIsOff()
         screenshot("wrap-file-off")
         compose.onNodeWithContentDescription(str(R.string.files_wrap_lines)).performClick()
-        compose.waitUntil(5000) { layout().lineCount > 1 }
+        compose.waitUntil(5000) { (layout()?.lineCount ?: 0) > 1 }
         compose.onNodeWithContentDescription(str(R.string.files_wrap_lines)).assertIsOn()
-        org.junit.Assert.assertTrue(layout().layoutInput.text.spanStyles.isNotEmpty())
+        org.junit.Assert.assertTrue(layout()!!.layoutInput.text.spanStyles.isNotEmpty())
         screenshot("wrap-file-on")
         compose.runOnIdle { generation++ }
-        compose.waitUntil(5000) { layout().lineCount > 1 }
+        compose.waitUntil(5000) { (layout()?.lineCount ?: 0) > 1 }
         compose.onNodeWithContentDescription(str(R.string.files_wrap_lines)).assertIsOn().performClick()
-        compose.waitUntil(5000) { layout().lineCount == 1 }
+        compose.waitUntil(5000) { layout()?.lineCount == 1 }
         compose.runOnIdle { generation++ }
-        compose.waitUntil(5000) { layout().lineCount == 1 }
+        compose.waitUntil(5000) { layout()?.lineCount == 1 }
         compose.onNodeWithContentDescription(str(R.string.files_wrap_lines)).assertIsOff()
     }
 

@@ -2,6 +2,7 @@ package io.github.shiroel.aries.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -146,7 +147,8 @@ internal fun TasksHome(model: HostsModel, board: AgentBoard) {
 internal fun tasksAttentionColor(): Color = if (MaterialTheme.colorScheme.background.luminance() < .5f) Brand.Saffron else Color(0xFF8F5E06)
 
 @Composable
-internal fun TasksTaskRow(entry: AgentEntry, transcript: ChatSnapshot? = null, stats: TaskChangeStats? = null, onOpen: () -> Unit) {
+internal fun TasksTaskRow(entry: AgentEntry, transcript: ChatSnapshot? = null, stats: TaskChangeStats? = null,
+    onLongClick: (() -> Unit)? = null, onOpen: () -> Unit) {
     val status = entry.terminal.agentStatus
     val blocked = status as? AgentStatus.Blocked
     val lastTool = transcript?.entries?.lastOrNull { it.body is ChatEntryBody.Tool }?.body as? ChatEntryBody.Tool
@@ -180,7 +182,7 @@ internal fun TasksTaskRow(entry: AgentEntry, transcript: ChatSnapshot? = null, s
                 color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
             if (entry.live && entry.terminal.statusMs != null) AgentElapsedTime(entry.terminal.statusMs)
             else if (!entry.live) entry.lastUpdatedMs?.let { Text(agentLastSeen(it), style = MaterialTheme.typography.bodySmall) }
-        }, summary = summary, mono = blocked?.reason == BlockedReason.PERMISSION)
+        }, summary = summary, mono = blocked?.reason == BlockedReason.PERMISSION, onLongClick = onLongClick)
 }
 
 @Composable
@@ -200,10 +202,12 @@ private fun TasksCallRow(entry: CallEntry, onOpen: () -> Unit) {
 
 @Composable
 private fun TasksRow(title: String, label: String, accent: Color, urgent: Boolean, modifier: Modifier,
-    onOpen: () -> Unit, metadata: @Composable RowScope.() -> Unit, summary: String?, mono: Boolean = false) {
+    onOpen: () -> Unit, metadata: @Composable RowScope.() -> Unit, summary: String?, mono: Boolean = false,
+    onLongClick: (() -> Unit)? = null) {
     Column(modifier.fillMaxWidth().then(if (urgent) Modifier.background(Brand.Saffron.copy(alpha = .07f))
         .drawBehind { drawLine(Brand.Saffron, Offset(1.5.dp.toPx(), 0f), Offset(1.5.dp.toPx(), size.height), 3.dp.toPx()) } else Modifier)
-        .clickable(role = Role.Button, onClick = onOpen).padding(horizontal = 16.dp, vertical = 12.dp),
+        .combinedClickable(role = Role.Button, onClick = onOpen, onLongClick = onLongClick,
+            onLongClickLabel = stringResource(R.string.terminals_actions_label)).padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
             Text(title, Modifier.weight(1f), fontWeight = FontWeight.SemiBold, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
