@@ -108,7 +108,7 @@ private fun AriesContent(model: HostsModel, settings: ThemeSettings, terminalDis
                                 hostEditor = { host -> if (host.endpoint is Endpoint.Ssh) HostEditSection(model, host) },
                             )
                         }
-                        is Screen.Connecting -> Connecting(s.host)
+                        is Screen.Connecting -> ConnectionNotice(s.link)
                         is Screen.Browse -> {
                             BrowseScreen(
                                 s.browser,
@@ -302,14 +302,6 @@ private fun AddHostForm(model: HostsModel) {
             name = ""; address = ""; port = "22"; user = ""
         },
     ) { Text(stringResource(R.string.host_add_button)) }
-}
-
-@Composable
-private fun Connecting(host: Host) {
-    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        CircularProgressIndicator()
-        Text(stringResource(R.string.connecting, host.name))
-    }
 }
 
 @Composable
