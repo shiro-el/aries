@@ -18,7 +18,6 @@ import com.journeyapps.barcodescanner.ScanOptions
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.CoreException
 import io.github.shiroel.aries.core.HostPairingDetails
-import kotlinx.coroutines.launch
 
 /** Review survives UI recreation in memory; QR credentials never enter saved state or disk. */
 internal class QrPairingReview {
@@ -26,7 +25,11 @@ internal class QrPairingReview {
     var details by mutableStateOf<HostPairingDetails?>(null)
     var name by mutableStateOf("")
     var error by mutableStateOf<Int?>(null)
-    fun clear() { qr = null; details = null; name = ""; error = null }
+    var busy by mutableStateOf(false)
+    var paired by mutableStateOf<io.github.shiroel.aries.core.Host?>(null)
+    var revision = 0
+        private set
+    fun clear() { revision++; qr = null; details = null; name = ""; error = null; busy = false; paired = null }
 }
 
 @Composable
@@ -34,17 +37,15 @@ internal fun QrHostPairing(
     model: HostsModel,
     scanQr: (((String) -> Unit) -> Unit)? = null,
     connectAfterPair: Boolean = false,
-    onPaired: (io.github.shiroel.aries.core.Host) -> Unit = {},
 ) {
     val review = model.pairingReview
     var qr by review::qr
     var details by review::details
     var name by review::name
     var error by review::error
-    var busy by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
+    val busy = review.busy
     val scanned: (String) -> Unit = { value ->
-        qr = null; details = null; error = null
+        review.clear()
         try {
             val parsed = model.inspectPairingQr(value)
             details = parsed; name = parsed.address; qr = value
@@ -75,31 +76,9 @@ internal fun QrHostPairing(
                 ConsoleButton(
                     modifier = Modifier.testTag("host-pair-confirm"),
                     enabled = !busy && qr != null && validHostInput(model.hosts, null, name, offer.address, offer.port.toInt(), offer.user),
-                    onClick = {
-                        val credential = qr ?: return@ConsoleButton
-                        // A submitted one-use credential cannot be replayed if
-                        // recreation interrupts the form's wait for its result.
-                        qr = null
-                        busy = true; error = null
-                        scope.launch {
-                            try {
-                                val host = model.pairHostQr(name, credential, connectAfterPair)
-                                qr = null; details = null; name = ""
-                                onPaired(host)
-                            } catch (e: CoreException) {
-                                error = when (e) {
-                                    is CoreException.InvalidPairingQr -> R.string.host_pair_invalid
-                                    is CoreException.HostKeyChanged -> R.string.host_pair_key_changed
-                                    else -> R.string.host_pair_refused
-                                }
-                                // A lost reply may mean the token was consumed. Require
-                                // another scan, never retry the write automatically.
-                                qr = null
-                            } finally { busy = false }
-                        }
-                    },
+                    onClick = { model.pairReviewedHost(connectAfterPair) },
                 ) { Text(stringResource(if (busy) R.string.host_pair_busy else R.string.host_pair_confirm_button)) }
-                TextButton(enabled = !busy, onClick = { qr = null; details = null; error = null }) {
+                TextButton(enabled = !busy, onClick = review::clear) {
                     Text(stringResource(R.string.cancel_button))
                 }
             }
