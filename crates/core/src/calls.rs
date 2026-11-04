@@ -22,6 +22,7 @@ use crate::transport::Stream;
 
 /// No line (not even a heartbeat) for this long means the stream is dead.
 const SILENCE: Duration = Duration::from_secs(wire::HEARTBEAT_SECS * 3);
+const SNAPSHOT_WAIT: Duration = Duration::from_secs(15);
 const MAX_BACKOFF: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
@@ -418,8 +419,17 @@ async fn run_watch(
         let (tx, mut cut_rx) = tokio::sync::oneshot::channel();
         *cut.lock().expect("cut lock") = Some(tx);
         let result = async {
-            let mut feed = Feed::new(runner.open(&command(&["calls", "--follow"])).await?);
-            let mut calls = feed.snapshot().await?;
+            // Bound the entire initial sync, including reconnects and streams that keep
+            // sending heartbeats or partial history without ever reaching Synced.
+            let (mut feed, mut calls) = tokio::time::timeout(SNAPSHOT_WAIT, async {
+                let mut feed = Feed::new(runner.open(&command(&["calls", "--follow"])).await?);
+                let calls = feed.snapshot().await?;
+                Ok::<_, CoreError>((feed, calls))
+            })
+            .await
+            .map_err(|_| CoreError::Unreachable {
+                detail: "the Host did not finish syncing Calls in time".into(),
+            })??;
             backoff = Duration::from_secs(1);
             match &mut seen {
                 None => seen = Some(calls.iter().map(|(_, c)| c.id.clone()).collect()),

@@ -37,12 +37,15 @@ private enum class TasksFilter(val label: Int, val tag: String) {
 
 @Composable
 internal fun TasksHome(model: HostsModel, board: AgentBoard) {
+    androidx.lifecycle.compose.LifecycleStartEffect(model) {
+        model.beginTaskNeeds()
+        onStopOrDispose { model.endTaskNeeds() }
+    }
     var filter by rememberSaveable { mutableStateOf(TasksFilter.ALL) }
     var grouped by rememberSaveable { mutableStateOf(false) }
     var queue by remember { mutableStateOf<TasksNeedsQueue?>(null) }
-    var resolved by remember { mutableStateOf<Set<String>>(emptySet()) }
     val agents = board.agents
-    val needs = taskNeeds(agents, model.calls.calls).filterNot { it.key in resolved }
+    val needs = taskNeeds(agents, model.calls.calls, model::taskTranscript)
     val calls = needs.filterIsInstance<TaskNeed.Call>().map { it.entry }
     val visible = agents.filter {
         when (filter) {
@@ -53,7 +56,7 @@ internal fun TasksHome(model: HostsModel, board: AgentBoard) {
         }
     }
     val openNeed: (TaskNeed) -> Unit = { need ->
-        queue = TasksNeedsQueue(needs, needs.indexOfFirst { it.key == need.key }.coerceAtLeast(0)) { resolved = resolved + it }
+        queue = TasksNeedsQueue(needs, needs.indexOfFirst { it.key == need.key }.coerceAtLeast(0))
     }
     val folds = rememberTreeFolds("tasks-hosts")
     Column(Modifier.fillMaxSize().testTag("tasks-home")) {
