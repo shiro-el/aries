@@ -383,14 +383,11 @@ class ChatModel(
         // Retain the current line before even reading camera bytes. Leaving the Host
         // can then finish this bounded batch before disconnecting, without replaying a put.
         val initialConnection = link.connection
-        val upload: suspend () -> Unit = {
+        val upload: suspend (HostConnection) -> Unit = { connection ->
             try {
                 for (uri in content.uris) {
                     val attachment = withContext(Dispatchers.IO) { prepareAttachment(context, uri, resize) }
                     uploadRemaining = listOf(attachment.name) + uploadRemaining.drop(1)
-                    // The picker/camera may stop the Activity and release its Host connection.
-                    // Wait for its replacement after reading the URI; never retry a put itself.
-                    val connection = initialConnection ?: link.awaitConnection()
                     if (inputUnavailable) throw CoreException.Closed()
                     val path = try {
                         connection.uploadAttachment(terminal.address, attachment.name, attachment.bytes)
@@ -414,8 +411,24 @@ class ChatModel(
                 cleanup()
             }
         }
-        uploadJob = if (initialConnection != null) link.finishBeforeDisconnect(initialConnection, upload)
-        else scope.launch(start = CoroutineStart.UNDISPATCHED) { upload() }
+        uploadJob = if (initialConnection != null) {
+            link.finishBeforeDisconnect(initialConnection) { upload(initialConnection) }
+        } else scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            // A picker/camera may release the old line. Acquire and retain its
+            // replacement before preparing bytes; never retry a put itself.
+            try {
+                val connection = link.awaitConnection()
+                uploadJob = link.finishBeforeDisconnect(connection) { upload(connection) }
+            } catch (e: CancellationException) {
+                uploading = false
+                cleanup()
+                throw e
+            } catch (e: Exception) {
+                if (attachmentRevision == revision) attachmentFailed(e)
+                uploading = false
+                cleanup()
+            }
+        }
         return true
     }
 
