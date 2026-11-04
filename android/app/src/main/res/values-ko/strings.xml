@@ -535,6 +535,9 @@
     <string name="agents_next_waiting">다음 확인 필요 Agent: %1$s · %2$s</string>
 
     <!-- Agent list liveness -->
+    <string name="agents_host_scope">%1$s만 보는 중</string>
+    <string name="agents_show_all">모두 보기</string>
+    <string name="agents_host_not_connected">%1$s · 연결 안 함</string>
     <string name="agents_watch_stopped">%1$s · 멈춤: %2$s</string>
     <string name="agents_host_offline">%1$s · 오프라인</string>
     <string name="agents_last_known_group">마지막 확인 상태 · %1$d</string>
@@ -819,6 +822,8 @@
     <string name="chat_queue_agent">Agent에 전달됨 · 차례 대기 중</string>
     <string name="chat_queue_uncertain">전달 여부 미확인 · 다시 보내기 전에 대화를 확인하세요</string>
     <string name="chat_queue_cancel_button">대기 메시지 취소</string>
+    <string name="chat_queue_returned">대기 중이던 메시지를 입력창으로 돌려놓았어요. 확인한 뒤 직접 보내 주세요.</string>
+    <string name="chat_delivery_dismiss_button">전송 안내 닫기</string>
 
     <string name="chat_send_held">누군가 이 Terminal에 입력하고 있어요. 입력이 멈추면 메시지를 넣을게요.</string>
     <string name="chat_send_refused">보내지 않았어요. Agent가 Blocked 상태라 Terminal에서 응답을 기다리고 있어요.</string>
@@ -894,6 +899,7 @@
     <string name="tasks_host_view">Host별 보기</string>
     <string name="tasks_offline">연결 끊김</string>
     <string name="tasks_host_connected">연결됨</string>
+    <string name="tasks_host_not_connected">연결 안 함</string>
     <string name="tasks_needs_position">필요 %1$d건 중 %2$d</string>
     <string name="tasks_needs_next">나중에 · 다음 건</string>
     <string name="tasks_needs_open">Chat에서 이 요청을 확인하세요.</string>
@@ -1324,6 +1330,7 @@
         <item quantity="other">Host %1$d개 확인 중…</item>
     </plurals>
     <string name="call_inbox_empty">여기서 답할 Call이 없어요.</string>
+    <string name="call_caller_unknown">Agent</string>
     <string name="call_inbox_caller">%2$s의 %1$s</string>
     <string name="call_open_chat">Chat에서 열기</string>
     <string name="call_open_chat_label">%1$s Chat 열기 (Call: %2$s)</string>

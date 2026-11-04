@@ -45,6 +45,7 @@ internal fun TasksChatDetail(model: HostsModel, chat: ChatModel) {
         if (changesOpen) Column(Modifier.fillMaxSize()) {
             AgentScreenHeader(chat.terminal, chat.host.name, model::closeChat, AgentView.CHAT, null,
                 link = chat.link, usage = chat.snapshot?.usage, onTerminalUpdate = { chat.update(listOf(it)) })
+            CallAttentionSlot()
             TasksChanges(changes, chat.link, chat.terminal) { text -> chat.appendDraft(text); changesOpen = false }
         } else ChatScreen(chat, onBack = model::closeChat, onOpenTerminal = { model.switchView(AgentView.TERMINAL) },
             onView = model::switchView, calls = model.calls)
@@ -76,6 +77,7 @@ internal fun TasksTerminalDetail(model: HostsModel, viewer: TerminalViewer, disp
         if (changesOpen) Column(Modifier.fillMaxSize()) {
             AgentScreenHeader(viewer.terminal, link.host.name, model::closeTerminal, AgentView.TERMINAL, null,
                 link = link, onTerminalUpdate = { viewer.update(listOf(it)) })
+            CallAttentionSlot()
             TasksChanges(changes, link, viewer.terminal, onSend = model::sendTerminalSelectionToDraft)
         } else TerminalScreen(viewer, onBack = model::closeTerminal, onView = model::switchView,
             displaySettings = display, onSelectionSend = model::sendTerminalSelectionToDraft,

@@ -7,6 +7,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -82,9 +83,10 @@ private fun ThreadTaskForm(task: NewTask, model: HostsModel?, onStart: () -> Uni
         }
         Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
             Column {
-                OutlinedTextField(task.input, { task.input = it }, enabled = !form.busy && !task.sent,
+                OutlinedTextField(task.input, { model?.interactWithHome(); task.input = it }, enabled = !form.busy && !task.sent,
                     placeholder = { Text(stringResource(R.string.new_task_prompt)) }, minLines = 2, maxLines = 6,
-                    modifier = Modifier.fillMaxWidth().testTag("new-task-prompt"), shape = RoundedCornerShape(20.dp))
+                    modifier = Modifier.fillMaxWidth().onFocusChanged { if (it.isFocused) model?.interactWithHome() }
+                        .testTag("new-task-prompt"), shape = RoundedCornerShape(20.dp))
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = { options = !options }, enabled = editable) { Text(stringResource(R.string.new_task_options)) }
                     Spacer(Modifier.weight(1f))

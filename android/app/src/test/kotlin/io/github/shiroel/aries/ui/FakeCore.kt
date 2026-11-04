@@ -775,6 +775,8 @@ class FakeConnection(
 ) : HostConnection(NoHandle) {
     override fun previewPorts(output: String): List<UShort> = emptyList()
     override suspend fun previewListeningPorts(): List<UShort> = emptyList()
+    override suspend fun openPreview(port: UShort): io.github.shiroel.aries.core.PreviewForward =
+        throw CoreException.Unreachable("No preview server in this fixture")
 
     var githubRepo = io.github.shiroel.aries.core.GithubRepository("/repo", null, "octo/project", "github.com")
     var githubRepoReads = 0
@@ -1097,9 +1099,11 @@ class FakeConnection(
     /** When set, `sendMessage` is held (someone types at the Host) until it completes. */
     var sendHold: CompletableDeferred<Unit>? = null
     var sendReply: CompletableDeferred<Unit>? = null
+    val sendListeners = mutableListOf<SendListener>()
 
     override suspend fun sendMessage(address: String, text: String, listener: SendListener): SendOutcome {
         calls += "sendMessage"
+        sendListeners += listener
         sendHold?.let {
             listener.onHeld()
             it.await()

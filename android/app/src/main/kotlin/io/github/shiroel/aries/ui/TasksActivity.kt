@@ -110,7 +110,8 @@ internal fun TasksRequestDialogs(dialogs: ChatDialogState, chat: ChatModel, call
 @Composable
 internal fun TasksCallTrace(entry: CallEntry) {
     val dialogs = LocalChatDialogs.current
-    TextButton(onClick = { dialogs?.tasksRequest = TasksRequest.Call(entry) }, modifier = Modifier.fillMaxWidth().testTag("tasks-call:${entry.key}")) {
+    TextButton(onClick = { dialogs?.tasksRequest = TasksRequest.Call(entry) }, modifier = Modifier.fillMaxWidth().testTag("tasks-call:${entry.key}")
+        .presentsCalls(setOf(entry.key))) {
         Column(Modifier.fillMaxWidth().padding(8.dp)) {
             Text(entry.call.title, color = tasksAttentionColor())
             Text(stringResource(R.string.console_chat_call_label), style = MaterialTheme.typography.labelSmall)
