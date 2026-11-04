@@ -77,6 +77,10 @@ class HostLink(
     /** The live connection; `null` while reconnecting. */
     val connection: HostConnection? get() = current.value
 
+    private val githubModels = mutableMapOf<String, GithubModel>()
+    internal fun github(address: String): GithubModel =
+        githubModels.getOrPut(address) { GithubModel(scope, ::finishBeforeDisconnect) }
+
     private val finishingSends = mutableMapOf<HostConnection, MutableSet<Job>>()
 
     /** Finish explicitly submitted input on its original line; never reconnect or retry it. */
