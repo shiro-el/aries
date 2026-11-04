@@ -993,6 +993,8 @@
     <!-- Console appearance settings -->
     <string name="settings_title">설정</string>
     <!-- Local diagnostics -->
+    <string name="diagnostics_storage">기기 저장소</string>
+    <string name="diagnostics_last_known_state">마지막 확인 상태 저장</string>
     <string name="diagnostics_title">진단</string>
     <string name="diagnostics_all">전체</string>
     <string name="diagnostics_all_hosts">모든 Host</string>
