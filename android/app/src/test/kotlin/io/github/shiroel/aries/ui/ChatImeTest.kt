@@ -1,16 +1,27 @@
 package io.github.shiroel.aries.ui
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.*
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -29,7 +40,7 @@ class ChatImeTest {
     private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
     private val input get() = compose.onNodeWithContentDescription(context.getString(R.string.chat_input_label))
 
-    private fun open() {
+    private fun open(compact: Boolean = false, fontScale: Float = 1f) {
         val host = core.addHost("home", Endpoint.Ssh("host", 22u, "me"))
         compose.setContent {
             val scope = rememberCoroutineScope()
@@ -37,9 +48,56 @@ class ChatImeTest {
                 HostLink(host, connection, scope, { connection })
             }
             chat = remember { ChatModel(core, host, terminal, link).also { it.start(scope) } }
-            MaterialTheme { ChatScreen(chat, {}) }
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
+                MaterialTheme {
+                    Box(if (compact) Modifier.height(360.dp) else Modifier) { ChatScreen(chat, {}) }
+                }
+            }
         }
         input.performClick()
+    }
+
+    // A compact viewport must not collapse multiline drafts back to a single visible line.
+    @Test fun compactDraftGrowsFromOneToThreeLines() = checkCompactGrowth(1f)
+
+    @Test fun compactDraftGrowsWithLargeText() = checkCompactGrowth(1.6f)
+
+    private fun checkCompactGrowth(fontScale: Float) {
+        open(compact = true, fontScale = fontScale)
+        input.performTextInput("First line")
+        val singleLineHeight = input.fetchSemanticsNode().boundsInRoot.height
+        input.performTextInput("\nSecond line\nThird line")
+        assertTrue("Three lines must grow the compact composer", input.fetchSemanticsNode().boundsInRoot.height > singleLineHeight)
+        input.assertIsFocused().assertTextEquals("First line\nSecond line\nThird line")
+    }
+
+    // Overflow must scroll the editor, and moving the caret must reveal either end of a long draft.
+    @Test fun longCompactDraftStaysBoundedAndFollowsTheCaret() {
+        open(compact = true, fontScale = 1.6f)
+        input.performTextInput((1..12).joinToString("\n") { "Line $it" })
+        val cappedHeight = input.fetchSemanticsNode().boundsInRoot.height
+        input.performTextInput("\nAnother line")
+        assertEquals(cappedHeight, input.fetchSemanticsNode().boundsInRoot.height, 0.5f)
+        fun scroll() = input.fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange]
+        assertTrue("Long drafts must scroll inside the composer", scroll().maxValue() > 0f)
+
+        input.performTextInputSelection(TextRange(0))
+        compose.waitForIdle()
+        assertEquals(0f, scroll().value(), 0.5f)
+        input.performTextInputSelection(TextRange(chat.draft.length))
+        compose.waitForIdle()
+        assertTrue("The caret at the end must scroll into view", scroll().value() > 0f)
+        val layouts = mutableListOf<TextLayoutResult>()
+        input.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        val caret = layouts.single().getCursorRect(chat.draft.length)
+        assertTrue(caret.top - scroll().value() >= 0f)
+        assertTrue(caret.bottom - scroll().value() <= cappedHeight)
+        val endScroll = scroll().value()
+        input.performTouchInput { swipeDown() }
+        compose.waitForIdle()
+        assertTrue("Swiping the empty part of the input must also scroll the draft", scroll().value() < endScroll)
+        input.assertIsFocused()
     }
 
     @Test fun snapshotAndSameTextDraftWriteKeepVoiceCompositionAndSelection() {
