@@ -62,8 +62,9 @@ class WatchProgressPhoneTest {
                     paths += request.uri.path
                 }
         }
-        WorkManagerTestInitHelper.initializeTestWorkManager(context,
-            androidx.work.Configuration.Builder().setWorkerFactory(factory).build())
+        // Only the explicitly built worker publishes to this fake DataClient.
+        // Automatically scheduled work must not race its result observations.
+        WorkManagerTestInitHelper.initializeTestWorkManager(context)
         WatchProgressPhone.progress(context, "h1", PushContent.Progress("t1", "One", 10uL, 0u, now.toULong(), false))
         WatchProgressPhone.progress(context, "h2", PushContent.Progress("t1", "Two", 10uL, 0u, (now - 10).toULong(), false))
         WatchProgressPhone.completed(context, "h1", "t1", (now + 1).toULong())
@@ -83,8 +84,9 @@ class WatchProgressPhoneTest {
                     published += requireNotNull(WatchProgress.fromBytes(request.data))
                 }
         }
-        WorkManagerTestInitHelper.initializeTestWorkManager(context,
-            androidx.work.Configuration.Builder().setWorkerFactory(factory).build())
+        // Only the explicitly built worker publishes to this fake DataClient.
+        // Automatically scheduled work must not race its result observations.
+        WorkManagerTestInitHelper.initializeTestWorkManager(context)
         suspend fun publish() = TestListenableWorkerBuilder<WatchProgressWorker>(context).setWorkerFactory(factory).build().doWork()
         val activity = org.robolectric.Robolectric.buildActivity(android.app.Activity::class.java).setup()
         try {
