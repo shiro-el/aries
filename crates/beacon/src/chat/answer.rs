@@ -4,7 +4,9 @@
 //! Agent-neutral: the open question is the one the Agent's [`Interpreter`]
 //! reports as a running `tool` with a `question`, and only while herdr-core
 //! says the Terminal is `blocked` on a `question`. Each [`Agent`] only maps
-//! picks to its TUI keys ([`Agent::answer_keys`]).
+//! picks to its TUI keys ([`Agent::answer_keys`]). The reserved `permission:`
+//! IDs take a separate picks-only path: re-read a recognized live permission
+//! menu and its status/turn before sending that menu's advertised shortcut.
 
 use std::collections::HashMap;
 
@@ -20,9 +22,6 @@ pub trait TerminalInput {
     fn keys(&mut self, terminal: &str, keys: &[String]) -> Result<(), String>;
     fn text(&mut self, _terminal: &str, _text: &str) -> Result<(), String> {
         Err("literal text input is unavailable".into())
-    }
-    fn screen(&mut self, _terminal: &str) -> Result<String, String> {
-        Err("live screen is unavailable".into())
     }
 }
 
@@ -106,6 +105,32 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
     else {
         return Ok(reply(AnswerOutcome::NoAgent, terminal));
     };
+
+    if answer.question.starts_with(super::permission::PREFIX) {
+        let screen = link.screen(terminal).unwrap_or_default();
+        let Some(permission) =
+            super::permission::detect(agent.name(), &located.session, &facts, &screen)
+                .filter(|p| p.item.id == answer.question)
+        else {
+            return Ok(reply(AnswerOutcome::Gone, "the permission menu changed"));
+        };
+        let Some(keys) = permission.keys(&answer.picks, &answer.free_text) else {
+            return Ok(reply(AnswerOutcome::Invalid, "invalid permission choice"));
+        };
+        // Recheck status after the screen read. Never retry a possibly sent key.
+        let latest = link.get(terminal).ok().flatten();
+        if latest
+            .as_ref()
+            .and_then(|f| super::permission::detect(agent.name(), &located.session, f, &screen))
+            .is_none_or(|p| p.item.id != answer.question)
+        {
+            return Ok(reply(AnswerOutcome::Gone, "the permission status changed"));
+        }
+        return Ok(match link.keys(terminal, &keys) {
+            Ok(()) => AnswerReply::new(AnswerOutcome::Sent, None),
+            Err(e) => reply(AnswerOutcome::Failed, e),
+        });
+    }
 
     let Some(items) = transcript(agent.as_ref(), &located)? else {
         return Ok(reply(AnswerOutcome::Gone, "no transcript"));

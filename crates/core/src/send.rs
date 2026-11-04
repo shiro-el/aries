@@ -29,6 +29,42 @@ pub enum SendOutcome {
     },
 }
 
+/// What herdr-core observed after pressing the Agent's stop key.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, uniffi::Enum)]
+#[serde(rename_all = "snake_case")]
+pub enum InterruptOutcome {
+    Stopped,
+    Exited,
+    StillWorking,
+    Unknown,
+    /// The Agent was no longer Working when checked; no input was sent.
+    NotWorking,
+}
+
+pub(crate) async fn interrupt(
+    client: &HcClient,
+    address: &str,
+) -> Result<InterruptOutcome, CoreError> {
+    let terminal = client
+        .call("terminal.get", json!({ "terminal": address }))
+        .await?;
+    let info = crate::terminal_info(&terminal);
+    if info.state != "live" || info.agent_status != Some(AgentStatus::Working) {
+        return Ok(InterruptOutcome::NotWorking);
+    }
+    // herdr-core owns stop-key overrides and terminal key encoding. Never
+    // retry: a lost reply may still mean the key reached the Agent.
+    let reply = client
+        .call(
+            "terminal.interrupt",
+            json!({ "terminal": address, "timeout": 5 }),
+        )
+        .await?;
+    serde_json::from_value(reply["outcome"].clone()).map_err(|e| CoreError::Protocol {
+        detail: format!("invalid interrupt outcome: {e}"),
+    })
+}
+
 /// Hears about a send in progress.
 #[uniffi::export(with_foreign)]
 pub trait SendListener: Send + Sync {

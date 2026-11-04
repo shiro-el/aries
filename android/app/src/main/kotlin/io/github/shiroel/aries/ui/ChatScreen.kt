@@ -54,6 +54,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.shiroel.aries.PERMISSION_TOOL
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AnswerProblem
 import io.github.shiroel.aries.core.AgentStatus
@@ -119,7 +120,8 @@ class ChatModel(
 
     /**
      * Transcript Running means unresolved, not necessarily a live menu.
-     * Only a caught-up Chat and question-blocked Terminal expose live keys.
+     * Only a caught-up Chat and a matching Blocked reason expose live keys.
+     * Permission projections never become historical message replies.
      * Codex requests queue FIFO within the current user turn; Claude's newest
      * tool supersedes interrupted older ones. The Beacon rechecks before input.
      * With no live question, only the latest unresolved history may send a
@@ -133,11 +135,18 @@ class ChatModel(
         val pending = entries.drop(entries.indexOfLast { (it.body as? ChatEntryBody.User)?.queued == false } + 1)
             .filter { (it.body as? ChatEntryBody.Question)?.status == ChatToolStatus.RUNNING }
         val blocked = terminal.agentStatus as? AgentStatus.Blocked
+        val permission = (entries.find { it.id == id }?.body as? ChatEntryBody.Question)?.name == PERMISSION_TOOL
+        if (permission) {
+            return if (terminal.state == "live" && blocked?.reason == BlockedReason.PERMISSION &&
+                pending.lastOrNull { (it.body as? ChatEntryBody.Question)?.name == PERMISSION_TOOL }?.id == id)
+                QuestionMode.Live else QuestionMode.ReadOnly
+        }
         if (blocked?.reason == BlockedReason.QUESTION) {
-            val codex = pending.firstOrNull()?.body.let { (it as? ChatEntryBody.Question)?.name == "request_user_input" }
-            val current = if (codex) pending.firstOrNull() else pending.lastOrNull()
+            val questions = pending.filter { (it.body as? ChatEntryBody.Question)?.name != PERMISSION_TOOL }
+            val codex = questions.firstOrNull()?.body.let { (it as? ChatEntryBody.Question)?.name == "request_user_input" }
+            val current = if (codex) questions.firstOrNull() else questions.lastOrNull()
             if (current?.id == id) return QuestionMode.Live
-            return if (codex && pending.any { it.id == id }) QuestionMode.Queued else QuestionMode.ReadOnly
+            return if (codex && questions.any { it.id == id }) QuestionMode.Queued else QuestionMode.ReadOnly
         }
         if (blocked != null || terminal.state != "live") return QuestionMode.ReadOnly
         val latestIndex = entries.indexOfLast { it.body is ChatEntryBody.Question }
@@ -169,6 +178,32 @@ class ChatModel(
     /** Why the last message could not be sent, other than a refusal. */
     var sendError by mutableStateOf<String?>(null)
         private set
+
+    var interrupting by mutableStateOf(false)
+        private set
+    var interruptNotice by mutableStateOf<Message?>(null)
+        private set
+    val canInterrupt: Boolean get() = terminalAvailable && terminal.agentStatus == AgentStatus.Working &&
+        link?.connection != null && !interrupting && sending == null
+
+    /** One confirmed attempt, with no reconnect queue or automatic retry. */
+    fun interrupt() {
+        val scope = scope ?: return
+        if (!canInterrupt) return
+        val connection = link?.connection ?: return
+        val address = terminal.address
+        interrupting = true
+        interruptNotice = null
+        scope.launch {
+            try {
+                interruptNotice = interruptMessage(connection.interruptAgent(address))
+            } catch (e: CoreException) {
+                interruptNotice = Message(R.string.chat_interrupt_failed, listOf(e.message ?: e.toString()))
+            } finally {
+                interrupting = false
+            }
+        }
+    }
 
     var pendingShare by mutableStateOf<SharedContent?>(null)
     var attachments by mutableStateOf<List<DraftAttachment>>(emptyList())
@@ -243,7 +278,7 @@ class ChatModel(
         if (now.agentStatus !is AgentStatus.Blocked) refused = false
     }
 
-    val canSend: Boolean get() = link != null && canEdit && !uploading && pendingShare == null &&
+    val canSend: Boolean get() = link != null && canEdit && !interrupting && !uploading && pendingShare == null &&
         (draft.isNotBlank() || attachments.isNotEmpty())
 
     /**
@@ -577,8 +612,8 @@ fun ChatScreen(
             (chat.terminal.agentStatus as? AgentStatus.Blocked)?.let {
                 // A question the Chat shows open is answered with its own buttons;
                 // the Terminal notice is for what the Chat cannot answer.
-                val answerable = it.reason == BlockedReason.QUESTION && entries.any { e ->
-                    (e.body as? ChatEntryBody.Question)?.status == ChatToolStatus.RUNNING
+                val answerable = entries.any { e ->
+                    e.body is ChatEntryBody.Question && chat.questionMode(e.id) == ChatModel.QuestionMode.Live
                 }
                 if (!answerable || chat.refused) BlockedNotice(it, refused = chat.refused, onOpenTerminal)
             }
@@ -685,6 +720,7 @@ private fun MessageInput(chat: ChatModel) {
         lineHeight = 20.sp,
     )
     HorizontalDivider()
+    ChatInterruptControls(chat)
     DraftAttachments(chat)
     io.github.shiroel.aries.dictation.DictationInput(
         names = listOf(chat.host.name, displayName(chat.terminal), chat.terminal.cwd.orEmpty().trimEnd('/').substringAfterLast('/')),
@@ -726,9 +762,8 @@ private fun MessageInput(chat: ChatModel) {
 }
 
 /**
- * The Agent is Blocked: say why and send the user to the Terminal. A
- * permission request is only shown here, never answered: approving happens
- * in the Terminal.
+ * The Agent is Blocked and Chat has no recognized actionable menu.
+ * Keep the Terminal available for unsupported or incomplete prompts.
  */
 @Composable
 private fun BlockedNotice(status: AgentStatus.Blocked, refused: Boolean, onOpenTerminal: () -> Unit) {

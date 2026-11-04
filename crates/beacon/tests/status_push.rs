@@ -453,6 +453,39 @@ fn a_question_push_has_the_chat_id_options_and_current_turn() {
     assert!(json.get("excerpt").is_none());
 }
 
+#[test]
+fn a_permission_push_carries_the_live_scope_and_checked_answer_identity() {
+    let mut host = Host::new();
+    host.serve();
+    let screen = include_str!("../../../fixtures/agents/permissions/claude-write.txt")
+        .lines()
+        .map(|line| format!("say {line}\n"))
+        .collect::<String>();
+    let terminal = transcript_agent(
+        &host,
+        "",
+        &format!("status blocked permission\nsleep 0.2\n{screen}wait\n"),
+    );
+    let push = serde_json::to_value(&host.pushes(1)[0]).unwrap();
+    assert_eq!(push["terminal"], terminal);
+    assert!(
+        push["question"]["id"]
+            .as_str()
+            .unwrap()
+            .starts_with("permission:")
+    );
+    assert_eq!(
+        push["question"]["options"],
+        serde_json::json!(["Allow", "Allow always", "Deny"])
+    );
+    assert!(
+        push["question"]["text"]
+            .as_str()
+            .unwrap()
+            .contains("/work/a during this session")
+    );
+}
+
 /// Synthetic transcript records use the same parser as the recorded fixtures.
 fn question_record(questions: serde_json::Value) -> String {
     serde_json::json!({"type":"assistant","uuid":"m1","message":{"content":[{

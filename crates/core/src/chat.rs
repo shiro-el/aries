@@ -79,6 +79,9 @@ pub enum ChatEntryBody {
     /// A recorded Agent question. Running means unresolved, not necessarily
     /// live. Only the current question while the Terminal is Blocked on a
     /// question may use `answer_question` / `answer_question_with_text`.
+    /// The reserved name `permission` and `permission:` ID prefix instead
+    /// identify a transient live permission menu. It takes picks only while
+    /// permission-blocked, is rechecked on the Host, and is never cached.
     /// Codex queues unresolved requests FIFO in the current user turn; other
     /// Agents use the newest one. The Beacon validates again before input.
     /// With no live menu, a reply to the latest unresolved historical question
@@ -312,14 +315,37 @@ impl ChatModel {
     /// Shows a cached Chat (its images included) and resumes after its cursor.
     pub fn seed(&mut self, chat: CachedChat) {
         self.cursor = chat.cursor;
-        for item in chat.items {
+        for item in chat
+            .items
+            .into_iter()
+            .filter(|item| !item.id.starts_with("permission:"))
+        {
             self.upsert(item);
+        }
+    }
+
+    // Live screen projections have no transcript cursor. Clear them before
+    // resuming a stream, which will publish only the currently visible menu.
+    fn clear_permissions(&mut self) {
+        let ids: Vec<_> = self
+            .items
+            .iter()
+            .filter(|item| item.id.starts_with("permission:"))
+            .map(|item| item.id.clone())
+            .collect();
+        for id in ids {
+            self.apply(ChatLine::new(ChatEvent::Remove { id }));
         }
     }
 
     pub fn to_cache(&self) -> CachedChat {
         CachedChat {
-            items: self.items.clone(),
+            items: self
+                .items
+                .iter()
+                .filter(|item| !item.id.starts_with("permission:"))
+                .cloned()
+                .collect(),
             cursor: self.cursor.clone(),
         }
     }
@@ -881,6 +907,7 @@ async fn follow(
         if active.wait_for(|active| *active).await.is_err() {
             return;
         }
+        model.clear_permissions();
         let command = command(&terminal, model.cursor.as_deref());
         let opened = tokio::select! {
             biased;

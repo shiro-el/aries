@@ -65,13 +65,25 @@ class QuestionNotificationAnswerTest {
     private fun show() = PushService.show(context, push()) { core.canAnswerInBackground(it) }
     private fun notice(): QuestionNotice {
         show()
-        return QuestionNotice.fromJson(shadowOf(shown().actions[1].actionIntent).savedIntent
-            .getStringExtra(QuestionChoiceReceiver.EXTRA_NOTICE)!!)!!
+        return QuestionNotice.fromJson(NotificationPayloads.open(context, shadowOf(shown().actions[1].actionIntent).savedIntent
+            .getStringExtra(QuestionChoiceReceiver.EXTRA_NOTICE))!!)!!
     }
     private fun runWorker(choice: Int = 1): ListenableWorker.Result = runBlocking {
         val notice = notice()
         TestListenableWorkerBuilder<QuestionReplyWorker>(context)
-            .setInputData(QuestionReplyWorker.input(notice, choice)).build().doWork()
+            .setInputData(QuestionReplyWorker.input(context, notice, choice)).build().doWork()
+    }
+
+    @Test
+    fun questionTextAndOptionsAreSealedInWorkAndPendingIntents() {
+        val notice = notice()
+        val input = QuestionReplyWorker.input(context, notice, 0).toByteArray().toString(Charsets.ISO_8859_1)
+        val extra = shadowOf(shown().actions.first().actionIntent).savedIntent
+            .getStringExtra(QuestionChoiceReceiver.EXTRA_NOTICE)!!
+        for (secret in listOf("Which color?", "Green")) {
+            assertFalse(input.contains(secret))
+            assertFalse(extra.contains(secret))
+        }
     }
 
     @Test
@@ -104,6 +116,21 @@ class QuestionNotificationAnswerTest {
         val push = push()
         val status = push.content as PushContent.Status
         PushService.show(context, push.copy(content = status.copy(status = AgentStatus.Blocked(BlockedReason.PERMISSION, "Allow?")))) { true }
+        assertTrue(buttons().isEmpty())
+    }
+
+    @Test
+    fun aPermissionNotificationPreservesThePromptAndChoiceForAColdWorker() = runBlocking {
+        val question = PushQuestion("permission:current", "Allow Write to /repo/file?", listOf("Allow", "Allow always", "Deny"))
+        val push = push(question)
+        val status = push.content as PushContent.Status
+        PushService.show(context, push.copy(content = status.copy(status = AgentStatus.Blocked(BlockedReason.PERMISSION, null)))) { true }
+        assertEquals(listOf("Allow", "Allow always", "Deny"), buttons())
+        val notice = QuestionNotice.fromJson(shadowOf(shown().actions[2].actionIntent).savedIntent
+            .getStringExtra(QuestionChoiceReceiver.EXTRA_NOTICE)!!)!!
+        assertEquals(ListenableWorker.Result.success(), TestListenableWorkerBuilder<QuestionReplyWorker>(context)
+            .setInputData(QuestionReplyWorker.input(notice, 2)).build().doWork())
+        assertEquals(listOf(Triple("remote/t3", "permission:current", listOf(listOf(2u)))), core.backgroundAnswers)
         assertTrue(buttons().isEmpty())
     }
 
