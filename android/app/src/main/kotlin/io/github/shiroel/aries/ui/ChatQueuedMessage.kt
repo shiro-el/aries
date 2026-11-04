@@ -33,6 +33,8 @@ data class QueuedChatMessage(
     val before: Set<String>,
     val phase: QueuedMessagePhase = QueuedMessagePhase.Waiting,
     val confirmed: Boolean = false,
+    /** Progress only: herdr-core is waiting for a person to stop typing. */
+    val heldForTyping: Boolean = false,
 )
 
 @Composable
@@ -45,7 +47,7 @@ internal fun QueuedMessageBubble(message: QueuedChatMessage, chat: ChatModel) {
         Column(Modifier.padding(start = 12.dp, end = 4.dp, bottom = 12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    stringResource(when (message.phase) {
+                    stringResource(if (message.heldForTyping) R.string.chat_send_held else when (message.phase) {
                         QueuedMessagePhase.Waiting -> R.string.chat_queue_waiting
                         QueuedMessagePhase.Agent -> R.string.chat_queue_agent
                         QueuedMessagePhase.Uncertain -> R.string.chat_queue_uncertain

@@ -10,6 +10,9 @@ import io.github.shiroel.aries.core.HostConnection
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -74,6 +77,31 @@ class HostLink(
 
     /** The live connection; `null` while reconnecting. */
     val connection: HostConnection? get() = current.value
+
+    private val finishingSends = mutableMapOf<HostConnection, MutableSet<Job>>()
+
+    /** Finish explicitly submitted input on its original line; never reconnect or retry it. */
+    internal fun finishBeforeDisconnect(conn: HostConnection, send: suspend () -> Unit): Job {
+        val job = scope.launch(NonCancellable, start = CoroutineStart.UNDISPATCHED) {
+            // A lifecycle handoff gets one existing RPC timeout, not an ongoing service.
+            withTimeout(30_000L) { send() }
+        }
+        finishingSends.getOrPut(conn) { mutableSetOf() }.add(job)
+        job.invokeOnCompletion {
+            finishingSends[conn]?.let { jobs ->
+                jobs.remove(job)
+                if (jobs.isEmpty()) finishingSends.remove(conn)
+            }
+        }
+        return job
+    }
+
+    private fun disconnectAfterSends(conn: HostConnection) {
+        scope.launch(NonCancellable, start = CoroutineStart.UNDISPATCHED) {
+            finishingSends[conn]?.toList()?.joinAll()
+            conn.disconnect()
+        }
+    }
 
     /** Waits for foreground reconnection without replaying the caller's operation. */
     suspend fun awaitConnection(): HostConnection = withTimeoutOrNull(30_000L) {
@@ -170,7 +198,7 @@ class HostLink(
         val conn = current.value
         current.value = null
         if (state !is LinkState.Down) state = LinkState.Reconnecting
-        conn?.let { scope.launch(NonCancellable) { it.disconnect() } }
+        conn?.let(::disconnectAfterSends)
     }
 
     fun resume() {
@@ -187,7 +215,7 @@ class HostLink(
         val conn = current.value
         current.value = null
         // ViewModel clearing cancels the owner scope before onCleared releases its links.
-        conn?.let { scope.launch(NonCancellable) { it.disconnect() } }
+        conn?.let(::disconnectAfterSends)
     }
 
     private suspend fun reconnect() {

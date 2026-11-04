@@ -122,7 +122,11 @@ class ChatQueuedMessageTest {
         val core = FakeCore()
         val connection = open(core)
         send("recover this draft")
-        compose.runOnIdle { hosts.back() }
+        compose.runOnIdle {
+            // A lost connection cannot accept a final handoff; preserve its draft.
+            (hosts.screen as Screen.Chat).chat.link!!.close()
+            hosts.back()
+        }
         compose.onNodeWithText("home").performClick()
         compose.onNodeWithText("claude").performClick()
         core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, null))
@@ -185,6 +189,29 @@ class ChatQueuedMessageTest {
         compose.onNodeWithContentDescription("Cancel queued message").performClick()
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("keep this queued message")
         assertEquals(0, connection.calls.count { it == "sendMessage" })
+    }
+
+    @Test fun stoppingChatHandsOffWaitingMessagesInOrderBeforeDisconnecting() {
+        val core = FakeCore()
+        val connection = open(core)
+        send("first queued instruction")
+        send("second queued instruction")
+        val chat = compose.runOnIdle { (hosts.screen as Screen.Chat).chat }
+        val hold = CompletableDeferred<Unit>()
+        connection.sendHold = hold
+        compose.runOnIdle { hosts.back() }
+        compose.waitForIdle()
+        assertEquals(1, connection.calls.count { it == "sendMessage" })
+        compose.runOnIdle {
+            assertEquals("", chat.draft)
+            assertEquals(listOf(QueuedMessagePhase.Agent, QueuedMessagePhase.Agent), chat.queuedMessages.map { it.phase })
+            assertEquals(false, connection.disconnected)
+        }
+        hold.complete(Unit)
+        compose.waitUntil(5_000) { connection.typed.size == 2 && connection.disconnected }
+        assertEquals(listOf("t1" to "first queued instruction", "t1" to "second queued instruction"), connection.typed)
+        assertEquals(2, connection.calls.count { it == "sendMessage" })
+        compose.runOnIdle { assertEquals("", chat.draft) }
     }
 
     private fun screenshot(name: String) {

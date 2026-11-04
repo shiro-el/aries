@@ -411,9 +411,12 @@ class ReconnectTest {
         compose.onNodeWithContentDescription(str(R.string.agent_switch_chat_label)).performClick()
         compose.waitForIdle()
         val chat = (model.screen as Screen.Chat).chat
+        val connection = core.connection!!
         core.pushChat(io.github.shiroel.aries.core.ChatSnapshot(emptyList(), io.github.shiroel.aries.core.ChatStatus.LIVE, "cursor-1"))
         compose.waitForIdle()
         compose.runOnIdle {
+            chat.draft = "queued before backgrounding"
+            chat.send()
             chat.draft = "unfinished question"
             screenLifecycle.currentState = Lifecycle.State.CREATED
             model.networkChanged()
@@ -421,6 +424,7 @@ class ReconnectTest {
         compose.mainClock.advanceTimeBy(30_000)
         compose.waitForIdle()
         assertFalse(core.chatPaused)
+        assertTrue(connection.typed.isEmpty())
         compose.runOnIdle {
             screenLifecycle.currentState = Lifecycle.State.RESUMED
             model.foregrounded()
@@ -433,6 +437,7 @@ class ReconnectTest {
         compose.mainClock.advanceTimeBy(120_100)
         compose.waitForIdle()
         assertTrue(core.chatPaused)
+        assertEquals(listOf("t1" to "queued before backgrounding"), connection.typed)
         assertEquals(0, core.chatReconnects)
         compose.runOnIdle { screenLifecycle.currentState = Lifecycle.State.RESUMED }
         compose.waitForIdle()
