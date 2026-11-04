@@ -93,8 +93,12 @@ class ChatQueuedMessageTest {
         core.pushChat(ChatSnapshot(listOf(ChatEntry("different", null, ChatEntryBody.User("[Image #1]"))), ChatStatus.LIVE, null))
         compose.waitForIdle()
         assertEquals(emptyList<QueuedChatMessage>(), chat.queuedMessages)
+        core.push(listOf(agent))
+        compose.waitForIdle()
+        core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle, turn = 1uL)))
+        compose.waitForIdle()
         send("second")
-        core.push(listOf(agent.copy(agentStatus = AgentStatus.Done, turn = 1uL)))
+        core.push(listOf(agent.copy(agentStatus = AgentStatus.Done, turn = 2uL)))
         compose.waitForIdle()
         assertEquals(emptyList<QueuedChatMessage>(), chat.queuedMessages)
         send("third")
@@ -112,6 +116,10 @@ class ChatQueuedMessageTest {
         send("older image instruction")
         core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
         compose.waitForIdle()
+        core.push(listOf(agent))
+        compose.waitForIdle()
+        core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle, turn = 1uL)))
+        compose.waitForIdle()
         send("newer instruction")
         core.pushChat(ChatSnapshot(listOf(ChatEntry("newer", null, ChatEntryBody.User("newer instruction"))), ChatStatus.LIVE, null))
         compose.waitForIdle()
@@ -119,8 +127,8 @@ class ChatQueuedMessageTest {
         assertEquals(listOf("t1" to "older image instruction", "t1" to "newer instruction"), connection.typed)
     }
 
-    // D10 fallback: returning rows to the composer must leave a durable explanation across edits/restart.
-    @Test fun endedAgentsReturnWaitingInOrderWithANoticeThatSurvivesEditingAndRecreation() {
+    // D12: ended-Agent recovery must be copyable, and editing must dismiss its obsolete notice.
+    @Test fun endedAgentsReturnCopyableTextAndEditingDismissesItsNoticeAcrossRecreation() {
         val core = FakeCore()
         val connection = open(core)
         send("first")
@@ -128,7 +136,9 @@ class ChatQueuedMessageTest {
         core.pushChat(ChatSnapshot(emptyList(), ChatStatus.ENDED, null))
         compose.waitForIdle()
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("first\n\nsecond")
-        compose.onNodeWithText(str(R.string.chat_queue_returned)).assertExists()
+        compose.onNodeWithText(str(R.string.chat_queue_returned_ended)).assertExists()
+        compose.onNodeWithText(str(R.string.chat_queue_copy_returned_button)).performClick()
+        assertEquals("first\n\nsecond", context.getSystemService(android.content.ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
         compose.runOnIdle { (hosts.screen as Screen.Chat).chat.draft += " edited" }
         // Process death inside the debounce window cannot run a lifecycle flush.
         compose.waitUntil(5_000) { core.chatOutbox("h1", "t1")?.let(::decodeChatOutbox)?.draft == "first\n\nsecond edited" }
@@ -139,7 +149,8 @@ class ChatQueuedMessageTest {
         core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, null))
         compose.waitForIdle()
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertTextEquals("first\n\nsecond edited")
-        compose.onNodeWithText(str(R.string.chat_queue_returned)).assertExists()
+        compose.onNodeWithText(str(R.string.chat_queue_returned)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.chat_queue_returned_ended)).assertDoesNotExist()
         assertEquals(emptyList<Pair<String, String>>(), connection.typed)
         assertEquals(emptyList<Pair<String, String>>(), core.connection!!.typed)
     }
@@ -394,6 +405,7 @@ class ChatQueuedMessageTest {
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assert(SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.EditableText, androidx.compose.ui.text.AnnotatedString("")))
         val connection = core.connection!!
         connection.sendHold = CompletableDeferred()
+        core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, null))
         core.push(listOf(agent.copy(agentStatus = AgentStatus.Idle)))
         compose.waitForIdle()
         compose.onNodeWithContentDescription("Cancel queued message").assertDoesNotExist()
