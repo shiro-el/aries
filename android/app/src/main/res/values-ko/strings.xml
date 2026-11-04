@@ -1211,6 +1211,7 @@
     <string name="push_on_body">Relay: %1$s</string>
     <string name="push_test_sent">테스트 알림을 보냈어요.</string>
     <string name="push_relay_label">Relay URL</string>
+    <string name="push_relay_required">푸시 알림을 켜려면 Relay URL을 입력해 주세요.</string>
     <string name="push_change_relay_button">Relay 변경</string>
     <string name="push_use_relay_button">이 Relay 사용</string>
     <string name="push_unavailable">푸시 알림을 쓸 수 없어요. 네트워크와 Google Play 서비스를 확인한 뒤 다시 시도해 주세요.</string>
