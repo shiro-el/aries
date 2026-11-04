@@ -19,13 +19,24 @@
 
     <!-- GitHub Issues and PR conversations (113) -->
     <string name="github_button">GitHub</string>
+    <string name="github_draft">Draft</string>
+    <string name="github_number">#%1$d</string>
+    <string name="github_branches">%1$s → %2$s</string>
+    <string name="github_open_browser">Open in browser</string>
+    <string name="github_item_actions">Issue actions</string>
+    <string name="github_checks_passed">Checks passed</string>
+    <string name="github_checks_failed">Checks failed</string>
+    <string name="github_checks_pending">Checks pending</string>
+    <string name="github_checks_other">Check results</string>
+    <string name="github_checks_count">%1$d/%2$d passed</string>
+    <string name="github_view_files">View all files</string>
     <string name="github_issues">Issues</string>
     <string name="github_prs">Pull requests</string>
     <string name="github_open">Open</string>
     <string name="github_closed">Closed</string>
     <string name="github_all">All</string>
     <string name="github_merged">Merged</string>
-    <string name="github_search_hint">Search text in this repository</string>
+    <string name="github_search_hint">Search repository</string>
     <string name="github_search_button">Search</string>
     <string name="github_previous">Previous</string>
     <string name="github_next">Next</string>

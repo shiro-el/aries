@@ -75,6 +75,8 @@ async fn detail_keeps_markdown_deleted_authors_and_all_comment_pages() {
     assert_eq!(detail.item.body, "# Hello\n```rust\nlet n = 1;\n```");
     assert_eq!(detail.item.author, "");
     assert_eq!(detail.item.kind, GithubKind::Issue);
+    assert!(detail.head_branch.is_none());
+    assert!(detail.base_branch.is_none());
     assert_eq!(detail.comments.len(), 2);
     assert_eq!(detail.comments[0].body, "**first**");
     assert_eq!(detail.comments[1].body, "한국어 댓글");

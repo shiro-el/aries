@@ -132,3 +132,16 @@ async fn empty_resources_are_valid_but_malformed_responses_are_errors() {
         conn.disconnect().await;
     }
 }
+
+#[tokio::test]
+async fn detail_uses_pull_request_branches_and_draft_or_merged_state() {
+    for (scenario, expected) in [("pr_detail_draft", "draft"), ("pr_detail_merged", "merged")] {
+        let (_tools, _data, _hc, conn, repo) = setup(Some(scenario)).await;
+        let detail = conn.github_detail(repo, 42).await.unwrap();
+        assert_eq!(detail.item.state, expected);
+        assert_eq!(detail.head_branch.as_deref(), Some("feature/한글"));
+        assert_eq!(detail.base_branch.as_deref(), Some("main"));
+        assert_eq!(detail.comments.len(), 2);
+        conn.disconnect().await;
+    }
+}

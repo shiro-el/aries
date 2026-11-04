@@ -52,7 +52,7 @@ class GithubPrScreenTest {
         }
         compose.onNodeWithTag("agent-actions").performClick()
         compose.onNodeWithText(str(R.string.github_button)).performClick()
-        compose.onNodeWithText("#42 · PR title").performClick()
+        compose.onNodeWithText("PR title").performClick()
         return conn
     }
 
@@ -113,5 +113,37 @@ class GithubPrScreenTest {
         compose.onNodeWithContentDescription(str(R.string.github_refresh)).performClick()
         compose.onNodeWithText(str(R.string.github_pr_no_files)).assertExists()
         compose.onNodeWithText(str(R.string.github_disconnected)).assertDoesNotExist()
+    }
+
+    @Test fun overviewDoesNotReportPendingOrCancelledChecksAsPassedAndClearsStaleHealth() {
+        val conn = open()
+        compose.runOnIdle {
+            conn.githubPrChecks = GithubPrChecks("d".repeat(40), listOf(
+                GithubPrCheck("Build", "completed", "success", ""),
+                GithubPrCheck("External CI", "pending", null, "Queued"),
+            ))
+        }
+        compose.onNodeWithContentDescription(str(R.string.github_refresh)).performClick()
+        compose.onNodeWithText(str(R.string.github_checks_pending)).assertExists()
+        compose.onNodeWithTag("github-checks-summary").performClick()
+        compose.onNodeWithText(str(R.string.github_pr_pending)).assertExists()
+        tab("conversation")
+        compose.onNodeWithText("src/새 이름.rs").performScrollTo().performClick()
+        compose.onNodeWithText("+새 코드").assertExists()
+        compose.onNodeWithTag("github-back").performClick()
+        tab("conversation")
+        compose.runOnIdle {
+            conn.githubPrChecks = GithubPrChecks("e".repeat(40), listOf(
+                GithubPrCheck("Build", "completed", "cancelled", ""),
+            ))
+        }
+        compose.onNodeWithContentDescription(str(R.string.github_refresh)).performClick()
+        compose.onNodeWithText(str(R.string.github_checks_other)).assertExists()
+        compose.onNodeWithText(str(R.string.github_checks_passed)).assertDoesNotExist()
+        compose.runOnIdle { conn.githubPrFailure = CoreException.Closed() }
+        compose.onNodeWithContentDescription(str(R.string.github_refresh)).performClick()
+        compose.onNodeWithTag("github-checks-summary").assertTextContains(str(R.string.github_disconnected))
+        compose.onNodeWithText(str(R.string.github_checks_pending)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.github_checks_other)).assertDoesNotExist()
     }
 }
