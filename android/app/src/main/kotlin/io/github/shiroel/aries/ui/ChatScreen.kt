@@ -126,6 +126,7 @@ class ChatModel(
      * normal message, through terminal.send's Blocked gate.
      */
     fun questionMode(id: String): QuestionMode {
+        if (inputUnavailable) return QuestionMode.ReadOnly
         val snap = snapshot ?: return QuestionMode.ReadOnly
         if (snap.status != ChatStatus.LIVE) return QuestionMode.ReadOnly
         val entries = snap.entries
@@ -190,6 +191,7 @@ class ChatModel(
     /** Saves bytes and adds attachment chips to the current draft; never calls sendMessage. */
     fun attach(context: Context, content: SharedContent, cleanup: () -> Unit = {}) {
         val scope = scope ?: return
+        if (inputUnavailable) { cleanup(); return }
         if (uploading || sending != null) return
         val connection = link?.connection ?: run { attachmentFailed(CoreException.Closed()); return }
         val resize = AttachmentSettings.from(context).resizeImages
@@ -203,6 +205,7 @@ class ChatModel(
             try {
                 for (uri in content.uris) {
                     val attachment = withContext(Dispatchers.IO) { prepareAttachment(context, uri, resize) }
+                    if (inputUnavailable) break
                     val path = connection.uploadAttachment(terminal.address, attachment.name, attachment.bytes)
                     attachments = attachments + DraftAttachment(path, attachment.name, attachment.bytes.size,
                         attachment.bytes.takeIf { remoteMediaKind(attachment.name) == RemoteMediaKind.IMAGE })
@@ -223,15 +226,23 @@ class ChatModel(
     private var watch: ChatWatch? = null
     private var job: Job? = null
     private var scope: CoroutineScope? = null
+    private var terminalPresent by mutableStateOf(true)
+
+    val terminalAvailable: Boolean get() = terminalPresent && terminal.state == "live" && snapshot?.status != ChatStatus.NO_TERMINAL
+    /** The transcript can outlive its Agent, and may lag the pane returning to a shell. */
+    val inputUnavailable: Boolean get() = !terminalAvailable || terminal.agentStatus == null ||
+        snapshot?.status == ChatStatus.ENDED || snapshot?.status == ChatStatus.NO_AGENT
+    val canEdit: Boolean get() = !inputUnavailable && sending == null
 
     /** The Host's Terminals changed: follow this Agent's status. */
     fun update(terminals: List<TerminalInfo>) {
+        terminalPresent = terminals.any { it.address == terminal.address }
         val now = terminals.find { it.address == terminal.address } ?: return
         terminal = now
         if (now.agentStatus !is AgentStatus.Blocked) refused = false
     }
 
-    val canSend: Boolean get() = link != null && sending == null && !uploading && pendingShare == null &&
+    val canSend: Boolean get() = link != null && canEdit && !uploading && pendingShare == null &&
         (draft.isNotBlank() || attachments.isNotEmpty())
 
     /**
@@ -272,7 +283,9 @@ class ChatModel(
                     }
                 }
             } catch (e: CoreException) {
-                sendError = e.message ?: e.toString()
+                if (e is CoreException.Rpc && e.kind == "no_agent") {
+                    terminal = terminal.copy(agentStatus = null)
+                } else sendError = e.message ?: e.toString()
             } finally {
                 sending = null
             }
@@ -569,6 +582,14 @@ fun ChatScreen(
                 ChatNotice(stringResource(R.string.attachments_uploading))
             }
             chat.attachmentError?.let { Text(stringResource(it.res, *it.args.toTypedArray()), color = MaterialTheme.colorScheme.error) }
+            if (chat.inputUnavailable) {
+                ConsoleChatCallSurface {
+                    Text(stringResource(if (chat.terminalAvailable) R.string.chat_input_agent_ended else R.string.chat_status_no_terminal))
+                    ConsoleButton(onClick = if (chat.terminalAvailable) onOpenTerminal else onBack) {
+                        Text(stringResource(if (chat.terminalAvailable) R.string.terminal_open_button else R.string.back_button))
+                    }
+                }
+            }
             if (chat.link != null) {
                 ChatCatalogControls(chat)
                 MessageInput(chat)
@@ -656,7 +677,7 @@ private fun MessageInput(chat: ChatModel) {
         names = listOf(chat.host.name, displayName(chat.terminal), chat.terminal.cwd.orEmpty().trimEnd('/').substringAfterLast('/')),
         lastResponse = chat.snapshot?.entries?.asReversed()?.firstNotNullOfOrNull { (it.body as? ChatEntryBody.Agent)?.text }.orEmpty(),
         onTranscript = { text -> chat.draft = if (chat.draft.isBlank()) text else chat.draft + " " + text },
-        enabled = chat.sending == null,
+        enabled = chat.canEdit,
     )
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
         BasicTextField(
@@ -669,7 +690,7 @@ private fun MessageInput(chat: ChatModel) {
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
             maxLines = 6,
-            enabled = chat.sending == null,
+            enabled = chat.canEdit,
             decorationBox = { field ->
                 Box(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
                     if (chat.draft.isEmpty()) {

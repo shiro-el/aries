@@ -489,6 +489,7 @@
 
     <string name="chat_empty">No messages yet.</string>
     <string name="chat_status_connecting">Connecting to the Beacon…</string>
+    <string name="chat_input_agent_ended">The Agent has ended or is no longer in this Terminal. Chat input is disabled. Your draft is kept. Open Terminal to continue.</string>
     <string name="chat_status_reconnecting">Connection lost. Reconnecting…</string>
     <string name="chat_status_no_terminal">This Terminal no longer exists.</string>
     <string name="chat_status_no_beacon">The Chat needs the Beacon on this Host. Install it from the Host screen.</string>
