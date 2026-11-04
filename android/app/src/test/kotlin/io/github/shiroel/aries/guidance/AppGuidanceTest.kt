@@ -7,6 +7,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.hasScrollToKeyAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -33,28 +36,77 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "h1200dp")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class AppGuidanceTest {
     @get:Rule val compose = createComposeRule()
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val prefs get() = context.getSharedPreferences("guidance-test", Context.MODE_PRIVATE)
 
-    @Test fun firstLaunchResumesItsStepAndSkipPersistsAcrossRelaunch() {
+    private fun screenshot(name: String) {
+        System.getenv("ARIES_ONBOARDING_RENDER_DIR")?.let { directory ->
+            java.io.File(directory).mkdirs()
+            java.io.File(directory, "$name.png").outputStream().use {
+                compose.onRoot().captureToImage().asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+            }
+        }
+    }
+
+    @Test fun firstConnectionCreatesKeyInlineAndRequiresConnectionBeforeBeaconSetup() {
         prefs.edit().clear().commit()
-        val first = AppGuidanceState(prefs, 1, "0.1")
-        val current = first
-        compose.setContent { MaterialTheme { AppGuidance(current) {} } }
-        compose.onNodeWithTag("onboarding-step-0").assertExists()
-        compose.onNodeWithTag("onboarding-next").performClick()
-        compose.onNodeWithTag("onboarding-step-1").assertExists()
-        val relaunched = AppGuidanceState(prefs, 1, "0.1")
-        assertEquals(1, relaunched.onboardingStep)
-        compose.onNodeWithTag("onboarding-skip").performClick()
-        compose.onNodeWithTag("onboarding-dialog").assertDoesNotExist()
+        val state = AppGuidanceState(prefs, 1, "0.1")
+        val core = FakeCore().apply { requireTrust = "SHA256:abc" }
+        var permissionRequested = false
+        compose.setContent {
+            val scope = rememberCoroutineScope()
+            val model = remember { HostsModel(core, scope) }
+            AriesApp(model, guidance = state, allowNotifications = { permissionRequested = true; false })
+        }
+        screenshot("welcome")
+        compose.onNodeWithTag("onboarding-manual").performClick()
+        screenshot("inline-key")
+        compose.onNodeWithText(context.getString(R.string.key_create_button)).performScrollTo().performClick()
+        compose.onNodeWithTag("onboarding-connected").assertDoesNotExist()
+        compose.onNodeWithText(context.getString(R.string.host_add_address)).performScrollTo().performTextReplacement("desk.example")
+        compose.onNodeWithText(context.getString(R.string.host_add_user)).performScrollTo().performTextReplacement("me")
+        compose.onNodeWithText(context.getString(R.string.host_add_button)).performScrollTo().performClick()
+        compose.onNodeWithTag("onboarding-connected").assertDoesNotExist()
+        compose.onNodeWithText(context.getString(R.string.host_key_trust_button)).performClick()
+        compose.onNodeWithTag("onboarding-connected").assertExists()
+        compose.onNodeWithText(context.getString(R.string.beacon_install_button)).performScrollTo().performClick()
+        compose.onNodeWithText(context.getString(R.string.beacon_reinstall_button)).assertExists()
+        compose.onNodeWithTag("onboarding-permission").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(true, permissionRequested) }
+        screenshot("connected-beacon")
+        compose.onNodeWithTag("onboarding-finish").performScrollTo().performClick()
         assertEquals(null, AppGuidanceState(prefs, 1, "0.1").onboardingStep)
     }
+
+    @Test fun qrRegistrationContinuesAfterImportingTheFirstKeyInline() {
+        prefs.edit().clear().commit()
+        val state = AppGuidanceState(prefs, 1, "0.1")
+        val core = FakeCore()
+        compose.setContent {
+            val scope = rememberCoroutineScope()
+            val model = remember { HostsModel(core, scope) }
+            AriesApp(model, guidance = state)
+        }
+        compose.onNodeWithTag("onboarding-qr").performClick()
+        assertEquals(1, AppGuidanceState(prefs, 1, "0.1").onboardingStep)
+        compose.onNodeWithText(context.getString(R.string.key_import_button)).performScrollTo().performClick()
+        compose.onNodeWithTag("key-import-private").performTextReplacement("private test key")
+        compose.onNodeWithTag("key-import-save").performClick()
+        assertEquals("private test key", core.importedKeys.single().second)
+        compose.onNodeWithTag("host-pair-scan").assertExists()
+        compose.onNodeWithText(context.getString(R.string.host_add_address)).assertDoesNotExist()
+        screenshot("qr-after-import")
+        compose.onNodeWithTag("onboarding-skip").performClick()
+        assertEquals(null, AppGuidanceState(prefs, 1, "0.1").onboardingStep)
+    }
+
     @Test fun bundledChangesAppearOnceAfterEachVersionChange() {
         prefs.edit().clear().commit()
         val current = mutableStateOf(AppGuidanceState(prefs, 1, "0.1").also { it.finishOnboarding() })
@@ -101,14 +153,13 @@ class AppGuidanceTest {
         }
     }
 
-    @Test fun settingsSaveTheFeedAndReopenGuidanceWithNotificationPermissionAction() {
+    @Test fun settingsSaveTheFeedAndReopenTheConnectionGuide() {
         prefs.edit().clear().commit()
         val state = AppGuidanceState(prefs, 10, "0.10").also { it.finishOnboarding() }
-        var permissionRequested = false
         compose.setContent {
             val scope = rememberCoroutineScope()
             val hosts = remember { HostsModel(FakeCore(), scope) }
-            AriesApp(hosts, guidance = state, allowNotifications = { permissionRequested = true; false })
+            AriesApp(hosts, guidance = state)
         }
         compose.openConsoleDrawer()
         compose.onNodeWithTag("settings-open").performClick()
@@ -117,13 +168,9 @@ class AppGuidanceTest {
         compose.onNodeWithTag("app-update-save").performScrollTo().performClick()
         assertEquals("https://example.test/release.json", AppGuidanceState(prefs, 10, "0.10").updateUrl)
         compose.onNodeWithTag("guidance-open").performScrollTo().performClick()
-        compose.onNodeWithTag("onboarding-next").performClick()
-        compose.onNodeWithTag("onboarding-next").performClick()
-        compose.onNodeWithTag("onboarding-step-2").assertExists()
-        compose.onNodeWithTag("onboarding-permission").performClick()
-        compose.runOnIdle { assertEquals(true, permissionRequested) }
-        compose.onNodeWithTag("onboarding-next").performClick()
-        compose.onNodeWithTag("onboarding-dialog").assertDoesNotExist()
+        compose.onNodeWithTag("onboarding-manual").assertExists()
+        compose.onNodeWithTag("onboarding-skip").performClick()
+        compose.onNode(hasScrollToKeyAction()).performScrollToKey("app-guidance")
         compose.onNodeWithTag("whats-new-open").performScrollTo().performClick()
         compose.onNodeWithTag("whats-new-dialog").assertExists()
     }
