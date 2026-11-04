@@ -70,11 +70,17 @@ class KeystoreVault(
         authorized(cipher, protection).doFinal(sealed, IV_BYTES, sealed.size - IV_BYTES)
     }
 
+    private val promptLock = Any()
+
     private fun authorized(cipher: Cipher, protection: KeyProtection): Cipher {
         if (protection == KeyProtection.PLAIN) return cipher
-        val auth = authorizer ?: throw VaultException.Locked()
+        if (authorizer == null) throw VaultException.Locked()
         check(Looper.myLooper() != Looper.getMainLooper()) { "biometric unlock on the main thread" }
-        return auth.authorize(cipher) ?: throw VaultException.Locked()
+        // All Keystore operations share this gate, including seal/import paths.
+        return synchronized(promptLock) {
+            // A queued request must recheck that an Activity is still available.
+            (authorizer ?: throw VaultException.Locked()).authorize(cipher) ?: throw VaultException.Locked()
+        }
     }
 
     private fun aliasFor(protection: KeyProtection) = when (protection) {

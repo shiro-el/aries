@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use russh::client;
-use russh::keys::{HashAlg, PrivateKey, PrivateKeyWithHashAlg, PublicKeyOrCertificate};
+use russh::keys::{HashAlg, PrivateKeyWithHashAlg, PublicKeyOrCertificate};
 
 use super::{OpenFuture, Stream, Transport};
 use crate::error::CoreError;
@@ -27,7 +27,7 @@ pub(crate) struct Ssh {
     pub address: String,
     pub port: u16,
     pub user: String,
-    pub key: PrivateKey,
+    pub key: crate::key_unlock::SshKey,
     /// Trusted `SHA256:...` fingerprint, `None` before the first connection.
     pub trusted: Option<String>,
     /// Jump hosts in order: the first is reached directly, each next one
@@ -40,7 +40,7 @@ pub(crate) struct SshHop {
     pub address: String,
     pub port: u16,
     pub user: String,
-    pub key: PrivateKey,
+    pub key: crate::key_unlock::SshKey,
     pub trusted: Option<String>,
 }
 
@@ -79,6 +79,7 @@ impl client::Handler for Checker {
 
 /// Why one hop (a jump host or the Host) failed.
 enum HopFailure {
+    Key(CoreError),
     Check(HostKeyCheck),
     AuthRejected,
     Denied(String),
@@ -96,6 +97,7 @@ impl HopFailure {
     fn into_error(self, role: Role, address: &str) -> CoreError {
         let address = address.to_owned();
         match (role, self) {
+            (_, HopFailure::Key(error)) => error,
             (_, HopFailure::Denied(detail)) => CoreError::Rpc {
                 kind: "permission_denied".into(),
                 detail: format!("{address}: {detail}"),
@@ -168,7 +170,7 @@ impl Drop for Session {
     fn drop(&mut self) {
         if let Some(session) = self.handle.take() {
             crate::runtime().spawn(async move {
-                let _ = tokio::time::timeout(
+                let _ = crate::network_timeout::timeout(
                     Duration::from_secs(2),
                     session.disconnect(russh::Disconnect::ByApplication, "", ""),
                 )
@@ -217,7 +219,7 @@ async fn handshake_hop(
 
     let connected = match via {
         None => {
-            tokio::time::timeout(CONNECT_TIMEOUT, async {
+            crate::network_timeout::timeout(CONNECT_TIMEOUT, async {
                 let tcp = tokio::net::TcpStream::connect((address, port)).await?;
                 tcp.set_nodelay(true)?;
                 let tcp = tcp.into_std()?;
@@ -231,7 +233,7 @@ async fn handshake_hop(
                 .channel_open_direct_tcpip(address, u32::from(port), "127.0.0.1", 0)
                 .await
                 .map_err(unreachable)?;
-            tokio::time::timeout(
+            crate::network_timeout::timeout(
                 CONNECT_TIMEOUT,
                 client::connect_stream(config, channel.into_stream(), checker),
             )
@@ -259,10 +261,12 @@ async fn reach(
     address: &str,
     port: u16,
     user: &str,
-    key: &PrivateKey,
+    key: &crate::key_unlock::SshKey,
     trusted: Option<String>,
 ) -> Result<Session, HopFailure> {
     let mut session = handshake_hop(config, via, address, port, trusted).await?;
+    let lease = key.open().await.map_err(HopFailure::Key)?;
+    let key = &lease.key;
     // RSA keys imported from OpenSSH need RSA-SHA2 on modern sshd. `None`
     // would select legacy SHA-1, which those servers reject. Negotiate for
     // each hop; absent extension information, prefer SHA-256.
@@ -278,7 +282,7 @@ async fn reach(
     let auth = session
         .authenticate_publickey(
             user.to_owned(),
-            PrivateKeyWithHashAlg::new(Arc::new(key.clone()), hash_alg),
+            PrivateKeyWithHashAlg::new(key.clone(), hash_alg),
         )
         .await
         .map_err(|e| HopFailure::Unreachable(e.to_string()))?;
@@ -321,7 +325,7 @@ pub(crate) async fn handshake(
     port: u16,
     trusted: Option<String>,
 ) -> Result<(Vec<Session>, Session), CoreError> {
-    tokio::time::timeout(CONNECT_TIMEOUT, async {
+    crate::network_timeout::timeout(CONNECT_TIMEOUT, async {
         let config = client_config();
         let sessions = through_jumps(&config, jumps).await?;
         let session = handshake_hop(config, sessions.last(), address, port, trusted)
@@ -391,7 +395,7 @@ impl Ssh {
     }
 
     async fn session(&self) -> Result<(Vec<Session>, Session), CoreError> {
-        tokio::time::timeout(CONNECT_TIMEOUT, self.session_unbounded())
+        crate::network_timeout::timeout(CONNECT_TIMEOUT, self.session_unbounded())
             .await
             .map_err(|_| unreachable_err("SSH sign-in timed out"))?
     }
@@ -399,9 +403,12 @@ impl Ssh {
     /// Runs `command` on the Host (no PTY), feeds it `stdin` then EOF, and
     /// collects its output.
     pub async fn exec(&self, command: &str, stdin: &[u8]) -> Result<ExecOutput, CoreError> {
-        tokio::time::timeout(Duration::from_secs(60), self.exec_unbounded(command, stdin))
-            .await
-            .map_err(|_| crate::error::protocol("SSH command timed out; its result is unknown"))?
+        crate::network_timeout::timeout(
+            Duration::from_secs(60),
+            self.exec_unbounded(command, stdin),
+        )
+        .await
+        .map_err(|_| crate::error::protocol("SSH command timed out; its result is unknown"))?
     }
 
     async fn exec_unbounded(&self, command: &str, stdin: &[u8]) -> Result<ExecOutput, CoreError> {
@@ -447,7 +454,7 @@ impl Ssh {
         sign_in: Duration,
     ) -> Result<Stream, CoreError> {
         let mut submitted = false;
-        tokio::time::timeout(sign_in, async {
+        crate::network_timeout::timeout(sign_in, async {
             let (sessions, session) = self.session_unbounded().await?;
             Self::stream_on(sessions, session, command, &mut submitted).await
         })
@@ -480,6 +487,7 @@ impl Ssh {
         // russh's exec() only enqueues the request. Wait for the Host's
         // acknowledgement under the same opening deadline. Some Hosts send
         // stdout first; that also proves execution, and must be replayed.
+        let mut outcome = super::CommandExit::default();
         let prefix = loop {
             match channel.wait().await {
                 Some(russh::ChannelMsg::Success) => break Vec::new(),
@@ -490,7 +498,14 @@ impl Ssh {
                         detail: "SSH exec was refused".into(),
                     });
                 }
+                Some(russh::ChannelMsg::ExtendedData { data, ext: 1 }) => outcome.stderr(&data),
+                Some(russh::ChannelMsg::ExitStatus { exit_status }) => {
+                    outcome.status = Some(exit_status)
+                }
                 Some(russh::ChannelMsg::Close) | None => {
+                    if command == REMOTE_COMMAND && outcome.missing_core() {
+                        return Err(CoreError::HerdrCoreMissing);
+                    }
                     return Err(crate::error::protocol(
                         "SSH exec ended before acknowledgement; its result is unknown",
                     ));
@@ -499,13 +514,55 @@ impl Ssh {
             }
         };
         let session = Arc::new(session);
-        let (reader, writer) = tokio::io::split(channel.into_stream());
+        let (reader, writer, command_exit, task) = if command == REMOTE_COMMAND {
+            // into_stream discards stderr and exit status. Preserve those until
+            // hello succeeds, so a missing executable is not retried as a network loss.
+            let (mut incoming, outgoing) = channel.split();
+            let writer =
+                Box::new(outgoing.make_writer()) as Box<dyn tokio::io::AsyncWrite + Send + Unpin>;
+            let (reader, mut output) = tokio::io::duplex(64 * 1024);
+            let (tx, rx) = tokio::sync::oneshot::channel();
+            let task = tokio::spawn(async move {
+                use tokio::io::AsyncWriteExt;
+                while let Some(msg) = incoming.wait().await {
+                    match msg {
+                        russh::ChannelMsg::Data { data } => {
+                            if output.write_all(&data).await.is_err() {
+                                return;
+                            }
+                        }
+                        russh::ChannelMsg::ExtendedData { data, ext: 1 } => outcome.stderr(&data),
+                        russh::ChannelMsg::ExitStatus { exit_status } => {
+                            outcome.status = Some(exit_status)
+                        }
+                        russh::ChannelMsg::Close => break,
+                        _ => {}
+                    }
+                }
+                let _ = tx.send(outcome);
+            });
+            (
+                Box::new(reader) as Box<dyn tokio::io::AsyncRead + Send + Unpin>,
+                writer,
+                Some(rx),
+                Some(super::CommandTask(task.abort_handle())),
+            )
+        } else {
+            let (reader, writer) = tokio::io::split(channel.into_stream());
+            (
+                Box::new(reader) as Box<dyn tokio::io::AsyncRead + Send + Unpin>,
+                Box::new(writer) as Box<dyn tokio::io::AsyncWrite + Send + Unpin>,
+                None,
+                None,
+            )
+        };
         use tokio::io::AsyncReadExt;
         Ok(Stream {
             reader: Box::new(std::io::Cursor::new(prefix).chain(reader)),
             writer: Box::new(writer),
             // The jump sessions carry the Host's; keep them all alive.
-            guard: Box::new((Mutex::new(sessions), session.clone())),
+            guard: Box::new((Mutex::new(sessions), session.clone(), task)),
+            command_exit,
             ssh: Some(session),
         })
     }

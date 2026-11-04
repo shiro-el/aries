@@ -70,7 +70,7 @@ class ReconnectTest {
         ),
     )
 
-    private fun start(core: FakeCore) {
+    private fun start(core: FakeCore, lock: io.github.shiroel.aries.security.AppLock? = null) {
         compose.setContent {
             val scope = rememberCoroutineScope()
             model = remember { HostsModel(core, scope) }
@@ -80,7 +80,10 @@ class ReconnectTest {
                 }
             }
             screenLifecycle = owner.lifecycle
-            CompositionLocalProvider(LocalLifecycleOwner provides owner) {
+            CompositionLocalProvider(LocalLifecycleOwner provides owner,
+                io.github.shiroel.aries.security.LocalAppLock provides lock?.let {
+                    io.github.shiroel.aries.security.AppLockSession(it, io.github.shiroel.aries.security.AppAuthenticator { })
+                }) {
                 MaterialTheme { AriesApp(model) }
             }
         }
@@ -255,11 +258,11 @@ class ReconnectTest {
         assertTrue(model.screen is Screen.Chat)
         compose.runOnIdle { model.networkChanged(); model.backgrounded(); model.foregrounded() }
         compose.waitForIdle()
-        assertEquals("unlock cancellation must not prompt repeatedly", 1, core.chatsOpened.size)
+        assertEquals("returning to the visible locked Agent must retry authorization", 2, core.chatsOpened.size)
         core.failChatWith = null
         compose.onNodeWithText(str(R.string.connect_retry_button)).performClick()
         compose.waitForIdle()
-        assertEquals(2, core.chatsOpened.size)
+        assertEquals(3, core.chatsOpened.size)
         core.pushChat(io.github.shiroel.aries.core.ChatSnapshot(emptyList(), io.github.shiroel.aries.core.ChatStatus.LIVE, null))
         compose.waitForIdle()
         assertEquals(io.github.shiroel.aries.core.ChatStatus.LIVE, (model.screen as Screen.Chat).chat.snapshot!!.status)
@@ -543,4 +546,25 @@ class ReconnectTest {
         compose.onNodeWithContentDescription(str(R.string.agent_status_idle), useUnmergedTree = true).assertExists()
         assertEquals(listOf("h1 t1 seen=0", "h1 t1 seen=1"), core.labelWrites)
     }
+    // D40: the app's one-minute lock policy must retain the line until its actual deadline.
+    @Test fun oneMinuteAppLockKeepsTheLineUntilItsDeadline() {
+        val preferences = context.getSharedPreferences("reconnect-lock", android.content.Context.MODE_PRIVATE)
+        preferences.edit().clear().commit()
+        val lock = io.github.shiroel.aries.security.AppLock(preferences).apply {
+            enableAfterAuthentication()
+            chooseDelay(io.github.shiroel.aries.security.LockDelay.ONE_MINUTE)
+        }
+        val core = FakeCore().apply { terminals = listOf(build) }
+        core.addHost("home", Endpoint.Ssh("home.test", 22u, "me"))
+        start(core, lock)
+        compose.runOnIdle { model.connect(model.hosts.single()) }
+        compose.waitForIdle()
+        val connection = core.connection!!
+        compose.runOnIdle { screenLifecycle.currentState = Lifecycle.State.CREATED }
+        compose.mainClock.advanceTimeBy(30_000)
+        compose.runOnIdle { assertFalse(connection.disconnected) }
+        compose.mainClock.advanceTimeBy(30_100)
+        compose.runOnIdle { assertTrue(connection.disconnected) }
+    }
+
 }

@@ -102,9 +102,9 @@ private fun AriesContent(
         model.resumeScreens()
         model.resumeCalls()
         onStopOrDispose {
-            // A replacement Activity keeps its sessions; App Lock releases immediately.
+            // A replacement Activity keeps its sessions; a lock policy owns its grace period.
             if (activity?.isChangingConfigurations != true) {
-                model.backgrounded(retainConnections = appLock?.enabled != true)
+                model.backgrounded(connectionGraceMs = appLock?.takeIf { it.enabled }?.delay?.milliseconds ?: SCREEN_CONNECTION_GRACE_MS)
                 model.pauseCalls()
             }
         }
@@ -430,12 +430,12 @@ private fun PromptDialog(prompt: Prompt, model: HostsModel) {
             title = { Text(text(prompt.title)) },
             text = { AnnouncedText(text(prompt.body)) },
             confirmButton = {
-                TextButton(onClick = { if (prompt.recoverKey) model.openKeyRecovery() else model.dismiss() }) {
-                    Text(stringResource(if (prompt.recoverKey) R.string.key_recover_button else R.string.ok_button))
+                TextButton(onClick = { if (prompt.unlock != null) prompt.unlock.invoke() else if (prompt.recoverKey) model.openKeyRecovery() else model.dismiss() }) {
+                    Text(stringResource(if (prompt.unlock != null) R.string.key_unlock_button else if (prompt.recoverKey) R.string.key_recover_button else R.string.ok_button))
                 }
             },
             dismissButton = {
-                if (prompt.recoverKey) TextButton(onClick = model::dismiss) { Text(stringResource(R.string.cancel_button)) }
+                if (prompt.recoverKey || prompt.unlock != null) TextButton(onClick = model::dismiss) { Text(stringResource(R.string.cancel_button)) }
             },
         )
     }

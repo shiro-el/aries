@@ -39,7 +39,7 @@ class AgentOpenLinkTest {
     private fun show(core: AriesCoreInterface) {
         compose.setContent {
             val scope = rememberCoroutineScope()
-            model = remember { HostsModel(core, scope) }
+            model = remember { HostsModel(core, scope, elapsedRealtime = { compose.mainClock.currentTime }) }
             AriesApp(model)
         }
         compose.waitForIdle()
@@ -56,6 +56,31 @@ class AgentOpenLinkTest {
 
     private fun caller() = CallEntry(model.hosts[1], CallInfo("h2", "c1", 100uL, agent.address, true,
         "Review", "Ready", CallUrgency.CHECK, emptyList(), null, true))
+
+    // D32: selecting a locked Agent must authenticate again, with a usable retry after cancellation.
+    @Test fun explicitlyOpeningALockedAgentRetriesAndOffersUnlockAfterCancellation() {
+        val fake = core().apply { ensureKey(); setKeyProtection(KeyProtection.BIOMETRIC) }
+        show(fake)
+        compose.runOnIdle { model.openAgents() }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertTrue(fake.connectAttempts.isEmpty())
+            fake.failWith = CoreException.KeyLocked()
+            model.openPushedAgent("h2", agent.address, openChat = true)
+        }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals(listOf("h2"), fake.connectAttempts)
+            assertTrue((model.prompt as Prompt.Problem).unlock != null)
+            fake.failWith = null
+        }
+        compose.onNodeWithText("Unlock SSH key").performClick()
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals(AgentKey("h2", agent.address), model.currentAgentKey)
+            assertEquals(listOf("h2", "h2"), fake.connectAttempts)
+        }
+    }
 
     // Regression: inbox-only Chat must follow its own Host/address, even when Browse watches the same address on another Host.
     @Test fun inboxChatFollowsItsHostStatusAcrossReconnectAndReleasesTheLineOnBack() {
@@ -360,6 +385,158 @@ class AgentOpenLinkTest {
         compose.runOnIdle { model.networkChanged() }
         compose.waitForIdle()
         compose.runOnIdle { assertEquals(AgentKey("h2", agent.address), model.currentAgentKey) }
+    }
+
+    // D41: Browse must borrow the home board's SSH line and watches, and release only its own view on Back.
+    @Test fun browseReusesTheWarmHomeLineAndWatches() {
+        val core = core()
+        show(core)
+        compose.runOnIdle { model.openAgents() }
+        compose.waitForIdle()
+        val home = model.screen
+        val connection = core.connectionsOf.getValue("h1")
+        val attempts = core.connectAttempts.size
+        val watches = core.terminalWatchStarts["h1"]
+        compose.runOnIdle { model.connect(model.hosts[0]) }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertTrue(model.screen is Screen.Browse)
+            assertSame(connection, core.connectionsOf.getValue("h1"))
+            assertEquals(attempts, core.connectAttempts.size)
+            assertEquals(watches, core.terminalWatchStarts["h1"])
+            core.push("h1", listOf(agent.copy(name = "Updated")))
+        }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals("Updated", (model.screen as Screen.Browse).browser.terminals.single().name)
+            model.openAgents()
+            assertSame(home, model.screen)
+            assertFalse(connection.disconnected)
+        }
+    }
+
+    // D39: an offline open must not expire while the phone is in the background.
+    @Test fun agentOpeningBudgetPausesWhileBackgrounded() {
+        val core = core()
+        show(core)
+        compose.runOnIdle { model.connect(model.hosts[0]) }
+        compose.waitForIdle()
+        core.failFor["h2"] = CoreException.Unreachable("offline")
+        compose.runOnIdle { model.openPushedAgent("h2", agent.address) }
+        compose.mainClock.advanceTimeBy(5_000)
+        compose.runOnIdle { model.backgrounded() }
+        compose.mainClock.advanceTimeBy(60_000)
+        compose.runOnIdle {
+            assertNull(model.prompt)
+            assertNotNull(model.agentOpening)
+            model.resumeScreens()
+        }
+        compose.mainClock.advanceTimeBy(14_000)
+        compose.runOnIdle { assertNull(model.prompt); assertNotNull(model.agentOpening) }
+        compose.mainClock.advanceTimeBy(2_000)
+        compose.runOnIdle {
+            assertTrue(model.prompt is Prompt.Problem)
+            assertNull(model.agentOpening)
+        }
+    }
+
+    // D44: a superseded trust decision must neither remain visible nor revive a cancelled open.
+    @Test fun supersedingAnOpenDismissesItsTrustDecisionAndIgnoresAQueuedTrust() {
+        val core = core()
+        show(core)
+        compose.runOnIdle { model.connect(model.hosts[0]) }
+        compose.waitForIdle()
+        core.requireTrust = "SHA256:new"
+        compose.runOnIdle { model.openPushedAgent("h2", agent.address) }
+        compose.waitForIdle()
+        val oldPrompt = model.prompt as Prompt.TrustHostKey
+        compose.runOnIdle { model.openDrawerAgent(AgentEntry(model.hosts[0], agent)) }
+        compose.waitForIdle()
+        val attempts = core.connectAttempts.size
+        compose.runOnIdle {
+            assertNull(model.prompt)
+            model.trust(oldPrompt)
+        }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals(AgentKey("h1", agent.address), model.currentAgentKey)
+            assertEquals(attempts, core.connectAttempts.size)
+        }
+    }
+
+    // D42: a failed Browse opened while home connects must not shadow that home's recovered live line.
+    @Test fun agentOpenPrefersTheUpHomeLineOverAFailedBrowse() {
+        val core = core()
+        val hold = CompletableDeferred<Unit>()
+        var attempts = 0
+        val routed = object : AriesCoreInterface by core {
+            override suspend fun connect(hostId: String): HostConnection {
+                if (hostId == "h1") {
+                    when (++attempts) {
+                        1 -> hold.await()
+                        2 -> Unit
+                        else -> throw CoreException.AuthRejected()
+                    }
+                }
+                return core.connect(hostId)
+            }
+        }
+        show(routed)
+        compose.runOnIdle { model.openAgents() }
+        compose.waitForIdle()
+        compose.runOnIdle { model.connect(model.hosts[0]) }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            core.connectionsOf.getValue("h1").dead = true
+            model.foregrounded()
+        }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertTrue(model.screen is Screen.Browse)
+            hold.complete(Unit)
+        }
+        compose.waitForIdle()
+        compose.runOnIdle { model.openDrawerAgent(AgentEntry(model.hosts[0], agent)) }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals(AgentKey("h1", agent.address), model.currentAgentKey)
+            assertNull(model.prompt)
+        }
+    }
+
+    // D43: Pin and Unpin must use a live Browse when the retained home line needs recovery.
+    @Test fun pinUsesTheUpBrowseInsteadOfAFailedHomeLine() {
+        val core = core().apply { failFor["h1"] = CoreException.AuthRejected() }
+        show(core)
+        compose.runOnIdle { model.openAgents() }
+        compose.waitForIdle()
+        core.failFor.remove("h1")
+        compose.runOnIdle { model.connect(model.hosts[0]) }
+        compose.waitForIdle()
+        val entry = AgentEntry(model.hosts[0], agent)
+        compose.runOnIdle { assertTrue(model.canPin(entry)); model.pin(entry, true) }
+        compose.waitForIdle()
+        compose.runOnIdle { model.pin(entry, false) }
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals(listOf("h1 box/t1 pinned=true", "h1 box/t1 pinned=false"), core.labelWrites.filter { "pinned=" in it }) }
+    }
+
+    // D45: switching a live drawer Agent must not show a modal while its existing line answers.
+    @Test fun liveDrawerSwitchDoesNotShowAnOpeningModalDuringTheRoundTrip() {
+        val core = core()
+        show(core)
+        compose.runOnIdle { model.connect(model.hosts[0]) }
+        compose.waitForIdle()
+        val hold = CompletableDeferred<Unit>()
+        core.terminalListHolds["h1"] = hold
+        compose.runOnIdle { model.openDrawerAgent(AgentEntry(model.hosts[0], agent)) }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertNull(model.agentOpening)
+            hold.complete(Unit)
+        }
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals(AgentKey("h1", agent.address), model.currentAgentKey) }
     }
 
 }

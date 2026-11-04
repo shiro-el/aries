@@ -9,7 +9,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.LifecycleStartEffect
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.*
 
@@ -103,6 +102,7 @@ internal fun TasksNeedsSheet(model: HostsModel, board: AgentBoard, queue: TasksN
             key(current.key) {
                 when (current) {
                     is TaskNeed.Call -> {
+                        LaunchedEffect(current.key) { model.stopTaskQuestion() }
                         val entry = model.calls.calls.find { it.key == current.entry.key } ?: current.entry.copy(live = false)
                         val caller = entry.call.terminal?.let { board.find(AgentKey(entry.host.id, it)) }
                         val resolved = entry.call.answer?.state == CallAnswerState.DELIVERED ||
@@ -119,7 +119,7 @@ internal fun TasksNeedsSheet(model: HostsModel, board: AgentBoard, queue: TasksN
                             model.openPushedAgent(entry.host.id, entry.call.terminal!!, openChat = true)
                         }) { Text(stringResource(R.string.tasks_open_task)) }
                     }
-                    is TaskNeed.Agent -> TasksQuestion(model, board, current, onAnswered = { queue.resolve(current.key) }, onDismiss = onDismiss)
+                    is TaskNeed.Agent -> TasksQuestion(model, board, current, onAnswered = { queue.resolve(current.key) })
                 }
                 TextButton(onClick = queue::next, modifier = Modifier.testTag("tasks-needs-next")) {
                     Text(stringResource(R.string.tasks_needs_next))
@@ -131,7 +131,7 @@ internal fun TasksNeedsSheet(model: HostsModel, board: AgentBoard, queue: TasksN
 
 @Composable
 private fun TasksQuestion(model: HostsModel, board: AgentBoard, need: TaskNeed.Agent,
-    onAnswered: () -> Unit, onDismiss: () -> Unit) {
+    onAnswered: () -> Unit) {
     val original = need.entry
     val entry = board.find(original.key) ?: original.copy(live = false)
     val link = board.links[entry.host.id]
@@ -143,14 +143,8 @@ private fun TasksQuestion(model: HostsModel, board: AgentBoard, need: TaskNeed.A
         if (retainedChat == null) retainedChat = model.taskQuestion(board, entry.key)
     }
     val chat = retainedChat
-    val sharedWithDetail = chat != null && model.isViewedChat(chat)
-    DisposableEffect(chat, sharedWithDetail) {
-        if (!sharedWithDetail && chat != null) model.startTaskQuestion(chat)
-        onDispose { if (chat != null && !sharedWithDetail && !model.isViewedChat(chat)) chat.stop() }
-    }
-    if (!sharedWithDetail) LifecycleStartEffect(chat) {
-        chat?.resume()
-        onStopOrDispose { if (chat != null && !model.isViewedChat(chat)) chat.pause() }
+    LaunchedEffect(chat) {
+        if (chat == null) model.stopTaskQuestion() else model.startTaskQuestion(chat)
     }
     // A key receipt is not confirmation. Keep the displayed question (and its
     // Unconfirmed recovery UI) until transcript completion or a live status change.
@@ -162,6 +156,10 @@ private fun TasksQuestion(model: HostsModel, board: AgentBoard, need: TaskNeed.A
     Text(displayName(entry.terminal), Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.titleMedium)
     Text(entry.host.name, Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall)
     when {
+        (link?.state as? LinkState.Down)?.error is CoreException.KeyLocked -> {
+            Text(stringResource(R.string.key_locked_body), Modifier.padding(16.dp))
+            TextButton(onClick = link::retryNow) { Text(stringResource(R.string.key_unlock_button)) }
+        }
         entry.host in board.loadingHosts -> ScreenLoading(stringResource(R.string.chat_loading), compact = true,
             onRetry = { link?.retryNow() })
         link?.state == LinkState.Reconnecting -> Text(stringResource(R.string.tasks_reconnecting), Modifier.padding(16.dp))
@@ -178,7 +176,7 @@ private fun TasksQuestion(model: HostsModel, board: AgentBoard, need: TaskNeed.A
             Text(stringResource(R.string.tasks_needs_open), Modifier.padding(16.dp))
         }
     }
-    TextButton(onClick = { onDismiss(); model.openAgent(board, entry, openChat = true) }, enabled = entry.live) {
+    TextButton(onClick = { model.openTaskQuestion(board, entry) }, enabled = entry.live) {
         Text(stringResource(R.string.tasks_open_task))
     }
 }

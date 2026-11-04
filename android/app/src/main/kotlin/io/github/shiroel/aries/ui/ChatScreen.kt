@@ -879,6 +879,8 @@ class ChatModel(
         }
     }
 
+    internal val isRunning get() = !stopped && job?.isActive == true
+
     fun start(scope: CoroutineScope, paused: Boolean = this.paused) {
         this.paused = paused
         transcriptReady = false

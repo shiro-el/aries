@@ -209,7 +209,7 @@ pub(crate) fn category(error: &CoreError) -> DiagnosticError {
             D::Authentication
         }
         C::Unreachable { .. } => D::Unreachable,
-        C::Incompatible { .. } => D::Incompatible,
+        C::Incompatible { .. } | C::HerdrCoreMissing => D::Incompatible,
         C::Protocol { .. } | C::Rpc { .. } | C::InvalidPairingQr => D::Protocol,
         C::Closed => D::Closed,
         C::Storage { .. } => D::Storage,
