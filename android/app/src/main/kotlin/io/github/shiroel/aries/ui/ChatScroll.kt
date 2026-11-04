@@ -36,6 +36,12 @@ internal class ChatScrollState(following: Boolean) {
         private set
 
     fun latest() { latestRequest++ }
+
+    /** Apply before changing a tool's height so LazyColumn keeps the same reading anchor. */
+    fun readTool() {
+        following = false
+        list.requestScrollToItem(list.firstVisibleItemIndex, list.firstVisibleItemScrollOffset)
+    }
 }
 
 /** Keep the reading position relative to the bottom as the IME resizes Chat. */
@@ -90,15 +96,19 @@ internal fun rememberChatScrollState(
         var pending = emptySet<String>()
         var lastSaved = saved
         var request = state.latestRequest
+        var disclosures = chat.expanded to chat.rawInputsExpanded
         snapshotFlow {
             // Read layout as well as data: scrolling changes the follow mode;
             // a streaming update can change height without adding any rows.
             Triple(
                 content.value,
                 state.list.layoutInfo,
-                state.latestRequest,
+                Triple(state.latestRequest, chat.expanded, chat.rawInputsExpanded),
             )
-        }.collect { (data, _, latestRequest) ->
+        }.collect { (data, _, controls) ->
+            val (latestRequest, expanded, rawInputsExpanded) = controls
+            val disclosureChanged = disclosures != (expanded to rawInputsExpanded)
+            disclosures = expanded to rawInputsExpanded
             val (rows, calls, documents, followEnabled) = data
             val transcript = rows.map { "transcript:${it.id}" }
             val keys = buildList {
@@ -121,7 +131,9 @@ internal fun rememberChatScrollState(
             if (previousEntries != null && lastViewport != currentViewport) {
                 state.following = !state.list.canScrollForward
             }
-            if (!followEnabled) state.following = false
+            // A disclosure is a reading action, not new Agent output. Its next
+            // measure must not trigger scrollToLatest and move the tapped header.
+            if (!followEnabled || disclosureChanged) state.following = false
             lastViewport = currentViewport
             val ready = rows.all { entry ->
                 val text = entry.body.markdownSource()

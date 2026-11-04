@@ -586,6 +586,7 @@
     <string name="chat_copy_all">Copy all</string>
     <string name="chat_select_text">Select text</string>
     <string name="chat_thinking">Thinking</string>
+    <string name="chat_tool_done">done</string>
     <string name="chat_tool_running">running</string>
     <string name="chat_tool_failed">failed</string>
     <!-- Agent usage and context (193) -->
