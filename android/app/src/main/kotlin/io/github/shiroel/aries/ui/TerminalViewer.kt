@@ -197,7 +197,7 @@ class TerminalViewer(terminal: TerminalInfo) {
 
     /**
      * Typing mode: attached as an ordinary viewer whose grid is the phone's
-     * ([phoneGrid]). Starts on input focus ([startTyping]) or right away
+     * ([phoneGrid]). Starts on an input tap or key ([startTyping]) or right away
      * when the default attach mode is input.
      */
     var typing by mutableStateOf(false)

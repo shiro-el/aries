@@ -15,8 +15,8 @@ import io.github.shiroel.aries.core.TerminalKey
 /**
  * The Terminal's input field: a plain focusable View so the soft keyboard
  * talks to our own [TerminalInputConnection] instead of a text editor.
- * Tapping it focuses it and shows the keyboard; focusing it starts typing
- * mode on [viewer] (observe -> ordinary viewer).
+ * Tapping it focuses it, shows the keyboard and starts typing mode on
+ * [viewer]. Restored Android focus after a reconnect keeps observe mode.
  */
 @SuppressLint("ViewConstructor")
 class TerminalInputView(context: Context, viewer: TerminalViewer) : View(context) {
@@ -33,7 +33,6 @@ class TerminalInputView(context: Context, viewer: TerminalViewer) : View(context
         isFocusable = true
         isFocusableInTouchMode = true
         setOnClickListener { showKeyboard() }
-        setOnFocusChangeListener { _, focused -> if (focused) this.viewer.startTyping() }
         viewer.onCompositionInterrupted = interruptKeyboard
     }
 
@@ -49,6 +48,7 @@ class TerminalInputView(context: Context, viewer: TerminalViewer) : View(context
 
     fun showKeyboard() {
         if (!viewer.canInput) return
+        viewer.startTyping()
         requestFocus()
         context.getSystemService(InputMethodManager::class.java)?.showSoftInput(this, 0)
     }
@@ -106,6 +106,7 @@ class TerminalInputConnection(view: View, private val viewer: TerminalViewer) : 
 
     override fun commitText(text: CharSequence, newCursorPosition: Int): Boolean {
         if (!currentLine()) return true
+        if (text.isNotEmpty()) viewer.startTyping()
         viewer.commit(text.toString())
         editable?.clear()
         return true
@@ -113,6 +114,7 @@ class TerminalInputConnection(view: View, private val viewer: TerminalViewer) : 
 
     override fun setComposingText(text: CharSequence, newCursorPosition: Int): Boolean {
         if (!currentLine()) return true
+        if (text.isNotEmpty()) viewer.startTyping()
         viewer.compose(text.toString())
         return true
     }
@@ -125,6 +127,7 @@ class TerminalInputConnection(view: View, private val viewer: TerminalViewer) : 
 
     override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
         if (!currentLine()) return true
+        if (beforeLength > 0 || afterLength > 0) viewer.startTyping()
         if (viewer.deleteComposing(beforeLength)) return true
         repeat(beforeLength) { viewer.press(TerminalKey.Backspace) }
         repeat(afterLength) { viewer.press(TerminalKey.Delete) }
@@ -162,6 +165,7 @@ internal fun sendKey(viewer: TerminalViewer, event: KeyEvent): Boolean {
     }
     if (key != null) {
         // Shift only matters to Tab and the cursor/function keys, not to Enter.
+        viewer.startTyping()
         viewer.press(key, mods)
         return true
     }
@@ -169,6 +173,7 @@ internal fun sendKey(viewer: TerminalViewer, event: KeyEvent): Boolean {
     val ch = event.getUnicodeChar(event.metaState and (KeyEvent.META_CTRL_MASK or KeyEvent.META_ALT_MASK).inv())
     if (ch == 0 || ch and KeyCharacterMapCombining != 0) return false
     val text = String(Character.toChars(ch))
+    viewer.startTyping()
     if (mods.ctrl || mods.alt) {
         viewer.press(TerminalKey.Char(text), mods.copy(shift = false))
     } else {
