@@ -949,7 +949,7 @@
     <string name="jump_key_changed_body">Jump host %1$d (%2$s) presented a different key than before, so Aries did not connect. Someone may be intercepting the connection, or the jump host was reinstalled.\n\nTrusted: %3$s\nNow: %4$s</string>
     <string name="connect_jump_auth_rejected">Jump host %1$d (%2$s) did not accept the key chosen for it. Add that key\'s public key to ~/.ssh/authorized_keys on the jump host.</string>
     <string name="calls_title">Calls</string>
-    <string name="calls_feed_down">%1$s: Calls are not up to date (%2$s). Retrying.</string>
+    <string name="calls_feed_down">%1$s: Calls are not up to date. %2$s</string>
     <string name="call_meta">%1$s · %2$s · %3$s</string>
     <string name="call_choices">Choices: %1$s</string>
     <string name="call_urgency_record">Record</string>
@@ -1133,7 +1133,17 @@
     <string name="call_inbox_expanded">Expanded</string>
     <string name="call_inbox_collapsed">Collapsed</string>
     <string name="call_inbox_past">Past Calls</string>
-    <string name="call_inbox_empty">No waiting Calls.</string>
+    <string name="call_feed_retrying">Retrying…</string>
+    <string name="call_feed_unlock">Unlock</string>
+    <string name="call_feed_retry">Retry</string>
+    <string name="call_feed_settings">Settings</string>
+    <string name="call_inbox_other">Other unanswered Calls</string>
+    <string name="call_inbox_helper">This Call is from a helper Agent. Open its Chat to follow up; Choices cannot be sent here.</string>
+    <string name="call_inbox_read_only">Read-only · Last checked %1$s.</string>
+    <string name="call_inbox_blocked">Blocked Agents: %1$d · View Agents</string>
+    <string name="call_reply_dismiss">Dismiss reply note</string>
+    <string name="call_inbox_syncing">Checking %1$d Hosts…</string>
+    <string name="call_inbox_empty">No Calls to answer here.</string>
     <string name="call_inbox_caller">%1$s on %2$s</string>
     <string name="call_open_chat">Open in Chat</string>
     <string name="call_open_chat_label">Open %1$s in Chat for Call: %2$s</string>

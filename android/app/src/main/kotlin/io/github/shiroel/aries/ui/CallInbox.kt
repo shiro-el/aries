@@ -72,7 +72,9 @@ internal fun CallInboxOverlay(model: HostsModel, modifier: Modifier = Modifier) 
             .background(MaterialTheme.colorScheme.surface).testTag("call-inbox-panel")
             .semantics { paneTitle = title }) {
             CallInboxPanel(model.calls, model::openCallChat, callerName = model::callCallerName,
-                onInstallBeacon = model::openHostSettings)
+                onInstallBeacon = model::openHostSettings, onFeedSettings = model::callFeedSettings, openingCall = model.openingCall,
+                blockedAgents = model.drawerAgents.count { it.terminal.agentStatus is AgentStatus.Blocked },
+                onWaitingAgents = { model.closeCallInbox(); model.openAgents() })
         }
     }
 }

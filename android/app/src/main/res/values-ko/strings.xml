@@ -946,7 +946,7 @@
     <string name="jump_key_changed_body">점프 호스트 %1$d(%2$s)가 이전과 다른 키를 보내서 연결하지 않았어요. 누군가 연결을 가로채고 있거나 점프 호스트를 다시 설치했을 수 있어요.\n\n신뢰한 키: %3$s\n현재 키: %4$s</string>
     <string name="connect_jump_auth_rejected">점프 호스트 %1$d(%2$s)가 지정한 키를 거부했어요. 점프 호스트의 ~/.ssh/authorized_keys에 그 키의 공개 키를 추가해 주세요.</string>
     <string name="calls_title">Call 기록</string>
-    <string name="calls_feed_down">%1$s: Call 목록을 갱신하지 못했어요(%2$s). 다시 시도하는 중이에요.</string>
+    <string name="calls_feed_down">%1$s: Call을 최신 상태로 확인하지 못했어요. %2$s</string>
     <string name="call_meta">%1$s · %2$s · %3$s</string>
     <string name="call_choices">Choice: %1$s</string>
     <string name="call_urgency_record">기록</string>
@@ -1128,7 +1128,17 @@
     <string name="call_inbox_expanded">펼침</string>
     <string name="call_inbox_collapsed">접힘</string>
     <string name="call_inbox_past">지난 Call</string>
-    <string name="call_inbox_empty">대기 중인 Call이 없어요.</string>
+    <string name="call_feed_retrying">다시 연결 중…</string>
+    <string name="call_feed_unlock">잠금 해제</string>
+    <string name="call_feed_retry">다시 시도</string>
+    <string name="call_feed_settings">설정</string>
+    <string name="call_inbox_other">그 밖의 미응답 Call</string>
+    <string name="call_inbox_helper">하위 Agent의 Call이에요. Chat을 열어 확인해 주세요. 여기서는 Choice를 보낼 수 없어요.</string>
+    <string name="call_inbox_read_only">읽기 전용 · 마지막 확인 %1$s</string>
+    <string name="call_inbox_blocked">Blocked Agent %1$d개가 기다려요 · Agent 보기</string>
+    <string name="call_reply_dismiss">답장 안내 닫기</string>
+    <string name="call_inbox_syncing">Host %1$d개 확인 중…</string>
+    <string name="call_inbox_empty">여기서 답할 Call이 없어요.</string>
     <string name="call_inbox_caller">%2$s의 %1$s</string>
     <string name="call_open_chat">Chat에서 열기</string>
     <string name="call_open_chat_label">%1$s Chat 열기 (Call: %2$s)</string>

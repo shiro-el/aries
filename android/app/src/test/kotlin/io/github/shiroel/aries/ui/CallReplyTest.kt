@@ -90,6 +90,27 @@ class CallReplyTest {
     }
 
     @Test
+    fun lateClaimAndStaleFeedCannotUndoTheDeliveredAnswer() {
+        val hold = CompletableDeferred<Unit>()
+        val core = core().apply {
+            replyHold = hold
+            replyResult = CallReply(CallReplyOutcome.ANSWERED, answer("Wait", CallAnswerState.CLAIMED), null)
+        }
+        openCalls(core)
+        choice("Merge").performClick()
+        compose.runOnIdle {
+            core.callListeners.getValue("h1").onCalls(listOf(call(answer("Wait", CallAnswerState.DELIVERED))))
+        }
+        hold.complete(Unit)
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.call_answer_delivered, "Wait")).assertExists()
+        compose.onNodeWithText(str(R.string.call_answer_claimed, "Wait")).assertDoesNotExist()
+        compose.runOnIdle { core.callListeners.getValue("h1").onCalls(listOf(call())) }
+        compose.onNodeWithText(str(R.string.call_answer_delivered, "Wait")).assertExists()
+        choice("Merge").assertDoesNotExist()
+    }
+
+    @Test
     fun aReplyThatNeverReachedTheHostSaysNotSentAndCanBeRetried() {
         val failure = CoreException.Unreachable("no route to host")
         val core = core().apply { replyFailure = failure }
