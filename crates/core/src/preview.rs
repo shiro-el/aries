@@ -1,6 +1,15 @@
 //! Screen-owned loopback preview; never opens a second SSH connection.
 use crate::{CoreError, HostConnection, error::protocol, on_runtime};
-use std::sync::Arc;
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+
+pub(crate) struct Discovery {
+    checked: Instant,
+    ports: Vec<u16>,
+}
 
 /// Extract localhost endpoints from Agent prose/Terminal output without
 /// interpreting unrelated numbers, lookalike hostnames or truncated ports.
@@ -120,6 +129,52 @@ impl HostConnection {
     /// Optional discovery source. Missing tools, denied exec and malformed
     /// output yield no ports; they must not interrupt the Agent screen.
     pub async fn preview_listening_ports(&self) -> Vec<u16> {
+        // Both successful and rejected probes are cached per live connection.
+        // Coalesce concurrent Agent screens; never scan on every output update.
+        let mut cache = self.preview_cache.lock().await;
+        if let Some(found) = cache.as_ref()
+            && found.checked.elapsed() < Duration::from_secs(30)
+        {
+            return found.ports.clone();
+        }
+        let candidates = self.listening_ports().await;
+        let session = self.client.ssh.as_ref().and_then(std::sync::Weak::upgrade);
+        let ports = on_runtime(async move {
+            let Some(session) = session else {
+                return Ok(Vec::new());
+            };
+            let mut accepted = Vec::new();
+            // Bound work even on shared Hosts with hundreds of listeners.
+            for batch in candidates.chunks(8).take(8) {
+                let mut probes = tokio::task::JoinSet::new();
+                for &port in batch {
+                    let session = session.clone();
+                    probes.spawn(async move {
+                        let http = probe_http(&session, port).await;
+                        (port, http)
+                    });
+                }
+                while let Some(result) = probes.join_next().await {
+                    if let Ok((port, true)) = result {
+                        accepted.push(port);
+                    }
+                }
+            }
+            Ok(candidates
+                .into_iter()
+                .filter(|port| accepted.contains(port))
+                .collect::<Vec<_>>())
+        })
+        .await
+        .unwrap_or_default();
+        *cache = Some(Discovery {
+            checked: Instant::now(),
+            ports: ports.clone(),
+        });
+        ports
+    }
+
+    async fn listening_ports(&self) -> Vec<u16> {
         let mut ports = Vec::new();
         if let Ok(out) = self
             .machine_exec(vec!["ss".into(), "-H".into(), "-ltn".into()], None, 3)
@@ -169,4 +224,57 @@ fn add_listening_port(endpoint: &str, ports: &mut Vec<u16>) {
     {
         ports.push(port);
     }
+}
+
+/// HEAD detects even 404/405/auth responses without downloading the page or
+/// following redirects off the Host. No dependency on curl/python on the Host.
+async fn probe_http(session: &crate::transport::ssh::Session, port: u16) -> bool {
+    tokio::time::timeout(Duration::from_millis(750), async {
+        let channel = session
+            .channel_open_direct_tcpip("127.0.0.1", u32::from(port), "127.0.0.1", 0)
+            .await
+            .ok()?;
+        let mut stream = channel.into_stream();
+        stream
+            .write_all(
+                format!("HEAD / HTTP/1.1\r\nHost: localhost:{port}\r\nConnection: close\r\n\r\n")
+                    .as_bytes(),
+            )
+            .await
+            .ok()?;
+        // Read only a bounded status line, never the page body.
+        let mut line = Vec::new();
+        let mut reader = tokio::io::BufReader::new(stream);
+        while line.len() < 256 {
+            let bytes = reader.fill_buf().await.ok()?;
+            if bytes.is_empty() {
+                return None;
+            }
+            let count = bytes
+                .iter()
+                .position(|b| *b == b'\n')
+                .map_or(bytes.len(), |i| i + 1)
+                .min(256 - line.len());
+            line.extend_from_slice(&bytes[..count]);
+            reader.consume(count);
+            if line.ends_with(b"\n") {
+                break;
+            }
+        }
+        let line = std::str::from_utf8(&line).ok()?;
+        let mut fields = line.split_whitespace();
+        let version = fields.next()?;
+        let status = fields.next()?;
+        Some(
+            matches!(version, "HTTP/1.0" | "HTTP/1.1")
+                && status.len() == 3
+                && status
+                    .parse::<u16>()
+                    .is_ok_and(|code| (100..600).contains(&code)),
+        )
+    })
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or(false)
 }
