@@ -54,6 +54,11 @@ internal class ChatTranscript(
     private val projection by derivedStateOf(structuralEqualityPolicy()) { project(entries.value, markdown.value) }
     private var handles = emptyMap<String, ChatTranscriptRow>()
 
+    /** Plain projection for layout grouping. Do not eagerly read lazy row-handle States in
+     * the parent composition: those handles may have been created in a newer snapshot.
+     */
+    val contents: List<ChatTranscriptContent> get() = projection.rows.map { it.content }
+
     val rows: List<ChatTranscriptRow> by derivedStateOf(structuralEqualityPolicy()) {
         projection.rows.map { row ->
             handles[row.key]?.takeIf { it.contentType == row.contentType }
