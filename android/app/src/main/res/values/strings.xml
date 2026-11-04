@@ -458,6 +458,12 @@
     <string name="terminal_search_invalid">Invalid search pattern or query too long</string>
 
     <string name="agents_button">All Agents</string>
+    <!-- Waiting Agent flow (194). -->
+    <string name="agents_loading_hosts">Connecting to %1$d Hosts…</string>
+    <string name="agents_waiting_unknown">Waiting · —</string>
+    <string name="agents_waiting_partial">%1$d+ waiting</string>
+    <string name="agents_next_waiting">Next waiting Agent: %1$s · %2$s</string>
+
     <string name="agents_title">Agents</string>
     <string name="agents_empty">No Agents are running on your Hosts.</string>
     <string name="agents_no_hosts">Add a Host first.</string>
