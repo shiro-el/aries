@@ -49,6 +49,26 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+/** Fixed-width navigation stays visible even in compact height or with a hidden normal key bar. */
+@Composable
+internal fun TerminalRewindControls(viewer: TerminalViewer) {
+    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(stringResource(R.string.chat_rewind_picker_hint), Modifier.weight(1f).padding(horizontal = 12.dp),
+                style = MaterialTheme.typography.bodySmall)
+            ActionIcon(R.drawable.ic_x, R.string.chat_rewind_controls_close, { viewer.rewindPicker = false })
+        }
+        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+            BarKey(label = R.string.key_esc, enabled = viewer.canInput) { viewer.press(TerminalKey.Escape) }
+            BarKey(label = R.string.key_left, enabled = viewer.canInput, repeating = true, fontSize = 20.sp) { viewer.press(TerminalKey.Left) }
+            BarKey(label = R.string.key_up, enabled = viewer.canInput, repeating = true, fontSize = 20.sp) { viewer.press(TerminalKey.Up) }
+            BarKey(label = R.string.key_down, enabled = viewer.canInput, repeating = true, fontSize = 20.sp) { viewer.press(TerminalKey.Down) }
+            BarKey(label = R.string.key_right, enabled = viewer.canInput, repeating = true, fontSize = 20.sp) { viewer.press(TerminalKey.Right) }
+            BarKey(label = R.string.chat_rewind_enter_key, enabled = viewer.canInput) { viewer.press(TerminalKey.Enter) }
+        }
+    }
+}
+
 /** Seven-column rows; the screen collapses this optional bar in compact height. */
 @Composable
 internal fun TerminalKeyBar(viewer: TerminalViewer) {
