@@ -1,6 +1,9 @@
 package io.github.shiroel.aries.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -19,7 +22,8 @@ internal fun FileFindBar(
 ) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
         OutlinedTextField(query, onQuery, Modifier.weight(1f).padding(vertical = 4.dp),
-            singleLine = true, label = { Text(stringResource(R.string.files_find_hint)) })
+            singleLine = true, keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { if (query.isNotEmpty() && !searching) onNext() }), label = { Text(stringResource(R.string.files_find_hint)) })
         ActionIcon(R.drawable.ic_chevron_left, R.string.files_find_previous, onPrevious, enabled = query.isNotEmpty() && !searching)
         ActionIcon(R.drawable.ic_chevron_right, R.string.files_find_next, onNext, enabled = query.isNotEmpty() && !searching)
     }

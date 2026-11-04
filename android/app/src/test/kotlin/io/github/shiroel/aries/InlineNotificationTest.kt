@@ -47,10 +47,71 @@ class InlineNotificationTest {
         if (enabled) shadowOf(caps).addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
         shadowOf(cm).setNetworkCapabilities(cm.activeNetwork, caps)
     }
+    /** Optional manual inspection artifact, never a pixel assertion. */
+    private fun screenshot(name: String) {
+        val directory = System.getenv("ARIES_NOTIFICATION_RENDER_DIR") ?: return
+        java.io.File(directory).mkdirs()
+        val parent = android.widget.FrameLayout(context)
+        val view = Notification.Builder.recoverBuilder(context, shown()).createBigContentView().apply(context, parent)
+        view.measure(android.view.View.MeasureSpec.makeMeasureSpec(1080, android.view.View.MeasureSpec.EXACTLY),
+            android.view.View.MeasureSpec.makeMeasureSpec(600, android.view.View.MeasureSpec.AT_MOST))
+        view.layout(0, 0, view.measuredWidth, view.measuredHeight)
+        val bitmap = android.graphics.Bitmap.createBitmap(view.measuredWidth, view.measuredHeight, android.graphics.Bitmap.Config.ARGB_8888)
+        android.graphics.Canvas(bitmap).apply { drawColor(android.graphics.Color.WHITE); view.draw(this) }
+        java.io.File(directory, "$name.png").outputStream().use {
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+        }
+    }
+
     private suspend fun work(target: String, action: String = InlineNotifications.REPLY, attempt: Int = 0,
         created: Long = System.currentTimeMillis()) = TestListenableWorkerBuilder<InlineActionWorker>(context)
         .setRunAttemptCount(attempt).setInputData(InlineActionWorker.input(context, target, action, "run tests", created))
         .build().doWork()
+
+    // Regression: a foreground shade reply/Seen must survive its own consumed-card update.
+    @Test
+    @Config(application = InlineCoreApp::class)
+    fun foregroundReplyAndSeenReachTheHostWhileViewingTheAgent() = runBlocking {
+        WorkManagerTestInitHelper.initializeTestWorkManager(context)
+        online()
+        val app = context as InlineCoreApp
+        val activity = android.app.Activity()
+        for (reply in listOf(true, false)) {
+            app.notificationVisibility.onActivityPaused(activity)
+            PushService.show(context, status())
+            app.notificationVisibility.viewing(activity, PushTarget("h1", "t1"))
+            app.notificationVisibility.onActivityResumed(activity)
+            val action = shown().actions.single {
+                if (reply) !it.remoteInputs.isNullOrEmpty()
+                else it.title == context.getString(R.string.notification_seen_button)
+            }
+            val hold = CompletableDeferred<Unit>()
+            if (reply) app.core.backgroundHold = hold
+            val fill = Intent()
+            if (reply) RemoteInput.addResultsToIntent(action.remoteInputs, fill, Bundle().apply {
+                putCharSequence(InlineNotifications.REPLY_TEXT, "from the shade")
+            })
+            action.actionIntent.send(context, 0, fill)
+            withTimeout(5_000) {
+                while (if (reply) app.core.backgroundMessages.isEmpty() else app.core.labelWrites.isEmpty()) {
+                    shadowOf(Looper.getMainLooper()).idle()
+                    delay(10)
+                }
+            }
+            if (reply) {
+                assertTrue(shown().actions.isNullOrEmpty())
+                action.actionIntent.send(context, 0, fill)
+                shadowOf(Looper.getMainLooper()).idle()
+                assertEquals(1, app.core.backgroundMessages.size)
+                hold.complete(Unit)
+                withTimeout(5_000) {
+                    while (text() != context.getString(R.string.notification_message_sent)) delay(10)
+                }
+            }
+        }
+        assertEquals(listOf(Triple("h1", "t1", "from the shade")), app.core.backgroundMessages)
+        assertEquals(listOf("h1 t1 seen=7"), app.core.labelWrites)
+    }
 
     @Test
     fun anUnreadableReplyShowsFailureWithoutSendingOrFallingBackToPlaintext() = runBlocking {
@@ -86,8 +147,11 @@ class InlineNotificationTest {
         assertTrue(core.backgroundMessages.isEmpty())
     }
 
+    // Regression: an offline RemoteInput must keep its text and remain explicitly retryable.
     @Test
-    fun anOfflineRemoteInputFailsImmediatelyWithoutWaitingForWork() {
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    fun anOfflineRemoteInputPreservesTheReplyAndAllowsAnExplicitRetry() = runBlocking {
+        WorkManagerTestInitHelper.initializeTestWorkManager(context)
         online(false)
         PushService.show(context, status())
         val action = shown().actions.single { !it.remoteInputs.isNullOrEmpty() }
@@ -99,6 +163,27 @@ class InlineNotificationTest {
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals(context.getString(R.string.notification_action_offline), text())
         assertTrue(core.backgroundMessages.isEmpty())
+        val retry = shown().actions.single { !it.remoteInputs.isNullOrEmpty() }
+        assertEquals("send later", retry.remoteInputs.single().choices.single().toString())
+        assertTrue(shown().extras.getCharSequence(Notification.EXTRA_BIG_TEXT).toString().contains("send later"))
+        assertNotEquals(shadowOf(action.actionIntent).savedIntent.data, shadowOf(retry.actionIntent).savedIntent.data)
+        assertEquals(InlineTarget.fromJson(shadowOf(retry.actionIntent).savedIntent.getStringExtra(InlineNotifications.TARGET)!!)!!.generation,
+            shown().extras.getString(InlineNotifications.GENERATION))
+        assertFalse(shown().extras.getBoolean("inline_consumed"))
+        screenshot("offline-reply")
+        online()
+        val resend = Intent()
+        RemoteInput.addResultsToIntent(retry.remoteInputs, resend, Bundle().apply {
+            putCharSequence(InlineNotifications.REPLY_TEXT, retry.remoteInputs.single().choices.single())
+        })
+        retry.actionIntent.send(context, 0, resend)
+        withTimeout(5_000) {
+            while (text() != context.getString(R.string.notification_message_sent)) {
+                shadowOf(Looper.getMainLooper()).idle()
+                delay(10)
+            }
+        }
+        assertEquals(listOf(Triple("h1", "t1", "send later")), core.backgroundMessages)
     }
 
     @Test
@@ -132,7 +217,7 @@ class InlineNotificationTest {
         core.backgroundFailure = io.github.shiroel.aries.core.CoreException.Unreachable("connection refused")
         work(target())
         assertEquals(context.getString(R.string.notification_action_failed), text())
-        assertTrue(shown().actions.isNullOrEmpty())
+        assertEquals("run tests", shown().actions.single { !it.remoteInputs.isNullOrEmpty() }.remoteInputs.single().choices.single())
         PushService.show(context, status())
         core.backgroundFailure = io.github.shiroel.aries.core.CoreException.KeyLocked()
         work(target())
@@ -148,6 +233,7 @@ class InlineNotificationTest {
         PushService.show(context, status())
         work(target(), created = System.currentTimeMillis() - 61_000)
         assertEquals(context.getString(R.string.notification_action_failed), text())
+        assertEquals("run tests", shown().actions.single { !it.remoteInputs.isNullOrEmpty() }.remoteInputs.single().choices.single())
         assertTrue(core.backgroundMessages.isEmpty())
     }
 
@@ -163,6 +249,43 @@ class InlineNotificationTest {
         shown().deleteIntent.send()
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals(listOf("h1 t1 seen=7"), core.labelWrites)
+    }
+
+    // Regression: the card can disappear after acceptance but before the persisted work starts.
+    @Test
+    fun acceptedReplyAndSeenStillRunAfterTheirCardsAreDismissed() = runBlocking {
+        online()
+        for (action in listOf(InlineNotifications.REPLY, InlineNotifications.SEEN)) {
+            PushService.show(context, status())
+            val accepted = target()
+            manager.cancel("t1", "h1".hashCode())
+            work(accepted, action)
+        }
+        assertEquals(listOf(Triple("h1", "t1", "run tests")), core.backgroundMessages)
+        assertEquals(listOf("h1 t1 seen=7"), core.labelWrites)
+    }
+
+    // Regression: a late failed send must preserve the typed text without overwriting a newer push.
+    @Test
+    fun aFailedReplyKeepsItsDraftEvenWhenANewerCardArrivesDuringTheSend() = runBlocking {
+        online()
+        PushService.show(context, status())
+        val accepted = target()
+        val hold = CompletableDeferred<Unit>()
+        core.backgroundHold = hold
+        core.backgroundFailure = io.github.shiroel.aries.core.CoreException.Unreachable("connection lost")
+        val result = async(Dispatchers.Default) { work(accepted) }
+        withTimeout(5_000) {
+            while (text() != context.getString(R.string.chat_send_held)) delay(10)
+        }
+        PushService.show(context, status(AgentStatus.Error("newer error")))
+        hold.complete(Unit)
+        result.await()
+        assertTrue(text().contains("newer error"))
+        val recovery = manager.activeNotifications.single { it.tag.startsWith("inline-recovery:") }.notification
+        assertEquals("run tests", recovery.actions.single { !it.remoteInputs.isNullOrEmpty() }.remoteInputs.single().choices.single())
+        assertFalse(recovery.publicVersion.extras.toString().contains("run tests"))
+        assertEquals(PushTarget("h1", "t1"), PushTarget.from(shadowOf(recovery.contentIntent).savedIntent))
     }
 
     @Test
@@ -256,4 +379,11 @@ class InlineNotificationTest {
             assertEquals(choices.isEmpty(), shown("call:c1").actions.orEmpty().any { !it.remoteInputs.isNullOrEmpty() })
         }
     }
+}
+
+/** Real foreground policy with an inert core and notification vault. */
+class InlineCoreApp : AriesApplication(), HasNotificationVault {
+    override val core = io.github.shiroel.aries.ui.FakeCore()
+    override val notificationVault = FakeCoreApp().notificationVault
+    override fun onCreate() { registerActivityLifecycleCallbacks(notificationVisibility) }
 }

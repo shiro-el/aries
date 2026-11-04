@@ -116,7 +116,9 @@
     <string name="github_disconnected">Reconnect to this Host, then refresh.</string>
     <string name="github_unknown">The request may have completed. Check GitHub before posting again. Your draft is kept.</string>
     <string name="github_truncated">This GitHub conversation exceeds the Host’s response limit.</string>
-    <string name="github_draft_failed">The draft could not be saved on this phone. Keep this view open and try editing again.</string>
+    <string name="github_draft_failed">The draft could not be saved on this phone. Your draft is kept in memory. Retry saving it.</string>
+    <string name="github_draft_read_failed">The saved draft could not be read on this phone. Retry loading it to continue editing.</string>
+    <string name="github_draft_retry">Retry draft</string>
     <string name="github_draft_limit">Comments can contain at most 64 KiB of text.</string>
 
     <!-- GitHub PR resources (114) -->
