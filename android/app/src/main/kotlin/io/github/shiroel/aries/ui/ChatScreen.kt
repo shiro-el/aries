@@ -509,14 +509,13 @@ fun ChatScreen(
                     }
                 }
                 if (!searchOpen && !scroll.following && (entries.isNotEmpty() || agentCalls.isNotEmpty())) {
-                    TextButton(
+                    LatestButton(
+                        description = if (scroll.unreadCount == 0) stringResource(R.string.chat_latest_button)
+                            else stringResource(R.string.chat_latest_count_button, scroll.unreadCount),
                         onClick = scroll::latest,
-                        modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp)
-                            .background(MaterialTheme.colorScheme.surface),
-                    ) {
-                        Text(if (scroll.unreadCount == 0) stringResource(R.string.chat_latest_button)
-                            else stringResource(R.string.chat_latest_count_button, scroll.unreadCount))
-                    }
+                        modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp),
+                        unreadCount = scroll.unreadCount,
+                    )
                 }
             }
             (chat.terminal.agentStatus as? AgentStatus.Blocked)?.let {
