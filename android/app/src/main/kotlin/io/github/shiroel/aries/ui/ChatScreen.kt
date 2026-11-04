@@ -71,6 +71,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -875,12 +876,12 @@ class ChatModel(
             if (e is CoreException.Rpc && e.kind in setOf("no_agent", "status_mismatch")) {
                 delivery.rejected(message.id)
                 queuedMessages = queuedMessages.map {
-                    if (it.id == message.id) it.copy(phase = QueuedMessagePhase.Failed, heldForTyping = false, error = e.message) else it
+                    if (it.id == message.id) it.copy(phase = QueuedMessagePhase.Failed, heldForTyping = false, error = queuedMessageError(e)) else it
                 }
                 if (e.kind == "no_agent") terminal = terminal.copy(agentStatus = null)
             } else {
                 queuedMessages = queuedMessages.map {
-                    if (it.id == message.id) it.copy(phase = QueuedMessagePhase.Uncertain, heldForTyping = false, error = e.message) else it
+                    if (it.id == message.id) it.copy(phase = QueuedMessagePhase.Uncertain, heldForTyping = false, error = queuedMessageError(e)) else it
                 }
             }
             return false
@@ -1294,7 +1295,7 @@ fun ChatScreen(
     val selectedIndex = selectedChatSearchIndex(matches, selected)
     val active = matches.getOrNull(selectedIndex)
     fun closeSearch() { searchOpen = false; query = ""; selected = null }
-    BackHandler(enabled = searchOpen, onBack = ::closeSearch)
+    BackHandler(enabled = searchOpen && !LocalConsoleOverlayOpen.current, onBack = ::closeSearch)
     val agentCalls = calls?.let { model ->
         model.calls.filter {
             it.host.id == chat.host.id && it.call.terminal == chat.terminal.address &&
@@ -1589,7 +1590,7 @@ internal fun MessageInput(chat: ChatModel, compact: Boolean = false, leading: (@
         fontSize = 14.sp,
         lineHeight = 20.sp,
     )
-    // IME visibility also enables compact chrome on tall phones. Only the
+    // Compact chrome follows the remaining pane height. Only the
     // genuinely short viewport (landscape / split screen) needs fewer lines.
     val maxLines = if (!compact) 6 else if (LocalAgentViewportHeight.current < 300.dp) 2 else 4
     var inputLayout by remember(chat) { mutableStateOf<TextLayoutResult?>(null) }
@@ -1904,9 +1905,9 @@ private fun ToolContent(
                     )
                 }
                 Text(
-                    if (LocalTasksDetail.current != null && patchStats != null)
+                    if (LocalTasksDetail.current != null && patchStats != null && tool.status == ChatToolStatus.DONE)
                         tasksChangeText(patchStats) else AnnotatedString(status),
-                    modifier = Modifier.clearAndSetSemantics {}, style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.semantics { hideFromAccessibility() }, style = MaterialTheme.typography.labelSmall,
                     color = when (tool.status) {
                         ChatToolStatus.FAILED -> MaterialTheme.colorScheme.error
                         ChatToolStatus.RUNNING -> MaterialTheme.colorScheme.primary

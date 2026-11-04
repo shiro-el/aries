@@ -14,8 +14,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.core.CoreException
@@ -67,19 +65,32 @@ internal fun WatchFailureNotice(link: HostLink, error: CoreException) =
 
 @Composable
 internal fun CompactHostFailure(link: HostLink, error: CoreException, stopped: Boolean) {
-    val problem = problemFor(error)
-    val explanation = if (error is CoreException.HostKeyChanged ||
-        error is CoreException.JumpHostKeyChanged) problem.title else problem.body
-    val reason = stringResource(explanation.res, *explanation.args.toTypedArray())
+    val reason = messageText(compactConnectionReason(error))
     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
         val label = if (stopped) stringResource(R.string.agents_watch_stopped, link.host.name)
             else stringResource(R.string.agents_host_offline, link.host.name)
-        Text(label, Modifier.weight(1f).semantics { if (!stopped) stateDescription = reason },
-            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
+            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error,
+                maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        }
         TextButton(onClick = link::retryNow) { Text(stringResource(R.string.connect_retry_button)) }
         if (!stopped) IconButton(onClick = { link.settings(error) }) {
             Icon(painterResource(R.drawable.file_type_settings), stringResource(R.string.connect_settings_button),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+    }
+}
+
+/** Changed-key fingerprints belong in settings; the compact line names the actionable cause. */
+internal fun compactConnectionReason(error: CoreException): Message {
+    val problem = problemFor(error)
+    return when (error) {
+        is CoreException.HostKeyChanged, is CoreException.JumpHostKeyChanged,
+        is CoreException.KeyLocked, is CoreException.Incompatible -> problem.title
+        is CoreException.AuthRejected -> Message(R.string.connect_auth_rejected_short)
+        is CoreException.JumpAuthRejected -> Message(R.string.connect_jump_auth_rejected_short)
+        is CoreException.Protocol -> Message(R.string.connect_protocol_short)
+        else -> problem.body
     }
 }

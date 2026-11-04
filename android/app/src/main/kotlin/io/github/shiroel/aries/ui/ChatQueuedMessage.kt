@@ -17,7 +17,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -45,10 +45,30 @@ data class QueuedChatMessage(
     val confirmed: Boolean = false,
     /** Progress only: herdr-core is waiting for a person to stop typing. */
     val heldForTyping: Boolean = false,
+    /** Stable safe reason code; legacy exception text is never rendered. */
     val error: String? = null,
     /** herdr-core increments this counter when a Working turn ends. */
     val dispatchTurn: ULong? = null,
 )
+
+/** Only allowlisted, argument-free problem sentences may cross the outbox boundary. */
+internal enum class QueuedMessageProblem(val res: Int) {
+    NoAgent(R.string.error_no_agent), StatusMismatch(R.string.error_status_mismatch),
+    Connection(R.string.error_connection), Protocol(R.string.error_protocol),
+    Permission(R.string.error_permission), Missing(R.string.error_missing), Storage(R.string.error_storage),
+    AuthRejected(R.string.connect_auth_rejected), NoKey(R.string.connect_no_key),
+    KeyLocked(R.string.key_locked_body), KeyInvalidated(R.string.key_invalidated_body),
+    NoBeacon(R.string.chat_status_no_beacon), CoreMissing(R.string.herdr_install_connect_reason),
+    Other(R.string.error_retry);
+}
+
+internal fun queuedMessageError(error: io.github.shiroel.aries.core.CoreException): String {
+    val body = problemFor(error).body
+    return (QueuedMessageProblem.entries.firstOrNull { Message(it.res) == body } ?: QueuedMessageProblem.Other).name
+}
+
+private fun queuedMessageReason(code: String): Message = Message(
+    (QueuedMessageProblem.entries.firstOrNull { it.name == code } ?: QueuedMessageProblem.Other).res)
 
 /** Compare delivery identity despite Claude's bash wrapper and shell-quoted upload paths. */
 internal fun QueuedChatMessage.matchesTranscript(text: String): Boolean {
@@ -69,7 +89,7 @@ internal fun QueuedChatMessage.matchesTranscript(text: String): Boolean {
 
 @Composable
 internal fun QueuedMessageBubble(message: QueuedChatMessage, chat: ChatModel) {
-    var confirmRetry by remember(message.id) { mutableStateOf(false) }
+    var confirmRetry by rememberSaveable(message.id) { mutableStateOf(false) }
     if (confirmRetry) AlertDialog(
         onDismissRequest = { confirmRetry = false },
         title = { Text(stringResource(R.string.chat_delivery_resend_title)) },
@@ -108,7 +128,7 @@ internal fun QueuedMessageBubble(message: QueuedChatMessage, chat: ChatModel) {
             }
         }
         message.error?.takeIf { it.isNotBlank() }?.let {
-            Text(if (message.phase == QueuedMessagePhase.Uncertain) it else stringResource(R.string.chat_send_failed, it), color = MaterialTheme.colorScheme.error,
+            Text(messageText(queuedMessageReason(it)), color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodySmall)
         }
         if (message.phase == QueuedMessagePhase.Uncertain || message.phase == QueuedMessagePhase.Failed) {
@@ -193,7 +213,9 @@ internal fun ChatOutboxState.encode(): String? {
                 .put("id", message.id).put("draft", message.draft).put("text", message.text)
                 .put("attachments", attachmentsJson(message.attachments))
                 .put("before", org.json.JSONArray(message.before.toList())).put("phase", message.phase.name)
-                .put("confirmed", message.confirmed).put("error", message.error).put("dispatchTurn", message.dispatchTurn?.toString())) }
+                .put("confirmed", message.confirmed).put("error", message.error?.let { code ->
+                    (QueuedMessageProblem.entries.firstOrNull { it.name == code } ?: QueuedMessageProblem.Other).name
+                }).put("dispatchTurn", message.dispatchTurn?.toString())) }
         }).toString()
 }
 

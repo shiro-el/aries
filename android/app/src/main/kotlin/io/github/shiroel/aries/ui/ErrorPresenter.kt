@@ -10,6 +10,8 @@ import io.github.shiroel.aries.core.CoreException
 internal fun errorMessage(error: Throwable): Message = Message(when (error) {
     is CoreException.Closed, is CoreException.Unreachable, is java.io.IOException -> R.string.error_connection
     is CoreException.Rpc -> when (error.kind) {
+        "no_agent" -> R.string.error_no_agent
+        "status_mismatch" -> R.string.error_status_mismatch
         "permission_denied" -> R.string.error_permission
         "not_found", "terminal_not_found" -> R.string.error_missing
         else -> R.string.error_retry

@@ -40,6 +40,24 @@ class ChatConfigurationChangeApplication : AriesApplication() {
 class ChatConfigurationChangeTest {
     @get:Rule val compose = createEmptyComposeRule()
 
+    // D125: the retained stop decision must remain visible after actual Activity recreation.
+    @Test fun interruptConfirmationSurvivesRotation() {
+        val app = ApplicationProvider.getApplicationContext<ChatConfigurationChangeApplication>()
+        app.getSharedPreferences("app-guidance", Context.MODE_PRIVATE).edit()
+            .putBoolean("onboarding_complete", true).putString("update_url", "").commit()
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup()
+        try {
+            compose.onNodeWithText("rotation-host").performClick()
+            compose.onNodeWithText("rotation-terminal").performClick()
+            compose.onNodeWithContentDescription(app.getString(R.string.chat_interrupt_confirm_button)).performClick()
+            activity.recreate()
+            compose.waitForIdle()
+            compose.onNodeWithText(app.getString(R.string.chat_interrupt_title)).assertIsDisplayed()
+            compose.onNodeWithText(app.getString(R.string.cancel_button)).performClick()
+            assertEquals(emptyList<String>(), app.core.connection!!.interrupted)
+        } finally { activity.pause().stop().destroy() }
+    }
+
     // Regression: retaining the open Chat's viewport across Activity recreation must not
     // also restore that viewport when the same cached conversation is explicitly reopened.
     // A Terminal toggle is part of the retained visit, including its pixel offset/count.

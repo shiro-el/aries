@@ -137,4 +137,19 @@ class TasksActivityStateTest {
         compose.runOnIdle { chat.update(listOf(terminal)); chat.link!!.close() }
         assertAnimating(0)
     }
+    // D83: a patch arriving before its outcome must not replace running/failed status with statistics.
+    @Test fun diffToolsKeepTheirOutcomeVisibleAcrossStreamingUpdates() {
+        open(AgentStatus.Idle)
+        fun edit(status: ChatToolStatus) = ChatEntry("edit", null, ChatEntryBody.Tool("apply_patch", "src/State.kt", "{}", status, null,
+            ChatDiff("src/State.kt", listOf(ChatDiffHunk(1u, 1u, listOf("-old", "+new"))), false)))
+        push(listOf(edit(ChatToolStatus.RUNNING)))
+        compose.onNodeWithText("running").assertIsDisplayed()
+        push(listOf(edit(ChatToolStatus.FAILED)))
+        compose.onNodeWithText("failed").assertIsDisplayed()
+        compose.onNodeWithText("running").assertDoesNotExist()
+        push(listOf(edit(ChatToolStatus.DONE)))
+        compose.onNodeWithText("+1 −1").assertIsDisplayed()
+        compose.onNodeWithText("failed").assertDoesNotExist()
+    }
+
 }
