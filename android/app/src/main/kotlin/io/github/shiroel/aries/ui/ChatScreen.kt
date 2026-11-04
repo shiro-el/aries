@@ -10,6 +10,10 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.TimeoutCancellationException
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -58,6 +62,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
@@ -71,6 +78,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -1331,6 +1339,7 @@ fun ChatScreen(
         ChatDialogs(dialogs, chat, onRewind)
         TasksRequestDialogs(dialogs, chat, calls)
         AgentViewport(
+            collapseHeaderForIme = true,
             header = {
                 if (thread != null) ThreadChatHeader(chat, onBack, onOpenTerminal, { searchOpen = true }, preview, snapshot?.usage)
                 else AgentScreenHeader(chat.terminal, chat.host.name, onBack, AgentView.CHAT, onView,
@@ -1576,6 +1585,34 @@ internal fun MessageInput(chat: ChatModel, compact: Boolean = false, leading: (@
         fontSize = 14.sp,
         lineHeight = 20.sp,
     )
+    // IME visibility also enables compact chrome on tall phones. Only the
+    // genuinely short viewport (landscape / split screen) needs fewer lines.
+    val maxLines = if (!compact) 6 else if (LocalAgentViewportHeight.current < 300.dp) 2 else 4
+    var inputLayout by remember(chat) { mutableStateOf<TextLayoutResult?>(null) }
+    val maxTextHeight = with(LocalDensity.current) {
+        val layout = inputLayout
+        // Use rendered lines: Android's nonlinear font scaling can differ
+        // from converting the line-height sp independently of the font size.
+        if (layout != null && layout.lineCount >= maxLines) {
+            val last = layout.lineCount - 1
+            val lastLineHeight = layout.size.height - layout.getLineTop(last)
+            // Preserve font padding and the last line's trimmed leading.
+            (layout.getLineTop(maxLines - 1) + lastLineHeight).toDp()
+        } else inputStyle.lineHeight.toDp() * maxLines
+    }
+    val inputScroll = rememberScrollState()
+    LaunchedEffect(chat.input.selection, chat.input.text, inputLayout, inputScroll.viewportSize) {
+        val layout = inputLayout ?: return@LaunchedEffect
+        if (layout.layoutInput.text.text != chat.input.text || inputScroll.viewportSize == 0) return@LaunchedEffect
+        val caret = layout.getCursorRect(chat.input.selection.end)
+        val visibleTop = inputScroll.value
+        val visibleBottom = visibleTop + inputScroll.viewportSize
+        when {
+            caret.top < visibleTop -> inputScroll.scrollTo(caret.top.toInt())
+            caret.bottom > visibleBottom -> inputScroll.scrollTo(kotlin.math.ceil(caret.bottom - inputScroll.viewportSize).toInt())
+        }
+    }
+    val overflowColor = MaterialTheme.colorScheme.onSurfaceVariant
     val inputFocus = remember(chat) { FocusRequester() }
     val noticeFocus = remember(chat) { FocusRequester() }
     var returningFromInterrupt by remember(chat) { mutableStateOf(false) }
@@ -1604,18 +1641,36 @@ internal fun MessageInput(chat: ChatModel, compact: Boolean = false, leading: (@
             onValueChange = { chat.input = it },
             modifier = Modifier.weight(1f).focusRequester(inputFocus)
                 .heightIn(min = 48.dp)
+                // The value-based editor handles pointer input outside its
+                // decoration; route those drags to the same text viewport.
+                .scrollable(inputScroll, Orientation.Vertical, reverseDirection = true)
                 .semantics { contentDescription = inputLabel },
             textStyle = inputStyle.copy(color = MaterialTheme.colorScheme.onSurface),
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
-            maxLines = if (compact) 1 else 6,
+            onTextLayout = { inputLayout = it },
             enabled = chat.canEdit,
             decorationBox = { field ->
                 Box(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
-                    if (chat.draft.isEmpty()) {
-                        Text(inputLabel, style = inputStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    // Keep the editor's full text layout inside an explicit
+                    // viewport. Its scroll state follows selection above and
+                    // also drives overflow cues without moving on manual scroll.
+                    Box(Modifier.fillMaxWidth().heightIn(max = maxTextHeight).drawWithContent {
+                        drawContent()
+                        val stroke = 1.dp.toPx()
+                        if (inputScroll.canScrollBackward) {
+                            drawLine(overflowColor, Offset(0f, stroke / 2), Offset(size.width, stroke / 2), stroke)
+                        }
+                        if (inputScroll.canScrollForward) {
+                            drawLine(overflowColor, Offset(0f, size.height - stroke / 2),
+                                Offset(size.width, size.height - stroke / 2), stroke)
+                        }
+                    }.verticalScroll(inputScroll)) {
+                        if (chat.draft.isEmpty()) {
+                            Text(inputLabel, style = inputStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        field()
                     }
-                    field()
                 }
             },
         )

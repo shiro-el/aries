@@ -264,6 +264,9 @@ class ChatSendTest {
 
         assertEquals(listOf("t1" to "now add a test"), conn.typed)
         compose.onNodeWithText("now add a test").assertExists()
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithText(str(R.string.chat_delivery_entered)).fetchSemanticsNodes().isNotEmpty()
+        }
         compose.onNodeWithText(str(R.string.chat_delivery_entered)).assertExists()
     }
 
