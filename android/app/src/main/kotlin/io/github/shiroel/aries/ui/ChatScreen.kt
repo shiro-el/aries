@@ -1162,6 +1162,12 @@ fun ChatScreen(
     val thread = LocalThreadChat.current
     val readAloud = io.github.shiroel.aries.speech.rememberReadAloud(chat)
     val context = androidx.compose.ui.platform.LocalContext.current
+    // Every layout and input panel shares this owner, including compact Chat and live answers.
+    LaunchedEffect(chat, chat.pendingShare, chat.inputUnavailable, chat.uploading) {
+        chat.pendingShare?.takeUnless { chat.inputUnavailable || chat.uploading }?.let { content ->
+            if (chat.attach(context.applicationContext, content)) chat.pendingShare = null
+        }
+    }
     LaunchedEffect(readAloud.notice) {
         readAloud.notice?.let { android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_LONG).show() }
     }

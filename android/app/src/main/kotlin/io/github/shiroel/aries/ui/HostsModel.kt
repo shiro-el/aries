@@ -1878,19 +1878,22 @@ class HostsModel(
         get() = agentLinks.mapNotNull { (id, link) -> link.connection?.let { id to it } }.toMap()
     private val agentJobs = mutableListOf<Job>()
 
-    /** Shared content awaiting an explicit Agent selection. */
-    var pendingShare by mutableStateOf<SharedContent?>(null)
-        private set
+    private data class ShareRequest(val intent: android.content.Intent, val content: SharedContent)
+
+    /** Keep the original URI grant envelope until an Agent takes ownership (or the user cancels). */
+    private var shareRequest by mutableStateOf<ShareRequest?>(null)
+    val pendingShare: SharedContent? get() = shareRequest?.content
+    val pendingShareIntent: android.content.Intent? get() = shareRequest?.intent?.let { android.content.Intent(it) }
 
     /** Both cold and warm ACTION_SEND routes use the existing multi-Host Agent list. */
     fun receiveShare(intent: android.content.Intent): Boolean {
         val content = SharedContent.from(intent) ?: return false
         openAgents()
-        pendingShare = content
+        shareRequest = ShareRequest(android.content.Intent(intent), content)
         return true
     }
 
-    fun cancelShare() { pendingShare = null }
+    fun cancelShare() { shareRequest = null }
 
     /** Warm navigation returns to the retained home without applying the startup location again. */
     fun openThreadHome() = openAgents()
@@ -2090,7 +2093,7 @@ class HostsModel(
             if (t.agentStatus == null || t.state != "live") return
             chat(link, t, agents)
             (screen as Screen.Chat).chat.pendingShare = shared
-            pendingShare = null
+            cancelShare()
         } else if (openChat) chat(link, t, agents) else show(link, t, agents)
     }
 
@@ -2495,7 +2498,7 @@ class HostsModel(
                 if (shared != null && terminal.agentStatus != null) {
                     chat(target, terminal, screen)
                     (screen as Screen.Chat).chat.pendingShare = shared
-                    pendingShare = null
+                    cancelShare()
                 } else if (openChat) chat(target, terminal, screen) else show(target, terminal, screen)
                 closeCallInbox()
             } catch (e: CoreException) {
@@ -2563,7 +2566,7 @@ class HostsModel(
         closeQuickOpen()
         pendingQuickOpen = null
         restoring = false
-        pendingShare = null
+        cancelShare()
         (screen as? Screen.Chat)?.chat?.stop()
         ((screen as? Screen.Terminal)?.returnTo as? Screen.Chat)?.chat?.stop()
         viewing?.cancel()
