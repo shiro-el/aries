@@ -87,10 +87,13 @@ class ConfigurationChangeTest {
             compose.waitForIdle()
 
             compose.onNodeWithText("line 451").assertExists()
-            val shot = java.io.File("/tmp/aries-mvp-run/lanes/238-shots/files-after-rotation.png")
-            shot.outputStream().use {
-                compose.onNode(isDialog()).captureToImage().asAndroidBitmap()
-                    .compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+            System.getenv("ARIES_FILES_RENDER_DIR")?.let { directory ->
+                val shot = java.io.File(directory, "files-after-rotation.png")
+                shot.parentFile!!.mkdirs()
+                shot.outputStream().use {
+                    compose.onNode(isDialog()).captureToImage().asAndroidBitmap()
+                        .compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+                }
             }
             compose.onNodeWithTag("files-back").performClick()
             compose.onNodeWithText("notes.txt").assertExists()
