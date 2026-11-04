@@ -390,9 +390,8 @@
     <string name="terminal_input_hint">Terminal에 입력</string>
     <string name="terminal_input_typing">Terminal에 입력 중</string>
     <!-- Terminal extra-key rows -->
-    <string name="terminal_keys_locked">잠김</string>
-    <string name="terminal_keys_once">다음 키에 적용</string>
-    <string name="terminal_keys_lock_action">보조 키 잠금</string>
+    <string name="terminal_keys_on">켜짐</string>
+    <string name="terminal_keys_off">꺼짐</string>
     <string name="key_slash">/</string>
     <string name="key_dash">-</string>
     <string name="terminal_keys_hide_button">추가 키 숨기기</string>

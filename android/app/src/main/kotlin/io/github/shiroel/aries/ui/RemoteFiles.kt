@@ -41,7 +41,8 @@ fun RemoteFilesScreen(
     var startingFolder by remember(address, initialLocation) { mutableStateOf(initialFolder) }
     var directory by remember(address, initialLocation) { mutableStateOf<RemoteDirectory?>(null) }
     var file by remember(address, initialLocation) { mutableStateOf(initialLocation?.path) }
-    var wrap by remember(address) { mutableStateOf(false) }
+    val viewerSettings = rememberFileViewerSettings()
+    val wrap = viewerSettings.wrap
     var retry by remember { mutableIntStateOf(0) }
     var loading by remember { mutableStateOf(true) }
     var failed by remember { mutableStateOf(false) }
@@ -123,7 +124,7 @@ fun RemoteFilesScreen(
                 onFolder = { path -> folder = path; backToFolder() },
                 onRefresh = { retry++ }, refreshing = loading || !changesLoaded,
                 diffAvailable = changedFile != null && !mediaFile, fullFile = fullFile, onFullFile = { fullFile = !fullFile },
-                wrap = wrap, onWrap = if (file != null && !showingDiff && !showingMarkup && !mediaFile) ({ wrap = !wrap }) else null,
+                wrap = wrap, onWrap = if (file != null && !showingMarkup && !mediaFile) ({ viewerSettings.chooseWrap(!wrap) }) else null,
                 onSend = if (file != null && !showingDiff && onSend != null) ({ onSend(quotedFileReference(file!!)) }) else null,
                 onSave = save, onShare = share, exportEnabled = exportEnabled,
             )
@@ -205,7 +206,7 @@ fun RemoteFilesScreen(
                 }
             }
             failed -> Text(stringResource(R.string.files_failed), color = MaterialTheme.colorScheme.error)
-            showingDiff -> GitFileDiff(connection, address, changes!!.cwd, changedFile, retry, onDiffSend)
+            showingDiff -> GitFileDiff(connection, address, changes!!.cwd, changedFile, retry, wrap, onDiffSend)
             showingMarkup -> key(connection, address, file, retry) {
                 RemoteMarkdownPreview(connection, address, file!!, Modifier.weight(1f))
             }

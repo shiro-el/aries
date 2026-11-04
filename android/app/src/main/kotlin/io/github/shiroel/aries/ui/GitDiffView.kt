@@ -30,6 +30,7 @@ internal fun GitDiffView(
     modifier: Modifier,
     selection: IntRange? = null,
     onSelect: ((Int) -> Unit)? = null,
+    wrap: Boolean = false,
 ) {
     var approved by remember(patch) { mutableStateOf(false) }
     val large = remember(patch) { patch.lines.sumOf { it.text.toByteArray(Charsets.UTF_8).size.toLong() } >= 2 * 1024 * 1024 }
@@ -64,16 +65,21 @@ internal fun GitDiffView(
         if (patch.binary) Text(stringResource(R.string.git_binary), Modifier.padding(12.dp))
         if (patch.lines.isEmpty() && !patch.binary) Text(stringResource(R.string.git_empty_diff), Modifier.padding(12.dp))
         val horizontal = rememberScrollState()
-        LazyColumn(Modifier.weight(1f).horizontalScroll(horizontal).testTag("git-diff-lines"), state = state) {
+        LazyColumn(Modifier.weight(1f)
+            .then(if (wrap) Modifier.fillMaxWidth() else Modifier.horizontalScroll(horizontal))
+            .testTag("git-diff-lines"), state = state) {
             itemsIndexed(patch.lines) { index, line ->
                 val selected = selection?.contains(index) == true
                 val label = stringResource(R.string.git_line_label, line.oldLine?.toString() ?: "–", line.newLine?.toString() ?: "–", line.text)
-                Row(Modifier.fillMaxWidth().selectable(selected, enabled = onSelect != null && (line.oldLine != null || line.newLine != null), onClick = {
+                Row(Modifier.then(if (wrap) Modifier.fillMaxWidth() else Modifier)
+                    .selectable(selected, enabled = onSelect != null && (line.oldLine != null || line.newLine != null), onClick = {
                     onSelect?.invoke(index)
                 }).background(if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface)
                     .semantics { contentDescription = label }.padding(horizontal = 12.dp, vertical = 4.dp)) {
                     Text("${line.oldLine ?: ""} ${line.newLine ?: ""}", Modifier.widthIn(min = 64.dp), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall) // i18n-ok: numeric old/new line columns
-                    Text(markFileMatches(AnnotatedString(line.text), query, MaterialTheme.colorScheme), fontFamily = FontFamily.Monospace, color = when {
+                    Text(markFileMatches(AnnotatedString(line.text), query, MaterialTheme.colorScheme),
+                        modifier = if (wrap) Modifier.weight(1f) else Modifier,
+                        softWrap = wrap, fontFamily = FontFamily.Monospace, color = when {
                         line.newLine != null && line.oldLine == null -> MaterialTheme.colorScheme.primary
                         line.oldLine != null && line.newLine == null -> MaterialTheme.colorScheme.error
                         else -> MaterialTheme.colorScheme.onSurface

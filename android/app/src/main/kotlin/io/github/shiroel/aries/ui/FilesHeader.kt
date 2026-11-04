@@ -14,6 +14,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
@@ -54,6 +55,19 @@ internal fun FilesHeader(
             if (fullFile) R.drawable.ic_file_diff else R.drawable.ic_file,
             if (fullFile) R.string.files_diff_button else R.string.files_full_button, onFullFile,
         )
+        onWrap?.let { action ->
+            val wrapState = stringResource(if (wrap) R.string.menu_state_on else R.string.menu_state_off)
+            IconToggleButton(
+                checked = wrap, onCheckedChange = { action() },
+                modifier = Modifier.size(48.dp).semantics { stateDescription = wrapState },
+                colors = IconButtonDefaults.iconToggleButtonColors(
+                    checkedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    checkedContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                ),
+            ) {
+                Icon(painterResource(R.drawable.ic_wrap_text), stringResource(R.string.files_wrap_lines), Modifier.size(20.dp))
+            }
+        }
         ActionIcon(R.drawable.ic_refresh_cw, R.string.files_refresh_button, onRefresh, enabled = !refreshing)
         if (isFile) Box {
             ActionIcon(R.drawable.ic_ellipsis_vertical, R.string.files_actions_label, { menu = !menu })
@@ -64,12 +78,7 @@ internal fun FilesHeader(
                     enabled = exportEnabled, onClick = { menu = false; action() }) }
                 onShare?.let { action -> ActionMenuItem(stringResource(R.string.files_share_button), R.drawable.ic_share_2,
                     enabled = exportEnabled, onClick = { menu = false; action() }) }
-                onWrap?.let { action ->
-                    if (onSend != null || onSave != null || onShare != null) MenuDivider()
-                    SwitchMenuItem(checked = wrap, text = { Text(stringResource(R.string.files_wrap_lines)) },
-                        leadingIcon = { MenuIcon(R.drawable.ic_wrap_text) }, onClick = { menu = false; action() })
-                }
-                if (onSend != null || onSave != null || onShare != null || onWrap != null) MenuDivider()
+                if (onSend != null || onSave != null || onShare != null) MenuDivider()
                 ActionMenuItem(stringResource(R.string.files_close_button), R.drawable.ic_x, onClick = { menu = false; onClose() })
             }
         }
