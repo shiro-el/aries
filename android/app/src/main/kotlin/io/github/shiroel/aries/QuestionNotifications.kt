@@ -62,8 +62,16 @@ object QuestionNotifications {
             // replacing a newer status notification for this Terminal.
             builder.addExtras(android.os.Bundle().apply { putString(QUESTION_ID, question.id) })
             question.options.forEachIndexed { choice, label ->
+                val always = permission && label == "Allow always"
                 val label = if (permission) permissionChoiceResource(label)?.let(context::getString) ?: label else label
-                builder.addAction(Notification.Action.Builder(null, NotificationMarkdown.render(label).plain, choiceIntent(context, q, choice)).build())
+                // Persistent grants require the phone card's explicit confirmation.
+                // Allow/Deny keep their existing background path and original indices.
+                val intent = if (always) NotificationGroups.openApp(context, notice.hostId, notice.hostName,
+                    status.terminal, status.terminal, chat = true, generation = builder.extras.getString(NotificationGroups.GENERATION))
+                    else choiceIntent(context, q, choice)
+                val action = Notification.Action.Builder(null, NotificationMarkdown.render(label).plain, intent)
+                if (always) action.addExtras(android.os.Bundle().apply { putBoolean(WearNotificationBridge.PHONE_ONLY, true) })
+                builder.addAction(action.build())
             }
             builder.setStyle(Notification.BigTextStyle().bigText(NotificationMarkdown.render(question.text).expanded))
         } else {
