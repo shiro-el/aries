@@ -1178,6 +1178,7 @@ fun ChatScreen(
     onOpenTerminal: () -> Unit = {},
     onView: (AgentView) -> Unit = {},
     calls: CallsModel? = null,
+    onRewind: (String) -> Unit = {},
 ) {
     val thread = LocalThreadChat.current
     key(chat) {
@@ -1279,7 +1280,7 @@ fun ChatScreen(
         LocalChatMarkdownScrolls provides horizontalScrolls,
         LocalChatImageRevision provides chat.imageRevision,
         androidx.compose.ui.platform.LocalUriHandler provides rememberAgentUriHandler(preview, chat.link, chat.terminal.address)) {
-        ChatDialogs(dialogs)
+        ChatDialogs(dialogs, chat, onRewind)
         TasksRequestDialogs(dialogs, chat, calls)
         AgentViewport(
             header = {
