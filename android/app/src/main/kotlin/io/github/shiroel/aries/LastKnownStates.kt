@@ -42,7 +42,7 @@ object LastKnownStates {
             .setConstraints(network)
             .setInputData(workDataOf(HOST_ID to hostId))
             .build()
-        WorkManager.getInstance(context).enqueueUniqueWork("last-known-state:refresh:${hostId ?: "all"}", ExistingWorkPolicy.KEEP, request)
+        WorkManager.getInstance(context).enqueueUniqueWork("last-known-state:refresh:${hostId ?: "all"}", ExistingWorkPolicy.APPEND_OR_REPLACE, request)
     }
 
     /** Initial persisted lists, then changes from any live connection or background pull. */

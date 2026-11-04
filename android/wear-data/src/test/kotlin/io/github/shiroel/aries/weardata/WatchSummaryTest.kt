@@ -11,7 +11,8 @@ import org.robolectric.annotation.Config
 @Config(manifest = Config.NONE, sdk = [33])
 class WatchSummaryTest {
     @Test fun dataClientPayloadRetainsAgeUnicodeAndWholeTerminalAddresses() {
-        val summary = WatchSummary(5, listOf(WatchAgent("host-1", "remote/t7", "질문", "Blocked")), 120_000)
+        val summary = WatchSummary(5, listOf(WatchAgent("host-1", "remote/t7", "질문", "Blocked", hostName = "Studio")), 120_000,
+            hostFetchedAtMs = mapOf("host-1" to 120_000, "never-fetched" to 0, "offline" to 60_000))
         val request = summary.toRequest()
         assertEquals("/aries/last-known-state", request.uri.path)
         val wire = DataMap.fromByteArray(request.data!!)

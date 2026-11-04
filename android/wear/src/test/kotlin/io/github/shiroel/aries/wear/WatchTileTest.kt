@@ -37,8 +37,8 @@ class WatchTileTest {
     @Test fun tileKeepsMachineQualifiedAgentTargetsDistinct() {
         val agents = listOf(
             WatchAgent("h1", "remote/t7", "Claude", "blocked"),
-            WatchAgent("h2", "t7", "Codex", "working"),
-            WatchAgent("h1", "t8", "Pi", "done"),
+            WatchAgent("h2", "t7", "Codex", "error"),
+            WatchAgent("h1", "t8", "Pi", "blocked"),
         )
         val device = DeviceParameters.Builder().setScreenWidthDp(240).setScreenHeightDp(240)
             .setScreenDensity(2f).setFontScale(1f).build()
