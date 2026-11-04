@@ -185,8 +185,7 @@ class AgentViewToggleTest {
             )
         }
         show(core)
-        compose.openConsoleDrawer()
-        compose.onNodeWithTag("drawer-calls").performClick()
+        compose.onNodeWithTag("console-inbox").performClick()
         compose.onNodeWithContentDescription(str(R.string.call_open_chat_label, "Agent", "Review ready")).performClick()
         compose.waitForIdle()
         assertTrue(model.screen is Screen.Chat)

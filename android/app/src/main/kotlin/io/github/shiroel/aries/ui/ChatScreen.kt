@@ -1494,7 +1494,9 @@ fun ChatScreen(
                     if (chat.inputUnavailable) R.string.chat_queue_returned_ended else R.string.chat_queue_returned))
                 if (chat.inputUnavailable && (chat.draft.isNotEmpty() || chat.attachments.isNotEmpty())) ReturnedChatDraft(chat)
                 if (snapshot != null && entries.isEmpty() && chat.queuedMessages.isEmpty() && snapshot.status in setOf(ChatStatus.LIVE, ChatStatus.WAITING)) {
-                    Text(stringResource(R.string.chat_empty))
+                    Text(stringResource(R.string.chat_empty),
+                        Modifier.padding(horizontal = LocalLayoutTokens.current.contentPadding, vertical = 12.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 io.github.shiroel.aries.speech.ReadAloudPlayback(readAloud, showInactiveNotice = false)
                 Box(Modifier.weight(1f).fillMaxWidth()) {

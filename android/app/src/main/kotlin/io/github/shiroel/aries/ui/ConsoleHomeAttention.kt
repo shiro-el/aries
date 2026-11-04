@@ -19,11 +19,15 @@ internal val CallEntry.needsUrgentAttention: Boolean
     get() = needsAttention &&
         call.urgency in listOf(CallUrgency.URGENT, CallUrgency.EMERGENCY)
 
+/** The strip and header share the exact visible set, including its two-row limit. */
+internal fun consoleUrgentCalls(calls: List<CallEntry>, selectedHost: String? = null): List<CallEntry> =
+    calls.filter { it.host.id != selectedHost && it.needsUrgentAttention }
+        .sortedByDescending { it.call.urgency == CallUrgency.EMERGENCY }.take(2)
+
 /** The Host tree is local; this compact strip keeps other Hosts' urgent Calls in sight. */
 @Composable
 internal fun ConsoleHomeAttention(model: HostsModel, selectedHost: String? = null) {
-    val urgent = model.calls.calls.filter { it.host.id != selectedHost && it.needsUrgentAttention }
-        .sortedByDescending { it.call.urgency == CallUrgency.EMERGENCY }
+    val urgent = consoleUrgentCalls(model.calls.calls, selectedHost)
     if (urgent.isEmpty()) return
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().padding(start = LocalLayoutTokens.current.contentPadding), verticalAlignment = Alignment.CenterVertically) {
@@ -31,12 +35,17 @@ internal fun ConsoleHomeAttention(model: HostsModel, selectedHost: String? = nul
             TextButton(onClick = model::openCallInbox) { Text(stringResource(R.string.call_banner_open)) }
         }
         HorizontalDivider()
-        urgent.take(2).forEach { entry ->
+        urgent.forEach { entry ->
             val accent = if (entry.call.urgency == CallUrgency.EMERGENCY) MaterialTheme.colorScheme.error
                 else statusColor(io.github.shiroel.aries.core.AgentStatus.Blocked(null, null))
             Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("console-urgent:${entry.key}")
                 .presentsCalls(setOf(entry.key))
-                .clickable(role = Role.Button, onClickLabel = stringResource(R.string.call_open_chat)) { model.openCallInbox(); model.openCallChat(entry) }
+                .clickable(role = Role.Button, onClickLabel = stringResource(
+                    if (entry.call.terminal == null) R.string.call_banner_open else R.string.call_open_chat,
+                )) {
+                    model.openCallInbox()
+                    if (entry.call.terminal != null) model.openCallChat(entry)
+                }
                 .padding(horizontal = LocalLayoutTokens.current.contentPadding, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(urgencyLabel(entry.call.urgency), color = accent, style = MaterialTheme.typography.bodyMedium)
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {

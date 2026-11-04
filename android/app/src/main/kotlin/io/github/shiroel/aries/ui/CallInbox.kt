@@ -34,12 +34,11 @@ internal val LocalCallInbox = staticCompositionLocalOf<CallInboxAction?> { null 
 internal fun ConsoleInboxAction() {
     val action = LocalCallInbox.current ?: return
     val count = action.calls.calls.count { it.answerable || it.needsAttention }
-    if (count == 0) return
     val label = stringResource(R.string.call_inbox_label, count)
     val state = stringResource(if (action.open) R.string.call_inbox_expanded else R.string.call_inbox_collapsed)
     val ink = MaterialTheme.colorScheme.onSurfaceVariant
     Row(
-        Modifier.heightIn(min = 48.dp).widthIn(min = 48.dp).testTag("console-inbox")
+        Modifier.heightIn(min = 48.dp).width(64.dp).testTag("console-inbox")
             .clickable(role = Role.Button, onClick = action.toggle)
             .semantics { contentDescription = label; stateDescription = state; liveRegion = LiveRegionMode.Polite }
             .padding(horizontal = 10.dp),
@@ -80,13 +79,16 @@ internal fun CallInboxOverlay(model: HostsModel, modifier: Modifier = Modifier) 
             }
             CallInboxPanel(model.calls, model::openCallChat, modifier = Modifier.weight(1f, fill = false), callerName = model::callCallerName,
                 onInstallBeacon = model::openHostSettings, onFeedSettings = model::callFeedSettings, openingCall = model.openingCall,
-                blockedAgents = model.drawerAgents.count { isWaiting(it.terminal.agentStatus) },
-                onWaitingAgents = {
-                    model.closeCallInbox()
-                    val waiting = model.drawerAgents.firstOrNull { isWaiting(it.terminal.agentStatus) }
-                    if (thread && waiting != null)
-                        model.openPushedAgent(waiting.host.id, waiting.terminal.address, openChat = true)
-                    else model.openAgents()
+                waitingAgents = {
+                    WaitingSummary(model.quickOpenSources, model.drawerAgents,
+                        Modifier.testTag("call-inbox-waiting-agents"), onClick = {
+                            model.closeCallInbox()
+                            val waiting = model.drawerAgents.firstOrNull { it.live && isWaiting(it.terminal.agentStatus) }
+                                ?: model.drawerAgents.firstOrNull { isWaiting(it.terminal.agentStatus) }
+                            if (thread && waiting != null)
+                                model.openPushedAgent(waiting.host.id, waiting.terminal.address, openChat = true)
+                            else model.openAgents()
+                        })
                 })
         }
     }

@@ -17,7 +17,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentStatus
-import kotlinx.coroutines.delay
 
 /** Only actionable counts use row width; stored counts retain their known age. */
 @Composable
@@ -27,27 +26,32 @@ internal fun WaitingSummary(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
 ) {
-    val count = agents.count { isWaiting(it.terminal.agentStatus) }
-    if (count == 0) return
-    val unknown = sources.any { !it.live && it.fetchedAtMs == null }
-    val oldest = sources.filterNot { it.live }.mapNotNull { it.fetchedAtMs }.minOrNull()
-    val now by produceState(System.currentTimeMillis()) {
-        while (true) { delay(30_000); value = System.currentTimeMillis() }
-    }
-    val label = when {
-        unknown -> stringResource(R.string.agents_waiting_partial, count)
-        else -> stringResource(R.string.console_agents_waiting, count)
+    val waiting = agents.filter { isWaiting(it.terminal.agentStatus) }
+    val liveCount = waiting.count { it.live }
+    val stored = waiting.filterNot { it.live }
+    if (waiting.isEmpty()) return
+    val partial = sources.any { !it.live && it.fetchedAtMs == null }
+    val oldest = stored.mapNotNull { it.lastUpdatedMs }.minOrNull()
+    val now = System.currentTimeMillis()
+    val knownAge = oldest?.takeIf { age ->
+        age > 0 && age <= now && stored.all { it.lastUpdatedMs != null && it.lastUpdatedMs > 0 && it.lastUpdatedMs <= now }
     }
     Column(modifier.then(if (onClick == null) Modifier else Modifier.clickable(role = Role.Button, onClick = onClick))
-        .heightIn(min = 48.dp).padding(horizontal = 6.dp, vertical = 4.dp),
+        .widthIn(max = 176.dp).heightIn(min = 48.dp).padding(horizontal = 6.dp, vertical = 4.dp),
         verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.End) {
-        Text(label, style = MaterialTheme.typography.labelMedium, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis,
-            color = statusColor(AgentStatus.Blocked(null, null)))
-        if (oldest != null && oldest > 0uL && oldest <= now.coerceAtLeast(0).toULong()) Text(
-            relativeAge(androidx.compose.ui.platform.LocalContext.current, oldest, now),
-            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis,
+        if (liveCount > 0) Text(
+            stringResource(if (partial) R.string.agents_waiting_partial else R.string.console_agents_waiting, liveCount),
+            style = MaterialTheme.typography.labelMedium, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis,
+            color = statusColor(AgentStatus.Blocked(null, null)),
         )
+        if (stored.isNotEmpty()) {
+            Text(stringResource(R.string.agents_waiting_stored, stored.size),
+                style = MaterialTheme.typography.labelMedium, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(agentLastSeen(knownAge), style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
+        }
     }
 }
 
