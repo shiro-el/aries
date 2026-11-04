@@ -65,6 +65,8 @@ class HostLink(
     private val onDown: (CoreException) -> Unit = {},
     private val onSettings: (CoreException?) -> Unit = {},
     private val retryDelays: List<Long> = RETRY_DELAYS_MS,
+    private val canConnectAutomatically: () -> Boolean = { true },
+    initiallyExplicit: Boolean = true,
 ) {
     var state by mutableStateOf<LinkState>(if (first == null) LinkState.Reconnecting else LinkState.Up)
         private set
@@ -77,6 +79,7 @@ class HostLink(
     private var reconnecting: Job? = null
     private var closed = false
     private var paused = false
+    private var unlockRequested = initiallyExplicit
     private var probing: Job? = null
 
     /** The live connection; `null` while reconnecting. */
@@ -185,6 +188,7 @@ class HostLink(
     /** Explicit user retry also resumes a permanent failure after it has been fixed. */
     fun retryNow() {
         if (closed || paused) return
+        unlockRequested = true
         if (state is LinkState.Down) {
             state = LinkState.Reconnecting
             reconnecting = scope.launch { reconnect() }
@@ -262,6 +266,9 @@ class HostLink(
         while (!closed && !paused) {
 
             try {
+                val explicit = unlockRequested
+                unlockRequested = false
+                if (!explicit && !canConnectAutomatically()) throw CoreException.KeyLocked()
                 val conn = connect()
                 if (closed || paused) {
                     conn.disconnect()

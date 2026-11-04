@@ -78,14 +78,35 @@ fn core_with(dir: &std::path::Path, vault: &Arc<PhoneVault>) -> Arc<AriesCore> {
     AriesCore::new(dir.to_string_lossy().into_owned(), vault.clone()).expect("core")
 }
 
-/// An SSH Host nobody listens on: a connect that gets past the key fails as
-/// Unreachable, so a KeyLocked error proves the key was refused first.
+/// An SSH Host nobody listens on: transport fails before a key may be opened.
 fn closed_ssh() -> Endpoint {
     Endpoint::Ssh {
         address: "127.0.0.1".into(),
         port: 1,
         user: "aries".into(),
     }
+}
+
+// D31: an offline Host must never ask for a biometric on connection or watch retries.
+#[tokio::test]
+async fn unreachable_host_never_opens_a_key() {
+    let dir = tempfile::tempdir().unwrap();
+    let vault = PhoneVault::new();
+    let core = core_with(dir.path(), &vault);
+    core.ensure_key().unwrap();
+    core.set_key_protection(KeyProtection::Biometric).unwrap();
+    let host = core.add_host("offline".into(), closed_ssh()).unwrap();
+    vault.asked.lock().unwrap().clear();
+    for _ in 0..3 {
+        assert!(matches!(
+            core.connect(host.id.clone()).await,
+            Err(CoreError::Unreachable { .. })
+        ));
+    }
+    assert!(
+        vault.asked.lock().unwrap().is_empty(),
+        "offline retries must not prompt"
+    );
 }
 
 #[test]
@@ -122,7 +143,7 @@ fn requiring_biometric_keeps_the_same_key_and_survives_a_relaunch() {
 }
 
 #[tokio::test]
-async fn a_biometric_key_fails_clearly_in_the_background() {
+async fn offline_background_connect_does_not_unlock_a_biometric_key() {
     let dir = tempfile::tempdir().unwrap();
     let vault = PhoneVault::new();
     let core = core_with(dir.path(), &vault);
@@ -138,9 +159,9 @@ async fn a_biometric_key_fails_clearly_in_the_background() {
         .err()
         .expect("must fail");
 
-    assert!(matches!(err, CoreError::KeyLocked), "{err:?}");
-    // Only the biometric key was asked for: no quiet fallback to another key.
-    assert_eq!(*vault.asked.lock().unwrap(), vec![KeyProtection::Biometric]);
+    assert!(matches!(err, CoreError::Unreachable { .. }), "{err:?}");
+    // Neither the biometric key nor a fallback key was opened.
+    assert!(vault.asked.lock().unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -158,13 +179,27 @@ async fn a_biometric_key_still_signs_in_while_the_user_is_present() {
 }
 
 #[tokio::test]
+#[ignore = "needs docker"]
 async fn chat_reconnect_requires_a_fresh_key_authorization() {
     let dir = tempfile::tempdir().unwrap();
     let vault = PhoneVault::new();
     let core = core_with(dir.path(), &vault);
     core.ensure_key().unwrap();
-    let host = core.add_host("desk".into(), closed_ssh()).unwrap();
+    let sshd = aries_test_support::SshdHost::start();
+    let host = core
+        .add_host(
+            "desk".into(),
+            Endpoint::Ssh {
+                address: "127.0.0.1".into(),
+                port: sshd.port(),
+                user: aries_test_support::SshdHost::USER.into(),
+            },
+        )
+        .unwrap();
+    core.trust_host_key(host.id.clone(), sshd.host_key_fingerprint())
+        .unwrap();
     core.set_key_protection(KeyProtection::Biometric).unwrap();
+    vault.user_present.store(false, Ordering::SeqCst);
     let watch = core
         .watch_chat_retrying(
             host.id,
@@ -174,7 +209,7 @@ async fn chat_reconnect_requires_a_fresh_key_authorization() {
         )
         .unwrap();
     tokio::time::timeout(std::time::Duration::from_secs(10), async {
-        while watch.next().await.unwrap().status != aries_core::ChatStatus::Reconnecting {}
+        assert!(matches!(watch.next().await, Err(CoreError::KeyLocked)));
     })
     .await
     .unwrap();
@@ -193,6 +228,7 @@ async fn chat_reconnect_requires_a_fresh_key_authorization() {
 }
 
 #[tokio::test]
+#[ignore = "needs docker"]
 async fn call_reconnect_requires_a_fresh_key_authorization() {
     struct Listener(AtomicBool);
     impl aries_core::CallListener for Listener {
@@ -206,8 +242,21 @@ async fn call_reconnect_requires_a_fresh_key_authorization() {
     let vault = PhoneVault::new();
     let core = core_with(dir.path(), &vault);
     core.ensure_key().unwrap();
-    let host = core.add_host("desk".into(), closed_ssh()).unwrap();
+    let sshd = aries_test_support::SshdHost::start();
+    let host = core
+        .add_host(
+            "desk".into(),
+            Endpoint::Ssh {
+                address: "127.0.0.1".into(),
+                port: sshd.port(),
+                user: aries_test_support::SshdHost::USER.into(),
+            },
+        )
+        .unwrap();
+    core.trust_host_key(host.id.clone(), sshd.host_key_fingerprint())
+        .unwrap();
     core.set_key_protection(KeyProtection::Biometric).unwrap();
+    vault.user_present.store(false, Ordering::SeqCst);
     let listener = Arc::new(Listener(AtomicBool::new(false)));
     let watch = core.watch_calls(host.id, listener.clone()).await.unwrap();
     tokio::time::timeout(std::time::Duration::from_secs(10), async {
@@ -355,8 +404,7 @@ fn routed_host(core: &AriesCore, host_key: Option<String>, jump_key: Option<Stri
     host.id
 }
 
-/// Connects with nobody there to authenticate: `KeyLocked` if some key on
-/// the route needs a biometric unlock, `Unreachable` once all keys opened.
+/// An offline route reports transport failure without opening any of its keys.
 async fn background_connect(core: &AriesCore, vault: &PhoneVault, host_id: &str) -> CoreError {
     vault.user_present.store(false, Ordering::SeqCst);
     let err = core
@@ -387,7 +435,7 @@ async fn the_policy_covers_every_key_on_the_route_to_a_host() {
     assert!(!core.can_answer_in_background(via_extra.clone()).unwrap());
     assert!(!core.can_answer_in_background(direct_extra.clone()).unwrap());
     let err = background_connect(&core, &vault, &direct_extra).await;
-    assert!(matches!(err, CoreError::KeyLocked), "{err:?}");
+    assert!(matches!(err, CoreError::Unreachable { .. }), "{err:?}");
     // The extra key's public half is unchanged, so authorized_keys stays valid.
     assert_eq!(core.keys().unwrap()[1].id, extra);
 
@@ -412,7 +460,7 @@ async fn a_key_created_under_biometric_needs_biometric_too() {
 
     assert!(!core.can_answer_in_background(host.clone()).unwrap());
     let err = background_connect(&core, &vault, &host).await;
-    assert!(matches!(err, CoreError::KeyLocked), "{err:?}");
+    assert!(matches!(err, CoreError::Unreachable { .. }), "{err:?}");
 }
 
 #[tokio::test]
@@ -461,12 +509,25 @@ async fn a_background_question_answer_never_asks_to_unlock_a_biometric_key() {
 }
 
 #[tokio::test]
+#[ignore = "needs docker"]
 async fn permanent_invalidation_is_distinct_from_a_cancelled_unlock() {
     let dir = tempfile::tempdir().unwrap();
     let vault = PhoneVault::new();
     let core = core_with(dir.path(), &vault);
     core.ensure_key().unwrap();
-    let host = core.add_host("desk".into(), closed_ssh()).unwrap();
+    let sshd = aries_test_support::SshdHost::start();
+    let host = core
+        .add_host(
+            "desk".into(),
+            Endpoint::Ssh {
+                address: "127.0.0.1".into(),
+                port: sshd.port(),
+                user: aries_test_support::SshdHost::USER.into(),
+            },
+        )
+        .unwrap();
+    core.trust_host_key(host.id.clone(), sshd.host_key_fingerprint())
+        .unwrap();
     core.set_key_protection(KeyProtection::Biometric).unwrap();
     vault.invalidated.store(true, Ordering::SeqCst);
     let err = core.connect(host.id).await.err().unwrap();

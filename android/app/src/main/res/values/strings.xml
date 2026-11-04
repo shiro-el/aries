@@ -418,6 +418,7 @@
     <string name="key_recover_register_body">Copy each recovered public key above and add it to authorized_keys on the Host and any jump Hosts. If the Host allows password login, use its registration button below for the key assigned to that Host. Reconnect to verify access. Existing Host key trust is preserved.</string>
 
     <string name="key_biometric_label">Require biometrics for SSH keys</string>
+    <string name="key_unlock_button">Unlock SSH key</string>
     <string name="key_biometric_prompt_title">Unlock the SSH key</string>
     <string name="key_locked_title">SSH key locked</string>
     <string name="key_locked_body">The SSH key needs a biometric unlock, which did not happen. Try again and confirm the prompt.</string>

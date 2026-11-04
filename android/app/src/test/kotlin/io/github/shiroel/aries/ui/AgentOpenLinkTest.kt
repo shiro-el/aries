@@ -57,6 +57,31 @@ class AgentOpenLinkTest {
     private fun caller() = CallEntry(model.hosts[1], CallInfo("h2", "c1", 100uL, agent.address, true,
         "Review", "Ready", CallUrgency.CHECK, emptyList(), null, true))
 
+    // D32: selecting a locked Agent must authenticate again, with a usable retry after cancellation.
+    @Test fun explicitlyOpeningALockedAgentRetriesAndOffersUnlockAfterCancellation() {
+        val fake = core().apply { ensureKey(); setKeyProtection(KeyProtection.BIOMETRIC) }
+        show(fake)
+        compose.runOnIdle { model.openAgents() }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertTrue(fake.connectAttempts.isEmpty())
+            fake.failWith = CoreException.KeyLocked()
+            model.openPushedAgent("h2", agent.address, openChat = true)
+        }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals(listOf("h2"), fake.connectAttempts)
+            assertTrue((model.prompt as Prompt.Problem).unlock != null)
+            fake.failWith = null
+        }
+        compose.onNodeWithText("Unlock SSH key").performClick()
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals(AgentKey("h2", agent.address), model.currentAgentKey)
+            assertEquals(listOf("h2", "h2"), fake.connectAttempts)
+        }
+    }
+
     // Regression: inbox-only Chat must follow its own Host/address, even when Browse watches the same address on another Host.
     @Test fun inboxChatFollowsItsHostStatusAcrossReconnectAndReleasesTheLineOnBack() {
         val core = core()

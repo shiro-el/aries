@@ -108,7 +108,11 @@ class TerminalInputConnection(view: View, private val viewer: TerminalViewer) : 
     override fun commitText(text: CharSequence, newCursorPosition: Int): Boolean {
         if (!currentLine()) return true
         if (text.isNotEmpty()) viewer.startTyping()
-        viewer.commit(text.toString())
+        val committed = text.toString()
+        // Clipboard commits have no source flag. Preserve the keyboard's single
+        // newline Enter, but send multiline content through DEC 2004 paste.
+        if (committed.length > 1 && committed.any { it == '\n' || it == '\r' }) viewer.paste(committed)
+        else viewer.commit(committed)
         editable?.clear()
         return true
     }
