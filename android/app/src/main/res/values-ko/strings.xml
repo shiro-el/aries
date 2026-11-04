@@ -845,6 +845,24 @@
     <string name="tasks_answer_needed">답 필요</string>
     <string name="tasks_urgent_call">ϟ 긴급 Call</string>
 
+    <!-- Tasks detail: activity, plans and read-only changes. -->
+    <string name="tasks_activity">활동</string>
+    <string name="tasks_changes">변경</string>
+    <string name="tasks_changes_count">변경 %1$d</string>
+    <string name="tasks_change_stats">+%1$d −%2$d</string>
+    <string name="tasks_request">요청</string>
+    <string name="tasks_plan">계획</string>
+    <string name="tasks_plan_completed">완료</string>
+    <string name="tasks_plan_in_progress">진행 중</string>
+    <string name="tasks_plan_pending">예정</string>
+    <string name="tasks_view_request">요청 보기</string>
+    <string name="tasks_tool_read">읽음</string>
+    <string name="tasks_tool_search">찾음</string>
+    <string name="tasks_tool_edit">수정</string>
+    <string name="tasks_tool_write">새 파일</string>
+    <string name="tasks_tool_run">실행</string>
+
+
     <string name="new_task_title">새 작업</string>
     <string name="new_task_on_host">%1$s에서 새 작업</string>
     <string name="new_task_prompt">첫 프롬프트</string>

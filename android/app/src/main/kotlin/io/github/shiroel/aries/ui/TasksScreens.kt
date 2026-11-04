@@ -24,6 +24,9 @@ import io.github.shiroel.aries.R
 internal object TasksScreens : LayoutScreens() {
     @Composable override fun Shell(model: HostsModel, content: @Composable () -> Unit) = TasksShell(model, content)
     @Composable override fun Agents(model: HostsModel, board: AgentBoard) = TasksHome(model, board)
+    @Composable override fun Chat(model: HostsModel, chat: ChatModel) = TasksChatDetail(model, chat)
+    @Composable override fun Terminal(model: HostsModel, viewer: TerminalViewer, display: TerminalDisplaySettings) =
+        TasksTerminalDetail(model, viewer, display)
     @Composable override fun NewTask(task: NewTask, onStart: () -> Unit, onOpenChat: () -> Unit, onDismiss: () -> Unit) =
         NewTaskDialog(task, onStart, onOpenChat, onDismiss, fullScreen = true)
 }

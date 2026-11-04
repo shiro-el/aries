@@ -129,7 +129,7 @@ internal fun TasksHome(model: HostsModel, board: AgentBoard) {
                         showHost = false, canPin = model::canPin)
                 }
             } else items(visible, key = { "task:${it.key.hostId}:${it.key.address}" }) { entry ->
-                TasksTaskRow(entry, model.taskTranscript(entry.key), onOpen = {
+                TasksTaskRow(entry, model.taskTranscript(entry.key), stats = model.taskChangeStats(entry.key, entry.terminal), onOpen = {
                     val need = needs.filterIsInstance<TaskNeed.Agent>().firstOrNull { it.entry.key == entry.key }
                     if (filter == TasksFilter.NEEDS && need != null) openNeed(need) else model.selectListedAgent(board, entry)
                 })
@@ -146,7 +146,7 @@ internal fun TasksHome(model: HostsModel, board: AgentBoard) {
 internal fun tasksAttentionColor(): Color = if (MaterialTheme.colorScheme.background.luminance() < .5f) Brand.Saffron else Color(0xFF8F5E06)
 
 @Composable
-internal fun TasksTaskRow(entry: AgentEntry, transcript: ChatSnapshot? = null, onOpen: () -> Unit) {
+internal fun TasksTaskRow(entry: AgentEntry, transcript: ChatSnapshot? = null, stats: TaskChangeStats? = null, onOpen: () -> Unit) {
     val status = entry.terminal.agentStatus
     val blocked = status as? AgentStatus.Blocked
     val lastTool = transcript?.entries?.lastOrNull { it.body is ChatEntryBody.Tool }?.body as? ChatEntryBody.Tool
@@ -156,7 +156,7 @@ internal fun TasksTaskRow(entry: AgentEntry, transcript: ChatSnapshot? = null, o
         is AgentStatus.Error -> status.message?.takeIf(String::isNotBlank)
             ?: (transcript?.entries?.lastOrNull { it.body is ChatEntryBody.AgentError }?.body as? ChatEntryBody.AgentError)?.detail
         AgentStatus.Working -> lastTool?.title?.takeIf(String::isNotBlank)
-        else -> null
+        else -> stats?.let { stringResource(R.string.tasks_change_stats, it.added, it.removed) }
     }
     val label = when {
         !entry.live -> R.string.tasks_offline
