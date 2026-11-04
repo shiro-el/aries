@@ -63,7 +63,13 @@ internal fun ThreadWaitingPill(model: HostsModel, chat: ChatModel, showPill: Boo
             .presentsCalls(calls.map { it.key }.toSet()),
             shape = RoundedCornerShape(10.dp)) { Text(text) }
     }
+    // Keep reply observers above the selected target so a delivered item can disappear safely.
+    val questionChats = remember(chat, sheet) { mutableStateListOf<ChatModel>() }
     if (sheet) {
+        CallReplyAnnouncements(model.calls, keys = model.calls.calls.filter {
+            it.call.terminal != null && AgentKey(it.host.id, it.call.terminal!!) != current
+        }.map { it.key }.toSet())
+        questionChats.forEach { preview -> key(preview) { QuestionAnnouncements(preview, queueCompletion = true) } }
         val target = waiting.firstOrNull { it.key == selected } ?: waiting.firstOrNull()
         SideEffect { selected = target?.key; retained = target }
         ModalBottomSheet(onDismissRequest = { sheet = false }) {
@@ -93,11 +99,11 @@ internal fun ThreadWaitingPill(model: HostsModel, chat: ChatModel, showPill: Boo
                     ThreadCallPanel(live, model.calls, onDismiss = {
                         model.calls.closeThreadCall(live)
                         sheet = false
-                    }, announce = true, onOpenTerminal = {
+                    }, onOpenTerminal = {
                         sheet = false
                         model.openCallTerminal(live)
                     })
-                } else if (target.agent != null) ThreadWaitingQuestion(model, target.agent)
+                } else if (target.agent != null) key(target.key) { ThreadWaitingQuestion(model, target.agent) { if (it !in questionChats) questionChats.add(it) } }
             } else Text(stringResource(R.string.thread_waiting_empty), Modifier.padding(16.dp))
             Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
         }
@@ -105,7 +111,7 @@ internal fun ThreadWaitingPill(model: HostsModel, chat: ChatModel, showPill: Boo
 }
 
 @Composable
-private fun ThreadWaitingQuestion(model: HostsModel, agent: AgentEntry) {
+private fun ThreadWaitingQuestion(model: HostsModel, agent: AgentEntry, onChat: (ChatModel) -> Unit) {
     if (agent.terminal.agentStatus is AgentStatus.Error) {
         Text(stringResource(R.string.agents_waiting_error), Modifier.padding(16.dp))
         statusMessage(agent.terminal.agentStatus)?.takeIf { it.isNotBlank() }?.let {
@@ -115,7 +121,7 @@ private fun ThreadWaitingQuestion(model: HostsModel, agent: AgentEntry) {
     }
     val preview = remember(agent.key) { model.previewWaitingChat(agent) }
     DisposableEffect(preview) {
-        if (preview != null) model.startTaskQuestion(preview)
+        if (preview != null) { onChat(preview); model.startTaskQuestion(preview) }
         onDispose { if (preview != null && !model.isViewedChat(preview)) preview.stop() }
     }
     LifecycleStartEffect(preview) {
@@ -131,7 +137,7 @@ private fun ThreadWaitingQuestion(model: HostsModel, agent: AgentEntry) {
         val excerpt = preview.snapshot?.entries?.lastOrNull { it.body is ChatEntryBody.Agent }?.body as? ChatEntryBody.Agent
         excerpt?.let { Text(it.text, Modifier.padding(16.dp), maxLines = 4, style = MaterialTheme.typography.bodySmall) }
         ThreadConnectionGuidance(preview)
-        if (question != null) ThreadAnswerPanel(preview, question, announce = true)
+        if (question != null) ThreadAnswerPanel(preview, question)
         else Text(stringResource(if (preview.snapshot == null) R.string.chat_loading else R.string.thread_waiting_open_required), Modifier.padding(16.dp))
     }
 }

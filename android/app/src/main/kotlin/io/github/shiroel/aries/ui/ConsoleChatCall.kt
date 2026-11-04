@@ -1,5 +1,6 @@
 package io.github.shiroel.aries.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.selection.selectable
@@ -22,14 +23,14 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.key
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -61,10 +62,13 @@ internal fun ConsoleChatChoice(
     enabled: Boolean = true,
     selected: Boolean = false,
     multi: Boolean = false,
+    sendsImmediately: Boolean = true,
     onClick: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
-    val selection = if (multi) Modifier.toggleable(selected, enabled = enabled, role = Role.Checkbox) { onClick() }
+    val sendLabel = stringResource(R.string.chat_question_send)
+    val selection = if (sendsImmediately) Modifier.clickable(enabled = enabled, role = Role.Button, onClickLabel = sendLabel, onClick = onClick)
+        else if (multi) Modifier.toggleable(selected, enabled = enabled, role = Role.Checkbox) { onClick() }
         else Modifier.selectable(selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
     Surface(
         shape = RectangleShape, border = BorderStroke(1.dp, colors.outline),
@@ -74,7 +78,7 @@ internal fun ConsoleChatChoice(
         Row(
             Modifier.fillMaxWidth().heightIn(min = 48.dp).then(selection).semantics {
                 contentDescription = listOfNotNull(accessibilityLabel, description?.takeIf(String::isNotBlank)).joinToString(". ")
-                this.selected = selected
+                if (!sendsImmediately) this.selected = selected
             }.padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -84,8 +88,8 @@ internal fun ConsoleChatChoice(
                 Text(label)
                 description?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             }
-            if (multi) Checkbox(selected, onCheckedChange = null, enabled = enabled, modifier = Modifier.size(24.dp))
-            else RadioButton(selected, onClick = null, enabled = enabled, modifier = Modifier.size(24.dp))
+            if (!sendsImmediately && multi) Checkbox(selected, onCheckedChange = null, enabled = enabled, modifier = Modifier.size(24.dp))
+            else if (!sendsImmediately) RadioButton(selected, onClick = null, enabled = enabled, modifier = Modifier.size(24.dp))
         }
     }
 }
@@ -96,7 +100,9 @@ internal fun ConsoleChatCall(entry: CallEntry, calls: CallsModel, announce: Bool
     val call = entry.call
     if (announce) AnnounceChanges(Triple(call.answer, entry.key in calls.replying, calls.replyNotes[entry.key]), callReplyStatus(entry, calls))
     ConsoleChatCallSurface(modifier = Modifier.presentsCalls(setOf(entry.key))) {
-        Text(stringResource(R.string.console_chat_call_label), color = statusColor(AgentStatus.Blocked(null, null)),
+        Text(stringResource(R.string.console_chat_call_label), color = readableAccent(
+            statusColor(AgentStatus.Blocked(null, null)), MaterialTheme.colorScheme.surfaceContainer,
+            MaterialTheme.colorScheme.surfaceContainer.luminance() < .5f),
             style = MaterialTheme.typography.labelLarge)
         Text(call.title)
         if (call.body.isNotEmpty()) Text(call.body)
@@ -142,12 +148,12 @@ internal fun callReplyStatus(entry: CallEntry, calls: CallsModel): String? = whe
 
 /** Lives outside the transcript/inbox lazy list, so results survive row replacement. */
 @Composable
-internal fun CallReplyAnnouncements(calls: CallsModel, hostId: String? = null, address: String? = null) {
-    val entries = calls.calls.filter { (hostId == null || it.host.id == hostId) && (address == null || it.call.terminal == address) }
-    val states = entries.associate { it.key to Triple(it.call.answer, it.key in calls.replying, calls.replyNotes[it.key]) }
-    var previous by androidx.compose.runtime.remember(calls, hostId, address) { androidx.compose.runtime.mutableStateOf(states) }
-    val changed = entries.lastOrNull { previous[it.key] != states[it.key] }
-    val message = changed?.let { callReplyStatus(it, calls) }
-    AnnounceChanges(states, message)
-    androidx.compose.runtime.SideEffect { previous = states }
+internal fun CallReplyAnnouncements(calls: CallsModel, hostId: String? = null, address: String? = null, keys: Set<String>? = null) {
+    val entries = calls.calls.filter { (hostId == null || it.host.id == hostId) && (address == null || it.call.terminal == address) && (keys == null || it.key in keys) }
+    entries.forEach { entry ->
+        key(entry.key) {
+            AnnounceChanges(Triple(entry.call.answer, entry.key in calls.replying, calls.replyNotes[entry.key]),
+                callReplyStatus(entry, calls))
+        }
+    }
 }

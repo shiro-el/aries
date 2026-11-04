@@ -1761,12 +1761,12 @@ internal fun MessageInput(chat: ChatModel, compact: Boolean = false, leading: (@
         }
     }
     if (leading == null) HorizontalDivider()
-    if (!compact) ChatInterruptNotice(chat, Modifier.focusRequester(noticeFocus).onFocusChanged {
+    if (!compact) ChatInterruptNotice(chat, if (chat.interruptNotice != null) Modifier.focusRequester(noticeFocus).onFocusChanged {
         // Follow a removed result back to the composer, but do not pull focus
         // back after the user has deliberately moved elsewhere.
         if (noticeHadFocus && !it.isFocused && chat.interruptNotice != null && !chat.interrupting) returningFromInterrupt = false
         noticeHadFocus = it.isFocused
-    }.focusable())
+    }.focusable() else Modifier)
 
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
         leading?.invoke()
@@ -2007,7 +2007,7 @@ private fun ToolContent(
         ChatTextActions(tool.output?.takeIf { it.isNotEmpty() } ?: tool.input, onClick = onToggle, onClickLabel = label,
             showIndication = false) { actions ->
             Row(
-                Modifier.fillMaxWidth().heightIn(min = 36.dp).then(actions)
+                Modifier.fillMaxWidth().heightIn(min = 48.dp).then(actions)
                     .semantics { stateDescription = accessibleStatus },
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,

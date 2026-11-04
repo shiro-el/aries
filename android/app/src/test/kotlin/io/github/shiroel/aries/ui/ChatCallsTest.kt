@@ -81,6 +81,14 @@ class ChatCallsTest {
         ).assertCountEquals(0)
     }
 
+    // D104: an immediate Call reply must describe activation as a button, not selection.
+    @Test fun immediateReplyChoicesExposeButtonActions() {
+        openChat(core())
+        compose.onNodeWithContentDescription(str(R.string.call_answer_choice_label, call.title, "Wait"))
+            .assert(androidx.compose.ui.test.SemanticsMatcher.expectValue(
+                androidx.compose.ui.semantics.SemanticsProperties.Role, androidx.compose.ui.semantics.Role.Button))
+    }
+
     // D128: answering a Call does not resolve the independent permission prompt in Terminal.
     @Test fun anAnswerableCallKeepsTheTerminalFallbackForABlockedAgent() {
         val core = core()

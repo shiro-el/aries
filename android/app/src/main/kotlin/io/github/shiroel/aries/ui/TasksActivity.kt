@@ -143,10 +143,10 @@ internal fun TasksRequestDialogs(dialogs: ChatDialogState, chat: ChatModel, call
             when (request) {
                 is TasksRequest.Question -> CompositionLocalProvider(LocalChatSearchEntry provides request.id) {
                     QuestionView(chat, request.id,
-                        chat.snapshot?.entries?.find { it.id == request.id }?.body as? ChatEntryBody.Question ?: request.body, announce = true)
+                        chat.snapshot?.entries?.find { it.id == request.id }?.body as? ChatEntryBody.Question ?: request.body)
                 }
                 is TasksRequest.Call -> if (calls != null) ConsoleChatCall(
-                    calls.calls.find { it.key == request.entry.key } ?: request.entry.copy(live = false), calls, announce = true)
+                    calls.calls.find { it.key == request.entry.key } ?: request.entry.copy(live = false), calls)
             }
         }
     }
