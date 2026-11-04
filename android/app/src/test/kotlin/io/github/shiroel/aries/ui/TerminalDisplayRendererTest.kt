@@ -5,9 +5,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
@@ -20,6 +23,8 @@ import io.github.shiroel.aries.core.TerminalInfo
 import io.github.shiroel.aries.core.TerminalUpdate
 import io.github.shiroel.aries.core.TerminalSearch
 import io.github.shiroel.aries.core.TerminalSearchHighlight
+import io.github.shiroel.aries.R
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -78,6 +83,35 @@ class TerminalDisplayRendererTest {
     }
 
     @Test
+    fun rapidFontChangesSendOnlyTheSettledResizeAndSearchSendsNone() {
+        val (settings, core) = open()
+        compose.runOnIdle { (model.screen as Screen.Terminal).viewer.startTyping() }
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(300)
+        compose.waitForIdle()
+        val view = core.connection!!.views.last()
+        compose.runOnIdle { view.resizes.clear() }
+        compose.mainClock.autoAdvance = false
+        compose.runOnIdle { settings.chooseFontSize(18) }
+        compose.mainClock.advanceTimeBy(80)
+        compose.runOnIdle { settings.chooseFontSize(22) }
+        compose.mainClock.advanceTimeBy(80)
+        compose.runOnIdle { assertTrue("intermediate layouts must not reflow the Host", view.resizes.isEmpty()) }
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(300)
+        compose.runOnIdle { assertEquals(1, view.resizes.size) }
+        compose.mainClock.autoAdvance = true
+        compose.onNodeWithTag("agent-actions").performClick()
+        compose.onNodeWithContentDescription(context.getString(R.string.terminal_search_button)).performClick()
+        compose.mainClock.advanceTimeBy(400)
+        compose.runOnIdle { assertEquals("search is an overlay, not a Host resize", 1, view.resizes.size) }
+        val screenshot = java.io.File("build/reports/terminal-size/typing-search-overlay.png")
+        screenshot.parentFile?.mkdirs()
+        screenshot.outputStream().use { compose.onRoot().captureToImage().asAndroidBitmap()
+            .compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+    }
+
+    @Test
     fun changingFontSizeResizesTheTypingGridAndChangingFontRedrawsTheText() {
         val (settings, core) = open()
         core.connection!!.views.single().push(TerminalUpdate.Screen(ScreenFrame(
@@ -87,9 +121,13 @@ class TerminalDisplayRendererTest {
         )))
         compose.runOnIdle { (model.screen as Screen.Terminal).viewer.startTyping() }
         compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(300)
+        compose.waitForIdle()
         val viewer = (model.screen as Screen.Terminal).viewer
         val smallGrid = viewer.phoneGrid!!
         compose.runOnIdle { settings.chooseFontSize(28) }
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(300)
         compose.runOnIdle {
             val largeGrid = viewer.phoneGrid!!
             assertTrue("larger text leaves fewer columns", largeGrid.first < smallGrid.first)

@@ -1501,7 +1501,7 @@ class HostsModel(
             try {
                 link.keepWatching(onFailure = { viewer.watchError = it }, onStart = { viewer.watchError = null }) { conn, resumed ->
                     if (!viewer.typing) {
-                        // Watch until the input is focused, then let go of the observer.
+                        // Watch until the first key/paste, then let go of the observer.
                         val options = AttachOptions(observe = true, cols = 80u, rows = 24u, history = SCROLLBACK_LINES, resumed = resumed)
                         val exited = coroutineScope {
                             val watching = async { draw(conn, viewer, options, null) }
@@ -1514,6 +1514,7 @@ class HostsModel(
                         if (exited) return@keepWatching
                     }
                     // An ordinary viewer at the phone's grid; from now on the phone sets the size.
+                    // The Canvas publishes only settled grids, including before the first attach.
                     val (cols, rows) = snapshotFlow { viewer.phoneGrid }.filterNotNull().first()
                     val options = AttachOptions(
                         observe = false, cols = cols.toUShort(), rows = rows.toUShort(), history = SCROLLBACK_LINES, resumed = resumed,

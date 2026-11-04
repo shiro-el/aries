@@ -10,13 +10,13 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imeAnimationTarget
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -70,12 +70,15 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 import io.github.shiroel.aries.core.ScreenFrame
 import io.github.shiroel.aries.core.ScreenLine
 import io.github.shiroel.aries.core.TerminalExit
 import io.github.shiroel.aries.core.TerminalInfo
 import io.github.shiroel.aries.core.TerminalSearch
+import java.text.BreakIterator
+import java.util.Locale
 
 /** Stored separately from an attach stream, which is recreated on every view switch. */
 class TerminalComposerState(private val changed: () -> Unit = {}) {
@@ -218,9 +221,12 @@ class TerminalViewer(terminal: TerminalInfo, private val composer: TerminalCompo
 
     fun line(row: Int): ScreenLine? = lines.getOrNull(row)
 
+    /** Copy the row references on Main; frames replace rows rather than mutating them. */
+    fun snapshot(): TerminalSnapshot = TerminalSnapshot(cols, lines.toList())
+
     /**
      * Typing mode: attached as an ordinary viewer whose grid is the phone's
-     * ([phoneGrid]). Starts on an input tap or key ([startTyping]) or right away
+     * ([phoneGrid]). Starts on a key or paste ([startTyping]) or right away
      * when the default attach mode is input.
      */
     var typing by mutableStateOf(false)
@@ -500,9 +506,17 @@ class TerminalViewer(terminal: TerminalInfo, private val composer: TerminalCompo
         .take(20).toList().asReversed().joinToString("\n")
 
     /** The visible text, one string per row (explicit copy/export and tests). */
-    fun text(): String = (0 until rows).joinToString("\n") { row ->
+    fun text(): String = snapshot().text()
+}
+
+/** A stable viewport for selection and background output parsing. */
+class TerminalSnapshot internal constructor(val cols: Int, private val lines: List<ScreenLine?>) {
+    val rows: Int get() = lines.size
+    fun line(row: Int): ScreenLine? = lines.getOrNull(row)
+
+    fun text(): String = lines.joinToString("\n") { line ->
         val sb = StringBuilder()
-        line(row)?.runs?.forEach { run ->
+        line?.runs?.forEach { run ->
             while (sb.length < run.column.toInt()) sb.append(' ')
             sb.append(run.text)
         }
@@ -540,7 +554,7 @@ fun TerminalScreen(
     onSelectionSend: ((String) -> Unit)? = null,
     onPreviewCapture: ((SharedContent, () -> Unit) -> Boolean)? = null,
 ) {
-    val preview = rememberLocalhostPreview(viewer.link, viewer.version.let { viewer.text() }, viewer.terminal.address, viewer.preview)
+    val preview = rememberTerminalLocalhostPreview(viewer)
     var searching by rememberSaveable(viewer) { mutableStateOf(false) }
     // The keyboard pushes the input and key bar up and shrinks the screen
     // (the Scaffold already keeps clear of the navigation bar).
@@ -557,35 +571,34 @@ fun TerminalScreen(
                     captureEnabled = viewer.terminal.state == "live",
                     onAttachCapture = onPreviewCapture.takeIf { viewer.terminal.agentStatus != null })
             } else {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        stringResource(if (viewer.typing) R.string.terminal_typing else R.string.terminal_observing,
-                            viewer.terminal.address, viewer.cols, viewer.rows),
-                        Modifier.weight(1f).padding(horizontal = 16.dp, vertical = 4.dp),
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                TerminalSearchBar(viewer, searching, onClose = { searching = false })
-                viewer.exit?.let { Banner(exitText(it)) }
-                val line = viewer.link?.state
-                if (viewer.exit == null) viewer.link?.let {
-                    ConnectionNotice(it)
-                    if (line == LinkState.Up) viewer.watchError?.let { error -> WatchFailureNotice(it, error) }
-                }
-                if (viewer.exit == null && viewer.closed && (line == null || line == LinkState.Up)) {
-                    Banner(stringResource(R.string.terminal_connection_closed))
-                }
                 val look = viewer.look
                 val scope = rememberCoroutineScope()
-                TerminalLookBar(viewer, look, onSelectionSend)
                 Box(Modifier.fillMaxWidth().weight(1f)) {
                     TerminalCanvas(viewer, look, displaySettings, Modifier.fillMaxSize())
-                    if (viewer.scrolled > 0) {
-                        LatestButton(
-                            description = stringResource(R.string.terminal_back_to_live),
-                            onClick = { scope.launch { viewer.animateToLive() } },
-                            modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp),
-                        )
+                    // Transient controls must not change the Host's grid or move a selection.
+                    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
+                        TerminalSearchBar(viewer, searching, onClose = { searching = false })
+                        viewer.exit?.let { Banner(exitText(it)) }
+                        val line = viewer.link?.state
+                        if (viewer.exit == null) viewer.link?.let {
+                            ConnectionNotice(it)
+                            if (line == LinkState.Up) viewer.watchError?.let { error -> WatchFailureNotice(it, error) }
+                        }
+                        if (viewer.exit == null && viewer.closed && (line == null || line == LinkState.Up)) {
+                            Banner(stringResource(R.string.terminal_connection_closed))
+                        }
+                    }
+                    Column(Modifier.align(Alignment.BottomStart).fillMaxWidth()) {
+                        if (viewer.scrolled > 0 && look.selection == null) {
+                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                LatestButton(
+                                    description = stringResource(R.string.terminal_back_to_live),
+                                    onClick = { scope.launch { viewer.animateToLive() } },
+                                    modifier = Modifier.padding(8.dp),
+                                )
+                            }
+                        }
+                        TerminalLookBar(viewer, look, onSelectionSend)
                     }
                 }
                 TerminalComposer(viewer)
@@ -645,6 +658,7 @@ private fun Banner(text: String) {
 }
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 private fun TerminalCanvas(viewer: TerminalViewer, look: TerminalLook, settings: TerminalDisplaySettings, modifier: Modifier) {
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
@@ -656,10 +670,9 @@ private fun TerminalCanvas(viewer: TerminalViewer, look: TerminalLook, settings:
     val output = remember(viewer, viewer.version) { viewer.accessibleOutput() }
     val summary = stringResource(R.string.terminal_accessibility_summary, viewer.cols, viewer.rows)
     val reading = remember(summary, output) { AnnotatedString(if (output.isEmpty()) summary else "$summary\n$output") }
-    // The selected cells moved away.
-    LaunchedEffect(look, viewer.scrolled, viewer.cols, viewer.rows) { look.selection = null }
+    val selected = look.selection?.snapshot
     BoxWithConstraints(modifier.background(TerminalBackground)) {
-        val cols = viewer.cols.coerceAtLeast(1)
+        val cols = (selected?.cols ?: viewer.cols).coerceAtLeast(1)
         val widthPx = with(density) { maxWidth.toPx() }
         val per100 = probe.size.width.toFloat().coerceAtLeast(1f)
         // The probe's font size in px: cell sizes scale with font px over it.
@@ -672,12 +685,20 @@ private fun TerminalCanvas(viewer: TerminalViewer, look: TerminalLook, settings:
         val baseCellH = (probe.size.height * baseFontPx / probePx).coerceAtLeast(1f)
         val heightPx = with(density) { maxHeight.toPx() }
         if (viewer.typing) {
-            val grid = (widthPx / baseCellW).toInt().coerceAtLeast(1) to (heightPx / baseCellH).toInt().coerceAtLeast(1)
-            SideEffect { if (viewer.phoneGrid != grid) viewer.phoneGrid = grid }
+            // The Canvas follows the animated inset for drawing. The Host only
+            // needs the final keyboard height, independent of animation frames.
+            val currentIme = WindowInsets.ime.exclude(WindowInsets.navigationBars).getBottom(density)
+            val targetIme = WindowInsets.imeAnimationTarget.exclude(WindowInsets.navigationBars).getBottom(density)
+            val targetHeight = heightPx + currentIme - targetIme
+            val grid = (widthPx / baseCellW).toInt().coerceAtLeast(20) to (targetHeight / baseCellH).toInt().coerceAtLeast(4)
+            LaunchedEffect(viewer, grid) {
+                delay(200)
+                viewer.phoneGrid = grid
+            }
         }
         look.layout(baseCellW, baseCellH, widthPx, heightPx)
         if (WindowInsets.ime.getBottom(density) > 0) look.revealCursor()
-        LaunchedEffect(viewer.search, look.cellW, look.cellH, heightPx) { look.revealSearchMatch() }
+        LaunchedEffect(viewer.search, look.selection, look.cellW, look.cellH, heightPx) { look.revealSearchMatch() }
         // Zoom and pan: the phone's view only, the grid stays the Terminal's.
         val fontPx = baseFontPx * look.zoom
         val cellW = look.cellW
@@ -692,9 +713,9 @@ private fun TerminalCanvas(viewer: TerminalViewer, look: TerminalLook, settings:
             viewer.version // redraw on every frame
             val base = TextStyle(fontFamily = family, fontSize = fontSize, color = TerminalForeground)
             translate(look.panX, look.panY) {
-            for (row in 0 until viewer.rows) {
+            for (row in 0 until (selected?.rows ?: viewer.rows)) {
                 val y = row * cellH
-                for (run in viewer.line(row)?.runs.orEmpty()) {
+                for (run in (if (selected != null) selected.line(row) else viewer.line(row))?.runs.orEmpty()) {
                     val x = run.column.toInt() * cellW
                     var fg = run.fg?.let(::rgb) ?: TerminalForeground
                     var bg = run.bg?.let(::rgb)
@@ -707,19 +728,19 @@ private fun TerminalCanvas(viewer: TerminalViewer, look: TerminalLook, settings:
                     if (run.wide || run.text.isNotBlank()) {
                         for (span in terminalTextSpans(run, fg, bg ?: TerminalBackground, minimumContrast)) {
                             val ink = if (run.dim) span.foreground.copy(alpha = 0.6f) else span.foreground
-                            drawTerminalText(measurer, span.text, Offset(x + span.column * cellW, y), styleOf(base, run, ink))
+                            drawTerminalRun(measurer, span.text, Offset(x + span.column * cellW, y), styleOf(base, run, ink), cellW, run.wide)
                         }
                     }
                 }
             }
-            for (mark in viewer.search?.highlights.orEmpty()) {
+            for (mark in (if (selected == null) viewer.search?.highlights else null).orEmpty()) {
                 drawRect(
                     if (mark.current) Color(0x99FFB300) else Color(0x55FFE082),
                     Offset(mark.column.toInt() * cellW, mark.row.toInt() * cellH),
                     Size(mark.width.toInt() * cellW, cellH),
                 )
             }
-            viewer.cursor?.let { c ->
+            viewer.cursor?.takeIf { selected == null }?.let { c ->
                 drawRect(
                     TerminalForeground.copy(alpha = 0.5f),
                     Offset(c.column.toInt() * cellW, c.row.toInt() * cellH),
@@ -735,7 +756,7 @@ private fun TerminalCanvas(viewer: TerminalViewer, look: TerminalLook, settings:
             look.selection?.ordered()?.let { s ->
                 for (row in s.start.row..s.end.row) {
                     val from = if (row == s.start.row) s.start.col else 0
-                    val to = if (row == s.end.row) s.end.col else viewer.cols - 1
+                    val to = if (row == s.end.row) s.end.col else cols - 1
                     drawRect(
                         SelectionColor,
                         Offset(from * cellW, row * cellH),
@@ -752,6 +773,25 @@ private fun DrawScope.drawTerminalText(measurer: TextMeasurer, text: String, at:
     // TextMeasurer caches layout independently of color. Supply paint properties
     // explicitly so a color change also repaints already measured Terminal text.
     drawText(measurer.measure(text, style), color = style.color, topLeft = at, textDecoration = style.textDecoration)
+}
+
+private fun DrawScope.drawTerminalRun(measurer: TextMeasurer, text: String, at: Offset, style: TextStyle, cellW: Float, wide: Boolean) {
+    if (text.all { it.code < 128 }) {
+        drawTerminalText(measurer, text, at, style)
+        return
+    }
+    // Fallback fonts can have a different advance. Place each grapheme on its
+    // Terminal cell so a symbol never shifts the text that follows it.
+    val graphemes = BreakIterator.getCharacterInstance(Locale.ROOT).apply { setText(text) }
+    var start = graphemes.first()
+    var end = graphemes.next()
+    var column = 0
+    while (end != BreakIterator.DONE) {
+        drawTerminalText(measurer, text.substring(start, end), at + Offset(column * cellW, 0f), style)
+        column += if (wide) 2 else 1
+        start = end
+        end = graphemes.next()
+    }
 }
 
 private fun styleOf(base: TextStyle, run: CellRun, fg: Color): TextStyle {

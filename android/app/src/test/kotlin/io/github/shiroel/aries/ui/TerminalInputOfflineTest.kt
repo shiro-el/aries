@@ -60,6 +60,11 @@ class TerminalInputOfflineTest {
         return find(compose.activity.window.decorView)!!.also {
             compose.runOnUiThread { it.performClick() }
             compose.waitForIdle()
+            it.onCreateInputConnection(EditorInfo())!!.commitText("x", 1)
+            compose.waitForIdle()
+            compose.mainClock.advanceTimeBy(300)
+            compose.waitForIdle()
+            core.connection!!.views.last().sent.clear()
         }
     }
 
