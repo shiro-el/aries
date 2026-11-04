@@ -18,8 +18,10 @@ tiles = "1.6.2"
 protolayout = "1.4.2"
 complications = "1.2.1"
 wearRemote = "1.2.0"
+profileinstaller = "1.4.1"
 
 [libraries]
+androidx-profileinstaller = { group = "androidx.profileinstaller", name = "profileinstaller", version.ref = "profileinstaller" }
 play-services-wearable = { group = "com.google.android.gms", name = "play-services-wearable", version.ref = "wearable" }
 kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-play-services", version.ref = "coroutines" }
 wear-tiles = { group = "androidx.wear.tiles", name = "tiles", version.ref = "tiles" }
