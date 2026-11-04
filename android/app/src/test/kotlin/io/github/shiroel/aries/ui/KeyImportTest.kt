@@ -99,7 +99,7 @@ class KeyImportTest {
             val uri = Uri.parse("content://documents/$name")
             if (bytes != null) shadowOf(compose.activity.contentResolver).registerInputStream(uri, ByteArrayInputStream(bytes))
             compose.runOnIdle { shadowOf(compose.activity).receiveResult(request.intent, Activity.RESULT_OK, Intent().setData(uri)) }
-            compose.waitUntil(5_000) { compose.onAllNodesWithText(str(R.string.key_import_file_error)).fetchSemanticsNodes().isNotEmpty() }
+            compose.waitUntil(5_000) { compose.onAllNodesWithText(compose.activity.getString(R.string.key_import_file_error, MAX_PRIVATE_KEY_BYTES / 1024)).fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag("key-import-save").assertIsNotEnabled()
         }
         assertTrue(core.importedKeys.isEmpty())
@@ -132,7 +132,7 @@ class KeyImportTest {
         compose.onNodeWithTag("key-import-save").assertIsEnabled()
         compose.onNodeWithTag("key-import-private").performTextReplacement("x".repeat(64 * 1024 + 1))
         compose.onNodeWithTag("key-import-save").assertIsNotEnabled()
-        compose.onNodeWithText(str(R.string.key_import_too_large)).assertExists()
+        compose.onNodeWithText(compose.activity.getString(R.string.key_import_too_large, MAX_PRIVATE_KEY_BYTES / 1024)).assertExists()
         assertTrue(core.importedKeys.isEmpty())
     }
 

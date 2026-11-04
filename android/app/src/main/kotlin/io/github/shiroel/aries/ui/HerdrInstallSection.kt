@@ -36,7 +36,7 @@ fun HerdrInstallSection(model: HerdrInstallModel, connect: () -> Unit) {
             is HerdrCoreState.Installed -> {
                 if (state.needsUpdate) {
                     Text(stringResource(R.string.herdr_install_version, state.version))
-                    Text(stringResource(R.string.herdr_install_old))
+                    Text(stringResource(R.string.herdr_install_old, model.minimumCoreVersion))
                 } else Text(stringResource(R.string.herdr_install_ready))
             }
             null -> Unit

@@ -52,7 +52,7 @@ class PushNotificationTest {
         assertEquals(PushTarget("h1", "t1"), PushTarget.from(intent))
         NotificationGroups.opened(context, intent)
         val summary = manager.activeNotifications.single { it.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0 }.notification
-        assertEquals("box: 1 waiting", summary.extras.getCharSequence(Notification.EXTRA_TITLE).toString())
+        assertEquals("box · Notifications: 1", summary.extras.getCharSequence(Notification.EXTRA_TITLE).toString())
         val last = manager.activeNotifications.single { it.tag == "t2" }.notification
         NotificationGroups.opened(context, shadowOf(last.contentIntent).savedIntent)
         assertEquals(0, manager.activeNotifications.size)
@@ -91,7 +91,7 @@ class PushNotificationTest {
         manager.activeNotifications.single { it.tag == "t1" }.notification.deleteIntent.send()
         shadowOf(android.os.Looper.getMainLooper()).idle()
         val summary = manager.activeNotifications.single { it.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0 }.notification
-        assertEquals("box: 1 waiting", summary.extras.getCharSequence(Notification.EXTRA_TITLE).toString())
+        assertEquals("box · Notifications: 1", summary.extras.getCharSequence(Notification.EXTRA_TITLE).toString())
         manager.activeNotifications.single { it.tag == "t2" }.notification.deleteIntent.send()
         shadowOf(android.os.Looper.getMainLooper()).idle()
         assertEquals(0, manager.activeNotifications.size)
@@ -114,7 +114,7 @@ class PushNotificationTest {
         val all = manager.activeNotifications.map { it.notification }
         val summaries = all.filter { it.flags and Notification.FLAG_GROUP_SUMMARY != 0 }
         assertEquals(2, summaries.size)
-        assertEquals(setOf("box: 2 waiting", "other: 1 waiting"), summaries.map {
+        assertEquals(setOf("box · Notifications: 2", "other · Notifications: 1"), summaries.map {
             it.extras.getCharSequence(Notification.EXTRA_TITLE).toString()
         }.toSet())
         assertEquals(2, all.map { it.group }.toSet().size)

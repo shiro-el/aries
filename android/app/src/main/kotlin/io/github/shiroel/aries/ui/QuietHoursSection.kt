@@ -35,6 +35,12 @@ fun QuietHoursSection() {
         Text(stringResource(R.string.quiet_hours_title), Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
         Switch(checked = hours.enabled, onCheckedChange = null)
     }
+    Text(stringResource(R.string.quiet_hours_body), style = MaterialTheme.typography.bodySmall)
+    if (hours.enabled) Text(
+        if (hours.startMinute == hours.endMinute) stringResource(R.string.quiet_hours_all_day)
+        else stringResource(R.string.quiet_hours_range, quietTime(context, hours.startMinute), quietTime(context, hours.endMinute)),
+        style = MaterialTheme.typography.bodySmall,
+    )
     QuietTimeButton(R.string.quiet_hours_start, "quiet-hours-start", hours.startMinute, hours.enabled) {
         settings.update(settings.hours.copy(startMinute = it))
     }
@@ -46,9 +52,7 @@ fun QuietHoursSection() {
 @Composable
 private fun QuietTimeButton(label: Int, tag: String, minute: Int, enabled: Boolean, onChange: (Int) -> Unit) {
     val context = LocalContext.current
-    // Format a wall-clock time in the phone's locale/12h preference without applying a date's DST.
-    val time = DateFormat.getTimeFormat(context).apply { timeZone = TimeZone.getTimeZone("UTC") }
-        .format(Date(minute * 60_000L))
+    val time = quietTime(context, minute)
     TextButton(
         modifier = Modifier.fillMaxWidth().testTag(tag),
         enabled = enabled,
@@ -61,3 +65,7 @@ private fun QuietTimeButton(label: Int, tag: String, minute: Int, enabled: Boole
         Text(time)
     }
 }
+
+private fun quietTime(context: android.content.Context, minute: Int): String =
+    DateFormat.getTimeFormat(context).apply { timeZone = TimeZone.getTimeZone("UTC") }
+        .format(Date(minute * 60_000L))

@@ -191,7 +191,7 @@ internal fun QuickOpenDialog(model: HostsModel) {
                                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(if (result.live) stringResource(R.string.quick_open_live)
                                     else if (result.fetchedAtMs == null) stringResource(R.string.quick_open_unknown)
-                                    else stringResource(R.string.quick_open_age, ((now.toULong().coerceAtLeast(result.fetchedAtMs) - result.fetchedAtMs) / 60_000uL).toLong()),
+                                    else stringResource(R.string.quick_open_age, relativeAge(androidx.compose.ui.platform.LocalContext.current, result.fetchedAtMs, now)),
                                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             HorizontalDivider()

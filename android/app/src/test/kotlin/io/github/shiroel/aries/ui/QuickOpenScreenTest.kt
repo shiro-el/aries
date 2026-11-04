@@ -47,7 +47,7 @@ class QuickOpenScreenTest {
         compose.onNodeWithTag("quick-open-button").performClick()
         compose.onNodeWithTag("quick-open-query").performTextReplacement("rvw")
         compose.onNodeWithText("Review").assertExists()
-        compose.onNodeWithText(str(R.string.quick_open_age, 3)).assertExists()
+        compose.onNodeWithText(str(R.string.quick_open_age, str(R.string.surfaces_age_minutes, 3))).assertExists()
         assertNull(core.connection)
         compose.onNodeWithText("Review").performClick()
         compose.waitForIdle()

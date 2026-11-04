@@ -27,6 +27,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -94,6 +95,7 @@ internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit) {
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val screen = model.screen
+    CallAttentionEffect(model.calls)
     SeenAgentEffect(
         screen,
         enabled = drawer.isClosed && drawer.targetValue == DrawerValue.Closed &&
@@ -135,7 +137,7 @@ internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit) {
                 if (model.callInboxOpen) model.closeCallInbox() else model.openCallInbox()
             }
         }, LocalNextWaitingAgent provides model.nextWaitingAgent?.let { NextWaitingAction(it, model::openNextWaitingAgent) }) {
-            Box(Modifier.fillMaxSize().systemGestureExclusion { coordinates ->
+            BoxWithConstraints(Modifier.fillMaxSize().systemGestureExclusion { coordinates ->
                 Rect(0f, 0f, edgeWidth, minOf(coordinates.size.height.toFloat(), terminalHeaderHeight))
             }.pointerInput(screen, drawer.isClosed, model.callInboxOpen, model.quickOpenVisible) {
                 awaitEachGesture {
@@ -156,10 +158,15 @@ internal fun ConsoleShell(model: HostsModel, content: @Composable () -> Unit) {
                     }
                 }
             }) {
-                content()
-                if (model.callInboxOpen && drawer.isClosed && drawer.targetValue == DrawerValue.Closed) {
-                    CallInboxOverlay(model, Modifier.padding(top = 57.dp))
+                val inboxVisible = model.callInboxOpen && drawer.isClosed && drawer.targetValue == DrawerValue.Closed
+                val compactHeight = maxHeight < 480.dp || WindowInsets.ime.getBottom(density) > 0
+                Column(Modifier.fillMaxSize().semantics { if (inboxVisible) hideFromAccessibility() }) {
+                    if (!inboxVisible && !compactHeight) model.calls.banner?.let { entry ->
+                        CallAttentionBanner(entry, model.callCallerName(entry), model::openCallInbox, model.calls::dismissBanner)
+                    }
+                    Box(Modifier.weight(1f)) { content() }
                 }
+                if (inboxVisible) CallInboxOverlay(model)
             }
         }
     }

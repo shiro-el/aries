@@ -95,7 +95,7 @@ internal fun ConsoleChatCall(entry: CallEntry, calls: CallsModel) {
     ConsoleChatCallSurface {
         Text(stringResource(R.string.console_chat_call_label), color = statusColor(AgentStatus.Blocked(null, null)),
             style = MaterialTheme.typography.labelLarge)
-        Text(call.title)
+        AnnouncedText(call.title)
         if (call.body.isNotEmpty()) Text(call.body)
         call.answer?.let { answer ->
             AnnouncedText(stringResource(answer.state.labelResource(), answer.text), style = MaterialTheme.typography.bodySmall)
@@ -104,7 +104,7 @@ internal fun ConsoleChatCall(entry: CallEntry, calls: CallsModel) {
             }
         }
         when {
-            entry.key in calls.replying -> Text(stringResource(R.string.call_answer_sending))
+            entry.key in calls.replying -> AnnouncedText(stringResource(R.string.call_answer_sending))
             entry.answerable -> call.choices.forEachIndexed { index, choice ->
                 ConsoleChatChoice(index + 1, choice,
                     accessibilityLabel = stringResource(R.string.call_answer_choice_label, call.title, choice),
