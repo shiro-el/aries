@@ -222,22 +222,15 @@ class TerminalViewer(terminal: TerminalInfo) {
         if (!keyBarVisible) {
             ctrl = false
             alt = false
-            ctrlLocked = false
-            altLocked = false
         }
     }
 
-    /** Ctrl from the key bar, applied once unless locked by a long press. */
+    /** Ctrl from the key bar, active until toggled off or the key bar is hidden. */
     var ctrl by mutableStateOf(false)
         private set
 
-    /** Alt from the key bar, applied once unless locked by a long press. */
+    /** Alt from the key bar, active until toggled off or the key bar is hidden. */
     var alt by mutableStateOf(false)
-        private set
-
-    var ctrlLocked by mutableStateOf(false)
-        private set
-    var altLocked by mutableStateOf(false)
         private set
 
     /** What was typed, in order, until the model sends it. */
@@ -250,25 +243,11 @@ class TerminalViewer(terminal: TerminalInfo) {
     fun toggleCtrl() {
         interruptComposition()
         ctrl = !ctrl
-        ctrlLocked = false
     }
 
     fun toggleAlt() {
         interruptComposition()
         alt = !alt
-        altLocked = false
-    }
-
-    fun lockCtrl() {
-        interruptComposition()
-        ctrl = true
-        ctrlLocked = true
-    }
-
-    fun lockAlt() {
-        interruptComposition()
-        alt = true
-        altLocked = true
     }
 
     /**
@@ -323,7 +302,7 @@ class TerminalViewer(terminal: TerminalInfo) {
         onCompositionInterrupted?.invoke()
     }
 
-    /** Types [text]; a newline is Enter. Unlocked modifiers apply to the first character. */
+    /** Types [text]; a newline is Enter. Key-bar modifiers apply to every character. */
     fun type(text: String) {
         interruptComposition()
         typeNow(text)
@@ -349,7 +328,7 @@ class TerminalViewer(terminal: TerminalInfo) {
         }
     }
 
-    /** Presses [key] with held modifiers (then releases any unlocked ones) and extra [mods]. */
+    /** Presses [key] with active key-bar modifiers and extra [mods]. */
     fun press(key: TerminalKey, mods: KeyMods = NoMods) {
         interruptComposition()
         pressNow(key, mods)
@@ -357,8 +336,6 @@ class TerminalViewer(terminal: TerminalInfo) {
 
     private fun pressNow(key: TerminalKey, mods: KeyMods) {
         send(TerminalInput.Key(key, mods.copy(ctrl = mods.ctrl || ctrl, alt = mods.alt || alt)))
-        ctrl = ctrlLocked
-        alt = altLocked
     }
 
     /** Typing while scrolled back returns to the live screen, as terminals do. */

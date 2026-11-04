@@ -23,7 +23,6 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.performTouchInput
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.AgentStatus
@@ -193,11 +192,12 @@ class TerminalTypingTest {
         compose.onNodeWithText(str(R.string.key_down)).performClick()
         compose.onNodeWithText(str(R.string.key_left)).performClick()
         compose.onNodeWithText(str(R.string.key_right)).performClick()
-        // Ctrl applies to the next key only.
+        // Ctrl stays active across IME commits and extra keys until tapped again.
         compose.onNodeWithText(str(R.string.key_ctrl)).performClick()
         ic.commitText("c", 1)
         ic.commitText("c", 1)
         compose.onNodeWithText(str(R.string.key_slash)).performClick()
+        compose.onNodeWithText(str(R.string.key_ctrl)).assertIsSelected().performClick().assertIsNotSelected()
         compose.onNodeWithText(str(R.string.key_dash)).performClick()
         compose.waitForIdle()
 
@@ -205,14 +205,14 @@ class TerminalTypingTest {
             listOf(
                 "text:ls -la", "key:Enter", "text:x", "key:Backspace", "key:Enter",
                 "key:Escape", "key:Tab", "key:Up", "key:Down", "key:Left", "key:Right",
-                "key:ctrl+c", "text:c", "key:/", "key:-",
+                "key:ctrl+c", "key:ctrl+c", "key:ctrl+/", "key:-",
             ),
             typing.sent,
         )
     }
 
     @Test
-    fun altAppliesToTheNextCharacterOnlyAndCanBeCancelled() {
+    fun altAppliesToEveryCharacterUntilTappedAgain() {
         val core = FakeCore()
         open(core)
         val ic = focusInput()
@@ -220,16 +220,18 @@ class TerminalTypingTest {
         alt.assertIsNotSelected().performClick().assertIsSelected()
         ic.commitText("😀next", 1)
         compose.waitForIdle()
-        alt.assertIsNotSelected()
-        alt.performClick().assertIsSelected().performClick().assertIsNotSelected()
+        alt.assertIsSelected()
+        ic.commitText("x", 1)
+        alt.performClick().assertIsNotSelected()
         ic.commitText("plain", 1)
         compose.waitForIdle()
-        assertEquals(listOf("key:alt+😀", "text:next", "text:plain"), core.connection!!.views.last().sent)
+        assertEquals(listOf("key:alt+😀", "key:alt+n", "key:alt+e", "key:alt+x", "key:alt+t", "key:alt+x", "text:plain"),
+            core.connection!!.views.last().sent)
     }
 
     @Test
     @Config(qualifiers = "w360dp")
-    fun navigationKeysAreVisibleAndConsumeAltAndCtrlTogether() {
+    fun navigationKeysAndImeKeepAltAndCtrlActiveTogether() {
         val core = FakeCore()
         open(core)
         val ic = focusInput()
@@ -241,18 +243,18 @@ class TerminalTypingTest {
         alt.performClick()
         ctrl.performClick()
         compose.onNodeWithText(str(R.string.key_home)).performClick()
-        alt.assertIsNotSelected()
-        ctrl.assertIsNotSelected()
+        alt.assertIsSelected()
+        ctrl.assertIsSelected()
         ic.commitText("x", 1)
         compose.waitForIdle()
         assertEquals(
-            listOf("key:Home", "key:End", "key:PageUp", "key:PageDown", "key:ctrl+alt+Home", "text:x"),
+            listOf("key:Home", "key:End", "key:PageUp", "key:PageDown", "key:ctrl+alt+Home", "key:ctrl+alt+x"),
             core.connection!!.views.last().sent,
         )
     }
 
     @Test
-    fun heldHangulFinishesBeforeLatchingModifiersForTheNextKey() {
+    fun heldHangulFinishesWithTheCurrentModifiersBeforeTheyAreToggled() {
         val core = FakeCore()
         open(core)
         val ic = focusInput()
@@ -265,7 +267,7 @@ class TerminalTypingTest {
         compose.onNodeWithText(str(R.string.key_end)).performClick()
         compose.waitForIdle()
         assertEquals(
-            listOf("text:한", "key:alt+x", "text:국", "key:ctrl+alt+End"),
+            listOf("text:한", "key:alt+x", "key:alt+국", "key:ctrl+End"),
             core.connection!!.views.last().sent,
         )
     }
@@ -308,22 +310,24 @@ class TerminalTypingTest {
     }
 
     @Test
-    fun longPressedModifiersStayLockedUntilTappedAndHidingKeysClearsThem() {
+    fun tappedModifiersStayActiveUntilTappedAgainAndHidingKeysClearsBoth() {
         val core = FakeCore()
         open(core)
         val ic = focusInput()
         val ctrl = compose.onNodeWithText(str(R.string.key_ctrl))
         val alt = compose.onNodeWithText(str(R.string.key_alt))
-        ctrl.performTouchInput { longClick() }
-        alt.performTouchInput { longClick() }
+        ctrl.performClick().assertIsSelected()
+        alt.performClick().assertIsSelected()
         ic.commitText("cx", 1)
         compose.waitForIdle()
         assertEquals(listOf("key:ctrl+alt+c", "key:ctrl+alt+x"), core.connection!!.views.last().sent)
-        ctrl.performClick()
+        ctrl.assertIsSelected().performClick().assertIsNotSelected()
+        alt.assertIsSelected()
         ic.commitText("yz", 1)
         compose.waitForIdle()
         assertEquals(listOf("key:ctrl+alt+c", "key:ctrl+alt+x", "key:alt+y", "key:alt+z"),
             core.connection!!.views.last().sent)
+        ctrl.performClick().assertIsSelected()
         compose.onNodeWithContentDescription(str(R.string.terminal_keys_hide_button)).performClick()
         ic.commitText("q", 1)
         compose.waitForIdle()

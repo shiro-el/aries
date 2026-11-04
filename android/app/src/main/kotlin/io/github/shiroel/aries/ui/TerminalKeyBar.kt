@@ -55,10 +55,8 @@ internal fun TerminalKeyBar(viewer: TerminalViewer) {
         }
         Row(Modifier.fillMaxWidth()) {
             BarKey(R.string.key_tab) { viewer.press(TerminalKey.Tab) }
-            BarKey(R.string.key_ctrl, held = viewer.ctrl, locked = viewer.ctrlLocked,
-                onLongClick = viewer::lockCtrl, onClick = viewer::toggleCtrl)
-            BarKey(R.string.key_alt, held = viewer.alt, locked = viewer.altLocked,
-                onLongClick = viewer::lockAlt, onClick = viewer::toggleAlt)
+            BarKey(R.string.key_ctrl, held = viewer.ctrl, onClick = viewer::toggleCtrl)
+            BarKey(R.string.key_alt, held = viewer.alt, onClick = viewer::toggleAlt)
             BarKey(R.string.key_left, repeating = true, fontSize = 20.sp) { viewer.press(TerminalKey.Left) }
             BarKey(R.string.key_down, repeating = true, fontSize = 20.sp) { viewer.press(TerminalKey.Down) }
             BarKey(R.string.key_right, repeating = true, fontSize = 20.sp) { viewer.press(TerminalKey.Right) }
@@ -82,13 +80,10 @@ private fun RowScope.BarKey(
     held: Boolean? = null,
     repeating: Boolean = false,
     fontSize: TextUnit = 12.sp,
-    locked: Boolean = false,
-    onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
-    val modifierState = stringResource(if (locked) R.string.terminal_keys_locked else R.string.terminal_keys_once)
-    val lockAction = stringResource(R.string.terminal_keys_lock_action)
+    val modifierState = stringResource(if (held == true) R.string.terminal_keys_on else R.string.terminal_keys_off)
     val interactions = remember { MutableInteractionSource() }
     val pressed by interactions.collectIsPressedAsState()
     val send by rememberUpdatedState(onClick)
@@ -100,11 +95,11 @@ private fun RowScope.BarKey(
                 pressed -> colors.secondaryContainer
                 else -> colors.surface
             })
-            .border(if (locked) 2.dp else 1.dp, if (locked) colors.onPrimary else colors.outlineVariant)
+            .border(1.dp, colors.outlineVariant)
             .semantics {
                 if (held != null) {
                     selected = held
-                    if (held) stateDescription = modifierState
+                    stateDescription = modifierState
                 }
             }
             .pointerInput(repeating, repeatDelay) {
@@ -133,8 +128,7 @@ private fun RowScope.BarKey(
                 indication = null,
                 role = Role.Button,
                 // Consume a hold so releasing it does not add a final tap.
-                onLongClick = if (repeating) ({}) else onLongClick,
-                onLongClickLabel = if (onLongClick != null) lockAction else null,
+                onLongClick = if (repeating) ({}) else null,
                 onClick = onClick,
             ),
         contentAlignment = Alignment.Center,
