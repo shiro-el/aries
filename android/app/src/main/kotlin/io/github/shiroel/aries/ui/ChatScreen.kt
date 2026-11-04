@@ -55,6 +55,8 @@ import androidx.compose.runtime.structuralEqualityPolicy
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.RectangleShape
@@ -170,7 +172,7 @@ class ChatModel(
     var expanded by mutableStateOf<Set<String>>(emptySet())
         private set
     internal val threadToolGrouping = ThreadToolGrouping()
-    /** Disclosure state survives switching between following and history renderers. */
+    /** Disclosure state survives viewport changes. */
     var rawInputsExpanded by mutableStateOf<Set<String>>(emptySet())
         private set
 
@@ -762,6 +764,7 @@ class ChatModel(
             restoreMessage(message)
             return
         }
+        readingSession.latestRequest++
         drainQueue()
     }
 
@@ -1259,7 +1262,7 @@ fun ChatScreen(
     val toolUnreadKeys = toolGroups.flatMap { group -> group.entries.map { it.id to group.key } }.toMap()
     val scroll = rememberChatScrollState(chat, entries, callKeys + chat.queuedMessages.map { "queued:${it.id}" } +
         if (chat.showWorking) listOf("working") else emptyList(), markdown, followEnabled = !searchOpen && !dialogs.isOpen,
-        callKeys = callKeys, messageKeys = entries.map { toolUnreadKeys[it.id] ?: "transcript:${it.id}" }.distinct())
+        callKeys = callKeys, messageKeys = entries.map { toolUnreadKeys[it.id] ?: "transcript:${it.id}" })
     val toggleTool = remember(chat, scroll) {
         { id: String -> scroll.readTool(); chat.toggle(id) }
     }
@@ -1358,7 +1361,9 @@ fun ChatScreen(
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     // Scrollable clearance, rather than a footer that shrinks the viewport.
                     val transcriptPadding = PaddingValues(bottom = if (scroll.following || searchOpen) 0.dp else 64.dp)
-                    val transcriptModifier = Modifier.fillMaxSize().chatImeAnchor(scroll.list).testTag("chat-transcript")
+                    val transcriptModifier = Modifier.fillMaxSize().chatImeAnchor(scroll.list)
+                        .then(if (scroll.positioned) Modifier else Modifier.graphicsLayer { alpha = 0f }.clearAndSetSemantics { })
+                        .testTag("chat-transcript")
                     val historyContent = remember(chat, transcript, readAloud, agentCalls, calls, toggleTool, onOpenTerminal) {
                         chatHistoryContent(transcript, chat, readAloud, agentCalls, calls, toggleTool, onOpenTerminal)
                     }
@@ -1366,35 +1371,9 @@ fun ChatScreen(
                         threadHistoryContent(transcript, toolGroupsState, chat, readAloud,
                             answerQuestion?.id, agentCalls, toggleTool, scroll)
                     }
-                    // One LazyColumn owns both providers. Changing follow mode must
-                    // keep the same list instance and item keys when reading details.
-                    val followingContent: LazyListScope.() -> Unit = {
-                        // Keep main's follow renderer inline: its lazy provider and
-                        // forced scroll measure must consume the same content update.
-                        entries.forEach { entry ->
-                            val body = entry.body
-                            val source = body.markdownSource()
-                            item(key = "transcript:${entry.id}", contentType = body::class) {
-                                CompositionLocalProvider(LocalChatSearchEntry provides entry.id) {
-                                    ChatEntryHeader(entry, markdown[entry.id]?.attachments, chat, readAloud, toggleTool)
-                                }
-                            }
-                            if (source != null) {
-                                chatMarkdownItems(entry.id, markdown[entry.id], thinking = body is ChatEntryBody.Thinking)
-                                item(key = "transcript:${entry.id}:footer", contentType = ChatTranscriptContent.Footer::class) {
-                                    ChatEntryFooter((body as? ChatEntryBody.User)?.images.orEmpty(),
-                                        (body as? ChatEntryBody.Agent)?.metadata, chat, entry.id, toggleTool)
-                                }
-                            }
-                        }
-                        items(agentCalls, key = { "call:${it.key}" }, contentType = { "call" }) { entry ->
-                            if (calls != null) {
-                                if (LocalTasksDetail.current != null) TasksCallTrace(entry) else ConsoleChatCall(entry, calls, onOpenTerminal = onOpenTerminal)
-                            }
-                        }
-                        queuedChatMessages(chat)
-                    }
-                    if (chat.showInitialLoading) {
+                    // A stable row provider preserves image/diagram compositions when
+                    // a follower starts reading history or returns to the bottom.
+                    if (chat.showInitialLoading || !scroll.positioned && entries.isNotEmpty()) {
                         val loadingText = if (thread != null) statusText(snapshot?.status ?: ChatStatus.LIVE) else null
                         ScreenLoading(loadingText ?: stringResource(R.string.chat_loading), onRetry = {
                             chat.link?.retryNow()
@@ -1403,9 +1382,9 @@ fun ChatScreen(
                     }
                     LazyColumn(
                         transcriptModifier, state = scroll.list, contentPadding = transcriptPadding,
-                        content = if (thread != null) threadContent else if (scroll.following) followingContent else historyContent,
+                        content = if (thread != null) threadContent else historyContent,
                     )
-                    if (!searchOpen && !scroll.following && (entries.isNotEmpty() || agentCalls.isNotEmpty() || chat.queuedMessages.isNotEmpty())) {
+                    if (scroll.positioned && !searchOpen && !scroll.following && (entries.isNotEmpty() || agentCalls.isNotEmpty() || chat.queuedMessages.isNotEmpty())) {
                         LatestButton(
                             description = if (scroll.unreadCount == 0) stringResource(R.string.chat_latest_button)
                                 else stringResource(R.string.chat_latest_count_button, scroll.unreadCount),

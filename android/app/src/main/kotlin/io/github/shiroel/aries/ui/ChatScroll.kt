@@ -19,13 +19,16 @@ import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.layout
 import io.github.shiroel.aries.core.ChatEntry
+import io.github.shiroel.aries.core.ChatEntryBody
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 
 /** The viewport is independent of the Agent's `herdr.seen` turn. */
 internal class ChatScrollState(following: Boolean) {
-    val list = LazyListState()
+    // Clamp to the current tail on the first measure, even before Markdown is ready.
+    val list = LazyListState(if (following) Int.MAX_VALUE else 0)
+    var positioned by mutableStateOf(false)
     var following by mutableStateOf(following)
     var unreadCount by mutableIntStateOf(0)
     var latestRequest by mutableIntStateOf(0)
@@ -82,6 +85,7 @@ internal fun rememberChatScrollState(
     markdown: Map<String, ChatMarkdownDocument>,
     followEnabled: Boolean = true,
     callKeys: List<String> = emptyList(),
+    // One logical unread key per entry; a Thread tool group shares one key.
     messageKeys: List<String> = entries.map { "transcript:${it.id}" },
 ): ChatScrollState {
     val session = chat.readingSession
@@ -96,7 +100,12 @@ internal fun rememberChatScrollState(
                     state.jumping = false
                     state.following = false
                 }
-                is DragInteraction.Stop, is DragInteraction.Cancel -> state.dragging = false
+                is DragInteraction.Stop, is DragInteraction.Cancel -> {
+                    state.dragging = false
+                    // The final drag frame may already be at the end. A slow
+                    // release need not produce another viewport change or fling.
+                    state.following = !state.list.canScrollForward
+                }
             }
         }
     }
@@ -105,9 +114,11 @@ internal fun rememberChatScrollState(
         var previousCalls = emptyList<String>()
         var previousTranscript = emptyList<String>()
         var previousItemKeys = emptyList<String>()
+        var anchorKeys = emptyList<String>()
         var lastViewport: Pair<Any?, Int>? = null
         var readingAnchor: Pair<String, Int>? = null
         var pending = emptySet<String>()
+        var submission = session.latestRequest
         var disclosures = chat.expanded to chat.rawInputsExpanded
         snapshotFlow {
             // Read layout as well as data: scrolling changes the follow mode;
@@ -115,14 +126,27 @@ internal fun rememberChatScrollState(
             Triple(
                 content.value,
                 state.list.layoutInfo,
-                Triple(state.latestRequest, chat.expanded, chat.rawInputsExpanded) to state.dragging,
+                Triple(state.latestRequest to session.latestRequest, chat.expanded, chat.rawInputsExpanded) to state.dragging,
             )
         }.collect { (data, _, controls) ->
+            if (submission != session.latestRequest) {
+                submission = session.latestRequest
+                state.latest()
+            }
             val (_, expanded, rawInputsExpanded) = controls.first
             val disclosureChanged = disclosures != (expanded to rawInputsExpanded)
             disclosures = expanded to rawInputsExpanded
             val (rows, auxiliary, documents, followEnabled, calls, transcript) = data
-            val countable = (transcript + calls).toSet()
+            // Overlays suspend placement, not the user's follow intent. Keep the
+            // first visit/restore pending too, including automatically opened Tasks sheets.
+            if (!followEnabled) {
+                lastViewport = null
+                return@collect
+            }
+            val userInput = rows.mapIndexedNotNull { index, entry ->
+                transcript.getOrNull(index).takeIf { entry.body is ChatEntryBody.User }
+            }.toSet()
+            val countable = (transcript + calls).toSet() - userInput
             val keys = buildList {
                 rows.forEach { entry ->
                     add("transcript:${entry.id}")
@@ -140,16 +164,27 @@ internal fun rememberChatScrollState(
             val currentViewport = viewport()
             // Stable keys distinguish a deliberate scroll from a history
             // prepend or an asynchronous Markdown remeasure.
-            if (previousEntries != null && lastViewport != currentViewport && !state.jumping && !state.dragging) {
+            if (previousEntries != null && lastViewport != null && lastViewport != currentViewport && !state.jumping && !state.dragging) {
                 state.following = !state.list.canScrollForward
             }
             // A disclosure is a reading action, not new Agent output. Its next
             // measure must not trigger scrollToLatest and move the tapped header.
-            if (!followEnabled || disclosureChanged) {
+            if (disclosureChanged) {
                 state.jumping = false
                 state.following = false
             }
             lastViewport = currentViewport
+            // Pin the measured body key before the provider measures a prepend,
+            // including its unparsed header/footer and the later parsed blocks.
+            val previous = previousEntries
+            if (anchorKeys != keys && previous != null && !state.following && !state.jumping && !state.list.isScrollInProgress &&
+                rows.indexOfFirst { it.id == previous.firstOrNull()?.id } > 0) {
+                readingAnchor?.let { (key, offset) ->
+                    val index = keys.indexOf(key)
+                    if (index >= 0) state.list.requestScrollToItem(index, -offset)
+                }
+            }
+            anchorKeys = keys
             val ready = rows.all { entry ->
                 val text = entry.body.markdownSource()
                 text == null || documents[entry.id]?.matches(entry.body) == true
@@ -159,29 +194,19 @@ internal fun rememberChatScrollState(
             val changed = previousEntries != rows || previousCalls != calls || previousItemKeys != keys || previousTranscript != transcript
             val latest = state.jumping
             // Keep a tool's expand/collapse control reachable on arrival.
-            val alignBottom = auxiliary.isNotEmpty() || rows.lastOrNull()?.body !is io.github.shiroel.aries.core.ChatEntryBody.Tool
+            val alignBottom = auxiliary.isNotEmpty() || rows.lastOrNull()?.body !is ChatEntryBody.Tool
             if (changed || latest) {
-                val previous = previousEntries
                 if (previous != null) {
                     pending = (pending + addedTail(previousTranscript, transcript) +
                         calls.filterNot { it in previousCalls }).intersect(countable)
-                    if (!state.following && !latest && rows.indexOfFirst { it.id == previous.firstOrNull()?.id } > 0) {
-                        // A prepend can move the turn's read-aloud control to an
-                        // older entry and collapse the old first header. Keep
-                        // the measured body block in place, rather than that header.
-                        readingAnchor?.let { (key, offset) ->
-                            val index = keys.indexOf(key)
-                            if (index >= 0) state.observeScroll { state.list.scrollToItem(index, -offset) }
-                        }
-                    }
                 } else if (saved != null) {
                     pending = (saved.pending + after(saved.transcriptTail, transcript) + calls.filterNot { it in saved.calls })
                         .intersect(countable)
-                    // Restore even when the user left at the end: rows may
-                    // have arrived while this screen was covered. Follow again only
-                    // if that saved viewport still reaches the current end.
+                    // History readers restore their anchor. Followers return to
+                    // the current tail, including output received while covered
+                    // and a viewport whose height changed during rotation.
                     val anchorIndex = keys.indexOf(saved.anchor)
-                    if (followEnabled) {
+                    if (!saved.following) {
                         if (state.observeScroll {
                             state.list.scrollToItem(
                                 if (anchorIndex >= 0) anchorIndex else saved.index.coerceIn(keys.indices),
@@ -190,7 +215,7 @@ internal fun rememberChatScrollState(
                         }) state.following = !state.dragging && !state.list.canScrollForward
                     }
                 }
-                if (followEnabled && !state.dragging && (latest || (state.following && (previous != null || saved == null)))) {
+                if (!state.dragging && (latest || state.following)) {
                     // A streamed edit keeps the same tail key. Let its natural
                     // measure run before checking whether its height moved the
                     // bottom; forcing a jump here also measures the old height.
@@ -209,17 +234,43 @@ internal fun rememberChatScrollState(
                 previousCalls = calls
                 previousTranscript = transcript
                 previousItemKeys = keys
-            } else if (followEnabled && !state.dragging && state.following && state.list.canScrollForward) {
+            } else if (!state.dragging && state.following && state.list.canScrollForward) {
                 val completed = state.observeScroll { state.list.scrollToLatest(keys.lastIndex, alignBottom) }
                 state.following = completed && !state.dragging && !state.list.canScrollForward
             }
+            state.positioned = true
             lastViewport = viewport()
+            val layout = state.list.layoutInfo
             if (state.following) pending = emptySet()
+            else if (pending.isNotEmpty() && layout.totalItemsCount == keys.size &&
+                layout.visibleItemsInfo.all { keys.getOrNull(it.index) == it.key }) {
+                // Reading a message means reaching its end, including a tall
+                // body or Call. Rows passed above the viewport are read too.
+                val readThrough = layout.visibleItemsInfo.lastOrNull {
+                    it.offset + it.size <= layout.viewportEndOffset
+                }?.index
+                if (readThrough != null) {
+                    val indices = keys.withIndex().associate { it.value to it.index }
+                    val ends = mutableMapOf<String, Int>()
+                    rows.forEachIndexed { index, row ->
+                        val key = "transcript:${row.id}"
+                        // Empty footer/action rows may never be measured. The
+                        // final body block is the message's readable end.
+                        val block = documents[row.id]?.blocks?.lastIndex?.takeIf { it >= 0 }
+                        val end = if (block != null) "$key:markdown:$block" else key
+                        val message = transcript.getOrNull(index)
+                        if (message != null && (message !in ends || message in expanded)) {
+                            indices[end]?.let { ends[message] = it }
+                        }
+                    }
+                    calls.forEach { call -> indices[call]?.let { ends[call] = it } }
+                    pending = pending.filterTo(mutableSetOf()) { (ends[it] ?: Int.MAX_VALUE) > readThrough }
+                }
+            }
             state.unreadCount = pending.size
 
             // A data change can precede LazyColumn's next measure. Save the
             // actual measured key, never an old index into the new row list.
-            val layout = state.list.layoutInfo
             val first = layout.visibleItemsInfo.firstOrNull { it.index == state.list.firstVisibleItemIndex }
             val anchor = first?.key as? String
             if (layout.totalItemsCount == keys.size && anchor in keys) {
@@ -265,12 +316,13 @@ private data class ChatScrollContent(
 
 private fun after(tail: String?, keys: List<String>): List<String> {
     if (tail == null) return keys
-    val index = keys.indexOf(tail)
+    val index = keys.lastIndexOf(tail)
     return if (index < 0) emptyList() else keys.drop(index + 1)
 }
 
 /** Owned by one Chat visit, retained by the ViewModel across recreation and covered screens. */
 internal class ChatReadingSession {
+    var latestRequest by mutableIntStateOf(0)
     var position: ChatReadingPosition? = null
 }
 
