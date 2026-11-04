@@ -895,6 +895,7 @@
     <string name="tasks_home">작업</string>
     <string name="tasks_hosts_count">Host %1$d/%2$d</string>
     <string name="tasks_prompt_hint">무엇을 시킬까요?</string>
+    <string name="tasks_preparing">새 작업을 준비하는 중…</string>
     <string name="tasks_expand_label">새 작업 전체 화면으로 열기</string>
     <string name="tasks_agent">Agent</string>
     <string name="tasks_filter_all">전체</string>

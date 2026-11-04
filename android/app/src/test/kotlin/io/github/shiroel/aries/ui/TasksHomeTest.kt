@@ -31,12 +31,14 @@ class TasksHomeTest {
     @get:Rule val compose = createComposeRule()
     private val context = ApplicationProvider.getApplicationContext<Context>()
 
+    private lateinit var model: HostsModel
+
     private val callTime = System.currentTimeMillis().toULong() - 60_000uL
 
     private fun call(id: String, terminal: String, urgency: CallUrgency) = CallInfo(
         "h1", id, callTime, terminal, true, id, "Decide $id", urgency, listOf("Continue", "Wait"), null, true)
 
-    private fun show(core: FakeCore) {
+    private fun show(core: AriesCoreInterface) {
         val prefs = context.getSharedPreferences("tasks-home-test", Context.MODE_PRIVATE)
         prefs.edit().clear().commit()
         val settings = ThemeSettings(prefs).apply {
@@ -45,7 +47,7 @@ class TasksHomeTest {
         }
         compose.setContent {
             val scope = rememberCoroutineScope()
-            val model = remember { HostsModel(core, scope).apply { start() } }
+            model = remember { HostsModel(core, scope).apply { start() } }
             AriesApp(model, settings)
         }
         compose.waitForIdle()
@@ -59,6 +61,83 @@ class TasksHomeTest {
                     .asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it)
             }
         }
+    }
+
+    // D57: leaving Chat or receiving a newer turn must not present its retained Tool/question as current.
+    @Test fun homePreviewsRequireACaughtUpTranscriptForTheCurrentStatus() {
+        val terminal = TerminalInfo("t1", "Review build", "", listOf("codex"), "/repo", "live",
+            AgentStatus.Working, turn = 1uL, statusMs = 100uL)
+        val core = FakeCore().apply {
+            addHost("home", Endpoint.Ssh("home.test", 22u, "me"))
+            terminals = listOf(terminal)
+        }
+        show(core)
+        lateinit var chat: ChatModel
+        compose.runOnIdle {
+            val board = (model.screen as Screen.Agents).board
+            chat = model.taskQuestion(board, AgentKey("h1", "t1"))!!
+            model.startTaskQuestion(chat)
+            core.pushChat(ChatSnapshot(listOf(ChatEntry("tool", null,
+                ChatEntryBody.Tool("Bash", "Running old build", "{}", ChatToolStatus.RUNNING, null))), ChatStatus.LIVE, null))
+        }
+        compose.waitUntil { chat.snapshot?.status == ChatStatus.LIVE }
+        compose.runOnIdle { core.push(listOf(terminal.copy(title = "Current transcript"))) }
+        compose.onNodeWithText("Running old build").assertExists()
+        compose.runOnIdle { core.push(listOf(terminal.copy(turn = 2uL))) }
+        compose.onNodeWithText("Running old build").assertDoesNotExist()
+        compose.runOnIdle {
+            core.pushChat(ChatSnapshot(listOf(ChatEntry("tool2", null,
+                ChatEntryBody.Tool("Bash", "Running new build", "{}", ChatToolStatus.RUNNING, null))), ChatStatus.LIVE, null))
+        }
+        compose.onNodeWithText("Running new build").assertExists()
+        compose.runOnIdle { chat.stop() }
+        compose.onNodeWithText("Running new build").assertDoesNotExist()
+        compose.runOnIdle {
+            core.push(listOf(terminal.copy(turn = 2uL, statusMs = 200uL,
+                agentStatus = AgentStatus.Blocked(BlockedReason.QUESTION, null))))
+        }
+        compose.runOnIdle {
+            model.startTaskQuestion(chat)
+            core.pushChat(ChatSnapshot(listOf(ChatEntry("q", null, ChatEntryBody.Question("request_user_input", "Question",
+                listOf(ChatQuestionPart("Use the new build?", null, false, emptyList())), ChatToolStatus.RUNNING, null))), ChatStatus.LIVE, null))
+        }
+        compose.onNodeWithText("Use the new build?").assertExists()
+        compose.runOnIdle { core.push(listOf(chat.terminal.copy(statusMs = 300uL))) }
+        compose.onNodeWithText("Use the new build?").assertDoesNotExist()
+        compose.runOnIdle { chat.stop() }
+    }
+
+    // D58: a delayed connection/reconnection must offer recovery in the card and retain its draft.
+    @Test fun newTaskWaitsForItsHostAndKeepsTheDraftThroughReconnectAndRetry() {
+        var gate = CompletableDeferred<Unit>()
+        val fake = FakeCore().apply { addHost("home", Endpoint.Ssh("home.test", 22u, "me")) }
+        val core = object : AriesCoreInterface by fake {
+            override suspend fun connect(hostId: String): HostConnection {
+                gate.await()
+                return fake.connect(hostId)
+            }
+        }
+        show(core)
+        compose.onNodeWithTag("tasks-new-task").performClick()
+        val inCard = hasAnyAncestor(hasTestTag("tasks-new-card"))
+        compose.onNode(hasText(context.getString(R.string.reconnecting)) and inCard).assertExists()
+        compose.onNodeWithText(context.getString(R.string.agents_empty_hosts_button)).assertDoesNotExist()
+        compose.runOnIdle { gate.complete(Unit) }
+        compose.onNodeWithTag("tasks-new-prompt").performTextInput("Keep my draft")
+        compose.runOnIdle {
+            gate = CompletableDeferred()
+            val link = (model.screen as Screen.Agents).board.links.getValue("h1")
+            link.lost(link.connection!!)
+        }
+        compose.onNode(hasText(context.getString(R.string.reconnecting)) and inCard).assertExists()
+        compose.runOnIdle { fake.failWith = CoreException.AuthRejected(); gate.complete(Unit) }
+        compose.onNode(hasText(context.getString(R.string.connect_retry_button)) and inCard).performClick()
+        compose.runOnIdle { fake.failWith = null }
+        compose.onNode(hasText(context.getString(R.string.connect_retry_button)) and inCard).performClick()
+        compose.onNodeWithTag("tasks-new-prompt").assertTextContains("Keep my draft")
+        compose.onNodeWithTag("tasks-new-task").performClick()
+        compose.onNodeWithTag("tasks-new-task").performClick()
+        compose.onNodeWithTag("tasks-new-prompt").assertTextContains("Keep my draft")
     }
 
     // D25: Needs must ignore helpers, unknown callers and stale feeds, including on biometric Hosts.
