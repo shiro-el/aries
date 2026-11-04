@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Material Icon Theme, MIT; see assets/licenses/material-icon-theme.txt. -->
+<vector xmlns:aapt="http://schemas.android.com/aapt" xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24.0" android:viewportHeight="24.0">
+  <path android:pathData="M 2.975 2.976 v 18.048 h 18.05 v -.03 l -4.478 -4.511 l -4.48 -4.515 l 4.48 -4.515 l 4.443 -4.477 z">
+    <aapt:attr name="android:fillColor">
+      <gradient android:type="linear" android:startX="2.846839" android:endX="21.1225294" android:startY="21.378750800000002" android:endY="2.89940168">
+        <item android:offset="0" android:color="#7c4dff" />
+        <item android:offset=".5" android:color="#d500f9" />
+        <item android:offset="1" android:color="#ef5350" />
+      </gradient>
+    </aapt:attr>
+  </path>
+</vector>

@@ -167,6 +167,7 @@ fun RemoteFilesScreen(
                             if (folder == null && directory == null) folder = path.substringBeforeLast('/').ifEmpty { "/" }
                             file = path
                         }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            FileTypeIcon(entry.path, Modifier.padding(end = 8.dp))
                             Surface(color = MaterialTheme.colorScheme.secondaryContainer) {
                                 Text(gitFileBadge(entry), Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontFamily = FontFamily.Monospace)
                             }
@@ -193,9 +194,9 @@ fun RemoteFilesScreen(
                             if (entry.directory) {
                                 Icon(painterResource(if (isExpanded) R.drawable.ic_chevron_down else R.drawable.ic_chevron_right),
                                     contentDescription = null, modifier = Modifier.size(16.dp))
-                                Icon(painterResource(if (isExpanded) R.drawable.ic_folder_open else R.drawable.ic_folder),
-                                    contentDescription = null, modifier = Modifier.padding(end = 8.dp).size(20.dp))
                             }
+                            if (!entry.directory) Spacer(Modifier.width(16.dp))
+                            FileTypeIcon(entry.name, Modifier.padding(end = 8.dp), entry.directory, isExpanded)
                             Text(if (entry.directory) "${entry.name}/" else entry.name, fontFamily = FontFamily.Monospace)
                         }
                         if (entry.path in treeLoading) Text(stringResource(R.string.files_loading))

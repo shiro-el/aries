@@ -835,6 +835,7 @@ private fun ToolContent(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 SearchableChatText(tool.name, "tool-name", style = MaterialTheme.typography.labelLarge)
+                tool.details?.path?.let { FileTypeIcon(it) }
                 SearchableChatText(
                     title, "tool-title",
                     Modifier.weight(1f, fill = false),
