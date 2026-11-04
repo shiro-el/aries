@@ -944,7 +944,12 @@
     <string name="tasks_plan_completed">완료</string>
     <string name="tasks_plan_in_progress">진행 중</string>
     <string name="tasks_plan_pending">예정</string>
+    <string name="tasks_plan_paused">일시 중지</string>
+    <string name="tasks_plan_stopped">멈춤</string>
+    <string name="tasks_plan_error">오류</string>
+    <string name="tasks_plan_last_known">마지막 상태: 진행 중</string>
     <string name="tasks_view_request">요청 보기</string>
+    <string name="tasks_answer_history">지난 질문에 답하기</string>
     <string name="tasks_tool_read">읽음</string>
     <string name="tasks_tool_search">찾음</string>
     <string name="tasks_tool_edit">수정</string>

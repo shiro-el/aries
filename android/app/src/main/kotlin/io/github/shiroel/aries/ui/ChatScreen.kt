@@ -124,6 +124,13 @@ class ChatModel(
     internal val files = RemoteFilesPanel()
     internal val preview = LocalhostPreview()
     internal var selectedSearchMatch by mutableStateOf<ChatSearchMatch?>(null)
+    /** A dismissed Tasks question stays closed across reconnects and Activity recreation. */
+    internal var dismissedTaskQuestions by mutableStateOf<Set<String>>(emptySet())
+        private set
+
+    internal fun dismissTaskQuestion(id: String) {
+        dismissedTaskQuestions = dismissedTaskQuestions + id
+    }
     var link by mutableStateOf(link)
         private set
 
@@ -1197,7 +1204,9 @@ fun ChatScreen(
     val dialogs = remember(chat) { ChatDialogState() }
     val tasks = LocalTasksDetail.current
     val liveTaskQuestion = if (tasks != null) entries.firstOrNull {
-        it.body is ChatEntryBody.Question && chat.questionMode(it.id) == ChatModel.QuestionMode.Live && chat.answers[it.id] != AnswerState.Sent
+        it.body is ChatEntryBody.Question && it.id !in chat.dismissedTaskQuestions &&
+            chat.questionMode(it.id) == ChatModel.QuestionMode.Live &&
+            chat.answers[it.id] !in setOf(AnswerState.Sending, AnswerState.Held, AnswerState.Sent, AnswerState.Unconfirmed)
     } else null
     LaunchedEffect(chat, liveTaskQuestion?.id) {
         liveTaskQuestion?.let { dialogs.tasksRequest = TasksRequest.Question(it.id, it.body as ChatEntryBody.Question) }
@@ -1509,7 +1518,7 @@ private fun ChatEntryFooter(images: List<ChatImage>, metadata: ChatResponseMetad
         }
     }
     if (LocalTasksDetail.current != null && entryId == chat.snapshot?.entries?.firstOrNull { it.body is ChatEntryBody.User }?.id) {
-        TasksPlan(chat.snapshot?.entries.orEmpty())
+        TasksPlan(chat)
     }
     HorizontalDivider(Modifier.padding(top = 8.dp))
 }

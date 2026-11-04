@@ -8,6 +8,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -25,7 +26,7 @@ import java.time.format.DateTimeFormatter
 internal fun TasksActivityEntry(entry: ChatEntry, chat: ChatModel, content: @Composable () -> Unit) {
     val body = entry.body
     if (entry.id == chat.snapshot?.entries?.firstOrNull()?.id && chat.snapshot?.entries?.none { it.body is ChatEntryBody.User } == true) {
-        TasksPlan(chat.snapshot?.entries.orEmpty())
+        TasksPlan(chat)
     }
     if (body is ChatEntryBody.Question) {
         TasksQuestionTrace(entry, chat, body)
@@ -52,22 +53,40 @@ internal fun TasksActivityEntry(entry: ChatEntry, chat: ChatModel, content: @Com
 }
 
 @Composable
-internal fun TasksPlan(entries: List<ChatEntry>) {
+internal fun TasksPlan(chat: ChatModel) {
+    val entries = chat.snapshot?.entries.orEmpty()
     val items = remember(entries) { taskPlan(entries) }
     if (items.isEmpty()) return
+    val working = chat.showWorking && chat.connectionError == null
+    val progressLabel = when {
+        chat.inputUnavailable -> R.string.tasks_plan_stopped
+        chat.connectionError != null || chat.link?.state != LinkState.Up ||
+            chat.snapshot?.status !in setOf(ChatStatus.LIVE, ChatStatus.WAITING) -> R.string.tasks_plan_last_known
+        chat.terminal.agentStatus is AgentStatus.Error -> R.string.tasks_plan_error
+        working -> R.string.tasks_plan_in_progress
+        chat.terminal.agentStatus is AgentStatus.Blocked -> R.string.tasks_plan_paused
+        else -> R.string.tasks_plan_stopped
+    }
     Column(Modifier.fillMaxWidth().padding(16.dp).testTag("tasks-plan"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.tasks_plan), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         items.forEach { item ->
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 val description = stringResource(when (item.status) {
                     TaskPlanStatus.COMPLETED -> R.string.tasks_plan_completed
-                    TaskPlanStatus.IN_PROGRESS -> R.string.tasks_plan_in_progress
+                    TaskPlanStatus.IN_PROGRESS -> progressLabel
                     TaskPlanStatus.PENDING -> R.string.tasks_plan_pending
                 })
                 val status = Modifier.semantics { stateDescription = description }
-                if (item.status == TaskPlanStatus.IN_PROGRESS) CircularProgressIndicator(status.size(16.dp), strokeWidth = 2.dp)
+                if (item.status == TaskPlanStatus.IN_PROGRESS && working) CircularProgressIndicator(status.size(16.dp), strokeWidth = 2.dp)
+                else if (item.status == TaskPlanStatus.IN_PROGRESS) Icon(painterResource(R.drawable.ic_circle_dot),
+                    contentDescription = null, modifier = status.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 else Checkbox(checked = item.status == TaskPlanStatus.COMPLETED, onCheckedChange = null, modifier = status.size(20.dp))
                 Text(item.text, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                if (item.status == TaskPlanStatus.IN_PROGRESS && !working) {
+                    Text(description, style = MaterialTheme.typography.labelSmall,
+                        color = if (progressLabel == R.string.tasks_plan_error) MaterialTheme.colorScheme.error
+                            else MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
     }
@@ -76,12 +95,31 @@ internal fun TasksPlan(entries: List<ChatEntry>) {
 @Composable
 private fun TasksQuestionTrace(entry: ChatEntry, chat: ChatModel, body: ChatEntryBody.Question) {
     val dialogs = LocalChatDialogs.current
-    val live = chat.questionMode(entry.id) == ChatModel.QuestionMode.Live && chat.answers[entry.id] != AnswerState.Sent
+    val mode = chat.questionMode(entry.id)
+    val state = chat.answers[entry.id]
+    val label = when {
+        body.status != ChatToolStatus.RUNNING -> R.string.tasks_view_request
+        state == AnswerState.Unconfirmed -> R.string.chat_question_unconfirmed
+        state == AnswerState.Sending -> R.string.chat_question_sending
+        state == AnswerState.Held -> R.string.chat_send_held
+        state == AnswerState.Sent -> R.string.chat_question_waiting
+        mode == ChatModel.QuestionMode.Live -> R.string.tasks_answer_needed
+        mode == ChatModel.QuestionMode.History -> R.string.tasks_answer_history
+        else -> R.string.tasks_view_request
+    }
     TextButton(onClick = { dialogs?.tasksRequest = TasksRequest.Question(entry.id, body) }, modifier = Modifier.fillMaxWidth().testTag("tasks-question:${entry.id}")) {
         Column(Modifier.fillMaxWidth().padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(body.title, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
-            Text(stringResource(if (live) R.string.tasks_answer_needed else R.string.tasks_view_request), style = MaterialTheme.typography.labelSmall)
+            Text(stringResource(label), style = MaterialTheme.typography.labelSmall)
+            if (state == AnswerState.Unconfirmed && body.status == ChatToolStatus.RUNNING) {
+                Text(stringResource(R.string.chat_queue_uncertain), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error)
+            }
         }
+    }
+    // Reveal the selected field in-place so the search bar and next/previous actions stay usable.
+    LocalChatSearch.current.active?.field?.takeIf { it.entryId == entry.id }?.let { field ->
+        SearchableChatText(field.text, field.key, Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp))
     }
 }
 
@@ -95,12 +133,17 @@ internal sealed interface TasksRequest {
 @Composable
 internal fun TasksRequestDialogs(dialogs: ChatDialogState, chat: ChatModel, calls: CallsModel?) {
     val request = dialogs.tasksRequest ?: return
-    ModalBottomSheet(onDismissRequest = { dialogs.tasksRequest = null },
+    ModalBottomSheet(onDismissRequest = {
+        if (request is TasksRequest.Question) chat.dismissTaskQuestion(request.id)
+        dialogs.tasksRequest = null
+    },
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
             when (request) {
-                is TasksRequest.Question -> QuestionView(chat, request.id,
-                    chat.snapshot?.entries?.find { it.id == request.id }?.body as? ChatEntryBody.Question ?: request.body)
+                is TasksRequest.Question -> CompositionLocalProvider(LocalChatSearchEntry provides request.id) {
+                    QuestionView(chat, request.id,
+                        chat.snapshot?.entries?.find { it.id == request.id }?.body as? ChatEntryBody.Question ?: request.body)
+                }
                 is TasksRequest.Call -> if (calls != null) ConsoleChatCall(
                     calls.calls.find { it.key == request.entry.key } ?: request.entry.copy(live = false), calls)
             }
