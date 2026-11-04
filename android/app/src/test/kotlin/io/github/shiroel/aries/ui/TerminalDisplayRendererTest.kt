@@ -105,7 +105,7 @@ class TerminalDisplayRendererTest {
         compose.onNodeWithContentDescription(context.getString(R.string.terminal_search_button)).performClick()
         compose.mainClock.advanceTimeBy(400)
         compose.runOnIdle { assertEquals("search is an overlay, not a Host resize", 1, view.resizes.size) }
-        val screenshot = java.io.File("/tmp/aries-mvp-run/lanes/223-shots/typing-search-overlay.png")
+        val screenshot = java.io.File("build/reports/terminal-size/typing-search-overlay.png")
         screenshot.parentFile?.mkdirs()
         screenshot.outputStream().use { compose.onRoot().captureToImage().asAndroidBitmap()
             .compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }

@@ -82,7 +82,7 @@ class TerminalSelectionToChatTest {
         assertFalse(view.options.observe)
         selectWord(view)
         fun shot(name: String) {
-            val file = java.io.File("/tmp/aries-mvp-run/lanes/223-shots/$name.png")
+            val file = java.io.File("build/reports/terminal-size/$name.png")
             file.parentFile?.mkdirs()
             file.outputStream().use { compose.onRoot().captureToImage().asAndroidBitmap()
                 .compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
