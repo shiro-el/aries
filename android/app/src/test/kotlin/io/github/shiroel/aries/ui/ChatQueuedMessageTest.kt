@@ -102,9 +102,12 @@ class ChatQueuedMessageTest {
         compose.waitForIdle()
         assertEquals(emptyList<QueuedChatMessage>(), chat.queuedMessages)
         send("third")
+        // Storage completion is asynchronous; only confirmed input has a dismissible receipt.
+        compose.waitUntil(5_000) { chat.queuedMessages.any { it.draft == "third" && it.confirmed } }
         compose.onNodeWithContentDescription(str(R.string.chat_delivery_dismiss_button)).performClick()
         compose.waitForIdle()
         assertEquals(emptyList<QueuedChatMessage>(), chat.queuedMessages)
+        compose.waitUntil(5_000) { core.chatOutbox(chat.host.id, chat.terminal.address)?.let(::decodeChatOutbox)?.messages.orEmpty().isEmpty() }
         assertEquals(emptyList<QueuedChatMessage>(), ChatModel(core, chat.host, chat.terminal).queuedMessages)
         assertEquals(listOf("t1" to "first", "t1" to "second", "t1" to "third"), connection.typed)
     }
