@@ -29,12 +29,16 @@ data class WatchSummary(
     val languageTag: String = "",
     val inbox: List<WatchAgent> = agents,
     val totalAgents: Int = inbox.size,
+    val hostFetchedAtMs: Map<String, Long> = emptyMap(),
 ) {
     init {
         require(languageTag.length <= 64)
         require(waiting >= 0 && fetchedAtMs >= 0 && agents.size <= 3 && totalAgents >= 0)
         require((agents + inbox).all { it.hostId.isNotBlank() && it.terminal.isNotBlank() })
+        require(hostFetchedAtMs.all { (host, time) -> host.isNotBlank() && time >= 0 })
     }
+
+    fun fetchedAt(hostId: String): Long = if (hostFetchedAtMs.isEmpty()) fetchedAtMs else hostFetchedAtMs[hostId] ?: 0L
 
     fun toRequest(): PutDataRequest {
         val rows = inbox.take(MAX_INBOX_AGENTS).map { it.bounded() }.toMutableList()
@@ -45,6 +49,7 @@ data class WatchSummary(
             dataMap.putInt("waiting", waiting)
             dataMap.putInt("total_agents", maxOf(totalAgents, inbox.size))
             dataMap.putLong("fetched_at_ms", fetchedAtMs)
+            dataMap.putDataMap("host_fetched_at_ms", DataMap().apply { hostFetchedAtMs.forEach { (host, time) -> putLong(host, time) } })
             dataMap.putDataMapArrayList("agents", ArrayList(agents.map { it.bounded().toMap(false) }))
             dataMap.putDataMapArrayList("inbox", ArrayList(rows.map { it.toMap(true) }))
         }.asPutDataRequest()
@@ -77,7 +82,8 @@ data class WatchSummary(
                 map.getDataMapArrayList("inbox")?.also { require(it.size <= MAX_INBOX_AGENTS) }?.map { it.toAgent() } ?: agents
             else agents
             WatchSummary(map.getInt("waiting"), agents, map.getLong("fetched_at_ms"), map.getString("language_tag") ?: "", inbox,
-                if (map.containsKey("total_agents")) map.getInt("total_agents") else inbox.size)
+                if (map.containsKey("total_agents")) map.getInt("total_agents") else inbox.size,
+                map.getDataMap("host_fetched_at_ms")?.let { times -> times.keySet().associateWith { times.getLong(it) } }.orEmpty())
         }.getOrNull()
     }
 }
@@ -102,6 +108,7 @@ private fun WatchAgent.bounded(): WatchAgent {
 private fun WatchAgent.toMap(details: Boolean) = DataMap().apply {
     putString("host", hostId); putString("terminal", terminal)
     putString("name", name); putString("status", status)
+    putString("host_name", hostName)
     if (details) {
         putString("host_name", hostName); putString("project", project)
         putString("request_body", requestBody); putString("conversation_summary", conversationSummary)

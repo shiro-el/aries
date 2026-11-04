@@ -1690,8 +1690,13 @@ class HostsModel(
     /** Resolve QS taps from the latest persisted pull, including the whole machine address. */
     fun openTile() {
         explicitSurfaceEntry = true
-        val target = io.github.shiroel.aries.AgentSurfaces.attention(core)
-        if (target == null) openAgents() else openPushedAgent(target.hostId, target.terminal)
+        scope.launch {
+            val target = withContext(keyWork) {
+                try { io.github.shiroel.aries.AgentSurfaces.attention(core) }
+                catch (_: CoreException) { null }
+            }
+            if (target == null) openAgents() else openPushedAgent(target.hostId, target.terminal)
+        }
     }
 
     /** Every exported Activity entry uses this gate; only published capabilities bypass approval. */
@@ -1931,7 +1936,8 @@ class HostsModel(
 
     val nextWaitingAgent: AgentEntry?
         get() = currentAgentKey?.let { current -> drawerAgents.firstOrNull {
-            it.key != current && isWaiting(it.terminal.agentStatus)
+            it.key != current && quickOpenSources.any { source -> source.host.id == it.host.id && source.live } &&
+                isWaiting(it.terminal.agentStatus)
         } }
 
     /** Switch in place over the original list, using the same entry path as drawer and inbox. */

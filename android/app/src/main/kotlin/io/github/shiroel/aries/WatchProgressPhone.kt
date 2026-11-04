@@ -18,13 +18,15 @@ import kotlinx.coroutines.tasks.await
 internal object WatchProgressPhone {
     private fun prefs(context: Context) = context.getSharedPreferences("watch-progress", Context.MODE_PRIVATE)
 
-    fun latest(context: Context): WatchProgress? = runCatching {
-        WatchProgress.fromBytes(Base64.decode(prefs(context).getString("payload", null), Base64.NO_WRAP))
-    }.getOrNull()
+    fun all(context: Context): List<WatchProgress> = prefs(context).all.mapNotNull { (key, value) ->
+        if (key != "payload" && !key.startsWith("payload:")) null else runCatching {
+            WatchProgress.fromBytes(Base64.decode(value as String, Base64.NO_WRAP))
+        }.getOrNull()
+    }
 
     @Synchronized fun progress(context: Context, host: String, progress: PushContent.Progress) {
         val at = millis(progress.at)
-        val previous = latest(context)
+        val previous = all(context).find { it.hostId == host && it.terminal == progress.terminal }
         if (previous != null && (at < previous.atMs ||
             (at == previous.atMs && previous.cancelled && previous.hostId == host && previous.terminal == progress.terminal))) return
         save(context, WatchProgress(host, progress.terminal, NotificationMarkdown.render(progress.name ?: progress.terminal).plain.take(128),
@@ -33,14 +35,21 @@ internal object WatchProgressPhone {
     }
 
     @Synchronized fun completed(context: Context, host: String, terminal: String, at: ULong) {
-        val previous = latest(context) ?: return
+        val previous = all(context).find { it.hostId == host && it.terminal == terminal } ?: return
         if (previous.hostId != host || previous.terminal != terminal || millis(at) < previous.atMs) return
         save(context, previous.copy(atMs = millis(at), cancelled = true))
     }
 
     private fun save(context: Context, progress: WatchProgress) {
         val bytes = requireNotNull(progress.toRequest().data)
-        if (prefs(context).edit().putString("payload", Base64.encodeToString(bytes, Base64.NO_WRAP)).commit()) enqueue(context)
+        val editor = prefs(context).edit()
+        // Carry the legacy single record forward when the first per-Agent update arrives.
+        prefs(context).getString("payload", null)?.let { legacy ->
+            val old = runCatching { WatchProgress.fromBytes(Base64.decode(legacy, Base64.NO_WRAP)) }.getOrNull()
+            if (old != null) editor.putString("payload:${old.dataPath}", legacy)
+        }
+        editor.remove("payload").putString("payload:${progress.dataPath}", Base64.encodeToString(bytes, Base64.NO_WRAP))
+        if (editor.commit()) enqueue(context)
     }
 
     fun enqueue(context: Context) {
@@ -62,10 +71,14 @@ class WatchProgressWorker @JvmOverloads constructor(
     },
 ) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
-        val progress = WatchProgressPhone.latest(applicationContext) ?: return Result.success()
+        val progress = WatchProgressPhone.all(applicationContext)
         return try {
             // GMS retains the DataItem while disconnected and delivers it when the watch returns.
-            publish(progress.toRequest())
+            progress.forEach { publish(it.toRequest()) }
+            // Older watches still subscribe to the single-record path.
+            progress.maxByOrNull { it.atMs }?.let { latest ->
+                publish(PutDataRequest.create(WatchProgress.DATA_PATH).setData(requireNotNull(latest.toRequest().data)).setUrgent())
+            }
             Result.success()
         } catch (cancelled: CancellationException) {
             throw cancelled

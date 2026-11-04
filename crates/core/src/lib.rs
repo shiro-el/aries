@@ -487,6 +487,7 @@ impl AriesCore {
             hosts: next.clone(),
         })?;
         *hosts = next;
+        self.last_known.changed();
         Ok(to_host(&saved))
     }
 
