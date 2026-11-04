@@ -38,6 +38,7 @@ internal fun AgentScreenHeader(
     preview: LocalhostPreview? = null,
     usage: AgentUsage? = null,
 ) {
+    val tasks = LocalTasksDetail.current
     var menu by remember(terminal.address) { mutableStateOf(false) }
     var showUsage by remember(terminal.address) { mutableStateOf(false) }
     if (showUsage) AgentUsageSheet(usage) { showUsage = false }
@@ -47,16 +48,18 @@ internal fun AgentScreenHeader(
     val openFiles = LocalOpenFiles.current
     val quickOpen = LocalQuickOpen.current
     val openDrawer = LocalConsoleMenu.current
-    Row(Modifier.fillMaxWidth().height(56.dp).testTag("console-top-bar"), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().then(if (tasks == null) Modifier.height(56.dp) else Modifier.heightIn(min = 56.dp))
+        .testTag("console-top-bar"), verticalAlignment = Alignment.CenterVertically) {
         val backLabel = stringResource(R.string.back_button)
         IconButton(onClick = onBack, modifier = Modifier.size(48.dp).testTag("console-back")) {
             Icon(painterResource(R.drawable.ic_arrow_left), contentDescription = backLabel, modifier = Modifier.size(20.dp))
         }
         Row(Modifier.weight(1f).padding(end = 4.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            terminal.agentStatus?.let { AgentStatusMark(it, modifier = Modifier.size(20.dp)) }
-            Text(title, Modifier.weight(1f, fill = false), fontFamily = FontFamily.Monospace,
-                fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (tasks == null) terminal.agentStatus?.let { AgentStatusMark(it, modifier = Modifier.size(20.dp)) }
+            Text(title, Modifier.weight(1f, fill = false), fontFamily = if (tasks == null) FontFamily.Monospace else FontFamily.Default,
+                fontSize = if (tasks == null) 14.sp else 16.sp, fontWeight = if (tasks == null) FontWeight.Medium else FontWeight.SemiBold,
+                maxLines = if (tasks == null) 1 else accessibleNameLines(), overflow = TextOverflow.Ellipsis)
             if (terminal.watched) {
                 val label = stringResource(R.string.agent_watch_label)
                 Canvas(Modifier.size(12.dp).semantics { contentDescription = label }) {
@@ -65,7 +68,7 @@ internal fun AgentScreenHeader(
                 }
             }
         }
-        onView?.let { AgentViewSwitch(current, it) }
+        if (tasks == null) onView?.let { AgentViewSwitch(current, it) }
         val inbox = LocalCallInbox.current
         if (inbox?.calls?.calls?.any { it.answerable } == true) ConsoleInboxAction()
         if (preview != null && preview.ports.isNotEmpty()) {
@@ -120,6 +123,10 @@ internal fun AgentScreenHeader(
                 }
             }
         }
+    }
+    if (tasks != null) {
+        TasksDetailMetadata(terminal, hostName)
+        TasksDetailTabs(tasks, terminal)
     }
     HorizontalDivider()
 }

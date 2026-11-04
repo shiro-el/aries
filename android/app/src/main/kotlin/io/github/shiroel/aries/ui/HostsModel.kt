@@ -1282,6 +1282,7 @@ class HostsModel(
             if (settingsReturnTo != null) back()
             hostSettings.remove(prompt.host.id)
             conversations.keys.removeAll { it.hostId == prompt.host.id }
+            taskChanges.keys.removeAll { it.hostId == prompt.host.id }
             hosts = core.hosts()
             hostsChanged()
             settingsHost = null
@@ -1451,6 +1452,10 @@ class HostsModel(
 
     /** Read already available transcript facts; the task list never opens per-row SSH watches. */
     internal fun taskTranscript(key: AgentKey) = conversations[key]?.snapshot
+
+    private val taskChanges = mutableMapOf<AgentKey, TasksChangesState>()
+    internal fun taskChanges(key: AgentKey) = taskChanges.getOrPut(key) { TasksChangesState() }
+    internal fun taskChangeStats(key: AgentKey, terminal: TerminalInfo) = taskChanges[key]?.takeIf { it.matches(terminal) }?.stats
 
     private fun chat(link: HostLink?, terminal: TerminalInfo, returnTo: Screen, draft: String = "") {
         val line = link ?: return

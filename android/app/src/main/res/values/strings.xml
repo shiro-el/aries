@@ -899,6 +899,24 @@
     <string name="tasks_answer_needed">Answer needed</string>
     <string name="tasks_urgent_call">ϟ Urgent Call</string>
 
+    <!-- Tasks detail: activity, plans and read-only changes. -->
+    <string name="tasks_activity">Activity</string>
+    <string name="tasks_changes">Changes</string>
+    <string name="tasks_changes_count">Changes %1$d</string>
+    <string name="tasks_change_stats">+%1$d −%2$d</string>
+    <string name="tasks_request">Request</string>
+    <string name="tasks_plan">Plan</string>
+    <string name="tasks_plan_completed">Done</string>
+    <string name="tasks_plan_in_progress">In progress</string>
+    <string name="tasks_plan_pending">Pending</string>
+    <string name="tasks_view_request">View request</string>
+    <string name="tasks_tool_read">Read</string>
+    <string name="tasks_tool_search">Searched</string>
+    <string name="tasks_tool_edit">Edited</string>
+    <string name="tasks_tool_write">Created</string>
+    <string name="tasks_tool_run">Ran</string>
+
+
     <string name="new_task_title">New task</string>
     <string name="new_task_on_host">New task on %1$s</string>
     <string name="new_task_prompt">First prompt</string>

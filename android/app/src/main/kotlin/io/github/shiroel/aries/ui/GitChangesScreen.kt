@@ -20,6 +20,8 @@ internal fun ColumnScope.GitFileDiff(
     revision: Int,
     wrap: Boolean,
     onSend: ((String) -> Unit)?,
+    cachedDiffs: Map<GitDiffKind, GitDiff> = emptyMap(),
+    colors: DiffColors = DiffColors(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.error),
 ) {
     var kind by remember(selectedFile) { mutableStateOf(when {
         selectedFile.untracked -> GitDiffKind.UNTRACKED
@@ -29,12 +31,12 @@ internal fun ColumnScope.GitFileDiff(
     var diff by remember(selectedFile, kind) { mutableStateOf<GitDiff?>(null) }
     var error by remember(selectedFile, kind) { mutableStateOf<Message?>(null) }
     var selection by remember(selectedFile, kind) { mutableStateOf<IntRange?>(null) }
-    LaunchedEffect(connection, address, cwd, selectedFile, kind, revision) {
+    LaunchedEffect(connection, address, cwd, selectedFile, kind, revision, cachedDiffs) {
         diff = null
         error = null
         selection = null
         try {
-            diff = (connection ?: throw CoreException.Closed()).gitDiff(address, cwd, selectedFile.path, kind)
+            diff = cachedDiffs[kind] ?: (connection ?: throw CoreException.Closed()).gitDiff(address, cwd, selectedFile.path, kind)
         } catch (e: CancellationException) { throw e }
         catch (e: Exception) { error = errorMessage(e) }
     }
@@ -62,6 +64,6 @@ internal fun ColumnScope.GitFileDiff(
             if (onSend == null) null else { index ->
                 val first = selection
                 selection = if (first == null || first.first != first.last) index..index else minOf(first.first, index)..maxOf(first.first, index)
-            }, wrap = wrap)
+            }, wrap = wrap, colors = colors)
     }
 }

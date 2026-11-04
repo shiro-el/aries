@@ -51,9 +51,11 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /** Sending from an Agent's Chat into its Terminal, against a fake core. */
 @RunWith(RobolectricTestRunner::class)
+@Config(qualifiers = "h740dp") // Exercise the expanded phone composer, including multiline editing.
 class ChatSendTest {
     @get:Rule val compose = createComposeRule()
 
@@ -85,6 +87,24 @@ class ChatSendTest {
         compose.onNodeWithText(str(R.string.chat_input_label)).performTextInput(text)
         compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
         compose.waitForIdle()
+    }
+
+    @Test
+    @Config(qualifiers = "h400dp")
+    fun compactToolsHistoryRestoresADraftForEditingWithoutSendingIt() {
+        // Regression: history selection inside compact tools must update the same composer draft.
+        val conn = openChat(FakeCore())
+        type("previous input")
+        compose.onNodeWithContentDescription(str(R.string.chat_input_tools_button)).performClick()
+        compose.onNodeWithContentDescription(str(R.string.input_history_title)).performClick()
+        compose.onNode(hasText("previous input") and hasClickAction()).performClick()
+        compose.onNodeWithText(str(R.string.ok_button)).performClick()
+        val input = compose.onNodeWithContentDescription(str(R.string.chat_input_label))
+        input.assertTextEquals("previous input")
+        assertEquals(listOf("t1" to "previous input"), conn.typed)
+        input.performTextReplacement("edited input")
+        compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
+        assertEquals(listOf("t1" to "previous input", "t1" to "edited input"), conn.typed)
     }
 
     @Test

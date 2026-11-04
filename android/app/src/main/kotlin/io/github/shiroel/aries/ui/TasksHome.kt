@@ -23,6 +23,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -130,7 +131,7 @@ internal fun TasksHome(model: HostsModel, board: AgentBoard) {
                         showHost = false, canPin = model::canPin)
                 }
             } else items(visible, key = { "task:${it.key.hostId}:${it.key.address}" }) { entry ->
-                TasksTaskRow(entry, model.taskTranscript(entry.key), onOpen = {
+                TasksTaskRow(entry, model.taskTranscript(entry.key), stats = model.taskChangeStats(entry.key, entry.terminal), onOpen = {
                     val need = needs.filterIsInstance<TaskNeed.Agent>().firstOrNull { it.entry.key == entry.key }
                     if (filter == TasksFilter.NEEDS && need != null) openNeed(need) else model.selectListedAgent(board, entry)
                 })
@@ -147,7 +148,7 @@ internal fun TasksHome(model: HostsModel, board: AgentBoard) {
 internal fun tasksAttentionColor(): Color = if (MaterialTheme.colorScheme.background.luminance() < .5f) Brand.Saffron else Color(0xFF8F5E06)
 
 @Composable
-internal fun TasksTaskRow(entry: AgentEntry, transcript: ChatSnapshot? = null,
+internal fun TasksTaskRow(entry: AgentEntry, transcript: ChatSnapshot? = null, stats: TaskChangeStats? = null,
     onLongClick: (() -> Unit)? = null, onOpen: () -> Unit) {
     val status = entry.terminal.agentStatus
     val blocked = status as? AgentStatus.Blocked
@@ -158,7 +159,7 @@ internal fun TasksTaskRow(entry: AgentEntry, transcript: ChatSnapshot? = null,
         is AgentStatus.Error -> status.message?.takeIf(String::isNotBlank)
             ?: (transcript?.entries?.lastOrNull { it.body is ChatEntryBody.AgentError }?.body as? ChatEntryBody.AgentError)?.detail
         AgentStatus.Working -> lastTool?.title?.takeIf(String::isNotBlank)
-        else -> null
+        else -> stats?.let { stringResource(R.string.tasks_change_stats, it.added, it.removed) }
     }
     val label = when {
         !entry.live -> R.string.tasks_offline
@@ -182,7 +183,9 @@ internal fun TasksTaskRow(entry: AgentEntry, transcript: ChatSnapshot? = null,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
             if (entry.live && entry.terminal.statusMs != null) AgentElapsedTime(entry.terminal.statusMs)
             else if (!entry.live) entry.lastUpdatedMs?.let { Text(agentLastSeen(it), style = MaterialTheme.typography.bodySmall) }
-        }, summary = summary, mono = blocked?.reason == BlockedReason.PERMISSION, onLongClick = onLongClick)
+        }, summary = summary, mono = blocked?.reason == BlockedReason.PERMISSION, onLongClick = onLongClick,
+        styledSummary = if (status !is AgentStatus.Blocked && status !is AgentStatus.Error && status != AgentStatus.Working)
+            stats?.let { tasksChangeText(it) } else null)
 }
 
 @Composable
@@ -203,7 +206,7 @@ private fun TasksCallRow(entry: CallEntry, onOpen: () -> Unit) {
 @Composable
 private fun TasksRow(title: String, label: String, accent: Color, urgent: Boolean, modifier: Modifier,
     onOpen: () -> Unit, metadata: @Composable RowScope.() -> Unit, summary: String?, mono: Boolean = false,
-    onLongClick: (() -> Unit)? = null) {
+    onLongClick: (() -> Unit)? = null, styledSummary: AnnotatedString? = null) {
     Column(modifier.fillMaxWidth().then(if (urgent) Modifier.background(Brand.Saffron.copy(alpha = .07f))
         .drawBehind { drawLine(Brand.Saffron, Offset(1.5.dp.toPx(), 0f), Offset(1.5.dp.toPx(), size.height), 3.dp.toPx()) } else Modifier)
         .combinedClickable(role = Role.Button, onClick = onOpen, onLongClick = onLongClick,
@@ -218,7 +221,7 @@ private fun TasksRow(title: String, label: String, accent: Color, urgent: Boolea
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), content = metadata)
         summary?.takeIf(String::isNotBlank)?.let {
-            Text(it.lineSequence().first(), style = MaterialTheme.typography.bodySmall,
+            Text(styledSummary ?: AnnotatedString(it.lineSequence().first()), style = MaterialTheme.typography.bodySmall,
                 color = accent, fontFamily = if (mono) FontFamily.Monospace else FontFamily.SansSerif,
                 maxLines = accessibleNameLines(), overflow = TextOverflow.Ellipsis)
         }
