@@ -96,6 +96,7 @@ class ChatSendTest {
         val core = FakeCore()
         val conn = openChat(core)
         type("previous input")
+        compose.waitForTypedMessages(conn, 1)
         compose.onNodeWithContentDescription(str(R.string.chat_input_tools_button)).performClick()
         compose.onNodeWithContentDescription(str(R.string.input_history_title)).performClick()
         compose.onNode(hasText("previous input") and hasClickAction()).performClick()
@@ -110,7 +111,7 @@ class ChatSendTest {
         core.push(listOf(claude.copy(agentStatus = AgentStatus.Working)))
         compose.waitForIdle()
         core.push(listOf(claude.copy(turn = 1uL)))
-        compose.waitUntil(5_000) { conn.typed.size == 2 }
+        compose.waitForTypedMessages(conn, 2)
         assertEquals(listOf("t1" to "previous input", "t1" to "edited input"), conn.typed)
     }
 
@@ -121,6 +122,7 @@ class ChatSendTest {
         val input = compose.onNodeWithContentDescription(str(R.string.chat_input_label))
         input.performTextInput("first\n한국어")
         compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
+        compose.waitForTypedMessages(conn, 1)
         compose.onNodeWithContentDescription("Input history").performClick()
         compose.onNode(hasText("first\n한국어") and hasClickAction()).performClick()
         input.assertTextEquals("first\n한국어")
@@ -132,7 +134,7 @@ class ChatSendTest {
         core.push(listOf(claude.copy(agentStatus = AgentStatus.Working)))
         compose.waitForIdle()
         core.push(listOf(claude.copy(turn = 1uL)))
-        compose.waitUntil(5_000) { conn.typed.size == 2 }
+        compose.waitForTypedMessages(conn, 2)
         assertEquals(listOf("t1" to "first\n한국어", "t1" to "edited message"), conn.typed)
         compose.onNodeWithContentDescription("Input history").performClick()
         compose.onNodeWithText("Clear history").performClick()
@@ -154,6 +156,7 @@ class ChatSendTest {
 
         compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
         compose.waitForIdle()
+        compose.waitForTypedMessages(conn, 1)
         assertEquals(listOf("t1" to message), conn.typed)
         input.assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
     }
@@ -223,6 +226,7 @@ class ChatSendTest {
         assertTrue("recovery must not replay a draft automatically", conn.typed.isEmpty())
         compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
         compose.waitForIdle()
+        compose.waitForTypedMessages(conn, 1)
         assertEquals(listOf("t1" to "please run the tests"), conn.typed)
     }
 
@@ -262,6 +266,7 @@ class ChatSendTest {
 
         type("now add a test")
 
+        compose.waitForTypedMessages(conn, 1)
         assertEquals(listOf("t1" to "now add a test"), conn.typed)
         compose.onNodeWithText("now add a test").assertExists()
         compose.waitUntil(5_000) {
@@ -278,6 +283,7 @@ class ChatSendTest {
         conn.sendHold = hold
 
         type("after you")
+        compose.waitUntil(5_000) { compose.onAllNodesWithText(str(R.string.chat_send_held)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(str(R.string.chat_send_held)).assertExists()
         compose.onNodeWithText("after you").assertExists()
         compose.onNodeWithContentDescription(str(R.string.chat_queue_cancel_button)).assertDoesNotExist()
@@ -286,6 +292,7 @@ class ChatSendTest {
 
         hold.complete(Unit)
         compose.waitForIdle()
+        compose.waitForTypedMessages(conn, 1)
         compose.onNodeWithText(str(R.string.chat_send_held)).assertDoesNotExist()
         assertEquals(listOf("t1" to "after you"), conn.typed)
     }
@@ -299,6 +306,7 @@ class ChatSendTest {
         type("go on")
 
         assertEquals(emptyList<Pair<String, String>>(), conn.typed)
+        compose.waitUntil(5_000) { compose.onAllNodesWithText(str(R.string.chat_send_refused)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(str(R.string.chat_send_refused)).assertExists()
         compose.onNodeWithText(str(R.string.chat_blocked_permission)).assertExists()
         compose.onNodeWithText("Write: /repo/hello.txt").assertExists()
@@ -376,6 +384,7 @@ class ChatSendTest {
         type("hello")
 
         compose.onNodeWithText("hello").assertExists()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText(str(R.string.chat_queue_uncertain)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(str(R.string.chat_queue_uncertain)).assertExists()
     }
 
@@ -402,6 +411,7 @@ class ChatSendTest {
         compose.onNodeWithText(str(R.string.chat_blocked_question)).assertDoesNotExist()
         compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue")).performClick()
         compose.waitForIdle()
+        compose.waitUntil(5_000) { compose.runOnIdle { core.answers.isNotEmpty() } }
         assertEquals(listOf(Triple("t1", "toolu_q", listOf(listOf(1u)))), core.answers)
     }
 }

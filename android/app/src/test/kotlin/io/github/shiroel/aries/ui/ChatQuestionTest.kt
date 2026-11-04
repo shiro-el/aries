@@ -97,6 +97,7 @@ class ChatQuestionTest {
         screenshot("permission")
         compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Deny")).performClick()
         compose.waitForIdle()
+        compose.waitUntil(5_000) { compose.runOnIdle { core.answers.size >= 1 } }
         assertEquals("permission:current", core.answers.single().second)
         assertEquals(listOf(listOf(2u)), core.answers.single().third)
         assertTrue(core.connection!!.typed.isEmpty())
@@ -125,11 +126,13 @@ class ChatQuestionTest {
         always.performClick()
         compose.onNode(hasText(str(R.string.chat_permission_allow_always)) and hasAnyAncestor(isDialog())).performClick()
         compose.waitForIdle()
+        compose.waitUntil(5_000) { compose.runOnIdle { core.answers.size >= 1 } }
         assertEquals(listOf(listOf(1u)), core.answers.single().third)
         core.pushChat(ChatSnapshot(listOf(permission("permission:2")), ChatStatus.LIVE, null))
         compose.waitForIdle()
         compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Allow")).performClick()
         compose.waitForIdle()
+        compose.waitUntil(5_000) { compose.runOnIdle { core.answers.size >= 2 } }
         assertEquals(listOf(listOf(0u)), core.answers.last().third)
         assertEquals(2, core.answers.size)
         compose.onNode(isDialog()).assertDoesNotExist()
@@ -162,6 +165,7 @@ class ChatQuestionTest {
         open(core)
         core.pushChat(ChatSnapshot(listOf(question("q-lost")), ChatStatus.LIVE, null))
         compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Red")).performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText(str(R.string.chat_question_unconfirmed)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(str(R.string.chat_question_unconfirmed)).assertExists()
         compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue")).assertDoesNotExist()
         compose.runOnIdle { assertEquals(1, core.answers.size) }
@@ -175,6 +179,7 @@ class ChatQuestionTest {
         compose.onNodeWithContentDescription(str(R.string.chat_question_text_label, "Color?")).performTextInput("보라색")
         compose.onNodeWithText(str(R.string.chat_question_send)).performClick()
         compose.waitForIdle()
+        compose.waitUntil(5_000) { compose.runOnIdle { core.textAnswers.isNotEmpty() } }
         assertEquals(listOf(listOf<String?>("보라색")), core.textAnswers.map { it.second })
         assertTrue(core.connection!!.typed.isEmpty())
         compose.onNodeWithText(str(R.string.chat_question_send)).assertDoesNotExist()
@@ -198,6 +203,7 @@ class ChatQuestionTest {
         compose.waitForIdle()
         compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue")).performClick()
         compose.waitForIdle()
+        compose.waitUntil(5_000) { compose.runOnIdle { core.answers.size >= 1 } }
         screenshot("sent-waiting")
         compose.mainClock.advanceTimeBy(4_000)
         screenshot("sent-still-blocked")
@@ -229,6 +235,7 @@ class ChatQuestionTest {
         compose.waitForIdle()
         blue.assertIsEnabled().performClick()
         compose.waitForIdle()
+        compose.waitUntil(5_000) { compose.runOnIdle { core.answers.size >= 1 } }
         assertEquals(listOf(Triple("t1", "q1", listOf(listOf(1u)))), core.answers)
         assertTrue(core.connection!!.typed.isEmpty())
     }
@@ -245,12 +252,14 @@ class ChatQuestionTest {
         val blue = compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue"))
         blue.performClick()
         compose.waitForIdle()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText(str(R.string.chat_send_held)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(str(R.string.chat_send_held)).assertExists()
         screenshot("held")
         blue.assertIsNotEnabled().performClick()
         assertTrue(core.connection!!.typed.isEmpty())
         hold.complete(Unit)
         compose.waitForIdle()
+        compose.waitForTypedMessages(core.connection!!, 1)
         assertEquals(listOf("t1" to "Blue"), core.connection!!.typed)
     }
 
@@ -265,10 +274,12 @@ class ChatQuestionTest {
         compose.waitForIdle()
         compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue")).performClick()
         compose.waitForIdle()
+        compose.waitForTypedMessages(core.connection!!, 1)
         compose.onNodeWithText(str(R.string.chat_sending)).assertExists()
         assertEquals(listOf("t1" to "Blue"), core.connection!!.typed)
         response.complete(Unit)
         compose.waitForIdle()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText(str(R.string.chat_queue_uncertain)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(str(R.string.chat_queue_uncertain)).assertExists()
         compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue")).assertDoesNotExist()
         screenshot("history-unconfirmed")
@@ -284,6 +295,7 @@ class ChatQuestionTest {
         compose.onNodeWithText(str(R.string.chat_delivery_retry_button)).performClick()
         compose.onNode(hasText(str(R.string.chat_delivery_retry_button)) and hasAnyAncestor(isDialog())).performClick()
         compose.waitForIdle()
+        compose.waitForTypedMessages(core.connection!!, 2)
         assertEquals(listOf("t1" to "Blue", "t1" to "Blue"), core.connection!!.typed)
         assertEquals(2, core.connection!!.calls.count { it == "sendMessage" })
     }
@@ -315,12 +327,14 @@ class ChatQuestionTest {
         compose.onAllNodesWithContentDescription(str(R.string.chat_question_option_label, "Blue")).assertCountEquals(1)
         compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue")).performClick()
         compose.waitForIdle()
+        compose.waitUntil(5_000) { compose.runOnIdle { core.answers.size >= 1 } }
         assertEquals("q1", core.answers.single().second)
         val done = first.copy(body = (first.body as ChatEntryBody.Question).copy(status = ChatToolStatus.DONE, output = "Blue"))
         core.pushChat(ChatSnapshot(listOf(done, second), ChatStatus.LIVE, null))
         compose.waitForIdle()
         compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Red")).performClick()
         compose.waitForIdle()
+        compose.waitUntil(5_000) { compose.runOnIdle { core.answers.size >= 2 } }
         assertEquals(listOf("q1", "q2"), core.answers.map { it.second })
     }
 
@@ -333,6 +347,7 @@ class ChatQuestionTest {
         compose.onNodeWithText(str(R.string.chat_question_history)).assertExists()
         compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue")).performClick()
         compose.waitForIdle()
+        compose.waitForTypedMessages(core.connection!!, 1)
         assertEquals(listOf("t1" to "Blue"), core.connection!!.typed)
         assertTrue(core.answers.isEmpty())
         compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue")).assertDoesNotExist()
@@ -347,6 +362,7 @@ class ChatQuestionTest {
         compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue")).performClick()
         compose.waitForIdle()
         assertTrue(core.connection!!.typed.isEmpty())
+        compose.waitUntil(5_000) { compose.onAllNodesWithText(str(R.string.chat_answer_gone)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(str(R.string.chat_answer_gone)).assertExists()
         compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue")).assertDoesNotExist()
     }
@@ -416,6 +432,7 @@ class ChatQuestionTest {
         }
         compose.onNodeWithContentDescription(str(R.string.chat_question_option_label, "Blue")).performClick()
         compose.waitForIdle()
+        compose.waitUntil(5_000) { compose.runOnIdle { core.answers.size >= 1 } }
         assertEquals("q1", core.answers.single().second)
         assertTrue(core.connection!!.typed.isEmpty())
     }

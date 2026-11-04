@@ -70,6 +70,7 @@ class ThreadChatStatusComposerTest {
         compose.onNodeWithContentDescription(str(R.string.chat_message_input_label)).performTextInput("Next instruction")
         compose.onNodeWithContentDescription(str(R.string.chat_send_button)).performClick()
         compose.waitForIdle()
+        compose.waitForTypedMessages(connection, 1)
         assertEquals(listOf("t1" to "Next instruction"), connection.typed)
 
         core.push(listOf(agent))

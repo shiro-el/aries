@@ -57,9 +57,11 @@ class ChatQueueLifetimeTest {
         compose.runOnIdle { hosts.closeChat() }
         assertTrue(hosts.screen is Screen.Browse)
         status(AgentStatus.Idle)
+        compose.waitForTypedMessages(line, 1)
         assertEquals(listOf("t1" to "first"), line.typed)
         status(AgentStatus.Working)
         status(AgentStatus.Idle, 1uL)
+        compose.waitForTypedMessages(line, 2)
         assertEquals(listOf("t1" to "first", "t1" to "second"), line.typed)
     }
 
@@ -72,9 +74,11 @@ class ChatQueueLifetimeTest {
         val line = open(openChat = false)
         assertTrue(hosts.screen is Screen.Browse)
         status(AgentStatus.Idle)
+        compose.waitForTypedMessages(line, 1)
         assertEquals(listOf("t1" to "first"), line.typed)
         status(AgentStatus.Working)
         status(AgentStatus.Idle, 1uL)
+        compose.waitForTypedMessages(line, 2)
         assertEquals(listOf("t1" to "first", "t1" to "second"), line.typed)
     }
 
@@ -84,6 +88,7 @@ class ChatQueueLifetimeTest {
         send("first")
         compose.runOnIdle { hosts.switchView(AgentView.TERMINAL) }
         status(AgentStatus.Idle)
+        compose.waitForTypedMessages(line, 1)
         assertEquals(listOf("t1" to "first"), line.typed)
     }
 
@@ -95,6 +100,7 @@ class ChatQueueLifetimeTest {
             ChatReplyRecovery.message("rejected", "old", "rejected", uncertain = false)) }
         status(AgentStatus.Idle)
         send("new")
+        compose.waitForTypedMessages(line, 1)
         assertEquals(listOf("t1" to "new"), line.typed)
         status(AgentStatus.Working)
         status(AgentStatus.Idle, 1uL)
@@ -125,12 +131,14 @@ class ChatQueueLifetimeTest {
         send("first")
         send("second")
         status(AgentStatus.Idle)
+        compose.waitForTypedMessages(line, 1)
         core.pushChat(ChatSnapshot(listOf(ChatEntry("u1", null, ChatEntryBody.User("first"))), ChatStatus.LIVE, null))
         compose.waitForIdle()
         status(AgentStatus.Idle)
         assertEquals(listOf("t1" to "first"), line.typed)
         status(AgentStatus.Working)
         status(AgentStatus.Idle, 1uL)
+        compose.waitForTypedMessages(line, 2)
         assertEquals(listOf("t1" to "first", "t1" to "second"), line.typed)
     }
 
@@ -146,6 +154,7 @@ class ChatQueueLifetimeTest {
         assertEquals(emptyList<Pair<String, String>>(), core.connection!!.typed)
         core.pushChat(ChatSnapshot(emptyList(), ChatStatus.LIVE, null))
         compose.waitForIdle()
+        compose.waitForTypedMessages(core.connection!!, 1)
         assertEquals(listOf("t1" to "waiting"), core.connection!!.typed)
     }
 
@@ -161,12 +170,15 @@ class ChatQueueLifetimeTest {
         send("first")
         compose.runOnIdle { (hosts.screen as Screen.Chat).chat.pick("q", question, 0, 0) }
         compose.waitForIdle()
+        compose.waitForSendAttempts(line, 1)
         assertEquals(1, line.sendListeners.size)
         line.sendReply!!.complete(Unit)
         compose.waitForIdle()
+        compose.waitForTypedMessages(line, 1)
         assertEquals(listOf("t1" to "first"), line.typed)
         status(AgentStatus.Working)
         status(AgentStatus.Idle, 1uL)
+        compose.waitForTypedMessages(line, 2)
         assertEquals(listOf("t1" to "first", "t1" to "Red"), line.typed)
     }
 }

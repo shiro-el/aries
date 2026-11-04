@@ -88,6 +88,7 @@ class ShareAttachmentTest {
         compose.onNodeWithContentDescription(str(R.string.chat_input_label))
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
         compose.onNodeWithText("please inspect").assertExists()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText(str(R.string.chat_queue_uncertain)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(str(R.string.chat_queue_uncertain)).assertExists()
         assertEquals(1, connection.calls.count { it == "sendMessage" })
         compose.onNodeWithText(str(R.string.chat_delivery_restore_button)).performClick()
@@ -99,6 +100,7 @@ class ShareAttachmentTest {
         connection.sendFailWith = null
         compose.onNodeWithText(str(R.string.chat_send_button)).performClick()
         compose.waitForIdle()
+        compose.waitForTypedMessages(connection, 1)
         assertEquals(listOf("box/t1" to "please inspect '/host/it'\"'\"'s file.jpg'"), connection.typed)
         compose.onAllNodesWithContentDescription(remove).assertCountEquals(0)
     }
