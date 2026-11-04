@@ -2235,7 +2235,9 @@ class HostsModel(
                 route.chat.terminal else find(route.returnTo)
             else -> null
         }
-        return find(screen)?.let(::displayName)?.takeIf { it.isNotBlank() }
+        val terminal = find(screen) ?: drawerAgents.firstOrNull { it.key == key }?.terminal
+            ?: quickOpenSources.firstOrNull { it.host.id == key.hostId }?.terminals?.firstOrNull { it.address == address }
+        return terminal?.let(::displayName)?.takeIf { it.isNotBlank() }
     }
 
     fun openHost(host: Host) {

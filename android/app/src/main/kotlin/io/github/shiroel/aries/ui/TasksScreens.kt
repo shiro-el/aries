@@ -60,7 +60,7 @@ private fun TasksShell(model: HostsModel, content: @Composable () -> Unit) {
         if (model.started && model.screen == Screen.Hosts && model.hostAddMethod == null) model.openAgents()
     }
     CompositionLocalProvider(LocalTasksHosts provides model::showHosts) {
-        ConsoleShell(model, content, showAttentionBanner = false,
+        ConsoleShell(model, content,
             onHome = model::openAgents, isHome = { it is Screen.Agents })
     }
 }
@@ -108,4 +108,5 @@ private fun TasksHomeHeader(model: HostsModel, screen: Screen) {
         }
     }
     HorizontalDivider()
+    if (screen == Screen.Hosts) CallAttentionSlot()
 }

@@ -34,7 +34,7 @@ internal fun ThreadWaitingPill(model: HostsModel, chat: ChatModel) {
     val waiting = (calls.map { call ->
         val key = AgentKey(call.host.id, call.call.terminal!!)
         val agent = otherAgents.firstOrNull { it.key == key }
-        ThreadWaiting(key, agent?.terminal?.let(::displayName) ?: call.call.terminal!!, agent, call)
+        ThreadWaiting(key, model.callCallerName(call) ?: stringResource(R.string.call_caller_unknown), agent, call)
     } + agents.filter { agent -> calls.none { it.host.id == agent.host.id && it.call.terminal == agent.terminal.address } }
         .map { ThreadWaiting(it.key, displayName(it.terminal), it, null) })
         .sortedWith(compareByDescending<ThreadWaiting> { it.call?.call?.urgency?.ordinal ?: -1 }
@@ -51,7 +51,8 @@ internal fun ThreadWaitingPill(model: HostsModel, chat: ChatModel) {
             waiting.size - 1, waiting.first().name, waiting.size - 1)
         FilledTonalButton(onClick = {
             selected = waiting.first().key; held = waiting.first(); sheet = true
-        }, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).testTag("thread-waiting-pill"),
+        }, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).testTag("thread-waiting-pill")
+            .presentsCalls(calls.map { it.key }.toSet()),
             shape = RoundedCornerShape(10.dp)) { Text(text) }
     }
     if (sheet) {

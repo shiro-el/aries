@@ -1328,6 +1328,7 @@
         <item quantity="other">Host %1$d개 확인 중…</item>
     </plurals>
     <string name="call_inbox_empty">여기서 답할 Call이 없어요.</string>
+    <string name="call_caller_unknown">Agent</string>
     <string name="call_inbox_caller">%2$s의 %1$s</string>
     <string name="call_open_chat">Chat에서 열기</string>
     <string name="call_open_chat_label">%1$s Chat 열기 (Call: %2$s)</string>
