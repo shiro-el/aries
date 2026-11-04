@@ -21,6 +21,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.retryWhen
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.buffer
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
@@ -34,21 +37,30 @@ object WatchPhone {
     fun languageChanged() { languageChanges.update { it + 1 } }
 
     /** Watches local storage only; the existing pull schedule owns all SSH activity. */
-    fun start(context: Context, core: AriesCoreInterface, scope: CoroutineScope) = scope.launch(Dispatchers.IO) {
+    fun start(context: Context, core: AriesCoreInterface, scope: CoroutineScope,
+        publish: suspend (WatchSummary) -> Unit = { summary ->
+            Wearable.getDataClient(context).putDataItem(summary.toRequest()).await()
+            Unit
+        },
+    ) = scope.launch(Dispatchers.IO) {
         WatchProgressPhone.enqueue(context)
         val privacy = context.getSharedPreferences("app_lock", Context.MODE_PRIVATE)
         val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> languageChanged() }
         privacy.registerOnSharedPreferenceChangeListener(listener)
         try {
-            LastKnownStates.observe(core).retryWhen { error, _ ->
+            LastKnownStates.observe(core)
+                .onEach { NotificationGroups.reconcile(context, core, it) }
+                // DataClient can wait for Play services. Keep local recall consuming
+                // storage updates while the watch publication is suspended.
+                .buffer(Channel.CONFLATED).retryWhen { error, _ ->
                 if (error is CancellationException) false else { delay(5_000); true }
             }.combine(languageChanges) { states, _ -> states }.collect { states ->
                 try {
                     val details = withCachedDetails(core, summary(core.hosts(), states),
                         privacy.getBoolean("enabled", false) && privacy.getBoolean("hide_previews", true))
-                    Wearable.getDataClient(context).putDataItem(details.copy(
+                    publish(details.copy(
                         languageTag = AppLanguage.context(context).resources.configuration.locales[0].toLanguageTag(),
-                    ).toRequest()).await()
+                    ))
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {
