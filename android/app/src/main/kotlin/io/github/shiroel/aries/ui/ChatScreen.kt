@@ -466,9 +466,9 @@ fun ChatScreen(
                 Text(stringResource(R.string.chat_empty))
             }
             io.github.shiroel.aries.speech.ReadAloudPlayback(readAloud, showInactiveNotice = false)
-            Box(Modifier.weight(1f).fillMaxWidth()) {
+            Column(Modifier.weight(1f).fillMaxWidth()) {
                 LazyColumn(
-                    Modifier.fillMaxSize().chatImeAnchor(scroll.list).testTag("chat-transcript"),
+                    Modifier.weight(1f).fillMaxWidth().chatImeAnchor(scroll.list).testTag("chat-transcript"),
                     state = scroll.list,
                 ) {
                     entries.forEach { entry ->
@@ -509,11 +509,13 @@ fun ChatScreen(
                     }
                 }
                 if (!searchOpen && !scroll.following && (entries.isNotEmpty() || agentCalls.isNotEmpty())) {
+                    // Reserve the button's measured height so bringing a Choice or
+                    // message into view never leaves its tap target under Latest.
                     LatestButton(
                         description = if (scroll.unreadCount == 0) stringResource(R.string.chat_latest_button)
                             else stringResource(R.string.chat_latest_count_button, scroll.unreadCount),
                         onClick = scroll::latest,
-                        modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp),
+                        modifier = Modifier.align(Alignment.CenterHorizontally).padding(8.dp),
                         unreadCount = scroll.unreadCount,
                     )
                 }
