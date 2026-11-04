@@ -61,17 +61,13 @@ fun WatchInbox(
                 val scroll = rememberScalingLazyListState(initialCenterItemIndex = 0)
                 Scaffold(timeText = { TimeText() }, positionIndicator = { PositionIndicator(scroll) }) {
                     ScalingLazyColumn(
-                        modifier = Modifier.fillMaxSize(), state = scroll,
+                        modifier = Modifier.fillMaxSize(), state = scroll, autoCentering = null,
                         contentPadding = PaddingValues(horizontal = 18.dp, vertical = 36.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         item { Heading(if (selected == null) stringResource(R.string.wear_inbox_title) else selected.name) }
                         item { Caption(WatchTile.age(LocalContext.current, summary, now)) }
                         if (selected == null) {
-                            item {
-                                InboxChip(stringResource(if (refreshing) R.string.wear_inbox_refreshing else R.string.wear_inbox_refresh), !refreshing, onRefresh)
-                            }
-                            notice?.let { resource -> item { Caption(stringResource(resource)) } }
                             if (summary.inbox.isEmpty()) item {
                                 Caption(stringResource(if (summary.fetchedAtMs == 0L) R.string.wear_open_phone else R.string.wear_no_agents))
                             }
@@ -94,6 +90,10 @@ fun WatchInbox(
                             if (summary.inbox.size < summary.totalAgents) item {
                                 Caption(stringResource(R.string.wear_inbox_more, summary.inbox.size))
                             }
+                            item {
+                                InboxChip(stringResource(if (refreshing) R.string.wear_inbox_refreshing else R.string.wear_inbox_refresh), !refreshing, onRefresh)
+                            }
+                            notice?.let { resource -> item { Caption(stringResource(resource)) } }
                         } else {
                             item { GroupLabel(selected) }
                             item { Caption(statusLabel(selected.status)) }
