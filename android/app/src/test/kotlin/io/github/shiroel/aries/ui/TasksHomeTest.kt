@@ -50,7 +50,7 @@ class TasksHomeTest {
         }
         compose.setContent {
             val scope = rememberCoroutineScope()
-            model = remember { HostsModel(core, scope).apply { start() } }
+            model = remember { HostsModel(core, scope).apply { start(layout = AppLayout.TASKS) } }
             androidx.compose.runtime.key(generation.intValue) { AriesApp(model, settings) }
         }
         compose.waitForIdle()

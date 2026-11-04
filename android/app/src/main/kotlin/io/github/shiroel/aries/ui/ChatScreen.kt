@@ -1525,7 +1525,7 @@ internal fun MessageInput(chat: ChatModel, compact: Boolean = false, leading: (@
     if (tools) ChatInputToolsDialog(chat) { tools = false }
     val inputLabel = stringResource(LocalLayoutScreens.current.messageInputLabel)
     val inputStyle = MaterialTheme.typography.bodyLarge.copy(
-        fontFamily = if (LocalThreadChat.current != null) FontFamily.SansSerif else FontFamily.Monospace,
+        fontFamily = LocalLayoutTokens.current.bodyFont,
         fontSize = 14.sp,
         lineHeight = 20.sp,
     )
