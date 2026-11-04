@@ -348,12 +348,22 @@ async fn extra_key_bar_keys_use_xterm_sequences_in_both_cursor_modes() {
 #[tokio::test]
 async fn ctrl_c_interrupts_the_program() {
     let hc = HcSession::start();
+    // Background test runners can pass down an ignored SIGINT, which a
+    // noninteractive sh's `trap` cannot reset. Reset and block it before
+    // announcing readiness, so sigwait receives even an already pending Ctrl-C.
     let address = hc.run_bg(
         "runaway",
         &[
-            "sh",
+            "python3",
             "-c",
-            "trap 'echo interrupted; exit 7' INT; echo running; while :; do sleep 0.1; done",
+            r#"import os, signal, sys
+signal.signal(signal.SIGINT, signal.SIG_DFL)
+signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGINT})
+os.write(1, b'running\n')
+signal.sigwait({signal.SIGINT})
+os.write(1, b'interrupted\n')
+sys.exit(7)
+"#,
         ],
     );
     let s = connect(&hc).await;

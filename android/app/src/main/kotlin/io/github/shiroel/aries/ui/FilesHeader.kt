@@ -8,6 +8,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -20,7 +21,7 @@ import io.github.shiroel.aries.R
 /** One navigation bar for folders, diffs and full files. */
 @Composable
 internal fun FilesHeader(
-    path: String, isFile: Boolean, onBack: () -> Unit, onClose: () -> Unit,
+    path: String, isFile: Boolean, canGoUp: Boolean, onBack: () -> Unit, onClose: () -> Unit,
     onFolder: (String) -> Unit, onRefresh: () -> Unit, refreshing: Boolean,
     diffAvailable: Boolean, fullFile: Boolean, onFullFile: () -> Unit,
     wrap: Boolean, onWrap: (() -> Unit)?, onSend: (() -> Unit)?,
@@ -28,7 +29,12 @@ internal fun FilesHeader(
 ) {
     var menu by remember(path) { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth().height(56.dp), verticalAlignment = Alignment.CenterVertically) {
-        ActionIcon(R.drawable.ic_arrow_left, if (isFile) R.string.files_back_folder_button else R.string.files_close_button, onBack)
+        val backLabel = when {
+            isFile -> R.string.files_back_folder_button
+            canGoUp -> R.string.files_parent_folder_button
+            else -> R.string.files_close_button
+        }
+        ActionIcon(R.drawable.ic_arrow_left, backLabel, onBack, modifier = Modifier.testTag("files-back"))
         val scroll = rememberScrollState()
         LaunchedEffect(path, scroll.maxValue) { scroll.scrollTo(scroll.maxValue) }
         Row(Modifier.weight(1f).horizontalScroll(scroll), verticalAlignment = Alignment.CenterVertically) {
