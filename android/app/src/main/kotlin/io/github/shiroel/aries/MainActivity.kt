@@ -17,19 +17,15 @@ import io.github.shiroel.aries.security.setAppLockPrivacy
 import io.github.shiroel.aries.ui.AriesTheme
 import io.github.shiroel.aries.ui.ThemeSettings
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import io.github.shiroel.aries.ui.AriesApp
 import io.github.shiroel.aries.ui.HostsModel
-import io.github.shiroel.aries.ui.LastLocationStore
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import androidx.lifecycle.lifecycleScope
-import io.github.shiroel.aries.core.CoreException
+import androidx.lifecycle.ViewModelProvider
 
 class MainActivity : AppCompatActivity() {
     private val app get() = application as AriesApplication
     private lateinit var appUnlock: DeviceAppUnlock
     private lateinit var lockSession: AppLockSession
+    private lateinit var sessions: HostsViewModel
 
     @Suppress("DEPRECATION") // Bundle.getParcelable is the API 28-compatible saved Intent reader.
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -52,20 +48,16 @@ class MainActivity : AppCompatActivity() {
             tileRequested = savedInstanceState.getBoolean("pending-tile-target")
             shareIntent = savedInstanceState.getParcelable("pending-share-intent")
         }
-        val core = app.core
-        val push = AndroidPushPlatform(this)
+        sessions = ViewModelProvider(this)[HostsViewModel::class.java]
+        val push = sessions.push
+        push.bind(this)
+        model = sessions.model
+        // After process death only IDs/settings are restored; recreation reuses the live route.
+        if (savedInstanceState?.getBoolean("settings-open") == true && model?.screen == io.github.shiroel.aries.ui.Screen.Hosts) {
+            model?.openSettings()
+        }
         setContent {
-            val scope = rememberCoroutineScope()
-            val model = remember {
-                HostsModel(
-                    core, scope, keyWork = Dispatchers.IO, pushPlatform = push,
-                    locationStore = LastLocationStore.from(this),
-                    onSavedLaunchesChanged = ::refreshLaunchShortcuts,
-                ).also {
-                    this@MainActivity.model = it
-                    if (savedInstanceState?.getBoolean("settings-open") == true) it.openSettings()
-                }
-            }
+            val model = sessions.model
             LaunchedEffect(model) { resumeModel() }
             val guidance = remember {
                 io.github.shiroel.aries.guidance.AppGuidanceState(
@@ -193,6 +185,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         network?.stop()
         appUnlock.dispose()
+        sessions.push.unbind()
         super.onDestroy()
     }
 
@@ -216,15 +209,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun refreshLaunchShortcuts() {
-        lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                LaunchShortcuts.sync(this@MainActivity, app.core)
-            } catch (_: CoreException) {
-                // A concurrent Host removal can be retried on the next foreground entry.
-            } catch (_: IllegalStateException) {
-                // The launcher service is unavailable until the user unlocks the phone.
-            }
-        }
+        sessions.refreshLaunchShortcuts()
     }
 
     override fun onPause() {

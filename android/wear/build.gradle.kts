@@ -31,6 +31,7 @@ dependencies {
     implementation("androidx.wear.compose:compose-foundation:1.7.1")
     implementation(libs.wear.tiles)
     implementation(libs.wear.protolayout)
+    implementation(libs.wear.protolayout.material3)
     implementation(libs.wear.complications)
     implementation(libs.wear.remote)
     implementation(libs.kotlinx.coroutines.android)

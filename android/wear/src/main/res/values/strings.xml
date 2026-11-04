@@ -17,9 +17,23 @@
     <string name="wear_inbox_back">Back</string>
     <string name="wear_inbox_more">Showing the first %1$d. Open your phone for all Agents.</string>
 
+    <!-- Console Tile and complication types -->
+    <string name="wear_complication_agent_description">%1$s · %2$s</string>
+    <string name="wear_tile_waiting">ARIES · %1$d WAITING</string>
+    <string name="wear_tile_all_clear">ALL CLEAR</string>
+    <string name="wear_tile_unknown">ARIES · --</string>
+    <string name="wear_tile_working">Working · %1$d (top Agents)</string>
+    <string name="wear_tile_stale">STALE · %1$s</string>
+    <string name="wear_tile_open">OPEN</string>
+    <string name="wear_code_blocked">BLK</string>
+    <string name="wear_code_error">ERR</string>
+    <string name="wear_code_working">RUN</string>
+    <string name="wear_code_done">DONE</string>
+    <string name="wear_code_idle">IDLE</string>
+    <string name="wear_complication_agent">%1$s %2$s · %3$s</string>
+
     <!-- Companion state surfaces -->
     <string name="app_name" translatable="false">Aries</string>
-    <string name="wear_waiting_count">%1$d waiting</string>
     <string name="wear_waiting_label">Waiting</string>
     <string name="wear_age_minutes">%1$d min ago</string>
     <string name="wear_age_compact">%1$dm ago</string>

@@ -18,7 +18,8 @@ request IDs are bounded too. Preview protection on the phone removes request
 and conversation content before publication. No SSH credentials or full
 transcripts are transferred.
 It works with an Android phone paired through the normal Wear OS pairing flow.
-Tile taps send a best-effort MessageClient command to that phone; there is no
+Tile and complication taps open the installed watch launcher when available, otherwise
+they open the phone through a best-effort MessageClient command; there is no
 offline command queue. The phone still applies its usual Host/key checks.
 
 ## Build and install with Wi-Fi ADB
@@ -56,12 +57,17 @@ flock /tmp/aries-mvp-run/emulator.lock "$ANDROID_HOME/platform-tools/adb" -s WAT
 ```
 
 Open Aries on the phone and fetch a Host once. Add the Aries Tile to the watch's
-carousel and select Aries as a Short Text complication on a compatible watch
-face. Confirm the count, three Agent rows, age and Agent tap on the phone. Check
+carousel and select Aries as a Short Text, Long Text, Monochromatic Image or Small
+Image complication on a compatible watch face. Confirm the count, two Agent rows
+on a small screen / three on a large screen, age and Agent tap on the phone.
+Long Text opens the leading Agent; other complication types open the app.
+The Console Tile highlights waiting Agents, marks state older than six minutes,
+and shows ALL CLEAR plus the Working count among the top Agents when none wait. Check
 again disconnected: the last value and its age remain, while a failed tap asks
 for the phone connection. The complication refresh interval is 300 seconds;
-Data Layer updates refresh the Tile but do not push complication updates more
-frequently. A never-synced complication displays `--` rather than a false zero.
+Data Layer updates refresh the Tile and request a complication refresh when the
+waiting count, leading Agent, sync availability or language changes. Fetch-time
+changes alone do not request another complication update. A never-synced complication displays `--` rather than a false zero.
 
 `INSTALL_FAILED_UPDATE_INCOMPATIBLE` means the existing install uses a different
 certificate; use matching builds. Do not uninstall another user's install as a
