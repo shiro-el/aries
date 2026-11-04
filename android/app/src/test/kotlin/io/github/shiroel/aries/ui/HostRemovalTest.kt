@@ -4,9 +4,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.test.core.app.ApplicationProvider
 import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.Endpoint
@@ -51,6 +54,8 @@ class HostRemovalTest {
         compose.waitForIdle()
 
         assertEquals(listOf("work"), core.hosts().map { it.name })
+        // Removal returns to Settings, whose Connections section is below the initial viewport.
+        compose.onNodeWithTag("settings-list").performScrollToNode(hasTestTag("settings-host:h2"))
         compose.onNodeWithText("home").assertDoesNotExist()
         compose.onNodeWithText("work").assertExists()
     }
