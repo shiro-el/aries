@@ -2043,7 +2043,9 @@ class HostsModel(
         callLink = link
         if (link == null) return
         callStatus = scope.launch {
-            link.keep { conn, _ ->
+            link.keepWatching(onFailure = { error ->
+                if (callLink === link) prompt = problemFor(error)
+            }) { conn, _ ->
                 val watch = conn.watchTerminals()
                 try {
                     while (true) {
