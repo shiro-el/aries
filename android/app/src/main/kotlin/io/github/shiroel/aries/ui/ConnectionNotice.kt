@@ -24,17 +24,17 @@ fun ConnectionNotice(link: HostLink, state: LinkState = link.state, onRetry: () 
         Modifier.fillMaxWidth().background(colors.errorContainer).padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text(stringResource(R.string.connect_host_status, link.host.name),
+        AnnouncedText(stringResource(R.string.connect_host_status, link.host.name),
             style = MaterialTheme.typography.titleSmall, color = colors.onErrorContainer)
         if (state is LinkState.Down) {
             val problem = state.why
-            Text(stringResource(problem.title.res, *problem.title.args.toTypedArray()), color = colors.onErrorContainer)
-            Text(stringResource(problem.body.res, *problem.body.args.toTypedArray()),
+            AnnouncedText(stringResource(problem.title.res, *problem.title.args.toTypedArray()), color = colors.onErrorContainer)
+            AnnouncedText(stringResource(problem.body.res, *problem.body.args.toTypedArray()),
                 style = MaterialTheme.typography.bodySmall, color = colors.onErrorContainer)
-            Text(stringResource(R.string.connect_action_needed),
+            AnnouncedText(stringResource(R.string.connect_action_needed),
                 style = MaterialTheme.typography.bodySmall, color = colors.onErrorContainer)
         } else {
-            Text(stringResource(R.string.reconnecting), color = colors.onErrorContainer)
+            AnnouncedText(stringResource(R.string.reconnecting), color = colors.onErrorContainer)
         }
         Row {
             TextButton(onClick = onRetry) { Text(stringResource(R.string.connect_retry_button), color = colors.onErrorContainer) }

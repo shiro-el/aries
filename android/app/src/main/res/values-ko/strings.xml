@@ -339,6 +339,7 @@
     <string name="cancel_button">취소</string>
     <string name="back_button">뒤로</string>
 
+    <string name="hosts_connect_button">연결</string>
     <string name="hosts_title">Host</string>
     <string name="hosts_empty">아직 Host가 없어요. 아래에서 추가해 주세요.</string>
 
@@ -450,6 +451,8 @@
     <string name="terminal_exited_code">프로그램이 종료됐어요(종료 코드 %1$d).</string>
     <string name="terminal_exited_signal">프로그램이 중지됐어요(시그널 %1$s).</string>
     <string name="terminal_exited_reason">프로그램이 종료됐어요(%1$s).</string>
+    <string name="terminal_accessibility_summary">터미널, %1$d열, %2$d행</string>
+    <string name="terminal_accessibility_cursor">커서 줄 %1$d: %2$s</string>
     <string name="terminal_connection_closed">Terminal 연결이 끊겼어요. 화면이 최신이 아닐 수 있어요.</string>
     <string name="reconnecting">연결 중이에요. 자동으로 재시도하고 있어요.</string>
     <string name="terminal_scrolled_back">%1$d줄 위</string>
@@ -663,6 +666,7 @@
 
     <string name="chat_input_label">Agent에게 보낼 메시지</string>
     <string name="chat_send_button">보내기</string>
+    <string name="chat_sent">메시지를 보냈습니다</string>
     <string name="chat_sending">보내는 중…</string>
     <string name="chat_send_held">누군가 이 Terminal에 입력하고 있어요. 입력이 멈추면 메시지를 넣을게요.</string>
     <string name="chat_send_refused">보내지 않았어요. Agent가 Blocked 상태라 Terminal에서 응답을 기다리고 있어요.</string>
