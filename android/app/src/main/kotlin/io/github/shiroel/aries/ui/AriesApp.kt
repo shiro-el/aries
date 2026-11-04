@@ -204,7 +204,7 @@ private fun HostListScreen(model: HostsModel) {
         item(key = "add") {
             Text(
                 stringResource(if (adding) R.string.console_add_close else R.string.console_add_host),
-                Modifier.fillMaxWidth().testTag("hosts-add-toggle").clickable {
+                Modifier.fillMaxWidth().testTag("hosts-add-toggle").clickable(role = Role.Button) {
                     if (adding) model.closeAddingHost() else model.startAddingHost()
                 }.padding(12.dp),
                 fontSize = 14.sp, color = MaterialTheme.colorScheme.primary,
