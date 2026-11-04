@@ -9,7 +9,10 @@ apk=${3:-$root/android/app/build/outputs/apk/chatProfile/app-chatProfile.apk}
 scenarios=${4:-"scroll stream reading"}
 # Long pasted user prompts exercise full-history source inspection as well as Agent output.
 prompt_repeats=${ARIES_CHAT_PROFILE_PROMPT_REPEATS:-0}
-[[ $prompt_repeats =~ ^[0-9]+$ ]] && ((prompt_repeats <= 1000))
+if [[ ! $prompt_repeats =~ ^[0-9]{1,4}$ ]] || ((10#$prompt_repeats > 1000)); then
+    printf 'ARIES_CHAT_PROFILE_PROMPT_REPEATS must be an integer from 0 to 1000\n' >&2
+    exit 2
+fi
 mkdir -p "$out"
 out=$(cd "$out" && pwd)
 adb=${ANDROID_HOME:-$HOME/Android/Sdk}/platform-tools/adb
@@ -33,6 +36,7 @@ flock -u 9
 for scenario in $scenarios; do
     case "$scenario" in scroll|stream|reading) ;; *) exit 2 ;; esac
     flock 9
+    printf 'Measuring %s (prompt repeats: %s)\n' "$scenario" "$prompt_repeats"
     cleanup
     call shell am start -W -n "$package/io.github.shiroel.aries.ui.ChatProfileActivity" --ei prompt-repeats "$prompt_repeats" > "$out/$scenario-launch.txt"
     sleep 8
