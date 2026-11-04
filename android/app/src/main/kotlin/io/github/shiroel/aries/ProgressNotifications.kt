@@ -26,7 +26,7 @@ internal object ProgressNotifications {
         if (at < old) return false
         val manager = context.getSystemService(NotificationManager::class.java)
         val progress = manager.activeNotifications.find { it.id == host.hashCode() && it.tag == terminal && it.notification.channelId == CHANNEL }
-        return progress == null || at >= (progress.notification.`when` / 1000).toULong()
+        return progress == null || at >= (progress.notification.extras.getLong(NotificationGroups.AT_MS, progress.notification.`when`) / 1000).toULong()
     }
 
     fun completed(context: Context, host: String, terminal: String, at: ULong) {
@@ -37,11 +37,11 @@ internal object ProgressNotifications {
         WatchProgressPhone.completed(context, host, terminal, at)
     }
 
-    fun post(context: Context, notice: PushNotice, p: PushContent.Progress) {
+    fun post(context: Context, notice: PushNotice, p: PushContent.Progress) = synchronized(NotificationGroups) {
         val manager = context.getSystemService(NotificationManager::class.java)
         if (p.at <= stamps(context).getLong(stampKey(notice.hostId, p.terminal), 0).toULong()) return
         val existing = manager.activeNotifications.find { it.id == notice.hostId.hashCode() && it.tag == p.terminal }
-        if (existing?.notification?.channelId == CHANNEL && p.at.toLong() < existing.notification.`when` / 1000) return
+        if (existing?.notification?.channelId == CHANNEL && p.at.toLong() < existing.notification.extras.getLong(NotificationGroups.AT_MS, existing.notification.`when`) / 1000) return
         if (p.cancelled) {
             completed(context, notice.hostId, p.terminal, p.at)
             // A delayed cleanup must not erase a newer attention or Done card.
@@ -63,7 +63,10 @@ internal object ProgressNotifications {
             .setContentTitle(context.getString(R.string.push_status_title, NotificationAgentName.resolve(context, notice.hostId, p.terminal, p.name), notice.hostName))
             .setContentText(if (p.childAgents == 0u) context.getString(R.string.push_progress_elapsed, (p.elapsedSecs / 60uL).toLong())
                 else context.getString(R.string.push_progress_body, (p.elapsedSecs / 60uL).toLong(), p.childAgents.toLong()))
-            .setWhen(p.at.toLong() * 1000)
+            .addExtras(Bundle().apply { putLong(NotificationGroups.AT_MS, p.at.toLong() * 1000) })
+            .setWhen((p.at - p.elapsedSecs.coerceAtMost(p.at)).toLong() * 1000)
+            .setUsesChronometer(true)
+            .setTimeoutAfter(io.github.shiroel.aries.weardata.WatchProgress.MAX_AGE_MS)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setLocalOnly(true)
