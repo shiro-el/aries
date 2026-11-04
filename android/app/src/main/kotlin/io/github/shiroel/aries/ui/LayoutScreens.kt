@@ -28,7 +28,8 @@ import io.github.shiroel.aries.core.Host
  * Never key a model, lifecycle effect or saveable-state owner by AppLayout.
  */
 internal fun layoutScreensFor(layout: AppLayout): LayoutScreens = when (layout) {
-    AppLayout.CONSOLE, AppLayout.THREAD, AppLayout.TASKS -> ConsoleScreens
+    AppLayout.CONSOLE, AppLayout.THREAD -> ConsoleScreens
+    AppLayout.TASKS -> TasksScreens
 }
 
 internal val LocalLayoutScreens = staticCompositionLocalOf<LayoutScreens> { ConsoleScreens }

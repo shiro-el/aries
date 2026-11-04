@@ -540,7 +540,8 @@ class HostsModel(
     private val liveChat: ChatModel?
         get() = (ownedScreen as? Screen.Chat ?: (ownedScreen as? Screen.Terminal)?.returnTo as? Screen.Chat)?.chat
 
-    private var started = false
+    internal var started by mutableStateOf(false)
+        private set
     private var explicitSurfaceEntry = false
     private var startupHostId: String? = null
     private var restoring by mutableStateOf(false)
@@ -815,7 +816,7 @@ class HostsModel(
         private set
     private val taskJobs = mutableMapOf<NewTask, Job>()
 
-    internal fun prepareTask(link: HostLink, cwd: String? = null, prompt: String? = null) {
+    internal fun prepareTask(link: HostLink, cwd: String? = null, prompt: String? = null, showDialog: Boolean = true) {
         if (link.state != LinkState.Up || pendingLaunch(link.host.id) || pendingWorktree(link.host.id)) return
         val conn = link.connection ?: return
         val previous = tasks[link.host.id]
@@ -823,7 +824,7 @@ class HostsModel(
             if (previous.link !== link && previous.waiting) taskJobs[previous]?.cancel()
             previous.link = link
             task = previous
-            taskVisible = true
+            taskVisible = showDialog
             return
         }
         val browser = quickOpenBrowser?.takeIf { it.host.id == link.host.id }
@@ -837,7 +838,7 @@ class HostsModel(
         val created = NewTask(link, form, prompt.orEmpty())
         tasks[link.host.id] = created
         task = created
-        taskVisible = true
+        taskVisible = showDialog
         if (form.cwd.isBlank()) scope.launch {
             try {
                 val home = conn.machineExec(listOf("sh", "-c", "printf '%s' \"\$HOME\""), null, 5u)
@@ -847,12 +848,17 @@ class HostsModel(
         }
     }
 
-    internal fun startTask() {
+    internal fun startTask() = startTaskFromSurface(inline = false)
+
+    internal fun startInlineTask() = startTaskFromSurface(inline = true)
+
+    private fun startTaskFromSurface(inline: Boolean) {
+        val origin = screen
         val current = task ?: return
         if (!current.canStart) return
         val job = scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
             current.start { terminal, draft ->
-                if (task === current && taskVisible && current.link in links) {
+                if (task === current && (taskVisible || inline && screen === origin) && current.link in links) {
                     taskVisible = false
                     tasks.remove(current.link.host.id)
                     task = null
@@ -1407,6 +1413,21 @@ class HostsModel(
             ChatModel(core, link.host, terminal, link, keyWork)
         }.also { it.bind(link, terminal) }
 
+    /** Needs sheets reuse the same answer/outbox owner as Chat, without changing navigation. */
+    internal fun taskQuestion(board: AgentBoard, key: AgentKey): ChatModel? {
+        val entry = board.find(key)?.takeIf { it.live } ?: return null
+        val link = board.links[key.hostId]?.takeIf { it.state == LinkState.Up && it.connection != null } ?: return null
+        return conversation(link, entry.terminal)
+    }
+
+    /** A submitted sheet answer outlives the sheet, just like a submitted Chat message. */
+    internal fun startTaskQuestion(chat: ChatModel) { chat.start(scope, paused = screensPaused) }
+
+    internal fun isViewedChat(chat: ChatModel) = liveChat === chat
+
+    /** Read already available transcript facts; the task list never opens per-row SSH watches. */
+    internal fun taskTranscript(key: AgentKey) = conversations[key]?.snapshot
+
     private fun chat(link: HostLink?, terminal: TerminalInfo, returnTo: Screen, draft: String = "") {
         val line = link ?: return
         viewing?.cancel()
@@ -1908,6 +1929,12 @@ class HostsModel(
             is CoreException.NoKey, is CoreException.KeyLocked, is CoreException.BiometricUnavailable -> openKeySettings()
             else -> openHostSettings(host)
         }
+    }
+
+    internal fun beginTaskNeeds() { calls.watch(hosts, everyHost = true) }
+
+    internal fun endTaskNeeds() {
+        if (callsActive) calls.watch(hosts, everyHost = callInboxOpen) else calls.stopAll()
     }
 
     fun closeCallInbox() {

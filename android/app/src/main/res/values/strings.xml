@@ -822,6 +822,28 @@
 
     <!-- New task from the phone -->
     <string name="new_task_folder_hint">Choose an absolute folder on this Host, or browse to select one.</string>
+    <!-- Tasks home and needs queue -->
+    <string name="tasks_home">Tasks</string>
+    <string name="tasks_hosts_count">Hosts %1$d/%2$d</string>
+    <string name="tasks_prompt_hint">What should the Agent do?</string>
+    <string name="tasks_expand_label">Open new task full screen</string>
+    <string name="tasks_agent">Agent</string>
+    <string name="tasks_filter_all">All</string>
+    <string name="tasks_filter_needs">Needs you</string>
+    <string name="tasks_filter_working">Working</string>
+    <string name="tasks_filter_done">Done</string>
+    <string name="tasks_filter_count">%1$s %2$d</string>
+    <string name="tasks_list_view">List view</string>
+    <string name="tasks_host_view">Group by Host</string>
+    <string name="tasks_offline">Disconnected</string>
+    <string name="tasks_host_connected">Connected</string>
+    <string name="tasks_needs_position">Need %2$d of %1$d</string>
+    <string name="tasks_needs_next">Later · Next</string>
+    <string name="tasks_needs_open">Open Chat to inspect this request.</string>
+    <string name="tasks_empty">No tasks in this view.</string>
+    <string name="tasks_answer_needed">Answer needed</string>
+    <string name="tasks_urgent_call">ϟ Urgent Call</string>
+
     <string name="new_task_title">New task</string>
     <string name="new_task_on_host">New task on %1$s</string>
     <string name="new_task_prompt">First prompt</string>
