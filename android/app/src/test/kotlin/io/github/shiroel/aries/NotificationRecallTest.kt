@@ -108,6 +108,42 @@ class NotificationRecallTest {
         }
     }
 
+    // D23: foreground CLAIMED/final feeds must not erase an in-flight worker's failure.
+    @Test
+    fun foregroundFeedKeepsFailedAndUnconfirmedNotificationResults() = runBlocking {
+        val app = context as FakeCoreApp
+        val host = app.core.addHost("box", Endpoint.Ssh("10.0.0.2", 22u, "me"))
+        app.core.ensureKey()
+        show()
+        CallNotifications.post(context, notice, CallView.Sending(0))
+        val owner = ViewModelStore()
+        try {
+            val model = ViewModelProvider(owner, ViewModelProvider.AndroidViewModelFactory(app))[HostsViewModel::class.java].model
+            fun snapshot(state: CallAnswerState) = listOf(CallInfo(host.id, "c1", 1uL, "t3", true,
+                "Review ready", "Tests pass.", CallUrgency.URGENT, listOf("Merge", "Wait"),
+                CallAnswer(0u, "Merge", state, 2uL, "reply lost"), true))
+            app.core.callsOf[host.id] = snapshot(CallAnswerState.CLAIMED)
+            model.calls.watch(listOf(host), everyHost = true)
+            withTimeout(5_000) {
+                while (model.calls.calls.isEmpty()) {
+                    shadowOf(android.os.Looper.getMainLooper()).idle()
+                    delay(10)
+                }
+            }
+            assertTrue(manager.activeNotifications.any { it.tag == notice.tag })
+            for (state in listOf(CallAnswerState.FAILED, CallAnswerState.UNCONFIRMED)) {
+                app.core.callListeners.getValue(host.id).onCalls(snapshot(state))
+                shadowOf(android.os.Looper.getMainLooper()).idle()
+                CallNotifications.post(context, notice, CallView.Done(state.name, "reply lost"))
+                assertEquals(state.name, card().extras.getCharSequence(Notification.EXTRA_TEXT).toString())
+            }
+            card().deleteIntent.send()
+            shadowOf(android.os.Looper.getMainLooper()).idle()
+            CallNotifications.post(context, notice, CallView.Done("late failure"))
+            assertTrue(manager.activeNotifications.isEmpty())
+        } finally { owner.clear() }
+    }
+
     // Regression: redelivery must not turn an already completed card back into live Choices.
     @Test
     fun aCompletedCallCannotRegainChoicesFromADuplicatePush() {
