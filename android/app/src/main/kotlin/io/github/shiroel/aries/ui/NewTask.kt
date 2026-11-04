@@ -1,0 +1,258 @@
+package io.github.shiroel.aries.ui
+
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.dp
+import io.github.shiroel.aries.R
+import io.github.shiroel.aries.core.*
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+
+internal data class TaskIssue(val repository: GithubRepository, val item: GithubItem)
+internal val LocalStartTask = compositionLocalOf<((TaskIssue?) -> Unit)?> { null }
+
+/** A launch is performed once. Only a positive readiness observation permits the first send.
+ * Reads may be retried, writes never are: a lost write reply is an uncertain outcome. */
+internal class NewTask(var link: HostLink, val form: LaunchForm, prompt: String) {
+    var input by mutableStateOf(TextFieldValue(prompt, TextRange(prompt.length)))
+    val prompt: String get() = input.text
+    var terminal by mutableStateOf<TerminalInfo?>(null)
+        private set
+    var deliveryUnknown by mutableStateOf(false)
+        private set
+    var launchUnknown by mutableStateOf(false)
+        private set
+    var waiting by mutableStateOf(false)
+        private set
+
+    val canStart get() = !form.busy && !deliveryUnknown && !launchUnknown &&
+        prompt.isNotBlank() && form.cwd.startsWith('/') && form.preset in taskPresets
+
+    suspend fun start(onReady: (TerminalInfo, String) -> Unit) {
+        if (!canStart) return
+        form.busy = true
+        form.error = null
+        try {
+            val conn = link.connection ?: throw CoreException.Closed()
+            if (terminal == null) {
+                // Without an idempotency token a disconnected launch cannot safely be repeated.
+                launchUnknown = true
+                terminal = conn.launch(form.request())
+                launchUnknown = false
+            }
+            waiting = true
+            val ready = withTimeoutOrNull(60_000) {
+                val watch = conn.watchTerminals()
+                try {
+                    var ready: TerminalInfo? = null
+                    while (ready == null) {
+                        val current = watch.next().find { it.address == terminal!!.address }
+                        if (current != null) {
+                            terminal = current
+                            if (current.state != "live" || current.agentStatus is AgentStatus.Blocked || current.agentStatus is AgentStatus.Error) break
+                            if (current.agentStatus == AgentStatus.Idle || current.agentStatus == AgentStatus.Done) ready = current
+                        }
+                    }
+                    ready
+                } finally { withContext(NonCancellable) { watch.stop(); watch.close() } }
+            }
+            waiting = false
+            if (ready == null) {
+                form.error = Message(R.string.new_task_not_ready)
+                return
+            }
+            val text = prompt
+            deliveryUnknown = true
+            when (conn.sendMessage(ready.address, text, object : SendListener { override fun onHeld() {} })) {
+                SendOutcome.Sent -> onReady(ready, "")
+                is SendOutcome.Blocked -> {
+                    deliveryUnknown = false
+                    form.error = Message(R.string.new_task_not_ready)
+                }
+            }
+        } catch (e: CancellationException) { throw e
+        } catch (e: CoreException) {
+            if (e is CoreException.Rpc && e.kind == "spawn_failed" && terminal == null) launchUnknown = false
+            form.error = when {
+                deliveryUnknown -> Message(R.string.new_task_delivery_unknown)
+                launchUnknown -> Message(R.string.new_task_launch_unknown)
+                else -> launchProblem(e)
+            }
+        } finally { form.busy = false; waiting = false }
+    }
+}
+
+private val taskPresets = listOf(AgentPreset.CLAUDE_CODE, AgentPreset.CODEX)
+
+/** Shared entry point for the Host list, connected Host menu and GitHub Issue. */
+@Composable
+internal fun NewTaskAccess(model: HostsModel, content: @Composable () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val resources = androidx.compose.ui.platform.LocalResources.current
+    var task by remember(model) { mutableStateOf<NewTask?>(null) }
+    var visible by remember(model) { mutableStateOf(false) }
+    val start: (TaskIssue?) -> Unit = start@{ issue ->
+        val screen = model.screen
+        val browser = model.quickOpenBrowser
+        val link = when (screen) {
+            is Screen.Browse -> screen.browser.link
+            is Screen.Chat -> screen.chat.link
+            is Screen.Terminal -> screen.viewer.link
+            else -> null
+        } ?: return@start
+        val conn = link.connection ?: return@start
+        if (issue == null && task?.link?.host?.id == link.host.id) {
+            task?.link = link
+            visible = true
+            return@start
+        }
+        if (issue?.repository?.on != null) return@start
+        val structure = browser?.structure ?: HostStructure(emptyList(), emptyList(), null)
+        val form = LaunchForm(structure, conn.recentCwds(), null, null, conn.savedLaunches())
+        form.preset = AgentPreset.CLAUDE_CODE
+        val terminal = when (screen) {
+            is Screen.Chat -> screen.chat.terminal
+            is Screen.Terminal -> screen.viewer.terminal
+            else -> null
+        }
+        form.cwd = issue?.repository?.cwd ?: terminal?.takeIf { it.machine == null }?.currentCwd ?:
+            browser?.openSpace?.folder ?: conn.recentCwds().firstOrNull() ?: ""
+        val prompt = issue?.let {
+            val repo = it.repository
+            val body = it.item.body.replace(Regex("\\s+"), " ").trim()
+            val summary = body.take(2000) + if (body.length > 2000) "…" else ""
+            resources.getString(R.string.new_task_issue_prompt, repo.nameWithOwner, it.item.number.toInt(),
+                it.item.title, "https://${repo.hostname}/${repo.nameWithOwner}/issues/${it.item.number}", summary)
+        }.orEmpty()
+        task = NewTask(link, form, prompt)
+        visible = true
+    }
+    val browse = model.screen as? Screen.Browse
+    LaunchedEffect(model.newTaskHostId, browse?.browser?.structure) {
+        if (model.newTaskHostId != null && browse?.browser?.host?.id == model.newTaskHostId && browse?.browser?.structure != null) {
+            model.newTaskHostId = null
+            start(null)
+        }
+    }
+    CompositionLocalProvider(LocalStartTask provides start) {
+        content()
+        task?.takeIf { visible }?.let { current ->
+            fun open(terminal: TerminalInfo, draft: String) {
+                visible = false
+                task = null
+                model.openTaskChat(current.link, terminal, draft)
+            }
+            NewTaskDialog(current,
+                onStart = { scope.launch { current.start(::open) } },
+                onOpenChat = { current.terminal?.let { open(it, current.prompt) } },
+                onDismiss = { if (!current.form.busy) visible = false })
+        }
+    }
+}
+
+@Composable
+private fun NewTaskDialog(task: NewTask, onStart: () -> Unit, onOpenChat: () -> Unit, onDismiss: () -> Unit) {
+    val form = task.form
+    var browsing by remember(task) { mutableStateOf(false) }
+    var options by remember(task) { mutableStateOf(false) }
+    var savedOpen by remember(task) { mutableStateOf(false) }
+    val editable = !form.busy && task.terminal == null && !task.launchUnknown
+    AlertDialog(onDismissRequest = onDismiss, modifier = Modifier.testTag("new-task-dialog"),
+        title = { Text(stringResource(R.string.new_task_title)) },
+        text = {
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(task.link.host.name, style = MaterialTheme.typography.labelLarge)
+                val saved = form.saved.filter { it.request.preset in taskPresets }
+                if (saved.isNotEmpty()) Box {
+                    TextButton(onClick = { savedOpen = true }, enabled = editable) { Text(stringResource(R.string.launch_saved)) }
+                    DropdownMenu(expanded = savedOpen, onDismissRequest = { savedOpen = false }) {
+                        saved.forEach { launch -> DropdownMenuItem(text = { Text(launch.name) }, modifier = Modifier.testTag("new-task-saved:${launch.id}"), onClick = {
+                            form.fill(launch.request)
+                            // New tasks create an unplaced Terminal; never reuse a saved layout target.
+                            form.selectSpace(null)
+                            savedOpen = false
+                        }) }
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    taskPresets.forEach { preset ->
+                        FilterChip(selected = form.preset == preset, enabled = editable,
+                            onClick = { form.preset = preset }, label = { Text(stringResource(preset.label)) })
+                    }
+                }
+                OutlinedTextField(form.cwd, { form.cwd = it }, enabled = editable, singleLine = true,
+                    label = { Text(stringResource(R.string.launch_cwd)) }, modifier = Modifier.testTag("launch_cwd"))
+                TextButton(onClick = { browsing = true }, enabled = editable && task.link.connection != null) {
+                    Text(stringResource(R.string.new_task_browse))
+                }
+                OutlinedTextField(task.input, { task.input = it }, enabled = !form.busy,
+                    minLines = 4, maxLines = 8, label = { Text(stringResource(R.string.new_task_prompt)) },
+                    modifier = Modifier.fillMaxWidth().testTag("new-task-prompt"))
+                TextButton(onClick = { options = !options }, enabled = editable) { Text(stringResource(R.string.new_task_options)) }
+                if (options && editable) {
+                    form.preset?.let { LaunchOptions(form, it) }
+                    OutlinedTextField(form.command, { form.command = it }, enabled = editable,
+                        singleLine = true, label = { Text(stringResource(R.string.launch_preset_args)) })
+                }
+                if (task.waiting) Text(stringResource(R.string.new_task_waiting))
+                if (form.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                form.error?.let { Text(stringResource(it.res, *it.args.toTypedArray()), color = MaterialTheme.colorScheme.error) }
+                if (task.terminal != null && !form.busy) TextButton(onClick = onOpenChat) { Text(stringResource(R.string.new_task_open_chat)) }
+            }
+        },
+        confirmButton = { TextButton(onClick = onStart, enabled = task.canStart) {
+            Text(stringResource(if (task.terminal == null) R.string.new_task_start else R.string.new_task_wait_again))
+        } },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !form.busy) { Text(stringResource(R.string.cancel_button)) } })
+    if (browsing) TaskFolderDialog(task.link.connection, form.cwd.ifBlank { "/" },
+        onSelect = { form.cwd = it; browsing = false }, onDismiss = { browsing = false })
+}
+
+/** Explicit paths use list_files on the Host without needing an existing Terminal. */
+@Composable
+private fun TaskFolderDialog(connection: HostConnection?, initial: String, onSelect: (String) -> Unit, onDismiss: () -> Unit) {
+    var path by remember { mutableStateOf(initial) }
+    var directory by remember { mutableStateOf<RemoteDirectory?>(null) }
+    var error by remember { mutableStateOf(false) }
+    var revision by remember { mutableIntStateOf(0) }
+    LaunchedEffect(connection, path, revision) {
+        directory = null
+        error = false
+        try { directory = connection?.listFiles("", path) ?: throw CoreException.Closed()
+        } catch (e: CancellationException) { throw e
+        } catch (e: CoreException) { error = true }
+    }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(stringResource(R.string.new_task_browse)) }, text = {
+        Column {
+            Text(directory?.path ?: path)
+            Row {
+                TextButton(onClick = { path = path.trimEnd('/').substringBeforeLast('/').ifBlank { "/" } }, enabled = path != "/") {
+                    Text(stringResource(R.string.files_parent_folder_button))
+                }
+                TextButton(onClick = { revision++ }) { Text(stringResource(R.string.github_refresh)) }
+            }
+            if (error) Text(stringResource(R.string.files_failed), color = MaterialTheme.colorScheme.error)
+            else if (directory == null) LinearProgressIndicator(Modifier.fillMaxWidth())
+            LazyColumn(Modifier.heightIn(max = 320.dp)) {
+                items(directory?.entries.orEmpty().filter { it.directory }, key = { it.name }) { entry ->
+                    TextButton(onClick = { path = directory!!.path.trimEnd('/') + "/" + entry.name }) { Text(entry.name) }
+                }
+            }
+        }
+    }, confirmButton = { TextButton(onClick = { directory?.path?.let(onSelect) }, enabled = directory != null) {
+        Text(stringResource(R.string.new_task_use_folder))
+    } }, dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel_button)) } })
+}

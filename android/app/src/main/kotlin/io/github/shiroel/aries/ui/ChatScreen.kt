@@ -6,6 +6,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.material3.LinearProgressIndicator
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -100,6 +101,9 @@ class ChatModel(
     var terminal by mutableStateOf(terminal)
         private set
     var snapshot by mutableStateOf<ChatSnapshot?>(null)
+        private set
+    /** Typed failures survive initial watch creation and later SSH reconnects. */
+    var connectionError by mutableStateOf<CoreException?>(null)
         private set
     /** Ids of tool entries the user expanded. */
     var expanded by mutableStateOf<Set<String>>(emptySet())
@@ -280,7 +284,7 @@ class ChatModel(
         if (now.agentStatus !is AgentStatus.Blocked) refused = false
     }
 
-    val canSend: Boolean get() = link != null && canEdit && !interrupting && !uploading && pendingShare == null &&
+    val canSend: Boolean get() = connectionError == null && link != null && canEdit && !interrupting && !uploading && pendingShare == null &&
         (draft.isNotBlank() || attachments.isNotEmpty())
 
     /**
@@ -340,21 +344,37 @@ class ChatModel(
 
     fun start(scope: CoroutineScope) {
         this.scope = scope
+        job?.cancel()
         job = scope.launch {
-            val w = try {
-                withContext(keyWork) { core.watchChat(host.id, terminal.address, null) }
-            } catch (e: CoreException) {
-                // Still show what the cache holds (ticket 44).
-                val cached = try { core.cachedChat(host.id, terminal.address) } catch (e: CoreException) { null }
-                snapshot = ChatSnapshot(cached?.entries.orEmpty(), ChatStatus.NO_BEACON, cached?.cursor)
-                return@launch
+            var attempt = 0
+            var w: ChatWatch
+            while (true) {
+                if (paused) return@launch
+                try {
+                    w = withContext(keyWork) { core.watchChat(host.id, terminal.address, snapshot?.cursor) }
+                    break
+                } catch (e: CoreException) {
+                    connectionError = e
+                    // A cancelled key unlock is not evidence of a missing Beacon.
+                    val cached = snapshot ?: try { core.cachedChat(host.id, terminal.address) } catch (_: CoreException) { null }
+                    snapshot = ChatSnapshot(cached?.entries.orEmpty(), ChatStatus.RECONNECTING, cached?.cursor)
+                    if (!e.retryableConnection()) return@launch
+                    delay(RETRY_DELAYS_MS[minOf(attempt++, RETRY_DELAYS_MS.lastIndex)])
+                }
             }
             watch = w
             if (paused) w.pause()
-            try {
-                while (true) snapshot = w.next()
-            } catch (e: CoreException) {
-                // Final status reached or stopped: keep the last snapshot.
+            while (true) {
+                try {
+                    snapshot = w.next()
+                    connectionError = null
+                } catch (e: CoreException) {
+                    if (e is CoreException.Closed) return@launch
+                    // The core pauses permanent failures until an explicit retry.
+                    connectionError = e
+                    snapshot = snapshot?.copy(status = ChatStatus.RECONNECTING)
+                }
+
             }
         }
     }
@@ -444,25 +464,37 @@ class ChatModel(
         }
     }
 
-    /** The network changed: replace the Chat's line now; it resumes after its cursor. */
+    /** Network/foreground signals may wake transient failures, never permanent ones. */
     fun reconnect() {
-        watch?.reconnect()
+        if (connectionError?.retryableConnection() == false) return
+        if (watch == null) scope?.let(::start) else watch?.reconnect()
     }
 
-    /** The app is back in front: retry a waiting reconnect now. */
     fun retryNow() {
-        watch?.retryNow()
+        if (connectionError?.retryableConnection() == false) return
+        if (watch == null) scope?.let(::start) else watch?.retryNow()
+    }
+
+    /** User action: keep the Agent/draft/cache and resume or recreate the watch. */
+    fun retryConnection() {
+        connectionError = null
+        if (watch == null || job?.isActive != true) {
+            watch?.stop()
+            watch = null
+            scope?.let(::start)
+        } else watch?.reconnect()
     }
 
     fun pause() {
         paused = true
-        watch?.pause()
+        if (watch == null) job?.cancel() else watch?.pause()
     }
 
     fun resume() {
         if (!paused) return
         paused = false
-        watch?.resume()
+        if (watch == null && connectionError?.retryableConnection() != false) scope?.let(::start)
+        else watch?.resume()
     }
 
     fun stop() {
@@ -509,6 +541,7 @@ fun ChatScreen(
     }
     val snapshot = chat.snapshot
     val rawEntries = snapshot?.entries.orEmpty()
+    val preview = rememberChatLocalhostPreview(chat.link, rawEntries, chat.terminal.address)
     val markdownState = rememberChatMarkdown(rawEntries)
     val markdown by markdownState
     val rendered = remember(chat) { ChatRenderedEntries() }
@@ -545,106 +578,126 @@ fun ChatScreen(
     CompositionLocalProvider(LocalChatSearch provides searchDecoration) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))) {
             AgentScreenHeader(chat.terminal, chat.host.name, onBack, AgentView.CHAT, onView,
-                link = chat.link, onTerminalUpdate = { chat.update(listOf(it)) }, onSearch = { searchOpen = true })
-            ChatSearchBar(searchOpen, query, selectedIndex + 1, matches.size,
-                onQuery = { query = it; selected = null },
-                onMove = { selected = navigateChatSearch(matches, active, it) },
-                onClose = ::closeSearch,
-            )
-            statusText(snapshot?.status ?: ChatStatus.CONNECTING)?.let { ChatNotice(it) }
-            if (snapshot != null && entries.isEmpty() && snapshot.status == ChatStatus.LIVE) {
-                Text(stringResource(R.string.chat_empty))
-            }
-            io.github.shiroel.aries.speech.ReadAloudPlayback(readAloud, showInactiveNotice = false)
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                // Scrollable clearance, rather than a footer that shrinks the viewport.
-                val transcriptPadding = PaddingValues(bottom = if (scroll.following || searchOpen) 0.dp else 64.dp)
-                val transcriptModifier = Modifier.fillMaxSize().chatImeAnchor(scroll.list).testTag("chat-transcript")
-                if (scroll.following) {
-                    // Keep main's follow renderer inline: its lazy provider and
-                    // forced scroll measure must consume the same content update.
-                    LazyColumn(transcriptModifier, state = scroll.list, contentPadding = transcriptPadding) {
-                        entries.forEach { entry ->
-                            val body = entry.body
-                            val source = body.markdownSource()
-                            item(key = "transcript:${entry.id}") {
-                                CompositionLocalProvider(LocalChatSearchEntry provides entry.id) {
-                                    if (body is ChatEntryBody.Question) {
-                                        QuestionView(chat, entry.id, body)
-                                    } else {
-                                        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (body is ChatEntryBody.Agent) 0.dp else 12.dp)) {
-                                            ChatEntryView(entry, markdown[entry.id]?.attachments, chat, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image, readAloud) { chat.toggle(entry.id) }
+                preview = preview, link = chat.link, onTerminalUpdate = { chat.update(listOf(it)) }, onSearch = { searchOpen = true })
+            PreviewChips(preview)
+            if (preview.selected != null) {
+                LocalhostPreviewBrowser(preview, chat.link, Modifier.weight(1f).fillMaxWidth(),
+                    change = chat.terminal.turn to rawEntries.mapNotNull { (it.body as? ChatEntryBody.Tool)?.diff })
+            } else {
+                ChatSearchBar(searchOpen, query, selectedIndex + 1, matches.size,
+                    onQuery = { query = it; selected = null },
+                    onMove = { selected = navigateChatSearch(matches, active, it) },
+                    onClose = ::closeSearch,
+                )
+                val chatLink = chat.link
+                val reconnecting = snapshot?.status == ChatStatus.RECONNECTING
+                val chatProblem = chat.connectionError ?: if (snapshot?.status == ChatStatus.NO_BEACON) CoreException.BeaconNotInstalled() else null
+                chatLink?.let { link ->
+                    val state = when {
+                        link.state != LinkState.Up -> link.state
+                        chatProblem != null && !chatProblem.retryableConnection() -> LinkState.Down(chatProblem)
+                        reconnecting -> LinkState.Reconnecting
+                        else -> LinkState.Up
+                    }
+                    ConnectionNotice(link, state) { link.retryNow(); chat.retryConnection() }
+                }
+                if (chatLink == null || (chatLink.state == LinkState.Up && !reconnecting && chatProblem == null)) {
+                    statusText(snapshot?.status ?: ChatStatus.CONNECTING)?.let { ChatNotice(it) }
+                }
+                if (snapshot != null && entries.isEmpty() && snapshot.status == ChatStatus.LIVE) {
+                    Text(stringResource(R.string.chat_empty))
+                }
+                io.github.shiroel.aries.speech.ReadAloudPlayback(readAloud, showInactiveNotice = false)
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    // Scrollable clearance, rather than a footer that shrinks the viewport.
+                    val transcriptPadding = PaddingValues(bottom = if (scroll.following || searchOpen) 0.dp else 64.dp)
+                    val transcriptModifier = Modifier.fillMaxSize().chatImeAnchor(scroll.list).testTag("chat-transcript")
+                    if (scroll.following) {
+                        // Keep main's follow renderer inline: its lazy provider and
+                        // forced scroll measure must consume the same content update.
+                        LazyColumn(transcriptModifier, state = scroll.list, contentPadding = transcriptPadding) {
+                            entries.forEach { entry ->
+                                val body = entry.body
+                                val source = body.markdownSource()
+                                item(key = "transcript:${entry.id}") {
+                                    CompositionLocalProvider(LocalChatSearchEntry provides entry.id) {
+                                        if (body is ChatEntryBody.Question) {
+                                            QuestionView(chat, entry.id, body)
+                                        } else {
+                                            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (body is ChatEntryBody.Agent) 0.dp else 12.dp)) {
+                                                ChatEntryView(entry, markdown[entry.id]?.attachments, chat, displayName(chat.terminal), expanded = entry.id in chat.expanded, chat::image, readAloud) { chat.toggle(entry.id) }
+                                            }
+                                            if (source == null) HorizontalDivider()
                                         }
-                                        if (source == null) HorizontalDivider()
+                                    }
+                                }
+                                if (source != null) {
+                                    chatMarkdownItems(entry.id, markdown[entry.id], thinking = body is ChatEntryBody.Thinking)
+                                    item(key = "transcript:${entry.id}:footer") {
+                                        if (body is ChatEntryBody.User && body.images.isNotEmpty()) {
+                                            Column(Modifier.padding(horizontal = 16.dp)) {
+                                                body.images.forEach { ChatImageView(it, chat::image) }
+                                            }
+                                        }
+                                        if (body is ChatEntryBody.Agent) body.metadata?.let { metadata ->
+                                            Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                                                ChatResponseMetadataView(metadata)
+                                            }
+                                        }
+                                        HorizontalDivider(Modifier.padding(top = 8.dp))
                                     }
                                 }
                             }
-                            if (source != null) {
-                                chatMarkdownItems(entry.id, markdown[entry.id], thinking = body is ChatEntryBody.Thinking)
-                                item(key = "transcript:${entry.id}:footer") {
-                                    if (body is ChatEntryBody.User && body.images.isNotEmpty()) {
-                                        Column(Modifier.padding(horizontal = 16.dp)) {
-                                            body.images.forEach { ChatImageView(it, chat::image) }
-                                        }
-                                    }
-                                    if (body is ChatEntryBody.Agent) body.metadata?.let { metadata ->
-                                        Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                                            ChatResponseMetadataView(metadata)
-                                        }
-                                    }
-                                    HorizontalDivider(Modifier.padding(top = 8.dp))
-                                }
+                            items(agentCalls, key = { "call:${it.key}" }) { entry ->
+                                if (calls != null) ConsoleChatCall(entry, calls)
                             }
                         }
-                        items(agentCalls, key = { "call:${it.key}" }) { entry ->
-                            if (calls != null) ConsoleChatCall(entry, calls)
+                    } else {
+                        ChatHistoryTranscript(transcriptModifier, scroll.list, transcript, chat, readAloud, agentCalls, calls, transcriptPadding)
+                    }
+                    if (!searchOpen && !scroll.following && (entries.isNotEmpty() || agentCalls.isNotEmpty())) {
+                        LatestButton(
+                            description = if (scroll.unreadCount == 0) stringResource(R.string.chat_latest_button)
+                                else stringResource(R.string.chat_latest_count_button, scroll.unreadCount),
+                            onClick = scroll::latest,
+                            modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp),
+                            unreadCount = scroll.unreadCount,
+                        )
+                    }
+                }
+                (chat.terminal.agentStatus as? AgentStatus.Blocked)?.let {
+                    // A question the Chat shows open is answered with its own buttons;
+                    // the Terminal notice is for what the Chat cannot answer.
+                    val answerable = entries.any { e ->
+                        e.body is ChatEntryBody.Question && chat.questionMode(e.id) == ChatModel.QuestionMode.Live
+                    }
+                    if (!answerable || chat.refused) BlockedNotice(it, refused = chat.refused, onOpenTerminal)
+                }
+                when (chat.sending) {
+                    ChatModel.Sending.Sending -> ChatNotice(stringResource(R.string.chat_sending))
+                    ChatModel.Sending.Held -> ChatNotice(stringResource(R.string.chat_send_held))
+                    null -> if (chat.sent && chat.draft.isEmpty() && chat.attachments.isEmpty()) ChatNotice(stringResource(R.string.chat_sent))
+                }
+                chat.sendError?.let {
+                    AnnouncedText(stringResource(R.string.chat_send_failed, it), color = MaterialTheme.colorScheme.error)
+                }
+                if (chat.uploading) {
+                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                    ChatNotice(stringResource(R.string.attachments_uploading))
+                }
+                chat.attachmentError?.let { AnnouncedText(stringResource(it.res, *it.args.toTypedArray()), color = MaterialTheme.colorScheme.error) }
+                if (chat.inputUnavailable) {
+                    ConsoleChatCallSurface {
+                        Text(stringResource(if (chat.terminalAvailable) R.string.chat_input_agent_ended else R.string.chat_status_no_terminal))
+                        ConsoleButton(onClick = if (chat.terminalAvailable) onOpenTerminal else onBack) {
+                            Text(stringResource(if (chat.terminalAvailable) R.string.terminal_open_button else R.string.back_button))
                         }
                     }
-                } else {
-                    ChatHistoryTranscript(transcriptModifier, scroll.list, transcript, chat, readAloud, agentCalls, calls, transcriptPadding)
                 }
-                if (!searchOpen && !scroll.following && (entries.isNotEmpty() || agentCalls.isNotEmpty())) {
-                    LatestButton(
-                        description = if (scroll.unreadCount == 0) stringResource(R.string.chat_latest_button)
-                            else stringResource(R.string.chat_latest_count_button, scroll.unreadCount),
-                        onClick = scroll::latest,
-                        modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp),
-                        unreadCount = scroll.unreadCount,
-                    )
+                if (chat.link != null) {
+                    ChatCatalogControls(chat)
+                    MessageInput(chat)
                 }
-            }
-            (chat.terminal.agentStatus as? AgentStatus.Blocked)?.let {
-                // A question the Chat shows open is answered with its own buttons;
-                // the Terminal notice is for what the Chat cannot answer.
-                val answerable = entries.any { e ->
-                    e.body is ChatEntryBody.Question && chat.questionMode(e.id) == ChatModel.QuestionMode.Live
-                }
-                if (!answerable || chat.refused) BlockedNotice(it, refused = chat.refused, onOpenTerminal)
-            }
-            when (chat.sending) {
-                ChatModel.Sending.Sending -> ChatNotice(stringResource(R.string.chat_sending))
-                ChatModel.Sending.Held -> ChatNotice(stringResource(R.string.chat_send_held))
-                null -> if (chat.sent && chat.draft.isEmpty() && chat.attachments.isEmpty()) ChatNotice(stringResource(R.string.chat_sent))
-            }
-            chat.sendError?.let {
-                AnnouncedText(stringResource(R.string.chat_send_failed, it), color = MaterialTheme.colorScheme.error)
-            }
-            if (chat.uploading) {
-                LinearProgressIndicator(Modifier.fillMaxWidth())
-                ChatNotice(stringResource(R.string.attachments_uploading))
-            }
-            chat.attachmentError?.let { AnnouncedText(stringResource(it.res, *it.args.toTypedArray()), color = MaterialTheme.colorScheme.error) }
-            if (chat.inputUnavailable) {
-                ConsoleChatCallSurface {
-                    Text(stringResource(if (chat.terminalAvailable) R.string.chat_input_agent_ended else R.string.chat_status_no_terminal))
-                    ConsoleButton(onClick = if (chat.terminalAvailable) onOpenTerminal else onBack) {
-                        Text(stringResource(if (chat.terminalAvailable) R.string.terminal_open_button else R.string.back_button))
-                    }
-                }
-            }
-            if (chat.link != null) {
-                ChatCatalogControls(chat)
-                MessageInput(chat)
             }
         }
     }

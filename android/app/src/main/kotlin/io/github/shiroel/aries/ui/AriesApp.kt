@@ -77,8 +77,10 @@ fun AriesApp(
     terminalDisplay: TerminalDisplaySettings = rememberTerminalDisplaySettings(),
 ) {
     AriesTheme(settings) {
-        if (guidance == null) AriesContent(model, settings, terminalDisplay)
-        else io.github.shiroel.aries.guidance.AppGuidance(guidance, allowNotifications) { AriesContent(model, settings, terminalDisplay) }
+        NewTaskAccess(model) {
+            if (guidance == null) AriesContent(model, settings, terminalDisplay)
+            else io.github.shiroel.aries.guidance.AppGuidance(guidance, allowNotifications) { AriesContent(model, settings, terminalDisplay) }
+        }
     }
 }
 
@@ -90,13 +92,17 @@ private fun rememberThemeSettings(): ThemeSettings {
 
 @Composable
 private fun AriesContent(model: HostsModel, settings: ThemeSettings, terminalDisplay: TerminalDisplaySettings) {
+    val activity = LocalContext.current as? android.app.Activity
     // Screen connections and the Call banner follow the visible lifecycle.
     LifecycleStartEffect(model) {
         model.resumeScreens()
         model.resumeCalls()
         onStopOrDispose {
-            model.backgrounded()
-            model.pauseCalls()
+            // A replacement Activity keeps the same sessions. Home/app lock still release them.
+            if (activity?.isChangingConfigurations != true) {
+                model.backgrounded()
+                model.pauseCalls()
+            }
         }
     }
     Scaffold { padding ->
@@ -112,7 +118,7 @@ private fun AriesContent(model: HostsModel, settings: ThemeSettings, terminalDis
                                 hostEditor = { host -> if (host.endpoint is Endpoint.Ssh) HostEditSection(model, host) },
                             )
                         }
-                        is Screen.Connecting -> Connecting(s.host)
+                        is Screen.Connecting -> ConnectionNotice(s.link)
                         is Screen.Browse -> {
                             BrowseScreen(
                                 s.browser,
@@ -219,6 +225,11 @@ private fun ConsoleHostRow(model: HostsModel, host: Host) {
             Modifier.border(1.dp, color.copy(alpha = .7f), RoundedCornerShape(3.dp)).padding(horizontal = 5.dp, vertical = 1.dp),
             fontSize = 11.sp, lineHeight = 15.sp, color = color,
         )
+        val taskLabel = stringResource(R.string.new_task_on_host, host.name)
+        ActionIcon(R.drawable.ic_plus, R.string.new_task_title, { model.newTask(host) },
+            modifier = Modifier.testTag("host-new-task").semantics {
+                contentDescription = taskLabel
+            })
         val moreLabel = stringResource(R.string.console_host_menu, host.name)
         Box(
             Modifier.size(48.dp).testTag("host-menu:${host.id}").clickable(role = Role.Button) { model.openHostSettings(host) }
@@ -309,14 +320,6 @@ private fun AddHostForm(model: HostsModel) {
             name = ""; address = ""; port = "22"; user = ""
         },
     ) { Text(stringResource(R.string.host_add_button)) }
-}
-
-@Composable
-private fun Connecting(host: Host) {
-    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        CircularProgressIndicator()
-        AnnouncedText(stringResource(R.string.connecting, host.name))
-    }
 }
 
 @Composable

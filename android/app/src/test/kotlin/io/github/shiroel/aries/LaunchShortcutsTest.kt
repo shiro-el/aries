@@ -159,8 +159,8 @@ class LaunchShortcutsTest {
         core.failWith = CoreException.KeyLocked()
         model.openSavedLaunch(context, intent)
         runCurrent()
-        assertTrue(model.screen is Screen.Hosts)
-        assertTrue(model.prompt is Prompt.Problem)
+        assertTrue(model.screen is Screen.Connecting)
+        assertNull(model.prompt)
         assertEquals(1, launched.launched.size)
     }
 
