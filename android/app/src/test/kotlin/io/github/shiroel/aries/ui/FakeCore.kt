@@ -906,13 +906,27 @@ class FakeConnection(
     var gitFiles = io.github.shiroel.aries.core.GitChanges("/repo", emptyList(), false, false)
     var gitPatch = io.github.shiroel.aries.core.GitDiff(emptyList(), false, false)
     var gitChangesRequests = 0
+    var gitChangesHold: CompletableDeferred<Unit>? = null
     override suspend fun gitChanges(address: String): io.github.shiroel.aries.core.GitChanges {
         gitChangesRequests++
-        return gitFiles
+        val result = gitFiles
+        gitChangesHold?.await()
+        return result
     }
+    var gitTotals = io.github.shiroel.aries.core.GitStats(0u, 0u, false, false)
+    var gitStatsHold: CompletableDeferred<Unit>? = null
+    var gitStatsRequests = 0
+    override suspend fun gitStats(address: String, cwd: String): io.github.shiroel.aries.core.GitStats {
+        gitStatsRequests++
+        val result = gitTotals
+        gitStatsHold?.await()
+        return result
+    }
+    val gitDiffRequests = mutableListOf<Pair<String, String>>()
     var gitDiffFailure: CoreException? = null
     var gitDiffHold: CompletableDeferred<Unit>? = null
     override suspend fun gitDiff(address: String, cwd: String, path: String, kind: io.github.shiroel.aries.core.GitDiffKind): io.github.shiroel.aries.core.GitDiff {
+        gitDiffRequests += cwd to path
         gitDiffHold?.await()
         gitDiffFailure?.let { throw it }
         return gitPatch

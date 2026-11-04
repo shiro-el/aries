@@ -22,6 +22,7 @@ internal enum class TasksDetailTab { ACTIVITY, CHANGES, TERMINAL }
 internal data class TasksDetailPresentation(
     val changes: TasksChangesState,
     val tab: TasksDetailTab,
+    val connection: HostConnection?,
     val select: (TasksDetailTab) -> Unit,
 )
 internal val LocalTasksDetail = staticCompositionLocalOf<TasksDetailPresentation?> { null }
@@ -30,8 +31,10 @@ internal val LocalTasksDetail = staticCompositionLocalOf<TasksDetailPresentation
 internal fun TasksChatDetail(model: HostsModel, chat: ChatModel) {
     var changesOpen by rememberSaveable(chat.host.id, chat.terminal.address) { mutableStateOf(false) }
     val changes = model.taskChanges(AgentKey(chat.host.id, chat.terminal.address))
+    val connection = chat.link?.connections?.collectAsState()?.value
+    LaunchedEffect(changes, connection, chat.terminal) { changes.observe(connection, chat.terminal) }
     val presentation = TasksDetailPresentation(changes,
-        if (changesOpen) TasksDetailTab.CHANGES else TasksDetailTab.ACTIVITY) {
+        if (changesOpen) TasksDetailTab.CHANGES else TasksDetailTab.ACTIVITY, connection) {
         when (it) {
             TasksDetailTab.ACTIVITY -> changesOpen = false
             TasksDetailTab.CHANGES -> changesOpen = true
@@ -61,8 +64,10 @@ internal fun TasksTerminalDetail(model: HostsModel, viewer: TerminalViewer, disp
     val context = LocalContext.current.applicationContext
     var changesOpen by rememberSaveable(link.host.id, viewer.terminal.address) { mutableStateOf(false) }
     val changes = model.taskChanges(AgentKey(link.host.id, viewer.terminal.address))
+    val connection by link.connections.collectAsState()
+    LaunchedEffect(changes, connection, viewer.terminal) { changes.observe(connection, viewer.terminal) }
     CompositionLocalProvider(LocalTasksDetail provides TasksDetailPresentation(changes,
-        if (changesOpen) TasksDetailTab.CHANGES else TasksDetailTab.TERMINAL) {
+        if (changesOpen) TasksDetailTab.CHANGES else TasksDetailTab.TERMINAL, connection) {
         when (it) {
             TasksDetailTab.ACTIVITY -> model.switchView(AgentView.CHAT)
             TasksDetailTab.CHANGES -> changesOpen = true
@@ -95,7 +100,7 @@ internal fun TasksDetailMetadata(terminal: TerminalInfo, hostName: String?) {
 
 @Composable
 internal fun TasksDetailTabs(presentation: TasksDetailPresentation, terminal: TerminalInfo) {
-    val fresh = presentation.changes.matches(terminal)
+    val fresh = terminal.agentStatus != AgentStatus.Working && presentation.changes.matches(terminal, presentation.connection)
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).testTag("tasks-detail-tabs")) {
         TasksDetailTab.entries.forEach { tab ->
             val selected = presentation.tab == tab
