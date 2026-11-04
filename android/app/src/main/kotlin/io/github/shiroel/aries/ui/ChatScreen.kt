@@ -696,7 +696,6 @@ class ChatModel(
         // Capture the current transcript immediately before this row's first attempt.
         val dispatched = message.copy(phase = QueuedMessagePhase.Agent, dispatchTurn = terminal.turn,
             before = snapshot?.entries.orEmpty().map { it.id }.toSet())
-        val beforeDispatch = queuedMessages
         queuedMessages = queuedMessages.map { if (it.id == message.id) dispatched else it }
         sending = Sending.Sending
         val revisionAtDispatch = terminalRevision
@@ -708,10 +707,14 @@ class ChatModel(
                 terminal.agentStatus == AgentStatus.Working || terminal.agentStatus is AgentStatus.Blocked ||
                 link.connection !== conn || link.state != LinkState.Up) {
                 queuedMessages = queuedMessages.map {
-                    if (it.id == message.id) beforeDispatch.first { old -> old.id == message.id } else it
+                    if (it.id == message.id) message else it
                 }
                 sending = null
-                if (saved) saveOutbox()
+                if (inputUnavailable) returnWaitingToDraft()
+                else if (saved) {
+                    saveOutbox()
+                    drainQueue()
+                }
             } else {
                 link.finishBeforeDisconnect(conn) {
                     try {

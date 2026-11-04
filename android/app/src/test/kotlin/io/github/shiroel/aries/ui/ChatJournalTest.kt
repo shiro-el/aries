@@ -95,6 +95,18 @@ class ChatJournalTest {
             runIo() // Attempt checkpoint.
             runCurrent()
             assertEquals(listOf("t1" to "last character!\n\nnewer!"), connection.typed)
+            repeat(4) { runIo(); runCurrent() }
+            // An Agent ending during a delayed checkpoint must return the unattempted row to the input.
+            chat.update(listOf(terminal))
+            chat.draft = "not typed before ending!"
+            chat.send()
+            chat.update(listOf(terminal.copy(agentStatus = AgentStatus.Idle)))
+            runCurrent()
+            chat.update(listOf(terminal.copy(agentStatus = null)))
+            repeat(4) { runIo(); runCurrent() }
+            assertEquals("not typed before ending!", chat.draft)
+            assertEquals("not typed before ending!", decodeChatOutbox(core.chatOutbox(host.id, "t1")!!).draft)
+            assertEquals(listOf("t1" to "last character!\n\nnewer!"), connection.typed)
             chat.stop()
             repeat(4) { runIo(); runCurrent() }
         } finally { Dispatchers.resetMain() }
