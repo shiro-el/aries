@@ -543,6 +543,7 @@
     <string name="agents_last_known_group">마지막 확인 상태 · %1$d</string>
     <string name="agents_last_seen">마지막 확인 %1$s</string>
     <string name="agents_last_seen_unknown">마지막 확인 시각 없음</string>
+    <string name="agent_opening">%1$s 여는 중…</string>
     <string name="agents_title">Agent</string>
     <string name="agents_empty">Host에서 실행 중인 Agent가 없어요.</string>
     <string name="agents_no_hosts">먼저 Host를 추가해 주세요.</string>

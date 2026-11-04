@@ -59,6 +59,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.dropWhile
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.withTimeoutOrNull
@@ -308,8 +309,7 @@ class HostsModel(
     fun selectListedAgent(board: AgentBoard, entry: AgentEntry) {
         val list = listScreen as? Screen.Agents ?: return
         if (list.board !== board || board.find(entry.key) == null || currentAgentKey == entry.key) return
-        returnToQuickOpenBase()
-        openAgent(board, entry)
+        openAgentTarget(entry.host, entry.terminal.address)
     }
 
     fun selectListedTerminal(browser: HostBrowser, terminal: TerminalInfo) {
@@ -457,6 +457,7 @@ class HostsModel(
 
     private var backgroundRelease: Job? = null
     private var screensPaused = false
+    private var pendingNetworkChange = false
     private val screensActive = MutableStateFlow(true)
     private val foregroundPulls = mutableSetOf<Job>()
 
@@ -493,7 +494,10 @@ class HostsModel(
      * own line, see `ChatWatch`) through [ChatModel.reconnect].
      */
     fun networkChanged() {
-        if (screensPaused) return
+        if (screensPaused) {
+            pendingNetworkChange = true
+            return
+        }
         links.forEach { it.networkChanged() }
         liveChat?.reconnect()
     }
@@ -527,6 +531,10 @@ class HostsModel(
         screensActive.value = true
         links.forEach { it.resume() }
         liveChat?.resume()
+        if (pendingNetworkChange) {
+            pendingNetworkChange = false
+            networkChanged()
+        }
     }
 
     fun foregrounded() {
@@ -1422,7 +1430,7 @@ class HostsModel(
         pendingQuickOpen = null
         prompt = null
         // Initial trust belongs to the pending connection; cancelling abandons it.
-        if (cancelledHost != null && agentOpeningLink?.host?.id == cancelledHost.id) cancelAgentOpen()
+        if (cancelledHost != null && agentOpeningHostId == cancelledHost.id) cancelAgentOpen()
         if (cancelledHost != null && (screen as? Screen.Connecting)?.host?.id == cancelledHost.id) back()
     }
 
@@ -1582,6 +1590,7 @@ class HostsModel(
     private fun chat(link: HostLink?, terminal: TerminalInfo, returnTo: Screen, draft: String = "",
         preserveReadingPosition: Boolean = false) {
         val line = link ?: return
+        restoreSettingsBase()
         viewing?.cancel()
         viewing = null
         liveChat?.stop()
@@ -1589,7 +1598,7 @@ class HostsModel(
         // Drafts/answers belong to the cached conversation; the viewport belongs to this visit.
         if (!preserveReadingPosition) chat.readingSession = ChatReadingSession()
         if (draft.isNotEmpty()) chat.appendDraft(draft)
-        screen = Screen.Chat(chat, returnTo)
+        screen = Screen.Chat(chat, if (returnTo == Screen.Settings) screen else returnTo)
         chat.start(scope, paused = screensPaused)
     }
 
@@ -1983,7 +1992,8 @@ class HostsModel(
             return
         }
         back()
-        openAgents(focus = host?.let { AgentKey(it.id, address) }, openChat = openChat, selectedHosts = listOfNotNull(host))
+        openAgents(focus = null, selectedHosts = listOfNotNull(host))
+        if (host != null) openAgentTarget(host, address, openChat)
         if (host == null) {
             prompt = Prompt.Problem(Message(R.string.push_terminal_gone_title), Message(R.string.push_host_gone_body, listOf(address)))
         }
@@ -2000,11 +2010,10 @@ class HostsModel(
         screen = agents
         selectedHosts.forEach { host ->
             var focusing = focus?.takeIf { it.hostId == host.id }
+            val link = link(host, null)
+            agentLinks[host.id] = link
+            board.links[host.id] = link
             agentJobs += scope.launch {
-                val link = link(host, null)
-
-                agentLinks[host.id] = link
-                board.links[host.id] = link
                 try {
                     // A new line starts from its snapshot, so what changed while away shows.
                     link.keepWatching(onFailure = { board.fail(host.id, it) }, onStart = { board.starting(host.id) }) { c, _ ->
@@ -2068,7 +2077,7 @@ class HostsModel(
         if (agents.board !== board) return
         val current = board.find(entry.key) ?: return
         if (!current.live) {
-            board.links[entry.host.id]?.retryNow()
+            openAgentTarget(current.host, current.terminal.address, openChat)
             return
         }
         val link = agentLinks[current.host.id] ?: return
@@ -2387,42 +2396,77 @@ class HostsModel(
     private var agentOpeningJob: Job? = null
     private var agentOpenRequest = 0
     private var agentOpeningFromInbox = false
+    var agentOpening by mutableStateOf<Message?>(null)
+        private set
+    private var agentOpeningHostId: String? = null
 
-    private fun cancelAgentOpen() {
+    fun cancelAgentOpen() {
         agentOpenRequest++
         agentOpeningJob?.cancel()
         agentOpeningJob = null
         agentOpeningLink?.close()
         agentOpeningLink = null
         agentOpeningFromInbox = false
+        agentOpening = null
+        agentOpeningHostId = null
         openingCall = null
+    }
+
+    private fun restoreSettingsBase() {
+        settingsReturnTo?.let { screen = it }
+        settingsReturnTo = null
     }
 
     /** Resolve against exactly one Host. Pending trust retries this same action on this same link. */
     private fun openAgentTarget(host: Host, address: String, openChat: Boolean = false, callKey: String? = null) {
         val fromInbox = callKey != null
         if (fromInbox) navigationIntent() else userNavigation()
+        restoreSettingsBase()
         openingCall = callKey
         val version = navigationVersion
         val request = agentOpenRequest
         fun current() = navigationVersion == version && request == agentOpenRequest && (!fromInbox || callInboxOpen)
-        val existing = links.firstOrNull { it.host.id == host.id && it.state == LinkState.Up }
-        val target = existing ?: link(host, null) { error ->
-            if (current()) prompt = when (error) {
-                is CoreException.HostKeyUnknown -> Prompt.TrustHostKey(host, error.fingerprint)
-                is CoreException.JumpHostKeyUnknown -> Prompt.TrustJumpHostKey(host, error.hop, error.address, error.fingerprint)
-                else -> {
-                    cancelAgentOpen()
-                    problemFor(error)
-                }
-            }
-        }
+        val existing = links.firstOrNull { it.host.id == host.id && it.state != LinkState.Closed }
+        val target = existing ?: link(host, null)
+        val board = agentHome?.board?.takeIf { it.links[host.id] === target }
+        val name = board?.find(AgentKey(host.id, address))?.terminal?.let(::displayName)
+            ?: drawerAgents.firstOrNull { it.key == AgentKey(host.id, address) }?.terminal?.let(::displayName) ?: address
+        agentOpening = Message(R.string.agent_opening, listOf(name))
+        agentOpeningHostId = host.id
         agentOpeningFromInbox = fromInbox
         if (existing == null) agentOpeningLink = target
         agentOpeningJob = scope.launch {
             var adopted = false
             try {
-                val terminal = target.keep { conn, _ -> conn.terminals() }
+                val terminal = coroutineScope {
+                    // Trust is an explicit decision, so its time does not consume the connection budget.
+                    val deadline = launch {
+                        snapshotFlow { (target.state as? LinkState.Down)?.error }.collectLatest { error ->
+                            when (error) {
+                                is CoreException.HostKeyUnknown -> prompt = Prompt.TrustHostKey(host, error.fingerprint)
+                                is CoreException.JumpHostKeyUnknown -> prompt = Prompt.TrustJumpHostKey(host, error.hop, error.address, error.fingerprint)
+                                null -> {
+                                    delay(20_000L)
+                                    throw CoreException.Unreachable(host.name)
+                                }
+                                else -> throw error
+                            }
+                        }
+                    }
+                    try {
+                        if (target.state !is LinkState.Down) target.retryNow()
+                        target.keep { conn, _ ->
+                            if (board == null) conn.terminals() else {
+                                // Reuse the board's first fresh snapshot, including an empty list.
+                                val (source, failure) = snapshotFlow {
+                                    board.quickOpenSources.firstOrNull { it.host.id == host.id } to board.watchErrors[host.id]
+                                }.first { (source, failure) -> source != null || failure != null }
+                                if (failure != null) throw failure
+                                source!!.terminals
+                            }
+                        }
+                    } finally { deadline.cancel() }
+                }
                     .find { it.address == address && it.state == "live" }
                 if (!current()) return@launch
                 if (terminal == null) {
@@ -2436,20 +2480,32 @@ class HostsModel(
                 agentOpeningLink = null
                 agentOpeningJob = null
                 agentOpeningFromInbox = false
+                agentOpening = null
+                agentOpeningHostId = null
                 val retained = callLink?.takeIf { it === target }
                 if (retained != null) callLink = null
                 returnToQuickOpenBase()
                 if (retained != null) callLink = retained
                 if (existing == null) ownCallLink(target)
                 adopted = true
-                if (openChat) chat(target, terminal, screen) else show(target, terminal, screen)
+                val shared = pendingShare
+                if (shared != null && terminal.agentStatus != null) {
+                    chat(target, terminal, screen)
+                    (screen as Screen.Chat).chat.pendingShare = shared
+                    pendingShare = null
+                } else if (openChat) chat(target, terminal, screen) else show(target, terminal, screen)
                 closeCallInbox()
             } catch (e: CoreException) {
                 if (current()) prompt = problemFor(e)
             } finally {
                 if (existing == null && !adopted) target.close()
                 if (agentOpeningLink === target) agentOpeningLink = null
-                if (request == agentOpenRequest) openingCall = null
+                if (request == agentOpenRequest) {
+                    openingCall = null
+                    agentOpening = null
+                    agentOpeningHostId = null
+                    agentOpeningJob = null
+                }
             }
         }
     }
