@@ -104,7 +104,15 @@ class PushModel(
         private set
 
     /** The Relay URL being typed: to turn push on with, or to change to. */
-    var relayDraft by mutableStateOf("")
+    private var relayText by mutableStateOf("")
+    var relayDraft: String
+        get() = relayText
+        set(value) {
+            relayText = value
+            relayProblem = null
+        }
+    var relayProblem by mutableStateOf<Message?>(null)
+        private set
 
     /** Push is on and the user is choosing another Relay. */
     var changingRelay by mutableStateOf(false)
@@ -224,6 +232,13 @@ class PushModel(
         val host = host ?: return
         val relay = relayDraft.trim()
         if (relay.isEmpty()) return
+        problem = null
+        if (!validRelayUrl(relay)) {
+            relayProblem = Message(R.string.push_relay_invalid)
+            failedSteps = emptyList()
+            return
+        }
+        relayProblem = null
         val previous = ui
         val before = (ui as? PushUi.On)?.relayUrl
         val attempt = ++attemptId
@@ -356,3 +371,15 @@ private fun policyFailed(e: CoreException): Message = when (e) {
     is CoreException.BeaconStep -> Message(R.string.push_policy_failed, listOf(errorMessage(e)))
     else -> problemFor(e).body
 }
+
+/** Same URL policy as the core: HTTPS, with HTTP allowed only for loopback testing. */
+private fun validRelayUrl(raw: String): Boolean = runCatching {
+    val url = java.net.URI(raw)
+    val host = url.host?.removePrefix("[")?.removeSuffix("]") ?: return@runCatching false
+    val loopback = host.equals("localhost", ignoreCase = true) || host == "::1" ||
+        (host.split('.').let { parts -> parts.size == 4 && parts.first() == "127" &&
+            parts.all { it.toIntOrNull()?.let { number -> number in 0..255 } == true } })
+    !raw.any(Char::isWhitespace) && url.rawUserInfo == null && url.rawQuery == null &&
+        url.rawFragment == null && (url.scheme.equals("https", ignoreCase = true) ||
+        (url.scheme.equals("http", ignoreCase = true) && loopback))
+}.getOrDefault(false)

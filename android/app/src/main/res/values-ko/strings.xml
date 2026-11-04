@@ -1234,6 +1234,7 @@
     <string name="push_on_body">Relay: %1$s</string>
     <string name="push_test_sent">테스트 알림을 보냈어요.</string>
     <string name="push_relay_label">Relay URL</string>
+    <string name="push_relay_invalid">https://로 시작하는 올바른 Relay 주소를 입력해 주세요. 사용자 이름·암호·쿼리·프래그먼트는 넣을 수 없어요.</string>
     <string name="push_relay_required">푸시 알림을 켜려면 Relay URL을 입력해 주세요.</string>
     <string name="push_change_relay_button">Relay 변경</string>
     <string name="push_use_relay_button">이 Relay 사용</string>

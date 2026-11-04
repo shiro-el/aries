@@ -153,4 +153,42 @@ class SettingsNavigationRestorationTest {
         }
     }
 
+    // D116: a fresh Settings owner must return to the home selected after process restoration.
+    @Test fun restoredSettingsRemapsHomeInBothLayoutDirections() {
+        show()
+        compose.runOnIdle { model.openSettings() }
+        restart()
+        compose.runOnIdle {
+            model.homeLayoutChanged(AppLayout.CONSOLE, AppLayout.THREAD)
+            model.settingsBack()
+            assertTrue(model.screen is Screen.Agents)
+            model.openSettings()
+        }
+        restart()
+        compose.runOnIdle {
+            model.homeLayoutChanged(AppLayout.THREAD, AppLayout.CONSOLE)
+            model.settingsBack()
+            assertEquals(Screen.Hosts, model.screen)
+        }
+    }
+
+    // D124: process restoration must keep the Add Host method and the saved Host's authorization step.
+    @Test fun addHostProgressSurvivesSavedStateRestoration() {
+        show()
+        compose.runOnIdle { model.startAddingHost(HostAddMethod.QR) }
+        restart()
+        compose.runOnIdle {
+            assertEquals(HostAddMethod.QR, model.hostAddMethod)
+            assertEquals(Screen.Hosts, model.screen)
+            model.startAddingHost(HostAddMethod.MANUAL)
+            model.addHost("work", "work.test", 22, "me")
+        }
+        restart()
+        compose.runOnIdle {
+            assertEquals(HostAddMethod.MANUAL, model.hostAddMethod)
+            assertEquals("work", model.addedHost?.name)
+            assertEquals(model.addedHost?.id, model.setupHostId)
+        }
+    }
+
 }

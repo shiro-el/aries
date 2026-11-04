@@ -38,3 +38,26 @@ internal data class SettingsNavigationState(
         }
     }
 }
+
+/** Host setup identity only; QR credentials and trust decisions must be obtained again. */
+internal data class HostSetupState(
+    val method: HostAddMethod?,
+    val addedHostId: String?,
+    val setupHostId: String?,
+) {
+    fun writeTo(state: Bundle) {
+        state.putString("host-add-method", method?.name)
+        state.putString("host-add-saved", addedHostId)
+        state.putString("host-add-follow", setupHostId)
+    }
+
+    companion object {
+        fun read(state: Bundle?): HostSetupState? {
+            if (state == null || !state.containsKey("host-add-method")) return null
+            return HostSetupState(
+                HostAddMethod.entries.find { it.name == state.getString("host-add-method") },
+                state.getString("host-add-saved"), state.getString("host-add-follow"),
+            )
+        }
+    }
+}

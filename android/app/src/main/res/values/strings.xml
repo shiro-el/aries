@@ -1237,6 +1237,7 @@
     <string name="push_on_body">Relay: %1$s</string>
     <string name="push_test_sent">Test notification sent.</string>
     <string name="push_relay_label">Relay URL</string>
+    <string name="push_relay_invalid">Enter a valid Relay URL starting with https://, without a username, password, query or fragment.</string>
     <string name="push_relay_required">Enter a Relay URL to turn on push notifications.</string>
     <string name="push_relay_placeholder" translatable="false">https://relay.example.com</string>
     <string name="push_change_relay_button">Change Relay</string>

@@ -1,18 +1,26 @@
 package io.github.shiroel.aries.ui
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performScrollToKey
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -188,6 +196,34 @@ class PushSectionTest {
         shows(str(R.string.push_on_body, MINE))
     }
 
+    // D81: typing the first character must not remove the focused Relay field.
+    @Test fun relayFieldKeepsFocusWhenTypingWithoutADefaultRelay() {
+        val core = FakeCore().apply { beacon = installed() }
+        connectTo(core, Platform(relayUrl = null))
+        compose.onNodeWithTag("push-advanced").performScrollTo().performClick()
+        compose.onNodeWithTag(RELAY_FIELD).performScrollTo().performClick().performTextInput("h")
+        compose.onNodeWithTag(RELAY_FIELD).assertIsFocused().assertTextContains("h")
+        compose.onNodeWithTag(RELAY_FIELD).performTextInput("ttps://relay.mine.example")
+        click(R.string.push_enable_button)
+        assertEquals(MINE, core.pushPaired.values.single())
+    }
+
+    // D80: a malformed address must identify the editable field, not a failed connection.
+    @Test fun malformedRelaySubmissionMarksTheFieldAndCanBeCorrected() {
+        val core = FakeCore().apply { beacon = installed() }
+        val model = connectTo(core)
+        typeRelay("h")
+        click(R.string.push_enable_button)
+        compose.onNodeWithTag(RELAY_FIELD).assert(
+            androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.Error),
+        )
+        assertEquals(null, model.push.problem)
+        assertTrue(core.pushPaired.isEmpty())
+        typeRelay(MINE)
+        click(R.string.push_enable_button)
+        assertEquals(MINE, core.pushPaired.values.single())
+    }
+
     @Test
     fun usesASelfHostedRelayFromTheStart() {
         val core = FakeCore().apply { beacon = installed() }
@@ -299,6 +335,35 @@ class PushSectionTest {
         assertEquals(flushesBefore + 1, core.revocationFlushes)
         click(R.string.push_enable_button)
         assertTrue(core.pushPaired.isEmpty())
+    }
+
+    // D122: lazy disposal must not remove or resurrect an open Host confirmation.
+    @Test fun pushDisableConfirmationStaysOpenWhenItsSectionScrollsAway() {
+        val core = FakeCore().apply { beacon = installed(); pushPaired["h1"] = RELAY }
+        val host = core.addHost("box", Endpoint.Ssh("10.0.0.2", 22u, "me"))
+        lateinit var model: HostsModel
+        compose.setContent {
+            val scope = rememberCoroutineScope()
+            model = remember { HostsModel(core, scope, noDownload, pushPlatform = Platform(), http = noHttp) }
+            LaunchedEffect(model) { model.openHostSettings(host) }
+            MaterialTheme {
+                HostSettingsScreen(model, host, hostEditor = {
+                    // Long connection settings force real lazy disposal, including prefetch caches.
+                    Column { repeat(80) { Text("Connection detail $it") } }
+                })
+            }
+        }
+        // A retained request can arrive before the section is composed after recreation.
+        compose.runOnIdle { model.push.askDisable() }
+        val title = str(R.string.push_disable_title, "box")
+        compose.onNodeWithText(title).assertExists()
+        compose.onNodeWithTag("host-actions:h1").performScrollToKey("push")
+        compose.onNodeWithTag("host-actions:h1").performScrollToIndex(0)
+        compose.onNodeWithText(title).assertExists()
+        compose.onNodeWithText(str(R.string.cancel_button)).performClick()
+        compose.onNodeWithTag("host-actions:h1").performScrollToKey("push")
+        compose.onNodeWithText(title).assertDoesNotExist()
+        assertEquals(RELAY, core.pushPaired["h1"])
     }
 
     private fun option(res: Int) = compose.onNodeWithText(str(res)).performScrollTo()

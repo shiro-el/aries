@@ -73,8 +73,13 @@ fun AriesApp(
     allowNotifications: suspend () -> Boolean = { false },
     terminalDisplay: TerminalDisplaySettings = rememberTerminalDisplaySettings(),
 ) {
+    // Keep Settings at the same composition location while its layout choice changes.
+    // The chosen colours/tokens update immediately; the navigation shell changes on exit.
+    val inSettings = model.screen == Screen.Settings || model.screen is Screen.JumpHosts
+    val settingsLayout by rememberSaveable(inSettings) { mutableStateOf(settings.layout) }
+    val presentation = if (inSettings) settingsLayout else settings.layout
     AriesTheme(settings) {
-        androidx.compose.runtime.CompositionLocalProvider(LocalLayoutScreens provides layoutScreensFor(settings.layout)) {
+        androidx.compose.runtime.CompositionLocalProvider(LocalLayoutScreens provides layoutScreensFor(presentation)) {
             NewTaskAccess(model) {
                 if (guidance == null) AriesContent(model, settings, terminalDisplay)
                 else io.github.shiroel.aries.guidance.AppGuidance(guidance) { AriesContent(model, settings, terminalDisplay, guidance, allowNotifications) }
