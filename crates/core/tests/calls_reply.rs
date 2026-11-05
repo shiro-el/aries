@@ -27,6 +27,9 @@ fn setup_with_beacon(beacon: &str) -> Setup {
         unreachable!()
     };
     env.insert("ARIES_BEACON".into(), beacon.into());
+    // `aries-beacon reply` reaches the session through the pinned herdr-core.
+    let bin_dir = hc.bin().parent().unwrap().display().to_string();
+    env.insert("PATH".into(), format!("{bin_dir}:/usr/bin:/bin"));
     let host = core
         .add_host("dev".into(), Endpoint::Local { argv, env })
         .unwrap()
@@ -107,7 +110,12 @@ async fn answering_a_call_types_the_choice_once_and_records_it() {
         .await
         .unwrap();
 
-    assert_eq!(reply.outcome, CallReplyOutcome::Delivered);
+    assert_eq!(
+        reply.outcome,
+        CallReplyOutcome::Delivered,
+        "{:?}",
+        reply.detail
+    );
     assert_eq!(inputs_after(&agent, 1).await, ["Ship it"]);
     let answer = s.call(&call.id).await.answer.unwrap();
     assert_eq!(answer.state, CallAnswerState::Delivered);
