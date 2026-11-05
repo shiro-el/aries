@@ -11,6 +11,9 @@ Checked (fails the release build):
   - foreground service types: an app that starts foreground services declares a
     type on them (API 34+) and holds the matching FOREGROUND_SERVICE_<TYPE>
     permission. Play also needs a foreground service declaration in the Console.
+    WorkManager's untyped SystemForegroundService is allowed: it runs expedited
+    work as a foreground service only below API 31, where no type is needed,
+    and Aries never calls setForeground().
   - restricted permissions that need a Play Console declaration or are
     disallowed for an app like Aries (background network goes through FCM and
     WorkManager, not a battery-optimization exemption).
@@ -62,6 +65,8 @@ RESTRICTED = {
 
 FCM_ACTION = "com.google.firebase.MESSAGING_EVENT"
 
+WORKMANAGER_FGS = "androidx.work.impl.foreground.SystemForegroundService"
+
 
 def fgs_types(value):
     """Type names in an android:foregroundServiceType value (hex flags or names)."""
@@ -89,7 +94,8 @@ def check(root):
 
     typed = [(s.get(A + "name"), fgs_types(s.get(A + "foregroundServiceType")))
              for s in services if s.get(A + "foregroundServiceType")]
-    if "android.permission.FOREGROUND_SERVICE" in perms and not typed:
+    workmanager = any(s.get(A + "name") == WORKMANAGER_FGS for s in services)
+    if "android.permission.FOREGROUND_SERVICE" in perms and not typed and not workmanager:
         errors.append("FOREGROUND_SERVICE is requested but no service declares android:foregroundServiceType (API 34+)")
     if typed and "android.permission.FOREGROUND_SERVICE" not in perms:
         errors.append("a service declares a foreground service type but android.permission.FOREGROUND_SERVICE is not requested")
