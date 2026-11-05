@@ -80,6 +80,7 @@ class RemotePdfDeviceTest {
         compose.waitUntil(10_000) {
             compose.onAllNodesWithText(str(R.string.files_preview_failed)).fetchSemanticsNodes().isNotEmpty()
         }
+        compose.onNodeWithContentDescription(str(R.string.files_actions_label)).performClick()
         compose.onNodeWithText(str(R.string.files_save_button)).assertIsEnabled()
         compose.onNodeWithText(str(R.string.files_share_button)).assertIsEnabled()
         compose.onNodeWithTag("pdf-page:1").assertDoesNotExist()
