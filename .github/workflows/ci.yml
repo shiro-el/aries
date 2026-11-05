@@ -113,3 +113,11 @@ jobs:
           target: google_apis
           working-directory: android
           script: ./gradlew --no-daemon -Paries.abis=x86_64 :app:connectedDebugAndroidTest
+      - name: Device test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-device-test-report
+          path: |
+            android/app/build/reports/androidTests/connected/
+            android/app/build/outputs/androidTest-results/connected/
