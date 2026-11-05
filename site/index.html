@@ -33,8 +33,8 @@
         <h1 id="hero-title">Your Herdr agents, in&nbsp;your&nbsp;pocket.</h1>
         <p class="lede">See who is Blocked, answer, and type back, over plain SSH.</p>
         <div class="actions">
-          <a class="button primary" href="https://github.com/shiro-el/aries">Source on GitHub</a>
-          <a class="button" href="#install">Build it today</a>
+          <a class="button primary" href="https://github.com/shiro-el/aries/releases">Download the APK</a>
+          <a class="button" href="https://github.com/shiro-el/aries">Source on GitHub</a>
         </div>
       </div>
       <ul class="panes" aria-label="Screens from the app">
@@ -100,8 +100,12 @@
     </section>
 
     <section id="install" class="install container" aria-labelledby="install-title">
-      <h2 id="install-title">No release yet. Build it from source.</h2>
-      <p class="side">Signed builds will land on <a href="https://github.com/shiro-el/aries/releases">GitHub Releases</a>. Until then you need Rust, Java 21 and the Android SDK with NDK 27.</p>
+      <h2 id="install-title">Download the APK.</h2>
+      <p class="side">Signed builds for Android 9 or newer are on GitHub Releases; the current one, 0.1.0-rc.1, is a release candidate. The app installs the Beacon its release pins on a Host, from the Host's settings.</p>
+      <div class="actions">
+        <a class="button primary" href="https://github.com/shiro-el/aries/releases">Get it on GitHub Releases</a>
+      </div>
+      <p class="side">Or build it from source with Rust, Java 21 and the Android SDK with NDK 27.</p>
       <pre><code>git clone https://github.com/shiro-el/aries.git
 cd aries/android
 ./gradlew :app:assembleDogfood -Paries.abis=arm64-v8a

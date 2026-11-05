@@ -141,7 +141,19 @@ These need the Beacon and a push Relay (see [How it works](#how-it-works)).
 
 ## Install
 
-There is no published release yet. Signed builds will appear on [GitHub Releases](https://github.com/shiro-el/aries/releases) once the release pipeline goes live; until then, build Aries from source.
+Download `aries-<version>.apk` from [GitHub Releases](https://github.com/shiro-el/aries/releases) and open it on the phone (Android 9 or newer). You may need to allow installs from your browser or file manager first. The current release, `0.1.0-rc.1`, is a release candidate.
+
+Each release also carries the Beacon binaries for Linux and macOS (x86_64, aarch64), with `SHA256SUMS` for the APK and `beacon-SHA256SUMS` for the Beacon. You do not need to download the Beacon: the app installs the copy its release pins, by checksum, from the Host's settings. To check the APK and its signing certificate:
+
+```sh
+sha256sum -c SHA256SUMS
+apksigner verify --print-certs aries-<version>.apk
+# certificate SHA-256 digest: 664096f8e735c81718a806952748e6bba9a8fda27cde792b80e04f8f8f2db699
+```
+
+The release APK installs next to a debug or dogfood build, which use the separate `io.github.shiroel.aries.dev` ID. There is no Wear OS APK in the release yet; build it from source below.
+
+### Build from source
 
 You need Rust (stable, 1.99+), Java 21 and the Android SDK with NDK 27.1.12297006.
 
@@ -161,7 +173,7 @@ adb install app/build/outputs/apk/dogfood/app-dogfood.apk
 
 A build from source differs from a release in two ways:
 
-- **Beacon**: the app installs only the Beacon binaries a release pins by checksum, so a plain source build cannot install one. Build the Beacon yourself as described in [CONTRIBUTING.md](CONTRIBUTING.md#releases) if you need Chat, Calls or push now.
+- **Beacon**: the app installs only the Beacon binaries a release pins by checksum, so a plain source build cannot install one. Build the Beacon yourself as described in [CONTRIBUTING.md](CONTRIBUTING.md#releases) if you need Chat, Calls or push.
 - **Push**: notifications need your own Firebase project (`android/app/google-services.json`) and a Relay. Without them the app tells you push is unavailable. See [relay/README.md](relay/README.md) to run your own Relay.
 
 ## Connect your first host
