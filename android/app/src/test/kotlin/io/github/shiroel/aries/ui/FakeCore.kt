@@ -1051,6 +1051,12 @@ class FakeConnection(
         saved.removeAll { it.id == id }
     }
 
+    /** Records the new-Space intent; herdr-app adopting the fresh labels is not faked. */
+    override suspend fun launchInNewSpace(request: LaunchRequest): TerminalInfo {
+        calls += "launchInNewSpace"
+        return launch(request)
+    }
+
     /** Like herdr-core: a new live Terminal, shown in its labelled Tab (or unplaced). */
     override suspend fun launch(request: LaunchRequest): TerminalInfo {
         calls += "launch"

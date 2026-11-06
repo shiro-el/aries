@@ -62,7 +62,8 @@ internal class NewTask(link: HostLink, val form: LaunchForm, prompt: String) {
             if (terminal == null) {
                 // Without an idempotency token a disconnected launch cannot safely be repeated.
                 launchUnknown = true
-                terminal = launchConnection.launch(form.request())
+                // Every task gets its own Space, so herdr-app shows it too.
+                terminal = launchConnection.launchInNewSpace(form.request())
                 launchUnknown = false
             }
             waiting = true

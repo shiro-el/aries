@@ -314,6 +314,18 @@ impl SavedLaunches {
     }
 }
 
+/// A Space id and a Tab id no herdr-app document holds yet, in herdr-app's
+/// own shape (`sp` / `tb` + 32 hex digits).
+pub(crate) fn fresh_space_ids() -> (String, String) {
+    let hex = |prefix: &str| {
+        let bytes: [u8; 16] = rand::random();
+        bytes
+            .iter()
+            .fold(prefix.to_owned(), |s, b| s + &format!("{b:02x}"))
+    };
+    (hex("sp"), hex("tb"))
+}
+
 /// The cwd to remember after a successful launch of `req`.
 pub(crate) fn cwd_to_remember(req: &LaunchRequest) -> Option<&str> {
     req.cwd.as_deref().filter(|cwd| !cwd.trim().is_empty())

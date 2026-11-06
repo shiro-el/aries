@@ -17,6 +17,7 @@ import io.github.shiroel.aries.R
 import io.github.shiroel.aries.core.*
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -80,6 +81,8 @@ class NewTaskScreenTest {
         compose.onNodeWithContentDescription(str(R.string.chat_input_label)).assertExists()
         assertEquals(listOf("t101" to "Survive rotation"), conn.typed)
         assertEquals(1, conn.launched.size)
+        // A task launched without a Space of its own is invisible in herdr-app.
+        assertTrue("launchInNewSpace" in conn.calls)
     }
 
     // Regression D87: acknowledging a lost launch reply must free both creation flows without replaying it.

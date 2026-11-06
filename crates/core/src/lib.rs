@@ -1955,6 +1955,21 @@ impl HostConnection {
         Ok(terminal_info(&result))
     }
 
+    /// [`HostConnection::launch`] in a Space of its own: the request's Space
+    /// and Tab are replaced by fresh ids, which herdr-app turns into a new
+    /// Space named after the folder (herdr-app `defaults/AGENTS.md`: "An id
+    /// Herdr doesn't know becomes a new space or tab"). Needs no `herdr-app`
+    /// binary on the Host. Until herdr-app adopts it the phone lists it unplaced.
+    pub async fn launch_in_new_space(
+        &self,
+        mut request: LaunchRequest,
+    ) -> Result<TerminalInfo, CoreError> {
+        let (space, tab) = launch::fresh_space_ids();
+        request.space_id = Some(space);
+        request.tab_id = Some(tab);
+        self.launch(request).await
+    }
+
     /// Working directories recently launched in on this Host, newest first,
     /// at most [`RECENT_CWDS_KEPT`]. Kept on the phone, per Host.
     pub fn recent_cwds(&self) -> Vec<String> {
