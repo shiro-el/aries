@@ -458,6 +458,108 @@ fn unconfirmed_socket_answer_falls_back_to_keys() {
     std::fs::remove_file(path.with_extension("json")).unwrap();
 }
 
+#[test]
+fn hook_and_late_transcript_answers_share_one_claim() {
+    if isolated_runtime("hook_and_late_transcript_answers_share_one_claim") {
+        return;
+    }
+    // Exercise the public answer seam with the actual Claude transcript interpreter.
+    use aries_beacon::chat::TerminalInput;
+    use aries_protocol::answer::{Answer, AnswerOutcome};
+    #[derive(Default)]
+    struct Link {
+        keys: Vec<String>,
+    }
+    impl TerminalLookup for Link {
+        fn screen(&mut self, _: &str) -> Result<String, String> {
+            Ok("Color?\n1. Blue\n2. Red".into())
+        }
+        fn get(&mut self, _: &str) -> Result<Option<TerminalFacts>, String> {
+            Ok(Some(TerminalFacts::from_json(
+                &json!({"status":{"state":"blocked","kind":"question"}}),
+            )))
+        }
+    }
+    impl TerminalInput for Link {
+        fn keys(&mut self, _: &str, keys: &[String]) -> Result<(), String> {
+            self.keys.extend_from_slice(keys);
+            Ok(())
+        }
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let req = request(&dir.path().join("transcript"));
+    std::fs::write(&req.transcript_path, "").unwrap();
+    let terminal = format!("test-{:016x}", rand::random::<u64>());
+    let path = hook::socket_path(dir.path(), hook::runtime_dir().as_deref(), &terminal).unwrap();
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let listener = UnixListener::bind(&path).unwrap();
+    let pending = hook::Pending {
+        request: req.clone(),
+        id: "claude-hook:0123456789abcdef".into(),
+        transcript_offset: 0,
+        created_at: 0,
+        nonce: "test".into(),
+    };
+    std::fs::write(
+        path.with_extension("json"),
+        serde_json::to_vec(&pending).unwrap(),
+    )
+    .unwrap();
+    let socket_path = path.clone();
+    let worker = std::thread::spawn(move || {
+        let (socket, _) = listener.accept().unwrap();
+        let mut line = String::new();
+        BufReader::new(socket).read_line(&mut line).unwrap();
+        std::fs::remove_file(&socket_path).unwrap();
+        std::fs::remove_file(socket_path.with_extension("json")).unwrap();
+        serde_json::from_str::<Value>(&line).unwrap()
+    });
+    let agents: Vec<Box<dyn Agent>> = vec![Box::new(Claude {
+        located: Located {
+            session: "session".into(),
+            path: req.transcript_path.clone(),
+        },
+    })];
+    let mut link = Link::default();
+    let result = answer::answer(
+        dir.path(),
+        &terminal,
+        &Answer {
+            question: pending.id.clone(),
+            picks: vec![vec![0], vec![1]],
+            free_text: vec![],
+        },
+        &mut link,
+        &agents,
+    )
+    .unwrap();
+    assert_eq!(result.outcome, AnswerOutcome::Sent, "{result:?}");
+    assert_eq!(
+        worker.join().unwrap()["answer"],
+        json!({"Color?":"Blue","Other?":"B"})
+    );
+    assert_eq!(link.keys, ["1", "2", "1"]);
+    assert!(!path.exists());
+    assert!(!path.with_extension("json").exists());
+    record(&req);
+    link.keys.clear();
+    let result = answer::answer(
+        dir.path(),
+        &terminal,
+        &Answer {
+            question: "tool1".into(),
+            picks: vec![vec![1], vec![0]],
+            free_text: vec![],
+        },
+        &mut link,
+        &agents,
+    )
+    .unwrap();
+    assert_eq!(result.outcome, AnswerOutcome::Failed, "{result:?}");
+    assert!(result.detail.unwrap().contains("already attempted"));
+    assert!(link.keys.is_empty());
+}
+
 /// Isolated real TUI: the installed plugin, mixed answers, multi-select and Bash.
 /// The only connection to real Claude config is the explicit credentials symlink.
 #[test]
