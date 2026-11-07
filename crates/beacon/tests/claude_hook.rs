@@ -302,7 +302,7 @@ fn unconfirmed_socket_answer_falls_back_to_keys() {
     let agents: Vec<Box<dyn Agent>> = vec![Box::new(Claude {
         located: Located {
             session: "session".into(),
-            path: req.transcript_path,
+            path: req.transcript_path.clone(),
         },
     })];
     let mut link = Link::default();
@@ -326,6 +326,37 @@ fn unconfirmed_socket_answer_falls_back_to_keys() {
     assert_eq!(link.keys, ["1", "2", "1"]);
     assert!(!path.exists());
     assert!(!path.with_extension("json").exists());
+    // A cached transcript id must retain its key path even while a hook
+    // overlay would hide that tool from a new Chat snapshot.
+    let listener = UnixListener::bind(&path).unwrap();
+    listener.set_nonblocking(true).unwrap();
+    record(&req);
+    std::fs::write(
+        path.with_extension("json"),
+        serde_json::to_vec(&pending).unwrap(),
+    )
+    .unwrap();
+    link.keys.clear();
+    let result = answer::answer(
+        dir.path(),
+        &terminal,
+        &Answer {
+            question: "tool1".into(),
+            picks: vec![vec![0], vec![1]],
+            free_text: vec![],
+        },
+        &mut link,
+        &agents,
+    )
+    .unwrap();
+    assert_eq!(result.outcome, AnswerOutcome::Sent);
+    assert_eq!(link.keys, ["1", "2", "1"]);
+    assert_eq!(
+        listener.accept().unwrap_err().kind(),
+        std::io::ErrorKind::WouldBlock
+    );
+    std::fs::remove_file(&path).unwrap();
+    std::fs::remove_file(path.with_extension("json")).unwrap();
 }
 
 /// Isolated real TUI: the installed plugin, mixed answers, multi-select and Bash.

@@ -289,7 +289,12 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
         });
     }
 
-    let Some(items) = terminal_transcript(agent.as_ref(), &located, state_dir, terminal)? else {
+    let items = if agent.name() == "claude-code" && answer.question.starts_with("claude-hook:") {
+        terminal_transcript(agent.as_ref(), &located, state_dir, terminal)?
+    } else {
+        transcript(agent.as_ref(), &located)?
+    };
+    let Some(items) = items else {
         return Ok(reply(AnswerOutcome::Gone, "no transcript"));
     };
 
