@@ -302,14 +302,13 @@ fn details(c: &Change, lookup: &mut CoreLookup, adapters: &Adapters) -> Details 
     let Ok(view) = adapters.observe(&c.terminal, lookup) else {
         return out;
     };
-    if !view.matches(&facts) {
-        return Details::default();
+    if view.matches(&facts) {
+        out.question = view.quick_reply().map(|q| PushQuestion {
+            id: q.id().as_str().to_owned(),
+            text: q.text().to_owned(),
+            options: q.options().to_vec(),
+        });
     }
-    out.question = view.quick_reply().map(|q| PushQuestion {
-        id: q.id().as_str().to_owned(),
-        text: q.text().to_owned(),
-        options: q.options().to_vec(),
-    });
     if c.status == AgentStatus::Done {
         out.excerpt = view.last_reply().map(str::to_owned);
     }
