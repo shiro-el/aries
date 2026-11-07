@@ -1,5 +1,5 @@
 use super::claude::hook::Pending;
-use super::{Agent, Interpreter, Located, TerminalFacts};
+use super::{Agent, Interpreter, Located};
 use aries_protocol::chat::{ChatBody, ChatEvent, ChatItem, ToolStatus};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -32,7 +32,6 @@ struct Gate {
     shape: String,
     offset: u64,
     prefix: Option<String>,
-    turn: Option<u64>,
 }
 #[derive(Clone, Serialize, Deserialize)]
 pub(super) struct Identity {
@@ -47,7 +46,6 @@ impl Identity {
     pub(super) fn new(
         agent: &dyn Agent,
         located: &Located,
-        facts: &TerminalFacts,
         item: &ChatItem,
         gate: Option<&Pending>,
         correlated: Option<&str>,
@@ -81,7 +79,6 @@ impl Identity {
             shape: shape(&p.request.tool_name, &p.request.tool_input),
             offset: p.transcript_offset,
             prefix: prefix(&located.path, p.transcript_offset),
-            turn: facts.turn,
         });
         Self {
             version: 1,
@@ -96,7 +93,7 @@ impl Identity {
             gate,
         }
     }
-    fn conflicts(&self, old: &Self, located: &Located, facts: &TerminalFacts) -> bool {
+    fn conflicts(&self, old: &Self, located: &Located) -> bool {
         if self.source != old.source {
             return false;
         }
@@ -111,6 +108,9 @@ impl Identity {
         {
             return true;
         }
+        if old.call.is_some() {
+            return false;
+        }
         let Some(call) = &self.call else {
             return false;
         };
@@ -118,11 +118,6 @@ impl Identity {
             return false;
         };
         if self.shape.as_ref() != Some(&gate.shape) {
-            return false;
-        }
-        if let (Some(before), Some(now)) = (gate.turn, facts.turn)
-            && before != now
-        {
             return false;
         }
         let Some(expected) = &gate.prefix else {
@@ -133,14 +128,9 @@ impl Identity {
         }
         // A gate before its tool_use exists claims the matching occurrence in
         // this exact transcript prefix, even after hook cleanup or a crash.
-        deferred_calls(&located.path, gate).is_none_or(|calls| calls.contains(call))
+        deferred_call(&located.path, gate).is_none_or(|witness| witness.as_ref() == Some(call))
     }
-    pub(super) fn check(
-        &self,
-        dir: &Path,
-        located: &Located,
-        facts: &TerminalFacts,
-    ) -> Result<(), String> {
+    pub(super) fn check(&self, dir: &Path, located: &Located) -> Result<(), String> {
         for alias in &self.aliases {
             if dir.join(alias).exists() {
                 return Err(attempted());
@@ -157,7 +147,7 @@ impl Identity {
             }
             let old: Self =
                 serde_json::from_slice(&bytes).map_err(|e| format!("invalid answer claim: {e}"))?;
-            if old.version != 1 || self.conflicts(&old, located, facts) {
+            if old.version != 1 || self.conflicts(&old, located) {
                 return Err(attempted());
             }
         }
@@ -171,13 +161,8 @@ impl Identity {
             .and_then(|dir| dir.sync_all())
             .map_err(|e| e.to_string())
     }
-    pub(super) fn claim(
-        &self,
-        dir: &Path,
-        located: &Located,
-        facts: &TerminalFacts,
-    ) -> Result<(), String> {
-        self.check(dir, located, facts)?;
+    pub(super) fn claim(&self, dir: &Path, located: &Located) -> Result<(), String> {
+        self.check(dir, located)?;
         let record = serde_json::to_vec(self).map_err(|e| e.to_string())?;
         for alias in &self.aliases {
             let mut options = OpenOptions::new();
@@ -219,14 +204,13 @@ fn prefix(path: &Path, offset: u64) -> Option<String> {
         .ok()?;
     (bytes.len() as u64 == offset).then(|| bytes_hash(&bytes))
 }
-fn deferred_calls(path: &Path, gate: &Gate) -> Option<Vec<String>> {
+fn deferred_call(path: &Path, gate: &Gate) -> Option<Option<String>> {
     let bytes = std::fs::read(path).ok()?;
     let mut interpreter = super::claude::ClaudeInterpreter::default();
     let mut end = 0u64;
     let mut turn = None;
-    let mut claimed_turn = None;
     let mut seen = std::collections::HashSet::new();
-    let mut calls = Vec::new();
+    let mut call = None;
     for line in bytes.split_inclusive(|b| *b == b'\n') {
         end += line.len() as u64;
         if line.last() != Some(&b'\n') {
@@ -237,13 +221,11 @@ fn deferred_calls(path: &Path, gate: &Gate) -> Option<Vec<String>> {
             match event {
                 ChatEvent::Item { item } => match &item.body {
                     ChatBody::User { queued: false, .. } => {
-                        turn = Some(hash(&item.id));
-                        if claimed_turn
-                            .as_ref()
-                            .is_some_and(|claimed| claimed != &turn)
-                        {
-                            return Some(calls);
+                        let next = hash(&item.id);
+                        if end > gate.offset && turn.as_ref().is_some_and(|old| old != &next) {
+                            return Some(call);
                         }
+                        turn = Some(next);
                     }
                     ChatBody::Tool {
                         name,
@@ -253,12 +235,12 @@ fn deferred_calls(path: &Path, gate: &Gate) -> Option<Vec<String>> {
                     } => {
                         let first = seen.insert(item.id.clone());
                         if first
+                            && call.is_none()
                             && end > gate.offset
                             && *status == ToolStatus::Running
                             && shape(name, input) == gate.shape
                         {
-                            claimed_turn.get_or_insert_with(|| turn.clone());
-                            calls.push(hash(&item.id));
+                            call = Some(hash(&item.id));
                         }
                     }
                     _ => {}
@@ -268,7 +250,5 @@ fn deferred_calls(path: &Path, gate: &Gate) -> Option<Vec<String>> {
             }
         }
     }
-    calls.sort();
-    calls.dedup();
-    Some(calls)
+    Some(call)
 }

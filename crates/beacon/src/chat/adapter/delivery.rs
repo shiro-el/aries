@@ -95,11 +95,10 @@ struct ClaimedInput<'a, L> {
 impl<L> ClaimedInput<'_, L> {
     fn claim(&mut self) -> Result<(), String> {
         if !self.claimed {
-            self.proof.request.identity().claim(
-                &self.path,
-                self.proof.located,
-                self.proof.facts,
-            )?;
+            self.proof
+                .request
+                .identity()
+                .claim(&self.path, self.proof.located)?;
             self.claimed = true;
         }
         Ok(())
@@ -272,7 +271,7 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
             {
                 return Ok(reply(AnswerOutcome::Gone, "the permission status changed"));
             }
-            if let Err(detail) = request.identity().check(&dir, &located, &facts) {
+            if let Err(detail) = request.identity().check(&dir, &located) {
                 return Ok(reply(AnswerOutcome::Failed, detail));
             }
             if let Some(pending) = primary
@@ -342,7 +341,7 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
         return Ok(reply(AnswerOutcome::Invalid, detail));
     }
     if let Some(pending) = primary {
-        if let Err(detail) = request.identity().check(&dir, &located, &facts) {
+        if let Err(detail) = request.identity().check(&dir, &located) {
             return Ok(reply(AnswerOutcome::Failed, detail));
         }
         let answers: serde_json::Map<String, serde_json::Value> = question
@@ -401,7 +400,7 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
         Err(KeysError::Unsupported(d)) => return Ok(reply(AnswerOutcome::Unsupported, d)),
     };
     if !link.claimed
-        && let Err(detail) = request.identity().check(&dir, &located, &facts)
+        && let Err(detail) = request.identity().check(&dir, &located)
     {
         return Ok(reply(AnswerOutcome::Failed, detail));
     }

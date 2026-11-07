@@ -115,7 +115,6 @@ pub(super) fn collect_requests(
             identity: super::claims::Identity::new(
                 agent,
                 located,
-                facts,
                 item,
                 hook.as_ref().filter(|_| covered),
                 covered.then_some(item.id.as_str()),
@@ -132,7 +131,6 @@ pub(super) fn collect_requests(
             identity: super::claims::Identity::new(
                 agent,
                 located,
-                facts,
                 &item,
                 Some(primary),
                 correlation,
@@ -149,8 +147,7 @@ pub(super) fn collect_requests(
     if let Some(permission) = agent.approval(&located.session, facts, screen) {
         let item = permission.item.clone();
         let fallback = Tui::Approval(Box::new(permission));
-        let identity =
-            super::claims::Identity::new(agent, located, facts, &item, hook.as_ref(), None);
+        let identity = super::claims::Identity::new(agent, located, &item, hook.as_ref(), None);
         let route = match hook.filter(|p| p.request.tool_name != "AskUserQuestion") {
             Some(primary) => Route::ClaudeHook {
                 primary: Box::new(primary),

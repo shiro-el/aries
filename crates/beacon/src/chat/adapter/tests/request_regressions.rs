@@ -1,8 +1,10 @@
+use std::io::{BufRead, BufReader};
+use std::os::unix::net::UnixListener;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-use super::super::claude::hook;
+use super::super::claude::hook::{self, Request};
 use super::support::{
     Agent, Located, TerminalFacts, TerminalInput, TerminalLookup, answer, claude::ClaudeCode,
 };
@@ -251,4 +253,163 @@ fn an_older_turns_running_question_does_not_remove_push_buttons() {
     let quick = view.quick_reply().unwrap();
     assert_eq!(quick.id().as_str(), "tool1");
     assert_eq!(quick.options(), ["Red", "Blue"]);
+}
+
+fn hook_pending(transcript: &Path, id: &str, nonce: &str) -> hook::Pending {
+    hook::Pending {
+        request: Request {
+            session_id: "session".into(),
+            transcript_path: transcript.into(),
+            cwd: "/work".into(),
+            permission_mode: "default".into(),
+            hook_event_name: "PermissionRequest".into(),
+            tool_name: "AskUserQuestion".into(),
+            tool_input: q(),
+        },
+        id: id.into(),
+        transcript_offset: std::fs::metadata(transcript).unwrap().len(),
+        created_at: 0,
+        nonce: nonce.into(),
+    }
+}
+
+/// A hook socket that accepts one decision, flips status to working (the
+/// confirmation main also relies on) and removes its files like `wait` does.
+fn serve_hook(
+    sock: &Path,
+    pending: &hook::Pending,
+    working: Arc<AtomicBool>,
+) -> std::thread::JoinHandle<Value> {
+    std::fs::create_dir_all(sock.parent().unwrap()).unwrap();
+    let listener = UnixListener::bind(sock).unwrap();
+    std::fs::write(
+        sock.with_extension("json"),
+        serde_json::to_vec(pending).unwrap(),
+    )
+    .unwrap();
+    let sock = sock.to_owned();
+    std::thread::spawn(move || {
+        let (s, _) = listener.accept().unwrap();
+        let mut l = String::new();
+        BufReader::new(s).read_line(&mut l).unwrap();
+        working.store(true, Ordering::SeqCst);
+        std::fs::remove_file(&sock).unwrap();
+        std::fs::remove_file(sock.with_extension("json")).unwrap();
+        serde_json::from_str(&l).unwrap()
+    })
+}
+
+fn result(uuid: &str, parent: &str, tool: &str) -> String {
+    line(
+        json!({"type":"user","uuid":uuid,"parentUuid":parent,"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":tool,"content":"answered"}]}}),
+    )
+}
+
+#[test]
+fn a_hook_claim_still_refuses_its_late_call_after_a_herdr_turn_change() {
+    let (dir, transcript, terminal, agents) = setup();
+    let sock = hook::socket_path(dir.path(), None, &terminal).unwrap();
+    let h = hook_pending(&transcript, "claude-hook:0123456789abcdef", "test");
+    let mut link = Link::default();
+    link.turn.store(3, Ordering::SeqCst);
+    std::fs::create_dir_all(sock.parent().unwrap()).unwrap();
+    let listener = UnixListener::bind(&sock).unwrap();
+    std::fs::write(sock.with_extension("json"), serde_json::to_vec(&h).unwrap()).unwrap();
+    let s2 = sock.clone();
+    let w = std::thread::spawn(move || {
+        let (s, _) = listener.accept().unwrap();
+        let mut l = String::new();
+        BufReader::new(s).read_line(&mut l).unwrap();
+        std::fs::remove_file(&s2).unwrap();
+        std::fs::remove_file(s2.with_extension("json")).unwrap();
+    });
+    let first = submit(
+        dir.path(),
+        &terminal,
+        &h.id,
+        vec![vec![0]],
+        &mut link,
+        &agents,
+    );
+    w.join().unwrap();
+    assert_eq!(first.outcome, AnswerOutcome::Sent, "{first:?}");
+    assert_eq!(link.keys, ["1"]);
+    append(&transcript, &user("late-user", None, "Ask me"));
+    append(&transcript, &ask("m1", "late-user", "tool1", q()));
+    link.turn.store(4, Ordering::SeqCst);
+    let second = submit(
+        dir.path(),
+        &terminal,
+        "tool1",
+        vec![vec![1]],
+        &mut link,
+        &agents,
+    );
+    assert_eq!(second.outcome, AnswerOutcome::Failed, "{second:?}");
+    assert!(
+        second
+            .detail
+            .as_deref()
+            .unwrap()
+            .contains("already attempted")
+    );
+    assert_eq!(link.keys, ["1"]);
+}
+
+#[test]
+fn repeated_identical_questions_in_one_transcript_turn_remain_answerable() {
+    for (first_turn, second_turn) in [(0, 0), (7, 7), (2, 4)] {
+        for correlated in [true, false] {
+            for second_hook in [false, true] {
+                let (dir, transcript, terminal, agents) = setup();
+                let sock = hook::socket_path(dir.path(), None, &terminal).unwrap();
+                append(&transcript, &user("u1", None, "Ask me twice"));
+                if correlated {
+                    append(&transcript, &ask("m1", "u1", "tool1", q()));
+                }
+                let h1 = hook_pending(&transcript, "claude-hook:1111111111111111", "n1");
+                let mut link = Link::default();
+                link.turn.store(first_turn, Ordering::SeqCst);
+                let worker = serve_hook(&sock, &h1, link.working.clone());
+                let first = submit(
+                    dir.path(),
+                    &terminal,
+                    &h1.id,
+                    vec![vec![0]],
+                    &mut link,
+                    &agents,
+                );
+                worker.join().unwrap();
+                assert_eq!(first.outcome, AnswerOutcome::Sent, "{first:?}");
+                if !correlated {
+                    append(&transcript, &ask("m1", "u1", "tool1", q()));
+                }
+                append(&transcript, &result("r1", "m1", "tool1"));
+                append(&transcript, &ask("m2", "r1", "tool2", q()));
+                link.working.store(false, Ordering::SeqCst);
+                link.turn.store(second_turn, Ordering::SeqCst);
+                let h2 = hook_pending(&transcript, "claude-hook:2222222222222222", "n2");
+                let worker = second_hook.then(|| serve_hook(&sock, &h2, link.working.clone()));
+                let id = if second_hook { &h2.id } else { "tool2" };
+                let second = submit(dir.path(), &terminal, id, vec![vec![1]], &mut link, &agents);
+                if let Some(worker) = worker {
+                    if second.outcome != AnswerOutcome::Sent {
+                        let mut stream = std::os::unix::net::UnixStream::connect(&sock).unwrap();
+                        std::io::Write::write_all(&mut stream, b"{}\n").unwrap();
+                    }
+                    worker.join().unwrap();
+                }
+                assert_eq!(
+                    second.outcome,
+                    AnswerOutcome::Sent,
+                    "turn {first_turn}->{second_turn}, correlated={correlated}, second_hook={second_hook}: {second:?}"
+                );
+                if second_hook {
+                    assert!(link.keys.is_empty());
+                } else {
+                    assert_eq!(link.keys, ["2"]);
+                }
+            }
+        }
+    }
 }
