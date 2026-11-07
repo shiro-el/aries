@@ -234,9 +234,6 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
         }
         return Ok(reply(AnswerOutcome::Gone, "no such question"));
     };
-    if let Err(detail) = request.identity().check(&dir, &located, &facts) {
-        return Ok(reply(AnswerOutcome::Failed, detail));
-    }
     // Picks never enter the identity: another surface choosing a different
     // option must not dispatch a second answer to this same request.
     let mut claimed = ClaimedInput {
@@ -274,6 +271,9 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
                 .is_none_or(|p| p.item.id != answer.question)
             {
                 return Ok(reply(AnswerOutcome::Gone, "the permission status changed"));
+            }
+            if let Err(detail) = request.identity().check(&dir, &located, &facts) {
+                return Ok(reply(AnswerOutcome::Failed, detail));
             }
             if let Some(pending) = primary
                 && let Some(behavior) = agent.approval_decision(permission, answer.picks[0][0])
@@ -342,6 +342,9 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
         return Ok(reply(AnswerOutcome::Invalid, detail));
     }
     if let Some(pending) = primary {
+        if let Err(detail) = request.identity().check(&dir, &located, &facts) {
+            return Ok(reply(AnswerOutcome::Failed, detail));
+        }
         let answers: serde_json::Map<String, serde_json::Value> = question
             .questions
             .iter()
@@ -397,6 +400,11 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
         Err(KeysError::Invalid(d)) => return Ok(reply(AnswerOutcome::Invalid, d)),
         Err(KeysError::Unsupported(d)) => return Ok(reply(AnswerOutcome::Unsupported, d)),
     };
+    if !link.claimed
+        && let Err(detail) = request.identity().check(&dir, &located, &facts)
+    {
+        return Ok(reply(AnswerOutcome::Failed, detail));
+    }
     if let Err(result) = agent.prepare(
         &mut Navigation {
             link: link.inner,

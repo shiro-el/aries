@@ -181,3 +181,44 @@ fn a_core_hiccup_after_claim_leaves_the_question_answerable() {
     assert_eq!(retry.outcome, AnswerOutcome::Sent, "{retry:?}");
     assert_eq!(link.keys, ["1"]);
 }
+
+#[test]
+fn reanswers_validate_bad_picks_and_nonasking_status_before_claims() {
+    let (dir, transcript, terminal, agents) = setup();
+    append(&transcript, &user("u1", None, "ask"));
+    append(&transcript, &ask("m1", "u1", "tool1", q()));
+    let mut link = Link::default();
+    link.turn.store(7, Ordering::SeqCst);
+    let first = submit(
+        dir.path(),
+        &terminal,
+        "tool1",
+        vec![vec![0]],
+        &mut link,
+        &agents,
+    );
+    assert_eq!(first.outcome, AnswerOutcome::Sent, "{first:?}");
+    let invalid = submit(
+        dir.path(),
+        &terminal,
+        "tool1",
+        vec![vec![5]],
+        &mut link,
+        &agents,
+    );
+    link.working.store(true, Ordering::SeqCst);
+    let not_asking = submit(
+        dir.path(),
+        &terminal,
+        "tool1",
+        vec![vec![1]],
+        &mut link,
+        &agents,
+    );
+    eprintln!(
+        "REVIEW invalid-picks={invalid:?} not-asking={not_asking:?} keys={:?}",
+        link.keys
+    );
+    assert_eq!(invalid.outcome, AnswerOutcome::Invalid, "{invalid:?}");
+    assert_eq!(not_asking.outcome, AnswerOutcome::Gone, "{not_asking:?}");
+}
