@@ -1,9 +1,9 @@
 //! Multiline drafts stay one user item through each supported Chat reader.
-use aries_beacon::chat::claude::ClaudeInterpreter;
-use aries_beacon::chat::codex::CodexInterpreter;
-use aries_beacon::chat::opencode::OpenCodeSource;
-use aries_beacon::chat::pi::PiInterpreter;
-use aries_beacon::chat::{Batch, Interpreter, Source};
+use super::support::claude::ClaudeInterpreter;
+use super::support::codex::CodexInterpreter;
+use super::support::opencode::OpenCodeSource;
+use super::support::pi::PiInterpreter;
+use super::support::{Batch, Interpreter, Source};
 use aries_protocol::chat::{ChatBody, ChatEvent};
 use aries_test_support::opencode::{Db, db_path, fixture};
 use serde_json::json;

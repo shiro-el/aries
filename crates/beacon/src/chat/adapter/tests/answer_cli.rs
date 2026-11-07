@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use aries_protocol::answer::{AnswerOutcome, AnswerReply};
 use aries_test_support::{FakeAgent, HcSession};
 
-const BEACON: &str = env!("CARGO_BIN_EXE_aries-beacon");
+use super::support::BEACON;
 const COLOR: &str = "toolu_012hzhteG39obz5TwRGEb26o";
 const SIZE_TOPPINGS: &str = "toolu_01RAFRWAjh4oGAZDkHeY7V9E";
 
@@ -198,7 +198,7 @@ fn nothing_is_pressed_for_a_question_that_is_not_on_screen_or_bad_picks() {
 fn overlapping_answers_claim_the_question_before_the_agent_updates() {
     for permission in [false, true] {
         let host = Host::new();
-        let screen = include_str!("../../../fixtures/agents/permissions/claude-write.txt")
+        let screen = include_str!("../../../../../../fixtures/agents/permissions/claude-write.txt")
             .lines()
             .map(|line| format!("say {line}\n"))
             .collect::<String>();
@@ -259,7 +259,7 @@ fn overlapping_answers_claim_the_question_before_the_agent_updates() {
 /// the Terminal while an earlier multipart input is only partially delivered.
 #[test]
 fn terminal_validation_waits_for_input_and_failed_delivery_is_never_repeated() {
-    use aries_beacon::chat::{TerminalFacts, TerminalInput, TerminalLookup, claude::ClaudeCode};
+    use super::support::{TerminalFacts, TerminalInput, TerminalLookup, claude::ClaudeCode};
     use std::sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
@@ -323,10 +323,10 @@ fn terminal_validation_waits_for_input_and_failed_delivery_is_never_repeated() {
         inputs: inputs.clone(),
     };
     let run = |link: &mut Link| {
-        let agents: Vec<Box<dyn aries_beacon::chat::Agent>> = vec![Box::new(ClaudeCode {
+        let agents: Vec<Box<dyn super::support::Agent>> = vec![Box::new(ClaudeCode {
             config_dir: host.config.clone(),
         })];
-        aries_beacon::chat::answer::answer(
+        super::support::answer::answer(
             &state,
             &agent.address,
             &aries_protocol::answer::Answer::from_args(&[COLOR.into(), "1".into()]).unwrap(),

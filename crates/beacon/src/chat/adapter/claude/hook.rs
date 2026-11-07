@@ -11,7 +11,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
-use crate::chat::{TerminalLookup, answer::TerminalInput};
+use super::super::TerminalLookup;
+use super::super::delivery::StructuredInput;
 
 pub const TIMEOUT: Duration = Duration::from_secs(1795);
 
@@ -169,7 +170,7 @@ impl ResolutionScan {
     }
 }
 
-fn same_input(name: &str, left: &Value, right: &Value) -> bool {
+pub(in crate::chat::adapter) fn same_input(name: &str, left: &Value, right: &Value) -> bool {
     let normalize = |v: &Value| {
         let mut v = v.clone();
         // Claude persists updatedInput, including the answers supplied by us.
@@ -388,12 +389,12 @@ pub fn run(state: &Path) -> io::Result<()> {
 
 /// Match the terminal hook request identity before writing anything.
 /// `None` means use the existing key path after revalidating the live question.
-pub fn deliver<L: TerminalLookup + TerminalInput>(
+pub fn deliver<L: StructuredInput>(
     path: &Path,
     terminal: &str,
     session: &str,
     transcript: &Path,
-    expected: Option<(&str, &Value)>,
+    expected: &Pending,
     answer: Value,
     link: &mut L,
 ) -> bool {
@@ -409,14 +410,11 @@ pub fn deliver<L: TerminalLookup + TerminalInput>(
     {
         return false;
     }
-    if let Some((id, input)) = expected {
-        if pending.id != id
-            || pending.request.tool_name != "AskUserQuestion"
-            || pending.request.tool_input["questions"] != input["questions"]
-        {
-            return false;
-        }
-    } else if pending.request.tool_name == "AskUserQuestion" {
+    if pending.id != expected.id
+        || pending.nonce != expected.nonce
+        || pending.request.tool_name != expected.request.tool_name
+        || pending.request.tool_input != expected.request.tool_input
+    {
         return false;
     }
     let Ok(mut stream) = UnixStream::connect(path) else {
@@ -429,6 +427,15 @@ pub fn deliver<L: TerminalLookup + TerminalInput>(
         return false;
     }
     if link.claim_structured().is_err() {
+        return false;
+    }
+    let Some(current) = self::pending(path, session, transcript) else {
+        return false;
+    };
+    if current.id != expected.id
+        || current.nonce != expected.nonce
+        || current.request.tool_input != expected.request.tool_input
+    {
         return false;
     }
     if writeln!(
@@ -460,12 +467,12 @@ pub fn deliver<L: TerminalLookup + TerminalInput>(
 /// Overlay ephemeral hook requests on the ordinary Claude transcript. The
 /// cursor remembers the transient id so reconnecting can remove a stale item.
 pub fn open(
-    agent: &dyn crate::chat::Agent,
-    located: &crate::chat::Located,
+    agent: &dyn crate::chat::adapter::Agent,
+    located: &crate::chat::adapter::Located,
     resume: Option<&str>,
     state: &Path,
     terminal: &str,
-) -> crate::chat::Opened {
+) -> crate::chat::adapter::Opened {
     let (previous, position) =
         resume
             .and_then(|s| s.split_once('~'))
@@ -489,13 +496,13 @@ pub fn open(
 }
 
 struct HookSource {
-    inner: Box<dyn crate::chat::Source>,
+    inner: Box<dyn crate::chat::adapter::Source>,
     path: Option<PathBuf>,
-    located: crate::chat::Located,
+    located: crate::chat::adapter::Located,
     shown: Option<String>,
 }
 
-impl crate::chat::Source for HookSource {
+impl crate::chat::adapter::Source for HookSource {
     fn position(&self) -> String {
         format!(
             "hook-{}~{}",
@@ -507,9 +514,9 @@ impl crate::chat::Source for HookSource {
         )
     }
 
-    fn poll(&mut self) -> io::Result<crate::chat::Batch> {
-        use crate::chat::Batch;
-        use aries_protocol::chat::{ChatBody, ChatEvent, ChatItem, ToolStatus};
+    fn poll(&mut self) -> io::Result<crate::chat::adapter::Batch> {
+        use crate::chat::adapter::Batch;
+        use aries_protocol::chat::{ChatBody, ChatEvent, ToolStatus};
         let batch = self.inner.poll()?;
         let missing = matches!(&batch, Batch::Missing);
         let (events, more) = match batch {
@@ -584,31 +591,7 @@ impl crate::chat::Source for HookSource {
                     output.push((ChatEvent::Remove { id: id.into() }, None));
                 }
             }
-            output.push((
-                ChatEvent::Item {
-                    item: ChatItem {
-                        id: p.id,
-                        ts: None,
-                        body: ChatBody::Tool {
-                            title: crate::chat::claude::tool_title(
-                                &p.request.tool_name,
-                                &p.request.tool_input,
-                            ),
-                            question: (p.request.tool_name == "AskUserQuestion")
-                                .then(|| crate::chat::claude::question(&p.request.tool_input))
-                                .flatten(),
-                            name: p.request.tool_name,
-                            input: p.request.tool_input,
-                            status: ToolStatus::Running,
-                            output: None,
-                            diff: None,
-                            images: vec![],
-                            details: None,
-                        },
-                    },
-                },
-                None,
-            ));
+            output.push((ChatEvent::Item { item: item(&p) }, None));
         }
         self.shown = next;
         if missing && self.shown.is_none() && output.is_empty() {
@@ -651,5 +634,29 @@ mod lock_tests {
         assert!(HookLock::acquire(path.clone()).unwrap().is_none());
         drop(current);
         assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
+    }
+}
+
+pub(in crate::chat::adapter) fn item(p: &Pending) -> aries_protocol::chat::ChatItem {
+    use aries_protocol::chat::{ChatBody, ChatItem, ToolStatus};
+    ChatItem {
+        id: p.id.clone(),
+        ts: None,
+        body: ChatBody::Tool {
+            title: crate::chat::adapter::claude::tool_title(
+                &p.request.tool_name,
+                &p.request.tool_input,
+            ),
+            question: (p.request.tool_name == "AskUserQuestion")
+                .then(|| crate::chat::adapter::claude::question(&p.request.tool_input))
+                .flatten(),
+            name: p.request.tool_name.clone(),
+            input: p.request.tool_input.clone(),
+            status: ToolStatus::Running,
+            output: None,
+            diff: None,
+            images: vec![],
+            details: None,
+        },
     }
 }

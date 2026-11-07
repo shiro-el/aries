@@ -4,8 +4,8 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use aries_beacon::chat::Interpreter;
-use aries_beacon::chat::claude::ClaudeInterpreter;
+use super::support::Interpreter;
+use super::support::claude::ClaudeInterpreter;
 use aries_protocol::chat::{
     ChatBody, ChatDiff, ChatEvent, ChatImage, ChatItem, ChatQuestion, DIFF_MAX_LINE_CHARS,
     DIFF_MAX_LINES, DiffHunk, IMAGE_MAX_BYTES, ToolStatus,
@@ -676,21 +676,21 @@ fn waiting_input_does_not_make_the_beacon_refuse_the_open_question() {
     for line in transcript.lines().take(65) {
         chat.apply(interp.line(line));
     }
-    let question = aries_beacon::chat::answer::open_question(&chat.items)
+    let question = super::support::answer::open_question(&chat.items)
         .unwrap()
         .0
         .to_owned();
     let queued = fixture("mid-turn-messages.jsonl");
     chat.apply(interp.line(queued.lines().nth(1).unwrap()));
     assert_eq!(
-        aries_beacon::chat::answer::open_question(&chat.items)
+        super::support::answer::open_question(&chat.items)
             .unwrap()
             .0,
         question
     );
     chat.apply(interp.line(queued.lines().nth(2).unwrap()));
     chat.apply(interp.line(queued.lines().nth(4).unwrap()));
-    assert!(aries_beacon::chat::answer::open_question(&chat.items).is_none());
+    assert!(super::support::answer::open_question(&chat.items).is_none());
 }
 
 #[test]

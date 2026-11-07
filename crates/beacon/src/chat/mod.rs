@@ -2,20 +2,12 @@
 //! in a Terminal, reads its transcript and prints Agent-neutral
 //! [`ChatLine`]s (format: `aries_protocol::chat`).
 //!
-//! Adding an Agent means one [`Agent`] (pair a Terminal with a transcript)
-//! and one [`Interpreter`] (transcript line -> events) for JSONL transcripts;
-//! an Agent with another kind of transcript (OpenCode's SQLite database)
-//! overrides [`Agent::open`] with its own [`Source`]. The follow loop,
-//! cursor, rotation and the app's rendering are shared.
 
 pub mod adapter;
 pub mod answer;
 mod follow;
 pub mod media;
 
-use adapter::source;
-pub use adapter::{Agent, Batch, Interpreter, JsonlSource, Located, Opened, Poll, Source, agents};
-pub use adapter::{claude, codex, opencode, permission, pi};
 pub use answer::{KeysError, TerminalInput};
 use aries_protocol::agent_status::StatusRecord;
 pub use follow::{Options, TerminalLookup, run};

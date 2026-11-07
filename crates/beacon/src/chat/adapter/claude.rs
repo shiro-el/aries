@@ -82,6 +82,69 @@ impl Agent for ClaudeCode {
         hook::open(self, located, resume, state, terminal)
     }
 
+    fn approval(
+        &self,
+        session: &str,
+        facts: &TerminalFacts,
+        screen: &str,
+    ) -> Option<super::permission::Permission> {
+        super::permission::detect(self.name(), session, facts, screen)
+    }
+    fn hook(&self, state: &Path, terminal: &str, located: &Located) -> Option<hook::Pending> {
+        let path = hook::socket_path(state, hook::runtime_dir().as_deref(), terminal).ok()?;
+        hook::pending(&path, &located.session, &located.path)
+    }
+    fn approval_decision(
+        &self,
+        permission: &super::permission::Permission,
+        pick: usize,
+    ) -> Option<&'static str> {
+        let ChatBody::Tool {
+            question: Some(q), ..
+        } = &permission.item.body
+        else {
+            return None;
+        };
+        match q.questions[0].options[pick].label.as_str() {
+            "Allow" => Some("allow"),
+            "Deny" => Some("deny"),
+            _ => None,
+        }
+    }
+    fn prepare(
+        &self,
+        nav: &mut super::delivery::Navigation<'_>,
+        question: &ChatQuestion,
+        has_text: bool,
+    ) -> Result<(), aries_protocol::answer::AnswerReply> {
+        use super::delivery::reply;
+        use aries_protocol::answer::AnswerOutcome;
+        if !has_text {
+            return Ok(());
+        }
+        let screen = match nav.screen() {
+            Ok(screen) => screen,
+            Err(e) => return Err(reply(AnswerOutcome::Gone, e)),
+        };
+        let normalized = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
+        let row = format!("{}.", question.questions[0].options.len() + 1);
+        let other = screen.lines().any(|line| {
+            line.contains(&row)
+                && [
+                    "Other",
+                    "Type something",
+                    "Type your own answer",
+                    "None of the above",
+                ]
+                .iter()
+                .any(|label| line.contains(label))
+        });
+        if !other || !normalized(&screen).contains(&normalized(&question.questions[0].text)) {
+            return Err(reply(AnswerOutcome::Gone, "the live menu does not match"));
+        }
+
+        Ok(())
+    }
     fn answer_input(
         &self,
         question: &ChatQuestion,

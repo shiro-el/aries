@@ -71,7 +71,7 @@ fn main() {
         Some("answer") => answer(std::env::args().skip(2).collect()),
         Some("claude-hook") if std::env::args().nth(2).as_deref() == Some("permission-request") => {
             // Hook errors fail open: Claude keeps its ordinary permission menu.
-            if let Err(e) = aries_beacon::claude_hook::run(&state_dir()) {
+            if let Err(e) = aries_beacon::chat::adapter::run_claude_hook(&state_dir()) {
                 eprintln!("claude-hook: {e}");
             }
         }
@@ -380,10 +380,10 @@ fn chat(args: Vec<String>) {
     opts.follow = follow;
     opts.cursor = cursor.filter(|c| !c.is_empty());
     let mut lookup = aries_beacon::core_link::CoreLookup::default();
-    let agents = aries_beacon::chat::agents();
+    let adapters = aries_beacon::chat::adapter::Adapters::installed(&state_dir());
     let stdout = std::io::stdout();
     let mut out = std::io::LineWriter::new(stdout.lock());
-    if let Err(e) = aries_beacon::chat::run(opts, &mut lookup, &agents, &mut out) {
+    if let Err(e) = aries_beacon::chat::run(opts, &mut lookup, &adapters, &mut out) {
         // A closed stdout is how the app stops following.
         if e.kind() != std::io::ErrorKind::BrokenPipe {
             eprintln!("aries-beacon chat: {e}");
@@ -407,15 +407,14 @@ fn answer(args: Vec<String>) {
         }
     };
     let mut link = aries_beacon::core_link::CoreLookup::default();
-    let agents = aries_beacon::chat::agents();
-    let reply =
-        aries_beacon::chat::answer::answer(&state_dir(), &terminal, &answer, &mut link, &agents)
-            .unwrap_or_else(|e| {
-                aries_protocol::answer::AnswerReply::new(
-                    aries_protocol::answer::AnswerOutcome::Gone,
-                    Some(format!("transcript: {e}")),
-                )
-            });
+    let adapters = aries_beacon::chat::adapter::Adapters::installed(&state_dir());
+    let reply = aries_beacon::chat::answer::answer(&terminal, &answer, &mut link, &adapters)
+        .unwrap_or_else(|e| {
+            aries_protocol::answer::AnswerReply::new(
+                aries_protocol::answer::AnswerOutcome::Gone,
+                Some(format!("transcript: {e}")),
+            )
+        });
     println!("{}", reply.to_json());
     if !reply.outcome.is_sent() {
         std::process::exit(1);

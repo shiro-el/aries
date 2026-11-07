@@ -1,22 +1,23 @@
-pub mod claude;
-pub mod codex;
+mod claude;
+mod codex;
 mod details;
 mod jsonl;
-pub mod opencode;
-pub mod permission;
-pub mod pi;
+mod opencode;
+mod permission;
+mod pi;
 mod question;
-pub(super) mod source;
+mod source;
 mod usage;
 
-use super::{KeysError, TerminalFacts, answer, media};
+use super::{KeysError, TerminalFacts, TerminalInput, TerminalLookup, media};
 use aries_protocol::chat::{ChatEvent, ChatQuestion};
-pub use jsonl::{JsonlSource, Poll};
-pub use source::{Batch, Opened, Source};
+use delivery as answer;
+use jsonl::{JsonlSource, Poll};
+use source::{Batch, Opened, Source};
 use std::path::PathBuf;
 
 /// One Agent kind the Beacon can read.
-pub trait Agent {
+trait Agent {
     /// Agent name in [`ChatEvent::Reset`] and cursors (`claude-code`).
     fn name(&self) -> &'static str;
     /// The transcript the Agent running in `terminal` writes right now.
@@ -55,6 +56,43 @@ pub trait Agent {
         let _ = (state, terminal);
         self.open(located, resume)
     }
+    fn hook(
+        &self,
+        _state: &Path,
+        _terminal: &str,
+        _located: &Located,
+    ) -> Option<claude::hook::Pending> {
+        None
+    }
+    fn approval(
+        &self,
+        _session: &str,
+        _facts: &TerminalFacts,
+        _screen: &str,
+    ) -> Option<permission::Permission> {
+        None
+    }
+    fn approval_decision(
+        &self,
+        _permission: &permission::Permission,
+        _pick: usize,
+    ) -> Option<&'static str> {
+        None
+    }
+    fn current_question<'a>(
+        &self,
+        items: &'a [aries_protocol::chat::ChatItem],
+    ) -> Option<(&'a str, &'a ChatQuestion)> {
+        requests::open_question(items)
+    }
+    fn prepare(
+        &self,
+        _nav: &mut delivery::Navigation<'_>,
+        _question: &ChatQuestion,
+        _has_text: bool,
+    ) -> Result<(), aries_protocol::answer::AnswerReply> {
+        Ok(())
+    }
     /// Maps mixed picks/text to the Agent's own menu, without terminal.send.
     fn answer_input(
         &self,
@@ -87,7 +125,7 @@ pub trait Agent {
 
 /// Turns transcript lines into Chat events. Must ignore lines it does not
 /// understand: transcript formats are private and change.
-pub trait Interpreter {
+trait Interpreter {
     fn line(&mut self, line: &str) -> Vec<ChatEvent>;
     /// Version the projected Chat when the same bytes now mean different
     /// items. A new tag forces older caches to replay instead of resuming.
@@ -99,13 +137,13 @@ pub trait Interpreter {
 
 /// Where an Agent's current transcript is. The file may not exist yet.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Located {
+struct Located {
     pub session: String,
     pub path: PathBuf,
 }
 
 /// Every Agent this Beacon reads, in the order they are tried.
-pub fn agents() -> Vec<Box<dyn Agent>> {
+fn agents() -> Vec<Box<dyn Agent>> {
     vec![
         Box::new(claude::ClaudeCode::from_env()),
         Box::new(codex::Codex),
@@ -113,3 +151,86 @@ pub fn agents() -> Vec<Box<dyn Agent>> {
         Box::new(pi::Pi),
     ]
 }
+
+mod delivery;
+mod feed;
+mod requests;
+pub use feed::{ChatFrame, Feed};
+pub use requests::{Observation, PendingRequest, QuickReply, RequestId};
+use std::path::Path;
+
+pub struct Adapters {
+    state: PathBuf,
+    agents: Vec<Box<dyn Agent>>,
+}
+impl Adapters {
+    pub fn installed(state: &Path) -> Self {
+        Self {
+            state: state.to_owned(),
+            agents: agents(),
+        }
+    }
+    pub fn chat(&self, terminal: &str, cursor: Option<&str>) -> Feed<'_> {
+        Feed::new(&self.state, &self.agents, terminal, cursor)
+    }
+    pub fn answer<L: TerminalLookup + TerminalInput>(
+        &self,
+        terminal: &str,
+        submission: Submission,
+        link: &mut L,
+    ) -> std::io::Result<AnswerResult> {
+        let answer = aries_protocol::answer::Answer {
+            question: submission.id,
+            picks: submission.picks,
+            free_text: submission.text,
+        };
+        let reply = delivery::answer(&self.state, terminal, &answer, link, &self.agents)?;
+        use aries_protocol::answer::AnswerOutcome;
+        Ok(match reply.outcome {
+            AnswerOutcome::Sent => AnswerResult::Sent,
+            AnswerOutcome::Answered => AnswerResult::Answered(reply.detail),
+            AnswerOutcome::Gone => AnswerResult::Gone(reply.detail),
+            AnswerOutcome::Invalid => AnswerResult::Invalid(reply.detail),
+            AnswerOutcome::Unsupported => AnswerResult::Unsupported(reply.detail),
+            AnswerOutcome::NoAgent => AnswerResult::NoAgent(reply.detail),
+            AnswerOutcome::NoTerminal => AnswerResult::NoTerminal(reply.detail),
+            AnswerOutcome::NoCore => AnswerResult::NoCore(reply.detail),
+            AnswerOutcome::Failed => AnswerResult::Failed(reply.detail),
+            AnswerOutcome::NoBeacon => AnswerResult::NoBeacon(reply.detail),
+            AnswerOutcome::Unknown => AnswerResult::Unknown(reply.detail),
+        })
+    }
+}
+pub struct Submission {
+    id: String,
+    picks: Vec<Vec<usize>>,
+    text: Vec<Option<String>>,
+}
+impl Submission {
+    pub fn from_parts(id: &str, picks: &[Vec<usize>], text: &[Option<String>]) -> Self {
+        Self {
+            id: id.to_owned(),
+            picks: picks.to_vec(),
+            text: text.to_vec(),
+        }
+    }
+}
+pub enum AnswerResult {
+    Sent,
+    Answered(Option<String>),
+    Gone(Option<String>),
+    Invalid(Option<String>),
+    Unsupported(Option<String>),
+    NoAgent(Option<String>),
+    NoTerminal(Option<String>),
+    NoCore(Option<String>),
+    Failed(Option<String>),
+    NoBeacon(Option<String>),
+    Unknown(Option<String>),
+}
+pub fn run_claude_hook(state: &Path) -> std::io::Result<()> {
+    claude::hook::run(state)
+}
+
+#[cfg(test)]
+mod tests;

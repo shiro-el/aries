@@ -1,5 +1,5 @@
 //! Optional details leave the original transcript text intact.
-use aries_beacon::chat::{Interpreter, claude::ClaudeInterpreter};
+use super::support::{Interpreter, claude::ClaudeInterpreter};
 use aries_protocol::chat::ChatEvent;
 use serde_json::{Value, json};
 
@@ -16,7 +16,7 @@ fn feed(interpreter: &mut dyn Interpreter, record: Value) -> Vec<Value> {
 
 #[test]
 fn codex_function_image_results_keep_the_embedded_image_and_host_path() {
-    use aries_beacon::chat::codex::CodexInterpreter;
+    use super::support::codex::CodexInterpreter;
     let mut chat = CodexInterpreter::default();
     feed(
         &mut chat,
@@ -77,11 +77,12 @@ fn claude_exposes_command_results_and_response_usage_without_inventing_missing_f
 
 #[test]
 fn codex_updates_the_response_with_turn_usage_and_duration_and_command_measurements() {
-    use aries_beacon::chat::codex::CodexInterpreter;
+    use super::support::codex::CodexInterpreter;
     let mut chat = CodexInterpreter::default();
     let mut items = std::collections::BTreeMap::new();
     for line in
-        include_str!("../../../fixtures/agents/codex/sessions/simple-reply.rollout.jsonl").lines()
+        include_str!("../../../../../../fixtures/agents/codex/sessions/simple-reply.rollout.jsonl")
+            .lines()
     {
         for event in chat.line(line) {
             match event {
@@ -100,9 +101,10 @@ fn codex_updates_the_response_with_turn_usage_and_duration_and_command_measureme
     assert_eq!(response["metadata"]["duration_ms"], 3914);
     assert_eq!(response["metadata"]["completion"], "complete");
     assert!(response["metadata"]["input_tokens"].as_u64().unwrap() > 0);
-    for line in
-        include_str!("../../../fixtures/agents/codex/sessions/permission-exec.rollout.jsonl")
-            .lines()
+    for line in include_str!(
+        "../../../../../../fixtures/agents/codex/sessions/permission-exec.rollout.jsonl"
+    )
+    .lines()
     {
         for value in feed(&mut chat, serde_json::from_str(line).unwrap()) {
             items.insert(value["id"].as_str().unwrap().to_owned(), value);
@@ -117,7 +119,7 @@ fn codex_updates_the_response_with_turn_usage_and_duration_and_command_measureme
 
 #[test]
 fn pi_keeps_response_usage_abort_and_search_details_on_the_active_branch() {
-    use aries_beacon::chat::pi::PiInterpreter;
+    use super::support::pi::PiInterpreter;
     let mut chat = PiInterpreter::default();
     let response = feed(
         &mut chat,
@@ -151,7 +153,7 @@ fn pi_keeps_response_usage_abort_and_search_details_on_the_active_branch() {
 
 #[test]
 fn opencode_updates_already_streamed_text_when_message_metadata_finishes() {
-    use aries_beacon::chat::opencode::{MessageRow, OpenCodeChat, PartRow};
+    use super::support::opencode::{MessageRow, OpenCodeChat, PartRow};
     let mut chat = OpenCodeChat::default();
     let mut message = MessageRow {
         id: "m".into(),
@@ -230,7 +232,7 @@ fn claude_attaches_turn_duration_to_the_reply_and_keeps_it_out_of_the_next_turn(
 
 #[test]
 fn codex_function_results_expose_recorded_exit_and_time_and_keep_unknown_output() {
-    let mut chat = aries_beacon::chat::codex::CodexInterpreter::default();
+    let mut chat = super::support::codex::CodexInterpreter::default();
     feed(
         &mut chat,
         json!({"type":"response_item","payload":{"type":"function_call","call_id":"c","name":"exec_command","arguments":"{\"cmd\":\"false\",\"workdir\":\"/repo\"}"}}),
@@ -250,7 +252,7 @@ fn codex_function_results_expose_recorded_exit_and_time_and_keep_unknown_output(
 
 #[test]
 fn codex_tool_only_response_usage_does_not_replace_the_previous_text_response_usage() {
-    let mut chat = aries_beacon::chat::codex::CodexInterpreter::default();
+    let mut chat = super::support::codex::CodexInterpreter::default();
     feed(
         &mut chat,
         json!({"type":"event_msg","payload":{"type":"task_started"}}),

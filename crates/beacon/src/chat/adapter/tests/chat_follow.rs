@@ -9,8 +9,8 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::Duration;
 
-use aries_beacon::chat::claude::ClaudeInterpreter;
-use aries_beacon::chat::{
+use super::support::claude::ClaudeInterpreter;
+use super::support::{
     Agent, Interpreter, JsonlSource, Located, Options, Poll, TerminalFacts, TerminalLookup, run,
 };
 use aries_protocol::chat::{ChatEvent, ChatItem, ChatLine, ChatState};

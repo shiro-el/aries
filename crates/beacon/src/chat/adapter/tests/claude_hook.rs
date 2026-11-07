@@ -4,12 +4,12 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use aries_beacon::chat::{TerminalFacts, TerminalLookup};
-use aries_beacon::claude_hook::{self as hook, Request};
-use aries_beacon::claude_plugin as plugin;
+use super::super::claude::hook::{self as hook, Request};
+use super::support::{TerminalFacts, TerminalLookup};
+use crate::claude_plugin as plugin;
 use serde_json::{Value, json};
 
-const BEACON: &str = env!("CARGO_BIN_EXE_aries-beacon");
+use super::support::BEACON;
 
 // Tests exercising the public answer/chat seams must agree with their hook's
 // runtime path. Set the environment only in a child, never in parallel tests.
@@ -20,7 +20,11 @@ fn isolated_runtime(test: &str) -> bool {
     }
     let runtime = tempfile::tempdir().unwrap();
     let output = Command::new(std::env::current_exe().unwrap())
-        .args(["--exact", test, "--nocapture"])
+        .args([
+            "--exact",
+            &format!("{}::{test}", module_path!().split_once("::").unwrap().1),
+            "--nocapture",
+        ])
         .env(CHILD, test)
         .env("XDG_RUNTIME_DIR", runtime.path())
         .output()
@@ -64,7 +68,7 @@ fn ready(path: &Path) {
     }
 }
 
-use aries_beacon::chat::{Agent, Located, answer, claude::ClaudeCode};
+use super::support::{Agent, Located, answer, claude::ClaudeCode};
 struct Claude {
     located: Located,
 }
@@ -75,11 +79,38 @@ impl Agent for Claude {
     fn locate(&self, _: &TerminalFacts) -> Option<Located> {
         Some(self.located.clone())
     }
-    fn interpreter(&self) -> Box<dyn aries_beacon::chat::Interpreter> {
+    fn interpreter(&self) -> Box<dyn super::support::Interpreter> {
         ClaudeCode {
             config_dir: "/unused".into(),
         }
         .interpreter()
+    }
+    fn hook(&self, state: &Path, terminal: &str, located: &Located) -> Option<hook::Pending> {
+        ClaudeCode {
+            config_dir: "/unused".into(),
+        }
+        .hook(state, terminal, located)
+    }
+    fn approval(
+        &self,
+        session: &str,
+        facts: &TerminalFacts,
+        screen: &str,
+    ) -> Option<super::super::permission::Permission> {
+        ClaudeCode {
+            config_dir: "/unused".into(),
+        }
+        .approval(session, facts, screen)
+    }
+    fn approval_decision(
+        &self,
+        permission: &super::super::permission::Permission,
+        pick: usize,
+    ) -> Option<&'static str> {
+        ClaudeCode {
+            config_dir: "/unused".into(),
+        }
+        .approval_decision(permission, pick)
     }
     fn answer_keys(
         &self,
@@ -124,7 +155,7 @@ fn mixed_answers_travel_through_the_hook_socket() {
             }}))))
         }
     }
-    impl aries_beacon::chat::TerminalInput for Link {
+    impl super::support::TerminalInput for Link {
         fn keys(&mut self, _: &str, _: &[String]) -> Result<(), String> {
             panic!("structured mixed answer must not send keys")
         }
@@ -331,7 +362,10 @@ fn binary_free_removal_keeps_edits_and_removes_only_managed_files() {
         }
         std::fs::write(root.join("user-file"), "keep").unwrap();
         let output = Command::new("sh")
-            .args(["-c", include_str!("../../core/src/claude_plugin_remove.sh")])
+            .args([
+                "-c",
+                include_str!("../../../../../core/src/claude_plugin_remove.sh"),
+            ])
             .env("XDG_DATA_HOME", dir.path())
             .env("PATH", "/usr/bin:/bin")
             .output()
@@ -348,7 +382,7 @@ fn unconfirmed_socket_answer_falls_back_to_keys() {
         return;
     }
     // Exercise the public answer seam with the actual Claude transcript interpreter.
-    use aries_beacon::chat::TerminalInput;
+    use super::support::TerminalInput;
     use aries_protocol::answer::{Answer, AnswerOutcome};
     #[derive(Default)]
     struct Link {
@@ -464,7 +498,7 @@ fn hook_and_late_transcript_answers_share_one_claim() {
         return;
     }
     // Exercise the public answer seam with the actual Claude transcript interpreter.
-    use aries_beacon::chat::TerminalInput;
+    use super::support::TerminalInput;
     use aries_protocol::answer::{Answer, AnswerOutcome};
     #[derive(Default)]
     struct Link {
@@ -582,7 +616,7 @@ fn real_claude_plugin_questions_and_bash() {
     }
     let credentials = std::env::var_os("ARIES_CLAUDE_CREDENTIALS")
         .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| aries_beacon::home().join(".claude/.credentials.json"));
+        .unwrap_or_else(|| crate::home().join(".claude/.credentials.json"));
     std::os::unix::fs::symlink(credentials, config.join(".credentials.json")).unwrap();
     let path = format!(
         "{}:{}",
@@ -777,10 +811,10 @@ fn real_claude_plugin_questions_and_bash() {
     hc.hc(&["send",&terminal,"Use Bash to execute exactly: printf hook-bash > permission-hook-proof.txt . Do not use Write or any other tool. Afterward say OK and stop."]);
     let bash = pending("Bash");
     std::thread::sleep(Duration::from_secs(1));
-    let facts = aries_beacon::chat::TerminalFacts::from_json(
+    let facts = super::support::TerminalFacts::from_json(
         &serde_json::from_str::<Value>(&hc.hc(&["get", &terminal, "--json"])).unwrap(),
     );
-    let permission = aries_beacon::chat::permission::detect(
+    let permission = super::support::permission::detect(
         "claude-code",
         &bash.request.session_id,
         &facts,
@@ -855,7 +889,7 @@ fn hook_question_is_visible_before_transcript_and_removed_on_resume() {
     if isolated_runtime("hook_question_is_visible_before_transcript_and_removed_on_resume") {
         return;
     }
-    use aries_beacon::chat::Batch;
+    use super::support::Batch;
     use aries_protocol::chat::{ChatBody, ChatEvent, ToolStatus};
     let dir = tempfile::tempdir().unwrap();
     let req = request(&dir.path().join("transcript"));
@@ -1008,7 +1042,7 @@ fn old_identical_results_do_not_resolve_a_new_request() {
 
 #[test]
 fn four_row_claude_approval_keeps_rule_and_mode_changes_on_keys() {
-    use aries_beacon::chat::{TerminalInput, permission};
+    use super::support::{TerminalInput, permission};
     use aries_protocol::{
         answer::{Answer, AnswerOutcome},
         chat::ChatBody,
@@ -1028,12 +1062,14 @@ fn four_row_claude_approval_keeps_rule_and_mode_changes_on_keys() {
         }
     }
     impl TerminalInput for Link {
-        fn claim_structured(&mut self) -> Result<(), String> {
-            panic!("rule/mode choices must use keys")
-        }
         fn keys(&mut self, _: &str, keys: &[String]) -> Result<(), String> {
             self.keys.extend_from_slice(keys);
             Ok(())
+        }
+    }
+    impl super::super::delivery::StructuredInput for Link {
+        fn claim_structured(&mut self) -> Result<(), String> {
+            panic!("rule/mode choices must use keys")
         }
     }
     for (pick, key) in [(1, "2"), (2, "3")] {

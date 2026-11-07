@@ -11,11 +11,10 @@ use aries_beacon::progress::{ProgressWatch, WatchedAgent};
 use std::sync::mpsc;
 use std::time::Duration;
 
-use aries_beacon::chat::{self, Agent, TerminalLookup};
+use aries_beacon::chat::{TerminalLookup, adapter::Adapters};
 use aries_beacon::core_link::CoreLookup;
 use aries_beacon::status_watch::Change;
 use aries_protocol::agent_status::{self, AgentStatus, BlockedReason};
-use aries_protocol::chat::ChatBody;
 use aries_protocol::push::{PADDED_LEN, PushMessage, PushQuestion};
 use aries_protocol::push_policy::PushPolicy;
 
@@ -33,7 +32,7 @@ impl Sender {
         let (tx, rx) = mpsc::channel::<(Vec<Change>, Vec<WatchedAgent>)>();
         std::thread::spawn(move || {
             let mut lookup = CoreLookup::default();
-            let chat_agents = chat::agents();
+            let adapters = Adapters::installed(&aries_beacon::state_dir());
             let mut progress = ProgressWatch::default();
             let mut agents = Vec::new();
             let mut pending = std::collections::BTreeMap::new();
@@ -71,7 +70,7 @@ impl Sender {
                 let policy = policy();
                 for c in changes {
                     if policy.allows(&c.status, c.top_level) {
-                        let extra = details(&c, &mut lookup, &chat_agents);
+                        let extra = details(&c, &mut lookup, &adapters);
                         last_status_ms = now.max(last_status_ms + 1);
                         pending.insert(c.terminal.clone(), message(c, last_status_ms, extra));
                     }
@@ -96,7 +95,7 @@ impl Sender {
                                 status,
                                 turn: turn.unwrap_or(0),
                             };
-                            let extra = details(&c, &mut lookup, &chat_agents);
+                            let extra = details(&c, &mut lookup, &adapters);
                             last_status_ms = now.max(last_status_ms + 1);
                             message(c, last_status_ms, extra)
                         }
@@ -265,7 +264,7 @@ struct Details {
 /// Read on the push worker so transcript I/O cannot hold up status tracking.
 /// A queued transition may already be old: attach actionable details only
 /// while the Host still reports that status.
-fn details(c: &Change, lookup: &mut CoreLookup, agents: &[Box<dyn Agent>]) -> Details {
+fn details(c: &Change, lookup: &mut CoreLookup, adapters: &Adapters) -> Details {
     let mut out = Details::default();
     let Ok(Some(facts)) = lookup.get(&c.terminal) else {
         return out;
@@ -300,73 +299,21 @@ fn details(c: &Change, lookup: &mut CoreLookup, agents: &[Box<dyn Agent>]) -> De
     if !asking && !permission && c.status != AgentStatus::Done {
         return out;
     }
-    let Some((agent, located)) = agents.iter().find_map(|a| a.locate(&facts).map(|l| (a, l)))
-    else {
+    let Ok(view) = adapters.observe(&c.terminal, lookup) else {
         return out;
     };
-    if permission {
-        // Agents can report Blocked just before drawing the menu. Give that
-        // render a short bounded window, checking the current turn/status on
-        // every read so a later request cannot inherit this notification.
-        for attempt in 0..20 {
-            let Ok(Some(current)) = lookup.get(&c.terminal) else {
-                break;
-            };
-            if current.turn != facts.turn || current.status != facts.status {
-                break;
-            }
-            if let Ok(screen) = lookup.screen(&c.terminal)
-                && let Some(p) =
-                    chat::permission::detect(agent.name(), &located.session, &current, &screen)
-                && let ChatBody::Tool {
-                    question: Some(q), ..
-                } = p.item.body
-            {
-                let q = &q.questions[0];
-                out.question = Some(PushQuestion {
-                    id: p.item.id,
-                    // Keep persistent approval scope visible beside short buttons.
-                    text: std::iter::once(q.text.clone())
-                        .chain(
-                            q.options
-                                .iter()
-                                .filter(|o| o.label == "Allow always")
-                                .filter_map(|o| o.description.clone()),
-                        )
-                        .collect::<Vec<_>>()
-                        .join("\n"),
-                    options: q.options.iter().map(|o| o.label.clone()).collect(),
-                });
-                break;
-            }
-            if attempt < 19 {
-                std::thread::sleep(Duration::from_millis(50));
-            }
-        }
-        return out;
+    if !view.matches(&facts) {
+        return Details::default();
     }
-    let Ok(Some(items)) = chat::answer::transcript(agent.as_ref(), &located) else {
-        return out;
-    };
-    if asking {
-        if chat::answer::pending_questions(&items).count() == 1
-            && let Some((id, q)) = chat::answer::current_question(agent.name(), &items)
-            && let [q] = q.questions.as_slice()
-            && !q.multi
-            && (1..=3).contains(&q.options.len())
-        {
-            out.question = Some(PushQuestion {
-                id: id.to_owned(),
-                text: q.text.clone(),
-                options: q.options.iter().map(|o| o.label.clone()).collect(),
-            });
-        }
-    } else {
-        out.excerpt = items.iter().rev().find_map(|i| match &i.body {
-            ChatBody::Agent { text, .. } => Some(text.clone()),
-            _ => None,
-        });
+    out.question = view.quick_reply().map(|q| PushQuestion {
+        id: q.id().as_str().to_owned(),
+        text: q.text().to_owned(),
+        options: q.options().to_vec(),
+    });
+    if c.status == AgentStatus::Done {
+        out.excerpt = view.last_reply().map(str::to_owned);
     }
+
     out
 }
 

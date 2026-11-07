@@ -10,10 +10,8 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use aries_beacon::chat::pi::{Pi, PiInterpreter, numbered_diff};
-use aries_beacon::chat::{
-    Agent, Interpreter, Located, Options, TerminalFacts, TerminalLookup, run,
-};
+use super::support::pi::{Pi, PiInterpreter, numbered_diff};
+use super::support::{Agent, Interpreter, Located, Options, TerminalFacts, TerminalLookup, run};
 use aries_protocol::chat::{ChatBody, ChatEvent, ChatItem, ChatLine, DiffHunk, ToolStatus};
 use serde_json::json;
 

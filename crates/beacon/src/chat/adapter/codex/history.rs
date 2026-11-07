@@ -15,8 +15,8 @@ use serde::Deserialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+use super::super::{Batch, Interpreter, JsonlSource, Located, Opened, Poll, Source};
 use super::{CodexInterpreter, is_uuid};
-use crate::chat::{Batch, Interpreter, JsonlSource, Located, Opened, Poll, Source};
 
 #[derive(Deserialize)]
 struct HistoryBase {

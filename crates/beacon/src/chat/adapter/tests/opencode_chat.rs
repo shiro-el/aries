@@ -7,8 +7,8 @@ use std::collections::VecDeque;
 use std::rc::Rc;
 use std::time::Duration;
 
-use aries_beacon::chat::opencode::{OpenCode, OpenCodeSource, SESSION_LABEL};
-use aries_beacon::chat::{
+use super::support::opencode::{OpenCode, OpenCodeSource, SESSION_LABEL};
+use super::support::{
     Agent, Batch, KeysError, Options, Source, TerminalFacts, TerminalInput, TerminalLookup, answer,
     run,
 };
@@ -372,7 +372,7 @@ fn a_cursor_resumes_without_repeating_old_rows() {
     );
 
     // A cursor into a session the database does not have: start over.
-    let gone = aries_beacon::chat::Located {
+    let gone = super::support::Located {
         session: "ses_gone".into(),
         path: located.path.clone(),
     };
