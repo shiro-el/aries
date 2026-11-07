@@ -145,9 +145,13 @@ impl Identity {
             if bytes.is_empty() {
                 continue;
             }
-            let old: Self =
-                serde_json::from_slice(&bytes).map_err(|e| format!("invalid answer claim: {e}"))?;
-            if old.version != 1 || self.conflicts(&old, located) {
+            let Ok(old) = serde_json::from_slice::<Self>(&bytes) else {
+                continue;
+            };
+            if old.version != 1 {
+                continue;
+            }
+            if self.conflicts(&old, located) {
                 return Err(attempted());
             }
         }

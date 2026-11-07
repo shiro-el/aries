@@ -413,3 +413,76 @@ fn repeated_identical_questions_in_one_transcript_turn_remain_answerable() {
         }
     }
 }
+
+#[test]
+fn corrupt_claim_contents_do_not_block_another_request() {
+    for kind in ["empty", "truncated", "future-version"] {
+        let (dir, transcript, terminal, agents) = setup();
+        append(&transcript, &user("u1", None, "ask"));
+        append(&transcript, &ask("m1", "u1", "tool1", q()));
+        let mut link = Link::default();
+        let facts = link.get(&terminal).unwrap().unwrap();
+        let located = agents[0].locate(&facts).unwrap();
+        let items = super::super::requests::transcript(agents[0].as_ref(), &located)
+            .unwrap()
+            .unwrap();
+        let requests = super::super::requests::collect_requests(
+            agents[0].as_ref(),
+            &located,
+            dir.path(),
+            &terminal,
+            &facts,
+            &items,
+            "",
+        );
+        let mut identity = serde_json::to_value(requests.pending[0].identity()).unwrap();
+        identity["version"] = json!(2);
+        let contents = match kind {
+            "empty" => vec![],
+            "truncated" => b"{\"version\":1,".to_vec(),
+            _ => serde_json::to_vec(&identity).unwrap(),
+        };
+        let claims = dir
+            .path()
+            .join("answers")
+            .join(super::super::claims::hash(&terminal));
+        std::fs::create_dir_all(&claims).unwrap();
+        let foreign = claims.join("another-request");
+        std::fs::write(&foreign, &contents).unwrap();
+        let reply = submit(
+            dir.path(),
+            &terminal,
+            "tool1",
+            vec![vec![0]],
+            &mut link,
+            &agents,
+        );
+        assert_eq!(reply.outcome, AnswerOutcome::Sent, "{kind}: {reply:?}");
+        assert_eq!(link.keys, ["1"]);
+        assert_eq!(std::fs::read(&foreign).unwrap(), contents);
+        let alias = super::super::claims::hash((
+            agents[0].name(),
+            &located.session,
+            located.path.as_os_str().as_encoded_bytes(),
+            "tool1",
+        ));
+        std::fs::write(claims.join(alias), &contents).unwrap();
+        let again = submit(
+            dir.path(),
+            &terminal,
+            "tool1",
+            vec![vec![1]],
+            &mut link,
+            &agents,
+        );
+        assert_eq!(again.outcome, AnswerOutcome::Failed, "{kind}: {again:?}");
+        assert!(
+            again
+                .detail
+                .as_deref()
+                .unwrap()
+                .contains("already attempted")
+        );
+        assert_eq!(link.keys, ["1"]);
+    }
+}
