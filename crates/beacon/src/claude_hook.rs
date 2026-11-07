@@ -1,7 +1,7 @@
 //! Per-terminal PermissionRequest rendezvous. A decision is only an attempted
 //! delivery: callers must observe the transcript or terminal before reporting Sent.
 use std::collections::HashSet;
-use std::io::{self, BufRead, BufReader, Read, Write};
+use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
@@ -95,47 +95,79 @@ fn records(path: &Path) -> Vec<Value> {
         .collect()
 }
 
-/// Only a result appended after this request began can resolve it. Old,
-/// identical questions in the same session must not retire a new hook.
+/// Only tool uses and results appended after this request began can resolve it.
+/// Older Claude versions can instead resolve through the blocked-status transition.
 pub fn completed(pending: &Pending) -> bool {
-    let rows = records(&pending.request.transcript_path);
-    let ids: HashSet<_> = rows
-        .iter()
-        .flat_map(|r| r["message"]["content"].as_array().into_iter().flatten())
-        .filter(|b| {
-            b["type"] == "tool_use"
-                && b["name"] == pending.request.tool_name
-                && same_input(
-                    &pending.request.tool_name,
-                    &b["input"],
-                    &pending.request.tool_input,
-                )
-        })
-        .filter_map(|b| b["id"].as_str())
-        .collect();
-    let Ok(file) = std::fs::File::open(&pending.request.transcript_path) else {
-        return false;
-    };
-    use std::io::{Seek, SeekFrom};
-    let mut reader = BufReader::new(file);
-    if reader
-        .seek(SeekFrom::Start(pending.transcript_offset))
-        .is_err()
-    {
-        return false;
+    ResolutionScan::new(pending.transcript_offset).poll(pending)
+}
+
+/// Tail the transcript without reparsing history or discarding an unfinished
+/// JSONL record when a writer pauses in the middle of a line.
+struct ResolutionScan {
+    offset: u64,
+    reader: Option<BufReader<std::fs::File>>,
+    partial: Vec<u8>,
+    ids: HashSet<String>,
+}
+
+impl ResolutionScan {
+    fn new(offset: u64) -> Self {
+        Self {
+            offset,
+            reader: None,
+            partial: Vec::new(),
+            ids: HashSet::new(),
+        }
     }
-    reader
-        .lines()
-        .map_while(Result::ok)
-        .filter_map(|s| serde_json::from_str::<Value>(&s).ok())
-        .any(|r| {
-            r["message"]["content"].as_array().is_some_and(|blocks| {
-                blocks.iter().any(|b| {
-                    b["type"] == "tool_result"
-                        && b["tool_use_id"].as_str().is_some_and(|id| ids.contains(id))
-                })
-            })
-        })
+
+    fn poll(&mut self, pending: &Pending) -> bool {
+        if self.reader.is_none() {
+            let Ok(mut file) = std::fs::File::open(&pending.request.transcript_path) else {
+                return false;
+            };
+            if file.seek(SeekFrom::Start(self.offset)).is_err() {
+                return false;
+            }
+            self.reader = Some(BufReader::new(file));
+        }
+        let reader = self.reader.as_mut().unwrap();
+        loop {
+            match reader.read_until(b'\n', &mut self.partial) {
+                Ok(0) | Err(_) => return false,
+                Ok(_) => {}
+            }
+            if self.partial.last() != Some(&b'\n') {
+                return false;
+            }
+            let row = serde_json::from_slice::<Value>(&self.partial);
+            self.partial.clear();
+            let Ok(row) = row else { continue };
+            let Some(blocks) = row["message"]["content"].as_array() else {
+                continue;
+            };
+            for block in blocks {
+                if block["type"] == "tool_use"
+                    && block["name"] == pending.request.tool_name
+                    && same_input(
+                        &pending.request.tool_name,
+                        &block["input"],
+                        &pending.request.tool_input,
+                    )
+                    && let Some(id) = block["id"].as_str()
+                {
+                    self.ids.insert(id.to_owned());
+                }
+            }
+            if blocks.iter().any(|block| {
+                block["type"] == "tool_result"
+                    && block["tool_use_id"]
+                        .as_str()
+                        .is_some_and(|id| self.ids.contains(id))
+            }) {
+                return true;
+            }
+        }
+    }
 }
 
 fn same_input(name: &str, left: &Value, right: &Value) -> bool {
@@ -224,18 +256,23 @@ pub fn wait<L: TerminalLookup>(
         .map_err(|e| e.error)?;
     let deadline = Instant::now() + timeout;
     let mut blocked = false;
+    let mut scan = ResolutionScan::new(pending.transcript_offset);
+    let mut next_status = Instant::now();
     while Instant::now() < deadline {
-        if completed(&pending) {
+        if scan.poll(&pending) {
             return Ok(None);
         }
-        if let Ok(Some(facts)) = link.get(terminal)
-            && let Some(status) = facts.status
-        {
-            if status.state == "blocked" {
-                blocked = true;
-            } else if blocked {
-                return Ok(None);
+        if Instant::now() >= next_status {
+            if let Ok(Some(facts)) = link.get(terminal)
+                && let Some(status) = facts.status
+            {
+                if status.state == "blocked" {
+                    blocked = true;
+                } else if blocked {
+                    return Ok(None);
+                }
             }
+            next_status = Instant::now() + Duration::from_millis(250);
         }
         match listener.accept() {
             Ok((mut stream, _)) => {
@@ -250,7 +287,7 @@ pub fn wait<L: TerminalLookup>(
                     && let Some(decision) = decision(&pending.request, &message["answer"])
                 {
                     // The TUI may win while we read a socket message.
-                    if completed(&pending) {
+                    if scan.poll(&pending) {
                         return Ok(None);
                     }
                     return Ok(Some(decision));
@@ -368,8 +405,9 @@ pub fn deliver<L: TerminalLookup + TerminalInput>(
     {
         return false;
     }
+    let mut scan = ResolutionScan::new(pending.transcript_offset);
     for _ in 0..40 {
-        if completed(&pending)
+        if scan.poll(&pending)
             || link
                 .get(terminal)
                 .ok()

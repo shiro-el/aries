@@ -170,6 +170,69 @@ fn tui_result_and_timeout_clean_up_without_output() {
     }
 }
 
+/// A tool use can arrive on one poll and a result can be split across later
+/// polls, including in the middle of a UTF-8 character.
+#[test]
+fn appended_resolution_survives_partial_lines_between_polls() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = hook::socket_path(dir.path(), None, "partial").unwrap();
+    let req = request(&dir.path().join("transcript"));
+    std::fs::write(&req.transcript_path, "old history\n").unwrap();
+    let (tick, ticks) = std::sync::mpsc::channel();
+    let (done, finished) = std::sync::mpsc::channel();
+    struct Poll(std::sync::mpsc::Sender<Instant>);
+    impl TerminalLookup for Poll {
+        fn get(&mut self, _: &str) -> Result<Option<TerminalFacts>, String> {
+            self.0.send(Instant::now()).unwrap();
+            Ok(None)
+        }
+    }
+    let socket = path.clone();
+    let other = req.clone();
+    let worker = std::thread::spawn(move || {
+        let result = hook::wait(
+            &socket,
+            "partial",
+            other,
+            Duration::from_secs(5),
+            &mut Poll(tick),
+        )
+        .unwrap();
+        done.send(result).unwrap();
+    });
+    ready(&path);
+    let next_poll = || ticks.recv_timeout(Duration::from_secs(2)).unwrap();
+    let first = next_poll();
+    let mut file = std::fs::OpenOptions::new()
+        .append(true)
+        .open(&req.transcript_path)
+        .unwrap();
+    writeln!(file, "{}", json!({"message":{"content":[{"type":"tool_use","id":"split","name":req.tool_name,"input":req.tool_input}]}})).unwrap();
+    let second = next_poll();
+    assert!(second.duration_since(first) >= Duration::from_millis(250));
+    let result = format!(
+        "{}\n",
+        json!({"message":{"content":[{"type":"tool_result","tool_use_id":"split","content":"답"}]}})
+    );
+    let split = result.find('답').unwrap() + 1;
+    file.write_all(&result.as_bytes()[..split]).unwrap();
+    next_poll(); // The reader has encountered the incomplete result.
+    assert!(matches!(
+        finished.try_recv(),
+        Err(std::sync::mpsc::TryRecvError::Empty)
+    ));
+    file.write_all(&result.as_bytes()[split..]).unwrap();
+    assert!(
+        finished
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap()
+            .is_none()
+    );
+    worker.join().unwrap();
+    assert!(!path.exists());
+    assert!(!path.with_extension("json").exists());
+}
+
 #[test]
 fn outside_hc_does_not_even_read_stdin_or_create_state() {
     let dir = tempfile::tempdir().unwrap();
