@@ -12,7 +12,7 @@
 use std::fs::{File, OpenOptions};
 use std::path::{Path, PathBuf};
 
-use sha2::{Digest, Sha256};
+use super::claims::hash;
 
 use aries_protocol::answer::{Answer, AnswerOutcome, AnswerReply};
 use aries_protocol::chat::{ChatBody, ChatQuestion, ToolStatus};
@@ -93,24 +93,11 @@ struct ClaimedInput<'a, L> {
 impl<L> ClaimedInput<'_, L> {
     fn claim(&mut self) -> Result<(), String> {
         if !self.claimed {
-            let mut options = OpenOptions::new();
-            options.write(true).create_new(true);
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::OpenOptionsExt;
-                options.mode(0o600);
-            }
-            let file = options.open(&self.path).map_err(|e| {
-                if e.kind() == std::io::ErrorKind::AlreadyExists {
-                    "answer already attempted; delivery is uncertain".to_owned()
-                } else {
-                    format!("could not claim answer: {e}")
-                }
-            })?;
-            file.sync_all().map_err(|e| e.to_string())?;
-            File::open(self.path.parent().expect("claim directory"))
-                .and_then(|dir| dir.sync_all())
-                .map_err(|e| e.to_string())?;
+            self.proof.request.identity().claim(
+                &self.path,
+                self.proof.located,
+                self.proof.facts,
+            )?;
             self.claimed = true;
         }
         Ok(())
@@ -139,13 +126,6 @@ impl<L: TerminalLookup + TerminalInput> TerminalInput for ClaimedInput<'_, L> {
         self.verify(first)?;
         self.inner.text(terminal, text)
     }
-}
-
-fn hash(value: impl serde::Serialize) -> String {
-    Sha256::digest(serde_json::to_vec(&value).expect("answer identity"))
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect()
 }
 
 fn terminal_lock(dir: &Path) -> std::io::Result<File> {
@@ -226,16 +206,14 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
         }
         return Ok(reply(AnswerOutcome::Gone, "no such question"));
     };
+    if let Err(detail) = request.identity().check(&dir, &located, &facts) {
+        return Ok(reply(AnswerOutcome::Failed, detail));
+    }
     // Picks never enter the identity: another surface choosing a different
     // option must not dispatch a second answer to this same request.
     let mut claimed = ClaimedInput {
         inner: link,
-        path: dir.join(hash((
-            agent.name(),
-            &located.session,
-            located.path.as_os_str().as_encoded_bytes(),
-            &answer.question,
-        ))),
+        path: dir.clone(),
         claimed: false,
         proof: Proof {
             agent: agent.as_ref(),

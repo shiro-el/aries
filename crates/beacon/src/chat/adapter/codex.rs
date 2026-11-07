@@ -59,6 +59,14 @@ impl Agent for Codex {
         history::open(located, resume)
     }
 
+    fn logical_source(&self, located: &Located) -> PathBuf {
+        located
+            .path
+            .ancestors()
+            .find(|p| p.file_name().is_some_and(|n| n == "sessions"))
+            .unwrap_or(&located.path)
+            .to_owned()
+    }
     fn approval(
         &self,
         session: &str,

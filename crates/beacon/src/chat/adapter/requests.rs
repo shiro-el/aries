@@ -22,10 +22,14 @@ pub struct PendingRequest {
     route: Route,
     current: bool,
     visible: bool,
+    identity: super::claims::Identity,
 }
 impl PendingRequest {
     pub fn id(&self) -> &RequestId {
         &self.id
+    }
+    pub(super) fn identity(&self) -> &super::claims::Identity {
+        &self.identity
     }
     pub(super) fn route(&self) -> &Route {
         &self.route
@@ -73,6 +77,27 @@ pub(super) fn collect_requests(
 ) -> RequestSet {
     let hook = agent.hook(state, terminal, located);
     let head = agent.current_question(items).map(|(id, _)| id);
+    let correlated: Vec<_> = hook
+        .as_ref()
+        .map(|p| {
+            pending_questions(items)
+                .filter_map(|(id, _)| {
+                    let item = items.iter().find(|item| item.id == id)?;
+                    match &item.body {
+                        ChatBody::Tool { name, input, .. }
+                            if name == &p.request.tool_name
+                                && hook::same_input(name, input, &p.request.tool_input) =>
+                        {
+                            Some(id)
+                        }
+                        _ => None,
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let ambiguous = correlated.len() > 1;
+    let correlation = (correlated.len() == 1).then(|| correlated[0]);
     let mut pending = Vec::new();
     for item in items {
         if let ChatBody::Tool {
@@ -81,19 +106,22 @@ pub(super) fn collect_requests(
             ..
         } = &item.body
         {
-            let covered = hook.as_ref().is_some_and(|p| match &item.body {
-                ChatBody::Tool { name, input, .. } => {
-                    name == &p.request.tool_name
-                        && hook::same_input(name, input, &p.request.tool_input)
-                }
-                _ => false,
-            });
+            let covered = correlation == Some(item.id.as_str());
+            let potential_conflict = ambiguous && correlated.contains(&item.id.as_str());
             pending.push(PendingRequest {
                 id: request_id(&item.id),
                 item: item.clone(),
                 route: Route::Tui(Tui::Question),
-                current: head == Some(item.id.as_str()),
+                current: head == Some(item.id.as_str()) && !potential_conflict,
                 visible: !covered,
+                identity: super::claims::Identity::new(
+                    agent,
+                    located,
+                    facts,
+                    item,
+                    hook.as_ref().filter(|_| covered),
+                    covered.then_some(item.id.as_str()),
+                ),
             });
         }
     }
@@ -104,8 +132,16 @@ pub(super) fn collect_requests(
         let item = hook::item(primary);
         pending.push(PendingRequest {
             id: request_id(&item.id),
+            identity: super::claims::Identity::new(
+                agent,
+                located,
+                facts,
+                &item,
+                Some(primary),
+                correlation,
+            ),
             item,
-            current: true,
+            current: !ambiguous,
             visible: true,
             route: Route::ClaudeHook {
                 primary: primary.clone(),
@@ -116,6 +152,8 @@ pub(super) fn collect_requests(
     if let Some(permission) = agent.approval(&located.session, facts, screen) {
         let item = permission.item.clone();
         let fallback = Tui::Approval(permission);
+        let identity =
+            super::claims::Identity::new(agent, located, facts, &item, hook.as_ref(), None);
         let route = match hook.filter(|p| p.request.tool_name != "AskUserQuestion") {
             Some(primary) => Route::ClaudeHook { primary, fallback },
             None => Route::Tui(fallback),
@@ -123,6 +161,7 @@ pub(super) fn collect_requests(
         pending.push(PendingRequest {
             id: request_id(&item.id),
             item,
+            identity,
             route,
             current: true,
             visible: true,

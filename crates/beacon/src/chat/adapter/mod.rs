@@ -56,6 +56,9 @@ trait Agent {
         let _ = (state, terminal);
         self.open(located, resume)
     }
+    fn logical_source(&self, located: &Located) -> PathBuf {
+        located.path.clone()
+    }
     fn hook(
         &self,
         _state: &Path,
@@ -152,6 +155,7 @@ fn agents() -> Vec<Box<dyn Agent>> {
     ]
 }
 
+mod claims;
 mod delivery;
 mod feed;
 mod requests;
