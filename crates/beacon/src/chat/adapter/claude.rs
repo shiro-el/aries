@@ -7,6 +7,8 @@
 //! created with the first message. `<config>` is `$CLAUDE_CONFIG_DIR`, or
 //! `~/.claude`.
 
+pub mod hook;
+
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
