@@ -341,9 +341,6 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
         return Ok(reply(AnswerOutcome::Invalid, detail));
     }
     if let Some(pending) = primary {
-        if let Err(detail) = request.identity().check(&dir, &located) {
-            return Ok(reply(AnswerOutcome::Failed, detail));
-        }
         let answers: serde_json::Map<String, serde_json::Value> = question
             .questions
             .iter()
@@ -363,8 +360,14 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
                 (q.text.clone(), value.into())
             })
             .collect();
-        let delivered = answers.len() == question.questions.len()
-            && hook_answer(state_dir, terminal, &located, pending, answers.into(), link);
+        let delivered = if answers.len() == question.questions.len() {
+            if let Err(detail) = request.identity().check(&dir, &located) {
+                return Ok(reply(AnswerOutcome::Failed, detail));
+            }
+            hook_answer(state_dir, terminal, &located, pending, answers.into(), link)
+        } else {
+            false
+        };
         if let Some(failure) = link.failure.take() {
             return Ok(failure);
         }
