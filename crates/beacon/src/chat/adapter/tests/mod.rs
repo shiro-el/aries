@@ -1,0 +1,14 @@
+mod answer_cli;
+mod chat_follow;
+mod chat_metadata;
+mod chat_newlines;
+mod chat_usage;
+mod claude_hook;
+mod claude_interpreter;
+mod codex_cli;
+mod codex_history;
+mod codex_interpreter;
+mod opencode_chat;
+mod pi_chat;
+mod request_regressions;
+pub(in crate::chat::adapter) mod support;

@@ -59,6 +59,75 @@ impl Agent for Codex {
         history::open(located, resume)
     }
 
+    fn logical_source(&self, located: &Located) -> PathBuf {
+        located
+            .path
+            .ancestors()
+            .find(|p| p.file_name().is_some_and(|n| n == "sessions"))
+            .unwrap_or(&located.path)
+            .to_owned()
+    }
+    fn approval(
+        &self,
+        session: &str,
+        facts: &TerminalFacts,
+        screen: &str,
+    ) -> Option<super::permission::Permission> {
+        super::permission::detect(self.name(), session, facts, screen)
+    }
+    fn current_question<'a>(&self, items: &'a [ChatItem]) -> Option<(&'a str, &'a ChatQuestion)> {
+        super::requests::queued_question(items)
+    }
+    fn prepare(
+        &self,
+        nav: &mut super::delivery::Navigation<'_>,
+        question: &ChatQuestion,
+        has_text: bool,
+    ) -> Result<(), aries_protocol::answer::AnswerReply> {
+        use super::delivery::reply;
+        use aries_protocol::answer::AnswerOutcome;
+        let _ = has_text;
+        let screen = nav.screen().unwrap_or_default();
+        let normalized = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
+        let prompt = normalized(&question.questions[0].text);
+        if !normalized(&screen).contains(&prompt) && screen.contains("to answer") {
+            let hint = screen.to_lowercase();
+            let key = if hint.contains("shift+left")
+                || hint.contains("shift+←")
+                || (hint.contains('⇧') && hint.contains('←'))
+            {
+                "shift+left"
+            } else if hint.contains("alt+up") || hint.contains("alt+↑") {
+                "alt+up"
+            } else {
+                return Err(reply(
+                    AnswerOutcome::Unsupported,
+                    "custom Codex question binding",
+                ));
+            };
+            // Opening the editor is navigation, not an answer. Keep the
+            // terminal lock, but claim only at the first real answer key.
+            if let Err(e) = nav.open(key) {
+                return Err(reply(AnswerOutcome::Failed, e));
+            }
+            let mut opened = false;
+            for _ in 0..20 {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+                if nav.screen().is_ok_and(|s| normalized(&s).contains(&prompt)) {
+                    opened = true;
+                    break;
+                }
+            }
+            if !opened {
+                return Err(reply(
+                    AnswerOutcome::Gone,
+                    "queued question menu did not open",
+                ));
+            }
+        }
+
+        Ok(())
+    }
     fn answer_input(
         &self,
         question: &ChatQuestion,

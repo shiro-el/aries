@@ -9,8 +9,8 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::Duration;
 
-use aries_beacon::chat::codex::{Codex, CodexInterpreter, exec_title, locate_in, unified_hunks};
-use aries_beacon::chat::{
+use super::support::codex::{Codex, CodexInterpreter, exec_title, locate_in, unified_hunks};
+use super::support::{
     Agent, Interpreter, KeysError, Located, Options, TerminalFacts, TerminalLookup, run,
 };
 use aries_protocol::chat::{
@@ -416,6 +416,12 @@ fn backtracking_keeps_the_thread_and_selects_its_newest_rollout_in_any_fd_order(
 
 #[test]
 fn a_process_holding_a_rollout_open_is_paired() {
+    if super::support::isolated_test(concat!(
+        module_path!(),
+        "::a_process_holding_a_rollout_open_is_paired"
+    )) {
+        return;
+    }
     let home = tempfile::tempdir().unwrap();
     let path = home.path().join(format!(
         "sessions/2026/11/03/rollout-2026-11-03T15-21-51-{NEW}.jsonl"

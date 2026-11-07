@@ -5,8 +5,8 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::{cell::Cell, rc::Rc, time::Duration};
 
-use aries_beacon::chat::codex::Codex;
-use aries_beacon::chat::{
+use super::support::codex::Codex;
+use super::support::{
     Agent, Batch, Interpreter, Located, Opened, Options, Source, TerminalFacts, TerminalLookup, run,
 };
 use aries_protocol::chat::{ChatBody, ChatEvent};

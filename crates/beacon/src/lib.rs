@@ -2,7 +2,6 @@
 //! the tests drive directly.
 
 pub mod chat;
-pub mod claude_hook;
 pub mod claude_plugin;
 pub mod core_link;
 pub mod host_pairing;

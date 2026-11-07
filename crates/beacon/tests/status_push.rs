@@ -454,6 +454,73 @@ fn a_question_push_has_the_chat_id_options_and_current_turn() {
 }
 
 #[test]
+fn hook_only_question_push_routes_its_id_to_the_hook_in_another_process() {
+    use serde_json::json;
+    let mut host = Host::new();
+    host.serve();
+    let config = host.home.path().join(".claude");
+    let transcript = config.join("projects/-work-a/S1.jsonl");
+    std::fs::create_dir_all(transcript.parent().unwrap()).unwrap();
+    std::fs::write(&transcript, "").unwrap();
+    let agent = host.hc.run_fake_agent("claude", &format!(
+        "claude-session {} S1 /work/a\nstatus working\nrun while [ ! -f \"$XDG_RUNTIME_DIR/aries-beacon/claude/$HC_TERMINAL_ID.json\" ]; do sleep 0.01; done\nstatus blocked question Choose?\nwait\n", config.display()
+    ));
+    let terminal = agent.address.clone();
+    let request = json!({
+        "session_id":"S1", "transcript_path":transcript, "cwd":"/work/a",
+        "permission_mode":"default", "hook_event_name":"PermissionRequest",
+        "tool_name":"AskUserQuestion", "tool_input":{"questions":[one_question(false, &["Yes", "No"])]}
+    });
+    let mut hook = host
+        .command("claude-hook")
+        .arg("permission-request")
+        .env("HC_TERMINAL_ID", &terminal)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    hook.stdin
+        .take()
+        .unwrap()
+        .write_all(request.to_string().as_bytes())
+        .unwrap();
+    let push = serde_json::to_value(&host.pushes(1)[0]).unwrap();
+    let Some(id) = push["question"]["id"].as_str().map(str::to_owned) else {
+        hook.kill().unwrap();
+        hook.wait().unwrap();
+        panic!("hook-only push question: {push}");
+    };
+    let chat = host.command("chat").arg(&terminal).output().unwrap();
+    assert!(chat.status.success(), "{chat:?}");
+    assert!(String::from_utf8(chat.stdout).unwrap().lines().any(|line| {
+        let line: serde_json::Value = serde_json::from_str(line).unwrap();
+        line["item"]["id"] == id
+    }));
+    assert_eq!(push["question"]["options"], json!(["Yes", "No"]));
+    let worker = std::thread::spawn(move || {
+        let output = hook.wait_with_output().unwrap();
+        assert!(output.status.success(), "{output:?}");
+        let decision: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(
+            decision["hookSpecificOutput"]["decision"]["updatedInput"]["answers"],
+            json!({"Choose?":"Yes"})
+        );
+        std::fs::write(transcript, format!("{}\n{}\n", question_record(json!([one_question(false, &["Yes", "No"])])),
+            json!({"type":"user","uuid":"result","parentUuid":"m1","message":{"content":[{"type":"tool_result","tool_use_id":"ask-1","content":"Yes"}]}}))).unwrap();
+    });
+    let answer = host
+        .command("answer")
+        .args([&terminal, &id, "0"])
+        .output()
+        .unwrap();
+    assert!(answer.status.success(), "{answer:?}");
+    let reply: serde_json::Value = serde_json::from_slice(&answer.stdout).unwrap();
+    assert_eq!(reply["outcome"], "sent", "{reply}");
+    worker.join().unwrap();
+    assert!(agent.inputs().is_empty(), "{:?}", agent.inputs());
+}
+
+#[test]
 fn a_permission_push_carries_the_live_scope_and_checked_answer_identity() {
     let mut host = Host::new();
     host.serve();

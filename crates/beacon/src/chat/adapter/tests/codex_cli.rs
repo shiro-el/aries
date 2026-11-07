@@ -10,7 +10,7 @@ use aries_protocol::answer::{AnswerOutcome, AnswerReply};
 use aries_protocol::chat::{ChatBody, ChatEvent, ChatLine, ToolStatus};
 use aries_test_support::{FakeAgent, HcSession};
 
-const BEACON: &str = env!("CARGO_BIN_EXE_aries-beacon");
+use super::support::BEACON;
 const THREAD: &str = "01a1a012-3af0-7c01-97e4-7e2adbc2ae4f";
 const QUESTION: &str = "call_f2e4624a40ee4bd7ba6cc92a8b052c06";
 const FIXTURE: &str = "codex/sessions/question-then-resume.rollout.jsonl";
@@ -233,29 +233,42 @@ fn a_codex_question_is_answered_with_down_and_enter_and_only_once() {
 // D27: opening a collapsed menu must not consume the one durable answer attempt.
 #[test]
 fn a_delayed_collapsed_menu_can_be_retried_without_claim_rejection() {
-    use aries_beacon::chat::{TerminalFacts, TerminalInput, TerminalLookup, codex::Codex};
+    use super::support::{TerminalFacts, TerminalInput, TerminalLookup, codex::Codex};
     struct TestCodex(PathBuf);
-    impl aries_beacon::chat::Agent for TestCodex {
+    impl super::support::Agent for TestCodex {
         fn name(&self) -> &'static str {
             "codex"
         }
-        fn locate(&self, _: &TerminalFacts) -> Option<aries_beacon::chat::Located> {
-            Some(aries_beacon::chat::Located {
+        fn locate(&self, _: &TerminalFacts) -> Option<super::support::Located> {
+            Some(super::support::Located {
                 session: THREAD.into(),
                 path: self.0.clone(),
             })
         }
-        fn interpreter(&self) -> Box<dyn aries_beacon::chat::Interpreter> {
-            aries_beacon::chat::Agent::interpreter(&Codex)
+        fn interpreter(&self) -> Box<dyn super::support::Interpreter> {
+            super::support::Agent::interpreter(&Codex)
+        }
+        fn current_question<'a>(
+            &self,
+            items: &'a [aries_protocol::chat::ChatItem],
+        ) -> Option<(&'a str, &'a aries_protocol::chat::ChatQuestion)> {
+            super::support::Agent::current_question(&Codex, items)
+        }
+        fn prepare(
+            &self,
+            nav: &mut super::super::delivery::Navigation<'_>,
+            question: &aries_protocol::chat::ChatQuestion,
+            has_text: bool,
+        ) -> Result<(), aries_protocol::answer::AnswerReply> {
+            super::support::Agent::prepare(&Codex, nav, question, has_text)
         }
         fn answer_input(
             &self,
             q: &aries_protocol::chat::ChatQuestion,
             picks: &[Vec<usize>],
             texts: &[Option<String>],
-        ) -> Result<Vec<aries_beacon::chat::answer::AnswerInput>, aries_beacon::chat::KeysError>
-        {
-            aries_beacon::chat::Agent::answer_input(&Codex, q, picks, texts)
+        ) -> Result<Vec<super::support::answer::AnswerInput>, super::support::KeysError> {
+            super::support::Agent::answer_input(&Codex, q, picks, texts)
         }
     }
     struct Link {
@@ -295,23 +308,23 @@ fn a_delayed_collapsed_menu_can_be_retried_without_claim_rejection() {
         opened: false,
         inputs: vec![],
     };
-    let agents: Vec<Box<dyn aries_beacon::chat::Agent>> =
+    let agents: Vec<Box<dyn super::support::Agent>> =
         vec![Box::new(TestCodex(host.rollout.clone()))];
     let state = host.home.path().join("answers-test");
     let request =
         aries_protocol::answer::Answer::from_args(&[QUESTION.into(), "1".into()]).unwrap();
     let first =
-        aries_beacon::chat::answer::answer(&state, &agent.address, &request, &mut link, &agents)
+        super::support::answer::answer(&state, &agent.address, &request, &mut link, &agents)
             .unwrap();
     assert_eq!(first.outcome, AnswerOutcome::Gone, "{first:?}");
     link.opened = true;
     let second =
-        aries_beacon::chat::answer::answer(&state, &agent.address, &request, &mut link, &agents)
+        super::support::answer::answer(&state, &agent.address, &request, &mut link, &agents)
             .unwrap();
     assert_eq!(second.outcome, AnswerOutcome::Sent, "{second:?}");
     assert_eq!(link.inputs, vec![vec!["shift+left"], vec!["down", "enter"]]);
     let third =
-        aries_beacon::chat::answer::answer(&state, &agent.address, &request, &mut link, &agents)
+        super::support::answer::answer(&state, &agent.address, &request, &mut link, &agents)
             .unwrap();
     assert_eq!(third.outcome, AnswerOutcome::Failed);
     assert_eq!(link.inputs.len(), 2);

@@ -4,12 +4,12 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use aries_beacon::chat::{TerminalFacts, TerminalLookup};
-use aries_beacon::claude_hook::{self as hook, Request};
-use aries_beacon::claude_plugin as plugin;
+use super::super::claude::hook::{self as hook, Request};
+use super::support::{TerminalFacts, TerminalLookup};
+use crate::claude_plugin as plugin;
 use serde_json::{Value, json};
 
-const BEACON: &str = env!("CARGO_BIN_EXE_aries-beacon");
+use super::support::BEACON;
 
 // Tests exercising the public answer/chat seams must agree with their hook's
 // runtime path. Set the environment only in a child, never in parallel tests.
@@ -20,7 +20,11 @@ fn isolated_runtime(test: &str) -> bool {
     }
     let runtime = tempfile::tempdir().unwrap();
     let output = Command::new(std::env::current_exe().unwrap())
-        .args(["--exact", test, "--nocapture"])
+        .args([
+            "--exact",
+            &format!("{}::{test}", module_path!().split_once("::").unwrap().1),
+            "--nocapture",
+        ])
         .env(CHILD, test)
         .env("XDG_RUNTIME_DIR", runtime.path())
         .output()
@@ -64,8 +68,9 @@ fn ready(path: &Path) {
     }
 }
 
-use aries_beacon::chat::{Agent, Located, answer, claude::ClaudeCode};
+use super::support::{Agent, Located, answer, claude::ClaudeCode};
 struct Claude {
+    runtime_dir: Option<std::path::PathBuf>,
     located: Located,
 }
 impl Agent for Claude {
@@ -75,11 +80,45 @@ impl Agent for Claude {
     fn locate(&self, _: &TerminalFacts) -> Option<Located> {
         Some(self.located.clone())
     }
-    fn interpreter(&self) -> Box<dyn aries_beacon::chat::Interpreter> {
+    fn interpreter(&self) -> Box<dyn super::support::Interpreter> {
         ClaudeCode {
             config_dir: "/unused".into(),
+            runtime_dir: self.runtime_dir.clone(),
         }
         .interpreter()
+    }
+    fn hook_runtime_dir(&self) -> Option<&Path> {
+        self.runtime_dir.as_deref()
+    }
+    fn hook(&self, state: &Path, terminal: &str, located: &Located) -> Option<hook::Pending> {
+        ClaudeCode {
+            config_dir: "/unused".into(),
+            runtime_dir: self.runtime_dir.clone(),
+        }
+        .hook(state, terminal, located)
+    }
+    fn approval(
+        &self,
+        session: &str,
+        facts: &TerminalFacts,
+        screen: &str,
+    ) -> Option<super::super::permission::Permission> {
+        ClaudeCode {
+            config_dir: "/unused".into(),
+            runtime_dir: self.runtime_dir.clone(),
+        }
+        .approval(session, facts, screen)
+    }
+    fn approval_decision(
+        &self,
+        permission: &super::super::permission::Permission,
+        pick: usize,
+    ) -> Option<&'static str> {
+        ClaudeCode {
+            config_dir: "/unused".into(),
+            runtime_dir: self.runtime_dir.clone(),
+        }
+        .approval_decision(permission, pick)
     }
     fn answer_keys(
         &self,
@@ -88,6 +127,7 @@ impl Agent for Claude {
     ) -> Result<Vec<String>, answer::KeysError> {
         ClaudeCode {
             config_dir: "/unused".into(),
+            runtime_dir: self.runtime_dir.clone(),
         }
         .answer_keys(q, p)
     }
@@ -124,12 +164,13 @@ fn mixed_answers_travel_through_the_hook_socket() {
             }}))))
         }
     }
-    impl aries_beacon::chat::TerminalInput for Link {
+    impl super::support::TerminalInput for Link {
         fn keys(&mut self, _: &str, _: &[String]) -> Result<(), String> {
             panic!("structured mixed answer must not send keys")
         }
     }
     let agents: Vec<Box<dyn Agent>> = vec![Box::new(Claude {
+        runtime_dir: hook::runtime_dir(),
         located: Located {
             session: req.session_id.clone(),
             path: req.transcript_path.clone(),
@@ -331,7 +372,10 @@ fn binary_free_removal_keeps_edits_and_removes_only_managed_files() {
         }
         std::fs::write(root.join("user-file"), "keep").unwrap();
         let output = Command::new("sh")
-            .args(["-c", include_str!("../../core/src/claude_plugin_remove.sh")])
+            .args([
+                "-c",
+                include_str!("../../../../../core/src/claude_plugin_remove.sh"),
+            ])
             .env("XDG_DATA_HOME", dir.path())
             .env("PATH", "/usr/bin:/bin")
             .output()
@@ -348,7 +392,7 @@ fn unconfirmed_socket_answer_falls_back_to_keys() {
         return;
     }
     // Exercise the public answer seam with the actual Claude transcript interpreter.
-    use aries_beacon::chat::TerminalInput;
+    use super::support::TerminalInput;
     use aries_protocol::answer::{Answer, AnswerOutcome};
     #[derive(Default)]
     struct Link {
@@ -399,6 +443,7 @@ fn unconfirmed_socket_answer_falls_back_to_keys() {
         serde_json::from_str::<Value>(&line).unwrap()
     });
     let agents: Vec<Box<dyn Agent>> = vec![Box::new(Claude {
+        runtime_dir: hook::runtime_dir(),
         located: Located {
             session: "session".into(),
             path: req.transcript_path.clone(),
@@ -425,17 +470,70 @@ fn unconfirmed_socket_answer_falls_back_to_keys() {
     assert_eq!(link.keys, ["1", "2", "1"]);
     assert!(!path.exists());
     assert!(!path.with_extension("json").exists());
-    // A cached transcript id must retain its key path even while a hook
-    // overlay would hide that tool from a new Chat snapshot.
+}
+
+#[test]
+fn cached_transcript_id_uses_keys_and_refuses_a_second_hook_answer() {
+    if isolated_runtime("cached_transcript_id_uses_keys_and_refuses_a_second_hook_answer") {
+        return;
+    }
+    // Exercise the public answer seam with the actual Claude transcript interpreter.
+    use super::support::TerminalInput;
+    use aries_protocol::answer::{Answer, AnswerOutcome};
+    #[derive(Default)]
+    struct Link {
+        keys: Vec<String>,
+    }
+    impl TerminalLookup for Link {
+        fn screen(&mut self, _: &str) -> Result<String, String> {
+            Ok("Color?\n1. Blue\n2. Red".into())
+        }
+        fn get(&mut self, _: &str) -> Result<Option<TerminalFacts>, String> {
+            Ok(Some(TerminalFacts::from_json(
+                &json!({"status":{"state":"blocked","kind":"question"}}),
+            )))
+        }
+    }
+    impl TerminalInput for Link {
+        fn keys(&mut self, _: &str, keys: &[String]) -> Result<(), String> {
+            self.keys.extend_from_slice(keys);
+            Ok(())
+        }
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let req = request(&dir.path().join("transcript"));
+    std::fs::write(&req.transcript_path, "").unwrap();
+    let terminal = format!("test-{:016x}", rand::random::<u64>());
+    let path = hook::socket_path(dir.path(), hook::runtime_dir().as_deref(), &terminal).unwrap();
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     let listener = UnixListener::bind(&path).unwrap();
     listener.set_nonblocking(true).unwrap();
+    let pending = hook::Pending {
+        request: req.clone(),
+        id: "claude-hook:0123456789abcdef".into(),
+        transcript_offset: 0,
+        created_at: 0,
+        nonce: "test".into(),
+    };
+    std::fs::write(
+        path.with_extension("json"),
+        serde_json::to_vec(&pending).unwrap(),
+    )
+    .unwrap();
     record(&req);
     std::fs::write(
         path.with_extension("json"),
         serde_json::to_vec(&pending).unwrap(),
     )
     .unwrap();
-    link.keys.clear();
+    let agents: Vec<Box<dyn Agent>> = vec![Box::new(Claude {
+        runtime_dir: hook::runtime_dir(),
+        located: Located {
+            session: "session".into(),
+            path: req.transcript_path.clone(),
+        },
+    })];
+    let mut link = Link::default();
     let result = answer::answer(
         dir.path(),
         &terminal,
@@ -454,8 +552,129 @@ fn unconfirmed_socket_answer_falls_back_to_keys() {
         listener.accept().unwrap_err().kind(),
         std::io::ErrorKind::WouldBlock
     );
+    let second = answer::answer(
+        dir.path(),
+        &terminal,
+        &Answer {
+            question: pending.id.clone(),
+            picks: vec![vec![1], vec![0]],
+            free_text: vec![],
+        },
+        &mut link,
+        &agents,
+    )
+    .unwrap();
+    assert_eq!(second.outcome, AnswerOutcome::Failed);
+    assert!(second.detail.unwrap().contains("already attempted"));
+    assert_eq!(link.keys, ["1", "2", "1"]);
     std::fs::remove_file(&path).unwrap();
     std::fs::remove_file(path.with_extension("json")).unwrap();
+}
+
+#[test]
+fn hook_and_late_transcript_answers_share_one_claim() {
+    if isolated_runtime("hook_and_late_transcript_answers_share_one_claim") {
+        return;
+    }
+    // Exercise the public answer seam with the actual Claude transcript interpreter.
+    use super::support::TerminalInput;
+    use aries_protocol::answer::{Answer, AnswerOutcome};
+    #[derive(Default)]
+    struct Link {
+        keys: Vec<String>,
+    }
+    impl TerminalLookup for Link {
+        fn screen(&mut self, _: &str) -> Result<String, String> {
+            Ok("Color?\n1. Blue\n2. Red".into())
+        }
+        fn get(&mut self, _: &str) -> Result<Option<TerminalFacts>, String> {
+            Ok(Some(TerminalFacts::from_json(
+                &json!({"status":{"state":"blocked","kind":"question"}}),
+            )))
+        }
+    }
+    impl TerminalInput for Link {
+        fn keys(&mut self, _: &str, keys: &[String]) -> Result<(), String> {
+            self.keys.extend_from_slice(keys);
+            Ok(())
+        }
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let req = request(&dir.path().join("transcript"));
+    std::fs::write(&req.transcript_path, "").unwrap();
+    let terminal = format!("test-{:016x}", rand::random::<u64>());
+    let path = hook::socket_path(dir.path(), hook::runtime_dir().as_deref(), &terminal).unwrap();
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let listener = UnixListener::bind(&path).unwrap();
+    let pending = hook::Pending {
+        request: req.clone(),
+        id: "claude-hook:0123456789abcdef".into(),
+        transcript_offset: 0,
+        created_at: 0,
+        nonce: "test".into(),
+    };
+    std::fs::write(
+        path.with_extension("json"),
+        serde_json::to_vec(&pending).unwrap(),
+    )
+    .unwrap();
+    let socket_path = path.clone();
+    let worker = std::thread::spawn(move || {
+        let (socket, _) = listener.accept().unwrap();
+        let mut line = String::new();
+        BufReader::new(socket).read_line(&mut line).unwrap();
+        std::fs::remove_file(&socket_path).unwrap();
+        std::fs::remove_file(socket_path.with_extension("json")).unwrap();
+        serde_json::from_str::<Value>(&line).unwrap()
+    });
+    let agents: Vec<Box<dyn Agent>> = vec![Box::new(Claude {
+        runtime_dir: hook::runtime_dir(),
+        located: Located {
+            session: "session".into(),
+            path: req.transcript_path.clone(),
+        },
+    })];
+    let mut link = Link::default();
+    let result = answer::answer(
+        dir.path(),
+        &terminal,
+        &Answer {
+            question: pending.id.clone(),
+            picks: vec![vec![0], vec![1]],
+            free_text: vec![],
+        },
+        &mut link,
+        &agents,
+    )
+    .unwrap();
+    assert_eq!(result.outcome, AnswerOutcome::Sent, "{result:?}");
+    assert_eq!(
+        worker.join().unwrap()["answer"],
+        json!({"Color?":"Blue","Other?":"B"})
+    );
+    assert_eq!(link.keys, ["1", "2", "1"]);
+    assert!(!path.exists());
+    assert!(!path.with_extension("json").exists());
+    std::fs::write(&req.transcript_path, format!("{}\n{}\n",
+        json!({"type":"user","uuid":"late-user","message":{"role":"user","content":"Ask me"}}),
+        json!({"type":"assistant","uuid":"m1","parentUuid":"late-user","message":{"role":"assistant","content":[{"type":"tool_use","id":"tool1","name":req.tool_name,"input":req.tool_input}]}})
+    )).unwrap();
+    link.keys.clear();
+    let result = answer::answer(
+        dir.path(),
+        &terminal,
+        &Answer {
+            question: "tool1".into(),
+            picks: vec![vec![1], vec![0]],
+            free_text: vec![],
+        },
+        &mut link,
+        &agents,
+    )
+    .unwrap();
+    assert_eq!(result.outcome, AnswerOutcome::Failed, "{result:?}");
+    assert!(result.detail.unwrap().contains("already attempted"));
+    assert!(link.keys.is_empty());
 }
 
 /// Isolated real TUI: the installed plugin, mixed answers, multi-select and Bash.
@@ -480,7 +699,7 @@ fn real_claude_plugin_questions_and_bash() {
     }
     let credentials = std::env::var_os("ARIES_CLAUDE_CREDENTIALS")
         .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| aries_beacon::home().join(".claude/.credentials.json"));
+        .unwrap_or_else(|| crate::home().join(".claude/.credentials.json"));
     std::os::unix::fs::symlink(credentials, config.join(".credentials.json")).unwrap();
     let path = format!(
         "{}:{}",
@@ -675,10 +894,10 @@ fn real_claude_plugin_questions_and_bash() {
     hc.hc(&["send",&terminal,"Use Bash to execute exactly: printf hook-bash > permission-hook-proof.txt . Do not use Write or any other tool. Afterward say OK and stop."]);
     let bash = pending("Bash");
     std::thread::sleep(Duration::from_secs(1));
-    let facts = aries_beacon::chat::TerminalFacts::from_json(
+    let facts = super::support::TerminalFacts::from_json(
         &serde_json::from_str::<Value>(&hc.hc(&["get", &terminal, "--json"])).unwrap(),
     );
-    let permission = aries_beacon::chat::permission::detect(
+    let permission = super::support::permission::detect(
         "claude-code",
         &bash.request.session_id,
         &facts,
@@ -753,7 +972,7 @@ fn hook_question_is_visible_before_transcript_and_removed_on_resume() {
     if isolated_runtime("hook_question_is_visible_before_transcript_and_removed_on_resume") {
         return;
     }
-    use aries_beacon::chat::Batch;
+    use super::support::Batch;
     use aries_protocol::chat::{ChatBody, ChatEvent, ToolStatus};
     let dir = tempfile::tempdir().unwrap();
     let req = request(&dir.path().join("transcript"));
@@ -780,6 +999,7 @@ fn hook_question_is_visible_before_transcript_and_removed_on_resume() {
     assert_eq!(pending.id.len(), "claude-hook:".len() + 16);
     let terminal = path.file_stem().unwrap().to_str().unwrap();
     let agent = Claude {
+        runtime_dir: hook::runtime_dir(),
         located: Located {
             session: req.session_id.clone(),
             path: req.transcript_path.clone(),
@@ -906,7 +1126,7 @@ fn old_identical_results_do_not_resolve_a_new_request() {
 
 #[test]
 fn four_row_claude_approval_keeps_rule_and_mode_changes_on_keys() {
-    use aries_beacon::chat::{TerminalInput, permission};
+    use super::support::{TerminalInput, permission};
     use aries_protocol::{
         answer::{Answer, AnswerOutcome},
         chat::ChatBody,
@@ -926,12 +1146,14 @@ fn four_row_claude_approval_keeps_rule_and_mode_changes_on_keys() {
         }
     }
     impl TerminalInput for Link {
-        fn claim_structured(&mut self) -> Result<(), String> {
-            panic!("rule/mode choices must use keys")
-        }
         fn keys(&mut self, _: &str, keys: &[String]) -> Result<(), String> {
             self.keys.extend_from_slice(keys);
             Ok(())
+        }
+    }
+    impl super::super::delivery::StructuredInput for Link {
+        fn claim_structured(&mut self) -> Result<(), String> {
+            panic!("rule/mode choices must use keys")
         }
     }
     for (pick, key) in [(1, "2"), (2, "3")] {
@@ -954,6 +1176,7 @@ fn four_row_claude_approval_keeps_rule_and_mode_changes_on_keys() {
             ["Allow", "Allow always", "Switch to auto mode", "Deny"]
         );
         let agents: Vec<Box<dyn Agent>> = vec![Box::new(Claude {
+            runtime_dir: hook::runtime_dir(),
             located: Located {
                 session: "session".into(),
                 path: dir.path().join("transcript"),
