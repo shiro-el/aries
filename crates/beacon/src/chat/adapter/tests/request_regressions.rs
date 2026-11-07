@@ -222,3 +222,33 @@ fn reanswers_validate_bad_picks_and_nonasking_status_before_claims() {
     assert_eq!(invalid.outcome, AnswerOutcome::Invalid, "{invalid:?}");
     assert_eq!(not_asking.outcome, AnswerOutcome::Gone, "{not_asking:?}");
 }
+
+#[test]
+fn an_older_turns_running_question_does_not_remove_push_buttons() {
+    let (dir, transcript, terminal, agents) = setup();
+    append(&transcript, &user("u1", None, "first"));
+    append(&transcript, &ask("m1", "u1", "tool0", q()));
+    append(&transcript, &user("u2", Some("m1"), "second"));
+    let other = json!({"questions":[{"question":"Color?","header":"C","multiSelect":false,"options":[{"label":"Red","description":"r"},{"label":"Blue","description":"b"}]}]});
+    append(&transcript, &ask("m2", "u2", "tool1", other));
+    let mut link = Link::default();
+    link.turn.store(7, Ordering::SeqCst);
+    let old = submit(
+        dir.path(),
+        &terminal,
+        "tool0",
+        vec![vec![0]],
+        &mut link,
+        &agents,
+    );
+    assert_eq!(old.outcome, AnswerOutcome::Gone, "{old:?}");
+    assert!(link.keys.is_empty());
+    let adapters = super::super::Adapters {
+        state: dir.path().to_owned(),
+        agents,
+    };
+    let view = adapters.observe(&terminal, &mut link).unwrap();
+    let quick = view.quick_reply().unwrap();
+    assert_eq!(quick.id().as_str(), "tool1");
+    assert_eq!(quick.options(), ["Red", "Blue"]);
+}

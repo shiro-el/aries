@@ -99,31 +99,28 @@ pub(super) fn collect_requests(
     let ambiguous = correlated.len() > 1;
     let correlation = (correlated.len() == 1).then(|| correlated[0]);
     let mut pending = Vec::new();
-    for item in items {
-        if let ChatBody::Tool {
-            status: ToolStatus::Running,
-            question: Some(_),
-            ..
-        } = &item.body
-        {
-            let covered = correlation == Some(item.id.as_str());
-            let potential_conflict = ambiguous && correlated.contains(&item.id.as_str());
-            pending.push(PendingRequest {
-                id: request_id(&item.id),
-                item: item.clone(),
-                route: Route::Tui(Tui::Question),
-                current: head == Some(item.id.as_str()) && !potential_conflict,
-                visible: !covered,
-                identity: super::claims::Identity::new(
-                    agent,
-                    located,
-                    facts,
-                    item,
-                    hook.as_ref().filter(|_| covered),
-                    covered.then_some(item.id.as_str()),
-                ),
-            });
-        }
+    for (id, _) in pending_questions(items) {
+        let item = items
+            .iter()
+            .find(|item| item.id == id)
+            .expect("pending question");
+        let covered = correlation == Some(item.id.as_str());
+        let potential_conflict = ambiguous && correlated.contains(&item.id.as_str());
+        pending.push(PendingRequest {
+            id: request_id(&item.id),
+            item: item.clone(),
+            route: Route::Tui(Tui::Question),
+            current: head == Some(item.id.as_str()) && !potential_conflict,
+            visible: !covered,
+            identity: super::claims::Identity::new(
+                agent,
+                located,
+                facts,
+                item,
+                hook.as_ref().filter(|_| covered),
+                covered.then_some(item.id.as_str()),
+            ),
+        });
     }
     if let Some(primary) = hook
         .as_ref()
