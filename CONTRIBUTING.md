@@ -132,6 +132,30 @@ checksums come from the Beacon release pipeline (below); tests swap it with
 `AriesCore::set_beacon_release` and serve binaries from
 `aries_test_support::ReleaseServer` (an `nginx:alpine` container).
 
+Claude Code permissions and questions use a managed local marketplace at
+`${XDG_DATA_HOME:-~/.local/share}/aries-beacon/claude-marketplace/`.
+`aries-beacon claude-plugin install|remove|status` reports JSON; installation
+is best effort when the Claude CLI is missing or fails. Claude's CLI alone
+writes its settings. Modified plugin files are preserved. Binary-free Host
+removal uses Python 3 to verify the recorded file contents; without Python 3
+it preserves the marketplace directory. The hook is inactive outside hc.
+Answers use the terminal's socket, then verify the transcript/status before
+reporting success; unconfirmed answers recheck the question before key fallback.
+
+The opt-in Claude check runs Haiku in a disposable HOME and CLAUDE_CONFIG_DIR,
+with only `.credentials.json` symlinked to the login credentials. It checks
+mixed choice/text, multi-select and Bash approval through the installed plugin:
+
+```sh
+ARIES_REAL_CLAUDE=1 cargo test -p aries-beacon --test claude_hook -- --ignored real_claude --nocapture
+```
+
+`ARIES_CLAUDE_CREDENTIALS` can select another credential file. The test uses
+manual (`default`) permission mode, matching the research procedure.
+This check currently exposes a blocker on Claude Code 2.1.319: the pending
+AskUserQuestion tool_use is absent from the transcript until the TUI answer
+is submitted, so the fixed transcript-based hook identity cannot be found.
+
 ## Registering a Host with a QR
 
 Run this as the SSH account on the Host (the address must be reachable by the phone):
