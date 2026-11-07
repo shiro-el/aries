@@ -70,6 +70,7 @@ fn ready(path: &Path) {
 
 use super::support::{Agent, Located, answer, claude::ClaudeCode};
 struct Claude {
+    runtime_dir: Option<std::path::PathBuf>,
     located: Located,
 }
 impl Agent for Claude {
@@ -82,12 +83,17 @@ impl Agent for Claude {
     fn interpreter(&self) -> Box<dyn super::support::Interpreter> {
         ClaudeCode {
             config_dir: "/unused".into(),
+            runtime_dir: self.runtime_dir.clone(),
         }
         .interpreter()
+    }
+    fn hook_runtime_dir(&self) -> Option<&Path> {
+        self.runtime_dir.as_deref()
     }
     fn hook(&self, state: &Path, terminal: &str, located: &Located) -> Option<hook::Pending> {
         ClaudeCode {
             config_dir: "/unused".into(),
+            runtime_dir: self.runtime_dir.clone(),
         }
         .hook(state, terminal, located)
     }
@@ -99,6 +105,7 @@ impl Agent for Claude {
     ) -> Option<super::super::permission::Permission> {
         ClaudeCode {
             config_dir: "/unused".into(),
+            runtime_dir: self.runtime_dir.clone(),
         }
         .approval(session, facts, screen)
     }
@@ -109,6 +116,7 @@ impl Agent for Claude {
     ) -> Option<&'static str> {
         ClaudeCode {
             config_dir: "/unused".into(),
+            runtime_dir: self.runtime_dir.clone(),
         }
         .approval_decision(permission, pick)
     }
@@ -119,6 +127,7 @@ impl Agent for Claude {
     ) -> Result<Vec<String>, answer::KeysError> {
         ClaudeCode {
             config_dir: "/unused".into(),
+            runtime_dir: self.runtime_dir.clone(),
         }
         .answer_keys(q, p)
     }
@@ -161,6 +170,7 @@ fn mixed_answers_travel_through_the_hook_socket() {
         }
     }
     let agents: Vec<Box<dyn Agent>> = vec![Box::new(Claude {
+        runtime_dir: hook::runtime_dir(),
         located: Located {
             session: req.session_id.clone(),
             path: req.transcript_path.clone(),
@@ -433,6 +443,7 @@ fn unconfirmed_socket_answer_falls_back_to_keys() {
         serde_json::from_str::<Value>(&line).unwrap()
     });
     let agents: Vec<Box<dyn Agent>> = vec![Box::new(Claude {
+        runtime_dir: hook::runtime_dir(),
         located: Located {
             session: "session".into(),
             path: req.transcript_path.clone(),
@@ -516,6 +527,7 @@ fn cached_transcript_id_uses_keys_and_refuses_a_second_hook_answer() {
     )
     .unwrap();
     let agents: Vec<Box<dyn Agent>> = vec![Box::new(Claude {
+        runtime_dir: hook::runtime_dir(),
         located: Located {
             session: "session".into(),
             path: req.transcript_path.clone(),
@@ -616,6 +628,7 @@ fn hook_and_late_transcript_answers_share_one_claim() {
         serde_json::from_str::<Value>(&line).unwrap()
     });
     let agents: Vec<Box<dyn Agent>> = vec![Box::new(Claude {
+        runtime_dir: hook::runtime_dir(),
         located: Located {
             session: "session".into(),
             path: req.transcript_path.clone(),
@@ -986,6 +999,7 @@ fn hook_question_is_visible_before_transcript_and_removed_on_resume() {
     assert_eq!(pending.id.len(), "claude-hook:".len() + 16);
     let terminal = path.file_stem().unwrap().to_str().unwrap();
     let agent = Claude {
+        runtime_dir: hook::runtime_dir(),
         located: Located {
             session: req.session_id.clone(),
             path: req.transcript_path.clone(),
@@ -1162,6 +1176,7 @@ fn four_row_claude_approval_keeps_rule_and_mode_changes_on_keys() {
             ["Allow", "Allow always", "Switch to auto mode", "Deny"]
         );
         let agents: Vec<Box<dyn Agent>> = vec![Box::new(Claude {
+            runtime_dir: hook::runtime_dir(),
             located: Located {
                 session: "session".into(),
                 path: dir.path().join("transcript"),

@@ -17,6 +17,7 @@ struct Claude {
 fn cc() -> ClaudeCode {
     ClaudeCode {
         config_dir: "/unused".into(),
+        runtime_dir: None,
     }
 }
 impl Agent for Claude {
@@ -134,10 +135,6 @@ fn setup() -> (
     String,
     Vec<Box<dyn Agent>>,
 ) {
-    assert!(
-        hook::runtime_dir().is_none(),
-        "run with XDG_RUNTIME_DIR unset"
-    );
     let dir = tempfile::tempdir().unwrap();
     let transcript = dir.path().join("transcript.jsonl");
     std::fs::write(&transcript, "").unwrap();

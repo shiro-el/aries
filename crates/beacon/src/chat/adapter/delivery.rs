@@ -278,6 +278,7 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
                 && let Some(behavior) = agent.approval_decision(permission, answer.picks[0][0])
             {
                 let delivered = hook_answer(
+                    agent.hook_runtime_dir(),
                     state_dir,
                     terminal,
                     &located,
@@ -364,7 +365,15 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
             if let Err(detail) = request.identity().check(&dir, &located) {
                 return Ok(reply(AnswerOutcome::Failed, detail));
             }
-            hook_answer(state_dir, terminal, &located, pending, answers.into(), link)
+            hook_answer(
+                agent.hook_runtime_dir(),
+                state_dir,
+                terminal,
+                &located,
+                pending,
+                answers.into(),
+                link,
+            )
         } else {
             false
         };
@@ -440,6 +449,7 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
 }
 
 fn hook_answer<L: StructuredInput>(
+    runtime: Option<&Path>,
     state: &Path,
     terminal: &str,
     located: &super::Located,
@@ -447,7 +457,7 @@ fn hook_answer<L: StructuredInput>(
     answer: serde_json::Value,
     link: &mut L,
 ) -> bool {
-    let Ok(path) = hook::socket_path(state, hook::runtime_dir().as_deref(), terminal) else {
+    let Ok(path) = hook::socket_path(state, runtime, terminal) else {
         return false;
     };
     hook::deliver(

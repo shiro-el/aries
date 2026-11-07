@@ -59,6 +59,9 @@ trait Agent {
     fn logical_source(&self, located: &Located) -> PathBuf {
         located.path.clone()
     }
+    fn hook_runtime_dir(&self) -> Option<&Path> {
+        None
+    }
     fn hook(
         &self,
         _state: &Path,

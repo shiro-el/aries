@@ -325,6 +325,7 @@ fn terminal_validation_waits_for_input_and_failed_delivery_is_never_repeated() {
     let run = |link: &mut Link| {
         let agents: Vec<Box<dyn super::support::Agent>> = vec![Box::new(ClaudeCode {
             config_dir: host.config.clone(),
+            runtime_dir: None,
         })];
         super::support::answer::answer(
             &state,

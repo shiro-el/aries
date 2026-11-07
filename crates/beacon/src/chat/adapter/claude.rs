@@ -24,6 +24,7 @@ pub const AGENT: &str = "claude-code";
 
 pub struct ClaudeCode {
     pub config_dir: PathBuf,
+    pub runtime_dir: Option<PathBuf>,
 }
 
 impl ClaudeCode {
@@ -32,7 +33,10 @@ impl ClaudeCode {
             .filter(|v| !v.is_empty())
             .map(PathBuf::from)
             .unwrap_or_else(|| crate::home().join(".claude"));
-        Self { config_dir }
+        Self {
+            config_dir,
+            runtime_dir: hook::runtime_dir(),
+        }
     }
 
     /// The registry entry of `pid`, if it is a running Claude Code (and not
@@ -90,8 +94,11 @@ impl Agent for ClaudeCode {
     ) -> Option<super::permission::Permission> {
         super::permission::detect(self.name(), session, facts, screen)
     }
+    fn hook_runtime_dir(&self) -> Option<&Path> {
+        self.runtime_dir.as_deref()
+    }
     fn hook(&self, state: &Path, terminal: &str, located: &Located) -> Option<hook::Pending> {
-        let path = hook::socket_path(state, hook::runtime_dir().as_deref(), terminal).ok()?;
+        let path = hook::socket_path(state, self.runtime_dir.as_deref(), terminal).ok()?;
         hook::pending(&path, &located.session, &located.path)
     }
     fn approval_decision(

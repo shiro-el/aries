@@ -488,7 +488,7 @@ pub fn open(
     let previous = if opened.resumed { previous } else { None };
     opened.source = Box::new(HookSource {
         inner: opened.source,
-        path: socket_path(state, runtime_dir().as_deref(), terminal).ok(),
+        path: socket_path(state, agent.hook_runtime_dir(), terminal).ok(),
         located: located.clone(),
         shown: previous,
     });
