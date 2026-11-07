@@ -2,7 +2,7 @@
 //! delivery: callers must observe the transcript or terminal before reporting Sent.
 use std::collections::HashSet;
 use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom, Write};
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
+use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -75,7 +75,6 @@ fn private_dir(path: &Path) -> io::Result<()> {
         .mode(0o700)
         .create(path)?;
     let meta = std::fs::symlink_metadata(path)?;
-    use std::os::unix::fs::MetadataExt;
     if !meta.is_dir() || meta.uid() != unsafe { libc::geteuid() } {
         return Err(io::Error::other(
             "Claude socket directory is not privately owned",
@@ -202,6 +201,50 @@ impl Drop for Cleanup {
     }
 }
 
+struct HookLock {
+    path: PathBuf,
+    // Keep the inode locked until after unlink, including during Drop.
+    _file: std::fs::File,
+}
+
+impl HookLock {
+    fn acquire(path: PathBuf) -> io::Result<Option<Self>> {
+        loop {
+            let file = std::fs::OpenOptions::new()
+                .create(true)
+                .truncate(false)
+                .write(true)
+                .mode(0o600)
+                .custom_flags(libc::O_NOFOLLOW)
+                .open(&path)?;
+            // Never steal a live hook, even for a duplicate event.
+            if file.try_lock().is_err() {
+                return Ok(None);
+            }
+            // Another hook may have unlinked this inode after we opened it.
+            // Only the lock currently named by the path can own the socket.
+            if Self::is_current(&file, &path)? {
+                return Ok(Some(Self { path, _file: file }));
+            }
+        }
+    }
+
+    fn is_current(file: &std::fs::File, path: &Path) -> io::Result<bool> {
+        let held = file.metadata()?;
+        match std::fs::symlink_metadata(path) {
+            Ok(named) => Ok(held.dev() == named.dev() && held.ino() == named.ino()),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(false),
+            Err(e) => Err(e),
+        }
+    }
+}
+
+impl Drop for HookLock {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
+}
+
 /// None means somebody else resolved the request, or the deadline elapsed.
 pub fn wait<L: TerminalLookup>(
     path: &Path,
@@ -211,17 +254,9 @@ pub fn wait<L: TerminalLookup>(
     link: &mut L,
 ) -> io::Result<Option<Value>> {
     private_dir(path.parent().unwrap())?;
-    let lock = std::fs::OpenOptions::new()
-        .create(true)
-        .truncate(false)
-        .write(true)
-        .mode(0o600)
-        .custom_flags(libc::O_NOFOLLOW)
-        .open(path.with_extension("lock"))?;
-    // Never steal a live hook, even for a duplicate PermissionRequest event.
-    if lock.try_lock().is_err() {
+    let Some(_lock) = HookLock::acquire(path.with_extension("lock"))? else {
         return Ok(None);
-    }
+    };
     let _cleanup = Cleanup(path.to_path_buf());
     let _ = std::fs::remove_file(path);
     let _ = std::fs::remove_file(path.with_extension("json"));
@@ -592,5 +627,32 @@ impl crate::chat::Source for HookSource {
             events: output,
             more,
         })
+    }
+}
+
+#[cfg(test)]
+mod lock_tests {
+    use super::*;
+
+    #[test]
+    fn an_opened_lock_cannot_own_the_socket_after_unlink() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("terminal.lock");
+        let first = HookLock::acquire(path.clone()).unwrap().unwrap();
+        let stale = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
+        assert!(stale.try_lock().is_err());
+        assert!(HookLock::acquire(path.clone()).unwrap().is_none());
+        drop(first);
+        assert!(!path.exists());
+
+        // A contender that opened before cleanup can lock the unlinked inode,
+        // even while a new hook owns the current path. It must retry instead.
+        let current = HookLock::acquire(path.clone()).unwrap().unwrap();
+        stale.try_lock().unwrap();
+        assert!(!HookLock::is_current(&stale, &path).unwrap());
+        assert!(HookLock::is_current(&current._file, &path).unwrap());
+        assert!(HookLock::acquire(path.clone()).unwrap().is_none());
+        drop(current);
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
     }
 }
