@@ -52,6 +52,7 @@ pub fn detect(
         ),
         _ => line.starts_with("Do you want to ") && line.ends_with('?'),
     })?;
+    let max_rows = if agent == "claude-code" { 4 } else { 3 };
     let mut rows: Vec<(usize, String)> = Vec::new();
     let mut end = heading;
     let mut menu_start = None;
@@ -60,13 +61,13 @@ pub fn detect(
         if let Some((n, label)) = line.split_once(". ")
             && let Ok(n) = n.parse::<usize>()
         {
-            if n != rows.len() + 1 || n > 3 {
+            if n != rows.len() + 1 || n > max_rows {
                 return None;
             }
             menu_start.get_or_insert(i);
             rows.push((n, label.to_owned()));
             end = i;
-        } else if rows.len() < 3
+        } else if rows.len() < max_rows
             && let Some((_, label)) = rows.last_mut()
             && !line.is_empty()
             && !line.starts_with("Esc ")
@@ -77,7 +78,7 @@ pub fn detect(
             end = i;
         }
     }
-    if !(2..=3).contains(&rows.len()) {
+    if !(2..=max_rows).contains(&rows.len()) {
         return None;
     }
     let first = &rows[0].1;
@@ -87,13 +88,13 @@ pub fn detect(
     {
         return None;
     }
-    if rows.len() == 3 {
-        let scope = rows[1].1.to_lowercase();
-        if !scope.starts_with("yes, ")
-            || !["don't ask again", "allow all", "always allow"]
-                .iter()
-                .any(|s| scope.contains(s))
-        {
+    for (_, label) in &rows[1..rows.len() - 1] {
+        let scope = label.to_lowercase();
+        let known_scope = ["don't ask again", "allow all", "always allow"]
+            .iter()
+            .any(|s| scope.contains(s));
+        let auto = agent == "claude-code" && scope.starts_with("yes, and switch to auto mode");
+        if !scope.starts_with("yes, ") || !(known_scope || auto) {
             return None;
         }
     }
@@ -145,6 +146,8 @@ pub fn detect(
                 "Allow"
             } else if i == rows.len() - 1 {
                 "Deny"
+            } else if rows[i].1.to_lowercase().contains("switch to auto mode") {
+                "Switch to auto mode"
             } else {
                 "Allow always"
             }

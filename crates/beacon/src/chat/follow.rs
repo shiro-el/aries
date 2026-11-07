@@ -117,7 +117,13 @@ pub fn run(
                     .take()
                     .filter(|c| c.agent == agent.name() && c.session == located.session)
                     .map(|c| c.position);
-                let opened = agent.open(located, after.as_deref());
+                let opened = crate::claude_hook::open(
+                    agent.as_ref(),
+                    located,
+                    after.as_deref(),
+                    &crate::state_dir(),
+                    &opts.terminal,
+                );
                 let source = opened.source;
                 if !opened.resumed {
                     emit(
@@ -159,7 +165,14 @@ pub fn run(
                     permission = None;
                     let agent = agents.iter().find(|a| a.name() == cur.agent);
                     if let Some(agent) = agent {
-                        cur.source = agent.open(&cur.located, None).source;
+                        cur.source = crate::claude_hook::open(
+                            agent.as_ref(),
+                            &cur.located,
+                            None,
+                            &crate::state_dir(),
+                            &opts.terminal,
+                        )
+                        .source;
                     }
                     caught_up = false;
                     now_state = ChatState::Live;

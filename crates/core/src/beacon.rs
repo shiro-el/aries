@@ -277,6 +277,7 @@ fn launch_agent() -> String {
 /// (pairing 27, managed skill 34) add their own step here. The Beacon's
 /// state directory is not removed: it holds the Call records.
 pub(crate) const UNINSTALL_STEPS: &[(&str, &str)] = &[
+    ("claude plugin", include_str!("claude_plugin_remove.sh")),
     // Ticket 42: the OpenCode plugin, unless the user edited it (its first
     // line holds the SHA-256 of the rest; same check as the Beacon's
     // `opencode-plugin remove`, in shell so it works without the binary).
@@ -459,6 +460,12 @@ pub(crate) async fn install(
     // Agent's configuration the Beacon cannot write does not make the
     // Beacon itself any less installed.
     let _ = ssh.exec(&sh_c(OPENCODE_PLUGIN_INSTALL), &[]).await;
+    let _ = ssh
+        .exec(
+            &sh_c(r#""$HOME/.local/bin/aries-beacon" claude-plugin install"#),
+            &[],
+        )
+        .await;
     Ok(BeaconInstall {
         version: release.version.clone(),
         linger,

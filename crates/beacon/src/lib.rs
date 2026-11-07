@@ -2,6 +2,8 @@
 //! the tests drive directly.
 
 pub mod chat;
+pub mod claude_hook;
+pub mod claude_plugin;
 pub mod core_link;
 pub mod host_pairing;
 pub mod opencode_plugin;
@@ -26,4 +28,13 @@ pub fn herdr_core() -> Option<PathBuf> {
         .map(|d| d.join("herdr-core"))
         .chain(std::iter::once(home().join(".local/bin/herdr-core")))
         .find(|p| p.is_file())
+}
+
+/// Private state shared by the CLI and transient Chat sources.
+pub fn state_dir() -> PathBuf {
+    std::env::var_os("XDG_STATE_HOME")
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home().join(".local/state"))
+        .join("aries-beacon")
 }

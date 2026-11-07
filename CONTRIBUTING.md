@@ -132,6 +132,36 @@ checksums come from the Beacon release pipeline (below); tests swap it with
 `AriesCore::set_beacon_release` and serve binaries from
 `aries_test_support::ReleaseServer` (an `nginx:alpine` container).
 
+Claude Code permissions and questions use a managed local marketplace at
+`${XDG_DATA_HOME:-~/.local/share}/aries-beacon/claude-marketplace/`.
+`aries-beacon claude-plugin install|remove|status` reports JSON; installation
+is best effort when the Claude CLI is missing or fails. Claude's CLI alone
+writes its settings. Modified plugin files are preserved. Binary-free Host
+removal uses Python 3 to verify the recorded file contents; without Python 3
+it preserves the marketplace directory. The hook is inactive outside hc.
+Each hook request owns a `claude-hook:<16 hex>` identity; Chat overlays its
+pending tool/question even before Claude flushes the tool_use. The overlay
+vanishes on resolution, including across cursor resumes. Answers with that
+identity use the terminal's socket, then verify a new matching transcript
+result or a blocked-status transition before reporting success. Unconfirmed
+answers recheck the live question before key fallback; transcript tool IDs
+keep the existing key path.
+
+The opt-in Claude check runs Haiku in a disposable HOME and CLAUDE_CONFIG_DIR,
+with only `.credentials.json` symlinked to the login credentials. It checks
+mixed choice/text, multi-select, Bash approval and TUI-first question resolution
+(empty hook output and socket cleanup) through the installed plugin:
+
+```sh
+ARIES_REAL_CLAUDE=1 cargo test -p aries-beacon --test claude_hook -- --ignored real_claude --nocapture
+```
+
+`ARIES_CLAUDE_CREDENTIALS` can select another credential file. The test uses
+manual (`default`) permission mode, matching the research procedure.
+Claude Code 2.1.319 writes AskUserQuestion tool_use and tool_result together
+after answering. Pending hook identity therefore comes from the request itself;
+transcript matching is used only to confirm resolution.
+
 ## Registering a Host with a QR
 
 Run this as the SSH account on the Host (the address must be reachable by the phone):

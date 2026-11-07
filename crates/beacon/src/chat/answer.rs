@@ -3,8 +3,9 @@
 //!
 //! Agent-neutral: the open question is the one the Agent's [`Interpreter`]
 //! reports as a running `tool` with a `question`, and only while herdr-core
-//! says the Terminal is `blocked` on a `question`. Each [`Agent`] only maps
-//! picks to its TUI keys ([`Agent::answer_keys`]). The reserved `permission:`
+//! says the Terminal is `blocked` on a `question`. Claude first tries its
+//! PermissionRequest hook and confirms the result; each Agent's TUI keys
+//! ([`Agent::answer_keys`]) remain the fallback. The reserved `permission:`
 //! IDs take a separate picks-only path: re-read a recognized live permission
 //! menu and its status/turn before sending that menu's advertised shortcut.
 
@@ -23,6 +24,11 @@ use super::{Agent, TerminalLookup};
 /// Presses named keys (`2`, `tab`, `enter`, `down`) in a Terminal
 /// (herdr-core `terminal.keys`).
 pub trait TerminalInput {
+    /// Claim a structured answer before its first possible delivery.
+    fn claim_structured(&mut self) -> Result<(), String> {
+        Ok(())
+    }
+
     fn keys(&mut self, terminal: &str, keys: &[String]) -> Result<(), String>;
     fn text(&mut self, _terminal: &str, _text: &str) -> Result<(), String> {
         Err("literal text input is unavailable".into())
@@ -139,6 +145,10 @@ impl<L: TerminalLookup> TerminalLookup for ClaimedInput<'_, L> {
 }
 
 impl<L: TerminalInput> TerminalInput for ClaimedInput<'_, L> {
+    fn claim_structured(&mut self) -> Result<(), String> {
+        self.claim()
+    }
+
     fn keys(&mut self, terminal: &str, keys: &[String]) -> Result<(), String> {
         self.claim()?;
         self.inner.keys(terminal, keys)
@@ -234,13 +244,57 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
         {
             return Ok(reply(AnswerOutcome::Gone, "the permission status changed"));
         }
+        if agent.name() == "claude-code" {
+            let ChatBody::Tool {
+                question: Some(q), ..
+            } = &permission.item.body
+            else {
+                unreachable!()
+            };
+            let choice = answer.picks[0][0];
+            let behavior = match q.questions[0].options[choice].label.as_str() {
+                "Allow" => Some("allow"),
+                "Deny" => Some("deny"),
+                _ => None,
+            };
+            if let Some(behavior) = behavior {
+                if hook_answer(
+                    state_dir,
+                    terminal,
+                    &located,
+                    None,
+                    serde_json::json!(behavior),
+                    link,
+                ) {
+                    return Ok(AnswerReply::new(AnswerOutcome::Sent, None));
+                }
+                // A failed decision may still race the TUI. Re-read its identity.
+                let fresh_screen = link.screen(terminal).unwrap_or_default();
+                if link
+                    .get(terminal)
+                    .ok()
+                    .flatten()
+                    .and_then(|f| {
+                        super::permission::detect(agent.name(), &located.session, &f, &fresh_screen)
+                    })
+                    .is_none_or(|p| p.item.id != answer.question)
+                {
+                    return Ok(reply(AnswerOutcome::Gone, "the permission menu changed"));
+                }
+            }
+        }
         return Ok(match link.keys(terminal, &keys) {
             Ok(()) => AnswerReply::new(AnswerOutcome::Sent, None),
             Err(e) => reply(AnswerOutcome::Failed, e),
         });
     }
 
-    let Some(items) = transcript(agent.as_ref(), &located)? else {
+    let items = if agent.name() == "claude-code" && answer.question.starts_with("claude-hook:") {
+        terminal_transcript(agent.as_ref(), &located, state_dir, terminal)?
+    } else {
+        transcript(agent.as_ref(), &located)?
+    };
+    let Some(items) = items else {
         return Ok(reply(AnswerOutcome::Gone, "no transcript"));
     };
 
@@ -295,9 +349,73 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
             validation_picks[i] = vec![0];
         }
     }
-    let actions = match validate(&question, &validation_picks)
-        .and_then(|()| agent.answer_input(&question, &answer.picks, texts))
-    {
+    if let Err(KeysError::Invalid(detail)) = validate(&question, &validation_picks) {
+        return Ok(reply(AnswerOutcome::Invalid, detail));
+    }
+    if agent.name() == "claude-code" && answer.question.starts_with("claude-hook:") {
+        let ChatBody::Tool { input, .. } = &item.body else {
+            unreachable!()
+        };
+        let answers: serde_json::Map<String, serde_json::Value> = question
+            .questions
+            .iter()
+            .enumerate()
+            .map(|(i, q)| {
+                let value = texts
+                    .get(i)
+                    .and_then(Option::as_ref)
+                    .cloned()
+                    .unwrap_or_else(|| {
+                        answer.picks[i]
+                            .iter()
+                            .map(|n| q.options[*n].label.clone())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    });
+                (q.text.clone(), value.into())
+            })
+            .collect();
+        let pending = crate::claude_hook::socket_path(
+            state_dir,
+            crate::claude_hook::runtime_dir().as_deref(),
+            terminal,
+        )
+        .ok()
+        .and_then(|path| crate::claude_hook::pending(&path, &located.session, &located.path));
+        if hook_answer(
+            state_dir,
+            terminal,
+            &located,
+            Some((&answer.question, input)),
+            answers.into(),
+            link,
+        ) {
+            return Ok(AnswerReply::new(AnswerOutcome::Sent, None));
+        }
+        // Verify the original question is still pending before key fallback.
+        let fresh =
+            terminal_transcript(agent.as_ref(), &located, state_dir, terminal)?.unwrap_or_default();
+        let asking = link
+            .get(terminal)
+            .ok()
+            .flatten()
+            .and_then(|f| f.status)
+            .is_some_and(|s| s.state == "blocked" && s.kind.as_deref() == Some("question"));
+        let same =
+            current_question(agent.name(), &fresh).is_some_and(|(id, _)| id == answer.question);
+        let still_on_screen = pending
+            .as_ref()
+            .is_some_and(|p| p.id == answer.question && !crate::claude_hook::completed(p))
+            && current_question(agent.name(), &fresh).is_none()
+            && link.screen(terminal).is_ok_and(|screen| {
+                let normalize = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ");
+                normalize(&screen).contains(&normalize(&question.questions[0].text))
+            });
+        if !asking || !(same || still_on_screen) {
+            return Ok(reply(AnswerOutcome::Gone, "the question changed"));
+        }
+    }
+    let actions = match agent.answer_input(&question, &answer.picks, texts) {
         Ok(actions) => actions,
         Err(KeysError::Invalid(d)) => return Ok(reply(AnswerOutcome::Invalid, d)),
         Err(KeysError::Unsupported(d)) => return Ok(reply(AnswerOutcome::Unsupported, d)),
@@ -393,6 +511,32 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
     Ok(AnswerReply::new(AnswerOutcome::Sent, None))
 }
 
+fn hook_answer<L: TerminalLookup + TerminalInput>(
+    state: &Path,
+    terminal: &str,
+    located: &super::Located,
+    expected: Option<(&str, &serde_json::Value)>,
+    answer: serde_json::Value,
+    link: &mut L,
+) -> bool {
+    let Ok(path) = crate::claude_hook::socket_path(
+        state,
+        crate::claude_hook::runtime_dir().as_deref(),
+        terminal,
+    ) else {
+        return false;
+    };
+    crate::claude_hook::deliver(
+        &path,
+        terminal,
+        &located.session,
+        &located.path,
+        expected,
+        answer,
+        link,
+    )
+}
+
 /// Codex's editor can retain a person's selection on any part. Re-read the
 /// actual menu before each part, including after a preceding Enter advances.
 fn menu<L: TerminalLookup + TerminalInput>(
@@ -476,7 +620,21 @@ pub fn transcript(
     agent: &dyn Agent,
     located: &super::Located,
 ) -> std::io::Result<Option<Vec<ChatItem>>> {
-    let mut source = agent.open(located, None).source;
+    read_transcript(agent.open(located, None).source)
+}
+
+fn terminal_transcript(
+    agent: &dyn Agent,
+    located: &super::Located,
+    state: &Path,
+    terminal: &str,
+) -> std::io::Result<Option<Vec<ChatItem>>> {
+    read_transcript(crate::claude_hook::open(agent, located, None, state, terminal).source)
+}
+
+fn read_transcript(
+    mut source: Box<dyn super::source::Source>,
+) -> std::io::Result<Option<Vec<ChatItem>>> {
     let mut items: Vec<ChatItem> = Vec::new();
     let mut index: HashMap<String, usize> = HashMap::new();
     loop {

@@ -69,6 +69,30 @@ fn main() {
         Some("unpair") => exit_on_error(push::unpair_command()),
         Some("chat") => chat(std::env::args().skip(2).collect()),
         Some("answer") => answer(std::env::args().skip(2).collect()),
+        Some("claude-hook") if std::env::args().nth(2).as_deref() == Some("permission-request") => {
+            // Hook errors fail open: Claude keeps its ordinary permission menu.
+            if let Err(e) = aries_beacon::claude_hook::run(&state_dir()) {
+                eprintln!("claude-hook: {e}");
+            }
+        }
+        Some("claude-plugin") => {
+            let result = std::env::current_exe().and_then(|binary| {
+                aries_beacon::claude_plugin::run(
+                    std::env::args().nth(2).as_deref().unwrap_or(""),
+                    &binary,
+                )
+            });
+            match result {
+                Ok(report) => println!("{report}"),
+                Err(e) => {
+                    println!(
+                        "{}",
+                        serde_json::json!({"claude":"failed", "detail":e.to_string()})
+                    );
+                    std::process::exit(1);
+                }
+            }
+        }
         Some("skill") => exit_on_error(skill(&rest_args())),
         Some("policy") => std::process::exit(policy::command(&rest_args())),
         Some("opencode-plugin") => opencode_plugin(std::env::args().nth(2).as_deref()),
@@ -77,7 +101,7 @@ fn main() {
         }
         _ => {
             eprintln!(
-                "usage: aries-beacon --version | status | serve | call ... | calls [--follow] | reply CALL CHOICE | pair-qr --address ADDRESS [--port PORT] [--listen IP:PORT] [--host-key PUBLIC_KEY_FILE] | pair | push-test | unpair | chat TERMINAL [--follow] [--cursor C] | answer TERMINAL QUESTION PICKS... | skill install|uninstall | pi-extension install|remove | opencode-plugin install|remove | policy [set]"
+                "usage: aries-beacon --version | status | serve | call ... | calls [--follow] | reply CALL CHOICE | pair-qr --address ADDRESS [--port PORT] [--listen IP:PORT] [--host-key PUBLIC_KEY_FILE] | pair | push-test | unpair | chat TERMINAL [--follow] [--cursor C] | answer TERMINAL QUESTION PICKS... | skill install|uninstall | pi-extension install|remove | opencode-plugin install|remove | claude-plugin install|remove|status | claude-hook permission-request | policy [set]"
             );
             std::process::exit(2);
         }
@@ -127,11 +151,7 @@ struct ServiceState {
 /// The Beacon's private directory. Call records live here too, so it
 /// survives an uninstall; only [`service_file`] is removed then.
 fn state_dir() -> PathBuf {
-    let base = std::env::var_os("XDG_STATE_HOME")
-        .filter(|v| !v.is_empty())
-        .map(PathBuf::from)
-        .unwrap_or_else(|| home().join(".local/state"));
-    base.join("aries-beacon")
+    aries_beacon::state_dir()
 }
 
 fn call_log() -> calls::Log {
