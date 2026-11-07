@@ -410,6 +410,7 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
             terminal,
             allow_open: true,
             input_started: Some(&mut link.input_started),
+            read_error: None,
         },
         &question,
         has_text,
@@ -550,12 +551,15 @@ pub(super) struct Navigation<'a> {
     terminal: &'a str,
     allow_open: bool,
     input_started: Option<&'a mut bool>,
+    read_error: Option<String>,
 }
 trait Terminal: TerminalLookup + TerminalInput {}
 impl<T: TerminalLookup + TerminalInput> Terminal for T {}
 impl Navigation<'_> {
     pub(super) fn screen(&mut self) -> Result<String, String> {
-        self.link.screen(self.terminal)
+        self.link.screen(self.terminal).inspect_err(|e| {
+            self.read_error = Some(e.clone());
+        })
     }
     pub(super) fn open(&mut self, key: &str) -> Result<(), String> {
         if !self.allow_open {
@@ -629,6 +633,22 @@ impl<L: TerminalLookup + TerminalInput> ClaimedInput<'_, L> {
                 "the request changed after claim",
             ));
         }
+        if !tui && let Route::ClaudeHook { primary, .. } = proof.request.route() {
+            let live = proof
+                .agent
+                .hook(proof.state_dir, proof.terminal, proof.located);
+            if live.as_ref().is_none_or(|p| {
+                p.id != primary.id
+                    || p.nonce != primary.nonce
+                    || p.request.tool_name != primary.request.tool_name
+                    || p.request.tool_input != primary.request.tool_input
+            }) {
+                return Err(reply(
+                    AnswerOutcome::Gone,
+                    "the hook request changed after claim",
+                ));
+            }
+        }
         let fallback = match proof.request.route() {
             Route::Tui(tui) | Route::ClaudeHook { fallback: tui, .. } => tui,
         };
@@ -698,23 +718,22 @@ impl<L: TerminalLookup + TerminalInput> ClaimedInput<'_, L> {
                         .request
                         .question()
                         .ok_or_else(|| reply(AnswerOutcome::Gone, "not a question"))?;
+                    let mut nav = Navigation {
+                        link: self.inner,
+                        terminal: proof.terminal,
+                        allow_open: false,
+                        input_started: None,
+                        read_error: None,
+                    };
                     proof
                         .agent
-                        .prepare(
-                            &mut Navigation {
-                                link: self.inner,
-                                terminal: proof.terminal,
-                                allow_open: false,
-                                input_started: None,
-                            },
-                            question,
-                            proof.has_text,
-                        )
-                        .map_err(|r| {
-                            reply(
+                        .prepare(&mut nav, question, proof.has_text)
+                        .map_err(|r| match nav.read_error {
+                            Some(e) => reply(AnswerOutcome::Failed, e),
+                            None => reply(
                                 AnswerOutcome::Gone,
                                 r.detail.unwrap_or_else(|| "the live menu changed".into()),
-                            )
+                            ),
                         })?;
                     if let Route::Tui(_) = proof.request.route() {
                         let items = transcript(proof.agent, proof.located)

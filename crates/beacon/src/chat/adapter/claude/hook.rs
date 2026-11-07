@@ -426,9 +426,6 @@ pub fn deliver<L: StructuredInput>(
     {
         return false;
     }
-    if link.claim_structured().is_err() {
-        return false;
-    }
     let Some(current) = self::pending(path, session, transcript) else {
         return false;
     };
@@ -436,6 +433,9 @@ pub fn deliver<L: StructuredInput>(
         || current.nonce != expected.nonce
         || current.request.tool_input != expected.request.tool_input
     {
+        return false;
+    }
+    if link.claim_structured().is_err() {
         return false;
     }
     if writeln!(
