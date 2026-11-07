@@ -11,6 +11,31 @@ use serde_json::{Value, json};
 
 const BEACON: &str = env!("CARGO_BIN_EXE_aries-beacon");
 
+// Tests exercising the public answer/chat seams must agree with their hook's
+// runtime path. Set the environment only in a child, never in parallel tests.
+fn isolated_runtime(test: &str) -> bool {
+    const CHILD: &str = "ARIES_HOOK_TEST_CHILD";
+    if std::env::var(CHILD).as_deref() == Ok(test) {
+        return false;
+    }
+    let runtime = tempfile::tempdir().unwrap();
+    let output = Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", test, "--nocapture"])
+        .env(CHILD, test)
+        .env("XDG_RUNTIME_DIR", runtime.path())
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert!(
+        std::fs::read_dir(runtime.path().join("aries-beacon/claude"))
+            .unwrap()
+            .next()
+            .is_none(),
+        "hook left runtime files behind"
+    );
+    true
+}
+
 struct Offline;
 impl TerminalLookup for Offline {
     fn get(&mut self, _: &str) -> Result<Option<TerminalFacts>, String> {
@@ -70,6 +95,9 @@ impl Agent for Claude {
 
 #[test]
 fn mixed_answers_travel_through_the_hook_socket() {
+    if isolated_runtime("mixed_answers_travel_through_the_hook_socket") {
+        return;
+    }
     let dir = tempfile::tempdir().unwrap();
     let terminal = format!("test-{:016x}", rand::random::<u64>());
     let path = hook::socket_path(dir.path(), hook::runtime_dir().as_deref(), &terminal).unwrap();
@@ -167,6 +195,10 @@ fn tui_result_and_timeout_clean_up_without_output() {
         assert!(worker.join().unwrap().is_none());
         assert!(!path.exists());
         assert!(!path.with_extension("json").exists());
+        assert_eq!(
+            std::fs::read_dir(path.parent().unwrap()).unwrap().count(),
+            0
+        );
     }
 }
 
@@ -240,6 +272,7 @@ fn outside_hc_does_not_even_read_stdin_or_create_state() {
         .args(["claude-hook", "permission-request"])
         .env_remove("HC_TERMINAL_ID")
         .env("XDG_STATE_HOME", dir.path())
+        .env("XDG_RUNTIME_DIR", dir.path())
         .stdin(Stdio::piped())
         .output()
         .unwrap();
@@ -311,6 +344,9 @@ fn binary_free_removal_keeps_edits_and_removes_only_managed_files() {
 
 #[test]
 fn unconfirmed_socket_answer_falls_back_to_keys() {
+    if isolated_runtime("unconfirmed_socket_answer_falls_back_to_keys") {
+        return;
+    }
     // Exercise the public answer seam with the actual Claude transcript interpreter.
     use aries_beacon::chat::TerminalInput;
     use aries_protocol::answer::{Answer, AnswerOutcome};
@@ -714,6 +750,9 @@ fn real_claude_plugin_questions_and_bash() {
 
 #[test]
 fn hook_question_is_visible_before_transcript_and_removed_on_resume() {
+    if isolated_runtime("hook_question_is_visible_before_transcript_and_removed_on_resume") {
+        return;
+    }
     use aries_beacon::chat::Batch;
     use aries_protocol::chat::{ChatBody, ChatEvent, ToolStatus};
     let dir = tempfile::tempdir().unwrap();
