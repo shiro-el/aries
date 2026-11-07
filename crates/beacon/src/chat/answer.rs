@@ -289,7 +289,7 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
         });
     }
 
-    let Some(items) = transcript(agent.as_ref(), &located)? else {
+    let Some(items) = terminal_transcript(agent.as_ref(), &located, state_dir, terminal)? else {
         return Ok(reply(AnswerOutcome::Gone, "no transcript"));
     };
 
@@ -347,7 +347,7 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
     if let Err(KeysError::Invalid(detail)) = validate(&question, &validation_picks) {
         return Ok(reply(AnswerOutcome::Invalid, detail));
     }
-    if agent.name() == "claude-code" {
+    if agent.name() == "claude-code" && answer.question.starts_with("claude-hook:") {
         let ChatBody::Tool { input, .. } = &item.body else {
             unreachable!()
         };
@@ -370,6 +370,13 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
                 (q.text.clone(), value.into())
             })
             .collect();
+        let pending = crate::claude_hook::socket_path(
+            state_dir,
+            crate::claude_hook::runtime_dir().as_deref(),
+            terminal,
+        )
+        .ok()
+        .and_then(|path| crate::claude_hook::pending(&path, &located.session, &located.path));
         if hook_answer(
             state_dir,
             terminal,
@@ -381,16 +388,25 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
             return Ok(AnswerReply::new(AnswerOutcome::Sent, None));
         }
         // Verify the original question is still pending before key fallback.
-        let fresh = transcript(agent.as_ref(), &located)?.unwrap_or_default();
+        let fresh =
+            terminal_transcript(agent.as_ref(), &located, state_dir, terminal)?.unwrap_or_default();
         let asking = link
             .get(terminal)
             .ok()
             .flatten()
             .and_then(|f| f.status)
             .is_some_and(|s| s.state == "blocked" && s.kind.as_deref() == Some("question"));
-        if !asking
-            || current_question(agent.name(), &fresh).is_none_or(|(id, _)| id != answer.question)
-        {
+        let same =
+            current_question(agent.name(), &fresh).is_some_and(|(id, _)| id == answer.question);
+        let still_on_screen = pending
+            .as_ref()
+            .is_some_and(|p| p.id == answer.question && !crate::claude_hook::completed(p))
+            && current_question(agent.name(), &fresh).is_none()
+            && link.screen(terminal).is_ok_and(|screen| {
+                let normalize = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ");
+                normalize(&screen).contains(&normalize(&question.questions[0].text))
+            });
+        if !asking || !(same || still_on_screen) {
             return Ok(reply(AnswerOutcome::Gone, "the question changed"));
         }
     }
@@ -599,7 +615,21 @@ pub fn transcript(
     agent: &dyn Agent,
     located: &super::Located,
 ) -> std::io::Result<Option<Vec<ChatItem>>> {
-    let mut source = agent.open(located, None).source;
+    read_transcript(agent.open(located, None).source)
+}
+
+fn terminal_transcript(
+    agent: &dyn Agent,
+    located: &super::Located,
+    state: &Path,
+    terminal: &str,
+) -> std::io::Result<Option<Vec<ChatItem>>> {
+    read_transcript(crate::claude_hook::open(agent, located, None, state, terminal).source)
+}
+
+fn read_transcript(
+    mut source: Box<dyn super::source::Source>,
+) -> std::io::Result<Option<Vec<ChatItem>>> {
     let mut items: Vec<ChatItem> = Vec::new();
     let mut index: HashMap<String, usize> = HashMap::new();
     loop {

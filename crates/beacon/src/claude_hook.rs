@@ -29,7 +29,8 @@ pub struct Request {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Pending {
     pub request: Request,
-    pub tool_use_id: String,
+    pub id: String,
+    pub transcript_offset: u64,
     pub created_at: u64,
     pub nonce: String,
 }
@@ -94,42 +95,71 @@ fn records(path: &Path) -> Vec<Value> {
         .collect()
 }
 
-pub fn completed(path: &Path, id: &str) -> bool {
-    records(path).iter().any(|r| {
-        r["message"]["content"].as_array().is_some_and(|blocks| {
-            blocks
-                .iter()
-                .any(|b| b["type"] == "tool_result" && b["tool_use_id"] == id)
-        })
-    })
-}
-
-pub fn tool_use_id(request: &Request) -> Option<String> {
-    let records = records(&request.transcript_path);
-    let answered: HashSet<_> = records
+/// Only a result appended after this request began can resolve it. Old,
+/// identical questions in the same session must not retire a new hook.
+pub fn completed(pending: &Pending) -> bool {
+    let rows = records(&pending.request.transcript_path);
+    let ids: HashSet<_> = rows
         .iter()
         .flat_map(|r| r["message"]["content"].as_array().into_iter().flatten())
-        .filter(|b| b["type"] == "tool_result")
-        .filter_map(|b| b["tool_use_id"].as_str())
-        .collect();
-    records
-        .iter()
-        .rev()
-        .flat_map(|r| {
-            r["message"]["content"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .rev()
-        })
-        .find(|b| {
+        .filter(|b| {
             b["type"] == "tool_use"
-                && b["name"] == request.tool_name
-                && b["input"] == request.tool_input
-                && b["id"].as_str().is_some_and(|id| !answered.contains(id))
+                && b["name"] == pending.request.tool_name
+                && same_input(
+                    &pending.request.tool_name,
+                    &b["input"],
+                    &pending.request.tool_input,
+                )
         })
-        .and_then(|b| b["id"].as_str())
-        .map(str::to_owned)
+        .filter_map(|b| b["id"].as_str())
+        .collect();
+    let Ok(file) = std::fs::File::open(&pending.request.transcript_path) else {
+        return false;
+    };
+    use std::io::{Seek, SeekFrom};
+    let mut reader = BufReader::new(file);
+    if reader
+        .seek(SeekFrom::Start(pending.transcript_offset))
+        .is_err()
+    {
+        return false;
+    }
+    reader
+        .lines()
+        .map_while(Result::ok)
+        .filter_map(|s| serde_json::from_str::<Value>(&s).ok())
+        .any(|r| {
+            r["message"]["content"].as_array().is_some_and(|blocks| {
+                blocks.iter().any(|b| {
+                    b["type"] == "tool_result"
+                        && b["tool_use_id"].as_str().is_some_and(|id| ids.contains(id))
+                })
+            })
+        })
+}
+
+fn same_input(name: &str, left: &Value, right: &Value) -> bool {
+    let normalize = |v: &Value| {
+        let mut v = v.clone();
+        // Claude persists updatedInput, including the answers supplied by us.
+        if name == "AskUserQuestion"
+            && let Some(o) = v.as_object_mut()
+        {
+            o.remove("answers");
+        }
+        v
+    };
+    normalize(left) == normalize(right)
+}
+
+pub fn pending(path: &Path, session: &str, transcript: &Path) -> Option<Pending> {
+    if !path.exists() {
+        return None;
+    }
+    let p: Pending =
+        serde_json::from_slice(&std::fs::read(path.with_extension("json")).ok()?).ok()?;
+    (p.request.session_id == session && p.request.transcript_path == transcript && !completed(&p))
+        .then_some(p)
 }
 
 struct Cleanup(PathBuf);
@@ -163,31 +193,39 @@ pub fn wait<L: TerminalLookup>(
     let _cleanup = Cleanup(path.to_path_buf());
     let _ = std::fs::remove_file(path);
     let _ = std::fs::remove_file(path.with_extension("json"));
-    let Some(id) = tool_use_id(&request) else {
-        return Ok(None);
-    };
     let listener = UnixListener::bind(path)?;
     listener.set_nonblocking(true)?;
+    let started = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
+    let digest = Sha256::digest(serde_json::to_vec(&json!([
+        request.session_id,
+        request.tool_name,
+        request.tool_input,
+        started.as_nanos().to_string()
+    ]))?);
     let pending = Pending {
+        transcript_offset: std::fs::metadata(&request.transcript_path).map_or(0, |m| m.len()),
         request,
-        tool_use_id: id,
-        created_at: SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs(),
+        id: format!(
+            "claude-hook:{}",
+            digest[..8]
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>()
+        ),
+        created_at: started.as_secs(),
         nonce: format!("{:032x}", rand::random::<u128>()),
     };
-    let mut file = std::fs::OpenOptions::new()
-        .create_new(true)
-        .write(true)
-        .mode(0o600)
-        .open(path.with_extension("json"))?;
+    let mut file = tempfile::NamedTempFile::new_in(path.parent().unwrap())?;
     serde_json::to_writer(&mut file, &pending)?;
     file.flush()?;
+    file.persist(path.with_extension("json"))
+        .map_err(|e| e.error)?;
     let deadline = Instant::now() + timeout;
     let mut blocked = false;
     while Instant::now() < deadline {
-        if completed(&pending.request.transcript_path, &pending.tool_use_id) {
+        if completed(&pending) {
             return Ok(None);
         }
         if let Ok(Some(facts)) = link.get(terminal)
@@ -212,7 +250,7 @@ pub fn wait<L: TerminalLookup>(
                     && let Some(decision) = decision(&pending.request, &message["answer"])
                 {
                     // The TUI may win while we read a socket message.
-                    if completed(&pending.request.transcript_path, &pending.tool_use_id) {
+                    if completed(&pending) {
                         return Ok(None);
                     }
                     return Ok(Some(decision));
@@ -276,7 +314,7 @@ pub fn run(state: &Path) -> io::Result<()> {
     Ok(())
 }
 
-/// Match the request to the exact transcript identity before writing anything.
+/// Match the terminal hook request identity before writing anything.
 /// `None` means use the existing key path after revalidating the live question.
 pub fn deliver<L: TerminalLookup + TerminalInput>(
     path: &Path,
@@ -295,12 +333,12 @@ pub fn deliver<L: TerminalLookup + TerminalInput>(
     };
     if pending.request.session_id != session
         || pending.request.transcript_path != transcript
-        || completed(transcript, &pending.tool_use_id)
+        || completed(&pending)
     {
         return false;
     }
     if let Some((id, input)) = expected {
-        if pending.tool_use_id != id
+        if pending.id != id
             || pending.request.tool_name != "AskUserQuestion"
             || pending.request.tool_input["questions"] != input["questions"]
         {
@@ -331,7 +369,7 @@ pub fn deliver<L: TerminalLookup + TerminalInput>(
         return false;
     }
     for _ in 0..40 {
-        if completed(transcript, &pending.tool_use_id)
+        if completed(&pending)
             || link
                 .get(terminal)
                 .ok()
@@ -344,4 +382,177 @@ pub fn deliver<L: TerminalLookup + TerminalInput>(
         std::thread::sleep(Duration::from_millis(50));
     }
     false
+}
+
+/// Overlay ephemeral hook requests on the ordinary Claude transcript. The
+/// cursor remembers the transient id so reconnecting can remove a stale item.
+pub fn open(
+    agent: &dyn crate::chat::Agent,
+    located: &crate::chat::Located,
+    resume: Option<&str>,
+    state: &Path,
+    terminal: &str,
+) -> crate::chat::Opened {
+    if agent.name() != "claude-code" {
+        return agent.open(located, resume);
+    }
+    let (previous, position) =
+        resume
+            .and_then(|s| s.split_once('~'))
+            .map_or((None, resume), |(id, pos)| {
+                (
+                    id.strip_prefix("hook-")
+                        .filter(|id| !id.is_empty())
+                        .map(|id| format!("claude-hook:{id}")),
+                    Some(pos),
+                )
+            });
+    let mut opened = agent.open(located, position);
+    let previous = if opened.resumed { previous } else { None };
+    opened.source = Box::new(HookSource {
+        inner: opened.source,
+        path: socket_path(state, runtime_dir().as_deref(), terminal).ok(),
+        located: located.clone(),
+        shown: previous,
+    });
+    opened
+}
+
+struct HookSource {
+    inner: Box<dyn crate::chat::Source>,
+    path: Option<PathBuf>,
+    located: crate::chat::Located,
+    shown: Option<String>,
+}
+
+impl crate::chat::Source for HookSource {
+    fn position(&self) -> String {
+        format!(
+            "hook-{}~{}",
+            self.shown
+                .as_deref()
+                .and_then(|id| id.strip_prefix("claude-hook:"))
+                .unwrap_or_default(),
+            self.inner.position()
+        )
+    }
+
+    fn poll(&mut self) -> io::Result<crate::chat::Batch> {
+        use crate::chat::Batch;
+        use aries_protocol::chat::{ChatBody, ChatEvent, ChatItem, ToolStatus};
+        let batch = self.inner.poll()?;
+        let missing = matches!(&batch, Batch::Missing);
+        let (events, more) = match batch {
+            Batch::Replaced => {
+                self.shown = None;
+                return Ok(Batch::Replaced);
+            }
+            Batch::Missing => (vec![], false),
+            Batch::Events { events, more } => (events, more),
+        };
+        let p = self
+            .path
+            .as_ref()
+            .and_then(|path| pending(path, &self.located.session, &self.located.path));
+        if events
+            .iter()
+            .any(|(e, _)| matches!(e, ChatEvent::Reset { .. }))
+        {
+            self.shown = None;
+        }
+        let next = p.as_ref().map(|p| p.id.clone());
+        let mut output = Vec::new();
+        if self.shown != next
+            && let Some(id) = self.shown.take()
+        {
+            output.push((ChatEvent::Remove { id }, None));
+        }
+        for (event, _) in events {
+            if let ChatEvent::Item { item } = &event
+                && let ChatBody::Tool {
+                    name,
+                    input,
+                    status,
+                    ..
+                } = &item.body
+                && p.as_ref().is_some_and(|p| {
+                    name == &p.request.tool_name && same_input(name, input, &p.request.tool_input)
+                })
+                && *status == ToolStatus::Running
+            {
+                output.push((
+                    ChatEvent::Remove {
+                        id: item.id.clone(),
+                    },
+                    None,
+                ));
+                continue;
+            }
+            output.push((event, None));
+        }
+        if self.shown != next
+            && let Some(p) = p
+        {
+            // The hook can arrive after a transcript poll already showed
+            // its tool. Retire that pending transcript item as well.
+            let rows = records(&p.request.transcript_path);
+            let blocks: Vec<_> = rows
+                .iter()
+                .flat_map(|r| r["message"]["content"].as_array().into_iter().flatten())
+                .collect();
+            let answered: HashSet<_> = blocks
+                .iter()
+                .filter(|b| b["type"] == "tool_result")
+                .filter_map(|b| b["tool_use_id"].as_str())
+                .collect();
+            for block in &blocks {
+                if block["type"] == "tool_use"
+                    && block["name"] == p.request.tool_name
+                    && same_input(&p.request.tool_name, &block["input"], &p.request.tool_input)
+                    && let Some(id) = block["id"].as_str().filter(|id| !answered.contains(id))
+                {
+                    output.push((ChatEvent::Remove { id: id.into() }, None));
+                }
+            }
+            output.push((
+                ChatEvent::Item {
+                    item: ChatItem {
+                        id: p.id,
+                        ts: None,
+                        body: ChatBody::Tool {
+                            title: crate::chat::claude::tool_title(
+                                &p.request.tool_name,
+                                &p.request.tool_input,
+                            ),
+                            question: (p.request.tool_name == "AskUserQuestion")
+                                .then(|| crate::chat::claude::question(&p.request.tool_input))
+                                .flatten(),
+                            name: p.request.tool_name,
+                            input: p.request.tool_input,
+                            status: ToolStatus::Running,
+                            output: None,
+                            diff: None,
+                            images: vec![],
+                            details: None,
+                        },
+                    },
+                },
+                None,
+            ));
+        }
+        self.shown = next;
+        if missing && self.shown.is_none() && output.is_empty() {
+            return Ok(Batch::Missing);
+        }
+        // An overlay has no independent log offset. Its identity is part of
+        // the checkpoint, and all events in this batch must precede it.
+        let position = self.position();
+        if let Some((_, cursor)) = output.last_mut() {
+            *cursor = Some(position);
+        }
+        Ok(Batch::Events {
+            events: output,
+            more,
+        })
+    }
 }

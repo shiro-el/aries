@@ -151,11 +151,7 @@ struct ServiceState {
 /// The Beacon's private directory. Call records live here too, so it
 /// survives an uninstall; only [`service_file`] is removed then.
 fn state_dir() -> PathBuf {
-    let base = std::env::var_os("XDG_STATE_HOME")
-        .filter(|v| !v.is_empty())
-        .map(PathBuf::from)
-        .unwrap_or_else(|| home().join(".local/state"));
-    base.join("aries-beacon")
+    aries_beacon::state_dir()
 }
 
 fn call_log() -> calls::Log {

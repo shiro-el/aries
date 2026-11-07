@@ -661,7 +661,7 @@ impl ClaudeInterpreter {
 
 /// AskUserQuestion `input.questions[{question, header, multiSelect,
 /// options[{label, description}]}]`. `None` if it has no usable question.
-fn question(input: &Value) -> Option<ChatQuestion> {
+pub(crate) fn question(input: &Value) -> Option<ChatQuestion> {
     let text = |v: &Value| v.as_str().filter(|s| !s.is_empty()).map(str::to_owned);
     let questions = input["questions"]
         .as_array()?
@@ -813,7 +813,7 @@ fn edit_diff(structured: &Value, input: &Value) -> Option<ChatDiff> {
 }
 
 /// The one line shown on a collapsed tool row.
-fn tool_title(name: &str, input: &Value) -> String {
+pub(crate) fn tool_title(name: &str, input: &Value) -> String {
     let field = |k: &str| input[k].as_str().map(str::to_owned);
     let title = match name {
         "AskUserQuestion" => input["questions"][0]["question"]
