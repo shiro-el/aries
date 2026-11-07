@@ -144,18 +144,21 @@ pub(super) fn collect_requests(
             current: !ambiguous,
             visible: true,
             route: Route::ClaudeHook {
-                primary: primary.clone(),
+                primary: Box::new(primary.clone()),
                 fallback: Tui::Question,
             },
         });
     }
     if let Some(permission) = agent.approval(&located.session, facts, screen) {
         let item = permission.item.clone();
-        let fallback = Tui::Approval(permission);
+        let fallback = Tui::Approval(Box::new(permission));
         let identity =
             super::claims::Identity::new(agent, located, facts, &item, hook.as_ref(), None);
         let route = match hook.filter(|p| p.request.tool_name != "AskUserQuestion") {
-            Some(primary) => Route::ClaudeHook { primary, fallback },
+            Some(primary) => Route::ClaudeHook {
+                primary: Box::new(primary),
+                fallback,
+            },
             None => Route::Tui(fallback),
         };
         pending.push(PendingRequest {
@@ -180,6 +183,9 @@ impl Observation {
         self.facts
             .as_ref()
             .is_some_and(|f| f.turn == expected.turn && f.status == expected.status)
+    }
+    pub fn pending(&self) -> &[PendingRequest] {
+        &self.requests.pending
     }
     pub fn turn(&self) -> Option<u64> {
         self.facts.as_ref().and_then(|f| f.turn)

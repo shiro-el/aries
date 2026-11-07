@@ -610,33 +610,6 @@ impl crate::chat::adapter::Source for HookSource {
     }
 }
 
-#[cfg(test)]
-mod lock_tests {
-    use super::*;
-
-    #[test]
-    fn an_opened_lock_cannot_own_the_socket_after_unlink() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("terminal.lock");
-        let first = HookLock::acquire(path.clone()).unwrap().unwrap();
-        let stale = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
-        assert!(stale.try_lock().is_err());
-        assert!(HookLock::acquire(path.clone()).unwrap().is_none());
-        drop(first);
-        assert!(!path.exists());
-
-        // A contender that opened before cleanup can lock the unlinked inode,
-        // even while a new hook owns the current path. It must retry instead.
-        let current = HookLock::acquire(path.clone()).unwrap().unwrap();
-        stale.try_lock().unwrap();
-        assert!(!HookLock::is_current(&stale, &path).unwrap());
-        assert!(HookLock::is_current(&current._file, &path).unwrap());
-        assert!(HookLock::acquire(path.clone()).unwrap().is_none());
-        drop(current);
-        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
-    }
-}
-
 pub(in crate::chat::adapter) fn item(p: &Pending) -> aries_protocol::chat::ChatItem {
     use aries_protocol::chat::{ChatBody, ChatItem, ToolStatus};
     ChatItem {
@@ -658,5 +631,38 @@ pub(in crate::chat::adapter) fn item(p: &Pending) -> aries_protocol::chat::ChatI
             images: vec![],
             details: None,
         },
+    }
+}
+
+#[cfg(test)]
+mod lock_tests {
+    use super::*;
+
+    #[test]
+    fn an_opened_lock_cannot_own_the_socket_after_unlink() {
+        if crate::chat::adapter::tests::support::isolated_test(concat!(
+            module_path!(),
+            "::an_opened_lock_cannot_own_the_socket_after_unlink"
+        )) {
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("terminal.lock");
+        let first = HookLock::acquire(path.clone()).unwrap().unwrap();
+        let stale = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
+        assert!(stale.try_lock().is_err());
+        assert!(HookLock::acquire(path.clone()).unwrap().is_none());
+        drop(first);
+        assert!(!path.exists());
+
+        // A contender that opened before cleanup can lock the unlinked inode,
+        // even while a new hook owns the current path. It must retry instead.
+        let current = HookLock::acquire(path.clone()).unwrap().unwrap();
+        stale.try_lock().unwrap();
+        assert!(!HookLock::is_current(&stale, &path).unwrap());
+        assert!(HookLock::is_current(&current._file, &path).unwrap());
+        assert!(HookLock::acquire(path.clone()).unwrap().is_none());
+        drop(current);
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
     }
 }

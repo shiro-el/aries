@@ -35,6 +35,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Pinned herdr-core
         run: scripts/fetch-herdr-core.sh
+      - name: Agent adapter boundary
+        run: scripts/check-agent-boundary.sh
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Unit and core API tests (real herdr-core, isolated session)

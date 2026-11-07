@@ -43,7 +43,7 @@ impl std::fmt::Display for Beacon {
     }
 }
 
-pub(super) fn isolated_test(name: &str) -> bool {
+pub(in crate::chat::adapter) fn isolated_test(name: &str) -> bool {
     if std::env::var("ARIES_ADAPTER_TEST_CHILD").as_deref() == Ok(name) {
         return false;
     }

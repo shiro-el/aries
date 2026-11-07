@@ -117,13 +117,13 @@ impl<L: TerminalLookup + TerminalInput> TerminalInput for ClaimedInput<'_, L> {
     fn keys(&mut self, terminal: &str, keys: &[String]) -> Result<(), String> {
         let first = !self.claimed;
         self.claim()?;
-        self.verify(first)?;
+        self.verify(first, true)?;
         self.inner.keys(terminal, keys)
     }
     fn text(&mut self, terminal: &str, text: &str) -> Result<(), String> {
         let first = !self.claimed;
         self.claim()?;
-        self.verify(first)?;
+        self.verify(first, true)?;
         self.inner.text(terminal, text)
     }
 }
@@ -172,21 +172,45 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
         return Ok(reply(AnswerOutcome::NoAgent, terminal));
     };
 
-    let items = transcript(agent.as_ref(), &located)?.unwrap_or_default();
     let screen = if blocked_on(&facts, "permission") {
         link.screen(terminal).unwrap_or_default()
     } else {
         String::new()
     };
-    let requests = collect_requests(
-        agent.as_ref(),
-        &located,
-        state_dir,
-        terminal,
-        &facts,
-        &items,
-        &screen,
-    );
+    let approval = blocked_on(&facts, "permission").then(|| {
+        collect_requests(
+            agent.as_ref(),
+            &located,
+            state_dir,
+            terminal,
+            &facts,
+            &[],
+            &screen,
+        )
+    });
+    let (items, requests) = match approval {
+        Some(requests)
+            if requests
+                .pending
+                .iter()
+                .any(|r| r.id().as_str() == answer.question) =>
+        {
+            (Vec::new(), requests)
+        }
+        _ => {
+            let items = transcript(agent.as_ref(), &located)?.unwrap_or_default();
+            let requests = collect_requests(
+                agent.as_ref(),
+                &located,
+                state_dir,
+                terminal,
+                &facts,
+                &items,
+                &screen,
+            );
+            (items, requests)
+        }
+    };
     let Some(request) = requests
         .pending
         .iter()
@@ -222,6 +246,7 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
             request,
             terminal,
             has_text: answer.free_text.iter().any(Option::is_some),
+            state_dir,
         },
         expected_screen: None,
     };
@@ -495,14 +520,14 @@ fn menu<L: TerminalLookup + TerminalInput>(
 pub(super) enum Route {
     Tui(Tui),
     ClaudeHook {
-        primary: hook::Pending,
+        primary: Box<hook::Pending>,
         fallback: Tui,
     },
 }
 
 pub(super) enum Tui {
     Question,
-    Approval(super::permission::Permission),
+    Approval(Box<super::permission::Permission>),
 }
 
 pub(super) struct Navigation<'a> {
@@ -530,7 +555,7 @@ pub(super) trait StructuredInput: TerminalLookup + TerminalInput {
 impl<L: TerminalLookup + TerminalInput> StructuredInput for ClaimedInput<'_, L> {
     fn claim_structured(&mut self) -> Result<(), String> {
         self.claim()?;
-        self.verify(false)
+        self.verify(false, false)
     }
 }
 
@@ -544,9 +569,10 @@ struct Proof<'a> {
     request: &'a super::requests::PendingRequest,
     terminal: &'a str,
     has_text: bool,
+    state_dir: &'a Path,
 }
 impl<L: TerminalLookup + TerminalInput> ClaimedInput<'_, L> {
-    fn verify(&mut self, first: bool) -> Result<(), String> {
+    fn verify(&mut self, first: bool, tui: bool) -> Result<(), String> {
         let proof = &self.proof;
         let facts = self
             .inner
@@ -575,6 +601,35 @@ impl<L: TerminalLookup + TerminalInput> ClaimedInput<'_, L> {
             Tui::Question => {
                 if !blocked_on(&facts, "question") {
                     return Err("the Agent is not asking".into());
+                }
+                if tui && let Route::ClaudeHook { primary, .. } = proof.request.route() {
+                    if hook::completed(primary) {
+                        return Err("the hook question has a result".into());
+                    }
+                    let live = proof
+                        .agent
+                        .hook(proof.state_dir, proof.terminal, proof.located);
+                    if live
+                        .as_ref()
+                        .is_some_and(|p| p.nonce != primary.nonce || p.id != primary.id)
+                    {
+                        return Err("the hook question changed".into());
+                    }
+                    if live.is_none() {
+                        let items = transcript(proof.agent, proof.located)
+                            .map_err(|e| e.to_string())?
+                            .unwrap_or_default();
+                        if proof.agent.current_question(&items).is_some() {
+                            return Err("the question changed".into());
+                        }
+                    }
+                    let question = proof.request.question().ok_or("not a question")?;
+                    let normalize = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ");
+                    if !normalize(&self.inner.screen(proof.terminal)?)
+                        .contains(&normalize(&question.questions[0].text))
+                    {
+                        return Err("the hook question is no longer on screen".into());
+                    }
                 }
                 if first {
                     let question = proof.request.question().ok_or("not a question")?;

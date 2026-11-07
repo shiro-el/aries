@@ -1,6 +1,6 @@
 use super::claude::hook::Pending;
-use super::{Agent, Located, TerminalFacts};
-use aries_protocol::chat::{ChatBody, ChatItem};
+use super::{Agent, Interpreter, Located, TerminalFacts};
+use aries_protocol::chat::{ChatBody, ChatEvent, ChatItem, ToolStatus};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs::{File, OpenOptions};
@@ -213,35 +213,50 @@ fn prefix(path: &Path, offset: u64) -> Option<String> {
 }
 fn deferred_calls(path: &Path, gate: &Gate) -> Option<Vec<String>> {
     let bytes = std::fs::read(path).ok()?;
+    let mut interpreter = super::claude::ClaudeInterpreter::default();
     let mut end = 0u64;
+    let mut turn = None;
+    let mut claimed_turn = None;
+    let mut seen = std::collections::HashSet::new();
     let mut calls = Vec::new();
     for line in bytes.split_inclusive(|b| *b == b'\n') {
         end += line.len() as u64;
-        if end <= gate.offset {
-            continue;
-        }
         if line.last() != Some(&b'\n') {
             break;
         }
-        let Ok(row) = serde_json::from_slice::<serde_json::Value>(line) else {
-            continue;
-        };
-        let content = &row["message"]["content"];
-        let new_turn = row["type"] == "user"
-            && (content.is_string()
-                || content.as_array().is_some_and(|blocks| {
-                    blocks.iter().any(|b| b["type"] == "text")
-                        && !blocks.iter().any(|b| b["type"] == "tool_result")
-                }));
-        if new_turn {
-            break;
-        }
-        for block in content.as_array().into_iter().flatten() {
-            if block["type"] == "tool_use"
-                && let (Some(name), Some(id)) = (block["name"].as_str(), block["id"].as_str())
-                && shape(name, &block["input"]) == gate.shape
-            {
-                calls.push(hash(id));
+        // Delivery/queue/branch records define turns; raw user rows do not.
+        for event in interpreter.line(std::str::from_utf8(line).ok()?) {
+            match event {
+                ChatEvent::Item { item } => match &item.body {
+                    ChatBody::User { queued: false, .. } => {
+                        turn = Some(hash(&item.id));
+                        if claimed_turn
+                            .as_ref()
+                            .is_some_and(|claimed| claimed != &turn)
+                        {
+                            return Some(calls);
+                        }
+                    }
+                    ChatBody::Tool {
+                        name,
+                        input,
+                        status,
+                        ..
+                    } => {
+                        let first = seen.insert(item.id.clone());
+                        if first
+                            && end > gate.offset
+                            && *status == ToolStatus::Running
+                            && shape(name, input) == gate.shape
+                        {
+                            claimed_turn.get_or_insert_with(|| turn.clone());
+                            calls.push(hash(&item.id));
+                        }
+                    }
+                    _ => {}
+                },
+                ChatEvent::Reset { .. } if end > gate.offset => return None,
+                _ => {}
             }
         }
     }

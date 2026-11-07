@@ -642,7 +642,10 @@ fn hook_and_late_transcript_answers_share_one_claim() {
     assert_eq!(link.keys, ["1", "2", "1"]);
     assert!(!path.exists());
     assert!(!path.with_extension("json").exists());
-    record(&req);
+    std::fs::write(&req.transcript_path, format!("{}\n{}\n",
+        json!({"type":"user","uuid":"late-user","message":{"role":"user","content":"Ask me"}}),
+        json!({"type":"assistant","uuid":"m1","parentUuid":"late-user","message":{"role":"assistant","content":[{"type":"tool_use","id":"tool1","name":req.tool_name,"input":req.tool_input}]}})
+    )).unwrap();
     link.keys.clear();
     let result = answer::answer(
         dir.path(),
