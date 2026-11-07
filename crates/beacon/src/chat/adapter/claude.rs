@@ -10,7 +10,7 @@
 pub mod hook;
 
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use aries_protocol::chat::{
     ChatBody, ChatDiff, ChatEvent, ChatImage, ChatItem, ChatQuestion, DiffHunk, Question,
@@ -70,6 +70,16 @@ impl Agent for ClaudeCode {
 
     fn interpreter(&self) -> Box<dyn Interpreter> {
         Box::<ClaudeInterpreter>::default()
+    }
+
+    fn open_chat(
+        &self,
+        located: &Located,
+        resume: Option<&str>,
+        state: &Path,
+        terminal: &str,
+    ) -> super::Opened {
+        hook::open(self, located, resume, state, terminal)
     }
 
     fn answer_input(

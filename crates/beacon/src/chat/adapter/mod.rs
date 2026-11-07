@@ -45,6 +45,16 @@ pub trait Agent {
             },
         }
     }
+    fn open_chat(
+        &self,
+        located: &Located,
+        resume: Option<&str>,
+        state: &std::path::Path,
+        terminal: &str,
+    ) -> Opened {
+        let _ = (state, terminal);
+        self.open(located, resume)
+    }
     /// Maps mixed picks/text to the Agent's own menu, without terminal.send.
     fn answer_input(
         &self,

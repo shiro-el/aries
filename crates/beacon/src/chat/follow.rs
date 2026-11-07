@@ -64,15 +64,19 @@ impl Cursor {
     }
 }
 
-struct Current {
-    agent: &'static str,
+struct Current<'a> {
+    agent: &'a dyn Agent,
     located: Located,
     source: Box<dyn Source>,
 }
 
-impl Current {
+impl Current<'_> {
     fn cursor(&self) -> String {
-        Cursor::format(self.agent, &self.located.session, &self.source.position())
+        Cursor::format(
+            self.agent.name(),
+            &self.located.session,
+            &self.source.position(),
+        )
     }
 }
 
@@ -111,14 +115,13 @@ pub fn run(
         if let Some((agent, located)) = &found {
             let same = current
                 .as_ref()
-                .is_some_and(|c| c.agent == agent.name() && c.located == *located);
+                .is_some_and(|c| c.agent.name() == agent.name() && c.located == *located);
             if !same {
                 let after = resume
                     .take()
                     .filter(|c| c.agent == agent.name() && c.session == located.session)
                     .map(|c| c.position);
-                let opened = crate::claude_hook::open(
-                    agent.as_ref(),
+                let opened = agent.open_chat(
                     located,
                     after.as_deref(),
                     &crate::state_dir(),
@@ -137,7 +140,7 @@ pub fn run(
                     permission = None;
                 }
                 current = Some(Current {
-                    agent: agent.name(),
+                    agent: (*agent).as_ref(),
                     located: located.clone(),
                     source,
                 });
@@ -156,24 +159,17 @@ pub fn run(
                     emit(
                         out,
                         ChatLine::new(ChatEvent::Reset {
-                            agent: cur.agent.into(),
+                            agent: cur.agent.name().into(),
                             session: cur.located.session.clone(),
                         }),
                     )?;
                     wrote = true;
                     last_state = None;
                     permission = None;
-                    let agent = agents.iter().find(|a| a.name() == cur.agent);
-                    if let Some(agent) = agent {
-                        cur.source = crate::claude_hook::open(
-                            agent.as_ref(),
-                            &cur.located,
-                            None,
-                            &crate::state_dir(),
-                            &opts.terminal,
-                        )
+                    cur.source = cur
+                        .agent
+                        .open_chat(&cur.located, None, &crate::state_dir(), &opts.terminal)
                         .source;
-                    }
                     caught_up = false;
                     now_state = ChatState::Live;
                 }
@@ -181,7 +177,8 @@ pub fn run(
                     for (event, position) in events {
                         let mut line = ChatLine::new(event);
                         if let Some(p) = position {
-                            line.cursor = Some(Cursor::format(cur.agent, &cur.located.session, &p));
+                            line.cursor =
+                                Some(Cursor::format(cur.agent.name(), &cur.located.session, &p));
                         }
                         emit(out, line)?;
                         wrote = true;

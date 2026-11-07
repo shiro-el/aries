@@ -466,9 +466,6 @@ pub fn open(
     state: &Path,
     terminal: &str,
 ) -> crate::chat::Opened {
-    if agent.name() != "claude-code" {
-        return agent.open(located, resume);
-    }
     let (previous, position) =
         resume
             .and_then(|s| s.split_once('~'))
