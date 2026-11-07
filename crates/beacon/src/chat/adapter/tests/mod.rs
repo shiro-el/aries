@@ -10,4 +10,5 @@ mod codex_history;
 mod codex_interpreter;
 mod opencode_chat;
 mod pi_chat;
+mod request_regressions;
 pub(in crate::chat::adapter) mod support;

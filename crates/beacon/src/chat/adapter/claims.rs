@@ -163,6 +163,14 @@ impl Identity {
         }
         Ok(())
     }
+    pub(super) fn release(&self, dir: &Path) -> Result<(), String> {
+        for alias in &self.aliases {
+            std::fs::remove_file(dir.join(alias)).map_err(|e| e.to_string())?;
+        }
+        File::open(dir)
+            .and_then(|dir| dir.sync_all())
+            .map_err(|e| e.to_string())
+    }
     pub(super) fn claim(
         &self,
         dir: &Path,

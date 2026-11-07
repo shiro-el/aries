@@ -86,6 +86,8 @@ struct ClaimedInput<'a, L> {
     inner: &'a mut L,
     path: PathBuf,
     claimed: bool,
+    input_started: bool,
+    failure: Option<AnswerReply>,
     proof: Proof<'a>,
     expected_screen: Option<String>,
 }
@@ -117,13 +119,15 @@ impl<L: TerminalLookup + TerminalInput> TerminalInput for ClaimedInput<'_, L> {
     fn keys(&mut self, terminal: &str, keys: &[String]) -> Result<(), String> {
         let first = !self.claimed;
         self.claim()?;
-        self.verify(first, true)?;
+        self.before_input(first, true)?;
+        self.input_started = true;
         self.inner.keys(terminal, keys)
     }
     fn text(&mut self, terminal: &str, text: &str) -> Result<(), String> {
         let first = !self.claimed;
         self.claim()?;
-        self.verify(first, true)?;
+        self.before_input(first, true)?;
+        self.input_started = true;
         self.inner.text(terminal, text)
     }
 }
@@ -239,6 +243,8 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
         inner: link,
         path: dir.clone(),
         claimed: false,
+        input_started: false,
+        failure: None,
         proof: Proof {
             agent: agent.as_ref(),
             located: &located,
@@ -272,14 +278,18 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
             if let Some(pending) = primary
                 && let Some(behavior) = agent.approval_decision(permission, answer.picks[0][0])
             {
-                if hook_answer(
+                let delivered = hook_answer(
                     state_dir,
                     terminal,
                     &located,
                     pending,
                     serde_json::json!(behavior),
                     link,
-                ) {
+                );
+                if let Some(failure) = link.failure.take() {
+                    return Ok(failure);
+                }
+                if delivered {
                     return Ok(AnswerReply::new(AnswerOutcome::Sent, None));
                 }
                 let fresh_screen = link.screen(terminal).unwrap_or_default();
@@ -295,7 +305,7 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
             }
             return Ok(match link.keys(terminal, &keys) {
                 Ok(()) => AnswerReply::new(AnswerOutcome::Sent, None),
-                Err(e) => reply(AnswerOutcome::Failed, e),
+                Err(e) => link.failure(e),
             });
         }
         Tui::Question => {}
@@ -351,9 +361,12 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
                 (q.text.clone(), value.into())
             })
             .collect();
-        if answers.len() == question.questions.len()
-            && hook_answer(state_dir, terminal, &located, pending, answers.into(), link)
-        {
+        let delivered = answers.len() == question.questions.len()
+            && hook_answer(state_dir, terminal, &located, pending, answers.into(), link);
+        if let Some(failure) = link.failure.take() {
+            return Ok(failure);
+        }
+        if delivered {
             return Ok(AnswerReply::new(AnswerOutcome::Sent, None));
         }
         // Verify the original question is still pending before key fallback.
@@ -389,6 +402,7 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
             link: link.inner,
             terminal,
             allow_open: true,
+            input_started: Some(&mut link.input_started),
         },
         &question,
         has_text,
@@ -398,12 +412,8 @@ pub fn answer<L: TerminalLookup + TerminalInput>(
 
     for action in actions {
         let result = match action {
-            AnswerInput::Keys(keys) => link
-                .keys(terminal, &keys)
-                .map_err(|e| reply(AnswerOutcome::Failed, e)),
-            AnswerInput::Text(text) => link
-                .text(terminal, &text)
-                .map_err(|e| reply(AnswerOutcome::Failed, e)),
+            AnswerInput::Keys(keys) => link.keys(terminal, &keys).map_err(|e| link.failure(e)),
+            AnswerInput::Text(text) => link.text(terminal, &text).map_err(|e| link.failure(e)),
             AnswerInput::Menu {
                 prompt,
                 options,
@@ -506,13 +516,11 @@ fn menu<L: TerminalLookup + TerminalInput>(
     let mut keys = vec![direction.to_owned(); target.abs_diff(selected)];
     keys.push("enter".into());
     link.expected_screen = Some(screen);
-    link.keys(terminal, &keys)
-        .map_err(|e| reply(AnswerOutcome::Failed, e))?;
+    link.keys(terminal, &keys).map_err(|e| link.failure(e))?;
     if let Some(text) = text {
-        link.text(terminal, text)
-            .map_err(|e| reply(AnswerOutcome::Failed, e))?;
+        link.text(terminal, text).map_err(|e| link.failure(e))?;
         link.keys(terminal, &["enter".into()])
-            .map_err(|e| reply(AnswerOutcome::Failed, e))?;
+            .map_err(|e| link.failure(e))?;
     }
     Ok(())
 }
@@ -534,6 +542,7 @@ pub(super) struct Navigation<'a> {
     link: &'a mut dyn Terminal,
     terminal: &'a str,
     allow_open: bool,
+    input_started: Option<&'a mut bool>,
 }
 trait Terminal: TerminalLookup + TerminalInput {}
 impl<T: TerminalLookup + TerminalInput> Terminal for T {}
@@ -545,6 +554,9 @@ impl Navigation<'_> {
         if !self.allow_open {
             return Err("the question changed after claim".into());
         }
+        if let Some(started) = &mut self.input_started {
+            **started = true;
+        }
         self.link.keys(self.terminal, &[key.into()])
     }
 }
@@ -555,7 +567,9 @@ pub(super) trait StructuredInput: TerminalLookup + TerminalInput {
 impl<L: TerminalLookup + TerminalInput> StructuredInput for ClaimedInput<'_, L> {
     fn claim_structured(&mut self) -> Result<(), String> {
         self.claim()?;
-        self.verify(false, false)
+        self.before_input(false, false)?;
+        self.input_started = true;
+        Ok(())
     }
 }
 
@@ -572,39 +586,69 @@ struct Proof<'a> {
     state_dir: &'a Path,
 }
 impl<L: TerminalLookup + TerminalInput> ClaimedInput<'_, L> {
-    fn verify(&mut self, first: bool, tui: bool) -> Result<(), String> {
+    fn failure(&mut self, detail: String) -> AnswerReply {
+        self.failure
+            .take()
+            .unwrap_or_else(|| reply(AnswerOutcome::Failed, detail))
+    }
+
+    fn before_input(&mut self, first: bool, tui: bool) -> Result<(), String> {
+        if let Err(mut failure) = self.verify(first, tui) {
+            if !self.input_started {
+                match self.proof.request.identity().release(&self.path) {
+                    Ok(()) => self.claimed = false,
+                    Err(e) => failure = reply(AnswerOutcome::Failed, e),
+                }
+                self.failure = Some(failure.clone());
+            }
+            return Err(failure.detail.unwrap_or_default());
+        }
+        Ok(())
+    }
+
+    fn verify(&mut self, first: bool, tui: bool) -> Result<(), AnswerReply> {
         let proof = &self.proof;
         let facts = self
             .inner
-            .get(proof.terminal)?
-            .ok_or("the Terminal ended")?;
+            .get(proof.terminal)
+            .map_err(|e| reply(AnswerOutcome::Failed, e))?
+            .ok_or_else(|| reply(AnswerOutcome::Gone, "the Terminal ended"))?;
         if facts.turn != proof.facts.turn
             || facts.pid != proof.facts.pid
             || proof.agent.locate(&facts).as_ref() != Some(proof.located)
         {
-            return Err("the request changed after claim".into());
+            return Err(reply(
+                AnswerOutcome::Gone,
+                "the request changed after claim",
+            ));
         }
         let fallback = match proof.request.route() {
             Route::Tui(tui) | Route::ClaudeHook { fallback: tui, .. } => tui,
         };
         match fallback {
             Tui::Approval(_) => {
-                let screen = self.inner.screen(proof.terminal)?;
+                let screen = self
+                    .inner
+                    .screen(proof.terminal)
+                    .map_err(|e| reply(AnswerOutcome::Failed, e))?;
                 if proof
                     .agent
                     .approval(&proof.located.session, &facts, &screen)
                     .is_none_or(|p| p.item.id != proof.request.id().as_str())
                 {
-                    return Err("the permission menu changed after claim".into());
+                    return Err(reply(
+                        AnswerOutcome::Gone,
+                        "the permission menu changed after claim",
+                    ));
                 }
             }
             Tui::Question => {
                 if !blocked_on(&facts, "question") {
-                    return Err("the Agent is not asking".into());
+                    return Err(reply(AnswerOutcome::Gone, "the Agent is not asking"));
                 }
                 if tui && let Route::ClaudeHook { primary, .. } = proof.request.route() {
                     if hook::completed(primary) {
-                        return Err("the hook question has a result".into());
+                        return Err(reply(AnswerOutcome::Gone, "the hook question has a result"));
                     }
                     let live = proof
                         .agent
@@ -613,26 +657,40 @@ impl<L: TerminalLookup + TerminalInput> ClaimedInput<'_, L> {
                         .as_ref()
                         .is_some_and(|p| p.nonce != primary.nonce || p.id != primary.id)
                     {
-                        return Err("the hook question changed".into());
+                        return Err(reply(AnswerOutcome::Gone, "the hook question changed"));
                     }
                     if live.is_none() {
                         let items = transcript(proof.agent, proof.located)
-                            .map_err(|e| e.to_string())?
+                            .map_err(|e| reply(AnswerOutcome::Failed, e.to_string()))?
                             .unwrap_or_default();
                         if proof.agent.current_question(&items).is_some() {
-                            return Err("the question changed".into());
+                            return Err(reply(AnswerOutcome::Gone, "the question changed"));
                         }
                     }
-                    let question = proof.request.question().ok_or("not a question")?;
+                    let question = proof
+                        .request
+                        .question()
+                        .ok_or_else(|| reply(AnswerOutcome::Gone, "not a question"))?;
                     let normalize = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ");
-                    if !normalize(&self.inner.screen(proof.terminal)?)
-                        .contains(&normalize(&question.questions[0].text))
+                    if !normalize(
+                        &self
+                            .inner
+                            .screen(proof.terminal)
+                            .map_err(|e| reply(AnswerOutcome::Failed, e))?,
+                    )
+                    .contains(&normalize(&question.questions[0].text))
                     {
-                        return Err("the hook question is no longer on screen".into());
+                        return Err(reply(
+                            AnswerOutcome::Gone,
+                            "the hook question is no longer on screen",
+                        ));
                     }
                 }
                 if first {
-                    let question = proof.request.question().ok_or("not a question")?;
+                    let question = proof
+                        .request
+                        .question()
+                        .ok_or_else(|| reply(AnswerOutcome::Gone, "not a question"))?;
                     proof
                         .agent
                         .prepare(
@@ -640,21 +698,30 @@ impl<L: TerminalLookup + TerminalInput> ClaimedInput<'_, L> {
                                 link: self.inner,
                                 terminal: proof.terminal,
                                 allow_open: false,
+                                input_started: None,
                             },
                             question,
                             proof.has_text,
                         )
-                        .map_err(|r| r.detail.unwrap_or_else(|| "the live menu changed".into()))?;
+                        .map_err(|r| {
+                            reply(
+                                AnswerOutcome::Gone,
+                                r.detail.unwrap_or_else(|| "the live menu changed".into()),
+                            )
+                        })?;
                     if let Route::Tui(_) = proof.request.route() {
                         let items = transcript(proof.agent, proof.located)
-                            .map_err(|e| e.to_string())?
+                            .map_err(|e| reply(AnswerOutcome::Failed, e.to_string()))?
                             .unwrap_or_default();
                         if proof
                             .agent
                             .current_question(&items)
                             .is_none_or(|(id, _)| id != proof.request.id().as_str())
                         {
-                            return Err("the question changed after claim".into());
+                            return Err(reply(
+                                AnswerOutcome::Gone,
+                                "the question changed after claim",
+                            ));
                         }
                     }
                 }
@@ -662,8 +729,17 @@ impl<L: TerminalLookup + TerminalInput> ClaimedInput<'_, L> {
         }
         if let Some(expected) = self.expected_screen.take() {
             let normalize = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ");
-            if normalize(&self.inner.screen(proof.terminal)?) != normalize(&expected) {
-                return Err("the selection changed after claim".into());
+            if normalize(
+                &self
+                    .inner
+                    .screen(proof.terminal)
+                    .map_err(|e| reply(AnswerOutcome::Failed, e))?,
+            ) != normalize(&expected)
+            {
+                return Err(reply(
+                    AnswerOutcome::Gone,
+                    "the selection changed after claim",
+                ));
             }
         }
         Ok(())
