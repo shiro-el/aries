@@ -32,7 +32,12 @@ android {
 
     buildTypes {
         getByName("release") { buildConfigField("boolean", "ARIES_DEV_UPDATES", "false") }
-        getByName("debug") { buildConfigField("boolean", "ARIES_DEV_UPDATES", "true") }
+        getByName("debug") {
+            buildConfigField("boolean", "ARIES_DEV_UPDATES", "true")
+            // -Paries.debuggable=false: frame timings as a sideloaded build runs (ART optimizes
+            // only non-debuggable apps); scripts/measure-terminal-jank.sh uses it.
+            isDebuggable = findProperty("aries.debuggable") != "false"
+        }
         getByName("dogfood") {
             proguardFiles("proguard-rules.pro")
             buildConfigField("boolean", "ARIES_DEV_UPDATES", "true")

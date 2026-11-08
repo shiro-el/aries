@@ -198,7 +198,8 @@ class TerminalLatencyTest {
         else -> null
     }
 
-    private companion object {
+    companion object {
+        /** The fixture sshd's `bootstrap` password. */
         const val PASSWORD = "aries-test-password"
     }
 }

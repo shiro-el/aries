@@ -72,6 +72,14 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.graphics.GraphicsContext
+import androidx.compose.ui.graphics.layer.GraphicsLayer
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.platform.LocalGraphicsContext
+import androidx.compose.ui.unit.IntSize
+import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.roundToInt
 import io.github.shiroel.aries.core.ScreenFrame
 import io.github.shiroel.aries.core.ScreenLine
@@ -715,7 +723,9 @@ private fun Banner(text: String) {
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
 private fun TerminalCanvas(viewer: TerminalViewer, look: TerminalLook, settings: TerminalDisplaySettings, modifier: Modifier, topInset: Float) {
-    val measurer = rememberTextMeasurer()
+    // A screen repeats few distinct glyphs and runs (box rules, Hangul, prompts);
+    // the default 8-entry cache would lay each out again on every frame.
+    val measurer = rememberTextMeasurer(cacheSize = TextLayoutCacheSize)
     val density = LocalDensity.current
     val family = settings.font.family
     // Advance width and line height of one monospace cell at 100sp (in px).
@@ -761,6 +771,9 @@ private fun TerminalCanvas(viewer: TerminalViewer, look: TerminalLook, settings:
         val cellH = look.cellH
         val fontSize = with(density) { fontPx.toSp() }
         val minimumContrast = settings.minimumContrast
+        val graphics = LocalGraphicsContext.current
+        val rowLayers = remember(viewer, graphics) { TerminalRowLayers(graphics) }
+        DisposableEffect(rowLayers) { onDispose { rowLayers.release() } }
         Canvas(
             Modifier.fillMaxSize().clipToBounds().testTag("terminal-screen")
                 .semantics { text = reading; liveRegion = LiveRegionMode.Polite }
@@ -769,25 +782,16 @@ private fun TerminalCanvas(viewer: TerminalViewer, look: TerminalLook, settings:
             viewer.version // redraw on every frame
             val base = TextStyle(fontFamily = family, fontSize = fontSize, color = TerminalForeground)
             translate(look.panX, look.panY) {
-            for (row in 0 until (selected?.rows ?: viewer.rows)) {
-                val y = row * cellH
-                for (run in (if (selected != null) selected.line(row) else viewer.line(row))?.runs.orEmpty()) {
-                    val x = run.column.toInt() * cellW
-                    var fg = run.fg?.let(::rgb) ?: TerminalForeground
-                    var bg = run.bg?.let(::rgb)
-                    if (run.inverse) {
-                        val f = fg
-                        fg = bg ?: TerminalBackground
-                        bg = f
-                    }
-                    bg?.let { drawRect(it, Offset(x, y), Size(run.width.toInt() * cellW, cellH)) }
-                    if (run.wide || run.text.isNotBlank()) {
-                        for (span in terminalTextSpans(run, fg, bg ?: TerminalBackground, minimumContrast)) {
-                            val ink = if (run.dim) span.foreground.copy(alpha = 0.6f) else span.foreground
-                            drawTerminalRun(measurer, span.text, Offset(x + span.column * cellW, y), styleOf(base, run, ink), cellW, run.wide)
-                        }
-                    }
+            val rows = selected?.rows ?: viewer.rows
+            val rowSize = IntSize(ceil(cols * cellW).toInt().coerceAtLeast(1), ceil(cellH).toInt().coerceAtLeast(1))
+            rowLayers.look(listOf(family, fontPx, cellW, cellH, minimumContrast), rows)
+            for (row in 0 until rows) {
+                val line = (if (selected != null) selected.line(row) else viewer.line(row)) ?: continue
+                if (line.runs.isEmpty()) continue
+                val layer = rowLayers.layer(row, line) { layer ->
+                    layer.record(rowSize) { drawTerminalRow(measurer, line, base, cellW, cellH, minimumContrast) }
                 }
+                translate(top = row * cellH) { drawLayer(layer) }
             }
             for (mark in (if (selected == null) viewer.search?.highlights else null).orEmpty()) {
                 drawRect(
@@ -825,6 +829,72 @@ private fun TerminalCanvas(viewer: TerminalViewer, look: TerminalLook, settings:
     }
 }
 
+private const val TextLayoutCacheSize = 4096
+
+/**
+ * One recorded drawing per grid row. A frame redraws only the rows whose
+ * line changed; the rest replay. Everything that shapes a row's drawing
+ * besides its line goes into [look], which drops all recordings on a change.
+ */
+private class TerminalRowLayers(private val graphics: GraphicsContext) {
+    private var key: Any? = null
+    private val lines = mutableListOf<ScreenLine?>()
+    private val layers = mutableListOf<GraphicsLayer>()
+
+    fun look(key: Any, rows: Int) {
+        if (key != this.key) {
+            this.key = key
+            lines.fill(null)
+        }
+        while (layers.size > rows) {
+            graphics.releaseGraphicsLayer(layers.removeAt(layers.lastIndex))
+            lines.removeAt(lines.lastIndex)
+        }
+    }
+
+    /** The row's layer, recorded again by [draw] when [line] is not what it holds. */
+    fun layer(row: Int, line: ScreenLine, draw: (GraphicsLayer) -> Unit): GraphicsLayer {
+        while (layers.size <= row) {
+            layers += graphics.createGraphicsLayer()
+            lines += null
+        }
+        val layer = layers[row]
+        val held = lines[row]
+        if (held !== line && held != line) {
+            draw(layer)
+            lines[row] = line
+        }
+        return layer
+    }
+
+    fun release() {
+        layers.forEach(graphics::releaseGraphicsLayer)
+        layers.clear()
+        lines.clear()
+    }
+}
+
+/** One grid row at the origin: backgrounds, then text. */
+private fun DrawScope.drawTerminalRow(measurer: TextMeasurer, line: ScreenLine, base: TextStyle, cellW: Float, cellH: Float, minimumContrast: Boolean) {
+    for (run in line.runs) {
+        val x = run.column.toInt() * cellW
+        var fg = run.fg?.let(::rgb) ?: TerminalForeground
+        var bg = run.bg?.let(::rgb)
+        if (run.inverse) {
+            val f = fg
+            fg = bg ?: TerminalBackground
+            bg = f
+        }
+        bg?.let { drawRect(it, Offset(x, 0f), Size(run.width.toInt() * cellW, cellH)) }
+        if (run.wide || run.text.isNotBlank()) {
+            for (span in terminalTextSpans(run, fg, bg ?: TerminalBackground, minimumContrast)) {
+                val ink = if (run.dim) span.foreground.copy(alpha = 0.6f) else span.foreground
+                drawTerminalRun(measurer, span.text, Offset(x + span.column * cellW, 0f), styleOf(base, run, ink), cellW, run.wide)
+            }
+        }
+    }
+}
+
 private fun DrawScope.drawTerminalText(measurer: TextMeasurer, text: String, at: Offset, style: TextStyle) {
     // TextMeasurer caches layout independently of color. Supply paint properties
     // explicitly so a color change also repaints already measured Terminal text.
@@ -836,9 +906,18 @@ private fun DrawScope.drawTerminalRun(measurer: TextMeasurer, text: String, at: 
         drawTerminalText(measurer, text, at, style)
         return
     }
-    // Fallback fonts can have a different advance. Place each grapheme on its
-    // Terminal cell so a symbol never shifts the text that follows it.
+    // Fallback fonts can have a different advance. When the run as a whole
+    // does not span its cells, place each grapheme on its Terminal cell so a
+    // symbol never shifts the text that follows it.
     val graphemes = BreakIterator.getCharacterInstance(Locale.ROOT).apply { setText(text) }
+    var count = 0
+    graphemes.first()
+    while (graphemes.next() != BreakIterator.DONE) count++
+    val whole = measurer.measure(text, style)
+    if (abs(whole.size.width - count * (if (wide) 2 else 1) * cellW) < cellW / 4) {
+        drawText(whole, color = style.color, topLeft = at, textDecoration = style.textDecoration)
+        return
+    }
     var start = graphemes.first()
     var end = graphemes.next()
     var column = 0
