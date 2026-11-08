@@ -217,7 +217,7 @@ class TerminalLook(private val viewer: TerminalViewer) {
             zoom = next
         }
         panX += pan.x
-        drag(pan.y)
+        drag(pan.y, centroid)
         clamp()
     }
 
@@ -225,7 +225,8 @@ class TerminalLook(private val viewer: TerminalViewer) {
      * Down ([dy] > 0) pans to the grid's top, then reads back into the
      * scrollback; up first returns towards the live screen, then pans.
      */
-    private fun drag(dy: Float) {
+    private fun drag(dy: Float, at: Offset) {
+        if (viewer.altScreen) return dragProgram(dy, at)
         if (dy > 0) {
             val room = topInset - panY
             val used = minOf(dy, room)
@@ -236,14 +237,30 @@ class TerminalLook(private val viewer: TerminalViewer) {
         }
     }
 
+    /**
+     * The program keeps its own history (alternate screen): pan to the
+     * grid's edge first, then the rest of the drag scrolls the program.
+     */
+    private fun dragProgram(dy: Float, at: Offset) {
+        val room = if (dy > 0) topInset - panY else minOf(0f, viewH - cellH * rows) - panY
+        val used = if (dy > 0) minOf(dy, room.coerceAtLeast(0f)) else maxOf(dy, room.coerceAtMost(0f))
+        panY += used
+        val lines = wholeLines(dy - used)
+        if (lines != 0) viewer.scrollProgram(lines, cellAt(at))
+    }
+
     private fun scrollBy(dy: Float) {
-        if (dy == 0f) return
+        val lines = wholeLines(dy)
+        if (lines != 0) viewer.scrollBack(lines)
+    }
+
+    /** [dy] added to the drag not yet turned into lines; the whole lines it now makes. */
+    private fun wholeLines(dy: Float): Int {
+        if (dy == 0f) return 0
         scrollRest += dy
         val lines = (scrollRest / cellH).toInt()
-        if (lines != 0) {
-            scrollRest -= lines * cellH
-            viewer.scrollBack(lines)
-        }
+        scrollRest -= lines * cellH
+        return lines
     }
 
     private fun clamp() {

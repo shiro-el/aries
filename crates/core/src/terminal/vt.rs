@@ -20,6 +20,8 @@ use crate::error::{CoreError, protocol};
 pub const SCROLLBACK: usize = 1000;
 /// Upper bound on the scrollback a view keeps, whatever the attach asked.
 pub const MAX_SCROLLBACK: usize = 10_000;
+/// Lines one wheel notch stands for, as desktop terminals scroll by default.
+pub const WHEEL_LINES: u32 = 3;
 
 struct Size {
     cols: usize,
@@ -122,6 +124,44 @@ impl Vt {
         self.term.mode().contains(TermMode::APP_CURSOR)
     }
 
+    /// The program draws on the alternate screen (vim, a fullscreen agent
+    /// TUI): it keeps its own history, and this VT has no scrollback of it.
+    pub fn alt_screen(&self) -> bool {
+        self.term.mode().contains(TermMode::ALT_SCREEN)
+    }
+
+    /// What a desktop terminal sends for `notches` wheel notches over cell
+    /// (`column`, `row`); positive is back, towards older output. Mouse
+    /// reports when the program asked for them, else arrow keys on the
+    /// alternate screen (alternate scroll mode, 1007), else nothing.
+    pub fn wheel_bytes(&self, notches: i32, column: u16, row: u16) -> Vec<u8> {
+        let mode = *self.term.mode();
+        let count = notches.unsigned_abs() as usize;
+        let back = notches > 0;
+        if mode.intersects(TermMode::MOUSE_MODE) {
+            let button = if back { 64 } else { 65 };
+            let (x, y) = (column as u32 + 1, row as u32 + 1);
+            let one = if mode.contains(TermMode::SGR_MOUSE) {
+                format!("\x1b[<{button};{x};{y}M").into_bytes()
+            } else {
+                // X10 encoding: each value + 32 in one byte, so 223 at most.
+                let cap = |v: u32| (v.min(223) + 32) as u8;
+                vec![0x1b, b'[', b'M', button as u8 + 32, cap(x), cap(y)]
+            };
+            one.repeat(count)
+        } else if mode.contains(TermMode::ALT_SCREEN | TermMode::ALTERNATE_SCROLL) {
+            let key = if back { b'A' } else { b'B' };
+            let lead = if mode.contains(TermMode::APP_CURSOR) {
+                b'O'
+            } else {
+                b'['
+            };
+            [0x1b, lead, key].repeat(count * WHEEL_LINES as usize)
+        } else {
+            Vec::new()
+        }
+    }
+
     /// Encodes an edited draft as one paste, using the program's live DEC 2004 mode.
     pub fn paste_bytes(&self, text: &str) -> Vec<u8> {
         if self.term.mode().contains(TermMode::BRACKETED_PASTE) {
@@ -144,6 +184,10 @@ impl Vt {
             self.full = true;
         }
         target as u32
+    }
+
+    pub fn rows(&self) -> u16 {
+        self.term.screen_lines() as u16
     }
 
     pub fn cols(&self) -> u16 {
@@ -308,6 +352,7 @@ impl Vt {
             scrolled: offset as u32,
             history: self.term.grid().history_size() as u32,
             search: self.search_frame(),
+            alt_screen: self.alt_screen(),
         }
     }
 

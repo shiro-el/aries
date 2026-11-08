@@ -156,6 +156,22 @@ class TerminalViewer(terminal: TerminalInfo, private val composer: TerminalCompo
     /** Moves the core's view (`TerminalView.scrollTo`); set while attached. */
     var scroller: ((UInt) -> UInt)? = null
 
+    /**
+     * The program is on the alternate screen (a fullscreen agent TUI) and
+     * keeps its own history: there is no scrollback, so a drag scrolls the
+     * program instead ([scrollProgram]).
+     */
+    var altScreen by mutableStateOf(false)
+        private set
+
+    /** Hands dragged lines to the program (`TerminalView.scrollProgram`); set while attached. */
+    var programScroller: ((Int, Cell) -> Unit)? = null
+
+    /** Scrolls the program by [lines] (positive: back) over [at]. The desktop scrolls with it. */
+    fun scrollProgram(lines: Int, at: Cell) {
+        programScroller?.invoke(lines, at)
+    }
+
     var search by mutableStateOf<TerminalSearch?>(null)
         private set
     var searcher by mutableStateOf<(suspend (String, Boolean, Boolean) -> Unit)?>(null)
@@ -212,6 +228,7 @@ class TerminalViewer(terminal: TerminalInfo, private val composer: TerminalCompo
         title = frame.title
         scrolled = frame.scrolled.toInt()
         history = frame.history.toInt()
+        altScreen = frame.altScreen
         search = frame.search
         version++
     }

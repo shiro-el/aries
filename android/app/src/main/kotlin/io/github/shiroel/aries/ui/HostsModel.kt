@@ -1945,6 +1945,9 @@ class HostsModel(
             }
         }
         viewer.scroller = { lines -> view.scrollTo(lines).also { localChanges.trySend(Unit) } }
+        // Drag deltas in order; the sender coalesces whatever queued while the last one was sent.
+        val programScrolls = Channel<Pair<Int, Cell>>(Channel.UNLIMITED)
+        viewer.programScroller = { lines, at -> programScrolls.trySend(lines to at) }
         viewer.searcher = { query, caseSensitive, regex ->
             localOperation { it.search(query, caseSensitive, regex) }
         }
@@ -1965,6 +1968,23 @@ class HostsModel(
                             throw e
                         } catch (e: CoreException) {
                             request.result.completeExceptionally(e)
+                        }
+                    }
+                }
+                launch {
+                    for ((first, firstAt) in programScrolls) {
+                        var lines = first
+                        var at = firstAt
+                        while (true) {
+                            val (more, moreAt) = programScrolls.tryReceive().getOrNull() ?: break
+                            lines += more
+                            at = moreAt
+                        }
+                        try {
+                            view.scrollProgram(lines, at.col.toUShort(), at.row.toUShort())
+                        } catch (e: CoreException) {
+                            // A missed scroll step is not worth ending the view over; the next drag retries.
+                            if (e is CoreException.Closed) break
                         }
                     }
                 }
@@ -1999,6 +2019,8 @@ class HostsModel(
         } finally {
             if (!options.observe || viewer.link?.connection !== conn) viewer.discardInput(conn)
             viewer.scroller = null
+            viewer.programScroller = null
+            programScrolls.cancel()
             viewer.searcher = null
             viewer.searchNavigator = null
             localOperations.cancel()

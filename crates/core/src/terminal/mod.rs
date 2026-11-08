@@ -25,7 +25,7 @@ use tokio::time::Instant;
 
 use crate::error::{CoreError, protocol};
 use crate::hc::{Frame, HcClient, KIND_CLOSE, KIND_CREDIT, KIND_DATA, KIND_RESIZE};
-use vt::Vt;
+use vt::{Vt, WHEEL_LINES};
 
 /// Shortest time between two frames (60 Hz).
 pub const FRAME_INTERVAL: Duration = Duration::from_millis(16);
@@ -130,6 +130,11 @@ pub struct ScreenFrame {
     /// Search metadata is refreshed with the VT, even for a partial frame.
     #[uniffi(default = None)]
     pub search: Option<TerminalSearch>,
+    /// The program is on the alternate screen and keeps its own history:
+    /// there is no scrollback to [`TerminalView::scroll_to`], and reading
+    /// back means [`TerminalView::scroll_program`].
+    #[uniffi(default = false)]
+    pub alt_screen: bool,
 }
 
 /// How the Terminal's program ended, from the stream's CLOSE.
@@ -170,6 +175,8 @@ struct State {
     /// The stream is over; `next` still returns the last screen and `exit`.
     ended: bool,
     last_frame: Option<Instant>,
+    /// Dragged lines not yet a whole wheel notch or page ([`TerminalView::scroll_program`]).
+    program_scroll_rest: i32,
 }
 
 /// One attached Terminal: its screen, live.
@@ -182,6 +189,8 @@ pub struct TerminalView {
 struct Inner {
     client: Arc<HcClient>,
     channel: u32,
+    /// The attached Terminal, for calls outside the stream (`terminal.keys`).
+    address: String,
     state: Arc<Mutex<State>>,
     wake: Arc<Notify>,
     /// Serialises `next` callers.
@@ -209,7 +218,7 @@ impl TerminalView {
         options: AttachOptions,
     ) -> Result<Self, CoreError> {
         let mut params = json!({
-            "terminal": address,
+            "terminal": &address,
             "cols": options.cols.max(1),
             "rows": options.rows.max(1),
             "observe": options.observe,
@@ -247,6 +256,7 @@ impl TerminalView {
             exit: None,
             ended: false,
             last_frame: None,
+            program_scroll_rest: 0,
         }));
         let wake = Arc::new(Notify::new());
         let bytes = Arc::new(AtomicU64::new(0));
@@ -265,6 +275,7 @@ impl TerminalView {
         let inner = Inner {
             client,
             channel,
+            address,
             state,
             wake,
             reading: tokio::sync::Mutex::new(()),
@@ -363,6 +374,39 @@ impl Inner {
             return Ok(());
         }
         self.client.send(self.channel, KIND_DATA, bytes).await
+    }
+
+    async fn scroll_program(&self, lines: i32, column: u16, row: u16) -> Result<(), CoreError> {
+        let (steps, bytes) = {
+            let mut st = self.state.lock().expect("state lock");
+            let unit = if self.observe {
+                (st.vt.rows() as i32 / 2).max(1)
+            } else {
+                WHEEL_LINES as i32
+            };
+            let total = st.program_scroll_rest.saturating_add(lines);
+            let steps = total / unit;
+            st.program_scroll_rest = total - steps * unit;
+            let bytes = (!self.observe).then(|| st.vt.wheel_bytes(steps, column, row));
+            (steps, bytes)
+        };
+        if steps == 0 {
+            return Ok(());
+        }
+        match bytes {
+            Some(bytes) => self.input(&bytes).await,
+            None => {
+                let key = if steps > 0 { "pageup" } else { "pagedown" };
+                let keys = vec![key; steps.unsigned_abs() as usize];
+                self.client
+                    .call(
+                        "terminal.keys",
+                        json!({ "terminal": &self.address, "keys": keys }),
+                    )
+                    .await
+                    .map(drop)
+            }
+        }
     }
 
     async fn resize(&self, cols: u16, rows: u16) -> Result<(), CoreError> {
@@ -479,6 +523,22 @@ impl TerminalView {
         drop(st);
         self.inner.wake.notify_one();
         at
+    }
+
+    /// Scrolls the program itself by `lines` dragged lines (positive: back,
+    /// towards older output) over cell (`column`, `row`). For a program on
+    /// the alternate screen ([`ScreenFrame::alt_screen`]), which keeps its
+    /// own history, so [`TerminalView::scroll_to`] has nothing to show.
+    /// Unlike `scroll_to` this reaches the Terminal: the desktop's view of
+    /// the program scrolls too. Lines short of a whole step carry over.
+    ///
+    /// - Typing view: what a desktop wheel sends, one notch per
+    ///   [`WHEEL_LINES`] (mouse reports, or arrow keys without them).
+    /// - Observing view: Page Up / Page Down through `terminal.keys`, one per
+    ///   half screen, so the Terminal's size is left alone.
+    pub async fn scroll_program(&self, lines: i32, column: u16, row: u16) -> Result<(), CoreError> {
+        let inner = self.inner.clone();
+        crate::on_runtime(async move { inner.scroll_program(lines, column, row).await }).await
     }
 
     /// Search this view's retained VT, including soft-wrapped lines. An empty

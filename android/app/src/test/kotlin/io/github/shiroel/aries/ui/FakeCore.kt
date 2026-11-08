@@ -1258,6 +1258,13 @@ class FakeTerminalView(val address: String, val options: AttachOptions) : Termin
 
     override fun scrollTo(lines: UInt): UInt = lines.also { scrolls += it }
 
+    /** Every [scrollProgram] the UI made: lines, column, row. */
+    val programScrolls = mutableListOf<Triple<Int, Int, Int>>()
+
+    override suspend fun scrollProgram(lines: Int, column: UShort, row: UShort) {
+        programScrolls += Triple(lines, column.toInt(), row.toInt())
+    }
+
     val searches = mutableListOf<Triple<String, Boolean, Boolean>>()
     val searchMoves = mutableListOf<Boolean>()
     var duringSearch: ((String) -> Unit)? = null

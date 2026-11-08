@@ -132,6 +132,27 @@ class TerminalScrollZoomCopyTest {
     }
 
     @Test
+    fun onTheAlternateScreenSwipingScrollsTheProgramItself() {
+        val view = open()
+        view.push(TerminalUpdate.Screen(ScreenFrame(
+            COLS.toUShort(), 2u, true, listOf(ScreenLine(0u, listOf(run(0, "fullscreen agent")))),
+            null, null, 0u, 0u, altScreen = true,
+        )))
+        compose.waitForIdle()
+
+        screen.performTouchInput { swipeDown() }
+        compose.waitForIdle()
+        assertTrue("dragging down reads back in the program: ${view.programScrolls}",
+            view.programScrolls.isNotEmpty() && view.programScrolls.all { it.first > 0 })
+        val back = view.programScrolls.size
+        screen.performTouchInput { swipeUp() }
+        compose.waitForIdle()
+        assertTrue("dragging up returns towards live: ${view.programScrolls}",
+            view.programScrolls.drop(back).let { it.isNotEmpty() && it.all { s -> s.first < 0 } })
+        assertTrue("there is no scrollback to move: ${view.scrolls}", view.scrolls.all { it == 0u })
+    }
+
+    @Test
     fun pinchingZoomsTheViewOnlyAndResetGoesBack() {
         val view = open()
         view.push(text("$ make", "done"))
